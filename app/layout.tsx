@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   description:
     "An engineering intelligence platform connecting composite coupon design, physical testing, and traceable analysis. Explore the first chapter.",
   icons: {
-    icon: { url: "/anisotropy-icon.svg", type: "image/svg+xml" },
-    apple: "/assets/anisotropy-logo.png",
+    icon: { url: "/assets/brand/anisotropy-mark.svg", type: "image/svg+xml" },
+    apple: "/assets/brand/anisotropy-logo.png",
   },
 };
 export default function RootLayout({
