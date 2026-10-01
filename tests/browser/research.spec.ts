@@ -76,7 +76,7 @@ test("materials retain source units, missing values, review notes and export pro
       .getByRole("row")
       .filter({ has: page.getByRole("cell", { name: "F1C", exact: true }) }),
   ).toContainText("Not provided");
-  const source = await request.get("/assets/material-properties-2026-v2.pdf");
+  const source = await request.get("/assets/documents/material-properties-2026-v2.pdf");
   expect(source.ok()).toBeTruthy();
   expect((await source.body()).subarray(0, 5).toString()).toBe("%PDF-");
 });

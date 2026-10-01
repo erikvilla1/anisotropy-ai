@@ -40,7 +40,7 @@ test("overview, source images, modal dismissal, and material source document", a
       .toBeTruthy();
     await page.getByRole("button", { name: "Close image viewer" }).click();
   }
-  for (const path of ["/assets/material-properties-2026-v2.pdf"])
+  for (const path of ["/assets/documents/material-properties-2026-v2.pdf"])
     expect((await request.get(path)).ok()).toBeTruthy();
   expect(errors).toEqual([]);
 });

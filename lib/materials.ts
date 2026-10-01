@@ -17,7 +17,7 @@ export type Material = {
   properties: Property[];
   note?: string;
 };
-export const materialSource = "/assets/material-properties-2026-v2.pdf";
+export const materialSource = "/assets/documents/material-properties-2026-v2.pdf";
 // Source transcription. Strings intentionally retain printed units, signs, and unresolved values.
 const full = [
   ["Vf", "Fiber volume", "%"],
