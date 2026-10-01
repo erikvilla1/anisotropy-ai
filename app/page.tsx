@@ -25,7 +25,7 @@ import { useRouter } from "next/navigation";
 
 const research = [
   {
-    image: "/assets/coupon-01.jpg",
+    image: "/assets/images/coupon-01.jpg",
     label: "01 / COUPON STUDY",
     title: "A closer look at the material.",
     text: "Coupon imagery makes the material visible: surface condition, preparation, and the details behind every test record.",
@@ -33,7 +33,7 @@ const research = [
     type: "Specimen imagery",
   },
   {
-    image: "/assets/coupon-04.jpg",
+    image: "/assets/images/coupon-04.jpg",
     label: "02 / SPECIMEN SERIES",
     title: "One specimen. More context.",
     text: "A second view from the supplied specimen series. Connecting images with panel IDs and test conditions is part of the data foundation we’re building.",
@@ -41,7 +41,7 @@ const research = [
     type: "Specimen imagery",
   },
   {
-    image: "/assets/microscopy.jpg",
+    image: "/assets/images/microscopy.jpg",
     label: "03 / MICROSCOPY",
     title: "The evidence is in the details.",
     text: "Microscopy reveals the local features that aggregate numbers can miss. These observations will sit alongside measured results and engineering review.",
@@ -51,17 +51,17 @@ const research = [
 ];
 const gallery = [
   {
-    image: "/assets/vacuum-jig.svg",
+    image: "/assets/figures/vacuum-jig.svg",
     title: "Vacuum jig setup",
     subtitle: "Experimental setup / source diagram",
   },
   {
-    image: "/assets/surface-evaluation.svg",
+    image: "/assets/figures/surface-evaluation.svg",
     title: "Twist drill surface evaluation",
     subtitle: "Surface investigation / source diagram",
   },
   {
-    image: "/assets/python-plots.svg",
+    image: "/assets/figures/python-plots.svg",
     title: "Research visualization study",
     subtitle: "Data visualization / source diagram",
   },

@@ -14,7 +14,7 @@ export function SiteHeader() {
         <Link className="wordmark" href="/" aria-label="Anisotropy AI home">
           <img
             className="brand-symbol"
-            src="/assets/anisotropy-mark.svg"
+            src="/assets/brand/anisotropy-mark.svg"
             alt=""
             width="40"
             height="40"
@@ -38,7 +38,7 @@ export function SiteHeader() {
       >
         <img
           className="brand-symbol"
-          src="/assets/anisotropy-mark.svg"
+          src="/assets/brand/anisotropy-mark.svg"
           alt=""
           width="40"
           height="40"
@@ -104,7 +104,7 @@ export function SiteFooter() {
       <Link className="wordmark" href="/" aria-label="Anisotropy AI home">
         <img
           className="brand-symbol"
-          src="/assets/anisotropy-mark.svg"
+          src="/assets/brand/anisotropy-mark.svg"
           alt=""
           width="40"
           height="40"

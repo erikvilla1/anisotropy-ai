@@ -281,7 +281,7 @@ img {
   background-image:
     linear-gradient(90deg, #0c0e0d 2%, #0c0e0ddc 25%, #0c0e0d45 70%, #0c0e0d36),
     linear-gradient(0deg, #0c0e0d 0%, transparent 40%, #0c0e0d30 100%),
-    url("/assets/carbon-weave.jpg");
+    url("/assets/images/carbon-weave.jpg");
   background-size: cover;
   background-position:
     center,
@@ -1855,7 +1855,7 @@ img {
     background-image:
       linear-gradient(90deg, #0c0e0ddd, #0c0e0d70),
       linear-gradient(0deg, #0c0e0d, transparent 70%),
-      url("/assets/carbon-weave.jpg");
+      url("/assets/images/carbon-weave.jpg");
     background-position:
       center,
       center,
