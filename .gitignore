@@ -12,6 +12,12 @@ playwright-report/
 
 # Local references and assistant-specific instructions
 .local/
+# Local reference archive (includes user-supplied textbooks)
+References/
+# Local duplicate of the already tracked appendix; its SHA-256 is tested.
+public/assets/documents/material-properties-2026-v2-d851b3cf3135.pdf
+public/materials/catalog-status.json
+public/materials/*.tmp
 [Cc][Ll][Aa][Uu][Dd][Ee].[Mm][Dd]
 
 # Website media belongs under public/assets, not in the project root

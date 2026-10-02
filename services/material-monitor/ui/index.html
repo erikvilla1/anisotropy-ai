@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Material monitor · Anisotropy AI</title><link rel="stylesheet" href="/console.css"><script src="/console.js" defer></script></head>
+<body>
+  <header><a href="/" class="brand">Anisotropy <span>AI</span></a><span class="tag">LOCAL REVIEW CONSOLE</span></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">MATERIAL SOURCE MONITORING</p><h1>Evidence changes.<br><span>Keep the history.</span></h1><p class="lede">Track manufacturer datasheets, inspect revisions, and record a source review before considering changes to engineering data.</p></div><div class="controls"><button id="check">Check sources now</button><p id="schedule"></p></div></section>
+    <div class="notice"><strong>Source monitoring, not material qualification.</strong> Acceptance records a reviewed document. It does not approve design allowables, publish properties, or change existing analyses. This console uses local operator access, not production user authentication. Documents stay local; no AI service is connected.</div>
+    <p id="feedback" role="status" aria-live="polite"></p>
+    <section id="sources" class="sources" aria-label="Monitored sources"></section>
+    <section id="detail" hidden aria-label="Source review">
+      <div class="detail-title"><div><p class="eyebrow">REVIEW WORKSPACE</p><h2 id="detail-name"></h2></div><button id="close" class="secondary">Close review</button></div>
+      <p id="comparison-note"></p>
+      <div id="document-links" class="document-links"></div>
+      <div id="changes"></div>
+      <details><summary>Full extracted text</summary><div id="full-text"></div></details>
+      <form id="review-form">
+        <h3>Record a source review</h3>
+        <p>Inspect the original PDF, including tables and graphics. Text extraction can lose table alignment. Confirm the exact grade, units, conditions, revision, and reuse permissions. A changed test method does not automatically change material properties.</p>
+        <label>Reviewer name<input id="reviewer" required maxlength="120" autocomplete="name"></label>
+        <label>Review findings<textarea id="note" required maxlength="3000" rows="4" placeholder="Record the document revision, grade match, findings, and any limitations."></textarea></label>
+        <label>Decision<select id="decision"><option value="accepted">Accept source revision for reference</option><option value="rejected">Reject source revision</option></select></label>
+        <label class="confirm"><input type="checkbox" id="confirm" required>I inspected the original document. This is a source review, not approval of engineering values.</label>
+        <button id="save-review" type="submit">Record review</button>
+      </form>
+      <p id="review-state"></p>
+      <section id="reference-publication" hidden>
+        <h3>Publish a reviewed reference revision</h3>
+        <p>Source acceptance alone does not publish numbers. Inspect each extracted value against the original table before releasing it as a manufacturer reference. These releases remain blocked from engineering calculations.</p>
+        <div id="reference-candidates"></div>
+      </section>
+      <details><summary>Document history & reviews</summary><div id="history"></div></details>
+      <details><summary>Recent checks</summary><div id="checks"></div></details>
+    </section>
+    <footer>Manufacturer datasheets and public ASTM edition metadata are monitored independently. Only explicit reference releases update the library's reviewed property tables. No qualified design allowables are published.</footer>
+  </main>
+</body></html>

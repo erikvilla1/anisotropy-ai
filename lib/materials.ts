@@ -445,7 +445,7 @@ export const materials: Material[] = [
   record(
     "m55j",
     "M55J / EX1515",
-    "Carbon / epoxy",
+    "Carbon / cyanate ester",
     "Unidirectional prepreg",
     "Vacuum oven",
     "Nominal",

@@ -7,7 +7,6 @@ import {
   FileText,
   Layers3,
   ScanLine,
-  ShieldCheck,
 } from "lucide-react";
 import { CouponVisual } from "@/components/coupon-visual";
 export const metadata = { title: "Services — Anisotropy AI" };
@@ -86,7 +85,7 @@ export default function Services() {
             <Layers3 size={23} />
             <div>
               <span>TRY THE EXPERIENCE</span>
-              <h3>Engineering scope studio</h3>
+              <h3>Development Process Streamlining</h3>
             </div>
             <ArrowUpRight size={18} />
           </Link>
@@ -94,7 +93,7 @@ export default function Services() {
             <BookOpen size={23} />
             <div>
               <span>EXPLORE THE FOUNDATION</span>
-              <h3>Materials & physics library</h3>
+              <h3>Materials & Physics Library</h3>
             </div>
             <ArrowUpRight size={18} />
           </Link>
@@ -126,90 +125,6 @@ export default function Services() {
               <p>{desc}</p>
             </article>
           ))}
-        </div>
-      </section>
-      <section className="engine-section">
-        <div className="section">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">A CLOSER LOOK / YOUR ANALYSIS</span>
-              <h2>
-                Inspectable physics.
-                <br />
-                Traceable decisions.
-              </h2>
-            </div>
-            <p>
-              Follow your design from laminate response to a candidate layup,
-              with the calculations, assumptions, and verification behind each
-              decision available for review.
-            </p>
-          </div>
-          <div className="engine-grid">
-            <article>
-              <span>01</span>
-              <h3>Laminate physics</h3>
-              <p>
-                Classical Laminate Theory, Q and ABD matrices, local stress and
-                strain recovery, maximum stress, Tsai–Hill, Tsai–Wu, and Hashin
-                initiation.
-              </p>
-              <small>
-                Open-hole models require calibration. Progressive damage is a
-                later research phase.
-              </small>
-            </article>
-            <article>
-              <span>02</span>
-              <h3>CAD & finite elements</h3>
-              <p>
-                Review coupon geometry, ply orientations, loads, and restraints
-                alongside the resulting stress and strain fields.
-              </p>
-              <small>
-                Understand local stress concentrations and compare the finite
-                element response with laminate theory.
-              </small>
-            </article>
-            <article>
-              <span>03</span>
-              <h3>Candidate screening</h3>
-              <p>
-                Compare many possible stacks against the same material basis,
-                load cases, and design requirements. Identify candidates worth a
-                detailed solve.
-              </p>
-              <small>
-                Screening supports the search; shortlisted designs still pass
-                engineering verification.
-              </small>
-            </article>
-            <article>
-              <span>04</span>
-              <h3>Layup optimization</h3>
-              <p>
-                Find a light candidate that meets the specified constraints,
-                with permitted orientations and symmetric or balanced stacking
-                rules when required.
-              </p>
-              <small>
-                Compare mass, stiffness, and failure margins with a clear record
-                of the design requirements.
-              </small>
-            </article>
-          </div>
-          <div className="tool-note verification-note">
-            <ShieldCheck size={27} />
-            <div>
-              <h3>The verification gate</h3>
-              <p>
-                Reviewed inputs. Nonnegative margins for a passing design. Mesh
-                convergence. Comparable CLT and FEA results. A failed or
-                unresolved check returns an investigation record with the
-                reason, before a design can be reported as passing.
-              </p>
-            </div>
-          </div>
         </div>
       </section>
       <section className="section solution-section">
@@ -271,7 +186,7 @@ export default function Services() {
         <div className="library-preview-list">
           {[
             "22 initial source material records",
-            "Layup sequences & thickness context",
+            "Ply thicknesses & material context",
             "Topic-based functions & governing equations",
             "Source pages, units & review notes",
           ].map((s, i) => (

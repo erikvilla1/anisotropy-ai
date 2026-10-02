@@ -31,7 +31,7 @@ import {
   latexReport,
 } from "@/lib/demo";
 import { ScopeEditor } from "./scope-editor";
-import { materials } from "@/lib/materials";
+import { curatedMaterials as materials } from "@/lib/curated-materials";
 import { handoffKey } from "./home-composer";
 
 const suggestions = [
@@ -339,7 +339,7 @@ export function Workspace({
     const initial = record
       ? {
           ...emptyScope,
-          material: `${record.name} — Appendix F ${record.section}, p. ${record.page}; source review required`,
+          material: record.name,
         }
       : emptyScope;
     let handoff: { prompt?: string; format?: string } | null = null;

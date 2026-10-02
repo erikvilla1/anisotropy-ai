@@ -29,7 +29,7 @@ const priorities = [
     label: "PRIORITY APPLICATION",
     text: "A composites material library and detailed engineering explanations for the people investigating, teaching, and learning how laminates behave.",
     use: [
-      "Source-linked properties, layups, and thicknesses",
+      "Source-linked material properties and thicknesses",
       "CLT, local stresses, and failure criteria by topic",
       "Reproducible research and step-by-step methods",
     ],
@@ -118,7 +118,7 @@ export default function Industries() {
         <div className="section-heading">
           <div>
             <span className="eyebrow">BEYOND THE INITIAL FOCUS</span>
-            <h2>Potential markets.</h2>
+            <h2>Potential industries.</h2>
           </div>
           <p>
             The same need to understand composites appears in other sectors.
@@ -130,7 +130,7 @@ export default function Industries() {
           {potential.map((s) => (
             <article key={s.title}>
               <s.icon size={27} strokeWidth={1.3} />
-              <span className="tiny-label">POTENTIAL MARKET</span>
+              <span className="tiny-label">POTENTIAL INDUSTRY</span>
               <h3>{s.title}</h3>
               <p>{s.text}</p>
             </article>
