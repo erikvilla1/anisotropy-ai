@@ -1,0 +1,93 @@
+.library-monitor-status{padding:22px 25px;margin-bottom:24px;border:1px solid #3c4f31;background:#151e10;border-radius:6px}.library-monitor-status strong{display:block;font-size:16px;color:#d5e8c6}.library-monitor-status>span{display:block;margin-top:8px;font-size:11px;color:#aec597}.library-monitor-status p{font-size:12px;line-height:1.75;color:#96aa86;margin-bottom:0}.material-provenance{margin:8px 0 30px}.provenance-status{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;font-size:11px;color:#c9b181}.provenance-chip{padding:8px 11px;background:#30371e;color:#cdddaf;border:1px solid #536140;border-radius:3px}.provenance-issue{font-size:12px;line-height:1.8;color:#b1c29e;margin:18px 0}.provenance-dates{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px 0;border-top:1px solid #34462a;border-bottom:1px solid #34462a}.provenance-dates dt{font-size:10px;color:#8d9f7a;margin-bottom:7px}.provenance-dates dd{margin:0;font-size:12px;color:#d1dec4;line-height:1.6}.provenance-caption{font-size:10px!important;line-height:1.8!important;color:#8ca178!important}.provenance-sources{margin:25px 0}.provenance-sources h3,.reviewed-properties h3{font-size:16px;margin-bottom:16px}.provenance-sources>div{margin:15px 0}.provenance-sources a,.standard-references a{color:#c7dfb5;font-size:12px}.provenance-sources p{font-size:11px;line-height:1.7;color:#a0b38d;margin:8px 0}.source-observation{padding:14px;background:#182110;border:1px solid #34462a;border-radius:4px}.source-observation strong,.source-observation span{display:block;font-size:11px;line-height:1.8}.source-observation span{color:#beab7c}.standard-references,.candidate-properties,.legacy-properties{border-top:1px solid #3b4b30;padding:18px 0}.standard-references summary,.candidate-properties summary,.legacy-properties summary{font-size:12px;color:#d2e3bd;cursor:pointer;line-height:1.7}.standard-references p,.candidate-properties p{font-size:11px;line-height:1.8;color:#9eaf8c}.standard-reference{padding:14px 0;border-bottom:1px solid #2e3d26}.standard-reference small{display:block;font-size:10px;line-height:1.8;color:#a4b590;margin-top:5px}.no-qualified-data{padding:17px;background:#232416;border-left:2px solid #9b8d5d;color:#c6bb96;font-size:12px;line-height:1.8}.provenance-values{margin-top:15px}.provenance-values th{font-size:10px}.provenance-values td{font-size:11px;line-height:1.7;vertical-align:top}.provenance-values small{display:block;font-size:10px;color:#96ac83;margin-top:5px}.legacy-properties>.source-toolbar{margin-top:25px}.material-detail{min-width:0}.standard-reference a,.provenance-sources a{overflow-wrap:anywhere}@media(max-width:650px){.provenance-dates{grid-template-columns:1fr}.provenance-values table{min-width:700px}.library-monitor-status{padding:18px}.provenance-status{align-items:flex-start;flex-direction:column}}
+.library-monitor-status p{max-width:100ch}.property-heading{display:flex;align-items:start;justify-content:space-between;gap:20px;margin-top:28px}.property-heading h3,.manufacturer-properties h3{font-size:20px;margin:0 0 10px}.property-heading p{font-size:11px;color:#a5b992;line-height:1.7}.property-heading a{font-size:11px;color:#c8dfb4;white-space:nowrap}.school-properties td{vertical-align:top;font-size:12px;line-height:1.7}.school-properties th{font-size:11px}.school-properties td:last-child{max-width:260px}.property-available{font-size:10px;color:#b8d6a3}.school-citation{margin:16px 0}.school-citation summary,.material-provenance>summary{font-size:13px;color:#d4e6c5;cursor:pointer;padding:14px 0}.school-citation p{font-size:12px;line-height:1.8;color:#9eb38c;overflow-wrap:anywhere}.analysis-input-panel{padding:20px;border:1px solid #455638;background:#17210f;margin:22px 0}.analysis-input-panel label:first-child{display:flex;flex-direction:column;gap:10px;font-size:12px;color:#c6d9b4;margin-bottom:18px}.analysis-input-panel select{background:#10180d;color:#d4e6c5;border:1px solid #455638;padding:12px;max-width:100%;font:inherit}.analysis-input-panel strong{font-size:14px}.analysis-input-panel p,.analysis-input-panel li{font-size:12px;line-height:1.8;color:#aabd99}.analysis-input-panel ul{padding-left:20px}.analysis-ack{display:flex;align-items:flex-start;gap:12px;font-size:12px;line-height:1.7;margin:16px 0;color:#c6d9b4}.analysis-ack input{margin-top:4px;accent-color:#b4d09d}.analysis-input-panel button:disabled{opacity:.4;cursor:not-allowed}.material-provenance{border-top:1px solid #425036;margin-top:24px}.material-provenance>.provenance-status{margin-top:15px}.manufacturer-properties{margin:28px 0;padding-bottom:25px;border-bottom:1px solid #425036}.manufacturer-properties .provenance-values table{min-width:720px}.school-properties table{min-width:640px}@media(max-width:650px){.property-heading{flex-direction:column}.analysis-input-panel{padding:15px}.school-properties td:last-child{min-width:150px}}
+.source-materials .school-properties .table-scroll td:last-child{white-space:normal;min-width:150px}.source-materials .school-properties .table-scroll table{min-width:640px}.source-materials .manufacturer-properties .table-scroll table{min-width:720px}
+
+/* Property lookup: one reference, three columns, details on request. */
+.library-intro{padding-top:64px;padding-bottom:32px}
+.library-intro h1{font-size:clamp(32px,4vw,52px);margin:0 0 12px;letter-spacing:-1.5px}
+.library-intro p{font-size:15px;color:#b3c1a7;margin:0;line-height:1.7}
+.library-intro+.library-section{padding-top:0}
+.material-subtitle{font-size:13px;color:#b0c49c;margin:12px 0 26px;line-height:1.7}
+.source-materials .material-detail-title{margin-bottom:0}
+.source-materials .material-detail-title h2{margin-bottom:0}
+.dataset-picker{display:flex;align-items:center;gap:15px;font-size:13px;color:#a7bb93;margin-bottom:18px}
+.dataset-picker select{background:#17200f;border:1px solid #455638;border-radius:4px;color:#d5e4c9;padding:10px 12px;font:inherit;max-width:100%}
+.property-reference{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;padding:16px 18px;background:#192211;border:1px solid #35482b;border-radius:5px;font-size:13px;line-height:1.7}
+.property-reference>span{color:#a2b68f}
+.property-reference>a{color:#e0edcf;display:inline;overflow-wrap:anywhere}
+.property-reference>a svg{display:inline;vertical-align:middle}
+.property-reference>small{grid-column:2;font-size:11px;color:#b1c59d}
+.dataset-context{font-size:12px;color:#a6ba95;line-height:1.8;margin:12px 0 22px}
+.property-filters{display:flex;gap:7px;flex-wrap:wrap;margin:22px 0 16px}
+.property-filters button{font:inherit;font-size:12px;padding:8px 12px;border:1px solid #394d2d;border-radius:4px;color:#aac195;background:transparent;cursor:pointer}
+.property-filters button[aria-pressed=true]{background:#c0dab0;color:#14200e;border-color:#c0dab0}
+.source-materials .material-properties .simple-property-table table{width:100%;min-width:0;table-layout:fixed}
+.source-materials .material-properties .simple-property-table th,.source-materials .material-properties .simple-property-table td{white-space:normal;padding:17px 14px;min-width:0;max-width:none;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.source-materials .simple-property-table thead th{font-size:12px;color:#a8be95;font-weight:500;padding-top:12px;padding-bottom:12px;background:#182111}
+.simple-property-table thead th:first-child{width:48%}
+.source-materials .material-properties .simple-property-table td{font-size:14px;line-height:1.65;color:#e3eddb;font-variant-numeric:tabular-nums}
+.source-materials .simple-property-table th[scope=row]{font-weight:400}
+.property-name{font-size:14px;color:#dfebd5;line-height:1.65}
+.simple-property-table th[scope=row]>small{display:block;margin-top:4px;font-size:11px;color:#91a67f;line-height:1.7}
+.source-materials .material-properties .simple-property-table .property-group th{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#a6c18e;padding-top:24px;padding-bottom:9px;background:#121b0d}
+.value-note{margin-top:8px;color:#d9bd88;font-size:11px;line-height:1.7}
+.value-note summary{cursor:pointer;width:fit-content}
+.value-note p{font-size:11px;line-height:1.8;color:#ceb98d;margin-bottom:0}
+.source-materials .simple-property-table .flagged-property td{color:#ddc494}
+.units-note{font-size:11px;color:#9db38b;line-height:1.8;margin:16px 0 22px}
+.manufacturer-properties{margin:0;padding:0;border:0}
+.reference-methods,.analysis-export{border-top:1px solid #34452a;padding:14px 0}
+.reference-methods>summary,.analysis-export>summary{font-size:13px;color:#c5d9b4;cursor:pointer;line-height:1.8}
+.reference-methods>p{font-size:12px;color:#a6b793;line-height:1.8}
+.manufacturer-properties>.text-button{margin-top:15px}
+.source-materials .school-properties .analysis-input-panel{margin-bottom:0}
+.material-provenance .library-monitor-status{font-size:12px;padding:12px;margin:15px 0}
+@media(max-width:650px){
+  .library-intro{padding-top:35px;padding-bottom:24px}
+  .library-intro p{font-size:13px}
+  .property-reference{padding:12px;font-size:12px;grid-template-columns:1fr;gap:4px}
+  .property-reference>span{display:none}
+  .property-reference>small{grid-column:1}
+  .dataset-picker{align-items:flex-start;flex-direction:column;gap:8px}
+  .property-filters{gap:5px}
+  .property-filters button{font-size:11px;padding:7px 9px}
+  .source-materials .material-properties .simple-property-table th,.source-materials .material-properties .simple-property-table td{padding:13px 7px}
+  .simple-property-table thead th:first-child{width:44%}
+  .source-materials .simple-property-table thead th{font-size:10px}
+  .property-name,.source-materials .material-properties .simple-property-table td{font-size:12px}
+  .simple-property-table th[scope=row]>small{font-size:10px}
+}
+
+/* Curated property records keep the lookup compact, with exact citations nearby. */
+.dataset-summary, .dataset-application { font-size: .85rem; line-height: 1.7; color: var(--muted); }
+.dataset-summary { margin: 0 0 1.5rem; }
+.dataset-summary strong { color: var(--text); }
+.dataset-application { margin: 1.25rem 0; }
+.cited-reference-details { border-top: 1px solid #34452a; padding: 1.2rem 0; font-size: .82rem; line-height: 1.7; }
+.cited-reference-details summary { cursor: pointer; }
+.cited-reference-details ul { padding-left: 1.2rem; }
+.cited-reference-details li { margin: 1rem 0; }
+.cited-reference-details a { overflow-wrap: anywhere; }
+.reference-monitor-status { color: var(--muted); }
+.cited-properties .property-reference > div { display: flex; flex-direction: column; gap: 5px; }
+.cited-properties .property-reference { grid-template-columns: 1fr auto; }
+.material-dataset-picker { display: grid; gap: 8px; margin: 0 0 24px; font-size: .8rem; color: var(--muted); }
+.material-dataset-picker select { width: 100%; min-width: 0; padding: 12px; border: 1px solid #34452a; border-radius: 4px; background: #172010; color: var(--text); font: inherit; }
+.property-name a { text-decoration: underline; text-decoration-color: #405336; text-underline-offset: 4px; }
+.property-name a:hover { text-decoration-color: currentColor; }
+.equation-reference { border-top: 1px solid #34452a; padding-top: 14px; overflow-wrap: anywhere; }
+.equation-reference a { text-decoration: underline; text-underline-offset: 3px; }
+.equation-units { color: var(--muted); }
+.physics-review-panel { border: 1px solid #34452a; border-radius: 4px; margin-top: 24px; padding: 20px; font-size: .85rem; line-height: 1.8; }
+.physics-review-panel summary { cursor: pointer; color: var(--text); }
+.physics-review-panel p { color: var(--muted); }
+.physics-review-panel section { margin-top: 22px; }
+.physics-review-panel h4 { margin: 0; }
+.physics-review-panel ul { padding-left: 20px; }
+.physics-equation.typeset-equation { display: grid; gap: 20px; max-width: 100%; padding: 26px 24px; overflow-x: auto; white-space: normal; font-size: 1rem; line-height: normal; }
+.typeset-equation > div { min-width: max-content; }
+.typeset-equation .katex-display { margin: 0; text-align: left; }
+.typeset-equation .katex-display > .katex { text-align: left; }
+.typeset-equation:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+@media(max-width:650px) { .physics-equation.typeset-equation { padding: 22px 14px; font-size: .9rem; } }
+@media(max-width:650px) { .cited-properties .property-reference { grid-template-columns: 1fr; gap: 10px; } }

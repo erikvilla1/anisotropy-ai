@@ -17,7 +17,7 @@ test("navigation routes load directly with research-focused About", async ({
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "documented answer",
   );
-  await page.getByRole("link", { name: "Engineering scope studio" }).click();
+  await page.getByRole("link", { name: "Development process streamlining" }).click();
   await expect(page).toHaveURL(/\/chat\/?$/);
   await page.reload();
   await expect(
@@ -75,7 +75,7 @@ test("spec editor validates and feeds the chat and downloadable report outline",
   expect(text).toContain("No engineering conclusion is available");
 });
 
-test("material filters, empty state, layups, references and scope handoff", async ({
+test("material filters, empty state, references and scope handoff", async ({
   page,
 }) => {
   await page.goto("/library");
@@ -93,10 +93,6 @@ test("material filters, empty state, layups, references and scope handoff", asyn
     page.getByRole("heading", { name: "Nomex · HRH10-1/8-1.8", exact: true }),
   ).toBeVisible();
   await page.getByLabel("Filter material family").selectOption("All families");
-  await page.getByRole("tab", { name: "Layups & thickness" }).click();
-  await page.getByLabel("Layup concept").selectOption("Cross-ply");
-  await expect(page.locator(".ply-layer")).toHaveCount(8);
-  await expect(page.locator(".stack-visual")).toContainText("+90°");
   await page.getByRole("tab", { name: "Physics & references" }).click();
   await expect(
     page.getByRole("heading", {
@@ -106,7 +102,7 @@ test("material filters, empty state, layups, references and scope handoff", asyn
   ).toBeVisible();
   await page.getByRole("tab", { name: "Materials", exact: true }).click();
   await page
-    .getByRole("button", { name: "E-glass / 3783", exact: false })
+    .getByRole("button", { name: "7781 / E-765", exact: false })
     .click();
   await page.getByRole("link", { name: "Discuss this material" }).click();
   await page
@@ -115,7 +111,7 @@ test("material filters, empty state, layups, references and scope handoff", asyn
   await expect(
     page.getByRole("dialog").getByLabel("Material system", { exact: true }),
   ).toHaveValue(
-    "E-glass / 3783 — Appendix F F.1 · continued, p. 2; source review required",
+    "7781 / E-765",
   );
 });
 

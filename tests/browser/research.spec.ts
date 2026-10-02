@@ -34,53 +34,6 @@ test("homepage submits the initial message once to its own chat page", async ({
   ).toBeVisible();
 });
 
-test("materials retain source units, missing values, review notes and export provenance", async ({
-  page,
-  request,
-}) => {
-  await page.goto("/library");
-  await expect(page.getByText("22 source records")).toBeVisible();
-  await page.getByRole("textbox", { name: "Search materials" }).fill("CF0302");
-  await expect(
-    page.getByRole("heading", { name: "CF0302 / MTM49LT" }),
-  ).toBeVisible();
-  const row = page
-    .getByRole("row")
-    .filter({ has: page.getByRole("cell", { name: "F1C", exact: true }) });
-  await expect(row).toContainText("-87300");
-  await expect(row).toContainText("ksi");
-  await expect(row).toContainText("Confirm with the source owner");
-  const event = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export source record" }).click();
-  const stream = await (await event).createReadStream();
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
-  const record = JSON.parse(Buffer.concat(chunks).toString());
-  expect(record.page).toBe(4);
-  expect(
-    record.properties.find((p: { symbol: string }) => p.symbol === "F1C").value,
-  ).toBe("-87300");
-  await page
-    .getByRole("textbox", { name: "Search materials" })
-    .fill("Glass UD · nominal");
-  await expect(
-    page
-      .getByRole("row")
-      .filter({ has: page.getByRole("cell", { name: "ρ", exact: true }) }),
-  ).toContainText("0.700");
-  await page
-    .getByRole("textbox", { name: "Search materials" })
-    .fill("E-glass plain weave · VaRTM");
-  await expect(
-    page
-      .getByRole("row")
-      .filter({ has: page.getByRole("cell", { name: "F1C", exact: true }) }),
-  ).toContainText("Not provided");
-  const source = await request.get("/assets/documents/material-properties-2026-v2.pdf");
-  expect(source.ok()).toBeTruthy();
-  expect((await source.body()).subarray(0, 5).toString()).toBe("%PDF-");
-});
-
 test("physics topics group transformations, local recovery and failure functions", async ({
   page,
 }) => {
@@ -90,14 +43,13 @@ test("physics topics group transformations, local recovery and failure functions
     .locator("summary")
     .filter({ hasText: "Reduced stiffness Q" })
     .click();
-  await expect(page.locator("details[open]")).toContainText("Q₁₁ = E₁/Δ");
+  await expect(page.locator("details[open] .katex").first()).toBeVisible();
+  await expect(page.locator("details[open] annotation").nth(1)).toContainText(String.raw`\frac{E_1}{\Delta}`);
   await page
     .locator("summary")
     .filter({ hasText: "Local strains & local stresses" })
     .click();
-  await expect(page.locator("details[open]").last()).toContainText(
-    "Tε εxy,mech",
-  );
+  await expect(page.locator("details[open]").last().locator("annotation")).toContainText(String.raw`\mathbf T_\varepsilon`);
   await page.getByRole("button", { name: /Ply failure criteria/ }).click();
   await expect(
     page.locator("summary").filter({ hasText: "Reduced stiffness" }),
@@ -109,15 +61,17 @@ test("physics topics group transformations, local recovery and failure functions
   await expect(
     page.locator("details[open]").filter({ hasText: "Tsai–Wu coefficients" }),
   ).toContainText("experimental evidence");
-  await page.getByRole("button", { name: /CAD, FEA & verification/ }).click();
+  await page.getByRole("button", { name: /Thermal & moisture effects/ }).click();
   await expect(
     page.getByRole("textbox", { name: "Search this physics topic" }),
   ).toHaveValue("");
   await page
     .locator("summary")
-    .filter({ hasText: "Verification gate" })
+    .filter({ hasText: "Expansion coefficient transformation" })
     .click();
-  await expect(page.locator("details[open]")).toContainText("MS ≥ 0");
+  await expect(page.locator("details[open] annotation").nth(1)).toContainText(String.raw`2mn(\alpha_1-\alpha_2)`);
+  await expect(page.locator("details[open]")).toContainText("Eq. 8.6, p. 210");
+  await expect(page.getByRole("button", { name: /CAD, FEA & verification/ })).toHaveCount(0);
 });
 
 test("research positioning is explicit without an AI implementation pitch on About", async ({

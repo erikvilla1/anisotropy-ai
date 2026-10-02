@@ -400,7 +400,7 @@ export default function Home() {
               <h3>Keep the evidence close.</h3>
               <p>
                 Explore 22 initial source records for carbon, glass, and
-                sandwich cores, alongside layups, governing equations, and
+                sandwich cores, alongside governing equations and
                 topic-by-topic explanations.
               </p>
               <Link className="text-button" href="/library">
