@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 import "./expansion.css";
 import "./research.css";
+import "./provenance.css";
 import { SiteHeader, SiteFooter } from "@/components/site-shell";
 
 export const metadata: Metadata = {

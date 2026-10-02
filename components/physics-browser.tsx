@@ -1,26 +1,26 @@
 "use client";
 import { useState } from "react";
 import { ArrowUpRight, ChevronDown, Search } from "lucide-react";
-import { physicsTopics } from "@/lib/physics";
+import { physicsTopics, deferredPhysicsTopics } from "@/lib/physics";
+import { checkedExamples, bookReference } from "@/lib/physics-foundations";
+import { MathFormula } from "./math-formula";
 export function PhysicsBrowser() {
   const [selected, setSelected] = useState("clt");
   const [query, setQuery] = useState("");
   const topic = physicsTopics.find((t) => t.id === selected)!;
   const matches = topic.methods.filter((m) =>
-    `${m.name} ${m.detail} ${m.equation}`
+    `${m.name} ${m.detail} ${m.equation} ${m.reference?.location}`
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
   return (
     <div className="physics-catalog">
       <div className="physics-intro">
-        <span className="eyebrow">THE METHOD, OPEN TO INSPECTION</span>
-        <h2>Understand every step.</h2>
+        <span className="eyebrow">COMPOSITE MECHANICS</span>
+        <h2>Equations with a reference.</h2>
         <p>
-          A growing function and equation catalog. Start with the ply, build the
-          laminate, recover local stresses, then evaluate failure and verify the
-          result. These are educational references; no numerical analysis is
-          performed in this preview.
+          Look up the equation, its units and when it applies. These {physicsTopics.reduce((n, t) => n + t.methods.length, 0)} reference cards cover
+          lamina and laminate fundamentals. They do not calculate a component analysis.
         </p>
       </div>
       <div className="physics-browser">
@@ -37,7 +37,7 @@ export function PhysicsBrowser() {
               <span>0{i + 1}</span>
               <strong>
                 {t.title}
-                <small>{t.methods.length} functions & methods</small>
+                <small>{t.methods.length} equations &amp; methods</small>
               </strong>
             </button>
           ))}
@@ -71,8 +71,10 @@ export function PhysicsBrowser() {
                   <ChevronDown size={17} />
                 </summary>
                 <div>
-                  <pre className="physics-equation">{m.equation}</pre>
+                  <MathFormula name={m.name} />
                   <p>{m.detail}</p>
+                  <p className="equation-units"><strong>Units</strong> · {m.units}</p>
+                  {m.reference && <p className="equation-reference"><a href={m.reference.url} target="_blank" rel="noreferrer">{m.reference.title} <ArrowUpRight size={13} /></a><br />{m.reference.location}</p>}
                 </div>
               </details>
             ))}
@@ -91,19 +93,17 @@ export function PhysicsBrowser() {
             {topic.source}
             <ArrowUpRight size={15} />
           </a>
-          {topic.id === "failure" && (
-            <a
-              className="topic-source"
-              href="https://docs.software.vt.edu/abaqusv2024/English/SIMACAEMATRefMap/simamat-c-damageinitfibercomposite.htm"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Hashin initiation conventions · technical reference
-              <ArrowUpRight size={15} />
-            </a>
-          )}
         </div>
       </div>
+      <details className="physics-review-panel">
+        <summary>Worked examples &amp; equation checks</summary>
+        <p>Three textbook examples have been reproduced, alongside checks of axis rotation, stiffness symmetry and units. These verify selected formulas; they do not validate a CAD or FEA solver.</p>
+        {checkedExamples.map(example => <section key={example.name}><h4>{example.name}</h4><p>{example.inputs}</p><p>{example.result}</p><a href={bookReference.url} target="_blank" rel="noreferrer">{example.reference} <ArrowUpRight size={13} /></a></section>)}
+      </details>
+      <details className="physics-review-panel">
+        <summary>Later research: CAD, FEA &amp; advanced models</summary>
+        <ul>{deferredPhysicsTopics.map(topic => <li key={topic.title}><strong>{topic.title}</strong><p>{topic.detail}</p></li>)}</ul>
+      </details>
     </div>
   );
 }

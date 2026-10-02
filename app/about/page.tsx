@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  ArrowUpRight,
   FlaskConical,
   Layers3,
   Microscope,
@@ -189,42 +188,6 @@ export default function About() {
             calculations and reviewed source records.
           </p>
         </div>
-      </section>
-      <section className="section horizon">
-        <span className="eyebrow">COUPONS ARE THE BEGINNING</span>
-        <h2>
-          A small specimen.
-          <br />A much larger ambition.
-        </h2>
-        <div className="horizon-grid">
-          <article>
-            <span>NOW / MVP</span>
-            <h3>Composite coupons</h3>
-            <p>
-              Unnotched and open-hole tension. One material system. Establish
-              the physics and lab-validation loop.
-            </p>
-          </article>
-          <article>
-            <span>NEXT / AFTER VALIDATION</span>
-            <h3>Elements & repair studies</h3>
-            <p>
-              More materials, load cases, joints, and damage mechanisms. Explore
-              repairs once the relevant physics and tests are in place.
-            </p>
-          </article>
-          <article>
-            <span>LATER / RESEARCH DIRECTION</span>
-            <h3>Wing optimization</h3>
-            <p>
-              Extend toward panels, buckling, structural sizing, and wing-scale
-              optimization through successive validation gates.
-            </p>
-          </article>
-        </div>
-        <Link className="button primary" href="/services">
-          Explore the services <ArrowUpRight size={17} />
-        </Link>
       </section>
     </main>
   );

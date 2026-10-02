@@ -1,4 +1,6 @@
-export type Method = { name: string; equation: string; detail: string };
+import { foundationTopics, maximumStrain, bookReference, coreReferences } from "./physics-foundations";
+export type Method = { name: string; equation: string; detail: string;
+  reference?: { title: string; url: string; location: string }; units?: string };
 export type PhysicsTopic = {
   id: string;
   title: string;
@@ -13,7 +15,7 @@ const m = (name: string, equation: string, detail: string): Method => ({
   equation,
   detail,
 });
-export const physicsTopics: PhysicsTopic[] = [
+const existingPhysicsTopics: PhysicsTopic[] = [
   {
     id: "clt",
     title: "Classical Laminate Theory",
@@ -229,4 +231,26 @@ export const physicsTopics: PhysicsTopic[] = [
       ),
     ],
   },
+];
+
+// Only referenced analytical foundations are presented as current equation cards.
+export const physicsTopics: PhysicsTopic[] = [
+  ...existingPhysicsTopics.filter(t => ["clt", "failure"].includes(t.id)).map(topic => ({
+    ...topic, source: bookReference.title, url: bookReference.url,
+    assumptions: topic.id === "failure"
+      ? "Use positive tensile/compressive strength magnitudes and tension-positive local stresses. Match the criterion to the material architecture and strength basis. Failure indices estimate initiation; they do not predict damage evolution or final component failure."
+      : topic.assumptions,
+    methods: topic.methods.filter(m => !m.name.startsWith("Hashin")).map<Method>(method => ({
+      ...method, units: coreReferences[method.name].units,
+      reference: { ...bookReference, location: coreReferences[method.name].location },
+    })).concat(topic.id === "failure" ? [maximumStrain] : []),
+  })),
+  ...foundationTopics,
+];
+
+export const deferredPhysicsTopics = [
+  { title: "CAD & finite elements", detail: "Geometry, elements, meshing, boundary conditions and solver-specific validation need a separate research and implementation phase." },
+  { title: "Open-hole strength & progressive damage", detail: "Requires local-field models, applicable failure formulations and calibrated damage or characteristic-length data." },
+  { title: "Layup optimization", detail: "Requires a verified analysis model, explicit constraints and candidate checks before ranking designs." },
+  { title: "Mode-specific failure models", detail: "Hashin variants, required shear strengths and applicability to UD or woven materials need their own formulation review." },
 ];
