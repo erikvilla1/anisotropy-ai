@@ -56,6 +56,8 @@ New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
+Public source-viewer decision: [ADR-0010](decisions/ADR-0010-public-citations-local-page-evidence.md). Input and citation checks: [2026-10-03 evaluation](evaluations/2026-10-03-website-input-validation.md).
+
 | Document | Contents |
 | --- | --- |
 | [textbook-material-release-2026-10-01.md](textbook-material-release-2026-10-01.md) | Textbook material release |
