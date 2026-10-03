@@ -15,7 +15,7 @@ from .rotation import transformed_reduced_stiffness
 class Ply(BaseModel):
     """One ply in a stack: its material, orientation and cured thickness."""
 
-    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 
     material: Lamina
     angle_deg: float
