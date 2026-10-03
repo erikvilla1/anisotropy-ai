@@ -1,4 +1,4 @@
-# System overview | version 0.1 | last reviewed 2026-10-02 | owner: Founder
+# System overview | version 0.1 | last reviewed 2026-10-03 | owner: Founder
 
 ## Purpose
 
@@ -16,7 +16,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 | Material data | Cited property datasets with provenance; a monitor that detects source changes | Built | `lib/curated-materials.ts`, `services/material-monitor/` |
 | Engine | Laminate analysis: ply stiffness, rotation, A-B-D, load response, first-ply failure, engineering constants | Built, version 0.1 | `engine/` |
 | Validation cases | Textbook and answer-key problems the engine must reproduce | Built, 5 cases | `engine/validation/` |
-| API | Accepts a problem, runs the engine, returns results | Planned (FastAPI) | |
+| API | One-material laminate stiffness and deformation over HTTP | Local development; FastAPI, explicit SI-base inputs | `api/`, [component card](components/api.md) |
 | Run records | Inputs, versions and results stored for every run | Planned (PostgreSQL) | |
 | Material loader | Engine reads material values from the cited library instead of typed numbers | Planned | |
 | Language model assistant | Drafts inputs from plain language; explains results | Planned | |
@@ -25,7 +25,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 
 ## How a result is produced today
 
-A problem (material, layup, and loads, stresses or strains) goes into the engine, which works in SI units and returns the results. Today the engine is used from Python, from `engine/examples/laminate_calculator.py`, and by the validation runner. The website does not call it yet.
+A problem (material, layup, and loads, stresses or strains) goes into the engine, which works in SI units and returns the results. Today the engine is used from Python, from `engine/examples/laminate_calculator.py`, and by the validation runner. The local API also accepts explicit load resultants for one-material laminates and returns stiffness and deformation. The website does not call it yet. See [the API walkthrough](../api/README.md).
 
 ## External dependencies
 
@@ -33,6 +33,7 @@ A problem (material, layup, and loads, stresses or strains) goes into the engine
 | --- | --- | --- |
 | Python 3.12+, uv | Engine runtime and packaging | `engine/uv.lock` |
 | numpy, pydantic, pytest | Engine math, input checking, tests | `engine/uv.lock` |
+| FastAPI, Uvicorn, Pydantic, NumPy, pytest, HTTPX2 | Local API, serving, validation and integration tests | `api/uv.lock` |
 | Node.js 24, Next.js 16, React 19 | Website | `package-lock.json` |
 | GitHub | Code, pull requests, automated tests | |
 | Language model provider | None yet | |
