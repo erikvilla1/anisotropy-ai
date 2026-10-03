@@ -18,6 +18,8 @@ def test_every_unit_system_covers_the_same_quantities():
     ("psi", "modulus", 2.13e7, 146.8583e9),  # 21.3 Msi
     ("SI", "A", 60.24, 60.24e6),             # MN/m
     ("US", "N", 1.0, 175.1268),              # lb/in in N/m
+    ("US", "alpha", 1.0, 1.8),               # 1/degF in 1/K
+    ("psi", "delta_T", 9.0, 5.0),            # a change of 9 degF is 5 K
 ])
 def test_conversions_to_si(system, kind, value, si_value):
     assert value * UNIT_SYSTEMS[system][kind][0] == pytest.approx(si_value, rel=1e-6)
