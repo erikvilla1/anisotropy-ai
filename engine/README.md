@@ -37,6 +37,7 @@ The equations behind each module, and the function that computes each one, are i
 | `failure.py` | Maximum-stress and Tsai-Wu strength ratios, margin of safety, and first-ply failure of a laminate |
 | `engineering.py` | Effective laminate constants Ex, Ey, Gxy, Poisson ratios and shear coupling, the moduli a D3039 test measures |
 | `units.py` | SI, US (Msi, ksi) and psi unit systems for entering and reporting values |
+| `cases.py` | Loads validation cases and compares their expected values with engine results |
 
 ## Validation and examples
 

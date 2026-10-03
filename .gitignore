@@ -15,6 +15,10 @@ playwright-report/
 __pycache__/
 .pytest_cache/
 
+# Engine manual build output (rebuilt from sources)
+docs/manual/generated/
+docs/manual/build/
+
 # Local references and assistant-specific instructions
 .local/
 # Local reference archive (includes user-supplied textbooks)

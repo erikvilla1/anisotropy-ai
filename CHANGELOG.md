@@ -6,6 +6,8 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- LaTeX engine manual (`docs/manual/`), generated from the documentation, the engine source and engine results; built as a PDF on every pull request (ADR-0008).
+- `anisotropy_engine.cases`: validation-case logic shared by the tests, the manual and the future API.
 - Documentation in `docs/`: system overview, decision records ADR-0001 to ADR-0007, engine 0.1 verification report and risk register.
 - `engine/docs/theory.md`: every equation the engine uses, with the function that computes it.
 - Pull request template, and automated tests on every pull request (engine and website).
