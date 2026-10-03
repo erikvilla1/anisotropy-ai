@@ -1,14 +1,7 @@
 import type { CitedMaterial, CitedProperty } from "./curated-materials";
+import { textbookSource } from "./textbook-source";
 
 const conditions = "Ambient 24°C (75°F), dry; typical cured-composite properties. Fiber volume is specific to each material below.";
-const book = {
-  id: "daniel-ishai-2006", kind: "book" as const,
-  title: "Engineering Mechanics of Composite Materials", authors: "Isaac M. Daniel and Ori Ishai",
-  publisher: "Oxford University Press", date: "2006", revision: "Second edition · ISBN 978-0-19-515097-1",
-  url: "https://global.oup.com/academic/product/engineering-mechanics-of-composite-materials-9780195150971",
-  accessed: "2026-10-01", sha256: "8c46dbb6cc5d485aaa5a256b9e10c93fd4ee40eb86dc9973ecdb833b4ec729d2",
-  verification: "Named column visually checked in the supplied second-edition PDF. Fingerprint identifies that PDF, not the publisher catalog page. SI column retained; imperial display calculated from SI.",
-};
 type Values = {
   id: string; name: string; family: string; architecture: string; printedPage: number; table: string;
   // SI columns: Vf, density in g/cm³, E1, E2, G12 in GPa, ν12, strengths in MPa, strains as fractions.
@@ -75,7 +68,7 @@ const outOfPlane: Record<string, Extra[]> = {
 
 export const textbookMaterials: CitedMaterial[] = rows.map(row => {
   const [vf, density, e1, e2, g12, nu12, f1t, f2t, f12, strain1, strain2, f1c, f2c] = row.values;
-  const property = (key: string, label: string, value: number, unit: string, direction: string, sourceValue = value, sourceUnit = unit): CitedProperty => ({
+  const property = (key: string, label: string, value: number, unit: string, direction: string, sourceValue = value, sourceUnit = unit === "10⁻⁶/K" ? "10⁻⁶/°C" : unit): CitedProperty => ({
     key, label, value, unit, direction, symbol: key, basis: "Typical textbook value", conditions,
     method: `Compiled reference data, Table ${row.table}; no row-specific test-method edition assigned`,
     sourcePage: row.printedPage + 20, printedPage: row.printedPage, sourceValue, sourceUnit,
@@ -84,13 +77,13 @@ export const textbookMaterials: CitedMaterial[] = rows.map(row => {
   return {
     id: row.id, name: row.name, family: row.family, architecture: row.architecture,
     datasetId: `daniel-ishai-2006-${row.id}-v2`, dataset: "Textbook reference · available material properties",
-    conditions, source: { ...book, page: row.printedPage + 20, printedPage: row.printedPage },
+    conditions, source: { ...textbookSource, page: row.printedPage + 20, printedPage: row.printedPage },
     reviewedOn: "2026-10-02", recordRevision: "2026-10-02.1",
     elasticInputs: { E1: "E1", E2: "E2", G12: "G12", nu12: "nu12" },
     application: "Reference values for preliminary elastic and strength analysis at the stated conditions. These typical values are not statistical design allowables or a current manufacturing specification.",
     recordDetails: [
       `Table ${row.table}, printed p. ${row.printedPage} (supplied PDF p. ${row.printedPage + 20}). Ambient/dry conditions are stated on printed p. 42; Appendix A describes the compilation on p. 373.`,
-      "The publisher link identifies the book and edition. Consult the cited table in your copy; this site does not host the textbook PDF.",
+      "Property references open the matching table citation and recorded source values. Consult the cited table in your copy; page scans stay local and book information links to the publisher.",
       "Values use the printed SI column. Imperial values are calculated consistently from it, so they may differ from the book’s printed imperial equivalents. Density is converted from g/cm³ to kg/m³; fiber volume and tensile strain are converted from fractions to percent. Exports retain the original source numbers and units as well.",
       "The four in-plane elastic inputs are E1, E2, G12 and ν12. The displayed ν21 is the independently rounded textbook entry. For a constitutive model compute ν21 = ν12 E2/E1; do not treat the rounded value as a fifth independent input.",
       "Moisture expansion β is strain per unit water-volume concentration c (water volume / composite volume), not per percent moisture or per degree. See §10.3.5, Eq. 10.19, printed p. 314. A printed zero is retained; a dash is omitted.",
