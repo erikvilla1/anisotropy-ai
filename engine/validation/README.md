@@ -31,6 +31,10 @@ Together these cases are the evidence that the engine gives the right numbers, a
 
 Shear strains are engineering shear. Layups are listed from the bottom face up. Units follow `src/anisotropy_engine/units.py`.
 
+Case inputs reject unknown fields, partial strength sets and incomplete vectors. `loads` and `strains` require all six components, including explicit zeros. Other applied vectors require three finite components. The calculator accepts this same format; `expected` is optional for calculation and required for an automated comparison. Tsai-Wu runs only when all strengths and an explicit `f12_star` are present.
+
+Use `units = "SI"` for moduli in GPa, stresses in MPa and thickness in mm. For example, 140 GPa is entered as `E1 = 140`. `US` uses Msi/ksi/inches, and `psi` uses psi/inches. The engine still calculates in SI base units.
+
 New result keys are added when a problem needs them.
 
 ## When a case fails
