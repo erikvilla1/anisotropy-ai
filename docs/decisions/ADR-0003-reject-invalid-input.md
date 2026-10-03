@@ -21,6 +21,7 @@ Option 2. Input models reject non-finite, non-positive and physically impossible
 ## Why (evidence)
 
 - Invalid-input tests in `test_lamina.py`, `test_laminate.py`, `test_response.py` and `test_failure.py`.
+- The [2026-10-03 input review](../evaluations/2026-10-03-input-validation.md) and `test_input_validation.py` cover non-finite vectors, unknown fields and invalid safety factors. Unknown fields are errors, not omitted loads. Positive-infinite strength ratios remain valid for zero stress.
 - The physics library already states that the Tsai-Wu interaction coefficient must be measured or explicitly assumed.
 
 ## Consequences
