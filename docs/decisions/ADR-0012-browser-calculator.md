@@ -1,8 +1,8 @@
 # ADR-0012: A static calculator page calls the Python API directly
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-03
-- Decided by: Implementation proposal for founder review | Drafted by: Codex
+- Decided by: Founder | Drafted by: Codex
 - Related: [walkthrough](../walkthroughs/chunk-2-calculator.md), [evaluation](../evaluations/website/2026-10-03-calculator-chunk-2.md), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0011](ADR-0011-local-laminate-api.md)
 
 ## Context
