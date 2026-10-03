@@ -4,6 +4,10 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ## [Unreleased]
 
+### Fixed
+
+- Chat preview preserves signed, zero and decimal inputs for validation instead of converting negative values to positive values or retaining an earlier value. Explicit hole dimensions are not cleared by selecting D3039.
+
 ### Added
 
 - LaTeX engine manual (`docs/manual/`), generated from the documentation, the engine source and engine results; built as a PDF on every pull request (ADR-0008).
