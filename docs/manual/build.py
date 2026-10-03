@@ -283,9 +283,16 @@ def number(value: float, digits: int = 6) -> str:
 
 
 UNIT_OF = {"stress_global": "stress", "stress_local": "stress", "Ex": "modulus", "Ey": "modulus",
-           "Gxy": "modulus", "curvature": "kappa", "moments": "M", "N_T": "N", "M_T": "M",
-           "ply_stress_global": "stress", "ply_stress_local": "stress",
-           "Q11": "modulus", "Q12": "modulus", "Q22": "modulus", "Q66": "modulus"}
+           "Gxy": "modulus", "curvature": "kappa", "moments": "M", "N_T": "N", "M_T": "M"}
+MATRIX_UNITS = ((r"[ABDabd][126]{2}", None), (r"(Q|Qbar)[126]{2}", "modulus"), (r"(S|Sbar)[126]{2}", "compliance"))
+
+
+def unit_kind(base: str) -> str | None:
+    """The units.py quantity of a result key; None for dimensionless results."""
+    for pattern, kind in MATRIX_UNITS:
+        if re.fullmatch(pattern, base):
+            return kind or base[0]  # A, B, D and the inverse blocks a, b, d have their own units
+    return "stress" if base.startswith("ply_stress") else UNIT_OF.get(base)
 
 
 def validation() -> str:
@@ -300,8 +307,8 @@ def validation() -> str:
         rows = []
         for c in comparisons:
             base = c.key.split("[")[0]
-            unit_kind = base[0] if re.fullmatch(r"[ABD][126]{2}", base) else UNIT_OF.get(base)
-            unit = unit_label(units[unit_kind][1]) if unit_kind else "--"
+            kind = unit_kind(base)
+            unit = unit_label(units[kind][1]) if kind else "--"
             difference = abs(c.engine - c.expected)
             relative = f"{100 * difference / abs(c.expected):.3f}" + r"\%" if c.expected else number(difference, 2)
             rows.append(rf"{code(c.key)} & {unit} & {number(c.expected)} & {number(c.engine)} & {relative} & "
@@ -364,7 +371,9 @@ def units_table() -> str:
     names = {"modulus": "Modulus", "stress": "Stress", "length": "Length", "N": "Force per width $N$",
              "M": "Moment per width $M$", "kappa": r"Curvature $\kappa$", "A": r"$\mathbf{A}$",
              "B": r"$\mathbf{B}$", "D": r"$\mathbf{D}$", "alpha": r"Thermal expansion $\alpha$",
-             "delta_T": r"Temperature change $\Delta T$"}
+             "delta_T": r"Temperature change $\Delta T$", "compliance": r"Compliance $\mathbf{S}$, $\bar{\mathbf{S}}$",
+             "a": r"Inverse ABD block $\mathbf{a}$", "b": r"Inverse ABD block $\mathbf{b}$",
+             "d": r"Inverse ABD block $\mathbf{d}$"}
     rows = [rf"{label} & " + " & ".join(unit_label(UNIT_SYSTEMS[s][kind][1]) for s in ("SI", "US", "psi")) + r" \\"
             for kind, label in names.items()]
     return (r"The engine works in SI. These systems convert values where they enter and leave "

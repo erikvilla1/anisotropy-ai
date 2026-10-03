@@ -1,0 +1,30 @@
+title = "Thermal resultants and expansion coefficients of a [0, 60, -60, 0, 0, -60, 60, 0] IM7/977-3 laminate"
+source = "SE142/253A (Fall 2025) Homework 4, Problem 3(a), course solution; numbers only"
+units = "psi"
+
+[material]
+E1 = 27.7e6
+E2 = 1.44e6
+G12 = 1.13e6
+nu12 = 0.35
+alpha1 = -0.5e-6  # 1/degF
+alpha2 = 12.4e-6
+
+[laminate]
+layup = [0, 60, -60, 0, 0, -60, 60, 0]
+ply_thickness = 0.005
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]
+delta_T = 1.0  # degF; the free strains are then the laminate expansion coefficients
+
+[expected]
+tolerance = 0.002
+N_T = [0.0745, 0.328, 0]  # lb/in
+A11 = 629456  # lb/in
+A12 = 109510
+A16 = 0
+A22 = 365173
+A26 = 0
+A66 = 134421
+strain_global = [-4.005e-8, 9.107e-7, 0]  # alpha_x, alpha_y, alpha_xy in 1/degF

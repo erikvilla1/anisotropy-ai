@@ -37,6 +37,16 @@ def abd_matrix(plies: list[Ply]) -> np.ndarray:
     return np.block([[A, B], [B, D]])
 
 
+def abd_compliance(plies: list[Ply]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Blocks a (m/N), b (1/N) and d (1/(N*m)) of the inverted ABD matrix.
+
+    [eps0; kappa] = [[a, b], [b.T, d]] [N; M]. The course reader writes them as alpha,
+    beta and delta. Here the inverse is the result itself, so it is formed explicitly.
+    """
+    inverse = np.linalg.inv(abd_matrix(plies))
+    return inverse[:3, :3], inverse[:3, 3:], inverse[3:, 3:]
+
+
 def midplane_response(plies: list[Ply], loads: Loads) -> tuple[np.ndarray, np.ndarray]:
     """Mid-plane strains eps0 = [eps_x, eps_y, gamma_xy] and curvatures kappa = [k_x, k_y, k_xy] in 1/m."""
     deformation = np.linalg.solve(abd_matrix(plies), loads.as_vector())

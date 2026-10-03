@@ -1,4 +1,5 @@
 # Copy this file to a new name (no leading underscore) and fill it in.
+# For plies of several materials or thicknesses, use _template-several-materials.toml.
 # Files starting with "_" are ignored by the test runner.
 
 title = "What the problem asks, in one line"
@@ -37,10 +38,14 @@ ply_thickness = 0.0  # same for every ply
 [expected]
 tolerance = 0.001  # relative; loosen it to match how the answer key rounds
 # Give only the results the answer key states. Available keys:
-#   Q11 Q12 Q22 Q66 (ply stiffness in fiber axes)
+#   Q11 Q12 Q22 Q66, S11 ... S66 (ply stiffness and compliance in fiber axes)
+#   Qbar11 ... Qbar66, Sbar11 ... Sbar66 (one angle: stiffness and compliance in laminate axes)
 #   A11 A12 A16 A22 A26 A66, and the same for B and D
 #   strain_global, curvature, strain_local, stress_global, stress_local
-#   ply_stress_global, ply_stress_local: one [3 values] row per ply, bottom first, at mid-thickness
+#   a11 ... a66, b11 ... b66, d11 ... d66 (inverted ABD; the course reader's alpha, beta, delta)
+#   ply_strain_global, ply_strain_local, ply_stress_global, ply_stress_local: one [3 values] row
+#     per ply, bottom first, at mid-thickness; add _bottom or _top for a face. Or give only some
+#     plies as a table keyed by ply number (ply 1 at the bottom): [expected.ply_stress_local_top]
 #   N_T, M_T (thermal resultants, with delta_T)
 #   Ex Ey Gxy nu_xy nu_yx
 #   fpf_ratio_max_stress, fpf_ratio_tsai_wu (Tsai-Wu also needs f12_star = ... at the top of the file)

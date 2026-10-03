@@ -46,6 +46,20 @@ $`Q_{66} = G_{12}`$ because shear is engineering shear. $`Q_{16} = Q_{26} = 0`$ 
 
 <!-- code: reduced_stiffness -->
 
+Plane-stress compliance, the inverse of $`\mathbf{Q}`$, written directly from the engineering constants and computed by `reduced_compliance`:
+
+```math
+\begin{bmatrix}\varepsilon_1\\ \varepsilon_2\\ \gamma_{12}\end{bmatrix} = \mathbf{S}\begin{bmatrix}\sigma_1\\ \sigma_2\\ \tau_{12}\end{bmatrix},
+\qquad
+\mathbf{S} = \begin{bmatrix}
+\dfrac{1}{E_1} & -\dfrac{\nu_{12}}{E_1} & 0\\[12pt]
+-\dfrac{\nu_{12}}{E_1} & \dfrac{1}{E_2} & 0\\[12pt]
+0 & 0 & \dfrac{1}{G_{12}}
+\end{bmatrix}
+```
+
+<!-- code: reduced_compliance -->
+
 ## 2. Rotation (`rotation.py`)
 
 With $`m = \cos\theta`$ and $`n = \sin\theta`$, computed by `stress_transformation` and `strain_transformation` (Eqs. 4.57–4.62):
@@ -69,6 +83,20 @@ Transformed stiffness (Eq. 4.67), computed by `transformed_reduced_stiffness`:
 ```
 
 <!-- code: transformed_reduced_stiffness -->
+
+Transformed compliance: rotate stress into fiber axes, apply $`\mathbf{S}`$, and rotate the strain back. Computed by `transformed_compliance`:
+
+```math
+\bar{\mathbf{S}} = \mathbf{T}_\varepsilon^{-1}\,\mathbf{S}\,\mathbf{T}_\sigma,
+\qquad
+\mathbf{T}_\varepsilon^{-1}(\theta) = \mathbf{T}_\varepsilon(-\theta),
+\qquad
+\bar{\mathbf{S}} = \bar{\mathbf{Q}}^{-1}
+```
+
+It is built from $`\mathbf{S}`$ rather than by inverting $`\bar{\mathbf{Q}}`$, so $`\bar{\mathbf{S}}\,\bar{\mathbf{Q}} = \mathbf{I}`$ is an independent check.
+
+<!-- code: transformed_compliance -->
 
 ## 3. Laminate stiffness (`laminate.py`)
 
@@ -123,6 +151,21 @@ Mid-plane strain and curvature, computed by `abd_matrix` and `midplane_response`
 ```
 
 <!-- code: abd_matrix, midplane_response -->
+
+The inverted ABD matrix gives deformation directly from loads. Its blocks are computed by `abd_compliance`; the course reader writes them as $`\boldsymbol{\alpha}`$, $`\boldsymbol{\beta}`$ and $`\boldsymbol{\delta}`$:
+
+```math
+\begin{bmatrix}\boldsymbol{\varepsilon}^0\\ \boldsymbol{\kappa}\end{bmatrix}
+= \begin{bmatrix}\mathbf{a} & \mathbf{b}\\ \mathbf{b}^{T} & \mathbf{d}\end{bmatrix}
+\begin{bmatrix}\mathbf{N}\\ \mathbf{M}\end{bmatrix},
+\qquad
+\begin{bmatrix}\mathbf{a} & \mathbf{b}\\ \mathbf{b}^{T} & \mathbf{d}\end{bmatrix}
+= \begin{bmatrix}\mathbf{A} & \mathbf{B}\\ \mathbf{B} & \mathbf{D}\end{bmatrix}^{-1}
+```
+
+Units: a in m/N, b in 1/N, d in 1/(N·m). Here the inverse is the result itself, so it is formed explicitly. For a symmetric laminate $`\mathbf{b} = 0`$, $`\mathbf{a} = \mathbf{A}^{-1}`$ and $`\mathbf{d} = \mathbf{D}^{-1}`$.
+
+<!-- code: abd_compliance -->
 
 ### Known forces and prescribed curvature
 

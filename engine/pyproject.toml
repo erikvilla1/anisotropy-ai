@@ -5,6 +5,7 @@ description = "Laminate analysis engine for Anisotropy AI. The only source of nu
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.3",
+    "openpyxl>=3.1",
     "pydantic>=2.11",
 ]
 

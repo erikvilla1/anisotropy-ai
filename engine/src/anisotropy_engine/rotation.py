@@ -8,7 +8,7 @@ import math
 
 import numpy as np
 
-from .lamina import Lamina, reduced_stiffness
+from .lamina import Lamina, reduced_compliance, reduced_stiffness
 
 
 def _direction_cosines(angle_deg: float) -> tuple[float, float]:
@@ -45,3 +45,12 @@ def transformed_reduced_stiffness(ply: Lamina, angle_deg: float) -> np.ndarray:
     Q_bar = inverse(T_sigma) @ Q @ T_eps, and rotating back by -theta inverts T_sigma.
     """
     return stress_transformation(-angle_deg) @ reduced_stiffness(ply) @ strain_transformation(angle_deg)
+
+
+def transformed_compliance(ply: Lamina, angle_deg: float) -> np.ndarray:
+    """[eps_x, eps_y, gamma_xy] = S_bar @ [sigma_x, sigma_y, tau_xy], in 1/Pa
+
+    S_bar = inverse(T_eps) @ S @ T_sigma: rotate stress into fiber axes, apply the ply
+    compliance, and rotate the strain back. It equals inverse(Q_bar) without inverting Q_bar.
+    """
+    return strain_transformation(-angle_deg) @ reduced_compliance(ply) @ stress_transformation(angle_deg)
