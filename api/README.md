@@ -2,6 +2,8 @@
 
 This local API accepts one material, a bottom-first ply stack and six explicit load resultants. It returns the engine's A, B, D stiffness matrices, mid-plane strains and curvatures as JSON. The existing engine computes every engineering result.
 
+Chunk 3 adds `POST /v1/laminates/prescribed-curvature`: known forces and explicit curvature in, required moments and a numerical forward check out. Use `examples/flat-cross-ply.json`; see the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md). The original forward endpoint below keeps its existing contract.
+
 ## Run it
 
 From the repository root, in PowerShell:
