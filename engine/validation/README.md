@@ -31,6 +31,7 @@ The calculator also reads the course's Excel input template directly: `uv run py
 | `local_stress` | sigma_1, sigma_2, tau_12 (one angle and one material) |
 | `local_strain` | eps_1, eps_2, gamma_12 (one angle and one material) |
 | `forces_curvature` | Nx, Ny, Nxy, kappa_x, kappa_y, kappa_xy; calculate the required moments |
+| `[applied.mixed]` | A table naming one known quantity per pair: `Nx` or `sigma_x` or `eps_x`; `Ny` or `sigma_y` or `eps_y`; `Nxy` or `tau_xy` or `gamma_xy`; `Mx` or `kappa_x`; `My` or `kappa_y`; `Mxy` or `kappa_xy`. The other quantity of each pair is solved |
 | `delta_T` | Optional, next to one of the entries above: a uniform temperature change. Needs `alpha1` and `alpha2` in every material used |
 
 | `[expected]` key | Meaning |
@@ -40,6 +41,7 @@ The calculator also reads the course's Excel input template directly: `uv run py
 | `A11` ... `A66`, `B..`, `D..` | Laminate stiffness entries (indices 1, 2, 6) |
 | `a11` ... `a66`, `b..`, `d..` | Blocks of the inverted ABD matrix; the course reader calls them alpha, beta, delta. `b` is not symmetric: `b21` is row 2, column 1 |
 | `strain_global`, `curvature` | Mid-plane strains and curvatures |
+| `Nx` ... `Mxy`, `sigma_x`, `sigma_y`, `tau_xy`, `eps_x` ... `kappa_xy` | The same quantities one at a time, as answer keys state them: mechanical resultants, average stress N/h, mid-plane strains and curvatures |
 | `moments` | Applied Mx, My, Mxy resultants, in the case's moment-per-width units |
 | `strain_local`, `stress_global`, `stress_local` | Ply state, for one angle and material without bending |
 | `ply_strain_global`, `ply_strain_local`, `ply_stress_global`, `ply_stress_local` | One [3-value] row per ply at mid-thickness, which is the ply's value when curvature is zero |
@@ -60,6 +62,8 @@ Shear strains are engineering shear. Layups are listed from the bottom face up. 
 Case inputs reject unknown fields, partial strength sets and incomplete vectors. `loads`, `strains` and `forces_curvature` require all six components, including explicit zeros. Other applied vectors require three finite components. The calculator accepts this same format; `expected` is optional for calculation and required for an automated comparison. Tsai-Wu runs only when all strengths and an explicit `f12_star` are present.
 
 `forces_curvature` converts the first three components as force/width and the last three as curvature; the moments are outputs, never zero-filled inputs. Its forward check must pass before results are returned. The two `constructed-*.toml` cases use independently evaluated scalar formulas with synthetic inputs. They check implementation, not experimental validity. The generic engineering constants still describe free bending (ADR-0005). Any failure ratio scales all solved force/moment resultants proportionally; it does not maintain a fixed nonzero curvature while increasing only the forces.
+
+Mixed conditions: for example, a lamina between frictionless rigid walls is `eps_x = -0.01`, `eps_y = 0.0`, `tau_xy = 0.0`, `Mx = 0.0`, `My = 0.0`, `Mxy = 0.0`, and `sigma_x` is solved. Give every pair, including explicit zeros; see `se142-hw2-p2-cr-3-8-walls-30deg.toml` and `se142-hw4-p2-cr-5-13-unsymmetric-cure.toml`. Known loads are mechanical; `delta_T` adds the thermal resultants. Every solution must pass the forward check.
 
 Thermal inputs: `alpha1` and `alpha2` are in 1/degC (`SI`) or 1/degF (`US`, `psi`), and `delta_T` is a change in degC or degF. Stresses then come from each ply's mechanical strain, total strain minus its free thermal strain. The comparison cannot judge an expected zero when every value in that result is rounding noise, such as `M_T` of a symmetric laminate; leave such values out.
 

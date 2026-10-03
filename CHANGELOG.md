@@ -12,6 +12,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- Mixed load and deformation conditions: give one known quantity per load/deformation pair, with or without a temperature change, and the engine solves and verifies the rest. Course Homework 2 Problem 1 and Course Reader Problems 3.8 and 5.13 are now validation cases (ADR-0016).
 - Course inputs and answer-key comparison: the calculator reads the course Excel input template, cases can describe several materials and ply thicknesses, new results cover S, Q-bar, S-bar, the inverse ABD blocks and every ply face, and the calculator ends with an answer-key table. 17 new validation cases from course Homeworks 2 to 5 agree with 313 answer-key values (ADR-0015).
 - Thermal analysis: expansion coefficients, a uniform temperature change, thermal force and moment resultants, and residual ply stresses in the engine, case files and terminal calculator. Two validation cases reproduce the Course Reader 5.9 answer key (ADR-0014).
 - Prescribed-curvature analysis computes required laminate moments from explicit forces and curvature, checks the full forward response, and exposes a dedicated API operation with analytical cases and a chunk 3 walkthrough (ADR-0013).

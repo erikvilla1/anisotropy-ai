@@ -191,7 +191,9 @@ source diagrams may choose a different positive thickness direction.
 
 The engine applies the solved moments and known forces to `midplane_response`
 and compares the recovered deformation with the target curvature and calculated
-strain. It rejects the result if any component fails either check:
+strain. This forward check is computed by `forward_verification`, which also
+checks mixed conditions below. It rejects the result if any component fails
+either check:
 
 ```math
 |\varepsilon^{0,\mathrm{check}}_i-\varepsilon^0_i|
@@ -207,7 +209,7 @@ share stiffness code; their agreement is a consistency check. Separate analytica
 and stress-integration tests supply additional verification. Severe conditioning
 and experimental accuracy remain unestablished.
 
-<!-- code: prescribed_curvature_response -->
+<!-- code: prescribed_curvature_response, forward_verification -->
 
 Two constructed analytical cases isolate this operation. For two equally thick
 0/90 plies with zero major Poisson ratio, the in-plane matrices are diagonal:
@@ -223,6 +225,33 @@ case uses a single 0-degree ply: B is zero and
 $`\mathbf{D}=\operatorname{diag}(E_1,E_2,G_{12})h^3/12`$ when the Poisson ratio is zero.
 The case files record constructed constants and loading, not measured properties
 or a course solution. Their expected values come from these scalar equations.
+
+### Mixed load and deformation conditions
+
+Many problems fix some loads and some deformations: a lamina kept rectangular
+($`\gamma_{xy} = 0`$ under known normal stresses), a coupon between rigid walls
+($`\varepsilon_y = 0`$), or a cured laminate held flat in one direction only. For each of
+the six pairs $`(N_x, \varepsilon^0_x)`$, $`(N_y, \varepsilon^0_y)`$, $`(N_{xy}, \gamma^0_{xy})`$,
+$`(M_x, \kappa_x)`$, $`(M_y, \kappa_y)`$ and $`(M_{xy}, \kappa_{xy})`$ exactly one quantity is
+known. A force may be given as the average stress through the thickness, $`\sigma = N/h`$.
+
+With $`\mathbf{K}`$ the 6×6 ABD matrix, $`\mathbf{d} = [\boldsymbol{\varepsilon}^0; \boldsymbol{\kappa}]`$,
+$`\mathbf{F}`$ the mechanical resultants and $`\mathbf{F}^T`$ the thermal ones (zero without a
+temperature change), the total relation is $`\mathbf{F} + \mathbf{F}^T = \mathbf{K}\,\mathbf{d}`$.
+Splitting its rows into those with a known load (L) and those with a known
+deformation (D) gives the unknowns, computed by `mixed_response`:
+
+```math
+\mathbf{K}_{LL}\,\mathbf{d}_L = \mathbf{F}_L + \mathbf{F}^T_L - \mathbf{K}_{LD}\,\mathbf{d}_D,
+\qquad
+\mathbf{F}_D = \mathbf{K}_{DL}\,\mathbf{d}_L + \mathbf{K}_{DD}\,\mathbf{d}_D - \mathbf{F}^T_D
+```
+
+All loads known is the forward solve above; known forces and curvatures is the
+prescribed-curvature operation. The same forward check must recover the deformation
+from the total loads before a result is returned (ADR-0016).
+
+<!-- code: mixed_response -->
 
 ### Ply surface recovery
 
