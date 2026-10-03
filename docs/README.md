@@ -54,11 +54,11 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0006](decisions/ADR-0006-no-job-queue-yet.md) | No job queue until analyses are slow |
 | [0007](decisions/ADR-0007-validation-cases-store-numbers-only.md) | Validation cases store numbers and a source reference only |
 | [0008](decisions/ADR-0008-manual-generated-from-sources.md) | The LaTeX manual is generated from the repository's sources |
-| [0009](decisions/ADR-0009-calculator-inputs-in-case-files.md) | Calculator inputs reuse explicit TOML cases (proposed) |
-| [0010](decisions/ADR-0010-public-citations-local-page-evidence.md) | Publish property citations; keep textbook page scans local (proposed) |
-| [0011](decisions/ADR-0011-local-laminate-api.md) | Separate synchronous API with explicit SI-base inputs (proposed) |
-| [0012](decisions/ADR-0012-browser-calculator.md) | Static calculator page calls Python API with explicit boundary conversions (proposed) |
-| [0013](decisions/ADR-0013-prescribed-curvature-analysis.md) | Dedicated prescribed-curvature operation with required inputs and forward verification (proposed) |
+| [0009](decisions/ADR-0009-calculator-inputs-in-case-files.md) | Calculator inputs reuse explicit TOML cases |
+| [0010](decisions/ADR-0010-public-citations-local-page-evidence.md) | Publish property citations; keep textbook page scans local |
+| [0011](decisions/ADR-0011-local-laminate-api.md) | Separate synchronous API with explicit SI-base inputs |
+| [0012](decisions/ADR-0012-browser-calculator.md) | Static calculator page calls Python API with explicit boundary conversions |
+| [0013](decisions/ADR-0013-prescribed-curvature-analysis.md) | Dedicated prescribed-curvature operation with required inputs and forward verification |
 
 New decisions use the [template](decisions/_template.md).
 
