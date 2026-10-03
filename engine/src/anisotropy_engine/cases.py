@@ -19,7 +19,7 @@ import numpy as np
 
 from ._validation import finite_vector
 from .engineering import engineering_constants
-from .failure import first_ply_failure
+from .failure import FirstPlyFailure, first_ply_failure_combined
 from .lamina import Lamina, Strengths, ThermalExpansion, reduced_compliance, reduced_stiffness
 from .laminate import Ply, abd_matrices
 from .response import (
@@ -86,7 +86,7 @@ def _check_material(table: dict, name: str) -> None:
 def validate_case_inputs(case: dict) -> None:
     """Reject incomplete or misspelled case inputs before converting units or solving."""
     _fields(case, "case", {"units", "laminate", "applied"},
-            {"title", "source", "expected", "f12_star", "material", "materials"})
+            {"title", "source", "expected", "f12_star", "material", "materials", "failure"})
     if ("material" in case) == ("materials" in case):
         raise ValueError("case needs exactly one of [material] (one material) or [materials.<name>] tables")
     if case["units"] not in UNIT_SYSTEMS:
@@ -144,6 +144,15 @@ def validate_case_inputs(case: dict) -> None:
         if missing:
             where = "[material]" if "material" in case else f"materials {missing}"
             raise ValueError(f"applied.delta_T needs alpha1 and alpha2 in {where}")
+    if "failure" in case:
+        _fields(case["failure"], "failure", {"fixed", "variable"}, set())
+        for name in ("fixed", "variable"):
+            finite_vector(case["failure"][name], f"failure.{name}", 6)
+        if not np.any(case["failure"]["variable"]):
+            raise ValueError("failure.variable needs at least one nonzero load to scale")
+        no_strengths = [name for name in used if "F1t" not in tables[name]]
+        if no_strengths:
+            raise ValueError(f"[failure] needs all five strengths for {no_strengths}")
     if "f12_star" in case and not -1 < case["f12_star"] < 1:
         raise ValueError("f12_star must be finite and strictly between -1 and 1")
     if "expected" in case:
@@ -252,6 +261,36 @@ def solve_case(case: dict) -> CaseSolution:
                         loads, eps0, kappa, surfaces, constrained, mixed)
 
 
+def failure_loads(case: dict, solution: CaseSolution) -> tuple[Loads, Loads] | None:
+    """The (fixed, variable) loads for first-ply failure, in SI, or None when it cannot be checked.
+
+    A [failure] table names both, as six resultants in the case's units. Without one, the
+    case's mechanical loads (given or solved) scale and nothing mechanical is held fixed; a
+    temperature change then stays fixed, as in Daniel & Ishai Section 9.8. None means some
+    ply has no strengths or nothing would scale.
+    """
+    if not all(ply.material.strengths is not None for ply in solution.plies):
+        return None
+    if "failure" in case:
+        factors = [UNIT_SYSTEMS[case["units"]][kind][0] for kind in ("N",) * 3 + ("M",) * 3]
+        fixed, variable = (np.asarray(case["failure"][name], dtype=float) * factors for name in ("fixed", "variable"))
+        return (Loads(**dict(zip(LOAD_NAMES, fixed))), Loads(**dict(zip(LOAD_NAMES, variable))))
+    if not np.any(solution.loads.as_vector()):
+        return None
+    return Loads(**dict.fromkeys(LOAD_NAMES, 0.0)), solution.loads
+
+
+def first_ply_failures(case: dict, solution: CaseSolution) -> dict[str, FirstPlyFailure]:
+    """First-ply failure for each criterion the case supports: maximum stress, and Tsai-Wu with f12_star."""
+    loads = failure_loads(case, solution)
+    if loads is None:
+        return {}
+    criteria = ("max_stress", "tsai_wu") if "f12_star" in case else ("max_stress",)
+    return {criterion: first_ply_failure_combined(solution.plies, *loads, solution.delta_T, criterion,
+                                                  case.get("f12_star"))
+            for criterion in criteria}
+
+
 def engine_results(case: dict) -> dict:
     """Everything the case's inputs determine, in the case's units, as {key: (value, scale)}.
 
@@ -337,14 +376,13 @@ def engine_results(case: dict) -> dict:
     results["nu_xy"] = (constants.nu_xy, 0.0)
     results["nu_yx"] = (constants.nu_yx, 0.0)
 
-    # Residual thermal stress does not scale with the applied load, so first_ply_failure's
-    # ratio would be wrong with a temperature change. No failure result is given then.
-    has_strengths = all(ply.material.strengths is not None for ply in plies)
-    if has_strengths and solution.delta_T is None and np.any(solution.loads.as_vector()):
-        results["fpf_ratio_max_stress"] = (first_ply_failure(plies, solution.loads).strength_ratio, 0.0)
-        if "f12_star" in case:
-            tsai_wu = first_ply_failure(plies, solution.loads, "tsai_wu", case["f12_star"])
-            results["fpf_ratio_tsai_wu"] = (tsai_wu.strength_ratio, 0.0)
+    # First-ply failure: the ratio on the variable loads, the loads at failure, and where it occurs.
+    for criterion, fpf in first_ply_failures(case, solution).items():
+        results[f"fpf_ratio_{criterion}"] = (fpf.strength_ratio, 0.0)
+        add(f"fpf_forces_{criterion}", shown(fpf.failure_loads.as_vector()[:3], "N"))
+        add(f"fpf_moments_{criterion}", shown(fpf.failure_loads.as_vector()[3:], "M"))
+        results[f"fpf_ply_{criterion}"] = (float(fpf.governing.ply_index + 1), 0.0)
+        results[f"fpf_z_{criterion}"] = (float(shown(fpf.governing.z_m, "length")), float(shown(h / 2, "length")))
     return results
 
 
