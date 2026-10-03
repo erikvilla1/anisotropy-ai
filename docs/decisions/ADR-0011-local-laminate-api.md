@@ -1,8 +1,8 @@
 # ADR-0011: A separate synchronous FastAPI adapter with an explicit SI-base contract
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-03
-- Decided by: Implementation proposal for founder review | Drafted by: Codex
+- Decided by: Founder | Drafted by: Codex
 - Related: [API walkthrough](../../api/README.md), [evaluation](../evaluations/api/2026-10-03-api-chunk-1.md), [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0006](ADR-0006-no-job-queue-yet.md)
 
 ## Context
