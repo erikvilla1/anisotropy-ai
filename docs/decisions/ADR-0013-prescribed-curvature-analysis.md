@@ -1,8 +1,8 @@
 # ADR-0013: A dedicated prescribed-curvature tool solves for required moments
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-03
-- Decided by: Implementation proposal for founder review | Drafted by: Codex
+- Decided by: Founder | Drafted by: Codex
 - Related: [walkthrough](../walkthroughs/chunk-3-constrained-analysis.md), [evaluation](../evaluations/2026-10-03-prescribed-curvature.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0004](ADR-0004-sign-and-stacking-conventions.md)
 
 ## Context
