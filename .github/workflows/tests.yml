@@ -17,6 +17,17 @@ jobs:
       - run: uv sync --locked
       - run: uv run pytest
 
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --locked
+      - run: uv run pytest tests ../engine/tests
+
   website:
     runs-on: ubuntu-latest
     steps:
