@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ._validation import finite_vector
 from .engineering import engineering_constants
 from .failure import first_ply_failure
 from .lamina import Lamina, Strengths
@@ -27,7 +28,40 @@ _INDEX = {"1": 0, "2": 1, "6": 2}
 
 def load_case(path: Path) -> dict:
     """Read one case file."""
-    return tomllib.loads(Path(path).read_text(encoding="utf-8"))
+    case = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+    validate_case_inputs(case)
+    return case
+
+
+def _fields(value: dict, name: str, required: set[str], optional: set[str]) -> None:
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be a table")
+    missing, unknown = required - value.keys(), value.keys() - required - optional
+    if missing or unknown:
+        raise ValueError(f"{name}: missing fields {sorted(missing)}; unknown fields {sorted(unknown)}")
+
+
+def validate_case_inputs(case: dict) -> None:
+    """Reject incomplete or misspelled case inputs before converting units or solving."""
+    _fields(case, "case", {"units", "material", "laminate", "applied"}, {"title", "source", "expected", "f12_star"})
+    if case["units"] not in UNIT_SYSTEMS:
+        raise ValueError(f"units must be one of {tuple(UNIT_SYSTEMS)}")
+    material = case["material"]
+    _fields(material, "material", {"E1", "E2", "G12", "nu12"}, set(STRENGTH_NAMES))
+    supplied = set(STRENGTH_NAMES) & material.keys()
+    if supplied and supplied != set(STRENGTH_NAMES):
+        raise ValueError("material needs either all five strengths or none")
+    _fields(case["laminate"], "laminate", {"layup", "ply_thickness"}, set())
+    angles = np.asarray(case["laminate"]["layup"], dtype=float)
+    if angles.ndim != 1 or not angles.size or not np.all(np.isfinite(angles)):
+        raise ValueError("laminate.layup must be a nonempty vector of finite angles")
+    _fields(case["applied"], "applied", set(), set(APPLIED_KINDS))
+    if len(case["applied"]) != 1:
+        raise ValueError(f"[applied] needs exactly one of {APPLIED_KINDS}")
+    kind, values = next(iter(case["applied"].items()))
+    finite_vector(values, f"applied.{kind}", 6 if kind in ("loads", "strains") else 3)
+    if "f12_star" in case and not -1 < case["f12_star"] < 1:
+        raise ValueError("f12_star must be finite and strictly between -1 and 1")
 
 
 def engine_results(case: dict) -> dict:
@@ -36,6 +70,7 @@ def engine_results(case: dict) -> dict:
     The scale is the largest magnitude in the same group of results, used to judge
     expected values of zero.
     """
+    validate_case_inputs(case)
     units = UNIT_SYSTEMS[case["units"]]
 
     def si(value, kind):

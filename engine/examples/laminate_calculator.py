@@ -1,15 +1,20 @@
-"""Laminate calculator for checking hand or homework answers. Edit the inputs, then run:
+"""Laminate calculator for checking hand or homework answers from a TOML case:
 
     cd engine
     uv run python examples/laminate_calculator.py
+    uv run python examples/laminate_calculator.py validation/cases/as4-zero-degree-axial-check.toml
 
 Prints Q, Q-bar, ply positions, A, B, D, mid-plane strains and curvatures, ply strains
 and stresses in laminate and fiber axes, laminate engineering constants and, when
 strengths are given, strength ratios and first-ply failure.
 """
 
+import argparse
+from pathlib import Path
+
 import numpy as np
 
+from anisotropy_engine.cases import STRENGTH_NAMES, load_case
 from anisotropy_engine.engineering import engineering_constants
 from anisotropy_engine.failure import first_ply_failure, max_stress_ratio, tsai_wu_ratio
 from anisotropy_engine.lamina import Lamina, Strengths, reduced_stiffness
@@ -18,34 +23,34 @@ from anisotropy_engine.response import Loads, abd_matrix, midplane_response, ply
 from anisotropy_engine.rotation import strain_transformation, stress_transformation, transformed_reduced_stiffness
 from anisotropy_engine.units import UNIT_SYSTEMS
 
-# ------------------------------------------------------------------ inputs
-UNITS = "SI"  # "SI": GPa, MPa, mm, N/m, N*m/m   "US": Msi, ksi, in, lb/in, lb*in/in   "psi": psi, in, lb/in, lb*in/in
-
-# Ply material. Default: Daniel & Ishai Problem 7.11 (printed A11 = 60.24 MN/m).
-E1, E2, G12, NU12 = 145.0, 10.5, 7.0, 0.28
-STRENGTHS = None  # (F1t, F1c, F2t, F2c, F6), compressive as positive, e.g. (2280, 1725, 57, 228, 76)
-
-# Layup listed from the bottom face up, angles in degrees, counterclockwise from x to the fibers.
-LAYUP = [0, 45, -45]
-PLY_THICKNESS = 0.25  # mm (SI) or in (US, psi), the same for every ply
-
-# Choose what the problem gives you, then fill in the matching line below.
-#   "loads"         N and M (force and moment per width)
-#   "stress"        global stresses sigma_x, sigma_y, tau_xy, averaged through the thickness
-#   "strains"       global mid-plane strains EPS0 and curvatures KAPPA
-#   "local stress"  sigma_1, sigma_2, tau_12 in the fiber axes (layup must use a single angle)
-#   "local strain"  eps_1, eps_2, gamma_12 in the fiber axes (layup must use a single angle)
-APPLIED = "loads"
-N = (100e3, 0.0, 0.0)  # Nx, Ny, Nxy: N/m (SI) or lb/in (US)
-M = (0.0, 0.0, 0.0)  # Mx, My, Mxy: N*m/m (SI) or lb*in/in (US)
-EPS0 = (1e-3, 0.0, 0.0)  # eps_x, eps_y, gamma_xy (engineering shear), when APPLIED = "strains"
-KAPPA = (0.0, 0.0, 0.0)  # kappa_x, kappa_y, kappa_xy: 1/m (SI) or 1/in (US)
-STRESS = (0.0, 0.0, 0.0)  # sigma_x, sigma_y, tau_xy averaged through the thickness, when APPLIED = "stress"
-LOCAL_STRESS = (0.0, 0.0, 0.0)  # sigma_1, sigma_2, tau_12, when APPLIED = "local stress"
-LOCAL_STRAIN = (0.0, 0.0, 0.0)  # eps_1, eps_2, gamma_12 (engineering shear), when APPLIED = "local strain"
-
-F12_STAR = -0.5  # Tsai-Wu interaction term, used only when strengths are given
-# --------------------------------------------------------------------------
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("case", nargs="?", type=Path,
+                    default=Path(__file__).parents[1] / "validation/cases/daniel-ishai-problem-7-11.toml")
+parser.add_argument("--allow-unusual-moduli", action="store_true",
+                    help="Continue after explicitly reviewing moduli outside the calculator's plausibility screen")
+args = parser.parse_args()
+try:
+    case = load_case(args.case)
+except (ValueError, OSError) as error:
+    parser.error(str(error))
+UNITS = case["units"]
+E1, E2, G12, NU12 = (case["material"][key] for key in ("E1", "E2", "G12", "nu12"))
+STRENGTHS = tuple(case["material"][key] for key in STRENGTH_NAMES) if "F1t" in case["material"] else None
+LAYUP = case["laminate"]["layup"]
+PLY_THICKNESS = case["laminate"]["ply_thickness"]
+applied_kind, applied_values = next(iter(case["applied"].items()))
+APPLIED = applied_kind.replace("_", " ")
+if APPLIED == "loads":
+    N, M = applied_values[:3], applied_values[3:]
+elif APPLIED == "strains":
+    EPS0, KAPPA = applied_values[:3], applied_values[3:]
+elif APPLIED == "stress":
+    STRESS = applied_values
+elif APPLIED == "local stress":
+    LOCAL_STRESS = applied_values
+else:
+    LOCAL_STRAIN = applied_values
+F12_STAR = case.get("f12_star")  # No unrecorded assumption for Tsai-Wu.
 
 UNIT_SETS = UNIT_SYSTEMS
 APPLIED_OPTIONS = ("loads", "stress", "strains", "local stress", "local strain")
@@ -86,13 +91,18 @@ if STRENGTHS is not None:
 e1, e2, g12 = to_si((E1, E2, G12), "modulus")
 material = Lamina(E1=e1, E2=e2, G12=g12, nu12=NU12, strengths=strengths)
 for name, value in (("E1", e1), ("E2", e2), ("G12", g12)):
-    # Real fiber composites and their resins sit between about 0.5 and 1000 GPa.
+    # This is an input-error screen inherited from the example, not a material validity criterion.
     if not 0.5e9 <= value <= 1000e9:
-        print(f"WARNING: {name} = {value / 1e9:.4g} GPa is outside the range of real materials. "
-              f'Check that UNITS = "{UNITS}" matches the numbers you typed.')
+        message = (f"{name} = {value / 1e9:.4g} GPa is outside the calculator's 0.5-1000 GPa plausibility screen. "
+                   f'Check units = "{UNITS}": enter moduli in {U["modulus"][1]}.')
+        if not args.allow_unusual_moduli:
+            parser.error(message + " Use --allow-unusual-moduli only after reviewing the input.")
+        print("WARNING: " + message)
 plies = [Ply(material=material, angle_deg=a, thickness_m=float(to_si(PLY_THICKNESS, "length"))) for a in LAYUP]
 
-print(f"Units: {UNITS}.  Layup (bottom face first): {LAYUP}")
+print(f"Case: {args.case.name}")
+print(f"Units: {UNITS}. Moduli: {U['modulus'][1]}; stress: {U['stress'][1]}; thickness: {U['length'][1]}.")
+print(f"Layup (bottom face first): {LAYUP}")
 print(f"nu21 = {material.nu21:.6g}")
 print_matrix("Q, fiber axes", reduced_stiffness(material), "modulus")
 for angle in dict.fromkeys(LAYUP):
@@ -157,13 +167,17 @@ if strengths is None:
 elif not np.any(loads.as_vector()):
     print("\nNothing is applied, so failure checks are skipped.")
 else:
-    print(f"\nStrength ratios on each ply face (Tsai-Wu with f12* = {F12_STAR:g})")
+    print("\nMaximum-stress strength ratios on each ply face")
+    if F12_STAR is None:
+        print("Tsai-Wu skipped: the case does not supply f12_star.")
+    else:
+        print(f"Tsai-Wu also evaluated with explicit f12* = {F12_STAR:g}.")
     for s in surfaces:
         face = "bottom" if s.z_m == z[s.ply_index] else "top"
         ratio, mode = max_stress_ratio(s.stress_12, strengths)
-        print(f"   ply {s.ply_index + 1:2d} {s.angle_deg:6g} deg {face:>6}   max stress {ratio:9.4g} ({mode})"
-              f"   Tsai-Wu {tsai_wu_ratio(s.stress_12, strengths, F12_STAR):9.4g}")
-    for criterion in ("max_stress", "tsai_wu"):
+        tw = f"   Tsai-Wu {tsai_wu_ratio(s.stress_12, strengths, F12_STAR):9.4g}" if F12_STAR is not None else ""
+        print(f"   ply {s.ply_index + 1:2d} {s.angle_deg:6g} deg {face:>6}   max stress {ratio:9.4g} ({mode})" + tw)
+    for criterion in (("max_stress", "tsai_wu") if F12_STAR is not None else ("max_stress",)):
         fpf = first_ply_failure(plies, loads, criterion, F12_STAR)
         g = fpf.governing
         print(f"\nFirst-ply failure, {criterion}: R = {fpf.strength_ratio:.6g}, ply {g.ply_index + 1} "

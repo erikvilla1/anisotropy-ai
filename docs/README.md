@@ -56,6 +56,8 @@ New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
+Calculator input decision: [ADR-0009: TOML cases](decisions/ADR-0009-calculator-inputs-in-case-files.md). Latest input checks: [2026-10-03 evaluation](evaluations/2026-10-03-input-validation.md).
+
 | Document | Contents |
 | --- | --- |
 | [textbook-material-release-2026-10-01.md](textbook-material-release-2026-10-01.md) | Textbook material release |

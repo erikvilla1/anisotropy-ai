@@ -21,6 +21,8 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Changed
 
+- The calculator reads explicit TOML cases using the existing validation format; personal inputs no longer require code edits. It displays input units, requires review of implausible moduli and does not assume a Tsai-Wu interaction coefficient (ADR-0009).
+- Case inputs reject unknown fields, partial strengths and malformed applied vectors before solving.
 - Moved `AI_Documentation.md` to `docs/documentation-guide.md`.
 
 ## [Engine 0.1.0] - 2026-10-02
