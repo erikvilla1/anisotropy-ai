@@ -33,7 +33,7 @@ ROOT = HERE.parents[1]
 GENERATED = HERE / "generated"
 BUILD = HERE / "build"
 REPO_URL = "https://github.com/erikvilla1/anisotropy-ai/blob/main/"
-ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal")
+ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed")
 
 # --------------------------------------------------------------------- text to LaTeX
 
@@ -283,7 +283,10 @@ def number(value: float, digits: int = 6) -> str:
 
 
 UNIT_OF = {"stress_global": "stress", "stress_local": "stress", "Ex": "modulus", "Ey": "modulus",
-           "Gxy": "modulus", "curvature": "kappa", "moments": "M", "N_T": "N", "M_T": "M"}
+           "Gxy": "modulus", "curvature": "kappa", "moments": "M", "N_T": "N", "M_T": "M",
+           "Nx": "N", "Ny": "N", "Nxy": "N", "Mx": "M", "My": "M", "Mxy": "M",
+           "sigma_x": "stress", "sigma_y": "stress", "tau_xy": "stress",
+           "kappa_x": "kappa", "kappa_y": "kappa", "kappa_xy": "kappa"}
 MATRIX_UNITS = ((r"[ABDabd][126]{2}", None), (r"(Q|Qbar)[126]{2}", "modulus"), (r"(S|Sbar)[126]{2}", "compliance"))
 
 

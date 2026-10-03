@@ -1,4 +1,4 @@
-title = "Stiffness and thermal resultants of a cured [0/90] AS4 laminate (Course Reader Problem 5.13)"
+title = "Curvature of a cured [0/90] AS4 laminate held flat in y and in twist (Course Reader Problem 5.13)"
 source = "SE142/253A (Fall 2025) Homework 4, Problem 2, course solution; numbers only"
 units = "SI"
 
@@ -15,8 +15,17 @@ layup = [0, 90]
 ply_thickness = 0.127
 
 [applied]
-loads = [0, 0, 0, 0, 0, 0]
 delta_T = -150.0  # degC
+
+[applied.mixed]
+# No mechanical forces and no applied Mx; the constraint holds kappa_y = kappa_xy = 0, so
+# kappa_x and the reaction moments My and Mxy are solved.
+Nx = 0.0
+Ny = 0.0
+Nxy = 0.0
+Mx = 0.0
+kappa_y = 0.0
+kappa_xy = 0.0
 
 [expected]
 tolerance = 0.002
@@ -30,4 +39,8 @@ D12 = 0.004123
 D66 = 0.009559
 N_T = [-3739.0, -3739.0, 0]  # N/m
 M_T = [-0.388, 0.388, 0]  # N*m/m
-# kappa_x = -13.035 1/m with kappa_y = kappa_xy = 0 held is a mixed condition; not solved yet.
+# The key evaluates kappa_x from rounded A, B, D, N_T and M_T; its denominator subtracts similar
+# numbers, so the rounding moves the result about 0.12% from the engine's -13.0507 1/m.
+# Its own rounded values give -13.0346 when evaluated directly.
+kappa_x = -13.035  # 1/m
+Mxy = 0  # N*m/m; the key shows Mxy = 0 by inspection
