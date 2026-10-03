@@ -16,4 +16,5 @@ Base: `e8bacf7`. This work retains the static preview; it adds no solver connect
 - Four page scans were moved from public assets to ignored `.local/textbook-evidence/daniel-ishai-2006/`. All four SHA-256 fingerprints still match the original manifest.
 - The rendering script writes only to that local directory. Rendering was not rerun; fresh image generation is UNVERIFIED in this change.
 - Unit tests reject a public scan directory. The browser suite checks exact source locations, values, invalid citation links, mobile overflow and a 404 response from the former scan URL. The production export contains no textbook scan directory.
-- Original source values and dataset identities are retained; no new source qualification is claimed. See [ADR-0010](../decisions/ADR-0010-public-citations-local-page-evidence.md).
+- Original source values and dataset identities are retained; no new source qualification is claimed. See [ADR-0010](../../decisions/ADR-0010-public-citations-local-page-evidence.md).
+- Website-only evaluations live in this subdirectory so the engine manual's latest-report selection continues to use an engine evaluation.
