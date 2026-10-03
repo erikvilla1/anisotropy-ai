@@ -1,0 +1,38 @@
+title = "Curing stresses in a [0/90]s S-glass/epoxy laminate cooled by 150 degC"
+source = "Course Reader Problem 5.9, answer key (course and term to be added); engine values matched the key when checked on 2026-10-03"
+units = "SI"
+
+[material]
+E1 = 45.0
+E2 = 9.0
+G12 = 4.5
+nu12 = 0.3
+alpha1 = 5.0e-6  # 1/degC
+alpha2 = 26.0e-6
+
+[laminate]
+layup = [0, 90, 90, 0]  # [0/90]s
+ply_thickness = 0.127
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]  # no mechanical load; curing only
+delta_T = -150.0  # degC
+
+[expected]
+tolerance = 0.001  # the key prints four to five significant figures
+Q11 = 45.825
+Q12 = 2.749
+Q22 = 9.165
+Q66 = 4.5
+A11 = 13.97
+A12 = 1.397
+A22 = 13.97
+A66 = 2.286
+N_T = [-21055.0, -21055.0, 0]  # N/m; the key prints -21.055 kN/m
+# Every ply has the same fiber-axis stress, [sigma_11, sigma_22, sigma_12] in MPa, bottom ply first.
+ply_stress_local = [[-21.48, 21.48, 0], [-21.48, 21.48, 0], [-21.48, 21.48, 0], [-21.48, 21.48, 0]]
+# Not recorded:
+# - The key prints eps0 = [-1.37, -1.37, 0] x 10^-4. Its own N_T / (A11 + A12) = -21055 / 15.367e6
+#   = -1.370e-3, and its 21.48 MPa stresses need -1.37e-3. Probably an exponent misprint; add
+#   strain_global once the course confirms the value.
+# - M_T = 0 and zero curvature: see the AS4 case.

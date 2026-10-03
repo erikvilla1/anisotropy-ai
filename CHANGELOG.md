@@ -12,6 +12,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- Thermal analysis: expansion coefficients, a uniform temperature change, thermal force and moment resultants, and residual ply stresses in the engine, case files and terminal calculator. Two validation cases reproduce the Course Reader 5.9 answer key (ADR-0014).
 - Prescribed-curvature analysis computes required laminate moments from explicit forces and curvature, checks the full forward response, and exposes a dedicated API operation with analytical cases and a chunk 3 walkthrough (ADR-0013).
 - Calculator page connects an editable GPa/mm laminate form to the Python API, displays engine stiffness/deformation, and handles invalid inputs, cancellation and outdated results; includes browser integration tests and a learning walkthrough (ADR-0012).
 - Local FastAPI endpoint for one-material laminate stiffness and deformation, with explicit SI-base inputs, integration tests and a chunk-by-chunk learning walkthrough (ADR-0011).

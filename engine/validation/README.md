@@ -21,21 +21,27 @@ Together these cases are the evidence that the engine gives the right numbers, a
 | `local_stress` | sigma_1, sigma_2, tau_12 (single-angle layups) |
 | `local_strain` | eps_1, eps_2, gamma_12 (single-angle layups) |
 | `forces_curvature` | Nx, Ny, Nxy, kappa_x, kappa_y, kappa_xy; calculate the required moments |
+| `delta_T` | Optional, next to one of the entries above: a uniform temperature change. Needs `alpha1` and `alpha2` in `[material]` |
 
 | `[expected]` key | Meaning |
 | --- | --- |
+| `Q11`, `Q12`, `Q22`, `Q66` | Ply reduced stiffness in fiber axes |
 | `A11` ... `A66`, `B..`, `D..` | Laminate stiffness entries (indices 1, 2, 6) |
 | `strain_global`, `curvature` | Mid-plane strains and curvatures |
 | `moments` | Applied Mx, My, Mxy resultants, in the case's moment-per-width units |
 | `strain_local`, `stress_global`, `stress_local` | Ply state, for single-angle layups without bending |
+| `ply_stress_global`, `ply_stress_local` | One [3-value] row per ply, bottom ply first: stress at the ply's mid-thickness, which is the ply's stress when curvature is zero |
+| `N_T`, `M_T` | Thermal force and moment resultants, when the case has `delta_T` |
 | `Ex`, `Ey`, `Gxy`, `nu_xy`, `nu_yx` | Laminate engineering constants |
-| `fpf_ratio_max_stress`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio (Tsai-Wu needs `f12_star`) |
+| `fpf_ratio_max_stress`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio (Tsai-Wu needs `f12_star`); not available with `delta_T` |
 
 Shear strains are engineering shear. Layups are listed from the bottom face up. Units follow `src/anisotropy_engine/units.py`.
 
 Case inputs reject unknown fields, partial strength sets and incomplete vectors. `loads`, `strains` and `forces_curvature` require all six components, including explicit zeros. Other applied vectors require three finite components. The calculator accepts this same format; `expected` is optional for calculation and required for an automated comparison. Tsai-Wu runs only when all strengths and an explicit `f12_star` are present.
 
 `forces_curvature` converts the first three components as force/width and the last three as curvature; the moments are outputs, never zero-filled inputs. Its forward check must pass before results are returned. The two `constructed-*.toml` cases use independently evaluated scalar formulas with synthetic inputs. They check implementation, not experimental validity. The generic engineering constants still describe free bending (ADR-0005). Any failure ratio scales all solved force/moment resultants proportionally; it does not maintain a fixed nonzero curvature while increasing only the forces.
+
+Thermal inputs: `alpha1` and `alpha2` are in 1/degC (`SI`) or 1/degF (`US`, `psi`), and `delta_T` is a change in degC or degF. Stresses then come from each ply's mechanical strain, total strain minus its free thermal strain. The comparison cannot judge an expected zero when every value in that result is rounding noise, such as `M_T` of a symmetric laminate; leave such values out.
 
 Use `units = "SI"` for moduli in GPa, stresses in MPa and thickness in mm. For example, 140 GPa is entered as `E1 = 140`. `US` uses Msi/ksi/inches, and `psi` uses psi/inches. The engine still calculates in SI base units.
 
