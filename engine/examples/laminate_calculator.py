@@ -138,6 +138,10 @@ if dT is not None:
 if solution.constrained is not None:
     print("\nPrescribed curvature: required applied moments calculated; forward verification passed.")
     print(f"Recovered curvature [{U['kappa'][1]}]: {show(solution.constrained.verification.recovered_curvature, 'kappa')}")
+if solution.mixed is not None:
+    given = ", ".join(f"{name} = {case['applied']['mixed'][name]:g}" for name in solution.mixed.known)
+    print(f"\nMixed conditions, in the case's units: given {given}.")
+    print("The other quantity of each pair was solved; forward verification passed.")
 
 loads = solution.loads
 eps0, kappa = solution.eps0, solution.kappa
@@ -178,8 +182,9 @@ elif dT is not None:
 elif not np.any(loads.as_vector()):
     print("\nNothing is applied, so failure checks are skipped.")
 else:
-    if solution.constrained is not None:
-        print("\nFailure ratios below scale solved N and M together; they do not hold a nonzero curvature fixed.")
+    if solution.constrained is not None or solution.mixed is not None:
+        print("\nFailure ratios below scale all N and M together, given and solved; they do not hold "
+              "prescribed deformations fixed.")
     print("\nMaximum-stress strength ratios on each ply face")
     if F12_STAR is None:
         print("Tsai-Wu skipped: the case does not supply f12_star.")

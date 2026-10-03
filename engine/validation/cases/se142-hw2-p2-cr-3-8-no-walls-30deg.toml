@@ -1,0 +1,28 @@
+title = "Stress that compresses a free 30-degree lamina by 1% (Course Reader Problem 3.8, part 2)"
+source = "SE142/253A (Fall 2025) Homework 2, Problem 2, course solution; numbers only"
+units = "SI"
+
+[material]
+E1 = 140.0
+E2 = 10.0
+G12 = 7.0
+nu12 = 0.3
+
+[laminate]
+layup = [30]
+ply_thickness = 1.0  # not given; these results do not depend on it
+
+[applied.mixed]
+# With the walls removed, eps_x = -0.01 is still imposed but sigma_y = 0 and tau_xy = 0.
+eps_x = -0.01
+sigma_y = 0.0
+tau_xy = 0.0
+Mx = 0.0
+My = 0.0
+Mxy = 0.0
+
+[expected]
+tolerance = 0.002  # the key prints three to four significant figures
+sigma_x = -276.0  # MPa, sigma_0 = 276 MPa
+eps_y = 0.002217
+gamma_xy = 0.01297
