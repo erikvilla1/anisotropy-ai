@@ -62,6 +62,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0014](decisions/ADR-0014-explicit-temperature-change.md) | Thermal analysis in separate functions with an explicit temperature change |
 | [0015](decisions/ADR-0015-course-inputs-and-several-materials.md) | Cases read course Excel inputs and describe several materials per laminate |
 | [0016](decisions/ADR-0016-mixed-load-deformation-conditions.md) | One general solver for mixed load and deformation conditions (proposed) |
+| [0017](decisions/ADR-0017-failure-with-fixed-and-variable-loads.md) | First-ply failure holds fixed loads and thermal stress constant and scales the rest (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
