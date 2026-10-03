@@ -23,6 +23,10 @@ docs/manual/build/
 .local/
 # Local reference archive (includes user-supplied textbooks)
 References/
+# Textbook page scans must never be committed or served as public assets.
+public/assets/documents/daniel-ishai-2006/
+# Generated review artifacts remain local.
+output/
 # Local duplicate of the already tracked appendix; its SHA-256 is tested.
 public/assets/documents/material-properties-2026-v2-d851b3cf3135.pdf
 public/materials/catalog-status.json

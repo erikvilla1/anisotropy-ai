@@ -12,6 +12,8 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | What changed, and when? | [Changelog](../CHANGELOG.md) and merged pull requests |
 | What could go wrong? | [Risk register](risks/risk_register.md) |
 | How is each result calculated? | [Engine theory](../engine/docs/theory.md) |
+| How does the API call the engine? | [Chunk 1 walkthrough](../api/README.md) and [API component card](components/api.md) |
+| How does the website call the API? | [Chunk 2 walkthrough](walkthroughs/chunk-2-calculator.md) and [calculator component card](components/calculator.md) |
 | All of the above as one typeset PDF | [Engine manual](manual/) |
 | Where do material values come from? | The material data documents below |
 
@@ -51,12 +53,16 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0006](decisions/ADR-0006-no-job-queue-yet.md) | No job queue until analyses are slow |
 | [0007](decisions/ADR-0007-validation-cases-store-numbers-only.md) | Validation cases store numbers and a source reference only |
 | [0008](decisions/ADR-0008-manual-generated-from-sources.md) | The LaTeX manual is generated from the repository's sources |
+| [0009](decisions/ADR-0009-calculator-inputs-in-case-files.md) | Calculator inputs reuse explicit TOML cases (proposed) |
+| [0010](decisions/ADR-0010-public-citations-local-page-evidence.md) | Publish property citations; keep textbook page scans local (proposed) |
+| [0011](decisions/ADR-0011-local-laminate-api.md) | Separate synchronous API with explicit SI-base inputs (proposed) |
+| [0012](decisions/ADR-0012-browser-calculator.md) | Static calculator page calls Python API with explicit boundary conversions (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
-Calculator input decision: [ADR-0009: TOML cases](decisions/ADR-0009-calculator-inputs-in-case-files.md). Latest input checks: [2026-10-03 evaluation](evaluations/2026-10-03-input-validation.md).
+Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md) and [website inputs and citations](evaluations/website/2026-10-03-input-validation.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
 
 | Document | Contents |
 | --- | --- |
@@ -69,4 +75,4 @@ Calculator input decision: [ADR-0009: TOML cases](decisions/ADR-0009-calculator-
 
 ## Added when the parts exist
 
-From the documentation guide, these wait until the parts they describe are built: component cards for the API, the language model and the report generator; the per-run provenance record; and the weekly brief.
+From the documentation guide, these wait until the parts they describe are built: component cards for the language model and the report generator; the per-run provenance record; and the weekly brief. The local API now has a [component card](components/api.md) and [evaluation](evaluations/api/2026-10-03-api-chunk-1.md).

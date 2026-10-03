@@ -17,6 +17,17 @@ jobs:
       - run: uv sync --locked
       - run: uv run pytest
 
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --locked
+      - run: uv run pytest tests ../engine/tests
+
   website:
     runs-on: ubuntu-latest
     steps:
@@ -28,6 +39,24 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
+
+  calculator-browser:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
+      BROWSER_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: npm ci
+      - run: uv sync --project api --locked
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run test:calculator
 
   manual:
     runs-on: ubuntu-latest

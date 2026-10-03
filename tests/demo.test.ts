@@ -130,3 +130,37 @@ test("rejects invalid draft geometry and escapes LaTeX text", () => {
   assert.ok(!report.includes("\\input{private}"));
   assert.ok(report.includes("No engineering conclusion is available"));
 });
+
+test("signed and zero inputs reach validation without becoming positive or retaining old values", () => {
+  for (const [prompt, key, value] of [
+    ["Apply -20 kN", "applied_load_kN", -20],
+    ["Apply −20 kN", "applied_load_kN", -20],
+    ["Use -5 mm thickness", "thickness_mm", -5],
+    ["width: -36 mm", "width_mm", -36],
+    ["length: -250 mm", "length_mm", -250],
+    ["Use a safety factor of -2", "safety_factor", -2],
+    ["Use 0 kN", "applied_load_kN", 0],
+    ["Use -16 plies", "ply_count", -16],
+    ["Use 4.5 plies", "ply_count", 4.5],
+    ["Use -6 mm hole", "hole_diameter_mm", -6],
+  ] as const) {
+    const scope = makeReply(prompt, { ...emptyScope, [key]: 10 }).scope;
+    assert.equal(scope[key], value, prompt);
+    assert.ok(scopeErrors(scope).length > 0, prompt);
+  }
+  const decimal = makeReply("+.5 kN, thickness: .25 mm", emptyScope).scope;
+  assert.equal(decimal.applied_load_kN, 0.5);
+  assert.equal(decimal.thickness_mm, 0.25);
+  assert.equal(makeReply("-2e1 kN", emptyScope).scope.applied_load_kN, -20);
+  const compact = makeReply("250x36x2 mm", emptyScope).scope;
+  assert.deepEqual([compact.length_mm, compact.width_mm, compact.thickness_mm], [250, 36, 2]);
+});
+
+test("signed dimensions and explicit holes cannot be silently corrected", () => {
+  const geometry = makeReply("−250 x 36 x −2 mm", emptyScope).scope;
+  assert.equal(geometry.length_mm, -250);
+  assert.equal(geometry.thickness_mm, -2);
+  const unnotched = makeReply("D3039 with a -6 mm hole", emptyScope).scope;
+  assert.equal(unnotched.hole_diameter_mm, -6);
+  assert.ok(scopeErrors(unnotched).length);
+});

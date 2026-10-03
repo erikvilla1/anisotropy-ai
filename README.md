@@ -1,6 +1,6 @@
 # Anisotropy AI
 
-A research-focused composites website with a materials library, educational physics references, and a guided engineering chat preview. Built with Next.js, React, and TypeScript. No backend or API keys are required.
+A research-focused composites website with a materials library, educational physics references, a guided engineering chat preview and a laminate calculator. Built with Next.js, React, and TypeScript. The calculator uses the local Python API; the other pages run without a backend. No AI API keys are required.
 
 ## Getting started
 
@@ -23,6 +23,8 @@ Open [localhost:3001](http://localhost:3001). Stop either server with Ctrl+C.
 ## Project structure
 
 ```text
+api/                    Local laminate calculation API (optional, Python)
+engine/                 Standalone laminate analysis engine
 app/                    Pages, layout, and styles
 components/             Shared UI and conversation components
 lib/                    Demo behavior, material records, physics references
@@ -36,6 +38,8 @@ tests/                  Unit and browser tests
 
 All website media is stored under `public/assets`. Original duplicate files and the unused analysis-showcase component have been removed. Internal planning PDFs and one unused source photograph are retained locally under `.local/reference/`, which is excluded from Git. `CLAUDE.md` files at any directory level are excluded too. Dependencies, generated builds, environment files, local previews, and test output are not committed.
 
+The [local API and chunk 1 walkthrough](api/README.md) exposes one-material laminate stiffness and deformation from the Python engine. The website now calls it from `/calculator`; see [chunk 2 setup and walkthrough](docs/walkthroughs/chunk-2-calculator.md). Copy `.env.example` to an untracked `.env.local` if absent, start the API on port 8000, and restart development or rebuild the website. Without a configured API address, calculation is disabled. Other pages remain usable.
+
 ## Pages
 
 | Route | Contents |
@@ -45,8 +49,10 @@ All website media is stored under `public/assets`. Original duplicate files and 
 | `/industries` | Aerospace and research/education priorities; potential industries |
 | `/services` | Composite development workflow and planned product offerings |
 | `/library` | Material records and physics references |
+| `/sources` | Textbook citations, recorded property values and unit conversions |
 | `/chat` | Dedicated conversation interface with editable specifications |
 | `/data` | Local CSV inspection and submission preview |
+| `/calculator` | Editable laminate form with engine stiffness, strains and curvatures |
 
 ## Try the experience
 
@@ -64,11 +70,13 @@ On `/data`, load the example or import a CSV. Preview checks cover required fiel
 
 The conversation uses a local intent parser, not a live language model. It captures supported inputs and requests missing information; it does not compute engineering results. Unknown fields stay empty. Reloading clears the conversation and uploaded CSV data. The homepage briefly uses sessionStorage to carry a prompt into chat; a query-string fallback is used if storage is unavailable.
 
-Example CSV values and field illustrations are synthetic. No actual analysis, CAD generation, optimization, failure prediction, or training occurs. LaTeX downloads are uncompiled outlines containing the current inputs and pending-result sections. The physics library contains 29 cited formula cards rendered with KaTeX. Numerical reference checks reproduce selected textbook examples; they are not a production analysis solver.
+Example CSV values and field illustrations are synthetic. The separate `/calculator` performs stiffness/deformation analysis through the Python API using explicit inputs; its example uses cited material properties and constructed loads. CAD generation, optimization, failure prediction and training are not offered by the website. LaTeX downloads are uncompiled outlines containing the current chat inputs and pending-result sections. The physics library contains 29 cited formula cards rendered with KaTeX. Numerical reference checks reproduce selected textbook examples; they are not a production analysis solver.
 
 ## Local reference archive
 
-`References/` holds local PDF snapshots, per-property references, dataset exports and file fingerprints. It and `.local/` are excluded from Git; the supplied textbooks and handbooks are not bundled with the website. `scripts/build-reference-archive.ts` recreates a dated archive when the original local research PDFs, handbook metadata and supplied books are available at the paths listed in that script. These local inputs are optional for running the website and its tests. Existing archive folders are never overwritten.
+`References/` holds local PDF snapshots, per-property references, dataset exports and file fingerprints. It and `.local/` are excluded from Git; full textbooks and handbooks are not bundled with the website. `scripts/build-reference-archive.ts` recreates a dated archive when the original local research PDFs, handbook metadata and supplied books are available at the paths listed in that script. These local inputs are optional for running the website and its tests. Existing archive folders are never overwritten.
+
+Textbook material-property links open `/sources` with the exact table citation and selected property. The viewer covers Daniel and Ishai, second edition: printed pp. 377-380 / supplied PDF pp. 397-400 (Tables A.4-A.6). It distinguishes recorded source values from website conversions and links to the publisher. Page scans and the full supplied PDF remain local; they are not website assets. For internal inspection, `npx tsx scripts/render-textbook-evidence.ts <pdf-path> [pdftoppm-path]` writes fingerprinted images and a manifest under ignored `.local/textbook-evidence/daniel-ishai-2006/`. A different PDF fingerprint is rejected. Formula-library book links still identify the publisher.
 
 Research screenshots supplied during development are not publicly included. Study-specific measurements remain unpublished. The original Appendix F import is preserved for investigation; it is not the public lookup dataset.
 
@@ -86,6 +94,8 @@ With the preview running, use another terminal:
 ```sh
 npm run test:e2e
 ```
+
+The calculator cases require the local API on port 8000 and a website built with `NEXT_PUBLIC_ANISOTROPY_API_URL=http://127.0.0.1:8000`. After that build, `npm run test:calculator` runs just these cases and starts missing local servers automatically. CI also runs these cases against real API and website processes.
 
 Browser checks use an installed Microsoft Edge browser. Set `BROWSER_CHANNEL=chrome` to use Chrome or `PREVIEW_URL` to change the test URL. Checks cover navigation, images, chat handoff, specification editing, downloads, material references, CSV review, and responsive layouts.
 
