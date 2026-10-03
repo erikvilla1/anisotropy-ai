@@ -40,6 +40,8 @@ All website media is stored under `public/assets`. Original duplicate files and 
 
 The [local API and chunk 1 walkthrough](api/README.md) exposes one-material laminate stiffness and deformation from the Python engine. The website now calls it from `/calculator`; see [chunk 2 setup and walkthrough](docs/walkthroughs/chunk-2-calculator.md). Copy `.env.example` to an untracked `.env.local` if absent, start the API on port 8000, and restart development or rebuild the website. Without a configured API address, calculation is disabled. Other pages remain usable.
 
+[Chunk 3](docs/walkthroughs/chunk-3-constrained-analysis.md) adds the API tool for known forces and prescribed curvature, returning required moments with numerical verification. It is available in the API explorer at `http://127.0.0.1:8000/docs`; the browser calculator and chat do not call this new operation yet.
+
 ## Pages
 
 | Route | Contents |

@@ -34,7 +34,7 @@ The equations behind each module, and the function that computes each one, are i
 | `lamina.py` | Ply elastic constants and optional `Strengths` (`Lamina`), and the plane-stress reduced stiffness `Q` |
 | `rotation.py` | Stress and strain transformations and the rotated ply stiffness `Q_bar` |
 | `laminate.py` | Ply stack (`Ply`), ply interface heights and the laminate `A`, `B`, `D` matrices |
-| `response.py` | Applied `Loads`, the 6x6 ABD solve for mid-plane strain and curvature, and strain and stress on each ply face |
+| `response.py` | Applied `Loads`, the full ABD response, required moments for prescribed curvature with a forward check, and ply surface stress/strain |
 | `failure.py` | Maximum-stress and Tsai-Wu strength ratios, margin of safety, and first-ply failure of a laminate |
 | `engineering.py` | Effective laminate constants Ex, Ey, Gxy, Poisson ratios and shear coupling, the moduli a D3039 test measures |
 | `units.py` | SI, US (Msi, ksi) and psi unit systems for entering and reporting values |
@@ -53,3 +53,5 @@ For another problem: `uv run python examples/laminate_calculator.py validation/c
 Input scales are explicit: `SI` means GPa, MPa and mm; `US` means Msi, ksi and inches; `psi` means psi and inches. For 140 GPa, enter `E1 = 140` with `units = "SI"`, not `140e9`. Conversion to Pa happens inside the calculator. Moduli outside the example's existing 0.5-1000 GPa plausibility screen now stop the calculator; `--allow-unusual-moduli` explicitly overrides that screen after review. This screen is not a physical validity criterion or an engine restriction.
 
 Failure checks always include maximum stress when all five strengths are supplied. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
+
+For required moments under a curvature constraint, run `uv run python examples/laminate_calculator.py validation/cases/constructed-flat-cross-ply.toml`. The new `forces_curvature` case mode accepts known force resultants and prescribed curvature; zero curvature requests flatness. See the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md) for the matching API operation and numerical verification policy.

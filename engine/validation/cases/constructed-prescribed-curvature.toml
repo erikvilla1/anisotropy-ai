@@ -1,0 +1,22 @@
+title = "Constructed analytical check: prescribed bending and twist of one ply"
+source = "Synthetic orthotropic constants, dimensions and loading for verification; not measured data or a course problem. Independent single-ply solution with nu12=0: B=0, A=diag(E1,E2,G12)h, D=diag(E1,E2,G12)h^3/12, eps=N/A, M=D*kappa. Derivation: engine/docs/theory.md, prescribed-curvature subsection."
+units = "SI"
+
+[material]
+E1 = 120.0
+E2 = 30.0
+G12 = 6.0
+nu12 = 0.0
+
+[laminate]
+layup = [0]
+ply_thickness = 0.2
+
+[applied]
+forces_curvature = [6000.0, -3000.0, 1200.0, 0.2, -0.1, 0.3]
+
+[expected]
+tolerance = 1e-10
+strain_global = [0.00025, -0.0005, 0.001]
+curvature = [0.2, -0.1, 0.3]
+moments = [0.016, -0.002, 0.0012]

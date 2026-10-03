@@ -14,6 +14,7 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | How is each result calculated? | [Engine theory](../engine/docs/theory.md) |
 | How does the API call the engine? | [Chunk 1 walkthrough](../api/README.md) and [API component card](components/api.md) |
 | How does the website call the API? | [Chunk 2 walkthrough](walkthroughs/chunk-2-calculator.md) and [calculator component card](components/calculator.md) |
+| How do we solve for moments under a curvature constraint? | [Chunk 3 walkthrough](walkthroughs/chunk-3-constrained-analysis.md) and [analysis card](components/prescribed-curvature.md) |
 | All of the above as one typeset PDF | [Engine manual](manual/) |
 | Where do material values come from? | The material data documents below |
 
@@ -57,6 +58,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0010](decisions/ADR-0010-public-citations-local-page-evidence.md) | Publish property citations; keep textbook page scans local (proposed) |
 | [0011](decisions/ADR-0011-local-laminate-api.md) | Separate synchronous API with explicit SI-base inputs (proposed) |
 | [0012](decisions/ADR-0012-browser-calculator.md) | Static calculator page calls Python API with explicit boundary conversions (proposed) |
+| [0013](decisions/ADR-0013-prescribed-curvature-analysis.md) | Dedicated prescribed-curvature operation with required inputs and forward verification (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 

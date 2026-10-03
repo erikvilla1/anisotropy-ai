@@ -124,6 +124,65 @@ Mid-plane strain and curvature, computed by `abd_matrix` and `midplane_response`
 
 <!-- code: abd_matrix, midplane_response -->
 
+### Known forces and prescribed curvature
+
+When all three force resultants and all three curvatures are known, the moments
+are unknown. Rearranging the same constitutive equations gives:
+
+```math
+\mathbf{A}\,\boldsymbol{\varepsilon}^0 = \mathbf{N} - \mathbf{B}\,\boldsymbol{\kappa},
+\qquad
+\mathbf{M} = \mathbf{B}\,\boldsymbol{\varepsilon}^0 + \mathbf{D}\,\boldsymbol{\kappa}
+```
+
+Computed by `prescribed_curvature_response`, using a direct linear solve rather
+than an explicit inverse. Setting every curvature to zero enforces flatness in
+this CLT model. The result is the moment resultant applied to the laminate, not
+the opposite reaction on a fixture. No specimen width is needed for resultants
+per unit width. Zero curvature alone does not fix rigid-body displacement or
+rotation, and this operation does not design supports. Mechanical loading only.
+
+The constitutive basis is also given in [NASA RP-1351, Section III.D, equations 48-51](https://ntrs.nasa.gov/api/citations/19950009349/downloads/19950009349.pdf#page=29).
+This operation uses the repository's sign and bottom-first stacking conventions;
+source diagrams may choose a different positive thickness direction.
+
+The engine applies the solved moments and known forces to `midplane_response`
+and compares the recovered deformation with the target curvature and calculated
+strain. It rejects the result if any component fails either check:
+
+```math
+|\varepsilon^{0,\mathrm{check}}_i-\varepsilon^0_i|
+\le 10^{-12}+10^{-9}|\varepsilon^0_i|,
+\qquad
+|\kappa^{\mathrm{check}}_i-\kappa_i|
+\le 10^{-9}\,\mathrm{m}^{-1}+10^{-9}|\kappa_i|
+```
+
+These are numerical acceptance tolerances (ADR-0013), not a bound on physical
+model error. Reported residuals are recovered minus reference values. Both solves
+share stiffness code; their agreement is a consistency check. Separate analytical
+and stress-integration tests supply additional verification. Severe conditioning
+and experimental accuracy remain unestablished.
+
+<!-- code: prescribed_curvature_response -->
+
+Two constructed analytical cases isolate this operation. For two equally thick
+0/90 plies with zero major Poisson ratio, the in-plane matrices are diagonal:
+
+```math
+A_{11}=A_{22}=(E_1+E_2)t,\qquad A_{66}=2G_{12}t,
+\qquad B_{11}=-B_{22}=\frac{(E_2-E_1)t^2}{2},\qquad B_{66}=0
+```
+
+At zero curvature, each strain is the corresponding force divided by its diagonal
+A entry, and each moment is the corresponding B entry times strain. A second
+case uses a single 0-degree ply: B is zero and
+$`\mathbf{D}=\operatorname{diag}(E_1,E_2,G_{12})h^3/12`$ when the Poisson ratio is zero.
+The case files record constructed constants and loading, not measured properties
+or a course solution. Their expected values come from these scalar equations.
+
+### Ply surface recovery
+
 Strain and stress on the bottom and top face of every ply, computed by `ply_surfaces`:
 
 ```math

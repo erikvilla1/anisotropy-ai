@@ -70,6 +70,7 @@ def test_calculator_requires_unit_review_for_unusual_moduli(tmp_path):
     ("loads", [1, 0, 0]), ("loads", [1, 0, 0, 0, 0, 0, 999]),
     ("strains", [0, 0, 0, 0, 0]), ("stress", [1, 0]),
     ("local_stress", [float("nan"), 0, 0]), ("local_strain", [0, float("inf"), 0]),
+    ("forces_curvature", [1, 0, 0]), ("forces_curvature", [1, 0, 0, 0, 0, float("inf")]),
 ])
 def test_case_vectors_cannot_be_truncated_or_defaulted(kind, values):
     case = load_case(REFERENCE)
@@ -98,3 +99,32 @@ def test_empty_layup_is_rejected():
     case["laminate"]["layup"] = []
     with pytest.raises(ValueError, match="nonempty"):
         engine_results(case)
+
+
+def test_calculator_prints_required_moments_and_forward_verification():
+    run = calculator(ENGINE / "validation/cases/constructed-flat-cross-ply.toml")
+    assert run.returncode == 0, run.stderr
+    assert "required applied moments calculated; forward verification passed" in run.stdout
+    moment_line = next(line for line in run.stdout.splitlines() if line.startswith("Moments M"))
+    assert "[N*m/m]" in moment_line
+    assert [float(v) for v in moment_line.split(":")[1].split()] == pytest.approx([-0.36, -0.18, 0], abs=1e-12)
+
+
+def test_prescribed_curvature_case_converts_us_force_and_curvature_units():
+    from anisotropy_engine.units import UNIT_SYSTEMS
+
+    case = load_case(ENGINE / "validation/cases/constructed-prescribed-curvature.toml")
+    base = engine_results(case)
+    si, us = UNIT_SYSTEMS["SI"], UNIT_SYSTEMS["US"]
+    case["units"] = "US"
+    for key in ("E1", "E2", "G12"):
+        case["material"][key] *= si["modulus"][0] / us["modulus"][0]
+    case["laminate"]["ply_thickness"] *= si["length"][0] / us["length"][0]
+    case["applied"]["forces_curvature"] = [
+        value / us["N" if i < 3 else "kappa"][0]
+        for i, value in enumerate(case["applied"]["forces_curvature"])
+    ]
+    converted = engine_results(case)
+    for key, kind in (("moments", "M"), ("curvature", "kappa")):
+        assert converted[key][0] * us[kind][0] == pytest.approx(base[key][0], rel=1e-10, abs=1e-12)
+    assert converted["strain_global"][0] == pytest.approx(base["strain_global"][0], rel=1e-10)
