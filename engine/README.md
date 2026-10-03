@@ -26,6 +26,8 @@ uv run pytest
 
 ## Modules
 
+The equations behind each module, and the function that computes each one, are in [docs/theory.md](docs/theory.md).
+
 | Module | Contents |
 | --- | --- |
 | `lamina.py` | Ply elastic constants and optional `Strengths` (`Lamina`), and the plane-stress reduced stiffness `Q` |
