@@ -6,11 +6,15 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Fixed
 
+- Chat preview preserves signed, zero and decimal inputs for validation instead of converting negative values to positive values or retaining an earlier value. Explicit hole dimensions are not cleared by selecting D3039.
 - Engine input checks reject non-finite stress/strain vectors, malformed vectors, unknown model fields and invalid safety-factor inputs (ADR-0003). Zero-stress infinite ratios remain supported.
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
 
+- Calculator page connects an editable GPa/mm laminate form to the Python API, displays engine stiffness/deformation, and handles invalid inputs, cancellation and outdated results; includes browser integration tests and a learning walkthrough (ADR-0012).
+- Local FastAPI endpoint for one-material laminate stiffness and deformation, with explicit SI-base inputs, integration tests and a chunk-by-chunk learning walkthrough (ADR-0011).
+- Property-specific textbook citation viewer with source units, conversions and exact table/page references. Original page scans and their rendering output remain local (ADR-0010).
 - Analytical practice case for a zero-degree AS4/3501-6 ply under 100 MPa tension, with independently calculated strains and maximum-stress ratio.
 - LaTeX engine manual (`docs/manual/`), generated from the documentation, the engine source and engine results; built as a PDF on every pull request (ADR-0008).
 - `anisotropy_engine.cases`: validation-case logic shared by the tests, the manual and the future API.
