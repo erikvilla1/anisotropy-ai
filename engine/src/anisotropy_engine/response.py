@@ -101,25 +101,33 @@ def prescribed_curvature_response(
         moments = B @ eps0 + D @ curvature
         if not all(np.isfinite(v).all() for v in (A, B, D, eps0, moments)):
             raise ValueError("Prescribed-curvature solve produced non-finite values")
-        loads = Loads(Nx=forces[0], Ny=forces[1], Nxy=forces[2],
-                      Mx=moments[0], My=moments[1], Mxy=moments[2])
-        recovered_eps, recovered_kappa = midplane_response(plies, loads)
-        if not all(np.isfinite(v).all() for v in (recovered_eps, recovered_kappa)):
-            raise ValueError("Forward verification produced non-finite values")
-        strain_error = recovered_eps - eps0
-        curvature_error = recovered_kappa - curvature
-        # Componentwise tolerance: atol + rtol * abs(reference), including zeros.
-        strain_allowed = 1e-12 + 1e-9 * np.abs(eps0)
-        curvature_allowed = 1e-9 + 1e-9 * np.abs(curvature)
-        passed = bool(np.all(np.abs(strain_error) <= strain_allowed)
-                      and np.all(np.abs(curvature_error) <= curvature_allowed))
-        if not passed:
-            raise ValueError("Forward verification did not recover the prescribed response within tolerance")
-    verification = ResponseVerification(
-        passed, recovered_eps, recovered_kappa, strain_error, curvature_error,
-        strain_allowed, curvature_allowed,
-    )
+        verification = forward_verification(plies, np.concatenate([forces, moments]), eps0, curvature)
     return PrescribedCurvatureResult(A, B, D, eps0, moments, verification)
+
+
+def forward_verification(plies: list[Ply], total_loads: np.ndarray, eps0: np.ndarray,
+                         kappa: np.ndarray) -> ResponseVerification:
+    """Re-solve the full ABD system for total_loads; it must recover eps0 and kappa.
+
+    total_loads is [Nx, Ny, Nxy, Mx, My, Mxy], including any thermal resultants.
+    Raises ValueError on non-finite output or a failed check, so an unchecked result
+    is never returned. Tolerances are numerical policy (ADR-0013), not physical accuracy.
+    """
+    loads = Loads(**dict(zip(("Nx", "Ny", "Nxy", "Mx", "My", "Mxy"), np.asarray(total_loads, dtype=float))))
+    recovered_eps, recovered_kappa = midplane_response(plies, loads)
+    if not all(np.isfinite(v).all() for v in (recovered_eps, recovered_kappa)):
+        raise ValueError("Forward verification produced non-finite values")
+    strain_error = recovered_eps - eps0
+    curvature_error = recovered_kappa - kappa
+    # Componentwise tolerance: atol + rtol * abs(reference), including zeros.
+    strain_allowed = 1e-12 + 1e-9 * np.abs(eps0)
+    curvature_allowed = 1e-9 + 1e-9 * np.abs(kappa)
+    passed = bool(np.all(np.abs(strain_error) <= strain_allowed)
+                  and np.all(np.abs(curvature_error) <= curvature_allowed))
+    if not passed:
+        raise ValueError("Forward verification did not recover the prescribed response within tolerance")
+    return ResponseVerification(passed, recovered_eps, recovered_kappa, strain_error, curvature_error,
+                                strain_allowed, curvature_allowed)
 
 
 @dataclass(frozen=True)

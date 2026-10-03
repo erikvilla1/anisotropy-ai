@@ -14,8 +14,8 @@ Tested, deterministic code computes every number. A language model, once added, 
 | --- | --- | --- | --- |
 | Website | Product pages, materials library, physics references, chat/CSV previews and laminate calculator | Static export; calculator calls local API. Chat still uses a local parser | `app/`, `components/`, `lib/`, [calculator card](components/calculator.md) |
 | Material data | Cited property datasets with provenance; a monitor that detects source changes | Built | `lib/curated-materials.ts`, `services/material-monitor/` |
-| Engine | Laminate stiffness and compliance, forward and prescribed-curvature response, temperature change and residual stresses, first-ply failure, engineering constants; plies of several materials and thicknesses | Built, version 0.1 | `engine/`, [constrained analysis](components/prescribed-curvature.md) |
-| Validation cases | Textbook/answer-key references and constructed analytical checks | Built, 27 cases | `engine/validation/` |
+| Engine | Laminate stiffness and compliance, forward, prescribed-curvature and mixed-condition response, temperature change and residual stresses, first-ply failure, engineering constants; plies of several materials and thicknesses | Built, version 0.1 | `engine/`, [constrained analysis](components/prescribed-curvature.md) |
+| Validation cases | Textbook/answer-key references and constructed analytical checks | Built, 28 cases | `engine/validation/` |
 | API | One-material forward response and required moments for prescribed curvature | Local development; FastAPI, explicit SI-base inputs | `api/`, [component card](components/api.md) |
 | Run records | Inputs, versions and results stored for every run | Planned (PostgreSQL) | |
 | Material loader | Engine reads material values from the cited library instead of typed numbers | Planned | |

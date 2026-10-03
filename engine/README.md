@@ -36,6 +36,7 @@ The equations behind each module, and the function that computes each one, are i
 | `laminate.py` | Ply stack (`Ply`), ply interface heights and the laminate `A`, `B`, `D` matrices |
 | `response.py` | Applied `Loads`, the inverted ABD blocks a, b, d, the full ABD response, required moments for prescribed curvature with a forward check, and ply surface stress/strain |
 | `failure.py` | Maximum-stress and Tsai-Wu strength ratios, margin of safety, and first-ply failure of a laminate |
+| `mixed.py` | Mixed conditions: one known load or deformation per pair, the rest solved and verified |
 | `thermal.py` | Rotated expansion coefficients, thermal force and moment resultants, the response to loads plus a temperature change, and residual ply stresses |
 | `engineering.py` | Effective laminate constants Ex, Ey, Gxy, Poisson ratios and shear coupling, the moduli a D3039 test measures |
 | `units.py` | SI, US (Msi, ksi) and psi unit systems for entering and reporting values |
