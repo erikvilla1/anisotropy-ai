@@ -33,7 +33,7 @@ ROOT = HERE.parents[1]
 GENERATED = HERE / "generated"
 BUILD = HERE / "build"
 REPO_URL = "https://github.com/erikvilla1/anisotropy-ai/blob/main/"
-ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering")
+ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal")
 
 # --------------------------------------------------------------------- text to LaTeX
 
@@ -283,7 +283,9 @@ def number(value: float, digits: int = 6) -> str:
 
 
 UNIT_OF = {"stress_global": "stress", "stress_local": "stress", "Ex": "modulus", "Ey": "modulus",
-           "Gxy": "modulus", "curvature": "kappa", "moments": "M"}
+           "Gxy": "modulus", "curvature": "kappa", "moments": "M", "N_T": "N", "M_T": "M",
+           "ply_stress_global": "stress", "ply_stress_local": "stress",
+           "Q11": "modulus", "Q12": "modulus", "Q22": "modulus", "Q66": "modulus"}
 
 
 def validation() -> str:
@@ -361,7 +363,8 @@ def coupon_example() -> str:
 def units_table() -> str:
     names = {"modulus": "Modulus", "stress": "Stress", "length": "Length", "N": "Force per width $N$",
              "M": "Moment per width $M$", "kappa": r"Curvature $\kappa$", "A": r"$\mathbf{A}$",
-             "B": r"$\mathbf{B}$", "D": r"$\mathbf{D}$"}
+             "B": r"$\mathbf{B}$", "D": r"$\mathbf{D}$", "alpha": r"Thermal expansion $\alpha$",
+             "delta_T": r"Temperature change $\Delta T$"}
     rows = [rf"{label} & " + " & ".join(unit_label(UNIT_SYSTEMS[s][kind][1]) for s in ("SI", "US", "psi")) + r" \\"
             for kind, label in names.items()]
     return (r"The engine works in SI. These systems convert values where they enter and leave "

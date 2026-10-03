@@ -23,8 +23,21 @@ class Strengths(BaseModel):
     F6: PositiveFloat
 
 
+class ThermalExpansion(BaseModel):
+    """Coefficients of thermal expansion in fiber axes, in 1/K (the same number as 1/degC).
+
+    Either may be negative: carbon fibers often contract along their length when heated.
+    """
+
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
+
+    alpha1: float
+    alpha2: float
+
+
 class Lamina(BaseModel):
-    """In-plane elastic constants of one ply in Pa, plus strengths when failure checks are needed."""
+    """In-plane elastic constants of one ply in Pa, plus strengths and thermal expansion
+    when failure or thermal checks need them."""
 
     model_config = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 
@@ -33,6 +46,7 @@ class Lamina(BaseModel):
     G12: PositiveFloat
     nu12: float
     strengths: Strengths | None = None
+    thermal_expansion: ThermalExpansion | None = None
 
     @property
     def nu21(self) -> float:

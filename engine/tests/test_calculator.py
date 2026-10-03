@@ -128,3 +128,34 @@ def test_prescribed_curvature_case_converts_us_force_and_curvature_units():
     for key, kind in (("moments", "M"), ("curvature", "kappa")):
         assert converted[key][0] * us[kind][0] == pytest.approx(base[key][0], rel=1e-10, abs=1e-12)
     assert converted["strain_global"][0] == pytest.approx(base["strain_global"][0], rel=1e-10)
+
+
+THERMAL = ENGINE / "validation/cases/course-reader-5-9-as4-curing.toml"
+
+
+def test_calculator_prints_thermal_resultants_and_residual_stresses():
+    run = calculator(THERMAL)
+    assert run.returncode == 0, run.stderr
+    assert "Temperature change delta_T = -150 degC" in run.stdout
+    n_line = next(line for line in run.stdout.splitlines() if line.startswith("Thermal forces N_T"))
+    assert [float(v) for v in n_line.split(":")[1].split()] == pytest.approx([-7477.57, -7477.57, 0], abs=0.01)
+    stress_rows = [line for line in run.stdout.splitlines() if line.strip().startswith("ply") and "|" in line][-8:]
+    for row in stress_rows:  # every ply face: sigma_1 = -36.346 MPa, sigma_2 = +36.346 MPa
+        assert [float(v) for v in row.split("|")[1].split()] == pytest.approx([-36.346, 36.346, 0], abs=1e-3)
+
+
+def test_calculator_states_when_no_temperature_change_is_given():
+    run = calculator(REFERENCE)
+    assert "Temperature change: none given" in run.stdout
+    assert "Thermal forces" not in run.stdout
+
+
+def test_calculator_skips_failure_ratios_with_a_temperature_change(tmp_path):
+    path = tmp_path / "thermal-with-strengths.toml"
+    strengths = "alpha2 = 26.0e-6\nF1t = 2280.0\nF1c = 1725.0\nF2t = 57.0\nF2c = 228.0\nF6 = 76.0"
+    path.write_text(THERMAL.read_text().replace("alpha2 = 26.0e-6", strengths)
+                    .replace("loads = [0, 0, 0, 0, 0, 0]", "loads = [1000, 0, 0, 0, 0, 0]"))
+    run = calculator(path)
+    assert run.returncode == 0, run.stderr
+    assert "strength ratios with residual thermal stresses are not implemented yet" in run.stdout
+    assert "First-ply failure" not in run.stdout

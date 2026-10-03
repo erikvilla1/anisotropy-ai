@@ -1,0 +1,39 @@
+title = "Curing stresses in a [0/90]s AS4/3501-6 laminate cooled by 150 degC"
+source = "Course Reader Problem 5.9, answer key (course and term to be added); engine values matched the key when checked on 2026-10-03"
+units = "SI"
+
+[material]
+E1 = 140.0
+E2 = 10.0
+G12 = 7.0
+nu12 = 0.3
+alpha1 = -1.0e-6  # 1/degC
+alpha2 = 26.0e-6
+
+[laminate]
+layup = [0, 90, 90, 0]  # [0/90]s
+ply_thickness = 0.127
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]  # no mechanical load; curing only
+delta_T = -150.0  # degC
+
+[expected]
+tolerance = 0.001  # the key prints four to five significant figures
+Q11 = 140.906
+Q12 = 3.019
+Q22 = 10.065
+Q66 = 7.0
+A11 = 38.347
+A12 = 1.534
+A22 = 38.347
+A66 = 3.556
+strain_global = [-1.875e-4, -1.875e-4, 0]
+# Every ply has the same fiber-axis stress, [sigma_11, sigma_22, sigma_12] in MPa, bottom ply first.
+ply_stress_local = [[-36.35, 36.35, 0], [-36.35, 36.35, 0], [-36.35, 36.35, 0], [-36.35, 36.35, 0]]
+# Not recorded:
+# - The key prints N_T = [-7.447, -7.447, 0] kN/m. That disagrees with its own strain:
+#   (A11 + A12) * eps0 = 39.881e6 N/m * -1.875e-4 = -7.478 kN/m, and the engine gives -7.4776 kN/m.
+#   Probably a misprint; add N_T once the course confirms the value.
+# - The key states M_T = 0 and zero curvature. The engine's values are rounding noise (about 1e-16),
+#   and the comparison cannot judge an expected zero when every value in the group is zero.

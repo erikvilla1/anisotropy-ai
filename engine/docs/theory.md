@@ -284,9 +284,66 @@ The in-plane compliance $`\mathbf{a}`$ is the top-left 3×3 block of the inverte
 
 <!-- code: engineering_constants -->
 
+## 7. Temperature change (`thermal.py`)
+
+A uniform temperature change $`\Delta T`$ (in K, the same number as a change in °C) gives each ply a free thermal strain $`\boldsymbol{\alpha}\,\Delta T`$. The expansion coefficients $`\alpha_1`$ and $`\alpha_2`$ are strains per kelvin, so they rotate into laminate axes like strain. Computed by `thermal_expansion_xy`:
+
+```math
+\begin{bmatrix}\alpha_x\\ \alpha_y\\ \alpha_{xy}\end{bmatrix}
+= \mathbf{T}_\varepsilon^{-1}\begin{bmatrix}\alpha_1\\ \alpha_2\\ 0\end{bmatrix}
+= \begin{bmatrix}\alpha_1 m^2 + \alpha_2 n^2\\ \alpha_1 n^2 + \alpha_2 m^2\\ 2(\alpha_1 - \alpha_2)\,mn\end{bmatrix},
+\qquad
+\mathbf{T}_\varepsilon^{-1}(\theta) = \mathbf{T}_\varepsilon(-\theta)
+```
+
+$`\alpha_{xy}`$ is an engineering shear coefficient, like $`\gamma_{xy}`$.
+
+<!-- code: thermal_expansion_xy -->
+
+A ply is stressed only by the strain it is forced to take beyond its free thermal strain:
+
+```math
+\boldsymbol{\sigma}_k(z) = \bar{\mathbf{Q}}_k\left(\boldsymbol{\varepsilon}^0 + z\,\boldsymbol{\kappa} - \boldsymbol{\alpha}_k\,\Delta T\right)
+```
+
+Integrating through the thickness, as for A, B and D, moves the thermal terms to the load side. The thermal force and moment resultants are computed by `thermal_resultants`:
+
+```math
+\mathbf{N}^T = \Delta T\sum_{k=1}^{N}\bar{\mathbf{Q}}_k\,\boldsymbol{\alpha}_k\,(z_k - z_{k-1}),
+\qquad
+\mathbf{M}^T = \frac{\Delta T}{2}\sum_{k=1}^{N}\bar{\mathbf{Q}}_k\,\boldsymbol{\alpha}_k\,(z_k^2 - z_{k-1}^2)
+```
+
+They are the resultants that would hold every ply at its free thermal strain, not applied loads.
+
+<!-- code: thermal_resultants -->
+
+Mid-plane strain and curvature under mechanical loads and a temperature change, computed by `thermomechanical_response`:
+
+```math
+\begin{bmatrix}\mathbf{A} & \mathbf{B}\\ \mathbf{B} & \mathbf{D}\end{bmatrix}
+\begin{bmatrix}\boldsymbol{\varepsilon}^0\\ \boldsymbol{\kappa}\end{bmatrix}
+= \begin{bmatrix}\mathbf{N} + \mathbf{N}^T\\ \mathbf{M} + \mathbf{M}^T\end{bmatrix}
+```
+
+With no mechanical load, a symmetric laminate has $`\mathbf{M}^T = 0`$ and stays flat, while an unsymmetric one warps.
+
+<!-- code: thermomechanical_response -->
+
+Ply strain and stress on each face, computed by `thermal_ply_surfaces`, follow the stress equation above. The reported strains are total strains $`\boldsymbol{\varepsilon}^0 + z\,\boldsymbol{\kappa}`$, as a strain gauge would read them.
+
+<!-- code: thermal_ply_surfaces -->
+
+When strains or curvatures are prescribed instead of loads, the mechanical loads are the total resultants minus the thermal ones: $`\mathbf{N} = \mathbf{A}\boldsymbol{\varepsilon}^0 + \mathbf{B}\boldsymbol{\kappa} - \mathbf{N}^T`$ and $`\mathbf{M} = \mathbf{B}\boldsymbol{\varepsilon}^0 + \mathbf{D}\boldsymbol{\kappa} - \mathbf{M}^T`$. The mechanical-only functions are unchanged. A temperature change applies only where it is given explicitly (ADR-0014).
+
+These equations follow the solution method of Course Reader Problem 5.9, whose answer key the engine reproduces (validation cases `course-reader-5-9-*`). The Daniel and Ishai equation numbers for this section have not been checked yet.
+
+Failure ratios are not computed with a temperature change. The residual stress does not scale with the applied load, so the strength ratio defined under Failure does not apply.
+
 ## Not modeled yet
 
-- Temperature and moisture effects, including curing residual stresses
+- Strength ratios and first-ply failure with residual thermal stresses
+- Moisture effects, and elastic properties that change with temperature
 - Progressive ply failure and ultimate laminate strength
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
