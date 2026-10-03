@@ -132,7 +132,7 @@ export type Reply = {
   prompt: string;
 };
 export function makeReply(prompt: string, previous: Scope): Reply {
-  const p = prompt.toLowerCase();
+  const p = prompt.toLowerCase().replace(/\u2212/g, "-");
   const scope = { ...previous };
   if (!/compare|comparison|difference/.test(p)) {
     if (/d5766|open[- ]hole|notched/.test(p) && !/unnotched/.test(p))
@@ -149,12 +149,13 @@ export function makeReply(prompt: string, previous: Scope): Reply {
     scope.material = "Printed polymer — research context, outside laminate MVP";
   if (/maximi[sz]e strength/.test(p))
     scope.objective = "Maximize strength at fixed thickness";
-  const volume = p.match(
-    /(-?\d+(?:\.\d+)?)\s*(?:x|×|by)\s*(-?\d+(?:\.\d+)?)\s*(?:x|×|by)\s*(-?\d+(?:\.\d+)?)\s*mm/,
-  );
-  const dimensions = p.match(
-    /(-?\d+(?:\.\d+)?)\s*(?:x|×|by)\s*(-?\d+(?:\.\d+)?)\s*mm/,
-  );
+  // Capture the complete signed number. The boundary prevents matching just the
+  // positive tail of a negative, decimal or exponent-form input.
+  const signedNumber = String.raw`([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)`;
+  const number = String.raw`(?<![\w.+-])${signedNumber}`;
+  const separator = String.raw`\s*(?:x|×|by)\s*`;
+  const volume = p.match(new RegExp(`${number}${separator}${signedNumber}${separator}${signedNumber}\\s*mm\\b`));
+  const dimensions = p.match(new RegExp(`${number}${separator}${signedNumber}\\s*mm\\b`));
   if (volume) {
     scope.length_mm = Number(volume[1]);
     scope.width_mm = Number(volume[2]);
@@ -164,27 +165,28 @@ export function makeReply(prompt: string, previous: Scope): Reply {
     scope.width_mm = Number(dimensions[2]);
   }
   for (const [key, pattern] of [
-    ["width_mm", /(?:width\s*(?:of|=|:)?\s*)(\d+(?:\.\d+)?)\s*mm/],
-    ["width_mm", /(\d+(?:\.\d+)?)\s*mm\s*wide/],
-    ["length_mm", /(?:length\s*(?:of|=|:)?\s*)(\d+(?:\.\d+)?)\s*mm/],
-    ["applied_load_kN", /(\d+(?:\.\d+)?)\s*kn/],
+    ["width_mm", new RegExp(`\\bwidth\\s*(?:of|=|:)?\\s*${number}\\s*mm\\b`)],
+    ["width_mm", new RegExp(`${number}\\s*mm\\s*wide\\b`)],
+    ["length_mm", new RegExp(`\\blength\\s*(?:of|=|:)?\\s*${number}\\s*mm\\b`)],
+    ["applied_load_kN", new RegExp(`${number}\\s*kn\\b`)],
     [
       "safety_factor",
-      /(?:safety factor|factor of safety|fs)\s*(?:of|=|:)?\s*(\d+(?:\.\d+)?)/,
+      new RegExp(`\\b(?:safety factor|factor of safety|fs)\\s*(?:of|=|:)?\\s*${number}`),
     ],
-    ["thickness_mm", /(?:thickness\s*(?:of|=|:)?\s*)(\d+(?:\.\d+)?)\s*mm/],
-    ["thickness_mm", /(\d+(?:\.\d+)?)\s*mm\s*thick/],
+    ["thickness_mm", new RegExp(`\\bthickness\\s*(?:of|=|:)?\\s*${number}\\s*mm\\b`)],
+    ["thickness_mm", new RegExp(`${number}\\s*mm\\s*thick`)],
     [
       "hole_diameter_mm",
-      /(?:hole(?: diameter)?\s*(?:of|=|:)?\s*)(\d+(?:\.\d+)?)\s*mm/,
+      new RegExp(`\\bhole(?: diameter)?\\s*(?:of|=|:)?\\s*${number}\\s*mm\\b`),
     ],
-    ["hole_diameter_mm", /(\d+(?:\.\d+)?)\s*mm\s*hole/],
-    ["ply_count", /(\d+)\s*plies/],
+    ["hole_diameter_mm", new RegExp(`${number}\\s*mm\\s*hole\\b`)],
+    ["ply_count", new RegExp(`${number}\\s*plies\\b`)],
   ] as const) {
     const match = p.match(pattern);
-    if (match && Number(match[1]) > 0) scope[key] = Number(match[1]);
+    if (match) scope[key] = Number(match[1]);
   }
-  if (scope.test_standard === "ASTM D3039") scope.hole_diameter_mm = 0;
+  if (scope.test_standard === "ASTM D3039" && scope.hole_diameter_mm === null)
+    scope.hole_diameter_mm = 0;
   const layup = prompt.match(/\[[\d\s+\-/°.]+\](?:\d+)?s?/i);
   if (layup) scope.layup = layup[0];
   const angles = prompt.match(
