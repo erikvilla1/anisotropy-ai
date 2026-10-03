@@ -12,6 +12,7 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | What changed, and when? | [Changelog](../CHANGELOG.md) and merged pull requests |
 | What could go wrong? | [Risk register](risks/risk_register.md) |
 | How is each result calculated? | [Engine theory](../engine/docs/theory.md) |
+| All of the above as one typeset PDF | [Engine manual](manual/) |
 | Where do material values come from? | The material data documents below |
 
 ## How we document
@@ -49,6 +50,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0005](decisions/ADR-0005-engineering-constants-from-full-abd.md) | Laminate engineering constants from the full ABD inverse |
 | [0006](decisions/ADR-0006-no-job-queue-yet.md) | No job queue until analyses are slow |
 | [0007](decisions/ADR-0007-validation-cases-store-numbers-only.md) | Validation cases store numbers and a source reference only |
+| [0008](decisions/ADR-0008-manual-generated-from-sources.md) | The LaTeX manual is generated from the repository's sources |
 
 New decisions use the [template](decisions/_template.md).
 
