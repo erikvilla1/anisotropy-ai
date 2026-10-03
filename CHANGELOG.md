@@ -12,6 +12,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- Calculator page connects an editable GPa/mm laminate form to the Python API, displays engine stiffness/deformation, and handles invalid inputs, cancellation and outdated results; includes browser integration tests and a learning walkthrough (ADR-0012).
 - Local FastAPI endpoint for one-material laminate stiffness and deformation, with explicit SI-base inputs, integration tests and a chunk-by-chunk learning walkthrough (ADR-0011).
 - Property-specific textbook citation viewer with source units, conversions and exact table/page references. Original page scans and their rendering output remain local (ADR-0010).
 - Analytical practice case for a zero-degree AS4/3501-6 ply under 100 MPa tension, with independently calculated strains and maximum-stress ratio.
