@@ -284,21 +284,6 @@ Keep entries short. Prefer bullet points. A human will review before merge.
 
 **E. Weekly brief**: ask the AI coder to draft it from the week's merged PRs, ADRs, and test logs; the engineer edits for five minutes.
 
----
-
-## Part 4. Your management cadence
-
-| When | What | Time |
-|---|---|---|
-| Weekly | Read the brief; approve or question decisions | 15 min |
-| Per decision | Review ADRs marked "Proposed" that affect cost, customers, or data | 5 to 10 min each |
-| Monthly | Review risk register and evaluation trends | 45 min |
-| Per release | Confirm evaluation report exists and thresholds passed | 15 min |
-| Quarterly | Audit: pick one customer-style output and trace it back through provenance, ADRs, and tests | 1 hr |
-
-**The audit test.** If you can pick any output and trace it to the exact code, model, data, and decision behind it in under 30 minutes, your documentation system works.
-
----
 
 ## Sources
 
