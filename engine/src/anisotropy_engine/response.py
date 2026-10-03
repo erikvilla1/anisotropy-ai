@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
+from ._validation import finite_vector
 from .laminate import Ply, abd_matrices, ply_interfaces
 from .rotation import strain_transformation, stress_transformation, transformed_reduced_stiffness
 
@@ -16,7 +17,7 @@ from .rotation import strain_transformation, stress_transformation, transformed_
 class Loads(BaseModel):
     """Force (N/m) and moment (N*m/m) resultants per unit width. Any not given are zero."""
 
-    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 
     Nx: float = 0.0
     Ny: float = 0.0
@@ -57,9 +58,8 @@ class PlySurface:
 
 def ply_surfaces(plies: list[Ply], eps0: np.ndarray, kappa: np.ndarray) -> list[PlySurface]:
     """Bottom then top face of every ply, bottom ply first: 2N entries."""
-    eps0, kappa = np.asarray(eps0, dtype=float), np.asarray(kappa, dtype=float)
-    if eps0.shape != (3,) or kappa.shape != (3,):
-        raise ValueError("eps0 and kappa must each have 3 components")
+    eps0 = finite_vector(eps0, "eps0")
+    kappa = finite_vector(kappa, "kappa")
     z = ply_interfaces(plies)
     surfaces = []
     for k, ply in enumerate(plies):

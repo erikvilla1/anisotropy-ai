@@ -23,6 +23,7 @@ uv run pytest
 - Strength ratio R is the factor on all applied loads at which a criterion predicts failure (Daniel & Ishai's safety factor S_f). Margin of safety is MS = R / FS - 1 for a required factor of safety FS.
 - First-ply failure is the onset of damage in one ply, not the ultimate strength of the laminate. Thermal residual stresses are not included yet.
 - Invalid input raises an error. The engine never substitutes a default value; the Tsai-Wu interaction term `f12_star` must be given explicitly.
+- Unknown material, strength, ply and load fields are rejected. Stress, strain and curvature vectors need three finite components. Safety factors must be finite and at least one; an unstressed ply can still have an infinite strength ratio.
 
 ## Modules
 
