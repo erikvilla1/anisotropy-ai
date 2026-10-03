@@ -23,6 +23,8 @@ Open [localhost:3001](http://localhost:3001). Stop either server with Ctrl+C.
 ## Project structure
 
 ```text
+api/                    Local laminate calculation API (optional, Python)
+engine/                 Standalone laminate analysis engine
 app/                    Pages, layout, and styles
 components/             Shared UI and conversation components
 lib/                    Demo behavior, material records, physics references
@@ -35,6 +37,8 @@ tests/                  Unit and browser tests
 ```
 
 All website media is stored under `public/assets`. Original duplicate files and the unused analysis-showcase component have been removed. Internal planning PDFs and one unused source photograph are retained locally under `.local/reference/`, which is excluded from Git. `CLAUDE.md` files at any directory level are excluded too. Dependencies, generated builds, environment files, local previews, and test output are not committed.
+
+The optional [local API and chunk 1 walkthrough](api/README.md) exposes one-material laminate stiffness and deformation from the Python engine. It includes an interactive request page at `/docs` when running locally. The website does not call it yet.
 
 ## Pages
 
