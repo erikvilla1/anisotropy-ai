@@ -1,8 +1,8 @@
 # ADR-0015: Cases read course Excel inputs and describe several materials per laminate
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-03
-- Decided by: pending founder review | Drafted by: Claude Code
+- Decided by: Founder | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/course_excel.py`, `engine/src/anisotropy_engine/cases.py`, `engine/tests/test_course_inputs.py`, [evaluation](../evaluations/2026-10-03-validation-course-problems.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0009](ADR-0009-calculator-inputs-in-case-files.md)
 
 ## Context
