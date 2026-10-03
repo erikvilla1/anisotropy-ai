@@ -1,0 +1,22 @@
+title = "Engineering constants of an AS4/3501-6 [+45/-45]s angle-ply laminate"
+source = "Daniel & Ishai (2006), Table 7.3, exact values; material from Table A.4. Gxy uses the table's 5.53 Msi (38.13 GPa); its GPa column prints 38.2."
+units = "SI"
+
+[material]
+E1 = 147.0
+E2 = 10.3
+G12 = 7.0
+nu12 = 0.27
+
+[laminate]
+layup = [45, -45, -45, 45]
+ply_thickness = 0.13
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]
+
+[expected]
+tolerance = 0.005  # printed to three significant figures
+Ex = 23.9
+Gxy = 38.13
+nu_xy = 0.71
