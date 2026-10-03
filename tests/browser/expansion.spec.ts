@@ -1,5 +1,15 @@
 import { test, expect } from "@playwright/test";
 
+test("negative chat inputs remain visible and show validation errors", async ({ page }) => {
+  await page.goto("/chat");
+  await page.getByRole("textbox", { name: "Message the scope assistant" }).fill("Apply -20 kN with -5 mm thickness");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.locator(".scope-fields").last()).toContainText("-20 kN");
+  await expect(page.locator(".scope-fields").last()).toContainText("-5 mm");
+  await expect(page.locator(".validation-errors").last()).toContainText("applied_load_kN must be positive");
+  await expect(page.locator(".validation-errors").last()).toContainText("thickness_mm must be positive");
+});
+
 test("navigation routes load directly with research-focused About", async ({
   page,
 }) => {
