@@ -7,3 +7,34 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# Working in this repository
+
+These rules apply to AI coding assistants and to people. `next dev` rewrites only the block above; keep project rules below it.
+
+## Changes
+
+- Work on a branch and open a pull request. Do not commit to `main` directly.
+- Before opening a pull request, run the tests that cover the change: `cd engine && uv run pytest` for the engine; `npm test` and `npm run typecheck` for the website.
+
+## Documentation
+
+The full method is in `docs/documentation-guide.md`; the index is `docs/README.md`.
+
+1. If a change chooses between alternatives (a library, algorithm, data format, architecture, units or conventions), add a decision record in `docs/decisions/` from `_template.md`. List the rejected options and link real evidence. Never invent evidence; write "no evidence yet" instead.
+2. Add a line to `CHANGELOG.md` under Unreleased.
+3. If engine physics changes, update `engine/docs/theory.md` and add or update cases in `engine/validation/cases/`.
+4. Never claim a test passed without its output. Mark anything unchecked as UNVERIFIED.
+5. State what was decided and what supports it. Do not present your own reasoning as fact.
+6. Keep entries short.
+
+## Engine rules
+
+- The engine computes every number in a result (ADR-0001).
+- SI units inside the engine; convert only where values enter and leave (ADR-0002).
+- Reject invalid input; never add silent defaults (ADR-0003).
+- Engineering shear strain, angles counterclockwise from x to the fibers, plies listed from the bottom face up (ADR-0004).
+
+## Data and sources
+
+Do not commit course problem statements or solutions, textbook pages, customer data, unapproved lab data, or secrets. Store numbers with a source reference; keep originals in `.local/`.
