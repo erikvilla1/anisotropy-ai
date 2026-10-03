@@ -45,6 +45,7 @@ All website media is stored under `public/assets`. Original duplicate files and 
 | `/industries` | Aerospace and research/education priorities; potential industries |
 | `/services` | Composite development workflow and planned product offerings |
 | `/library` | Material records and physics references |
+| `/sources` | Textbook citations, recorded property values and unit conversions |
 | `/chat` | Dedicated conversation interface with editable specifications |
 | `/data` | Local CSV inspection and submission preview |
 
@@ -68,7 +69,9 @@ Example CSV values and field illustrations are synthetic. No actual analysis, CA
 
 ## Local reference archive
 
-`References/` holds local PDF snapshots, per-property references, dataset exports and file fingerprints. It and `.local/` are excluded from Git; the supplied textbooks and handbooks are not bundled with the website. `scripts/build-reference-archive.ts` recreates a dated archive when the original local research PDFs, handbook metadata and supplied books are available at the paths listed in that script. These local inputs are optional for running the website and its tests. Existing archive folders are never overwritten.
+`References/` holds local PDF snapshots, per-property references, dataset exports and file fingerprints. It and `.local/` are excluded from Git; full textbooks and handbooks are not bundled with the website. `scripts/build-reference-archive.ts` recreates a dated archive when the original local research PDFs, handbook metadata and supplied books are available at the paths listed in that script. These local inputs are optional for running the website and its tests. Existing archive folders are never overwritten.
+
+Textbook material-property links open `/sources` with the exact table citation and selected property. The viewer covers Daniel and Ishai, second edition: printed pp. 377-380 / supplied PDF pp. 397-400 (Tables A.4-A.6). It distinguishes recorded source values from website conversions and links to the publisher. Page scans and the full supplied PDF remain local; they are not website assets. For internal inspection, `npx tsx scripts/render-textbook-evidence.ts <pdf-path> [pdftoppm-path]` writes fingerprinted images and a manifest under ignored `.local/textbook-evidence/daniel-ishai-2006/`. A different PDF fingerprint is rejected. Formula-library book links still identify the publisher.
 
 Research screenshots supplied during development are not publicly included. Study-specific measurements remain unpublished. The original Appendix F import is preserved for investigation; it is not the public lookup dataset.
 

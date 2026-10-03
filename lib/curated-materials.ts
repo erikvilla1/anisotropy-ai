@@ -193,8 +193,14 @@ export function currentMaterial(material: CitedMaterial, feed: MaterialFeed | nu
   } catch { return material; }
 }
 
-export function referenceUrl(source: CitedMaterial["source"], page: number) {
-  return source.kind === "book" ? source.url : `${source.url}#page=${page}`;
+export function referenceUrl(source: CitedMaterial["source"], page: number, context?: { datasetId: string; propertyKey?: string }) {
+  if (source.kind !== "book") return `${source.url}#page=${page}`;
+  const params = new URLSearchParams({ source: source.id, page: String(page) });
+  if (context) {
+    params.set("dataset", context.datasetId);
+    if (context.propertyKey) params.set("property", context.propertyKey);
+  }
+  return `/sources?${params}`;
 }
 
 export function exportCitedMaterial(material: CitedMaterial) {
@@ -207,7 +213,7 @@ export function exportCitedMaterial(material: CitedMaterial) {
     properties: material.properties.map(p => ({ ...p,
       valueType: p.valueQualifier ? "lower-bound" : p.valueEnd === undefined ? "scalar" : "range",
       displayUnits: dualUnits(propertyDisplayValue(p),p.unit),
-      referenceUrl: referenceUrl(material.source, p.sourcePage) })) };
+      referenceUrl: referenceUrl(material.source, p.sourcePage, { datasetId: material.datasetId, propertyKey: p.key }) })) };
 }
 
 export function materialDatasets(material: CitedMaterial): CitedMaterial[] {
