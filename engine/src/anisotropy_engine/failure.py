@@ -12,6 +12,7 @@ from typing import Literal
 
 import numpy as np
 
+from ._validation import finite_vector
 from .lamina import Strengths
 from .laminate import Ply
 from .response import Loads, midplane_response, ply_surfaces
@@ -21,7 +22,7 @@ Criterion = Literal["max_stress", "tsai_wu"]
 
 def max_stress_ratio(stress_12: np.ndarray, strengths: Strengths) -> tuple[float, str]:
     """Smallest strength ratio over the five maximum-stress limits, and the mode that governs."""
-    sigma1, sigma2, tau12 = stress_12
+    sigma1, sigma2, tau12 = finite_vector(stress_12, "stress_12")
     s = strengths
     limits = [
         (s.F1t / sigma1 if sigma1 > 0 else math.inf, "longitudinal tension"),
@@ -42,6 +43,7 @@ def tsai_wu_ratio(stress_12: np.ndarray, strengths: Strengths, f12_star: float) 
     """
     if not -1 < f12_star < 1:
         raise ValueError(f"f12_star must be between -1 and 1, got {f12_star}")
+    sigma1, sigma2, tau12 = finite_vector(stress_12, "stress_12")
     s = strengths
     f1 = 1 / s.F1t - 1 / s.F1c
     f2 = 1 / s.F2t - 1 / s.F2c
@@ -49,18 +51,19 @@ def tsai_wu_ratio(stress_12: np.ndarray, strengths: Strengths, f12_star: float) 
     f22 = 1 / (s.F2t * s.F2c)
     f66 = 1 / s.F6**2
     f12 = f12_star * math.sqrt(f11 * f22)
-    sigma1, sigma2, tau12 = stress_12
     a = f11 * sigma1**2 + f22 * sigma2**2 + f66 * tau12**2 + 2 * f12 * sigma1 * sigma2
     b = f1 * sigma1 + f2 * sigma2
-    # Positive root of a R^2 + b R - 1 = 0, rearranged to avoid cancellation when b < 0.
+    # Positive root of a R^2 + b R - 1 = 0, rearranged to avoid numerator cancellation when b > 0.
     denominator = b + math.sqrt(b * b + 4 * a)
     return 2 / denominator if denominator > 0 else math.inf
 
 
 def margin_of_safety(strength_ratio: float, factor_of_safety: float) -> float:
-    """MS = R / FS - 1. The check passes when MS >= 0."""
-    if not factor_of_safety >= 1:
-        raise ValueError(f"Factor of safety must be at least 1, got {factor_of_safety}")
+    """MS = R / FS - 1. Positive infinity is valid for an unstressed ply's ratio."""
+    if not math.isfinite(factor_of_safety) or factor_of_safety < 1:
+        raise ValueError(f"Factor of safety must be finite and at least 1, got {factor_of_safety}")
+    if math.isnan(strength_ratio) or strength_ratio < 0:
+        raise ValueError(f"Strength ratio must be nonnegative (positive infinity is allowed), got {strength_ratio}")
     return strength_ratio / factor_of_safety - 1
 
 

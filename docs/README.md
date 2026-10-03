@@ -51,12 +51,14 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0006](decisions/ADR-0006-no-job-queue-yet.md) | No job queue until analyses are slow |
 | [0007](decisions/ADR-0007-validation-cases-store-numbers-only.md) | Validation cases store numbers and a source reference only |
 | [0008](decisions/ADR-0008-manual-generated-from-sources.md) | The LaTeX manual is generated from the repository's sources |
+| [0009](decisions/ADR-0009-calculator-inputs-in-case-files.md) | Calculator inputs reuse explicit TOML cases (proposed) |
+| [0010](decisions/ADR-0010-public-citations-local-page-evidence.md) | Publish property citations; keep textbook page scans local (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
-Public source-viewer decision: [ADR-0010](decisions/ADR-0010-public-citations-local-page-evidence.md). Input and citation checks: [2026-10-03 evaluation](evaluations/2026-10-03-website-input-validation.md).
+Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md) and [website inputs and citations](evaluations/2026-10-03-website-input-validation.md).
 
 | Document | Contents |
 | --- | --- |

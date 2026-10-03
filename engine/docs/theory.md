@@ -10,6 +10,8 @@ Every equation the engine uses, and the function that computes it. Equations fol
 - Plies are listed from the bottom face up; $`z`$ is measured from the mid-plane, positive upward.
 - Compressive strengths are positive magnitudes.
 
+Input models reject unknown field names. Direct stress, strain and curvature vectors must contain exactly three finite components. Zero stress is valid; NaN and infinity are not measurements and are rejected before calculation. A strength ratio of positive infinity remains valid for an unstressed ply, while a factor of safety must be finite and at least one.
+
 ## 1. Ply stiffness (`lamina.py`)
 
 Reciprocity, computed by `Lamina.nu21`:
@@ -179,7 +181,7 @@ b = f_1\sigma_1 + f_2\sigma_2
 R = \frac{-b + \sqrt{b^2 + 4a}}{2a} = \frac{2}{b + \sqrt{b^2 + 4a}}
 ```
 
-The code uses the second form, which avoids losing digits when $`b`$ is large and negative.
+The code uses the second form, which avoids subtraction in the numerator when $`b > 0`$. It is algebraically equivalent to the first form; extreme numerical conditioning is not established by the current reference cases.
 
 <!-- code: tsai_wu_ratio -->
 

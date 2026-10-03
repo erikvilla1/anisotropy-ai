@@ -23,6 +23,7 @@ uv run pytest
 - Strength ratio R is the factor on all applied loads at which a criterion predicts failure (Daniel & Ishai's safety factor S_f). Margin of safety is MS = R / FS - 1 for a required factor of safety FS.
 - First-ply failure is the onset of damage in one ply, not the ultimate strength of the laminate. Thermal residual stresses are not included yet.
 - Invalid input raises an error. The engine never substitutes a default value; the Tsai-Wu interaction term `f12_star` must be given explicitly.
+- Unknown material, strength, ply and load fields are rejected. Stress, strain and curvature vectors need three finite components. Safety factors must be finite and at least one; an unstressed ply can still have an infinite strength ratio.
 
 ## Modules
 
@@ -42,7 +43,13 @@ The equations behind each module, and the function that computes each one, are i
 ## Validation and examples
 
 - `validation/cases/` holds solved problems from textbooks and answer keys; `tests/test_validation_cases.py` checks the engine against all of them. See [validation/README.md](validation/README.md).
-- `examples/laminate_calculator.py` prints every intermediate result for a problem you type in, for checking hand or homework answers.
+- `examples/laminate_calculator.py` prints every intermediate result from a TOML case, for checking hand or homework answers. Without an argument it runs the unchanged Problem 7.11 reference case.
 - `examples/coupon_check.py` summarizes stiffness, ply stresses and first-ply failure for a tension coupon.
 
 Run either example with `uv run python examples/<name>.py`.
+
+For another problem: `uv run python examples/laminate_calculator.py validation/cases/as4-zero-degree-axial-check.toml`. Put personal cases and original homework files in the repository's ignored `.local/` directory. See [the case format](validation/README.md).
+
+Input scales are explicit: `SI` means GPa, MPa and mm; `US` means Msi, ksi and inches; `psi` means psi and inches. For 140 GPa, enter `E1 = 140` with `units = "SI"`, not `140e9`. Conversion to Pa happens inside the calculator. Moduli outside the example's existing 0.5-1000 GPa plausibility screen now stop the calculator; `--allow-unusual-moduli` explicitly overrides that screen after review. This screen is not a physical validity criterion or an engine restriction.
+
+Failure checks always include maximum stress when all five strengths are supplied. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
