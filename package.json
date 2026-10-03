@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
+    "test:calculator": "playwright test --config playwright.calculator.config.ts",
     "monitor:start": "tsx services/material-monitor/server.ts",
     "monitor:check": "tsx services/material-monitor/server.ts --once",
     "test:monitor": "tsx --test tests/material-monitor.test.ts"

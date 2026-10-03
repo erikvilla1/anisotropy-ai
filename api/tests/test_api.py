@@ -129,3 +129,21 @@ def test_explicit_zero_loads_produce_zero_deformation(problem):
 def test_malformed_json_gets_a_client_error():
     response = client.post(ENDPOINT, content="{", headers={"Content-Type": "application/json"})
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("origin", ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"])
+def test_local_website_can_preflight_and_read_a_calculation(problem, origin):
+    headers = {"Origin": origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type"}
+    preflight = client.options(ENDPOINT, headers=headers)
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == origin
+    response = client.post(ENDPOINT, json=problem, headers={"Origin": origin})
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert "access-control-allow-credentials" not in response.headers
+
+
+def test_unapproved_browser_origin_fails_preflight():
+    response = client.options(ENDPOINT, headers={"Origin": "https://unapproved.example", "Access-Control-Request-Method": "POST"})
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
