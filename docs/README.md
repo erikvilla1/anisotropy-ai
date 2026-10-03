@@ -58,7 +58,7 @@ New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
-Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md) and [website inputs and citations](evaluations/2026-10-03-website-input-validation.md).
+Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md) and [website inputs and citations](evaluations/website/2026-10-03-input-validation.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
 
 | Document | Contents |
 | --- | --- |

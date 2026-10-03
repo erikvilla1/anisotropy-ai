@@ -21,7 +21,7 @@ Option 3. Retain table/page and dataset/property links, source-unit values and d
 
 ## Why (evidence)
 
-The policy is explicit in AGENTS.md. Unit tests check that public scans are absent; browser tests check citations, conversions, invalid links and a 404 for the old scan URL. Results are recorded in the [evaluation](../evaluations/2026-10-03-website-input-validation.md).
+The policy is explicit in AGENTS.md. Unit tests check that public scans are absent; browser tests check citations, conversions, invalid links and a 404 for the old scan URL. Results are recorded in the [evaluation](../evaluations/website/2026-10-03-input-validation.md).
 
 ## Consequences
 
