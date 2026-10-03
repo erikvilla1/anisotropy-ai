@@ -16,6 +16,9 @@ nu12 = 0.0
 # F2t = 0.0
 # F2c = 0.0
 # F6 = 0.0
+# Thermal expansion is only needed with delta_T: 1/degC (SI) or 1/degF (US, psi). Either may be negative.
+# alpha1 = 0.0
+# alpha2 = 0.0
 
 [laminate]
 layup = [0]          # angles from the bottom face up, counterclockwise from x to the fibers
@@ -28,11 +31,16 @@ ply_thickness = 0.0  # same for every ply
 # strains = [eps_x, eps_y, gamma_xy, kappa_x, kappa_y, kappa_xy]
 # local_stress = [sigma_1, sigma_2, tau_12]          single-angle layups only
 # local_strain = [eps_1, eps_2, gamma_12]            single-angle layups only
+# Optionally add a uniform temperature change next to it (needs alpha1 and alpha2):
+# delta_T = 0.0                                      degC (SI) or degF (US, psi)
 
 [expected]
 tolerance = 0.001  # relative; loosen it to match how the answer key rounds
 # Give only the results the answer key states. Available keys:
+#   Q11 Q12 Q22 Q66 (ply stiffness in fiber axes)
 #   A11 A12 A16 A22 A26 A66, and the same for B and D
 #   strain_global, curvature, strain_local, stress_global, stress_local
+#   ply_stress_global, ply_stress_local: one [3 values] row per ply, bottom first, at mid-thickness
+#   N_T, M_T (thermal resultants, with delta_T)
 #   Ex Ey Gxy nu_xy nu_yx
 #   fpf_ratio_max_stress, fpf_ratio_tsai_wu (Tsai-Wu also needs f12_star = ... at the top of the file)
