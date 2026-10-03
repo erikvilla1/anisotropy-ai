@@ -1,8 +1,8 @@
 # ADR-0010: Keep page scans local and publish property citations
 
-- Status: Proposed (implemented for review)
+- Status: Accepted
 - Date: 2026-10-03
-- Decided by: pending PR review | Drafted by: Codex
+- Decided by: Founder | Drafted by: Codex
 - Related: AGENTS.md data rules; risk R-05; `tests/textbook-materials.test.ts`
 
 ## Context
