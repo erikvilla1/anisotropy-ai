@@ -152,7 +152,7 @@ Mid-plane strain and curvature, computed by `abd_matrix` and `midplane_response`
 
 <!-- code: abd_matrix, midplane_response -->
 
-The inverted ABD matrix gives deformation directly from loads. Its blocks are computed by `abd_compliance`; the course reader writes them as $`\boldsymbol{\alpha}`$, $`\boldsymbol{\beta}`$ and $`\boldsymbol{\delta}`$:
+The inverted ABD matrix gives deformation directly from loads. Its blocks are computed by `abd_compliance` (Eqs. 7.27-7.28, where the lower-left block $`\mathbf{c} = \mathbf{b}^{T}`$); the course reader writes them as $`\boldsymbol{\alpha}`$, $`\boldsymbol{\beta}`$ and $`\boldsymbol{\delta}`$:
 
 ```math
 \begin{bmatrix}\boldsymbol{\varepsilon}^0\\ \boldsymbol{\kappa}\end{bmatrix}
@@ -329,7 +329,7 @@ The in-plane compliance $`\mathbf{a}`$ is the top-left 3×3 block of the inverte
 
 ## 7. Temperature change (`thermal.py`)
 
-A uniform temperature change $`\Delta T`$ (in K, the same number as a change in °C) gives each ply a free thermal strain $`\boldsymbol{\alpha}\,\Delta T`$. The expansion coefficients $`\alpha_1`$ and $`\alpha_2`$ are strains per kelvin, so they rotate into laminate axes like strain. Computed by `thermal_expansion_xy`:
+A uniform temperature change $`\Delta T`$ (in K, the same number as a change in °C) gives each ply a free thermal strain $`\boldsymbol{\alpha}\,\Delta T`$. The expansion coefficients $`\alpha_1`$ and $`\alpha_2`$ are strains per kelvin, so they rotate into laminate axes like strain (Eqs. 8.10-8.12). Computed by `thermal_expansion_xy`:
 
 ```math
 \begin{bmatrix}\alpha_x\\ \alpha_y\\ \alpha_{xy}\end{bmatrix}
@@ -343,13 +343,13 @@ $`\alpha_{xy}`$ is an engineering shear coefficient, like $`\gamma_{xy}`$.
 
 <!-- code: thermal_expansion_xy -->
 
-A ply is stressed only by the strain it is forced to take beyond its free thermal strain:
+A ply is stressed only by the strain it is forced to take beyond its free thermal strain (Eq. 8.16):
 
 ```math
 \boldsymbol{\sigma}_k(z) = \bar{\mathbf{Q}}_k\left(\boldsymbol{\varepsilon}^0 + z\,\boldsymbol{\kappa} - \boldsymbol{\alpha}_k\,\Delta T\right)
 ```
 
-Integrating through the thickness, as for A, B and D, moves the thermal terms to the load side. The thermal force and moment resultants are computed by `thermal_resultants`:
+Integrating through the thickness, as for A, B and D, moves the thermal terms to the load side. The thermal force and moment resultants (Eqs. 8.18 and 8.20, without moisture) are computed by `thermal_resultants`:
 
 ```math
 \mathbf{N}^T = \Delta T\sum_{k=1}^{N}\bar{\mathbf{Q}}_k\,\boldsymbol{\alpha}_k\,(z_k - z_{k-1}),
@@ -361,7 +361,7 @@ They are the resultants that would hold every ply at its free thermal strain, no
 
 <!-- code: thermal_resultants -->
 
-Mid-plane strain and curvature under mechanical loads and a temperature change, computed by `thermomechanical_response`:
+Mid-plane strain and curvature under mechanical loads and a temperature change (Eq. 8.25), computed by `thermomechanical_response`:
 
 ```math
 \begin{bmatrix}\mathbf{A} & \mathbf{B}\\ \mathbf{B} & \mathbf{D}\end{bmatrix}
@@ -379,7 +379,7 @@ Ply strain and stress on each face, computed by `thermal_ply_surfaces`, follow t
 
 When strains or curvatures are prescribed instead of loads, the mechanical loads are the total resultants minus the thermal ones: $`\mathbf{N} = \mathbf{A}\boldsymbol{\varepsilon}^0 + \mathbf{B}\boldsymbol{\kappa} - \mathbf{N}^T`$ and $`\mathbf{M} = \mathbf{B}\boldsymbol{\varepsilon}^0 + \mathbf{D}\boldsymbol{\kappa} - \mathbf{M}^T`$. The mechanical-only functions are unchanged. A temperature change applies only where it is given explicitly (ADR-0014).
 
-These equations follow the solution method of Course Reader Problem 5.9, whose answer key the engine reproduces (validation cases `course-reader-5-9-*`). The Daniel and Ishai equation numbers for this section have not been checked yet.
+These are the equations of Daniel and Ishai Chapter 8 (printed pp. 212-217) with the moisture terms omitted; Eq. 8.20 writes the moment integral as the ply's mid-plane height times its thickness, which equals $`(z_k^2 - z_{k-1}^2)/2`$. With $`\Delta T = 1`$ and no load, the mid-plane strains are the laminate expansion coefficients (Eq. 8.33). The engine reproduces the course answer keys for curing stresses (Course Reader 5.9), an unsymmetric cure (5.13), laminate expansion coefficients, a hybrid woven/tape laminate and combined thermal and mechanical loading (validation cases `course-reader-5-9-*` and `se142-hw4-*`, `se142-hw5-*`).
 
 Failure ratios are not computed with a temperature change. The residual stress does not scale with the applied load, so the strength ratio defined under Failure does not apply.
 
