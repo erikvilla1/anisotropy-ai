@@ -1,0 +1,157 @@
+% Anisotropy AI laminate engine manual.
+% Build with:  uv run --project engine python docs/manual/build.py
+% The files in generated/ are written by build.py from the repository's documents, code and
+% engine results. Edit those sources, not the generated files.
+
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=1in,headheight=14pt]{geometry}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{booktabs,array,xltabular}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{hyperref}
+
+\definecolor{accent}{HTML}{9A5A00}
+\definecolor{ink}{HTML}{1C1F22}
+\definecolor{muted}{HTML}{5D636A}
+\definecolor{codebg}{HTML}{F3F4F1}
+\definecolor{passgreen}{HTML}{2F6B3F}
+
+\hypersetup{colorlinks=true, linkcolor=ink, urlcolor=accent, citecolor=ink,
+  pdftitle={Anisotropy AI Laminate Engine Manual}, pdfauthor={Anisotropy AI}}
+
+\titleformat{\section}{\sffamily\Large\bfseries\color{ink}}{\color{accent}\thesection}{0.7em}{}
+\titleformat{\subsection}{\sffamily\large\bfseries\color{ink}}{\color{accent}\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\sffamily\normalsize\bfseries\color{ink}}{\thesubsubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{2.2ex plus 1ex}{1.2ex}
+\titlespacing*{\subsection}{0pt}{2ex plus 1ex}{0.8ex}
+
+\setlist{nosep, leftmargin=1.4em, topsep=0.3ex}
+\setlength{\emergencystretch}{3em}  % lets lines with long file names break instead of overflowing
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\renewcommand{\arraystretch}{1.25}
+
+\lstdefinestyle{engine}{
+  language=Python, basicstyle=\ttfamily\footnotesize, columns=fullflexible, keepspaces=true,
+  numbers=left, numberstyle=\tiny\color{muted}, numbersep=7pt,
+  backgroundcolor=\color{codebg}, frame=leftline, framerule=2pt, rulecolor=\color{accent},
+  xleftmargin=2.8em, framexleftmargin=2.2em, aboveskip=0.4ex, belowskip=1.2ex,
+  keywordstyle=\color{accent}\bfseries, commentstyle=\color{muted}\itshape,
+  stringstyle=\color{passgreen}, showstringspaces=false, breaklines=true}
+\lstnewenvironment{enginecode}[1][]{\lstset{style=engine,#1}}{}
+
+% \codefrom{function}{file}{lines}: caption above a code listing.
+\newcommand{\codefrom}[3]{\par\smallskip\noindent{\sffamily\footnotesize\color{muted}%
+  Code: \textcolor{ink}{\textbf{#1}} in #2, lines #3}\par\nopagebreak}
+% \adrmeta{status}{date}{url} and \adrpart{label}: decision record layout.
+\newcommand{\adrmeta}[3]{{\sffamily\small\color{muted}Status: #1\quad Date: #2\quad \href{#3}{Source file}}\par}
+\newcommand{\adrpart}[1]{\par\smallskip\noindent{\sffamily\footnotesize\bfseries\color{accent}\MakeUppercase{#1}}\par\nopagebreak}
+
+\input{generated/meta}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyhead[L]{\sffamily\footnotesize\color{muted}Anisotropy AI \textperiodcentered{} Laminate Engine Manual \textperiodcentered{} engine \EngineVersion}
+\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}
+\fancyfoot[C]{\sffamily\scriptsize\color{muted}Internal use. Not for design decisions until coupon tests are compared with predictions.}
+
+\begin{document}
+
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+  \sffamily
+  {\color{accent}\bfseries\small ANISOTROPY AI}\par
+  \vspace*{3cm}
+  {\fontsize{30}{36}\selectfont\bfseries\color{ink} Laminate Engine Manual}\par
+  \vspace{0.6cm}
+  {\Large\color{muted} Theory, verification, decisions and limits}\par
+  \vspace{2.5cm}
+  {\normalsize
+  \begin{tabular}{@{}ll@{}}
+    Engine version & \EngineVersion \\
+    Source commit & \texttt{\GitCommit} \\
+    Built & \BuildDate \\
+    Engine tests & \TestSummary \\
+  \end{tabular}}\par
+  \vfill
+  \colorbox{codebg}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small\color{ink}\textbf{Status: internal use.}
+    The engine reproduces textbook and answer-key results (Section~\ref{sec:verification}). It has not yet been compared
+    with our own coupon tests, so it is not approved for design or certification decisions.}}\par
+  \vspace{0.8cm}
+  {\small\color{muted} This manual is generated from the repository: its prose and equations come from the
+  Markdown documents, its code listings from the engine source, and every number in its tables from running the
+  engine while it was built. To change it, edit those sources and rebuild (see \texttt{docs/manual/README.md}).}
+\end{titlepage}
+\hypersetup{pageanchor=true}
+
+\tableofcontents
+\clearpage
+
+\section{About this manual}
+
+This manual collects the project's documentation about the laminate engine into one readable document. Its
+sections answer the questions set out in the documentation guide,
+\texttt{docs/\allowbreak documentation-\allowbreak guide.md}.
+
+\begin{xltabular}{\linewidth}{lYY}
+  \toprule
+  \textbf{Section} & \textbf{Question} & \textbf{Source in the repository} \\
+  \midrule
+  \ref{sec:built} & What have we built? & \texttt{docs/00\_system\_overview.md} \\
+  \ref{sec:theory} & How is each result calculated? & \texttt{engine/docs/theory.md} and the engine code \\
+  \ref{sec:verification} & Does it work, and how do we know? & \texttt{engine/validation/cases} and \texttt{docs/evaluations} \\
+  \ref{sec:decisions} & Why was it built this way? & \texttt{docs/decisions} \\
+  \ref{sec:limits} & What could go wrong? & \texttt{docs/00\_system\_overview.md} and \texttt{docs/risks/risk\_register.md} \\
+  \ref{sec:example} & What does a real calculation look like? & Computed by the engine while this manual was built \\
+  \bottomrule
+\end{xltabular}
+
+Each equation in Section~\ref{sec:theory} is followed by the code that computes it, copied from the engine with its
+real line numbers. Values marked as engine results were calculated during the build, so the manual cannot drift from
+the code it describes.
+
+\section{What we built}\label{sec:built}
+\input{generated/overview}
+
+\section{How results are calculated}\label{sec:theory}
+\input{generated/theory}
+
+\section{Does it work?}\label{sec:verification}
+\input{generated/verification}
+
+\section{Why it was built this way}\label{sec:decisions}
+These are the project's decision records: the context, the options considered, the choice, its evidence, and what
+would make us revisit it. The full records, including consequences, are in \texttt{docs/decisions}.
+\input{generated/decisions}
+
+\section{Limits and risks}\label{sec:limits}
+\input{generated/limits}
+
+\appendix
+
+\section{Worked example: tension coupon}\label{sec:example}
+\input{generated/example}
+
+\section{Unit systems}\label{sec:units}
+\input{generated/units}
+
+\section{References}
+\begin{itemize}[leftmargin=1.2em, itemsep=0.6ex]
+  \item I. M. Daniel and O. Ishai, \emph{Engineering Mechanics of Composite Materials}, 2nd edition. Oxford University
+    Press, 2006. Lamina relations, Chapter 4; lamina strength and Tsai-Wu, Chapter 6; laminate theory and engineering
+    properties, Chapter 7; first-ply failure, Chapter 9.
+  \item NASA-STD-7009A, \emph{Standard for Models and Simulations}. NASA, 2016.
+  \item ASME V\&V 10, \emph{Standard for Verification and Validation in Computational Solid Mechanics}. ASME.
+  \item NIST AI 100-1, \emph{Artificial Intelligence Risk Management Framework (AI RMF 1.0)}. NIST, 2023.
+  \item Project documentation guide and its sources: \texttt{docs/documentation-guide.md}.
+\end{itemize}
+
+\end{document}
