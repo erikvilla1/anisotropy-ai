@@ -27,6 +27,7 @@ The full method is in `docs/documentation-guide.md`; the index is `docs/README.m
 4. Never claim a test passed without its output. Mark anything unchecked as UNVERIFIED.
 5. State what was decided and what supports it. Do not present your own reasoning as fact.
 6. Keep entries short.
+7. The PDF manual in `docs/manual/` is generated from these documents and the code. Edit the sources, never `docs/manual/generated/`. When `theory.md` says a function computes something, add a `<!-- code: name -->` marker where its listing belongs.
 
 ## Engine rules
 
