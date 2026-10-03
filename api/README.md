@@ -68,6 +68,8 @@ The combined command also verifies the engine under the API's dependency version
 
 ## Chunk boundary
 
-This chunk provides local stiffness and deformation calculations only. Website integration, curated material loading, ply-stress/failure endpoints, saved runs and the AI assistant are future chunks. No authentication or deployment controls are implemented; run on loopback for local development. The API inherits the engine's flat-laminate CLT scope and physical limitations.
+This chunk provides local stiffness and deformation calculations only. The [chunk 2 calculator](../docs/walkthroughs/chunk-2-calculator.md) now calls it from the website. CORS permits JSON POST requests from `http://localhost:3000`, `http://127.0.0.1:3000`, `http://localhost:3001` and `http://127.0.0.1:3001`, without credentials. Restart the API after code changes. CORS is a browser policy, not authentication.
+
+Curated material loading, ply-stress/failure endpoints, saved runs and the AI assistant are future chunks. No authentication or deployment controls are implemented; run on loopback for local development. The API inherits the engine's flat-laminate CLT scope and physical limitations.
 
 Read [ADR-0011](../docs/decisions/ADR-0011-local-laminate-api.md) for the choices and [the component card](../docs/components/api.md) for the system-level boundary.

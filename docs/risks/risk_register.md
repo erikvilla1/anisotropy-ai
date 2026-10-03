@@ -4,7 +4,7 @@ Functions follow the NIST AI Risk Management Framework: Govern, Map, Measure, Ma
 
 | ID | Risk | Area | NIST function | Likelihood | Impact | Mitigation | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| R-01 | A unit-entry mistake gives a wrong result | Engineering | Measure | High: two mistakes on 2026-10-02 | High | SI inside the engine (ADR-0002); calculator screens implausible moduli; local API requires SI_BASE and unit-labelled material inputs (ADR-0011). Declaring units does not prove the entered scale is correct | Engineer | Partly mitigated |
+| R-01 | A unit-entry mistake gives a wrong result | Engineering | Measure | High: two mistakes on 2026-10-02 | High | SI inside the engine (ADR-0002); Python calculator screens implausible moduli; local API requires SI_BASE (ADR-0011); browser GPa/mm conversions have unit and real-API tests (ADR-0012). Labels and conversions do not prove the entered scale is correct | Engineer | Partly mitigated |
 | R-02 | First-ply failure is unconservative without curing residual stresses | Engineering | Map | Medium | High | Stated in the overview, the reports and the code; add temperature and moisture effects before design use | Engineer | Open |
 | R-03 | A result is used as ultimate strength or a design allowable | Engineering | Govern | Medium | High | First-ply failure labelled as the onset of cracking; engine not approved for design decisions | Founder | Open |
 | R-04 | Material values are typed wrongly or taken from the wrong dataset | Data | Measure | Medium | High | Material loader reading the cited library (planned); dataset recorded with every run (planned) | Engineer | Open |
