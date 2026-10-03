@@ -14,7 +14,7 @@ class Strengths(BaseModel):
     Compressive strengths are positive magnitudes.
     """
 
-    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 
     F1t: PositiveFloat
     F1c: PositiveFloat
@@ -26,7 +26,7 @@ class Strengths(BaseModel):
 class Lamina(BaseModel):
     """In-plane elastic constants of one ply in Pa, plus strengths when failure checks are needed."""
 
-    model_config = ConfigDict(frozen=True, allow_inf_nan=False)
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
 
     E1: PositiveFloat
     E2: PositiveFloat
