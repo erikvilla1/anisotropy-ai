@@ -10,6 +10,11 @@ next-env.d.ts
 test-results/
 playwright-report/
 
+# Python engine
+.venv/
+__pycache__/
+.pytest_cache/
+
 # Local references and assistant-specific instructions
 .local/
 # Local reference archive (includes user-supplied textbooks)
