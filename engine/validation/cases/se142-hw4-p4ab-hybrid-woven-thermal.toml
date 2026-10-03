@@ -1,0 +1,70 @@
+title = "Hybrid woven/tape laminate under in-plane load and cooling"
+source = "SE142/253A (Fall 2025) Homework 4, Problem 4(a)-(b), course solution; numbers only"
+units = "psi"
+
+[materials.IM7]
+# IM7/977-3 unidirectional tape, 0.005 in plies
+E1 = 27.7e6
+E2 = 1.44e6
+G12 = 1.13e6
+nu12 = 0.35
+alpha1 = -0.5e-6  # 1/degF
+alpha2 = 12.4e-6
+
+[materials.AGP370]
+# AGP370-5H/3501-6 woven fabric, 0.010 in plies
+E1 = 11.2e6
+E2 = 10.9e6
+G12 = 0.94e6
+nu12 = 0.06
+alpha1 = 1.9e-6  # 1/degF
+alpha2 = 2.1e-6
+
+[laminate]
+# [(0)W/0/45/90/-45/90]s, ply 1 at the bottom. The course Excel files repeat ply number 9;
+# the second one is ply 8.
+plies = [
+    {angle = 0, material = "AGP370", thickness = 0.010},
+    {angle = 0, material = "IM7", thickness = 0.005},
+    {angle = 45, material = "IM7", thickness = 0.005},
+    {angle = 90, material = "IM7", thickness = 0.005},
+    {angle = -45, material = "IM7", thickness = 0.005},
+    {angle = 90, material = "IM7", thickness = 0.005},
+    {angle = -45, material = "IM7", thickness = 0.005},
+    {angle = 90, material = "IM7", thickness = 0.005},
+    {angle = 45, material = "IM7", thickness = 0.005},
+    {angle = 0, material = "IM7", thickness = 0.005},
+    {angle = 0, material = "AGP370", thickness = 0.010},
+]
+
+[applied]
+loads = [860.0, 0.0, -250.0, 0.0, 0.0, 0.0]
+delta_T = -300.0  # degF
+
+[expected]
+tolerance = 0.002  # the key prints four significant figures
+A11 = 699607.4  # lb/in
+A12 = 154912.8
+A22 = 825727.8
+A66 = 188611.5
+N_T = [-223.4, -194.2, 0]  # lb/in
+strain_global = [1.004e-3, -4.235e-4, -1.325e-3]
+
+# Fiber-axis strain and stress (psi) in the plies the key reports. With no bending they are uniform in each ply.
+[expected.ply_strain_local]
+1 = [1.004e-3, -4.235e-4, -1.325e-3]
+11 = [1.004e-3, -4.235e-4, -1.325e-3]
+3 = [-3.726e-4, 9.528e-4, -1.427e-3]
+9 = [-3.726e-4, 9.528e-4, -1.427e-3]
+4 = [-4.235e-4, 1.004e-3, 1.325e-3]
+6 = [-4.235e-4, 1.004e-3, 1.325e-3]
+8 = [-4.235e-4, 1.004e-3, 1.325e-3]
+
+[expected.ply_stress_local]
+1 = [1.782e4, 3.291e3, -1.246e3]
+11 = [1.782e4, 3.291e3, -1.246e3]
+3 = [-1.220e4, 6.507e3, -1.613e3]
+9 = [-1.220e4, 6.507e3, -1.613e3]
+4 = [-1.359e4, 6.555e3, 1.498e3]
+6 = [-1.359e4, 6.555e3, 1.498e3]
+8 = [-1.359e4, 6.555e3, 1.498e3]

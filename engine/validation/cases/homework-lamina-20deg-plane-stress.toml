@@ -1,5 +1,5 @@
 title = "Global and local strains of a lamina at 20 degrees under a plane stress state"
-source = "Past homework assignment (course and problem number to be added); engine values matched the answer key when checked on 2026-10-02"
+source = "SE142/253A (Fall 2025) Homework 2, Problems 3(a) and 4(b), course solution; engine values matched the key when checked on 2026-10-02"
 units = "psi"
 
 [material]

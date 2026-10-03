@@ -1,0 +1,38 @@
+title = "A, D and inverse A of a [0_2/45/90/-45]s boron/epoxy laminate"
+source = "SE142/253A (Fall 2025) Homework 3, Problem 3(a), course solution; numbers only"
+units = "psi"
+
+[material]
+# Boron/epoxy, course property table: 29 / 3.0 / 0.78 Msi. The course Excel input files list
+# G12 = 7,800,000 psi; that is a typo, since only 780,000 reproduces this key's A66.
+E1 = 29.0e6
+E2 = 3.0e6
+G12 = 0.78e6
+nu12 = 0.17
+
+[laminate]
+layup = [0, 0, 45, 90, -45, -45, 90, 45, 0, 0]
+ply_thickness = 0.008
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]  # stiffness only
+
+[expected]
+tolerance = 0.002
+A11 = 1.2688e6  # lb/in
+A12 = 0.2645e6
+A22 = 0.8515e6
+A66 = 0.2860e6
+A16 = 0
+A26 = 0
+D11 = 1042.0  # lb*in
+D12 = 69.5
+D16 = 40.1
+D22 = 232.0
+D26 = 40.1
+D66 = 81.0
+a11 = 0.0843e-5  # in/lb
+a12 = -0.0262e-5
+a22 = 0.1256e-5
+a66 = 0.3496e-5
+# delta (d) is printed to four decimal places, about two significant figures; not recorded.

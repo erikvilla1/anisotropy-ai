@@ -1,0 +1,31 @@
+title = "Transformed stiffness and compliance of a 20-degree AS4/3501-6 lamina in psi"
+source = "SE142/253A (Fall 2025) Homework 2, Problem 4(a), course solution; numbers only"
+units = "psi"
+
+[material]
+E1 = 2.13e7
+E2 = 1.50e6
+G12 = 1.00e6
+nu12 = 0.27
+
+[laminate]
+layup = [20]
+ply_thickness = 1.0  # not given; these results do not depend on it
+
+[applied]
+stress = [50000.0, -3500.0, 12000.0]
+
+[expected]
+tolerance = 0.005  # S-bar is printed to three significant figures
+Qbar11 = 1.721e7
+Qbar12 = 2.277e6
+Qbar16 = 5.427e6
+Qbar22 = 1.966e6
+Qbar26 = 9.697e5
+Qbar66 = 2.870e6
+Sbar11 = 1.46e-7  # 1/psi
+Sbar12 = -3.96e-8
+Sbar16 = -2.63e-7
+Sbar22 = 6.21e-7
+Sbar26 = -1.35e-7
+Sbar66 = 8.92e-7

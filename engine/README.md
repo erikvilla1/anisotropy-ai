@@ -31,15 +31,16 @@ The equations behind each module, and the function that computes each one, are i
 
 | Module | Contents |
 | --- | --- |
-| `lamina.py` | Ply elastic constants, optional `Strengths` and `ThermalExpansion` (`Lamina`), and the plane-stress reduced stiffness `Q` |
-| `rotation.py` | Stress and strain transformations and the rotated ply stiffness `Q_bar` |
+| `lamina.py` | Ply elastic constants, optional `Strengths` and `ThermalExpansion` (`Lamina`), and the plane-stress stiffness `Q` and compliance `S` |
+| `rotation.py` | Stress and strain transformations, and the rotated ply stiffness `Q_bar` and compliance `S_bar` |
 | `laminate.py` | Ply stack (`Ply`), ply interface heights and the laminate `A`, `B`, `D` matrices |
-| `response.py` | Applied `Loads`, the full ABD response, required moments for prescribed curvature with a forward check, and ply surface stress/strain |
+| `response.py` | Applied `Loads`, the inverted ABD blocks a, b, d, the full ABD response, required moments for prescribed curvature with a forward check, and ply surface stress/strain |
 | `failure.py` | Maximum-stress and Tsai-Wu strength ratios, margin of safety, and first-ply failure of a laminate |
 | `thermal.py` | Rotated expansion coefficients, thermal force and moment resultants, the response to loads plus a temperature change, and residual ply stresses |
 | `engineering.py` | Effective laminate constants Ex, Ey, Gxy, Poisson ratios and shear coupling, the moduli a D3039 test measures |
 | `units.py` | SI, US (Msi, ksi) and psi unit systems for entering and reporting values |
-| `cases.py` | Loads validation cases and compares their expected values with engine results |
+| `cases.py` | Reads cases (one material, or several named materials per ply), solves them with `solve_case`, and compares expected values with engine results |
+| `course_excel.py` | Reads the course Excel input template into a case |
 
 ## Validation and examples
 
@@ -48,6 +49,8 @@ The equations behind each module, and the function that computes each one, are i
 - `examples/coupon_check.py` summarizes stiffness, ply stresses and first-ply failure for a tension coupon.
 
 Run either example with `uv run python examples/<name>.py`.
+
+The calculator also reads the course Excel input template, including several materials and ply thicknesses: `uv run python examples/laminate_calculator.py path/to/HW4_P4b.Input.xlsx`. When a TOML case has `[expected]` answers, the calculator ends with an "Answer key vs engine" table.
 
 For another problem: `uv run python examples/laminate_calculator.py validation/cases/as4-zero-degree-axial-check.toml`. Put personal cases and original homework files in the repository's ignored `.local/` directory. See [the case format](validation/README.md).
 

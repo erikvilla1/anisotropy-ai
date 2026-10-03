@@ -1,0 +1,32 @@
+title = "Transformed stiffness and compliance of a 30-degree lamina (Course Reader Problem 3.8)"
+source = "SE142/253A (Fall 2025) Homework 2, Problem 2, course solution; numbers only"
+units = "SI"
+
+[material]
+E1 = 140.0
+E2 = 10.0
+G12 = 7.0
+nu12 = 0.3
+
+[laminate]
+layup = [30]
+ply_thickness = 1.0  # not given; these results do not depend on it
+
+[applied]
+stress = [0.0, 0.0, 0.0]  # the matrices do not depend on the loading
+
+[expected]
+tolerance = 0.002  # the key prints four significant figures
+Qbar11 = 86.27  # GPa
+Qbar12 = 24.94
+Qbar16 = 40.99
+Qbar22 = 20.85
+Qbar26 = 15.67
+Qbar66 = 28.92
+Sbar11 = 0.03625  # 1/GPa: the key's 1e-11 m^2/N values times 1e9
+Sbar12 = -0.008036
+Sbar16 = -0.04701
+Sbar22 = 0.08268
+Sbar26 = -0.03340
+Sbar66 = 0.1193
+# sigma_0 = 282 MPa (walls) and 276 MPa (no walls) need mixed stress/strain conditions; not solved yet.

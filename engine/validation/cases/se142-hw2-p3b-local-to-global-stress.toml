@@ -1,0 +1,21 @@
+title = "Global stress that produces a given fiber-axis stress in a -30-degree lamina"
+source = "SE142/253A (Fall 2025) Homework 2, Problem 3(b), course solution; numbers only"
+units = "SI"
+
+# The problem needs no material; any valid one gives the same stress transformation.
+[material]
+E1 = 140.0
+E2 = 10.0
+G12 = 7.0
+nu12 = 0.3
+
+[laminate]
+layup = [-30]
+ply_thickness = 1.0  # not given; the result does not depend on it
+
+[applied]
+local_stress = [2280.0, 0.0, 15.0]
+
+[expected]
+tolerance = 0.001
+stress_global = [1723.0, 557.0, -979.8]

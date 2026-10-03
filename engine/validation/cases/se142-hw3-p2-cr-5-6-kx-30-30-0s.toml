@@ -1,0 +1,21 @@
+title = "In-plane x stiffness Kx = 1/a11 of a [30, 30, 0, 0, 30, 30] AS4 laminate (Course Reader Problem 5.6)"
+source = "SE142/253A (Fall 2025) Homework 3, Problem 2, course solution; numbers only"
+units = "SI"
+
+[material]
+E1 = 140.0
+E2 = 10.0
+G12 = 7.0
+nu12 = 0.3
+
+[laminate]
+layup = [30, 30, 0, 0, 30, 30]
+ply_thickness = 0.127
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]  # stiffness only
+
+[expected]
+tolerance = 0.002  # the key prints three significant figures
+# The key gives Kx = 5.21e+07 N/m, defined in the problem as 1/a11; recorded here as a11 = 1/Kx.
+a11 = 1.919386e-08  # m/N
