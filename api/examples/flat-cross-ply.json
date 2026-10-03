@@ -1,0 +1,17 @@
+{
+  "unit_system": "SI_BASE",
+  "stacking_order": "bottom_to_top",
+  "material": {
+    "E1_pa": 120000000000,
+    "E2_pa": 30000000000,
+    "G12_pa": 6000000000,
+    "nu12": 0,
+    "source_reference": "Constructed analytical verification inputs, not measured properties. See engine/validation/cases/constructed-flat-cross-ply.toml and engine/docs/theory.md."
+  },
+  "plies": [
+    {"angle_deg": 0, "thickness_m": 0.0002},
+    {"angle_deg": 90, "thickness_m": 0.0002}
+  ],
+  "forces": {"Nx": 6000, "Ny": -3000, "Nxy": 1200},
+  "prescribed_curvature_per_m": [0, 0, 0]
+}
