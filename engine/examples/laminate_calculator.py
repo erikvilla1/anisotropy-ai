@@ -19,7 +19,7 @@ from anisotropy_engine.engineering import engineering_constants
 from anisotropy_engine.failure import first_ply_failure, max_stress_ratio, tsai_wu_ratio
 from anisotropy_engine.lamina import Lamina, Strengths, reduced_stiffness
 from anisotropy_engine.laminate import Ply, abd_matrices, ply_interfaces
-from anisotropy_engine.response import Loads, abd_matrix, midplane_response, ply_surfaces
+from anisotropy_engine.response import Loads, abd_matrix, midplane_response, ply_surfaces, prescribed_curvature_response
 from anisotropy_engine.rotation import strain_transformation, stress_transformation, transformed_reduced_stiffness
 from anisotropy_engine.units import UNIT_SYSTEMS
 
@@ -44,6 +44,8 @@ if APPLIED == "loads":
     N, M = applied_values[:3], applied_values[3:]
 elif APPLIED == "strains":
     EPS0, KAPPA = applied_values[:3], applied_values[3:]
+elif APPLIED == "forces curvature":
+    N, KAPPA = applied_values[:3], applied_values[3:]
 elif APPLIED == "stress":
     STRESS = applied_values
 elif APPLIED == "local stress":
@@ -53,7 +55,7 @@ else:
 F12_STAR = case.get("f12_star")  # No unrecorded assumption for Tsai-Wu.
 
 UNIT_SETS = UNIT_SYSTEMS
-APPLIED_OPTIONS = ("loads", "stress", "strains", "local stress", "local strain")
+APPLIED_OPTIONS = ("loads", "stress", "strains", "local stress", "local strain", "forces curvature")
 if UNITS not in UNIT_SETS or APPLIED not in APPLIED_OPTIONS:
     raise SystemExit(f'Set UNITS to "SI", "US" or "psi", and APPLIED to one of {APPLIED_OPTIONS}.')
 if APPLIED.startswith("local") and len(set(LAYUP)) != 1:
@@ -129,6 +131,13 @@ if APPLIED in ("loads", "stress", "local stress"):
         n, m = stress * h, np.zeros(3)  # an average stress over h is a force per width N = sigma * h
     loads = Loads(**dict(zip(LOAD_NAMES, np.concatenate([n, m]))))
     eps0, kappa = midplane_response(plies, loads)
+elif APPLIED == "forces curvature":
+    n, kappa = to_si(N, "N"), to_si(KAPPA, "kappa")
+    constrained = prescribed_curvature_response(plies, n, kappa)
+    eps0 = constrained.midplane_strain
+    loads = Loads(**dict(zip(LOAD_NAMES, np.concatenate([n, constrained.moments]))))
+    print("\nPrescribed curvature: required applied moments calculated; forward verification passed.")
+    print(f"Recovered curvature [{U['kappa'][1]}]: {show(constrained.verification.recovered_curvature, 'kappa')}")
 else:
     if APPLIED == "strains":
         eps0, kappa = np.asarray(EPS0, dtype=float), to_si(KAPPA, "kappa")
@@ -167,6 +176,8 @@ if strengths is None:
 elif not np.any(loads.as_vector()):
     print("\nNothing is applied, so failure checks are skipped.")
 else:
+    if APPLIED == "forces curvature":
+        print("\nFailure ratios below scale solved N and M together; they do not hold a nonzero curvature fixed.")
     print("\nMaximum-stress strength ratios on each ply face")
     if F12_STAR is None:
         print("Tsai-Wu skipped: the case does not supply f12_star.")

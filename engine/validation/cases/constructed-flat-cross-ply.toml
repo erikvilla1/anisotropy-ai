@@ -1,0 +1,22 @@
+title = "Constructed analytical check: flat unsymmetric cross-ply"
+source = "Synthetic orthotropic constants, dimensions and loading for verification; not measured data or a course problem. Independent diagonal solution with nu12=0: A11=A22=(E1+E2)t, A66=2G12t, B11=-B22=(E2-E1)t^2/2, eps=N/A, M=B*eps. Derivation: engine/docs/theory.md, prescribed-curvature subsection."
+units = "SI"
+
+[material]
+E1 = 120.0
+E2 = 30.0
+G12 = 6.0
+nu12 = 0.0
+
+[laminate]
+layup = [0, 90]
+ply_thickness = 0.2
+
+[applied]
+forces_curvature = [6000.0, -3000.0, 1200.0, 0.0, 0.0, 0.0]
+
+[expected]
+tolerance = 1e-10
+strain_global = [0.0002, -0.0001, 0.0005]
+curvature = [0.0, 0.0, 0.0]
+moments = [-0.36, -0.18, 0.0]

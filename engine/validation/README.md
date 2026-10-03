@@ -20,18 +20,22 @@ Together these cases are the evidence that the engine gives the right numbers, a
 | `strains` | eps_x, eps_y, gamma_xy, kappa_x, kappa_y, kappa_xy |
 | `local_stress` | sigma_1, sigma_2, tau_12 (single-angle layups) |
 | `local_strain` | eps_1, eps_2, gamma_12 (single-angle layups) |
+| `forces_curvature` | Nx, Ny, Nxy, kappa_x, kappa_y, kappa_xy; calculate the required moments |
 
 | `[expected]` key | Meaning |
 | --- | --- |
 | `A11` ... `A66`, `B..`, `D..` | Laminate stiffness entries (indices 1, 2, 6) |
 | `strain_global`, `curvature` | Mid-plane strains and curvatures |
+| `moments` | Applied Mx, My, Mxy resultants, in the case's moment-per-width units |
 | `strain_local`, `stress_global`, `stress_local` | Ply state, for single-angle layups without bending |
 | `Ex`, `Ey`, `Gxy`, `nu_xy`, `nu_yx` | Laminate engineering constants |
 | `fpf_ratio_max_stress`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio (Tsai-Wu needs `f12_star`) |
 
 Shear strains are engineering shear. Layups are listed from the bottom face up. Units follow `src/anisotropy_engine/units.py`.
 
-Case inputs reject unknown fields, partial strength sets and incomplete vectors. `loads` and `strains` require all six components, including explicit zeros. Other applied vectors require three finite components. The calculator accepts this same format; `expected` is optional for calculation and required for an automated comparison. Tsai-Wu runs only when all strengths and an explicit `f12_star` are present.
+Case inputs reject unknown fields, partial strength sets and incomplete vectors. `loads`, `strains` and `forces_curvature` require all six components, including explicit zeros. Other applied vectors require three finite components. The calculator accepts this same format; `expected` is optional for calculation and required for an automated comparison. Tsai-Wu runs only when all strengths and an explicit `f12_star` are present.
+
+`forces_curvature` converts the first three components as force/width and the last three as curvature; the moments are outputs, never zero-filled inputs. Its forward check must pass before results are returned. The two `constructed-*.toml` cases use independently evaluated scalar formulas with synthetic inputs. They check implementation, not experimental validity. The generic engineering constants still describe free bending (ADR-0005). Any failure ratio scales all solved force/moment resultants proportionally; it does not maintain a fixed nonzero curvature while increasing only the forces.
 
 Use `units = "SI"` for moduli in GPa, stresses in MPa and thickness in mm. For example, 140 GPa is entered as `E1 = 140`. `US` uses Msi/ksi/inches, and `psi` uses psi/inches. The engine still calculates in SI base units.
 

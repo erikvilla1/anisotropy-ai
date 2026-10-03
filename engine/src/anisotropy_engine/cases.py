@@ -16,11 +16,11 @@ from .engineering import engineering_constants
 from .failure import first_ply_failure
 from .lamina import Lamina, Strengths
 from .laminate import Ply, abd_matrices
-from .response import Loads, abd_matrix, midplane_response, ply_surfaces
+from .response import Loads, abd_matrix, midplane_response, ply_surfaces, prescribed_curvature_response
 from .rotation import strain_transformation, stress_transformation
 from .units import UNIT_SYSTEMS
 
-APPLIED_KINDS = ("loads", "stress", "strains", "local_stress", "local_strain")
+APPLIED_KINDS = ("loads", "stress", "strains", "local_stress", "local_strain", "forces_curvature")
 STRENGTH_NAMES = ("F1t", "F1c", "F2t", "F2c", "F6")
 LOAD_NAMES = ("Nx", "Ny", "Nxy", "Mx", "My", "Mxy")
 _INDEX = {"1": 0, "2": 1, "6": 2}
@@ -59,7 +59,7 @@ def validate_case_inputs(case: dict) -> None:
     if len(case["applied"]) != 1:
         raise ValueError(f"[applied] needs exactly one of {APPLIED_KINDS}")
     kind, values = next(iter(case["applied"].items()))
-    finite_vector(values, f"applied.{kind}", 6 if kind in ("loads", "strains") else 3)
+    finite_vector(values, f"applied.{kind}", 6 if kind in ("loads", "strains", "forces_curvature") else 3)
     if "f12_star" in case and not -1 < case["f12_star"] < 1:
         raise ValueError("f12_star must be finite and strictly between -1 and 1")
 
@@ -111,6 +111,11 @@ def engine_results(case: dict) -> dict:
             resultants = np.concatenate([stress * h, np.zeros(3)])
         loads = Loads(**dict(zip(LOAD_NAMES, resultants)))
         eps0, kappa = midplane_response(plies, loads)
+    elif kind == "forces_curvature":
+        forces, kappa = si(value[:3], "N"), si(value[3:], "kappa")
+        constrained = prescribed_curvature_response(plies, forces, kappa)
+        eps0 = constrained.midplane_strain
+        loads = Loads(**dict(zip(LOAD_NAMES, np.concatenate([forces, constrained.moments]))))
     else:
         if kind == "strains":
             eps0, kappa = np.asarray(value[:3], dtype=float), si(value[3:], "kappa")
@@ -126,6 +131,8 @@ def engine_results(case: dict) -> dict:
                 results[f"{name}{i}{j}"] = (values[_INDEX[i], _INDEX[j]], np.abs(values).max())
     results["strain_global"] = (eps0, np.abs(eps0).max())
     results["curvature"] = (shown(kappa, "kappa"), np.abs(shown(kappa, "kappa")).max())
+    moments = shown(loads.as_vector()[3:], "M")
+    results["moments"] = (moments, np.abs(moments).max())
 
     if single_angle and not np.any(kappa):
         # One fiber direction and no bending: every ply face carries the same state.
