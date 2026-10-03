@@ -21,7 +21,7 @@ uv run pytest
 - Plies are listed from the bottom face up. z is measured from the mid-plane, positive upward, so the first ply starts at z = -h/2.
 - Compressive strengths are entered as positive magnitudes.
 - Strength ratio R is the factor on all applied loads at which a criterion predicts failure (Daniel & Ishai's safety factor S_f). Margin of safety is MS = R / FS - 1 for a required factor of safety FS.
-- First-ply failure is the onset of damage in one ply, not the ultimate strength of the laminate. Thermal residual stresses are not included yet.
+- First-ply failure is the onset of damage in one ply, not the ultimate strength of the laminate. It does not include residual thermal stresses yet.
 - Invalid input raises an error. The engine never substitutes a default value; the Tsai-Wu interaction term `f12_star` must be given explicitly.
 - Unknown material, strength, ply and load fields are rejected. Stress, strain and curvature vectors need three finite components. Safety factors must be finite and at least one; an unstressed ply can still have an infinite strength ratio.
 
@@ -31,11 +31,12 @@ The equations behind each module, and the function that computes each one, are i
 
 | Module | Contents |
 | --- | --- |
-| `lamina.py` | Ply elastic constants and optional `Strengths` (`Lamina`), and the plane-stress reduced stiffness `Q` |
+| `lamina.py` | Ply elastic constants, optional `Strengths` and `ThermalExpansion` (`Lamina`), and the plane-stress reduced stiffness `Q` |
 | `rotation.py` | Stress and strain transformations and the rotated ply stiffness `Q_bar` |
 | `laminate.py` | Ply stack (`Ply`), ply interface heights and the laminate `A`, `B`, `D` matrices |
 | `response.py` | Applied `Loads`, the full ABD response, required moments for prescribed curvature with a forward check, and ply surface stress/strain |
 | `failure.py` | Maximum-stress and Tsai-Wu strength ratios, margin of safety, and first-ply failure of a laminate |
+| `thermal.py` | Rotated expansion coefficients, thermal force and moment resultants, the response to loads plus a temperature change, and residual ply stresses |
 | `engineering.py` | Effective laminate constants Ex, Ey, Gxy, Poisson ratios and shear coupling, the moduli a D3039 test measures |
 | `units.py` | SI, US (Msi, ksi) and psi unit systems for entering and reporting values |
 | `cases.py` | Loads validation cases and compares their expected values with engine results |
@@ -52,6 +53,8 @@ For another problem: `uv run python examples/laminate_calculator.py validation/c
 
 Input scales are explicit: `SI` means GPa, MPa and mm; `US` means Msi, ksi and inches; `psi` means psi and inches. For 140 GPa, enter `E1 = 140` with `units = "SI"`, not `140e9`. Conversion to Pa happens inside the calculator. Moduli outside the example's existing 0.5-1000 GPa plausibility screen now stop the calculator; `--allow-unusual-moduli` explicitly overrides that screen after review. This screen is not a physical validity criterion or an engine restriction.
 
-Failure checks always include maximum stress when all five strengths are supplied. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
+For a temperature change, give `alpha1` and `alpha2` in `[material]` and `delta_T` in `[applied]`, for example `uv run python examples/laminate_calculator.py validation/cases/course-reader-5-9-as4-curing.toml`. The calculator then prints the thermal resultants and free thermal strains, and ply stresses include the residual thermal stress. Without `delta_T` it states that no temperature change was given.
+
+Failure checks always include maximum stress when all five strengths are supplied, and are skipped when the case has a temperature change. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
 
 For required moments under a curvature constraint, run `uv run python examples/laminate_calculator.py validation/cases/constructed-flat-cross-ply.toml`. The new `forces_curvature` case mode accepts known force resultants and prescribed curvature; zero curvature requests flatness. See the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md) for the matching API operation and numerical verification policy.
