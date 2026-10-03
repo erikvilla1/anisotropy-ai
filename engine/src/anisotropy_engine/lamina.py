@@ -60,6 +60,15 @@ class Lamina(BaseModel):
         return self
 
 
+def reduced_compliance(ply: Lamina) -> np.ndarray:
+    """Plane-stress compliance S, in 1/Pa: [eps1, eps2, gamma12] = S @ [sigma1, sigma2, tau12]."""
+    return np.array([
+        [1 / ply.E1, -ply.nu12 / ply.E1, 0.0],
+        [-ply.nu12 / ply.E1, 1 / ply.E2, 0.0],
+        [0.0, 0.0, 1 / ply.G12],
+    ])
+
+
 def reduced_stiffness(ply: Lamina) -> np.ndarray:
     """Plane-stress reduced stiffness Q: [sigma1, sigma2, tau12] = Q @ [eps1, eps2, gamma12]."""
     d = 1 - ply.nu12 * ply.nu21

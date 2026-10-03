@@ -1,0 +1,85 @@
+title = "Stiffness, compliance, deformation and ply-face strains and stresses of a [45/90/30/0] boron/epoxy laminate"
+source = "SE142/253A (Fall 2025) Homework 3, Problem 3(b)-(d), course solution; numbers only"
+units = "psi"
+
+[material]
+# Boron/epoxy, course property table: 29 / 3.0 / 0.78 Msi. The course Excel input files list
+# G12 = 7,800,000 psi; that is a typo, since only 780,000 reproduces this key's A66.
+E1 = 29.0e6
+E2 = 3.0e6
+G12 = 0.78e6
+nu12 = 0.17
+
+[laminate]
+layup = [45, 90, 30, 0]  # ply 1 (45) is the bottom ply
+ply_thickness = 0.008
+
+[applied]
+loads = [50.0, 0.0, 0.0, 10.0, 0.0, -5.0]
+
+[expected]
+tolerance = 0.005  # the key prints three to five significant figures
+A11 = 4.6786e5  # lb/in
+A12 = 1.1420e5
+A16 = 1.2153e5
+A22 = 3.6354e5
+A26 = 0.7312e5
+A66 = 1.2280e5
+B11 = 2380.8  # lb
+B12 = -503.2
+B16 = -348.4
+B22 = -1374.3
+B26 = -542.0
+B66 = -503.2
+D11 = 49.04  # lb*in
+D12 = 10.64
+D16 = 9.27
+D22 = 20.11
+D26 = 8.24
+D66 = 11.37
+a11 = 0.0585e-4  # in/lb; a12 and a26 are printed to two significant figures and not recorded
+a16 = -0.0544e-4
+a22 = 0.0400e-4
+a66 = 0.1579e-4
+b11 = -0.3772e-3  # 1/lb
+b12 = 0.0914e-3
+b16 = 0.1463e-3
+b21 = 0.0288e-3
+b22 = 0.2475e-3
+b26 = -0.0685e-3
+b61 = 0.3287e-3
+b62 = -0.0446e-3
+b66 = 0.2587e-3
+d11 = 0.0492  # 1/(lb*in)
+d12 = -0.0142
+d16 = -0.0255
+d22 = 0.0929
+d26 = -0.0430
+d66 = 0.1525
+strain_global = [-0.00421, 0.000595, 0.00172]
+curvature = [0.601, 0.0774, -1.010]  # 1/in
+
+# Part (d): fiber-axis strain and stress (psi) on each ply face; ply 1 is the bottom ply.
+[expected.ply_strain_local_top]
+4 = [5.40e-3, 1.83e-3, -1.44e-2]
+3 = [-2.00e-3, 3.81e-3, -2.64e-3]
+2 = [5.95e-4, -4.21e-3, -1.72e-3]
+1 = [3.79e-4, -9.42e-3, 8.99e-3]
+
+[expected.ply_strain_local_bottom]
+4 = [5.95e-4, 1.21e-3, -6.36e-3]
+3 = [-2.26e-3, -1.35e-3, 5.02e-3]
+2 = [-2.41e-5, -9.02e-3, -9.80e-3]
+1 = [1.71e-3, -1.62e-2, 1.32e-2]
+
+[expected.ply_stress_local_top]
+4 = [1.58e5, 8.28e3, -1.13e4]
+3 = [-5.63e4, 1.04e4, -2.06e3]
+2 = [1.52e4, -1.24e4, -1.34e3]
+1 = [6.22e3, -2.82e4, 7.01e3]
+
+[expected.ply_stress_local_bottom]
+4 = [1.79e4, 3.96e3, -4.96e3]
+3 = [-6.65e4, -5.23e3, 3.92e3]
+2 = [-5.31e3, -2.71e4, -7.64e3]
+1 = [4.13e4, -4.78e4, 1.03e4]

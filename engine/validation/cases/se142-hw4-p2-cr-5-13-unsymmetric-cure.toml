@@ -1,0 +1,33 @@
+title = "Stiffness and thermal resultants of a cured [0/90] AS4 laminate (Course Reader Problem 5.13)"
+source = "SE142/253A (Fall 2025) Homework 4, Problem 2, course solution; numbers only"
+units = "SI"
+
+[material]
+E1 = 140.0
+E2 = 10.0
+G12 = 7.0
+nu12 = 0.3
+alpha1 = -1.0e-6  # 1/degC
+alpha2 = 26.0e-6
+
+[laminate]
+layup = [0, 90]
+ply_thickness = 0.127
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]
+delta_T = -150.0  # degC
+
+[expected]
+tolerance = 0.002
+A11 = 19.17  # MN/m
+A12 = 0.767
+A66 = 1.778
+B11 = -1.055  # kN
+B22 = 1.055
+D11 = 0.1031  # N*m
+D12 = 0.004123
+D66 = 0.009559
+N_T = [-3739.0, -3739.0, 0]  # N/m
+M_T = [-0.388, 0.388, 0]  # N*m/m
+# kappa_x = -13.035 1/m with kappa_y = kappa_xy = 0 held is a mixed condition; not solved yet.

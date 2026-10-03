@@ -1,0 +1,32 @@
+title = "Compliance of a 45-degree lamina, and strains when shear keeps it rectangular"
+source = "SE142/253A (Fall 2025) Homework 2, Problem 1(b)-(c), course solution; numbers only"
+units = "SI"
+
+[material]
+E1 = 140.0
+E2 = 10.0
+G12 = 7.0
+nu12 = 0.3
+
+[laminate]
+layup = [45]
+ply_thickness = 1.0  # not given; these results do not depend on it
+
+[applied]
+stress = [10.0, -20.0, -4.16]  # sigma_0 = 10 MPa; tau_xy = -4.16 MPa is the key's answer to part (b)
+
+[expected]
+tolerance = 0.002  # the key prints four significant figures
+# Compliances in 1/GPa: the key's m^2/N times 1e9.
+S11 = 0.007143
+S12 = -0.002143
+S22 = 0.1
+S66 = 0.1429
+Sbar11 = 0.06143
+Sbar12 = -0.01
+Sbar16 = -0.04643
+Sbar22 = 0.06143
+Sbar26 = -0.04643
+Sbar66 = 0.1114
+strain_global = [1.008e-3, -1.135e-3, 0]
+# Part (b), finding tau_xy so that gamma_xy = 0, is a mixed condition the engine does not solve yet.
