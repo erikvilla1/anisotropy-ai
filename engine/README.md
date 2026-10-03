@@ -33,3 +33,4 @@ uv run pytest
 | `laminate.py` | Ply stack (`Ply`), ply interface heights and the laminate `A`, `B`, `D` matrices |
 | `response.py` | Applied `Loads`, the 6x6 ABD solve for mid-plane strain and curvature, and strain and stress on each ply face |
 | `failure.py` | Maximum-stress and Tsai-Wu strength ratios, margin of safety, and first-ply failure of a laminate |
+| `engineering.py` | Effective laminate constants Ex, Ey, Gxy, Poisson ratios and shear coupling, the moduli a D3039 test measures |
