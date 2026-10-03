@@ -5,6 +5,7 @@ from importlib.metadata import version
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from anisotropy_engine.laminate import Ply, abd_matrices
@@ -17,6 +18,19 @@ app = FastAPI(
     title="Anisotropy engine API",
     version=version("anisotropy-api"),
     description="Local development: one-material laminate stiffness and deformation in SI base units.",
+)
+
+# Only the local website origins used by this development project may read API responses.
+# This browser policy is not authentication; deployment remains a separate future task.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:3001", "http://127.0.0.1:3001",
+    ],
+    allow_methods=["POST"],
+    allow_headers=["Content-Type"],
+    allow_credentials=False,
 )
 
 
