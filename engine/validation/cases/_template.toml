@@ -1,0 +1,38 @@
+# Copy this file to a new name (no leading underscore) and fill it in.
+# Files starting with "_" are ignored by the test runner.
+
+title = "What the problem asks, in one line"
+source = "Where the answer comes from: book and problem number, or course, homework and problem"
+units = "SI"  # "SI" (GPa, MPa, mm, N/m, N*m/m), "US" (Msi, ksi, in, lb/in) or "psi"
+
+[material]
+E1 = 0.0
+E2 = 0.0
+G12 = 0.0
+nu12 = 0.0
+# Strengths are only needed for failure results. Compressive strengths are positive.
+# F1t = 0.0
+# F1c = 0.0
+# F2t = 0.0
+# F2c = 0.0
+# F6 = 0.0
+
+[laminate]
+layup = [0]          # angles from the bottom face up, counterclockwise from x to the fibers
+ply_thickness = 0.0  # same for every ply
+
+[applied]
+# Use exactly one of these:
+# loads = [Nx, Ny, Nxy, Mx, My, Mxy]
+# stress = [sigma_x, sigma_y, tau_xy]               average through the thickness
+# strains = [eps_x, eps_y, gamma_xy, kappa_x, kappa_y, kappa_xy]
+# local_stress = [sigma_1, sigma_2, tau_12]          single-angle layups only
+# local_strain = [eps_1, eps_2, gamma_12]            single-angle layups only
+
+[expected]
+tolerance = 0.001  # relative; loosen it to match how the answer key rounds
+# Give only the results the answer key states. Available keys:
+#   A11 A12 A16 A22 A26 A66, and the same for B and D
+#   strain_global, curvature, strain_local, stress_global, stress_local
+#   Ex Ey Gxy nu_xy nu_yx
+#   fpf_ratio_max_stress, fpf_ratio_tsai_wu (Tsai-Wu also needs f12_star = ... at the top of the file)
