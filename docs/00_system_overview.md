@@ -12,7 +12,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 
 | Layer | What it does | Status | Where |
 | --- | --- | --- | --- |
-| Website | Product pages, materials library, physics references, chat preview, CSV preview | Built; static export. The chat uses a local intent parser, not a language model | `app/`, `components/`, `lib/` |
+| Website | Product pages, materials library, physics references, chat/CSV previews and laminate calculator | Static export; calculator calls local API. Chat still uses a local parser | `app/`, `components/`, `lib/`, [calculator card](components/calculator.md) |
 | Material data | Cited property datasets with provenance; a monitor that detects source changes | Built | `lib/curated-materials.ts`, `services/material-monitor/` |
 | Engine | Laminate analysis: ply stiffness, rotation, A-B-D, load response, first-ply failure, engineering constants | Built, version 0.1 | `engine/` |
 | Validation cases | Textbook and answer-key problems the engine must reproduce | Built, 5 cases | `engine/validation/` |
@@ -25,7 +25,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 
 ## How a result is produced today
 
-A problem (material, layup, and loads, stresses or strains) goes into the engine, which works in SI units and returns the results. Today the engine is used from Python, from `engine/examples/laminate_calculator.py`, and by the validation runner. The local API also accepts explicit load resultants for one-material laminates and returns stiffness and deformation. The website does not call it yet. See [the API walkthrough](../api/README.md).
+A problem (material, layup, and loads, stresses or strains) goes into the engine, which works in SI units and returns the results. Today the engine is used from Python, from `engine/examples/laminate_calculator.py`, and by the validation runner. The website's `/calculator` converts labelled GPa/mm inputs to SI base units, sends explicit load resultants to the local API and displays its stiffness/deformation response. See [the API walkthrough](../api/README.md) and [website walkthrough](walkthroughs/chunk-2-calculator.md). The chat preview remains separate.
 
 ## External dependencies
 

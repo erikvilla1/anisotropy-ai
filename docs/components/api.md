@@ -12,13 +12,15 @@ Expose the existing engine's stiffness and deformation calculations to local HTT
 
 Uvicorn -> FastAPI -> Pydantic contract -> existing `anisotropy_engine` -> NumPy. Separate `api/pyproject.toml` and `api/uv.lock`; no HTTP dependency added to the engine. pytest and HTTPX2 exercise the app in process.
 
+The website's `/calculator` now calls this endpoint. CORS allows credential-free JSON POST requests from localhost/127.0.0.1 on ports 3000/3001. See [the calculator card](calculator.md).
+
 ## Evaluation
 
-[API integration evidence](../evaluations/api/2026-10-03-api-chunk-1.md); numerical equations remain covered by the existing engine tests.
+[API integration evidence](../evaluations/api/2026-10-03-api-chunk-1.md) and [browser/CORS checks](../evaluations/website/2026-10-03-calculator-chunk-2.md); numerical equations remain covered by the existing engine tests.
 
 ## Out of scope and limits
 
-Local development only. No authentication, website wiring, curated material loader, persistent records or language model. One material per laminate. No hole geometry, ply stress/failure endpoint, thermal/moisture effects or design approval. A caller's citation is not verified evidence; units are declared, not inferred. Extreme finite inputs can still be poorly conditioned; a finite result alone is not a numerical accuracy guarantee.
+Local development only. No authentication, curated material loader, persistent records or language model. One material per laminate. No hole geometry, ply stress/failure endpoint, thermal/moisture effects or design approval. A caller's citation is not verified evidence; units are declared, not inferred. Extreme finite inputs can still be poorly conditioned; a finite result alone is not a numerical accuracy guarantee.
 
 ## Owner
 
