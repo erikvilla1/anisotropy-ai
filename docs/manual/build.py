@@ -283,7 +283,7 @@ def number(value: float, digits: int = 6) -> str:
 
 
 UNIT_OF = {"stress_global": "stress", "stress_local": "stress", "Ex": "modulus", "Ey": "modulus",
-           "Gxy": "modulus", "curvature": "kappa"}
+           "Gxy": "modulus", "curvature": "kappa", "moments": "M"}
 
 
 def validation() -> str:
