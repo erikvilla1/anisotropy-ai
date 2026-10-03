@@ -1,0 +1,23 @@
+title = "Extensional stiffness of a [0/45/-45] carbon/epoxy laminate"
+source = "Daniel & Ishai, Engineering Mechanics of Composite Materials, 2nd ed. (2006), Problem 7.11; printed answer"
+units = "SI"
+
+[material]
+E1 = 145.0
+E2 = 10.5
+G12 = 7.0
+nu12 = 0.28
+
+[laminate]
+layup = [0, 45, -45]
+ply_thickness = 0.25
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]  # the problem asks only for stiffness
+
+[expected]
+tolerance = 0.001  # the answer is printed to 0.01 MN/m
+A11 = 60.24
+A12 = 17.53
+A22 = 26.43
+A66 = 20.56

@@ -1,0 +1,25 @@
+title = "Axial strength of an AS4/3501-6 [+45/-45]s angle-ply laminate"
+source = "Daniel & Ishai (2006), Sample Problem 9.1: axial strength is about 2 F6 (exact under maximum stress); strengths from Table A.4"
+units = "SI"
+
+[material]
+E1 = 147.0
+E2 = 10.3
+G12 = 7.0
+nu12 = 0.27
+F1t = 2280.0
+F1c = 1725.0
+F2t = 57.0
+F2c = 228.0
+F6 = 76.0
+
+[laminate]
+layup = [45, -45, -45, 45]
+ply_thickness = 0.13
+
+[applied]
+stress = [1.0, 0, 0]  # 1 MPa average axial stress, so the strength ratio equals the strength in MPa
+
+[expected]
+tolerance = 1e-6
+fpf_ratio_max_stress = 152.0
