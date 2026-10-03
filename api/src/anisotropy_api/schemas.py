@@ -1,4 +1,4 @@
-"""The explicit JSON contract for chunk 1: one material, stiffness and deformation."""
+"""Explicit JSON contracts for forward and prescribed-curvature laminate analysis."""
 
 from typing import Annotated, Literal, Self
 
@@ -82,3 +82,58 @@ class AnalysisResponse(Contract):
     D_N_m: Matrix3
     midplane_strain: Vector3 = Field(description="[epsilon_x, epsilon_y, gamma_xy]; engineering shear")
     curvature_per_m: Vector3 = Field(description="[kappa_x, kappa_y, kappa_xy], 1/m")
+
+
+class ForceInput(Contract):
+    """Only known force resultants are accepted; moments are outputs of this operation."""
+
+    Nx: float = Field(description="Axial force resultant, N/m")
+    Ny: float = Field(description="Transverse force resultant, N/m")
+    Nxy: float = Field(description="Shear force resultant, N/m")
+
+
+class PrescribedCurvatureRequest(Contract):
+    """Known forces and prescribed curvature; solve for all three moments and strains.
+
+    Explicitly declaring bottom_to_top makes the caller responsible for resolving
+    the stacking convention. Reversing the stack reverses flattening moment signs.
+    """
+
+    unit_system: Literal["SI_BASE"]
+    stacking_order: Literal["bottom_to_top"]
+    material: MaterialInput
+    plies: Annotated[list[PlyInput], Field(min_length=1)]
+    forces: ForceInput
+    prescribed_curvature_per_m: Vector3 = Field(
+        description="[kappa_x, kappa_y, kappa_xy], 1/m, with engineering twist convention. Enter [0,0,0] to enforce flatness.",
+    )
+
+
+class VerificationResponse(Contract):
+    """Forward-solve residuals and componentwise numerical tolerances, not validation against experiments."""
+
+    passed: Literal[True]
+    recovered_midplane_strain: Vector3
+    recovered_curvature_per_m: Vector3
+    strain_residual: Vector3
+    curvature_residual_per_m: Vector3
+    strain_allowed_error: Vector3
+    curvature_allowed_error_per_m: Vector3
+
+
+class PrescribedCurvatureResponse(Contract):
+    """Required applied moment resultants, not the opposite reactions on a fixture.
+
+    Axes x/y, engineering shear/twist, CCW angles from x to fibers, and bottom-first
+    plies follow ADR-0004. No thermal/moisture effects or support/fixture design.
+    """
+
+    analysis_type: Literal["prescribed_curvature"]
+    engine_version: str
+    inputs: PrescribedCurvatureRequest
+    A_N_per_m: Matrix3
+    B_N: Matrix3
+    D_N_m: Matrix3
+    midplane_strain: Vector3
+    moments_N_m_per_m: Vector3 = Field(description="Required [Mx, My, Mxy] applied to the laminate, N*m/m")
+    verification: VerificationResponse

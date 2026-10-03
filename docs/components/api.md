@@ -8,6 +8,8 @@ Expose the existing engine's stiffness and deformation calculations to local HTT
 
 `POST /v1/laminates/response`: explicit `SI_BASE` units, one elastic material and source-reference text, bottom-first ply stack and all six load resultants. Returns A/B/D, mid-plane engineering strains, curvatures, accepted inputs and engine package version. Unknown fields and invalid/non-finite values fail with 422.
 
+`POST /v1/laminates/prescribed-curvature`: explicit `SI_BASE`, `bottom_to_top`, material/source, plies, three forces and three prescribed curvatures. Returns A/B/D, required applied moments, strain and the engine's forward verification with residuals/tolerances. Supplied moments are rejected. Numerical failure returns 422. [Chunk 3 walkthrough](../walkthroughs/chunk-3-constrained-analysis.md).
+
 ## Dependencies and connections
 
 Uvicorn -> FastAPI -> Pydantic contract -> existing `anisotropy_engine` -> NumPy. Separate `api/pyproject.toml` and `api/uv.lock`; no HTTP dependency added to the engine. pytest and HTTPX2 exercise the app in process.
@@ -17,6 +19,8 @@ The website's `/calculator` now calls this endpoint. CORS allows credential-free
 ## Evaluation
 
 [API integration evidence](../evaluations/api/2026-10-03-api-chunk-1.md) and [browser/CORS checks](../evaluations/website/2026-10-03-calculator-chunk-2.md); numerical equations remain covered by the existing engine tests.
+
+[Prescribed-curvature engine/API evidence](../evaluations/2026-10-03-prescribed-curvature.md).
 
 ## Out of scope and limits
 
