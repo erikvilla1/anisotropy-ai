@@ -1,0 +1,12 @@
+{
+  "unit_system": "SI_BASE",
+  "material": {
+    "E1_pa": 147000000000,
+    "E2_pa": 10300000000,
+    "G12_pa": 7000000000,
+    "nu12": 0.27,
+    "source_reference": "Daniel & Ishai (2006), Table A.4, AS4/3501-6, p. 377. Same properties as engine/validation/cases/as4-zero-degree-axial-check.toml; thickness and loads are constructed practice inputs, not measurements."
+  },
+  "plies": [{"angle_deg": 0, "thickness_m": 0.00025}],
+  "loads": {"Nx": 25000, "Ny": 0, "Nxy": 0, "Mx": 0, "My": 0, "Mxy": 0}
+}

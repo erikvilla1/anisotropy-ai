@@ -12,6 +12,7 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | What changed, and when? | [Changelog](../CHANGELOG.md) and merged pull requests |
 | What could go wrong? | [Risk register](risks/risk_register.md) |
 | How is each result calculated? | [Engine theory](../engine/docs/theory.md) |
+| How does the API call the engine? | [Chunk 1 walkthrough](../api/README.md) and [API component card](components/api.md) |
 | All of the above as one typeset PDF | [Engine manual](manual/) |
 | Where do material values come from? | The material data documents below |
 
@@ -53,6 +54,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0008](decisions/ADR-0008-manual-generated-from-sources.md) | The LaTeX manual is generated from the repository's sources |
 | [0009](decisions/ADR-0009-calculator-inputs-in-case-files.md) | Calculator inputs reuse explicit TOML cases (proposed) |
 | [0010](decisions/ADR-0010-public-citations-local-page-evidence.md) | Publish property citations; keep textbook page scans local (proposed) |
+| [0011](decisions/ADR-0011-local-laminate-api.md) | Separate synchronous API with explicit SI-base inputs (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
@@ -71,4 +73,4 @@ Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md) and [
 
 ## Added when the parts exist
 
-From the documentation guide, these wait until the parts they describe are built: component cards for the API, the language model and the report generator; the per-run provenance record; and the weekly brief.
+From the documentation guide, these wait until the parts they describe are built: component cards for the language model and the report generator; the per-run provenance record; and the weekly brief. The local API now has a [component card](components/api.md) and [evaluation](evaluations/api/2026-10-03-api-chunk-1.md).

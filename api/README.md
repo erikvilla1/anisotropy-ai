@@ -1,0 +1,73 @@
+# Chunk 1: call the laminate engine over HTTP
+
+This local API accepts one material, a bottom-first ply stack and six explicit load resultants. It returns the engine's A, B, D stiffness matrices, mid-plane strains and curvatures as JSON. The existing engine computes every engineering result.
+
+## Run it
+
+From the repository root, in PowerShell:
+
+```powershell
+cd api
+uv sync --locked
+uv run uvicorn anisotropy_api.main:app --host 127.0.0.1 --port 8000
+```
+
+Open <http://127.0.0.1:8000/docs>. This is FastAPI's interactive API explorer. Expand `POST /v1/laminates/response`, select **Try it out**, paste `examples/zero-degree-tension.json`, and select **Execute**. The page displays the HTTP status and response JSON. Stop the server with Ctrl+C.
+
+Or, from a second PowerShell terminal at the repository root:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/v1/laminates/response' -ContentType 'application/json' -InFile 'api/examples/zero-degree-tension.json' | ConvertTo-Json -Depth 10
+```
+
+The example's material numbers cite Daniel & Ishai Table A.4 and match the existing analytical practice case. Its thickness and load are constructed practice inputs, not test measurements. At zero degrees, the axial strain should be approximately `0.0006802721088435374`; the integration test checks this against the independent uniaxial compliance relation.
+
+## Follow one request through the code
+
+1. **Uvicorn** listens on local port 8000 and hands the HTTP request to **FastAPI**.
+2. FastAPI routes `POST /v1/laminates/response` to `analyze_laminate()` in `src/anisotropy_api/main.py`.
+3. Before that function runs, **Pydantic** reads the JSON into `AnalysisRequest` from `schemas.py`. It checks required fields, finite numbers, positive moduli/thicknesses, explicit units and unknown fields. `validate_compliance()` reuses the engine's material-validity check.
+4. `MaterialInput.to_engine()` and `LoadInput.to_engine()` map the accepted fields into the engine's `Lamina` and `Loads` objects. `Ply` combines each supplied angle and thickness with the material.
+5. The existing `abd_matrices()` integrates ply stiffness through the thickness. Its A matrix describes stretching, B describes stretching/bending coupling, and D describes bending stiffness. `midplane_response()` solves the existing ABD system for strain and curvature using **NumPy**.
+6. `AnalysisResponse` checks the output shapes and finite values. Arrays become ordinary lists so FastAPI can return JSON, a text format of named fields, lists and numbers.
+
+The API does not implement new laminate equations. `invalid_request()` returns the location and reason for an invalid field with HTTP status 422. Numerical failures also produce 422 rather than an apparent successful calculation. HTTP status 200 means the request completed; it does not establish experimental validity.
+
+## Input and output contract
+
+- `unit_system` must explicitly be `SI_BASE`: moduli in Pa, thickness in m, forces per width in N/m, and moments per width in N*m/m. This is different from the calculator's `SI` display/input scale (GPa, MPa, mm). No conversions are performed by this endpoint.
+- Every material value and `source_reference` is required. The source text is supplied by the caller and echoed; the API does not verify that citation or load a curated dataset yet.
+- Plies are bottom face first. Angles are degrees, counterclockwise from x to the fibers. All plies use the one supplied material.
+- All six components `Nx`, `Ny`, `Nxy`, `Mx`, `My`, `Mxy` are required; enter `0` explicitly for unused components. Signed loads and angles are supported.
+- Strings such as `"147e9"`, booleans in numeric fields, NaN/Infinity, empty stacks and unknown fields are rejected.
+- Outputs: `A_N_per_m`, `B_N`, `D_N_m`; `midplane_strain = [epsilon_x, epsilon_y, gamma_xy]`; `curvature_per_m = [kappa_x, kappa_y, kappa_xy]`. Shear strain uses the engineering convention.
+- `inputs` echoes the accepted request; `engine_version` identifies the installed package release. This is not a persistent run record or a code/dataset fingerprint.
+
+## Libraries and their boundaries
+
+| Library/tool | Job | Where it belongs |
+| --- | --- | --- |
+| FastAPI | HTTP routing, JSON responses, OpenAPI schema and interactive `/docs` | API only |
+| Pydantic | Typed input/output contracts and validation | API and existing engine |
+| Uvicorn | Runs the HTTP server | API only |
+| NumPy | Matrix arithmetic and solves; API also checks results for finite numbers | Existing engine and API boundary |
+| pytest + HTTPX2 | Send test requests to the app and check its behavior | Development/test only |
+| uv | Installs the local packages and locked dependencies; runs commands | Development/runtime tooling |
+
+`api/pyproject.toml` lists direct dependencies. `api/uv.lock` pins the resolved versions. `tool.uv.sources` points to `../engine`, so the API imports the existing engine package. The engine retains its own environment and does not depend on FastAPI. Current Starlette's TestClient prefers HTTPX2; using HTTPX emits a deprecation warning in the installed release.
+
+## Check it
+
+```powershell
+cd api
+uv run pytest -q
+uv run pytest -q tests ../engine/tests
+```
+
+The combined command also verifies the engine under the API's dependency versions. CI runs the API's contract tests as a separate job. See [the evaluation record](../docs/evaluations/api/2026-10-03-api-chunk-1.md).
+
+## Chunk boundary
+
+This chunk provides local stiffness and deformation calculations only. Website integration, curated material loading, ply-stress/failure endpoints, saved runs and the AI assistant are future chunks. No authentication or deployment controls are implemented; run on loopback for local development. The API inherits the engine's flat-laminate CLT scope and physical limitations.
+
+Read [ADR-0011](../docs/decisions/ADR-0011-local-laminate-api.md) for the choices and [the component card](../docs/components/api.md) for the system-level boundary.
