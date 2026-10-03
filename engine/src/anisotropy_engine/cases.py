@@ -27,10 +27,16 @@ from .response import (
     prescribed_curvature_response,
 )
 from .rotation import strain_transformation, stress_transformation, transformed_compliance, transformed_reduced_stiffness
+from .mixed import AVERAGE_STRESSES, DEFORMATIONS, PAIRS, MixedResult, mixed_response
 from .thermal import thermal_ply_surfaces, thermal_resultants, thermomechanical_response
 from .units import UNIT_SYSTEMS
 
-APPLIED_KINDS = ("loads", "stress", "strains", "local_stress", "local_strain", "forces_curvature")
+APPLIED_KINDS = ("loads", "stress", "strains", "local_stress", "local_strain", "forces_curvature", "mixed")
+# Case unit kind of each named quantity in [applied.mixed] and in the named scalar results.
+QUANTITY_UNITS = {"Nx": "N", "Ny": "N", "Nxy": "N", "Mx": "M", "My": "M", "Mxy": "M",
+                  "sigma_x": "stress", "sigma_y": "stress", "tau_xy": "stress",
+                  "eps_x": None, "eps_y": None, "gamma_xy": None,
+                  "kappa_x": "kappa", "kappa_y": "kappa", "kappa_xy": "kappa"}
 STRENGTH_NAMES = ("F1t", "F1c", "F2t", "F2c", "F6")
 ALPHA_NAMES = ("alpha1", "alpha2")
 ELASTIC_NAMES = ("E1", "E2", "G12", "nu12")
@@ -119,7 +125,18 @@ def validate_case_inputs(case: dict) -> None:
     if len(kinds) != 1:
         raise ValueError(f"[applied] needs exactly one of {APPLIED_KINDS}, plus delta_T when temperature changes")
     kind = kinds[0]
-    finite_vector(applied[kind], f"applied.{kind}", 6 if kind in ("loads", "strains", "forces_curvature") else 3)
+    if kind == "mixed":
+        mixed = applied["mixed"]
+        _fields(mixed, "applied.mixed", set(), set(QUANTITY_UNITS))
+        for pair in PAIRS:
+            given = [name for name in pair if name in mixed]
+            if len(given) != 1:
+                raise ValueError(f"applied.mixed needs exactly one of {pair}; got {given or 'none'}")
+        bad = [name for name, value in mixed.items() if not _is_number(value)]
+        if bad:
+            raise ValueError(f"applied.mixed: {bad} must be finite numbers")
+    else:
+        finite_vector(applied[kind], f"applied.{kind}", 6 if kind in ("loads", "strains", "forces_curvature") else 3)
     if "delta_T" in applied:
         if not _is_number(applied["delta_T"]):
             raise ValueError("applied.delta_T must be a finite number (a temperature change)")
@@ -152,6 +169,7 @@ class CaseSolution:
     kappa: np.ndarray
     surfaces: list[PlySurface]  # bottom then top face of every ply
     constrained: PrescribedCurvatureResult | None  # set for forces_curvature
+    mixed: MixedResult | None  # set for mixed
 
 
 def _lamina(table: dict, si) -> Lamina:
@@ -193,7 +211,7 @@ def solve_case(case: dict) -> CaseSolution:
     # A temperature change is applied only when the case states one; it is never assumed.
     delta_T = float(si(applied["delta_T"], "delta_T")) if "delta_T" in applied else None
     N_T, M_T = thermal_resultants(plies, delta_T) if delta_T is not None else (np.zeros(3), np.zeros(3))
-    constrained = None
+    constrained = mixed = None
 
     if kind in ("loads", "stress", "local_stress"):
         if kind == "loads":
@@ -208,6 +226,12 @@ def solve_case(case: dict) -> CaseSolution:
             eps0, kappa = midplane_response(plies, loads)
         else:
             eps0, kappa = thermomechanical_response(plies, loads, delta_T)
+    elif kind == "mixed":
+        # Mechanical loads or deformations, one per pair; the solver adds any thermal resultants.
+        known = {name: float(si(v, QUANTITY_UNITS[name])) if QUANTITY_UNITS[name] else float(v)
+                 for name, v in value.items()}
+        mixed = mixed_response(plies, known, delta_T)
+        eps0, kappa, loads = mixed.midplane_strain, mixed.curvature, mixed.loads
     elif kind == "forces_curvature":
         # Solve with total forces N + N_T; the solved total moments include M_T, so remove it.
         forces, kappa = si(value[:3], "N"), si(value[3:], "kappa")
@@ -225,7 +249,7 @@ def solve_case(case: dict) -> CaseSolution:
     surfaces = (ply_surfaces(plies, eps0, kappa) if delta_T is None
                 else thermal_ply_surfaces(plies, eps0, kappa, delta_T))
     return CaseSolution(case["units"], materials, ply_materials, plies, kind, delta_T, N_T, M_T,
-                        loads, eps0, kappa, surfaces, constrained)
+                        loads, eps0, kappa, surfaces, constrained, mixed)
 
 
 def engine_results(case: dict) -> dict:
@@ -268,6 +292,18 @@ def engine_results(case: dict) -> dict:
     add("strain_global", solution.eps0)
     add("curvature", shown(solution.kappa, "kappa"))
     add("moments", shown(solution.loads.as_vector()[3:], "M"))
+    # Named scalars, as answer keys state them: mechanical resultants, average stress N/h,
+    # mid-plane strains and curvatures. Each is judged against the scale of its group.
+    h = sum(ply.thickness_m for ply in plies)
+    vector = solution.loads.as_vector()
+    groups = {"N": vector[:3], "M": vector[3:], "stress": vector[:3] / h,
+              None: solution.eps0, "kappa": solution.kappa}
+    names = {"N": ("Nx", "Ny", "Nxy"), "M": ("Mx", "My", "Mxy"), "stress": AVERAGE_STRESSES,
+             None: DEFORMATIONS[:3], "kappa": DEFORMATIONS[3:]}
+    for kind, values in groups.items():
+        values = shown(values, kind) if kind else np.asarray(values)
+        for name, v in zip(names[kind], values):
+            results[name] = (float(v), np.abs(values).max())
     if solution.delta_T is not None:
         add("N_T", shown(solution.N_T, "N"))
         add("M_T", shown(solution.M_T, "M"))
