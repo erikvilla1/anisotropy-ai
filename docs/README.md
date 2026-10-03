@@ -59,8 +59,8 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0011](decisions/ADR-0011-local-laminate-api.md) | Separate synchronous API with explicit SI-base inputs |
 | [0012](decisions/ADR-0012-browser-calculator.md) | Static calculator page calls Python API with explicit boundary conversions |
 | [0013](decisions/ADR-0013-prescribed-curvature-analysis.md) | Dedicated prescribed-curvature operation with required inputs and forward verification |
-| [0014](decisions/ADR-0014-explicit-temperature-change.md) | Thermal analysis in separate functions with an explicit temperature change (proposed) |
-| [0015](decisions/ADR-0015-course-inputs-and-several-materials.md) | Cases read course Excel inputs and describe several materials per laminate (proposed) |
+| [0014](decisions/ADR-0014-explicit-temperature-change.md) | Thermal analysis in separate functions with an explicit temperature change |
+| [0015](decisions/ADR-0015-course-inputs-and-several-materials.md) | Cases read course Excel inputs and describe several materials per laminate |
 
 New decisions use the [template](decisions/_template.md).
 
