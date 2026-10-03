@@ -9,9 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from anisotropy_engine.laminate import Ply, abd_matrices
-from anisotropy_engine.response import midplane_response
+from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
-from .schemas import AnalysisRequest, AnalysisResponse
+from .schemas import (
+    AnalysisRequest, AnalysisResponse, PrescribedCurvatureRequest,
+    PrescribedCurvatureResponse, VerificationResponse,
+)
 
 
 app = FastAPI(
@@ -68,4 +71,40 @@ def analyze_laminate(problem: AnalysisRequest) -> AnalysisResponse:
         inputs=problem,
         A_N_per_m=A.tolist(), B_N=B.tolist(), D_N_m=D.tolist(),
         midplane_strain=eps0.tolist(), curvature_per_m=kappa.tolist(),
+    )
+
+
+@app.post("/v1/laminates/prescribed-curvature", response_model=PrescribedCurvatureResponse)
+def analyze_prescribed_curvature(problem: PrescribedCurvatureRequest) -> PrescribedCurvatureResponse:
+    """Find required moments from explicit force resultants and a curvature constraint.
+
+    Set all curvatures to zero for a flat laminate. This is a local constitutive
+    calculation, not a displacement boundary-value problem or fixture design.
+    Unknown moments must be omitted, not sent as zero or null. All calculation
+    and numerical verification happen in the engine.
+    """
+    material = problem.material.to_engine()
+    plies = [Ply(material=material, **ply.model_dump()) for ply in problem.plies]
+    try:
+        result = prescribed_curvature_response(
+            plies, [problem.forces.Nx, problem.forces.Ny, problem.forces.Nxy],
+            problem.prescribed_curvature_per_m,
+        )
+    except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="These inputs do not produce a finite, numerically verified prescribed-curvature response. Check values, units and conditioning.",
+        ) from exc
+    check = result.verification
+    return PrescribedCurvatureResponse(
+        analysis_type="prescribed_curvature", engine_version=version("anisotropy-engine"), inputs=problem,
+        A_N_per_m=result.A.tolist(), B_N=result.B.tolist(), D_N_m=result.D.tolist(),
+        midplane_strain=result.midplane_strain.tolist(), moments_N_m_per_m=result.moments.tolist(),
+        verification=VerificationResponse(
+            passed=check.passed, recovered_midplane_strain=check.recovered_strain.tolist(),
+            recovered_curvature_per_m=check.recovered_curvature.tolist(),
+            strain_residual=check.strain_residual.tolist(), curvature_residual_per_m=check.curvature_residual.tolist(),
+            strain_allowed_error=check.strain_allowed_error.tolist(),
+            curvature_allowed_error_per_m=check.curvature_allowed_error.tolist(),
+        ),
     )
