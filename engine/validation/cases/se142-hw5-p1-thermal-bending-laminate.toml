@@ -1,0 +1,46 @@
+title = "[45/-45/90/0_2]s carbon/epoxy laminate under biaxial load, bending and cooling"
+source = "SE142/253A (Fall 2025) Homework 5, Problem 1, course solution; numbers only"
+units = "psi"
+
+[material]
+E1 = 20.0e6
+E2 = 1.5e6
+G12 = 1.0e6
+nu12 = 0.29
+alpha1 = -0.5e-6  # 1/degF
+alpha2 = 15.0e-6
+# Strengths as positive magnitudes; the course file enters X' and Y' as negative numbers.
+F1t = 310000.0
+F1c = 200000.0
+F2t = 9000.0
+F2c = 30000.0
+F6 = 15000.0
+
+[laminate]
+layup = [45, -45, 90, 0, 0, 0, 0, 90, -45, 45]
+ply_thickness = 0.005
+
+[applied]
+loads = [400.0, 200.0, 0.0, -4.0, 0.0, 0.0]
+delta_T = -275.0  # degF
+
+[expected]
+tolerance = 0.002
+A11 = 550194  # lb/in
+A12 = 105693
+A22 = 364020
+A66 = 133805
+D11 = 69.94  # lb*in
+D12 = 38.78
+D16 = 9.31
+D22 = 87.00
+D26 = 9.31
+D66 = 44.64
+N_T = [-94.481, -165.764, 0]  # lb/in
+strain_global = [5.69e-4, -7.11e-5, 0]
+curvature = [-7.69e-2, 3.33e-2, 9.09e-3]  # 1/in
+# Part D, first-ply failure at Nx = 568.25 lb/in with Mx and delta_T held fixed (ply 3 bottom,
+# matrix tension), needs failure with fixed loads; not computed yet.
+
+[expected.ply_stress_local_top]
+9 = [-6593.0, 5900.0, -1563.0]  # psi, ply 9 top at z = +0.02 in

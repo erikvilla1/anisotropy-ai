@@ -1,0 +1,38 @@
+# Copy this file to a new name (no leading underscore) and fill it in.
+# Use it when plies differ in material or thickness; otherwise use _template.toml.
+
+title = "What the problem asks, in one line"
+source = "Where the answer comes from: book and problem number, or course, homework and problem"
+units = "psi"  # "SI" (GPa, MPa, mm), "US" (Msi, ksi, in) or "psi" (psi, in)
+
+# One table per material. The name after "materials." is how plies refer to it.
+[materials.tape]
+E1 = 0.0
+E2 = 0.0
+G12 = 0.0
+nu12 = 0.0
+# Optional, all or none: F1t, F1c, F2t, F2c, F6 (compressive as positive), and alpha1, alpha2.
+
+[materials.fabric]
+E1 = 0.0
+E2 = 0.0
+G12 = 0.0
+nu12 = 0.0
+
+[laminate]
+# Bottom ply first. Each ply has its own angle, material and thickness.
+plies = [
+    {angle = 0, material = "fabric", thickness = 0.0},
+    {angle = 45, material = "tape", thickness = 0.0},
+]
+
+[applied]
+# Exactly one of loads, stress, strains, local_stress, local_strain or forces_curvature,
+# as in _template.toml, plus delta_T for a temperature change (needs alpha1 and alpha2).
+loads = [0, 0, 0, 0, 0, 0]
+
+[expected]
+tolerance = 0.001  # relative; loosen it to match how the answer key rounds
+# Per-ply results can name only the plies the key reports, with ply 1 at the bottom:
+# [expected.ply_stress_local_top]
+# 2 = [sigma_1, sigma_2, tau_12]

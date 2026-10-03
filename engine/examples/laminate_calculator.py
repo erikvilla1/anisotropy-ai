@@ -1,15 +1,17 @@
-"""Laminate calculator for checking hand or homework answers from a TOML case:
+"""Laminate calculator for checking hand or homework answers:
 
     cd engine
     uv run python examples/laminate_calculator.py
     uv run python examples/laminate_calculator.py validation/cases/as4-zero-degree-axial-check.toml
+    uv run python examples/laminate_calculator.py path/to/course-input.xlsx
 
-Prints Q, Q-bar, ply positions, A, B, D, mid-plane strains and curvatures, ply strains
-and stresses in laminate and fiber axes, laminate engineering constants and, when
-strengths are given, strength ratios and first-ply failure. When the case gives a
-temperature change delta_T (with alpha1 and alpha2), it also prints the thermal force
-and moment resultants and the free thermal strains, and ply stresses include the
-residual thermal stress.
+Reads a TOML case or a course Excel input file. Prints Q, Q-bar, ply positions, A, B, D,
+mid-plane strains and curvatures, ply strains and stresses in laminate and fiber axes,
+laminate engineering constants and, when strengths are given, strength ratios and
+first-ply failure. When the case gives a temperature change delta_T (with alpha1 and
+alpha2), it also prints the thermal force and moment resultants and the free thermal
+strains, and ply stresses include the residual thermal stress. When the case has
+[expected] answers, it ends by comparing them with the engine.
 """
 
 import argparse
@@ -17,16 +19,13 @@ from pathlib import Path
 
 import numpy as np
 
-from anisotropy_engine.cases import ALPHA_NAMES, APPLIED_KINDS, STRENGTH_NAMES, load_case
+from anisotropy_engine.cases import compare, load_case, solve_case
 from anisotropy_engine.engineering import engineering_constants
 from anisotropy_engine.failure import first_ply_failure, max_stress_ratio, tsai_wu_ratio
-from anisotropy_engine.lamina import Lamina, Strengths, ThermalExpansion, reduced_stiffness
-from anisotropy_engine.laminate import Ply, abd_matrices, ply_interfaces
-from anisotropy_engine.response import Loads, abd_matrix, midplane_response, ply_surfaces, prescribed_curvature_response
-from anisotropy_engine.rotation import strain_transformation, stress_transformation, transformed_reduced_stiffness
-from anisotropy_engine.thermal import (
-    thermal_expansion_xy, thermal_ply_surfaces, thermal_resultants, thermomechanical_response,
-)
+from anisotropy_engine.lamina import reduced_stiffness
+from anisotropy_engine.laminate import abd_matrices, ply_interfaces
+from anisotropy_engine.rotation import transformed_reduced_stiffness
+from anisotropy_engine.thermal import thermal_expansion_xy
 from anisotropy_engine.units import UNIT_SYSTEMS
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -40,41 +39,10 @@ try:
 except (ValueError, OSError) as error:
     parser.error(str(error))
 UNITS = case["units"]
-E1, E2, G12, NU12 = (case["material"][key] for key in ("E1", "E2", "G12", "nu12"))
-STRENGTHS = tuple(case["material"][key] for key in STRENGTH_NAMES) if "F1t" in case["material"] else None
-LAYUP = case["laminate"]["layup"]
-PLY_THICKNESS = case["laminate"]["ply_thickness"]
-ALPHAS = tuple(case["material"][key] for key in ALPHA_NAMES) if "alpha1" in case["material"] else None
-DELTA_T = case["applied"].get("delta_T")  # a temperature change is used only when the case states one
-applied_kind = next(kind for kind in APPLIED_KINDS if kind in case["applied"])
-applied_values = case["applied"][applied_kind]
-APPLIED = applied_kind.replace("_", " ")
-if APPLIED == "loads":
-    N, M = applied_values[:3], applied_values[3:]
-elif APPLIED == "strains":
-    EPS0, KAPPA = applied_values[:3], applied_values[3:]
-elif APPLIED == "forces curvature":
-    N, KAPPA = applied_values[:3], applied_values[3:]
-elif APPLIED == "stress":
-    STRESS = applied_values
-elif APPLIED == "local stress":
-    LOCAL_STRESS = applied_values
-else:
-    LOCAL_STRAIN = applied_values
+U = UNIT_SYSTEMS[UNITS]
+ONE_MATERIAL = "material" in case
+TABLES = {"material": case["material"]} if ONE_MATERIAL else case["materials"]
 F12_STAR = case.get("f12_star")  # No unrecorded assumption for Tsai-Wu.
-
-UNIT_SETS = UNIT_SYSTEMS
-APPLIED_OPTIONS = ("loads", "stress", "strains", "local stress", "local strain", "forces curvature")
-if UNITS not in UNIT_SETS or APPLIED not in APPLIED_OPTIONS:
-    raise SystemExit(f'Set UNITS to "SI", "US" or "psi", and APPLIED to one of {APPLIED_OPTIONS}.')
-if APPLIED.startswith("local") and len(set(LAYUP)) != 1:
-    raise SystemExit("Local 1-2 values belong to one fiber direction. Use a layup with a single angle, "
-                     "or give global values instead.")
-U = UNIT_SETS[UNITS]
-
-
-def to_si(value, kind):
-    return np.asarray(value, dtype=float) * U[kind][0]
 
 
 def tidy(values):
@@ -95,39 +63,56 @@ def print_matrix(title, matrix_si, kind):
         print("   " + "".join(f"{v:14.6g}" for v in row))
 
 
-strengths = None
-if STRENGTHS is not None:
-    f1t, f1c, f2t, f2c, f6 = to_si(STRENGTHS, "stress")
-    strengths = Strengths(F1t=f1t, F1c=f1c, F2t=f2t, F2c=f2c, F6=f6)
-expansion = None
-if ALPHAS is not None:
-    a1, a2 = to_si(ALPHAS, "alpha")
-    expansion = ThermalExpansion(alpha1=a1, alpha2=a2)
-e1, e2, g12 = to_si((E1, E2, G12), "modulus")
-material = Lamina(E1=e1, E2=e2, G12=g12, nu12=NU12, strengths=strengths, thermal_expansion=expansion)
-for name, value in (("E1", e1), ("E2", e2), ("G12", g12)):
-    # This is an input-error screen inherited from the example, not a material validity criterion.
-    if not 0.5e9 <= value <= 1000e9:
-        message = (f"{name} = {value / 1e9:.4g} GPa is outside the calculator's 0.5-1000 GPa plausibility screen. "
-                   f'Check units = "{UNITS}": enter moduli in {U["modulus"][1]}.')
-        if not args.allow_unusual_moduli:
-            parser.error(message + " Use --allow-unusual-moduli only after reviewing the input.")
-        print("WARNING: " + message)
-plies = [Ply(material=material, angle_deg=a, thickness_m=float(to_si(PLY_THICKNESS, "length"))) for a in LAYUP]
+def named(text, name):
+    """Add the material name to a heading only when the laminate has several materials."""
+    return text if ONE_MATERIAL else f"{text}, material {name}"
+
+
+for name, table in TABLES.items():
+    for key in ("E1", "E2", "G12"):
+        value = table[key] * U["modulus"][0]
+        # This is an input-error screen inherited from the example, not a material validity criterion.
+        if not 0.5e9 <= value <= 1000e9:
+            message = (f"{named(key, name)} = {value / 1e9:.4g} GPa is outside the calculator's 0.5-1000 GPa "
+                       f'plausibility screen. Check units = "{UNITS}": enter moduli in {U["modulus"][1]}.')
+            if not args.allow_unusual_moduli:
+                parser.error(message + " Use --allow-unusual-moduli only after reviewing the input.")
+            print("WARNING: " + message)
+
+try:
+    solution = solve_case(case)
+except (ValueError, np.linalg.LinAlgError) as error:
+    parser.error(str(error))
+plies = solution.plies
+used = list(dict.fromkeys(solution.ply_materials))
+dT = solution.delta_T
 
 print(f"Case: {args.case.name}")
+if case.get("title"):
+    print(f"Title: {case['title']}")
 print(f"Units: {UNITS}. Moduli: {U['modulus'][1]}; stress: {U['stress'][1]}; thickness: {U['length'][1]}.")
-print(f"Layup (bottom face first): {LAYUP}")
-print(f"nu21 = {material.nu21:.6g}")
-if ALPHAS is not None:
-    print(f"alpha1 = {ALPHAS[0]:.6g}, alpha2 = {ALPHAS[1]:.6g}  [{U['alpha'][1]}]")
-if DELTA_T is None:
+if ONE_MATERIAL:
+    print(f"Layup (bottom face first): {case['laminate']['layup']}")
+else:
+    print(f"Plies, bottom face first: angle, material, thickness [{U['length'][1]}]")
+    for number, ply in enumerate(case["laminate"]["plies"], 1):
+        print(f"   ply {number:2d} {ply['angle']:6g} deg   material {ply['material']:<8} {ply['thickness']:g}")
+for name in used:
+    material = solution.materials[name]
+    prefix = "" if ONE_MATERIAL else f"Material {name}: "
+    print(f"{prefix}nu21 = {material.nu21:.6g}")
+    if "alpha1" in TABLES[name]:
+        print(f"{prefix}alpha1 = {TABLES[name]['alpha1']:.6g}, alpha2 = {TABLES[name]['alpha2']:.6g}  [{U['alpha'][1]}]")
+if dT is None:
     print("Temperature change: none given, so this is a mechanical-load analysis without thermal stresses.")
 else:
-    print(f"Temperature change delta_T = {DELTA_T:g} {U['delta_T'][1]}")
-print_matrix("Q, fiber axes", reduced_stiffness(material), "modulus")
-for angle in dict.fromkeys(LAYUP):
-    print_matrix(f"Q-bar at {angle:g} deg", transformed_reduced_stiffness(material, angle), "modulus")
+    print(f"Temperature change delta_T = {case['applied']['delta_T']:g} {U['delta_T'][1]}")
+for name in used:
+    print_matrix(named("Q, fiber axes", name), reduced_stiffness(solution.materials[name]), "modulus")
+combinations = list(dict.fromkeys((ply.angle_deg, name) for ply, name in zip(plies, solution.ply_materials)))
+for angle, name in combinations:
+    print_matrix(named(f"Q-bar at {angle:g} deg", name),
+                 transformed_reduced_stiffness(solution.materials[name], angle), "modulus")
 
 z = ply_interfaces(plies)
 print(f"\nPly interfaces z, bottom to top  [{U['length'][1]}]")
@@ -137,54 +122,32 @@ A, B, D = abd_matrices(plies)
 print_matrix("A", A, "A")
 print_matrix("B", B, "B")
 print_matrix("D", D, "D")
-
 h = z[-1] - z[0]
-LOAD_NAMES = ["Nx", "Ny", "Nxy", "Mx", "My", "Mxy"]
-dT = None if DELTA_T is None else float(to_si(DELTA_T, "delta_T"))
-N_T, M_T = thermal_resultants(plies, dT) if dT is not None else (np.zeros(3), np.zeros(3))
+
 if dT is not None:
     print(f"\nThermal expansion of each ply angle [{U['alpha'][1]}]: alpha_x, alpha_y, alpha_xy"
           "  |  free thermal strain alpha * delta_T")
-    for angle in dict.fromkeys(LAYUP):
-        alpha_xy = thermal_expansion_xy(material, angle)
-        print(f"   {angle:6g} deg  " + "".join(f"{v:12.4e}" for v in tidy(show(alpha_xy, "alpha")))
+    for angle, name in combinations:
+        alpha_xy = thermal_expansion_xy(solution.materials[name], angle)
+        label = f"{angle:6g} deg" + ("" if ONE_MATERIAL else f" ({name})")
+        print(f"   {label}  " + "".join(f"{v:12.4e}" for v in tidy(show(alpha_xy, "alpha")))
               + "  |" + "".join(f"{v:12.4e}" for v in tidy(alpha_xy * dT)))
-    print(f"Thermal forces N_T  [{U['N'][1]}]:   " + "".join(f"{v:14.6g}" for v in show(N_T, "N")))
-    print(f"Thermal moments M_T  [{U['M'][1]}]: " + "".join(f"{v:14.6g}" for v in show(M_T, "M")))
-if APPLIED in ("loads", "stress", "local stress"):
-    if APPLIED == "loads":
-        n, m = to_si(N, "N"), to_si(M, "M")
-    else:
-        stress = to_si(STRESS if APPLIED == "stress" else LOCAL_STRESS, "stress")
-        if APPLIED == "local stress":
-            stress = stress_transformation(-LAYUP[0]) @ stress  # rotating back by -theta: local to global
-        n, m = stress * h, np.zeros(3)  # an average stress over h is a force per width N = sigma * h
-    loads = Loads(**dict(zip(LOAD_NAMES, np.concatenate([n, m]))))
-    eps0, kappa = midplane_response(plies, loads) if dT is None else thermomechanical_response(plies, loads, dT)
-elif APPLIED == "forces curvature":
-    n, kappa = to_si(N, "N"), to_si(KAPPA, "kappa")
-    # Solve with total forces N + N_T; the solved total moments include M_T, so remove it.
-    constrained = prescribed_curvature_response(plies, n + N_T, kappa)
-    eps0 = constrained.midplane_strain
-    loads = Loads(**dict(zip(LOAD_NAMES, np.concatenate([n, constrained.moments - M_T]))))
-    print("\nPrescribed curvature: required applied moments calculated; forward verification passed.")
-    print(f"Recovered curvature [{U['kappa'][1]}]: {show(constrained.verification.recovered_curvature, 'kappa')}")
-else:
-    if APPLIED == "strains":
-        eps0, kappa = np.asarray(EPS0, dtype=float), to_si(KAPPA, "kappa")
-    else:
-        eps0 = strain_transformation(-LAYUP[0]) @ np.asarray(LOCAL_STRAIN, dtype=float)  # local to global
-        kappa = np.zeros(3)
-    total = abd_matrix(plies) @ np.concatenate([eps0, kappa])  # mechanical plus thermal resultants
-    loads = Loads(**dict(zip(LOAD_NAMES, total - np.concatenate([N_T, M_T]))))
+    print(f"Thermal forces N_T  [{U['N'][1]}]:   " + "".join(f"{v:14.6g}" for v in show(solution.N_T, "N")))
+    print(f"Thermal moments M_T  [{U['M'][1]}]: " + "".join(f"{v:14.6g}" for v in show(solution.M_T, "M")))
 
+if solution.constrained is not None:
+    print("\nPrescribed curvature: required applied moments calculated; forward verification passed.")
+    print(f"Recovered curvature [{U['kappa'][1]}]: {show(solution.constrained.verification.recovered_curvature, 'kappa')}")
+
+loads = solution.loads
+eps0, kappa = solution.eps0, solution.kappa
 print(f"\nMechanical loads N  [{U['N'][1]}]:      " + "".join(f"{v:14.6g}" for v in show(loads.as_vector()[:3], "N")))
 print(f"Average stress N/h  [{U['stress'][1]}]: " + "".join(f"{v:14.6g}" for v in show(loads.as_vector()[:3] / h, "stress")))
 print(f"Moments M  [{U['M'][1]}]:  " + "".join(f"{v:14.6g}" for v in show(loads.as_vector()[3:], "M")))
 print("Mid-plane strains eps0:   " + "".join(f"{v:14.6e}" for v in tidy(eps0)))
 print(f"Curvatures kappa  [{U['kappa'][1]}]: " + "".join(f"{v:14.6e}" for v in show(kappa, "kappa")))
 
-surfaces = ply_surfaces(plies, eps0, kappa) if dT is None else thermal_ply_surfaces(plies, eps0, kappa, dT)
+surfaces = solution.surfaces
 print("\nPly strains (total)   global x-y: eps_x, eps_y, gamma_xy   |   local 1-2: eps_1, eps_2, gamma_12")
 for s in surfaces:
     face = "bottom" if s.z_m == z[s.ply_index] else "top"
@@ -196,8 +159,8 @@ print(f"\nPly stresses  global x-y: sigma_x, sigma_y, tau_xy   |   local 1-2: si
 for s in surfaces:
     face = "bottom" if s.z_m == z[s.ply_index] else "top"
     print(f"   ply {s.ply_index + 1:2d} {s.angle_deg:6g} deg {face:>6}  "
-          + "".join(f"{v:11.5g}" for v in show(s.stress_xy, "stress")) + "  |"
-          + "".join(f"{v:11.5g}" for v in show(s.stress_12, "stress")))
+          + "".join(f"{v:12.5g}" for v in show(s.stress_xy, "stress")) + "  |"
+          + "".join(f"{v:12.5g}" for v in show(s.stress_12, "stress")))
 
 c = engineering_constants(plies)
 print(f"\nLaminate engineering constants  [{U['modulus'][1]}]")
@@ -205,14 +168,17 @@ print(f"   Ex = {show(c.Ex, 'modulus'):.6g}   Ey = {show(c.Ey, 'modulus'):.6g}  
 eta_xs, eta_ys = (0.0 if abs(v) < 1e-12 else v for v in (c.eta_xs, c.eta_ys))
 print(f"   nu_xy = {c.nu_xy:.6g}   nu_yx = {c.nu_yx:.6g}   eta_xs = {eta_xs:.6g}   eta_ys = {eta_ys:.6g}")
 
-if strengths is None:
+with_strengths = [ply.material.strengths is not None for ply in plies]
+if not any(with_strengths):
     print("\nNo strengths given, so failure checks are skipped.")
+elif not all(with_strengths):
+    print("\nNot every material has strengths, so failure checks are skipped.")
 elif dT is not None:
     print("\nFailure checks are skipped: strength ratios with residual thermal stresses are not implemented yet.")
 elif not np.any(loads.as_vector()):
     print("\nNothing is applied, so failure checks are skipped.")
 else:
-    if APPLIED == "forces curvature":
+    if solution.constrained is not None:
         print("\nFailure ratios below scale solved N and M together; they do not hold a nonzero curvature fixed.")
     print("\nMaximum-stress strength ratios on each ply face")
     if F12_STAR is None:
@@ -221,6 +187,8 @@ else:
         print(f"Tsai-Wu also evaluated with explicit f12* = {F12_STAR:g}.")
     for s in surfaces:
         face = "bottom" if s.z_m == z[s.ply_index] else "top"
+        strengths = plies[s.ply_index].material.strengths
+        assert strengths is not None  # every ply has strengths in this branch
         ratio, mode = max_stress_ratio(s.stress_12, strengths)
         tw = f"   Tsai-Wu {tsai_wu_ratio(s.stress_12, strengths, F12_STAR):9.4g}" if F12_STAR is not None else ""
         print(f"   ply {s.ply_index + 1:2d} {s.angle_deg:6g} deg {face:>6}   max stress {ratio:9.4g} ({mode})" + tw)
@@ -231,3 +199,21 @@ else:
               f"({g.angle_deg:g} deg), {g.mode}")
         print(f"   Loads at failure N [{U['N'][1]}]: " + "".join(f"{v:14.6g}" for v in show(fpf.failure_loads.as_vector()[:3], "N")))
         print(f"   Moments at failure M [{U['M'][1]}]: " + "".join(f"{v:14.6g}" for v in show(fpf.failure_loads.as_vector()[3:], "M")))
+
+if "expected" in case:
+    comparisons, problems = compare(case)
+    tolerance = case["expected"]["tolerance"]
+    print(f"\nAnswer key vs engine, in the case's units (relative tolerance {100 * tolerance:g}%)")
+    print(f"   {'result':<30}{'answer key':>14}{'engine':>14}{'difference':>12}")
+    for comparison in comparisons:
+        difference = abs(comparison.engine - comparison.expected)
+        shown_difference = (f"{100 * difference / abs(comparison.expected):.3f}%" if comparison.expected
+                            else f"{difference:.2g}")
+        verdict = "agrees" if comparison.agrees else "DIFFERS"
+        print(f"   {comparison.key:<30}{comparison.expected:>14.6g}{comparison.engine:>14.6g}"
+              f"{shown_difference:>12}  {verdict}")
+    for problem in problems:
+        print(f"   CANNOT CHECK {problem}")
+    agreeing = sum(comparison.agrees for comparison in comparisons)
+    print(f"   {agreeing} of {len(comparisons)} values agree with the answer key"
+          + (f"; {len(problems)} expected entries could not be checked." if problems else "."))
