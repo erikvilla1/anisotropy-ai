@@ -12,6 +12,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- First-ply failure with fixed and variable loads: residual thermal stress and loads held fixed stay constant while the rest scale, in closed form for maximum stress and Tsai-Wu (Daniel and Ishai Section 9.8). Course Homework 5 Problem 1 part D (Nx at failure, ply and location) is now a validation case (ADR-0017).
 - Mixed load and deformation conditions: give one known quantity per load/deformation pair, with or without a temperature change, and the engine solves and verifies the rest. Course Homework 2 Problem 1 and Course Reader Problems 3.8 and 5.13 are now validation cases (ADR-0016).
 - Course inputs and answer-key comparison: the calculator reads the course Excel input template, cases can describe several materials and ply thicknesses, new results cover S, Q-bar, S-bar, the inverse ABD blocks and every ply face, and the calculator ends with an answer-key table. 17 new validation cases from course Homeworks 2 to 5 agree with 313 answer-key values (ADR-0015).
 - Thermal analysis: expansion coefficients, a uniform temperature change, thermal force and moment resultants, and residual ply stresses in the engine, case files and terminal calculator. Two validation cases reproduce the Course Reader 5.9 answer key (ADR-0014).

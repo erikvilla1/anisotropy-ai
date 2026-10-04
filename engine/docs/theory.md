@@ -338,6 +338,73 @@ First-ply failure is the onset of cracking in one ply, not the laminate's ultima
 
 <!-- code: first_ply_failure -->
 
+### Fixed and variable loading
+
+Often only part of the loading grows: the residual stress of a temperature change stays,
+and a problem may hold some loads fixed. The stress at failure is then
+$`\boldsymbol{\sigma}_s + R\,\boldsymbol{\sigma}_v`$, where $`\boldsymbol{\sigma}_s`$ comes from the
+fixed loads and the temperature change, and $`\boldsymbol{\sigma}_v`$ from the variable loads
+(Daniel and Ishai Section 9.8, Eq. 9.25, which holds the hygrothermal stresses fixed).
+Both parts are linear in their loads, so they superpose exactly.
+
+Maximum stress, computed by `max_stress_ratio_combined`. For each component, with tensile
+limit $`F_t`$ and compressive limit $`F_c`$ ($`F_6`$ for both in shear):
+
+```math
+R = \frac{F_t - \sigma_s}{\sigma_v}\ \ (\sigma_v > 0),
+\qquad
+R = \frac{-F_c - \sigma_s}{\sigma_v}\ \ (\sigma_v < 0),
+\qquad
+R = 0 \ \text{ when } \sigma_s \text{ alone reaches a limit}
+```
+
+and the smallest over the components governs.
+
+<!-- code: max_stress_ratio_combined -->
+
+Tsai-Wu, computed by `tsai_wu_ratio_combined`. Substituting $`\boldsymbol{\sigma}_s + R\,\boldsymbol{\sigma}_v`$
+into the criterion gives a quadratic (Eqs. 9.26-9.27):
+
+```math
+\begin{gathered}
+aR^2 + bR + c = 0, \qquad
+a = q(\boldsymbol{\sigma}_v, \boldsymbol{\sigma}_v),\\[6pt]
+b = f_1\sigma_{v1} + f_2\sigma_{v2} + 2\,q(\boldsymbol{\sigma}_s, \boldsymbol{\sigma}_v), \qquad
+c = f_1\sigma_{s1} + f_2\sigma_{s2} + q(\boldsymbol{\sigma}_s, \boldsymbol{\sigma}_s) - 1
+\end{gathered}
+```
+
+```math
+q(\mathbf{x}, \mathbf{y}) = f_{11}x_1y_1 + f_{22}x_2y_2 + f_{66}x_6y_6 + f_{12}(x_1y_2 + x_2y_1),
+\qquad
+R = \frac{-2c}{b + \sqrt{b^2 - 4ac}}
+```
+
+With $`c < 0`$ (the fixed stresses alone do not reach the criterion) and $`a \ge 0`$, this is the
+single positive root; $`c \ge 0`$ gives $`R = 0`$. With no fixed stress, $`c = -1`$ and both
+criteria reduce to the mechanical-only ratios above.
+
+<!-- code: tsai_wu_ratio_combined -->
+
+First-ply failure under fixed and variable loading, computed by `first_ply_failure_combined`,
+checks both faces of every ply and reports the loads at failure:
+
+```math
+R_{\text{FPF}} = \min_{k,\ \text{faces}} R\big(\boldsymbol{\sigma}_{s}, \boldsymbol{\sigma}_{v}\big),
+\qquad
+\mathbf{N}_{\text{FPF}} = \mathbf{N}_s + R_{\text{FPF}}\,\mathbf{N}_v,
+\qquad
+\mathbf{M}_{\text{FPF}} = \mathbf{M}_s + R_{\text{FPF}}\,\mathbf{M}_v
+```
+
+Stress is linear through each ply in both parts. For maximum stress each limit's ratio is
+then monotonic between the faces, so the faces govern. For Tsai-Wu, checking the faces
+follows the mechanical-only check and common practice; it is not proven here that no
+interior point is lower. When a case gives no fixed loads, its mechanical loads are
+variable and only a temperature change stays fixed (ADR-0017).
+
+<!-- code: first_ply_failure_combined -->
+
 ## 6. Laminate engineering constants (`engineering.py`)
 
 The in-plane compliance $`\mathbf{a}`$ is the top-left 3×3 block of the inverted ABD matrix, so an unsymmetric laminate is free to bend as it stretches (Section 7.12.3). For a symmetric laminate $`\mathbf{a} = \mathbf{A}^{-1}`$. Computed by `engineering_constants` (Eq. 7.84):
@@ -410,11 +477,10 @@ When strains or curvatures are prescribed instead of loads, the mechanical loads
 
 These are the equations of Daniel and Ishai Chapter 8 (printed pp. 212-217) with the moisture terms omitted; Eq. 8.20 writes the moment integral as the ply's mid-plane height times its thickness, which equals $`(z_k^2 - z_{k-1}^2)/2`$. With $`\Delta T = 1`$ and no load, the mid-plane strains are the laminate expansion coefficients (Eq. 8.33). The engine reproduces the course answer keys for curing stresses (Course Reader 5.9), an unsymmetric cure (5.13), laminate expansion coefficients, a hybrid woven/tape laminate and combined thermal and mechanical loading (validation cases `course-reader-5-9-*` and `se142-hw4-*`, `se142-hw5-*`).
 
-Failure ratios are not computed with a temperature change. The residual stress does not scale with the applied load, so the strength ratio defined under Failure does not apply.
+Failure ratios with a temperature change hold the residual stress fixed and scale only the mechanical loads, as described under "Fixed and variable loading" (ADR-0017).
 
 ## Not modeled yet
 
-- Strength ratios and first-ply failure with residual thermal stresses
 - Moisture effects, and elastic properties that change with temperature
 - Progressive ply failure and ultimate laminate strength
 - Through-thickness and interlaminar stresses

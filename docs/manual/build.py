@@ -286,7 +286,9 @@ UNIT_OF = {"stress_global": "stress", "stress_local": "stress", "Ex": "modulus",
            "Gxy": "modulus", "curvature": "kappa", "moments": "M", "N_T": "N", "M_T": "M",
            "Nx": "N", "Ny": "N", "Nxy": "N", "Mx": "M", "My": "M", "Mxy": "M",
            "sigma_x": "stress", "sigma_y": "stress", "tau_xy": "stress",
-           "kappa_x": "kappa", "kappa_y": "kappa", "kappa_xy": "kappa"}
+           "kappa_x": "kappa", "kappa_y": "kappa", "kappa_xy": "kappa",
+           **{f"fpf_{part}_{criterion}": kind for criterion in ("max_stress", "tsai_wu")
+              for part, kind in (("forces", "N"), ("moments", "M"), ("z", "length"))}}
 MATRIX_UNITS = ((r"[ABDabd][126]{2}", None), (r"(Q|Qbar)[126]{2}", "modulus"), (r"(S|Sbar)[126]{2}", "compliance"))
 
 

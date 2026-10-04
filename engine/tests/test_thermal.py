@@ -10,7 +10,8 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from anisotropy_engine.cases import disagreements, engine_results, load_case
+from anisotropy_engine.cases import engine_results
+from anisotropy_engine.failure import first_ply_failure_combined
 from anisotropy_engine.lamina import Lamina, Strengths, ThermalExpansion, reduced_stiffness
 from anisotropy_engine.laminate import Ply, ply_interfaces
 from anisotropy_engine.response import Loads, midplane_response, ply_surfaces
@@ -215,15 +216,20 @@ def test_invalid_thermal_case_inputs_are_rejected(changes, message):
         engine_results(case_with(**changes))
 
 
-def test_failure_ratios_are_not_reported_with_a_temperature_change():
+def test_failure_ratios_with_a_temperature_change_hold_the_residual_stress_fixed():
+    # Daniel & Ishai Section 9.8: mechanical loads scale with R; the thermal stress does not.
     material = dict(CASE["material"], F1t=2280.0, F1c=1725.0, F2t=57.0, F2c=228.0, F6=76.0)
     case = case_with(applied__loads=[1000, 0, 0, 0, 0, 0])
     case["material"] = material
-    case["expected"] = {"tolerance": 0.001, "fpf_ratio_max_stress": 1.0}
-    assert disagreements(case)[0].startswith("fpf_ratio_max_stress: not a result this case can produce")
-    # The same case without a temperature change still reports first-ply failure.
+    with_cooling = engine_results(case)["fpf_ratio_max_stress"][0]
+    strengths = Strengths(F1t=2280e6, F1c=1725e6, F2t=57e6, F2c=228e6, F6=76e6)
+    plies = stack([0, 90], MATERIAL.model_copy(update={"strengths": strengths}))
+    loads = Loads(Nx=1000, Ny=0, Nxy=0, Mx=0, My=0, Mxy=0)
+    expected = first_ply_failure_combined(plies, NO_LOAD, loads, DELTA_T).strength_ratio
+    assert with_cooling == pytest.approx(expected, rel=1e-12)
     del case["applied"]["delta_T"]
-    assert "fpf_ratio_max_stress" in engine_results(case)
+    mechanical_only = engine_results(case)["fpf_ratio_max_stress"][0]
+    assert with_cooling < mechanical_only  # curing stress uses up part of the transverse strength
 
 
 def test_us_units_convert_expansion_and_temperature_change_consistently():

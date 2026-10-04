@@ -150,12 +150,12 @@ def test_calculator_states_when_no_temperature_change_is_given():
     assert "Thermal forces" not in run.stdout
 
 
-def test_calculator_skips_failure_ratios_with_a_temperature_change(tmp_path):
+def test_calculator_holds_thermal_stress_fixed_in_failure_ratios(tmp_path):
     path = tmp_path / "thermal-with-strengths.toml"
     strengths = "alpha2 = 26.0e-6\nF1t = 2280.0\nF1c = 1725.0\nF2t = 57.0\nF2c = 228.0\nF6 = 76.0"
     path.write_text(THERMAL.read_text().replace("alpha2 = 26.0e-6", strengths)
                     .replace("loads = [0, 0, 0, 0, 0, 0]", "loads = [1000, 0, 0, 0, 0, 0]"))
     run = calculator(path)
     assert run.returncode == 0, run.stderr
-    assert "strength ratios with residual thermal stresses are not implemented yet" in run.stdout
-    assert "First-ply failure" not in run.stdout
+    assert "hold the residual thermal stress fixed and scale the mechanical loads" in run.stdout
+    assert "First-ply failure, max_stress: R = " in run.stdout
