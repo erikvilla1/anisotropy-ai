@@ -21,7 +21,7 @@ uv run pytest
 - Plies are listed from the bottom face up. z is measured from the mid-plane, positive upward, so the first ply starts at z = -h/2.
 - Compressive strengths are entered as positive magnitudes.
 - Strength ratio R is the factor on all applied loads at which a criterion predicts failure (Daniel & Ishai's safety factor S_f). Margin of safety is MS = R / FS - 1 for a required factor of safety FS.
-- First-ply failure is the onset of damage in one ply, not the ultimate strength of the laminate. It does not include residual thermal stresses yet.
+- First-ply failure is the onset of damage in one ply, not the ultimate strength of the laminate. Residual thermal stress and any loads held fixed stay constant while the remaining loads scale (Daniel & Ishai Section 9.8).
 - Invalid input raises an error. The engine never substitutes a default value; the Tsai-Wu interaction term `f12_star` must be given explicitly.
 - Unknown material, strength, ply and load fields are rejected. Stress, strain and curvature vectors need three finite components. Safety factors must be finite and at least one; an unstressed ply can still have an infinite strength ratio.
 
@@ -35,7 +35,7 @@ The equations behind each module, and the function that computes each one, are i
 | `rotation.py` | Stress and strain transformations, and the rotated ply stiffness `Q_bar` and compliance `S_bar` |
 | `laminate.py` | Ply stack (`Ply`), ply interface heights and the laminate `A`, `B`, `D` matrices |
 | `response.py` | Applied `Loads`, the inverted ABD blocks a, b, d, the full ABD response, required moments for prescribed curvature with a forward check, and ply surface stress/strain |
-| `failure.py` | Maximum-stress and Tsai-Wu strength ratios, margin of safety, and first-ply failure of a laminate |
+| `failure.py` | Maximum-stress and Tsai-Wu strength ratios, margin of safety, and first-ply failure of a laminate, also with fixed loads and residual thermal stress |
 | `mixed.py` | Mixed conditions: one known load or deformation per pair, the rest solved and verified |
 | `thermal.py` | Rotated expansion coefficients, thermal force and moment resultants, the response to loads plus a temperature change, and residual ply stresses |
 | `engineering.py` | Effective laminate constants Ex, Ey, Gxy, Poisson ratios and shear coupling, the moduli a D3039 test measures |
@@ -59,6 +59,6 @@ Input scales are explicit: `SI` means GPa, MPa and mm; `US` means Msi, ksi and i
 
 For a temperature change, give `alpha1` and `alpha2` in `[material]` and `delta_T` in `[applied]`, for example `uv run python examples/laminate_calculator.py validation/cases/course-reader-5-9-as4-curing.toml`. The calculator then prints the thermal resultants and free thermal strains, and ply stresses include the residual thermal stress. Without `delta_T` it states that no temperature change was given.
 
-Failure checks always include maximum stress when all five strengths are supplied, and are skipped when the case has a temperature change. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
+Failure checks always include maximum stress when all five strengths are supplied. A temperature change stays fixed while the mechanical loads scale; a `[failure]` table holds chosen loads fixed as well. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
 
 For required moments under a curvature constraint, run `uv run python examples/laminate_calculator.py validation/cases/constructed-flat-cross-ply.toml`. The new `forces_curvature` case mode accepts known force resultants and prescribed curvature; zero curvature requests flatness. See the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md) for the matching API operation and numerical verification policy.

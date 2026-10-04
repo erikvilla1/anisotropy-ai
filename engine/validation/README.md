@@ -48,7 +48,9 @@ The calculator also reads the course's Excel input template directly: `uv run py
 | the same keys ending `_bottom` or `_top` | One [3-value] row per ply on that face |
 | `N_T`, `M_T` | Thermal force and moment resultants, when the case has `delta_T` |
 | `Ex`, `Ey`, `Gxy`, `nu_xy`, `nu_yx` | Laminate engineering constants |
-| `fpf_ratio_max_stress`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio (Tsai-Wu needs `f12_star`); not available with `delta_T` |
+| `fpf_ratio_max_stress`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio R on the variable loads (Tsai-Wu needs `f12_star`) |
+| `fpf_forces_...`, `fpf_moments_...` | Loads at first-ply failure, fixed + R * variable (suffix `max_stress` or `tsai_wu`) |
+| `fpf_ply_...`, `fpf_z_...` | Ply number (1 at the bottom) and z of the face where the first ply fails |
 
 Per-ply results can list every row, or only the plies an answer key reports, as a table keyed by ply number with ply 1 at the bottom:
 
@@ -64,6 +66,8 @@ Case inputs reject unknown fields, partial strength sets and incomplete vectors.
 `forces_curvature` converts the first three components as force/width and the last three as curvature; the moments are outputs, never zero-filled inputs. Its forward check must pass before results are returned. The two `constructed-*.toml` cases use independently evaluated scalar formulas with synthetic inputs. They check implementation, not experimental validity. The generic engineering constants still describe free bending (ADR-0005). Any failure ratio scales all solved force/moment resultants proportionally; it does not maintain a fixed nonzero curvature while increasing only the forces.
 
 Mixed conditions: for example, a lamina between frictionless rigid walls is `eps_x = -0.01`, `eps_y = 0.0`, `tau_xy = 0.0`, `Mx = 0.0`, `My = 0.0`, `Mxy = 0.0`, and `sigma_x` is solved. Give every pair, including explicit zeros; see `se142-hw2-p2-cr-3-8-walls-30deg.toml` and `se142-hw4-p2-cr-5-13-unsymmetric-cure.toml`. Known loads are mechanical; `delta_T` adds the thermal resultants. Every solution must pass the forward check.
+
+First-ply failure: by default every mechanical load scales with R, and a temperature change stays fixed (Daniel and Ishai Section 9.8). To hold some loads fixed, add a `[failure]` table with `fixed` and `variable`, six resultants each in the case's units; failure occurs at fixed + R * variable, and `delta_T` stays fixed. For example, Nx growing with Ny = 0.5 Nx while Mx = -4 stays fixed is `fixed = [0, 0, 0, -4, 0, 0]` and `variable = [1, 0.5, 0, 0, 0, 0]`, so R is Nx at failure. See `se142-hw5-p1-thermal-bending-laminate.toml`.
 
 Thermal inputs: `alpha1` and `alpha2` are in 1/degC (`SI`) or 1/degF (`US`, `psi`), and `delta_T` is a change in degC or degF. Stresses then come from each ply's mechanical strain, total strain minus its free thermal strain. The comparison cannot judge an expected zero when every value in that result is rounding noise, such as `M_T` of a symmetric laminate; leave such values out.
 

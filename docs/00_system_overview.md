@@ -55,7 +55,7 @@ Accounts: the repository is owned by erikvilla1, with cvv-mx-256 as collaborator
 
 - The engine analyzes flat laminates under in-plane loads and moments with classical laminate theory. It does not model holes, through-thickness stresses or finite element geometry.
 - Failure checks give first-ply failure only: the onset of ply cracking, not the laminate's ultimate strength.
-- A uniform temperature change gives thermal resultants and residual ply stresses (ADR-0014), but first-ply failure does not include them yet, so its predictions can be unconservative. Moisture and temperature-dependent properties are not modeled.
+- A uniform temperature change gives thermal resultants and residual ply stresses (ADR-0014), and first-ply failure includes them (ADR-0017). Moisture and temperature-dependent properties are not modeled.
 - Material values are typed in; the engine does not yet read the website's material library.
 - The engine is checked against textbook and course problems, not yet against our own coupon tests. It is not approved for design decisions.
 - The website's chat captures inputs but does not calculate results.
