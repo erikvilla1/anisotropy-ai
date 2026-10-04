@@ -19,9 +19,8 @@ from pathlib import Path
 
 import numpy as np
 
-from anisotropy_engine.cases import compare, load_case, solve_case
+from anisotropy_engine.cases import compare, failure_loads, first_ply_failures, load_case, solve_case
 from anisotropy_engine.engineering import engineering_constants
-from anisotropy_engine.failure import first_ply_failure, max_stress_ratio, tsai_wu_ratio
 from anisotropy_engine.lamina import reduced_stiffness
 from anisotropy_engine.laminate import abd_matrices, ply_interfaces
 from anisotropy_engine.rotation import transformed_reduced_stiffness
@@ -173,35 +172,44 @@ eta_xs, eta_ys = (0.0 if abs(v) < 1e-12 else v for v in (c.eta_xs, c.eta_ys))
 print(f"   nu_xy = {c.nu_xy:.6g}   nu_yx = {c.nu_yx:.6g}   eta_xs = {eta_xs:.6g}   eta_ys = {eta_ys:.6g}")
 
 with_strengths = [ply.material.strengths is not None for ply in plies]
+search = failure_loads(case, solution)
 if not any(with_strengths):
     print("\nNo strengths given, so failure checks are skipped.")
 elif not all(with_strengths):
     print("\nNot every material has strengths, so failure checks are skipped.")
-elif dT is not None:
-    print("\nFailure checks are skipped: strength ratios with residual thermal stresses are not implemented yet.")
-elif not np.any(loads.as_vector()):
+elif search is None:
     print("\nNothing is applied, so failure checks are skipped.")
 else:
-    if solution.constrained is not None or solution.mixed is not None:
-        print("\nFailure ratios below scale all N and M together, given and solved; they do not hold "
-              "prescribed deformations fixed.")
+    fixed, variable = search
+    if "failure" in case:
+        print("\nFirst-ply failure search from [failure]: fixed loads stay constant and variable loads scale with R"
+              + ("; the temperature change also stays fixed." if dT is not None else "."))
+        for label, held in (("Fixed", fixed), ("Variable", variable)):
+            print(f"   {label} N [{U['N'][1]}]: " + "".join(f"{v:14.6g}" for v in show(held.as_vector()[:3], "N"))
+                  + f"   M [{U['M'][1]}]: " + "".join(f"{v:14.6g}" for v in show(held.as_vector()[3:], "M")))
+    else:
+        if dT is not None:
+            print("\nStrength ratios hold the residual thermal stress fixed and scale the mechanical loads "
+                  "(Daniel & Ishai Section 9.8). Add a [failure] table to hold some loads fixed as well.")
+        if solution.constrained is not None or solution.mixed is not None:
+            print("\nFailure ratios below scale all N and M together, given and solved; they do not hold "
+                  "prescribed deformations fixed.")
+    failures = first_ply_failures(case, solution)
     print("\nMaximum-stress strength ratios on each ply face")
     if F12_STAR is None:
         print("Tsai-Wu skipped: the case does not supply f12_star.")
     else:
         print(f"Tsai-Wu also evaluated with explicit f12* = {F12_STAR:g}.")
-    for s in surfaces:
-        face = "bottom" if s.z_m == z[s.ply_index] else "top"
-        strengths = plies[s.ply_index].material.strengths
-        assert strengths is not None  # every ply has strengths in this branch
-        ratio, mode = max_stress_ratio(s.stress_12, strengths)
-        tw = f"   Tsai-Wu {tsai_wu_ratio(s.stress_12, strengths, F12_STAR):9.4g}" if F12_STAR is not None else ""
-        print(f"   ply {s.ply_index + 1:2d} {s.angle_deg:6g} deg {face:>6}   max stress {ratio:9.4g} ({mode})" + tw)
-    for criterion in (("max_stress", "tsai_wu") if F12_STAR is not None else ("max_stress",)):
-        fpf = first_ply_failure(plies, loads, criterion, F12_STAR)
+    for k, check in enumerate(failures["max_stress"].checks):
+        face = "bottom" if check.z_m == z[check.ply_index] else "top"
+        tw = f"   Tsai-Wu {failures['tsai_wu'].checks[k].strength_ratio:9.4g}" if "tsai_wu" in failures else ""
+        print(f"   ply {check.ply_index + 1:2d} {check.angle_deg:6g} deg {face:>6}   "
+              f"max stress {check.strength_ratio:9.4g} ({check.mode})" + tw)
+    for criterion, fpf in failures.items():
         g = fpf.governing
+        face = "bottom" if g.z_m == z[g.ply_index] else "top"
         print(f"\nFirst-ply failure, {criterion}: R = {fpf.strength_ratio:.6g}, ply {g.ply_index + 1} "
-              f"({g.angle_deg:g} deg), {g.mode}")
+              f"({g.angle_deg:g} deg), {g.mode}, {face} face at z = {show(g.z_m, 'length'):g} {U['length'][1]}")
         print(f"   Loads at failure N [{U['N'][1]}]: " + "".join(f"{v:14.6g}" for v in show(fpf.failure_loads.as_vector()[:3], "N")))
         print(f"   Moments at failure M [{U['M'][1]}]: " + "".join(f"{v:14.6g}" for v in show(fpf.failure_loads.as_vector()[3:], "M")))
 

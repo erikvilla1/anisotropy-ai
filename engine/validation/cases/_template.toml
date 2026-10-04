@@ -38,6 +38,12 @@ ply_thickness = 0.0  # same for every ply
 # Optionally add a uniform temperature change next to it (needs alpha1 and alpha2):
 # delta_T = 0.0                                      degC (SI) or degF (US, psi)
 
+# Optional first-ply failure search (needs strengths): failure at fixed + R * variable,
+# six resultants each; delta_T also stays fixed. Without it, all mechanical loads scale.
+# [failure]
+# fixed = [0, 0, 0, 0, 0, 0]
+# variable = [1, 0, 0, 0, 0, 0]
+
 [expected]
 tolerance = 0.001  # relative; loosen it to match how the answer key rounds
 # Give only the results the answer key states. Available keys:
@@ -53,3 +59,4 @@ tolerance = 0.001  # relative; loosen it to match how the answer key rounds
 #   Nx Ny Nxy Mx My Mxy, sigma_x sigma_y tau_xy (N/h), eps_x eps_y gamma_xy, kappa_x kappa_y kappa_xy
 #   Ex Ey Gxy nu_xy nu_yx
 #   fpf_ratio_max_stress, fpf_ratio_tsai_wu (Tsai-Wu also needs f12_star = ... at the top of the file)
+#   fpf_forces_max_stress, fpf_moments_max_stress, fpf_ply_max_stress, fpf_z_max_stress (and _tsai_wu)
