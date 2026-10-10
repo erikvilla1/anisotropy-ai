@@ -6,6 +6,7 @@ import { exportCitedMaterial, materialDatasets, referenceUrl, type CitedMaterial
 import type { MaterialFeed } from "@/lib/material-evidence";
 import { downloadFile } from "@/lib/demo";
 import { propertyDisplayValue } from "@/lib/property-units";
+import { rightsPolicy } from "@/lib/source-rights";
 import { PropertyTable } from "./property-table";
 
 function date(value: string) {
@@ -25,14 +26,18 @@ export function CitedMaterialProperties({ material: initial, feed, stale }: { ma
   const unavailable = stale || observations.some(o => !o?.lastSuccess);
   const failed = observations.some(o => o?.failed);
   const overdue = observations.some(o => o && Date.now() > Date.parse(o.nextCheck));
+  const rights = rightsPolicy(source.rights);
   return <div className="material-properties cited-properties">
     {datasets.length > 1 && <label className="material-dataset-picker">Property dataset<select aria-label="Property dataset" value={material.datasetId} onChange={e => setSelected(e.target.value)}>{datasets.map(d => <option key={d.datasetId} value={d.datasetId}>{d.dataset}</option>)}</select></label>}
     <div className="property-reference">
       <div><strong>{source.publisher}</strong><span>{source.date ? `Published / revised ${date(source.date)}` : `Accessed ${date(source.accessed)}`}</span></div>
       <a href={referenceUrl(source, source.page, { datasetId: material.datasetId })} target={source.kind === "book" ? undefined : "_blank"} rel="noreferrer">{source.kind === "book" ? "View source details" : "Open reference"} <ArrowUpRight size={13} /></a>
     </div>
+    <p className="source-rights" aria-label="Source rights"><span className={`rights-chip rights-${source.rights}`}>{rights.label}</span><span>{source.rights === "licensed-reference" ? "Individual values cited by table and page; consult your own copy. No pages or tables are reproduced here." : source.rights === "public-domain" ? "Free of copyright; the document may be quoted and copied." : "Published openly by the source; linked at the publisher, not copied here."}</span></p>
     <p className="dataset-summary"><strong>{material.dataset}</strong><br />{material.conditions}{source.kind === "book" && <><br />Daniel &amp; Ishai, second edition · printed page {source.printedPage}. Select a property to review its citation and recorded source units.</>}</p>
-    <PropertyTable key={material.datasetId} properties={material.properties.map(p => ({ ...p, value: propertyDisplayValue(p), context: `${p.basis} · ${p.direction}`, referenceUrl: referenceUrl(source, p.sourcePage, { datasetId: material.datasetId, propertyKey: p.key }) }))} />
+    {rights.showValues
+      ? <PropertyTable key={material.datasetId} properties={material.properties.map(p => ({ ...p, value: propertyDisplayValue(p), context: `${p.basis} · ${p.direction}`, referenceUrl: referenceUrl(source, p.sourcePage, { datasetId: material.datasetId, propertyKey: p.key }) }))} />
+      : <p className="dataset-summary">Values from this source are not published. Consult {source.title}, page {source.page}, in your own copy.</p>}
     <p className="dataset-application">{material.application}</p>
     <details className="cited-reference-details">
       <summary>Reference &amp; test details</summary>

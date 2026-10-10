@@ -4,6 +4,7 @@ import { dualUnits, propertyDisplayValue } from "./property-units";
 import { qualifiedCarbon, qualifiedGlass, glassSupportingReferences } from "./qualification-materials";
 import { modernGlassAdditions, supplierAdditions } from "./material-property-additions";
 import { textbookMaterials } from "./textbook-materials";
+import type { SourceRights } from "./source-rights";
 
 export type CitedProperty = {
   key: string; label: string; value: number; valueEnd?: number; valueQualifier?: ">"; unit: string; symbol?: string;
@@ -15,7 +16,9 @@ export type CitedMaterial = {
   datasetId: string; dataset: string; application: string; conditions: string;
   source: { id: string; title: string; publisher: string; authors?: string; url: string;
     date: string | null; revision: string; accessed: string; sha256: string | null;
-    verification: string; page: number; kind?: "book"; printedPage?: number };
+    verification: string; page: number; kind?: "book"; printedPage?: number;
+    // What the website may show for this source and the evidence for that class (ADR-0018).
+    rights: SourceRights; rightsEvidence: string };
   properties: CitedProperty[];
   supportingReferences?: (CitedMaterial["source"] & { role: string })[];
   recordDetails?: string[];
@@ -39,7 +42,8 @@ export const as4Model: CitedMaterial = {
     authors: "Jason R. Maddocks", publisher: "MIT · NASA Technical Reports Server", date: "1995-05", revision: "NASA-CR-199802 · Table 6.2",
     url: "https://ntrs.nasa.gov/api/citations/19960008935/downloads/19960008935.pdf", accessed,
     sha256: "170f13db27c1bb30902e11ac2454edca2748aacd3236705e14ea77c87ea53653",
-    verification: "Table 6.2 visually checked against the original PDF; assumptions checked on p. 94.", page: 95 },
+    verification: "Table 6.2 visually checked against the original PDF; assumptions checked on p. 94.", page: 95,
+    rights: "open-publisher", rightsEvidence: "Public download from the NASA Technical Reports Server. Contractor-report copyright not checked, so the report is linked, not copied." },
   properties: [
     ["E1", "Longitudinal modulus", 142, "GPa", "Fiber direction"],
     ["E2", "Transverse in-plane modulus", 9.81, "GPa", "Transverse direction"],
@@ -62,7 +66,8 @@ const agp: CitedMaterial = {
     authors: "I. M. Daniel, J. L. Abot, J.-J. Luo and P. M. Schubel", publisher: "International Conference on Fracture · ICF11", date: "2005", revision: "Figures 3–5",
     url: "https://www.gruppofrattura.it/ocs/index.php/ICF/ICF11/paper/download/10515/9871", accessed,
     sha256: "04f0f86f489afc863e3f4c84bbeb5b121646c04e528b7a0fa85471e9886b9cd1", page: 4,
-    verification: "Numeric figure annotations visually checked in the original PDF; no curve digitization. Material identity in §2.1." },
+    verification: "Numeric figure annotations visually checked in the original PDF; no curve digitization. Material identity in §2.1.",
+    rights: "licensed-reference", rightsEvidence: "Conference paper downloadable from the ICF proceedings site; no license statement found. Figure values are cited; the paper is not copied." },
   properties: [
     prop("epsilon3t", "Ultimate out-of-plane tensile strain", .5, "%", "Reported experimental result", "Through thickness", "Waisted-block tension; §2.3", textileConditions, 4, "Figure 3 numeric annotation", "ε3t"),
     prop("epsilon3c", "Ultimate out-of-plane compressive strain", 6.6, "%", "Reported experimental result", "Through thickness", "Bonded-block compression; §2.3", textileConditions, 4, "Figure 4 numeric annotation", "ε3c"),
@@ -90,7 +95,8 @@ const ncamp: CitedMaterial = {
     publisher: "Wichita State University · NIAR / NCAMP", date: "2025-02-25", revision: "CAM-RP-2023-010 · Rev N/C",
     url: "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Park-Aerospace-Corp-7781-E765-Glass-CAM-RP-2023-010-Rev-NC-MPDR-2-25-25.pdf",
     accessed, sha256: "1eefc09bc58939ef84806bcb00b60c2e282a9db628352b38de66c03930d52816", page: 17,
-    verification: "Original publisher PDF visually checked: Table 2-1 measured RTD column and individual summary tables on pp. 18–23; immutable monitor snapshot retained." },
+    verification: "Original publisher PDF visually checked: Table 2-1 measured RTD column and individual summary tables on pp. 18–23; immutable monitor snapshot retained.",
+    rights: "open-publisher", rightsEvidence: "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied." },
   properties: [
     ["E1t", "Warp tensile modulus", 3.700, "Msi", "Warp", "ASTM D3039/D3039M-17", 18],
     ["E2t", "Fill tensile modulus", 3.472, "Msi", "Fill", "ASTM D3039/D3039M-17", 19],
@@ -118,7 +124,8 @@ const aluminum: CitedMaterial = {
     publisher: "Hexcel", date: null, revision: "ATA361USDC17–DS2100 · Table I", accessed, page: 4,
     url: "https://www.hexcel.com/wp-content/uploads/2025/12/HexWeb_CRIII_DataSheet.pdf",
     sha256: "0467f718f7d9d3a175635718573f94f58baea1d753e83db4be8edcba9f374034",
-    verification: "Table I visually checked, exact 1/8 in / 3.1 pcf / 5052 row. Copyright and URL dates are not treated as revision dates." },
+    verification: "Table I visually checked, exact 1/8 in / 3.1 pcf / 5052 row. Copyright and URL dates are not treated as revision dates.",
+    rights: "open-publisher", rightsEvidence: "Manufacturer datasheet published on the manufacturer's website. Linked, not copied." },
   properties: [
     ["compression-modulus", "Compressive modulus", 75, "ksi", "Typical", "Through thickness"],
     ["shear-L-modulus", "Plate shear modulus · L", 45, "ksi", "Typical", "L direction"],
@@ -155,7 +162,8 @@ function supplierMaterial(release: MaterialFeed["releases"][number]): CitedMater
     source: { id: release.sourceId, title: meta.title, publisher: meta.publisher, url: release.documentUrl,
       date: release.sourceRevisionDate, revision: release.sourceRevision || "Manufacturer product datasheet",
       accessed: release.approvedAt.slice(0,10), sha256: release.fingerprint, page: release.properties[0].sourcePage,
-      verification: "Exact grade, units, conditions and table cells checked against manufacturer document. Conflicting rows omitted." },
+      verification: "Exact grade, units, conditions and table cells checked against manufacturer document. Conflicting rows omitted.",
+      rights: "open-publisher", rightsEvidence: "Manufacturer datasheet published on the manufacturer's website. Linked, not copied." },
     properties: release.properties.filter(p => !p.review).map(p => ({ ...p,
       basis: p.basis === "minimum" ? "Supplier minimum" : "Nominal / typical" })).concat(additions),
     reviewedOn: additions.length ? "2026-10-02" : release.approvedAt.slice(0, 10),

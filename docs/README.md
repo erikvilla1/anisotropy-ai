@@ -63,12 +63,13 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0015](decisions/ADR-0015-course-inputs-and-several-materials.md) | Cases read course Excel inputs and describe several materials per laminate |
 | [0016](decisions/ADR-0016-mixed-load-deformation-conditions.md) | One general solver for mixed load and deformation conditions (proposed) |
 | [0017](decisions/ADR-0017-failure-with-fixed-and-variable-loads.md) | First-ply failure holds fixed loads and thermal stress constant and scales the rest (proposed) |
+| [0018](decisions/ADR-0018-source-rights-classes.md) | Every cited source carries a rights class that decides what the website shows (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
-Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md) and [website inputs and citations](evaluations/website/2026-10-03-input-validation.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
+Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
 
 | Document | Contents |
 | --- | --- |
@@ -78,6 +79,7 @@ Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md) and [
 | [qualification-records-2026-10-01.md](qualification-records-2026-10-01.md) | First carbon and glass engineering-reference records |
 | [material-property-expansion-2026-10-02.md](material-property-expansion-2026-10-02.md) | Material property expansion |
 | [physics-foundations-2026-10-02.md](physics-foundations-2026-10-02.md) | Physics reference foundation for the website library |
+| [material-research-public-sources-2026-10-10.md](material-research-public-sources-2026-10-10.md) | Public data sources the website may show: NCAMP reports, MIL-HDBK-17F, NASA, open-access papers, datasheets |
 
 ## Added when the parts exist
 

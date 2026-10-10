@@ -1,6 +1,9 @@
 import type { CitedMaterial, CitedProperty } from "./curated-materials";
 import { carbonAdditions, legacyGlassAdditions } from "./material-property-additions";
-import references from "./qualification-references.json";
+import rawReferences from "./qualification-references.json";
+
+// The JSON carries the rights class as a string; the record type narrows it (ADR-0018).
+const references = rawReferences as unknown as Record<keyof typeof rawReferences, CitedMaterial["source"] & { role: string }>;
 
 const reviewedOn = "2026-10-02";
 const recordRevision = "2026-10-02.1";

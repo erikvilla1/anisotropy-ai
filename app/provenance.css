@@ -91,3 +91,12 @@
 .typeset-equation:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 @media(max-width:650px) { .physics-equation.typeset-equation { padding: 22px 14px; font-size: .9rem; } }
 @media(max-width:650px) { .cited-properties .property-reference { grid-template-columns: 1fr; gap: 10px; } }
+
+/* Source rights class (ADR-0018): what the website may show for each cited source. */
+.source-rights { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 1rem; font-size: .78rem; line-height: 1.6; color: var(--muted); }
+.rights-chip { flex: none; padding: 5px 9px; border-radius: 3px; border: 1px solid #536140; background: #30371e; color: #cdddaf; font-size: .7rem; letter-spacing: .02em; white-space: nowrap; }
+.rights-public-domain { border-color: #4f7a4a; background: #1d3320; color: #bfe6b8; }
+.rights-licensed-reference { border-color: #8a7a48; background: #2f2a16; color: #e2d3a0; }
+.references-panel .rights-list { list-style: none; padding: 0; margin: 0 0 24px; display: grid; gap: 12px; max-width: 800px; }
+.references-panel .rights-list li { display: flex; gap: 12px; align-items: flex-start; font-size: 12px; line-height: 1.8; color: var(--muted); }
+@media (max-width: 650px) { .source-rights { flex-direction: column; gap: 8px; } }
