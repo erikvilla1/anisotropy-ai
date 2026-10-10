@@ -63,12 +63,13 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0015](decisions/ADR-0015-course-inputs-and-several-materials.md) | Cases read course Excel inputs and describe several materials per laminate |
 | [0016](decisions/ADR-0016-mixed-load-deformation-conditions.md) | One general solver for mixed load and deformation conditions (proposed) |
 | [0017](decisions/ADR-0017-failure-with-fixed-and-variable-loads.md) | First-ply failure holds fixed loads and thermal stress constant and scales the rest (proposed) |
+| [0018](decisions/ADR-0018-source-rights-classes.md) | Every cited source carries a rights class that decides what the website shows (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
-Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md) and [website inputs and citations](evaluations/website/2026-10-03-input-validation.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
+Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
 
 | Document | Contents |
 | --- | --- |

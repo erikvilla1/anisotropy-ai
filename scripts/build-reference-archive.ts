@@ -42,9 +42,9 @@ async function main() {
     const metadata = JSON.parse(await readFile(path.join(root, `.local/cmh17/${key}-metadata.json`), "utf8"));
     register({ id: key, title, date, revision, publisher: "As identified in supplied handbook", url: "", sha256: metadata.sha256 }, "User-supplied background handbook; not a numerical source for the current released property records", "01-Books");
   }
-  const schoolPath = path.join(root, "public", materialSource);
+  const schoolPath = path.join(root, materialSource.localPath);
   const schoolBytes = await readFile(schoolPath);
-  register({ id: "original-school-appendix", title: "Original supplied material-properties appendix", publisher: "User-supplied course material", date: null, revision: path.basename(materialSource), url: "", sha256: digest(schoolBytes) }, "Historical import and reconciliation only; not substituted for current cited datasets", "05-Original-Import");
+  register({ id: "original-school-appendix", title: "Original supplied material-properties appendix", publisher: "User-supplied course material", date: null, revision: path.basename(materialSource.localPath), url: "", sha256: digest(schoolBytes) }, "Historical import and reconciliation only; not substituted for current cited datasets", "05-Original-Import");
 
   const candidates = [schoolPath,
     path.join(process.env.USERPROFILE!, "Downloads/Engineering Mechanics of Composite Materials -- Isaac M. Daniel Ori lshai -- WeLib.org.pdf"),
