@@ -6,7 +6,9 @@ export const schoolAudit = {
   method: "All six pages visually checked against the library; numerical transcription checked by PDF cell position. This verifies transcription, not experimental accuracy or qualification.",
 };
 export function schoolCitation(m: Material) {
-  return { ...schoolAudit, url: `${materialSource}#page=${m.page}`, page: m.page, section: m.section, recordDate: m.basis,
+  return { ...schoolAudit, page: m.page, section: m.section, recordDate: m.basis,
+    rights: "licensed-reference" as const, publicDocument: materialSource.public,
+    rightsEvidence: "Course material. The appendix is retained locally and is not distributed; only transcribed values with their page are kept.",
     underlyingReference: m.id === "7781-e765"
       ? "Appendix cites Tomblin et al., AGATE-WP3.3-033051-105 (2001), p. 217. Original allowable table not independently verified; do not infer statistical basis for individual rows."
       : m.page <= 2 ? "Appendix cites Daniel and Ishai, Engineering Mechanics of Composite Materials, 2nd edition (2006), p. 380. Original book table not independently verified."

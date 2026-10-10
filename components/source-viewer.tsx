@@ -46,6 +46,7 @@ export function SourceViewer() {
     <div className="source-document-note">
       <strong>Consult the cited table in your copy</strong>
       <p>Table {page.table}, printed page {page.printedPage}, in the second edition of <em>{textbookSource.title}</em>. Page scans are not distributed here.</p>
+      <p className="source-rights"><span className="rights-chip rights-licensed-reference">Licensed reference</span><span>{textbookSource.rightsEvidence}</span></p>
       <a href={textbookSource.url} target="_blank" rel="noreferrer">Find the book at the publisher <ArrowUpRight size={14} /></a>
     </div>
     <div className="source-attribution">
