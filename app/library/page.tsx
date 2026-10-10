@@ -3,6 +3,7 @@ import { MaterialBrowser } from "@/components/material-browser";
 import { PhysicsBrowser } from "@/components/physics-browser";
 import { useState } from "react";
 import { ArrowUpRight, BookOpen, Database } from "lucide-react";
+import { handbookReferences, sourceRightsClasses, sourceRightsPolicy } from "@/lib/source-rights";
 
 export default function Library() {
   const [tab, setTab] = useState("Materials");
@@ -51,19 +52,28 @@ export default function Library() {
                 <span className="eyebrow">SOURCE LIBRARY</span>
                 <h3>Composite mechanics references.</h3>
                 <p>
-                  Daniel and Ishai supplies the equation references above. The supplied
-                  handbook volumes support material data and design context: Volume 2
-                  is MIL-HDBK-17-2F (2002); Volume 3 is CMH-17-3G (2012).
-                  Handbook-specific methods will receive section-level review before inclusion.
+                  Daniel and Ishai supplies the equation references above. Every source in this
+                  library carries a rights class that decides what the website may show. We never
+                  host copies of copyrighted books or handbooks; values are cited by table and page
+                  and readers consult their own copy. Handbook-specific methods receive
+                  section-level review before inclusion.
                 </p>
-                <a
-                  href="https://global.oup.com/academic/product/engineering-mechanics-of-composite-materials-9780195150971"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Daniel &amp; Ishai · Engineering Mechanics of Composite Materials,
-                  second edition (2006) · Publisher &amp; book <ArrowUpRight size={15} />
-                </a>
+                <ul className="rights-list" aria-label="Source rights classes">
+                  {sourceRightsClasses.map(rights => (
+                    <li key={rights}>
+                      <span className={`rights-chip rights-${rights}`}>{sourceRightsPolicy[rights].label}</span>
+                      <span>{sourceRightsPolicy[rights].summary}</span>
+                    </li>
+                  ))}
+                </ul>
+                {handbookReferences.map(ref => (
+                  <a key={ref.id} href={ref.url} target="_blank" rel="noreferrer">
+                    <span>
+                      {ref.title} · <span className={`rights-chip rights-${ref.rights}`}>{sourceRightsPolicy[ref.rights].label}</span>
+                    </span>
+                    <ArrowUpRight size={15} />
+                  </a>
+                ))}
               </div>
             </>
           )}

@@ -10,7 +10,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/hexcel-8552/AS4-Unitape-2.pdf",
     "sha256": "14c20a47834ed11fa3f3d62183c861a66b8dd0b48dae19c45ecacf64d9e424be",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "as4-stats": {
     "id": "ncamp-as4-8552-statistics",
@@ -23,7 +25,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/hexcel-8552/AS4-Unitape-3.pdf",
     "sha256": "f92977f3427210121cf6e667fe1c6cfd021931f42d4cab6c0516fab510150123",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "as4-detail": {
     "id": "ncamp-as4-8552-detail",
@@ -36,7 +40,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/hexcel-8552/AS4-Unitape-1.pdf",
     "sha256": "6e6a5faebb095c80d7ee730ddb6601099633073d2e6dbf21d0c94cbcbb9a53c0",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "as4-base": {
     "id": "ncamp-8552-base",
@@ -49,7 +55,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NMS-128-Rev-D-March-16-2022-Hexcel-8552-Base-Material-Specification.pdf",
     "sha256": "c30a130d783409eee1ebe5439b6707d886a8ce21bf9a90f66b6a861249295689",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "as4-process": {
     "id": "ncamp-8552-process",
@@ -62,7 +70,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NPS-81228-Rev-C-Hexcel-8552-Process-Specification-March-16-2022-.pdf",
     "sha256": "a73a420512cc4774643f6b7fa54e81462fa10ba452fa4c63f2d799e4e07be8c1",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "glass-legacy": {
     "id": "agate-e765-2001",
@@ -75,7 +85,9 @@
     "url": "https://agate.niar.wichita.edu/Materials/WP3.3-033051-105.pdf",
     "sha256": "88d0ed9b830da8bdcdf58b1fa3e7d7b1951e605d65f844833c45ee35a4760436",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "AGATE program report hosted publicly by NIAR for download. Linked, not copied."
   },
   "glass-data": {
     "id": "ncamp-e765-2025",
@@ -88,7 +100,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Park-Aerospace-Corp-7781-E765-Glass-CAM-RP-2023-010-Rev-NC-MPDR-2-25-25.pdf",
     "sha256": "1eefc09bc58939ef84806bcb00b60c2e282a9db628352b38de66c03930d52816",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "glass-stats": {
     "id": "ncamp-e765-equivalency",
@@ -101,7 +115,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Equivalency-Report-Park-Aerospace-E765-7781.pdf",
     "sha256": "8227ff87c4c30090018a84b2ce04dd6bae41f961ec6a860d29eb4065c2727f75",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "glass-base": {
     "id": "ncamp-e765-base",
@@ -114,7 +130,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NMS-765-Base-Rev-March-10-2024.pdf",
     "sha256": "1a1f4d3b2f8322c2ea04a538b582af2bee03412b847c1075720917fd5dd877f5",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "glass-detail": {
     "id": "ncamp-e765-detail",
@@ -127,7 +145,9 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NMS-765-slash-5-Rev-March-10-2024-E765-7781.pdf",
     "sha256": "bc9d0e8ac550536afdc2d523866c124f4460fa5cf01b35ee0dddee43981c7d40",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   },
   "glass-process": {
     "id": "ncamp-e765-process",
@@ -140,6 +160,8 @@
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NPS-81765-Rev-2.9.2024-E765-Process-Spec.pdf",
     "sha256": "c761ce96af51730e34855e036e02163e79dc91c211551e29675d1d637c5b8f3e",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed."
+    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
   }
 }

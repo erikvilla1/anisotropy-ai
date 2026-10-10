@@ -5,6 +5,8 @@ export const textbookSource = {
   url: "https://global.oup.com/academic/product/engineering-mechanics-of-composite-materials-9780195150971",
   accessed: "2026-10-01", sha256: "8c46dbb6cc5d485aaa5a256b9e10c93fd4ee40eb86dc9973ecdb833b4ec729d2",
   verification: "Named column visually checked in the supplied second-edition PDF. Fingerprint identifies that PDF, not the publisher catalog page. SI column retained; imperial display calculated from SI.",
+  rights: "licensed-reference" as const,
+  rightsEvidence: "Copyrighted textbook; no redistribution permission recorded (ADR-0010). Individual values are cited by table and printed page; scans and extracted text stay local.",
 };
 
 // Citation locations only. Original page images stay in ignored local storage.

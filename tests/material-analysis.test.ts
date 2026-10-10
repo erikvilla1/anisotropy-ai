@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { materials, materialSource } from "../lib/materials";
@@ -28,10 +28,13 @@ function canonical(value: string) {
   return number === null ? cleaned : String(number);
 }
 
-test("every school property matches its actual PDF cell, including missing cells and flagged source errors", async () => {
-  const bytes = readFileSync("public/assets/documents/material-properties-2026-v2.pdf");
+// The course appendix is course material and stays in ignored local storage (ADR-0018).
+// The cell-by-cell transcription check runs only where that local copy exists.
+const localCopy = existsSync(materialSource.localPath);
+test("every school property matches its actual PDF cell, including missing cells and flagged source errors",
+  { skip: localCopy ? false : `Course appendix not present at ${materialSource.localPath}` }, async () => {
+  const bytes = readFileSync(materialSource.localPath);
   assert.equal(createHash("sha256").update(bytes).digest("hex"), schoolAudit.sha256, "Changed PDF requires a new source audit");
-  assert.deepEqual(readFileSync(`public${materialSource}`), bytes, "The pinned source copy must match the audited document");
   const task = getDocument({ data: new Uint8Array(bytes), verbosity: 0 });
   const pdf = await task.promise;
   let count = 0;
@@ -86,6 +89,9 @@ test("analysis packets require acknowledgment, exclude flagged inputs and pin th
   const packet = analysisPacket("carbon-ud-wet", "strength-screening", true);
   assert.equal(packet.designAllowables, false);
   assert.equal(packet.source.sha256, schoolAudit.sha256);
+  assert.equal(packet.source.publicDocument, false);
+  assert.equal(packet.source.rights, "licensed-reference");
+  assert.ok(!("url" in packet.source), "Course material must not be linked from exports");
   assert.ok(packet.properties.find(p => p.symbol === "F1C")!.value > 0);
   assert.equal(packet.properties.find(p => p.symbol === "F1C")!.sourceValue, "-111");
   assert.equal(packet.properties.some(p => p.symbol === "ρ"), false);
