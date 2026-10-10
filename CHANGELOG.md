@@ -6,12 +6,15 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Fixed
 
+- The course handout "SE143AB Appendix F: Material Properties" was being served from the website's public assets and linked from exported analysis packets. It now stays in ignored local storage, is never served or linked, and the website's asset test expects a 404 for its former URL (ADR-0018).
+
 - Chat preview preserves signed, zero and decimal inputs for validation instead of converting negative values to positive values or retaining an earlier value. Explicit hole dimensions are not cleared by selecting D3039.
 - Engine input checks reject non-finite stress/strain vectors, malformed vectors, unknown model fields and invalid safety-factor inputs (ADR-0003). Zero-stress infinite ratios remain supported.
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
 
+- Source rights classes: every cited source records whether it is public domain, open publisher data, a licensed reference or user supplied, with evidence. One policy table decides what the website shows for each class; the library displays the class beside each dataset and explains the classes on the references panel. Tests check that every public dataset has a class, that nothing copied is served and that no PDF exists under public assets (ADR-0018).
 - First-ply failure with fixed and variable loads: residual thermal stress and loads held fixed stay constant while the rest scale, in closed form for maximum stress and Tsai-Wu (Daniel and Ishai Section 9.8). Course Homework 5 Problem 1 part D (Nx at failure, ply and location) is now a validation case (ADR-0017).
 - Mixed load and deformation conditions: give one known quantity per load/deformation pair, with or without a temperature change, and the engine solves and verifies the rest. Course Homework 2 Problem 1 and Course Reader Problems 3.8 and 5.13 are now validation cases (ADR-0016).
 - Course inputs and answer-key comparison: the calculator reads the course Excel input template, cases can describe several materials and ply thicknesses, new results cover S, Q-bar, S-bar, the inverse ABD blocks and every ply face, and the calculator ends with an answer-key table. 17 new validation cases from course Homeworks 2 to 5 agree with 313 answer-key values (ADR-0015).
