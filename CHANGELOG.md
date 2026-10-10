@@ -34,6 +34,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Changed
 
+- The founder accepted ADR-0016 (mixed load and deformation conditions), ADR-0017 (first-ply failure with fixed and variable loads) and ADR-0018 (source rights classes) on 2026-10-10.
 - The founder accepted ADR-0014 (thermal analysis) and ADR-0015 (course inputs, several materials). The thermal theory now cites its Daniel and Ishai Chapter 8 equations, and ADR-0014 records the course validation.
 - The founder accepted ADR-0009 to ADR-0013 (calculator cases, citations, local API, browser calculator, prescribed curvature).
 - The calculator reads explicit TOML cases using the existing validation format; personal inputs no longer require code edits. It displays input units, requires review of implausible moduli and does not assume a Tsai-Wu interaction coefficient (ADR-0009).
