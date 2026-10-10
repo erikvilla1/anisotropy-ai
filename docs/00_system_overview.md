@@ -1,4 +1,4 @@
-# System overview | version 0.1 | last reviewed 2026-10-03 | owner: Founder
+# System overview | version 0.1 | last reviewed 2026-10-10 | owner: Founder
 
 ## Purpose
 
@@ -13,7 +13,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 | Layer | What it does | Status | Where |
 | --- | --- | --- | --- |
 | Website | Product pages, materials library, physics references, chat/CSV previews and laminate calculator | Static export; calculator calls local API. Chat still uses a local parser | `app/`, `components/`, `lib/`, [calculator card](components/calculator.md) |
-| Material data | Cited property datasets with provenance; a monitor that detects source changes | Built | `lib/curated-materials.ts`, `services/material-monitor/` |
+| Material data | Cited property datasets with provenance and a rights class per source; a monitor that detects source changes | Built | `lib/curated-materials.ts`, `lib/source-rights.ts`, `services/material-monitor/` |
 | Engine | Laminate stiffness and compliance, forward, prescribed-curvature and mixed-condition response, temperature change and residual stresses, first-ply failure, engineering constants; plies of several materials and thicknesses | Built, version 0.1 | `engine/`, [constrained analysis](components/prescribed-curvature.md) |
 | Validation cases | Textbook/answer-key references and constructed analytical checks | Built, 28 cases | `engine/validation/` |
 | API | One-material forward response and required moments for prescribed curvature | Local development; FastAPI, explicit SI-base inputs | `api/`, [component card](components/api.md) |
@@ -57,5 +57,6 @@ Accounts: the repository is owned by erikvilla1, with cvv-mx-256 as collaborator
 - Failure checks give first-ply failure only: the onset of ply cracking, not the laminate's ultimate strength.
 - A uniform temperature change gives thermal resultants and residual ply stresses (ADR-0014), and first-ply failure includes them (ADR-0017). Moisture and temperature-dependent properties are not modeled.
 - Material values are typed in; the engine does not yet read the website's material library.
+- Copyrighted references (Daniel and Ishai, CMH-17, course material) are cited by table and page only; the website hosts no copies and shows only the individual values it records (ADR-0018). Public data comes from NCAMP, AGATE, NASA and manufacturer documents.
 - The engine is checked against textbook and course problems, not yet against our own coupon tests. It is not approved for design decisions.
 - The website's chat captures inputs but does not calculate results.

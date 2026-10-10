@@ -40,8 +40,9 @@ test("overview, source images, modal dismissal, and material source document", a
       .toBeTruthy();
     await page.getByRole("button", { name: "Close image viewer" }).click();
   }
+  // Course material is never served as a public asset (ADR-0018).
   for (const path of ["/assets/documents/material-properties-2026-v2.pdf"])
-    expect((await request.get(path)).ok()).toBeTruthy();
+    expect((await request.get(path)).status()).toBe(404);
   expect(errors).toEqual([]);
 });
 
