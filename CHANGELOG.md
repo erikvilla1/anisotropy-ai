@@ -14,6 +14,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- Research record of public material data sources the website may show (`docs/material-research-public-sources-2026-10-10.md`): 20 NCAMP-qualified systems with room-temperature means for 12 of them, four systems from the public-domain MIL-HDBK-17-2F, and NASA, open-access and manufacturer sources, each with its rights evidence. No values entered yet.
 - Source rights classes: every cited source records whether it is public domain, open publisher data, a licensed reference or user supplied, with evidence. One policy table decides what the website shows for each class; the library displays the class beside each dataset and explains the classes on the references panel. Tests check that every public dataset has a class, that nothing copied is served and that no PDF exists under public assets (ADR-0018).
 - First-ply failure with fixed and variable loads: residual thermal stress and loads held fixed stay constant while the rest scale, in closed form for maximum stress and Tsai-Wu (Daniel and Ishai Section 9.8). Course Homework 5 Problem 1 part D (Nx at failure, ply and location) is now a validation case (ADR-0017).
 - Mixed load and deformation conditions: give one known quantity per load/deformation pair, with or without a temperature change, and the engine solves and verifies the rest. Course Homework 2 Problem 1 and Course Reader Problems 3.8 and 5.13 are now validation cases (ADR-0016).
