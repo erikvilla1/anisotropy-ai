@@ -12,6 +12,9 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | What changed, and when? | [Changelog](../CHANGELOG.md) and merged pull requests |
 | What could go wrong? | [Risk register](risks/risk_register.md) |
 | How is each result calculated? | [Engine theory](../engine/docs/theory.md) |
+| How do I run my own problem through the engine? | [Engine cheat sheet](engine-cheat-sheet.md) and the [engine card](components/engine.md) |
+| How do I send a whole case over HTTP? | [Case endpoint note](api-case-endpoint-2026-10-11.md) and the [API card](components/api.md) |
+| What happened this week? | [Weekly briefs](weekly/) |
 | How does the API call the engine? | [Chunk 1 walkthrough](../api/README.md) and [API component card](components/api.md) |
 | How does the website call the API? | [Chunk 2 walkthrough](walkthroughs/chunk-2-calculator.md) and [calculator component card](components/calculator.md) |
 | How do we solve for moments under a curvature constraint? | [Chunk 3 walkthrough](walkthroughs/chunk-3-constrained-analysis.md) and [analysis card](components/prescribed-curvature.md) |
@@ -76,7 +79,7 @@ New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
-Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
+Latest checks: [engine, 11 October](evaluations/2026-10-11-criteria-buckling-loader.md), [API case endpoint](evaluations/api/2026-10-11-case-endpoint.md), [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
 
 | Document | Contents |
 | --- | --- |
@@ -99,4 +102,4 @@ Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [web
 
 ## Added when the parts exist
 
-From the documentation guide, these wait until the parts they describe are built: component cards for the language model and the report generator; the per-run provenance record; and the weekly brief. The local API now has a [component card](components/api.md) and [evaluation](evaluations/api/2026-10-03-api-chunk-1.md).
+From the documentation guide, these wait until the parts they describe are built: component cards for the language model and the report generator, and the per-run provenance record (run records, next). The weekly brief started on 2026-10-11 in `weekly/`; the engine has a [component card](components/engine.md). The local API now has a [component card](components/api.md) and [evaluation](evaluations/api/2026-10-03-api-chunk-1.md).
