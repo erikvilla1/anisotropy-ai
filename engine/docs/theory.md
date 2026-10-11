@@ -283,6 +283,29 @@ R = \min\left\{ \frac{F_{1t}}{\sigma_1}\Big|_{\sigma_1>0},\; \frac{F_{1c}}{-\sig
 
 <!-- code: max_stress_ratio -->
 
+Maximum strain, computed by `max_strain_ratio` (Daniel & Ishai Eq. 6.6), uses the mechanical strain in fiber axes, $`\boldsymbol{\varepsilon}_{12} = \mathbf{S}\,\boldsymbol{\sigma}_{12}`$, which with a temperature change excludes the free thermal strain, against five strain limits:
+
+```math
+R = \min\left\{ \frac{\varepsilon_{1t}^{u}}{\varepsilon_1}\Big|_{\varepsilon_1>0},\; \frac{\varepsilon_{1c}^{u}}{-\varepsilon_1}\Big|_{\varepsilon_1<0},\; \frac{\varepsilon_{2t}^{u}}{\varepsilon_2}\Big|_{\varepsilon_2>0},\; \frac{\varepsilon_{2c}^{u}}{-\varepsilon_2}\Big|_{\varepsilon_2<0},\; \frac{\gamma_{12}^{u}}{|\gamma_{12}|} \right\}
+```
+
+The limits are measured values given explicitly, or, by a stated choice in the case (`strain_limits = "from-strengths"`), strength divided by modulus, computed by `strain_limits_from_strengths` (ADR-0021). The engine never derives them on its own. Maximum strain and maximum stress differ in a laminate because $`\varepsilon_1 = (\sigma_1 - \nu_{12}\sigma_2)/E_1`$ couples the two normal stresses.
+
+<!-- code: max_strain_ratio, strain_limits_from_strengths -->
+
+Tsai-Hill (Eq. 6.16), computed by `tsai_hill_index` and `tsai_hill_ratio`:
+
+```math
+\mathrm{FI} = \left(\frac{\sigma_1}{X}\right)^2 - \frac{\sigma_1\sigma_2}{X^2} + \left(\frac{\sigma_2}{Y}\right)^2 + \left(\frac{\tau_{12}}{F_6}\right)^2,
+\qquad X = \begin{cases} F_{1t} & \sigma_1 \ge 0 \\ F_{1c} & \sigma_1 < 0 \end{cases},\quad
+Y = \begin{cases} F_{2t} & \sigma_2 \ge 0 \\ F_{2c} & \sigma_2 < 0 \end{cases},
+\qquad R = \frac{1}{\sqrt{\mathrm{FI}}}
+```
+
+The index is a homogeneous quadratic, so scaling every load by $`R`$ scales it by $`R^2`$ and the sign selection does not change: $`R = 1/\sqrt{\mathrm{FI}}`$. This is the textbook's convention for the mixed-sign case; other implementations choose differently, and the physics library card says so.
+
+<!-- code: tsai_hill_index, tsai_hill_ratio -->
+
 Tsai-Wu (Eqs. 6.29–6.40), computed by `tsai_wu_ratio`:
 
 ```math
@@ -361,6 +384,14 @@ R = 0 \ \text{ when } \sigma_s \text{ alone reaches a limit}
 and the smallest over the components governs.
 
 <!-- code: max_stress_ratio_combined -->
+
+Maximum strain with fixed and variable loading, computed by `max_strain_ratio_combined`, has the same form with the mechanical strains $`\boldsymbol{\varepsilon}_s + R\,\boldsymbol{\varepsilon}_v`$ in place of the stresses.
+
+<!-- code: max_strain_ratio_combined -->
+
+Tsai-Hill with fixed and variable loading, computed by `tsai_hill_ratio_combined`: substituting $`\boldsymbol{\sigma}_s + R\,\boldsymbol{\sigma}_v`$ gives $`aR^2 + bR + c = 0`$ with the bilinear form of Eq. 6.16, as for Tsai-Wu below. Because $`X`$ and $`Y`$ depend on the signs of the stresses at failure, which a fixed stress of one sign and a variable stress of the other can change along the path, the engine solves the quadratic for each of the four sign choices and keeps a root only when the stress at that root has the signs assumed; the smallest such root governs.
+
+<!-- code: tsai_hill_ratio_combined -->
 
 Tsai-Wu, computed by `tsai_wu_ratio_combined`. Substituting $`\boldsymbol{\sigma}_s + R\,\boldsymbol{\sigma}_v`$
 into the criterion gives a quadratic (Eqs. 9.26-9.27):
@@ -485,5 +516,5 @@ Failure ratios with a temperature change hold the residual stress fixed and scal
 - Progressive ply failure and ultimate laminate strength
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
-- Maximum strain, Tsai-Hill and Hashin failure criteria (maximum strain is what the course's failure strain allowables are for)
+- Hashin failure criteria
 - Buckling: no plate dimensions, edge conditions or stability equation. The specially orthotropic simply supported plate under in-plane compression has a closed form from D and would be the first step

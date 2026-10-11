@@ -86,7 +86,7 @@ export const thermalExtensions: Method[] = [
 
 export const maximumStrain = method("Maximum strain",
   "r₁ = ε₁/ε₁tᵘ (ε₁ ≥ 0); −ε₁/ε₁cᵘ (ε₁ < 0)\nr₂ = ε₂/ε₂tᵘ (ε₂ ≥ 0); −ε₂/ε₂cᵘ (ε₂ < 0)\nFI = max(r₁, r₂, |γ₁₂|/γ₁₂ᵘ)",
-  "Use local mechanical strains and positive magnitudes for the five ultimate strain limits. FI ≥ 1 reaches a component limit. Strain limits need an applicable source; do not fill missing compression or shear limits by dividing strength by modulus unless linear behavior to failure is an explicit justified assumption.",
+  "Use local mechanical strains and positive magnitudes for the five ultimate strain limits. FI ≥ 1 reaches a component limit. Strain limits need an applicable source; do not fill missing compression or shear limits by dividing strength by modulus unless linear behavior to failure is an explicit justified assumption. The engine takes explicit limits, or derives them from strengths only when a case states that choice (max_strain_ratio, strain_limits_from_strengths; ADR-0021).",
   "Eq. 6.6, p. 126; plane-stress version using positive compressive limits", "All strains are fractions, including engineering shear γ. Convert percentages by dividing by 100; FI dimensionless.");
 
 export const foundationTopics: PhysicsTopic[] = [

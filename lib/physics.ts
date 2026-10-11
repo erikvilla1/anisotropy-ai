@@ -114,7 +114,7 @@ const existingPhysicsTopics: PhysicsTopic[] = [
       m(
         "Tsai–Hill",
         "FI = (σ₁/X)² − σ₁σ₂/X²\n     + (σ₂/Y)² + (τ₁₂/S)²",
-        "This documented plane-stress convention selects X = Xₜ or X꜀ by the sign of σ₁ and Y similarly by σ₂. Mixed-sign conventions differ between implementations; record the convention before comparisons. FI ≥ 1 indicates initiation.",
+        "This documented plane-stress convention selects X = Xₜ or X꜀ by the sign of σ₁ and Y similarly by σ₂. Mixed-sign conventions differ between implementations; record the convention before comparisons. FI ≥ 1 indicates initiation; for proportional loading R = 1/√FI (tsai_hill_index, tsai_hill_ratio).",
       ),
       m(
         "Tsai–Wu coefficients",

@@ -20,6 +20,13 @@ nu12 = 0.0
 # F2t = 0.0
 # F2c = 0.0
 # F6 = 0.0
+# Maximum strain needs strain limits as positive fractions, or the stated choice to derive them:
+# eps1t = 0.0
+# eps1c = 0.0
+# eps2t = 0.0
+# eps2c = 0.0
+# gamma12 = 0.0
+# strain_limits = "from-strengths"   # strength divided by modulus (linear to failure); not with the five above
 # Thermal expansion is only needed with delta_T: 1/degC (SI) or 1/degF (US, psi). Either may be negative.
 # alpha1 = 0.0
 # alpha2 = 0.0

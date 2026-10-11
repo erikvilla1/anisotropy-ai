@@ -48,8 +48,8 @@ The calculator also reads the course's Excel input template directly: `uv run py
 | the same keys ending `_bottom` or `_top` | One [3-value] row per ply on that face |
 | `N_T`, `M_T` | Thermal force and moment resultants, when the case has `delta_T` |
 | `Ex`, `Ey`, `Gxy`, `nu_xy`, `nu_yx` | Laminate engineering constants |
-| `fpf_ratio_max_stress`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio R on the variable loads (Tsai-Wu needs `f12_star`) |
-| `fpf_forces_...`, `fpf_moments_...` | Loads at first-ply failure, fixed + R * variable (suffix `max_stress` or `tsai_wu`) |
+| `fpf_ratio_max_stress`, `fpf_ratio_max_strain`, `fpf_ratio_tsai_hill`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio R on the variable loads (maximum strain needs strain limits; Tsai-Wu needs `f12_star`) |
+| `fpf_forces_...`, `fpf_moments_...` | Loads at first-ply failure, fixed + R * variable (suffix `max_stress`, `max_strain`, `tsai_hill` or `tsai_wu`) |
 | `fpf_ply_...`, `fpf_z_...` | Ply number (1 at the bottom) and z of the face where the first ply fails |
 
 Per-ply results can list every row, or only the plies an answer key reports, as a table keyed by ply number with ply 1 at the bottom:
@@ -63,7 +63,7 @@ A `[material]` or `[materials.<name>]` table may name a library dataset instead 
 
 Shear strains are engineering shear. Layups are listed from the bottom face up. Units follow `src/anisotropy_engine/units.py`: compliances are in 1/GPa (`SI`), 1/Msi (`US`) or 1/psi (`psi`), so multiply a value in m^2/N by 1e9 for an `SI` case; `a`, `b` and `d` use the case's force and length units, for example in/lb, 1/lb and 1/(lb*in).
 
-Case inputs reject unknown fields, partial strength sets and incomplete vectors. `loads`, `strains` and `forces_curvature` require all six components, including explicit zeros. Other applied vectors require three finite components. The calculator accepts this same format; `expected` is optional for calculation and required for an automated comparison. Tsai-Wu runs only when all strengths and an explicit `f12_star` are present.
+Case inputs reject unknown fields, partial strength sets and incomplete vectors. `loads`, `strains` and `forces_curvature` require all six components, including explicit zeros. Other applied vectors require three finite components. The calculator accepts this same format; `expected` is optional for calculation and required for an automated comparison. Tsai-Wu runs only when all strengths and an explicit `f12_star` are present. Maximum strain runs only when every material has strain limits: `eps1t`, `eps1c`, `eps2t`, `eps2c`, `gamma12` as positive fractions, or `strain_limits = "from-strengths"` to state the linear-to-failure assumption (strength divided by modulus, ADR-0021). Tsai-Hill runs whenever strengths are present.
 
 `forces_curvature` converts the first three components as force/width and the last three as curvature; the moments are outputs, never zero-filled inputs. Its forward check must pass before results are returned. The two `constructed-*.toml` cases use independently evaluated scalar formulas with synthetic inputs. They check implementation, not experimental validity. The generic engineering constants still describe free bending (ADR-0005). Any failure ratio scales all solved force/moment resultants proportionally; it does not maintain a fixed nonzero curvature while increasing only the forces.
 
