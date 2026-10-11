@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { materials } from "../lib/materials";
 import { curatedMaterials, archivedMaterialReasons, currentMaterial, exportCitedMaterial, materialDatasets } from "../lib/curated-materials";
-import { qualifiedCarbon, qualifiedCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedGlass } from "../lib/qualification-materials";
+import { qualifiedCarbon, qualifiedCarbonIM7, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedGlass } from "../lib/qualification-materials";
 import { dualUnits } from "../lib/property-units";
 import published from "../lib/published-material-references.json";
 import type { MaterialFeed } from "../lib/material-evidence";
@@ -253,4 +253,54 @@ test("T1100GC / TC380 and IMS65 / EP2190 records use the measured room-temperatu
   assert.ok(!qualifiedEP2190.properties.some(p => p.key === "F1c-derived"));
   assert.ok(!qualifiedTC380.properties.some(p => p.key === "F1c"));
   assert.equal(new Set(curatedMaterials.map(m => m.id)).size, curatedMaterials.length);
+});
+
+test("NASA 2023 IM7 / 8552 dataset sits beside the NCAMP record with printed averages, page offsets and its own monitored report", () => {
+  const m = nasaCarbonIM7;
+  const value = (key: string) => m.properties.find(p => p.key === key)!;
+  assert.deepEqual(materialDatasets(qualifiedCarbonIM7).map(d => d.datasetId), [qualifiedCarbonIM7.datasetId, m.datasetId]);
+  assert.ok(!curatedMaterials.includes(m)); // A second dataset of an existing material, not a 21st material.
+  assert.equal(m.id, "im7-8552");
+  assert.equal(value("E1t").value, 23.105148);
+  assert.equal(value("E1t").sourceValue, 23105148);
+  assert.equal(value("E1t").sourceUnit, "psi");
+  assert.equal(value("E2t").value, 1.299337);
+  assert.equal(value("nu12").value, .3235);
+  assert.equal(value("G12").value, .650712);
+  assert.equal(value("G23").value, .414695);
+  assert.equal(value("G13").value, .763931);
+  assert.equal(value("E3t").value, 1.089994);
+  assert.equal(value("F1t").value, 392.337); // Printed average, not the last replicate 391,111 psi.
+  assert.equal(value("F1c").value, 116.744);
+  assert.equal(value("F1c").basis, "Measured mean");
+  assert.match(value("F1c").conditions, /end-crushing/);
+  assert.equal(value("F12-5pct").value, 14.492);
+  assert.equal(value("F23").value, 7.41);
+  assert.equal(value("tply").value, .18);
+  assert.equal(value("tply").unit, "mm");
+  assert.equal(value("SG").value, 1.61);
+  assert.equal(m.properties.length, 24);
+  assert.ok(!m.properties.some(p => p.key === "F1c-derived" || p.key === "SBS"));
+  for (const p of m.properties) {
+    assert.equal(p.printedPage, p.sourcePage - 6);
+    assert.match(p.conditions, /^Room temperature, quasi-static/);
+    assert.doesNotMatch(p.conditions, /70°F|75°F|dry as fabricated/);
+  }
+  assert.equal(m.source.sha256, "8720e1dce2830b9cae264627a637d74b1bca4d7a2cec078a29c52ae61e7e7eeb");
+  assert.equal(m.source.date, "2023-02");
+  assert.equal(m.source.rights, "open-publisher");
+  assert.match(m.source.rightsEvidence, /Public Use Permitted/);
+  assert.equal(m.supportingReferences, undefined);
+  const adapter = sources.find(s => s.id === m.source.id)!;
+  assert.equal(adapter.pageUrl, m.source.url);
+  assert.equal(adapter.kind, "reference-document");
+  assert.deepEqual(adapter.materials.map(x => x.id), ["im7-8552"]);
+  assert.ok(adapter.maxDocumentBytes! >= 10_000_000);
+  const inputs = Object.fromEntries(Object.entries(m.elasticInputs!).map(([name, key]) => [name, value(key).value]));
+  assert.ok(1 - inputs.nu12 * (inputs.nu12 * inputs.E2 / inputs.E1) > 0);
+  const out = exportCitedMaterial(m);
+  assert.notEqual(out.datasetId, exportCitedMaterial(qualifiedCarbonIM7).datasetId);
+  assert.ok(out.properties.every(p => p.referenceUrl.startsWith(m.source.url)));
+  assert.ok(out.properties.some(p => p.referenceUrl.endsWith("#page=18")));
+  assert.doesNotMatch(JSON.stringify(out), /391[,.]?111|23\.51|251\.13/); // Neither the mis-copied replicate nor NCAMP values.
 });

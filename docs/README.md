@@ -83,6 +83,7 @@ Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [web
 | [material-release-im7-8552-2026-10-10.md](material-release-im7-8552-2026-10-10.md) | Hexcel 8552 / IM7 record from the NCAMP 2019 reports |
 | [material-release-ncamp-5320-1-bt250e-6-2026-10-10.md](material-release-ncamp-5320-1-bt250e-6-2026-10-10.md) | Solvay 5320-1 / T650 and TenCate BT250E-6 / IM7 records from the NCAMP 2017 reports |
 | [material-release-ncamp-tc380-ep2190-2026-10-10.md](material-release-ncamp-tc380-ep2190-2026-10-10.md) | Toray TC380 / T1100GC and Syensqo EP2190 / IMS65 records from the NCAMP 2025 reports |
+| [material-release-nasa-im7-8552-2026-10-10.md](material-release-nasa-im7-8552-2026-10-10.md) | NASA 2023 IM7 / 8552 characterization as a second dataset of the IM7 / 8552 record |
 
 ## Added when the parts exist
 
