@@ -163,5 +163,35 @@
     "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
     "rights": "open-publisher",
     "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+  },
+  "im7-data": {
+    "id": "ncamp-im7-8552-data",
+    "title": "Hexcel 8552 IM7 unidirectional prepreg 190 gsm 35% RC · qualification material property data report",
+    "publisher": "Wichita State University · NIAR / NCAMP",
+    "date": "2019-04-16",
+    "revision": "CAM-RP-2009-015 · Rev B",
+    "page": 28,
+    "role": "Measured property data",
+    "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Qual-CAM-RP-2009-015-Rev-B-Hexcel-8552-IM7-MPDR-04.16.19.pdf",
+    "sha256": "640c215e6999e3429ed410722432174fb02e9157c76ae323380b9f314f211387",
+    "accessed": "2026-10-10",
+    "verification": "Original publisher PDF downloaded; cover, p. 9 distribution statement, Table 2-1 (p. 28) and the individual test summaries on pp. 30-34 and 37 visually checked.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9) and the cover carries Distribution Statement A. Linked, not copied."
+  },
+  "im7-stats": {
+    "id": "ncamp-im7-8552-statistics",
+    "title": "Hexcel 8552 IM7 unidirectional prepreg · qualification statistical analysis report",
+    "publisher": "Wichita State University · NIAR / NCAMP",
+    "date": "2019-04-16",
+    "revision": "NCP-RP-2009-028 · Rev B",
+    "page": 35,
+    "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
+    "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NCP-RP-2009-028-Rev-B-HEXCEL-8552-IM7-Uni-SAR-4-16-2019.pdf",
+    "sha256": "6313ba07cc0205aa0677f0a1f6233952f847fc4f0b093acc98f2d2a1bcd9628d",
+    "accessed": "2026-10-10",
+    "verification": "Original publisher PDF downloaded; cover and Table 3-1 (p. 35) visually checked; distribution sentence on p. 10.",
+    "rights": "open-publisher",
+    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 10) and the cover carries Distribution Statement A. Linked, not copied."
   }
 }

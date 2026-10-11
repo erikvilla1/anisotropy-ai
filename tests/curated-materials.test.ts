@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { materials } from "../lib/materials";
 import { curatedMaterials, archivedMaterialReasons, currentMaterial, exportCitedMaterial, materialDatasets } from "../lib/curated-materials";
-import { qualifiedCarbon, qualifiedGlass } from "../lib/qualification-materials";
+import { qualifiedCarbon, qualifiedCarbonIM7, qualifiedGlass } from "../lib/qualification-materials";
 import { dualUnits } from "../lib/property-units";
 import published from "../lib/published-material-references.json";
 import type { MaterialFeed } from "../lib/material-evidence";
@@ -13,7 +13,7 @@ import { buildCatalog } from "../services/material-monitor/catalog";
 
 test("every original record is explicitly curated or archived; public values have complete citations", () => {
   const active = curatedMaterials.map(m => m.id);
-  assert.equal(active.length, 15);
+  assert.equal(active.length, 16);
   assert.equal(Object.keys(archivedMaterialReasons).length, 13);
   assert.deepEqual([...active.filter(id => materials.some(m => m.id === id)), ...Object.keys(archivedMaterialReasons)].sort(), materials.map(m => m.id).sort());
   for (const m of curatedMaterials.flatMap(materialDatasets)) {
@@ -131,4 +131,37 @@ test("publication monitoring detects document replacement without extracting or 
   t.mock.restoreAll();
   t.mock.method(globalThis, "fetch", async () => new Response("<html>Access challenge</html>"));
   await assert.rejects(retrieveDocument(source), /Expected a PDF/);
+});
+
+test("IM7 / 8552 record uses the measured RTD column of the 2019 report and keeps its sources separate from AS4", () => {
+  const value = (key: string) => qualifiedCarbonIM7.properties.find(p => p.key === key)!;
+  assert.equal(qualifiedCarbonIM7.id, "im7-8552");
+  assert.equal(value("E1t").value, 23.51); // Measured, not normalized 22.99.
+  assert.equal(value("E2t").value, 1.30);
+  assert.equal(value("nu12").value, .316);
+  assert.equal(value("G12").value, .68);
+  assert.equal(value("F1t").value, 371.08);
+  assert.equal(value("F1c-derived").value, 251.13);
+  assert.equal(value("F1c-derived").basis, "Derived lamina mean");
+  assert.equal(value("F12-5pct").value, 13.22);
+  assert.equal(value("SBS").sourcePage, 37);
+  assert.equal(value("tply").value, .0072);
+  assert.equal(qualifiedCarbonIM7.properties.length, 21);
+  assert.equal(qualifiedCarbonIM7.source.sha256, "640c215e6999e3429ed410722432174fb02e9157c76ae323380b9f314f211387");
+  assert.equal(qualifiedCarbonIM7.source.date, "2019-04-16");
+  assert.equal(qualifiedCarbonIM7.source.rights, "open-publisher");
+  assert.match(qualifiedCarbonIM7.source.rightsEvidence, /general distribution to the public/);
+  for (const ref of [qualifiedCarbonIM7.source, ...qualifiedCarbonIM7.supportingReferences!]) {
+    const adapter = sources.find(s => s.id === ref.id)!;
+    assert.equal(adapter.pageUrl, ref.url);
+    assert.equal(adapter.kind, "reference-document");
+  }
+  assert.deepEqual(sources.find(s => s.id === "ncamp-im7-8552-data")!.materials.map(m => m.id), ["im7-8552"]);
+  assert.ok(sources.find(s => s.id === "ncamp-as4-8552-data")!.materials.every(m => m.id === "as4-8552"));
+  const inputs = Object.fromEntries(Object.entries(qualifiedCarbonIM7.elasticInputs!).map(([name, key]) => [name, value(key).value]));
+  assert.ok(1 - inputs.nu12 * (inputs.nu12 * inputs.E2 / inputs.E1) > 0);
+  assert.notEqual(qualifiedCarbon.datasetId, qualifiedCarbonIM7.datasetId);
+  const out = exportCitedMaterial(qualifiedCarbonIM7);
+  assert.ok(out.properties.every(p => p.referenceUrl.startsWith(qualifiedCarbonIM7.source.url)));
+  assert.doesNotMatch(JSON.stringify(out), /22\.99|362\.69|248\.94/); // Normalized values are not in the record.
 });

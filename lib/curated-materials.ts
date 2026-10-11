@@ -1,7 +1,7 @@
 import publishedReferences from "./published-material-references.json";
 import type { MaterialFeed } from "./material-evidence";
 import { dualUnits, propertyDisplayValue } from "./property-units";
-import { qualifiedCarbon, qualifiedGlass, glassSupportingReferences } from "./qualification-materials";
+import { qualifiedCarbon, qualifiedCarbonIM7, qualifiedGlass, glassSupportingReferences } from "./qualification-materials";
 import { modernGlassAdditions, supplierAdditions } from "./material-property-additions";
 import { textbookMaterials } from "./textbook-materials";
 import type { SourceRights } from "./source-rights";
@@ -173,7 +173,7 @@ function supplierMaterial(release: MaterialFeed["releases"][number]): CitedMater
 }
 const baseline = (publishedReferences as MaterialFeed["releases"]).map(supplierMaterial);
 const as4Textbook = textbookMaterials.find(m => m.id === "as4-3501")!;
-export const curatedMaterials: CitedMaterial[] = [as4Textbook, qualifiedCarbon, agp, qualifiedGlass,
+export const curatedMaterials: CitedMaterial[] = [as4Textbook, qualifiedCarbon, qualifiedCarbonIM7, agp, qualifiedGlass,
   baseline.find(m => m.id === "m55j")!, baseline.find(m => m.id === "nomex-aramid")!, aluminum,
   baseline.find(m => m.id === "divinycell-h45")!, baseline.find(m => m.id === "divinycell-h250")!, ...textbookMaterials.filter(m => m.id !== "as4-3501")];
 

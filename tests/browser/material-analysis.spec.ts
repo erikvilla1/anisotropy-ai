@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("curated lookup has dated original references, dual units and no classroom fallback", async ({ page }) => {
   await page.goto("/library");
-  await expect(page.getByText("15 materials", { exact: true })).toBeVisible();
+  await expect(page.getByText("16 materials", { exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "English / imperial", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "SI / metric", exact: true })).toBeVisible();
   await expect(page.locator(".cited-properties")).not.toContainText(/Appendix F|School source|identity needed|unverified/i);
