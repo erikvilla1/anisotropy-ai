@@ -16,6 +16,8 @@ The public physics library now has a card for every operation the engine documen
 | Thermal & moisture effects | Residual ply stress after ΔT | Eq. 8.16, p. 213 | `thermal_ply_surfaces` |
 | Thermal & moisture effects | Laminate expansion coefficients | Eq. 8.33, p. 217 | general solve with ΔT = 1 |
 
+Added on 11 October 2026: "Plate buckling · simply supported" (Whitney 1987, Eqs. 5.72 and 6.38; `navier_buckling`, `ritz_buckling`), making 39 cards and 18 in classical laminate theory.
+
 The existing "Laminate engineering constants" card was rewritten: it now gives the general-laminate form (extensional block of the full ABD inverse, §7.12.3, Eq. 7.84, pp. 183–184) with both Poisson ratios and the shear coupling coefficients, matching `engineering_constants`. Its old text limited the card to B = 0.
 
 Every new card has a plain-text equation (the search basis), a typeset KaTeX form, a units line and a source location. Cards that describe an engine operation name the function in their detail text so a reader can go from the card to `theory.md` and the validation cases.
