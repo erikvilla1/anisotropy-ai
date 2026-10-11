@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { materials } from "../lib/materials";
 import { curatedMaterials, archivedMaterialReasons, currentMaterial, exportCitedMaterial, materialDatasets } from "../lib/curated-materials";
-import { qualifiedCarbon, qualifiedCarbonIM7, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedGlass } from "../lib/qualification-materials";
+import { qualifiedCarbon, qualifiedCarbonIM7, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedAS4PW, qualifiedT650PW, qualifiedTC250, handbookT650976, handbookEA9396, qualifiedGlass } from "../lib/qualification-materials";
 import { dualUnits } from "../lib/property-units";
 import published from "../lib/published-material-references.json";
 import type { MaterialFeed } from "../lib/material-evidence";
@@ -13,7 +13,7 @@ import { buildCatalog } from "../services/material-monitor/catalog";
 
 test("every original record is explicitly curated or archived; public values have complete citations", () => {
   const active = curatedMaterials.map(m => m.id);
-  assert.equal(active.length, 20);
+  assert.equal(active.length, 25);
   assert.equal(Object.keys(archivedMaterialReasons).length, 13);
   assert.deepEqual([...active.filter(id => materials.some(m => m.id === id)), ...Object.keys(archivedMaterialReasons)].sort(), materials.map(m => m.id).sort());
   for (const m of curatedMaterials.flatMap(materialDatasets)) {
@@ -303,4 +303,91 @@ test("NASA 2023 IM7 / 8552 dataset sits beside the NCAMP record with printed ave
   assert.ok(out.properties.every(p => p.referenceUrl.startsWith(m.source.url)));
   assert.ok(out.properties.some(p => p.referenceUrl.endsWith("#page=18")));
   assert.doesNotMatch(JSON.stringify(out), /391[,.]?111|23\.51|251\.13/); // Neither the mis-copied replicate nor NCAMP values.
+});
+
+test("NCAMP plain weave records use the measured RTD column, direct fabric compression and their own monitored reports", () => {
+  const expected = {
+    "as4-8552s-pw": { record: qualifiedAS4PW, E1t: 9.58, E2t: 9.66, nu12: .046, G12: .72, F1t: 111.52, F2t: 109.19, F1c: 122.37, F2c: 113.31, F12offset: 8.11, F12pct: null, SBS: 13.36, tply: .0078, count: 20,
+      sha: "76fdace8746d4f5750373784888b72b6594738ed6b3e3d68009bd73c96efec7a", date: "2011-04-14", normalized: /109\.02|115\.13|9\.36/ },
+    "t650-5320-1-pw": { record: qualifiedT650PW, E1t: 9.990, E2t: 9.931, nu12: .053, G12: .735, F1t: 124.900, F2t: 121.810, F1c: 106.167, F2c: 100.365, F12offset: 8.299, F12pct: 14.650, SBS: 11.035, tply: .0077, count: 19,
+      sha: "edcf939a0b607c3e6c7053e7c0030d0364189b1ba3fa7d9b3839a7d8cb9438b0", date: "2015-10-13", normalized: /121\.838|102\.675|9\.738/ },
+    "hts40-tc250": { record: qualifiedTC250, E1t: 8.66, E2t: 8.58, nu12: .040, G12: .52, F1t: 126.33, F2t: 121.76, F1c: 100.14, F2c: 89.96, F12offset: 5.72, F12pct: 9.87, SBS: 9.36, tply: .0085, count: 20,
+      sha: "ccd1717a7c2b463223fbbef34638350c502aac62e7dd154c2acafd5ef068a8c1", date: "2016-09-26", normalized: /130\.41|101\.26|8\.94|1\.207/ },
+  };
+  for (const [id, e] of Object.entries(expected)) {
+    const m = e.record;
+    const value = (key: string) => m.properties.find(p => p.key === key)!;
+    assert.equal(m.id, id);
+    assert.match(m.architecture, /plain weave/);
+    assert.equal(value("E1t").direction, "Warp");
+    assert.equal(value("E2t").direction, "Fill");
+    for (const [key, v] of Object.entries({ E1t: e.E1t, E2t: e.E2t, nu12: e.nu12, G12: e.G12, F1t: e.F1t, F2t: e.F2t, F1c: e.F1c, F2c: e.F2c, "F12-offset": e.F12offset, SBS: e.SBS, tply: e.tply })) assert.equal(value(key).value, v, key);
+    if (e.F12pct === null) assert.ok(!m.properties.some(p => p.key === "F12-5pct")); else assert.equal(value("F12-5pct").value, e.F12pct);
+    assert.equal(value("F1c").basis, "Measured mean");
+    assert.ok(!m.properties.some(p => p.key === "F1c-derived"));
+    assert.equal(m.properties.length, e.count);
+    assert.ok(m.properties.every(p => /^70°F/.test(p.conditions)));
+    assert.equal(m.source.sha256, e.sha);
+    assert.equal(m.source.date, e.date);
+    assert.equal(m.source.rights, "open-publisher");
+    assert.match(m.source.rightsEvidence, /general distribution to the public/);
+    for (const ref of [m.source, m.supportingReferences![0]]) {
+      const adapter = sources.find(s => s.id === ref.id)!;
+      assert.equal(adapter.pageUrl, ref.url);
+      assert.equal(adapter.kind, "reference-document");
+      assert.deepEqual(adapter.materials.map(x => x.id), [id]);
+      assert.match(ref.sha256!, /^[a-f0-9]{64}$/);
+    }
+    const inputs = Object.fromEntries(Object.entries(m.elasticInputs!).map(([name, key]) => [name, value(key).value]));
+    assert.ok(1 - inputs.nu12 * (inputs.nu12 * inputs.E2 / inputs.E1) > 0);
+    const out = exportCitedMaterial(m);
+    assert.ok(out.properties.every(p => p.referenceUrl.startsWith(m.source.url)));
+    assert.ok(!out.properties.some(p => e.normalized.test(String(p.value)))); // Normalized columns and the unverified density are not values.
+  }
+  assert.ok(!qualifiedTC250.properties.some(p => p.key.startsWith("density"))); // Printed 1.207 g/cm³ is UNVERIFIED and not entered.
+  assert.equal(new Set(curatedMaterials.map(m => m.id)).size, curatedMaterials.length);
+});
+
+test("MIL-HDBK-17-2F historical records are public domain, labelled canceled and keep the handbook data classes as basis", () => {
+  for (const m of [handbookT650976, handbookEA9396]) {
+    assert.match(m.dataset, /historical handbook data/);
+    assert.match(m.conditions, /canceled 26 March 2013/);
+    assert.match(m.conditions, /^72°F/);
+    assert.equal(m.source.rights, "public-domain");
+    assert.equal(m.source.id, "mil-hdbk-17-2f-volume-2");
+    assert.equal(m.source.sha256, "a0368e3214a93ca859a50fc09d7cc3230cd4856d5be3e9ba1e9916f34758ff8b");
+    assert.equal(m.source.date, "2002-06-17");
+    assert.equal(m.supportingReferences![0].id, "mil-hdbk-17-2f-notice-1");
+    assert.equal(m.supportingReferences![0].date, "2013-03-26");
+    for (const p of m.properties) {
+      assert.match(p.evidence, /handbook page \d-\d+ \(PDF page \d+\)/);
+      assert.ok(["Mean", "Interim", "Screening", "B30", "B18", "Reported nominal", "Reported transition temperature"].includes(p.basis), p.basis);
+    }
+    const adapter = sources.find(s => s.id === m.source.id)!;
+    assert.equal(adapter.pageUrl, m.source.url);
+    assert.deepEqual(adapter.materials.map(x => x.id).sort(), ["7781-ea9396", "t650-35-976"]);
+  }
+  const t = (key: string) => handbookT650976.properties.find(p => p.key === key)!;
+  assert.equal(t("F1t").value, 236); // Measured, not the normalized 231.
+  assert.equal(t("F1t").basis, "B30");
+  assert.equal(t("E1t").value, 22.5);
+  assert.equal(t("E2t").basis, "Screening");
+  assert.equal(t("G12").value, .745);
+  assert.equal(t("F12").value, 14.9);
+  assert.equal(t("F1t").sourcePage, 301);
+  assert.equal(handbookT650976.elasticInputs, undefined); // No Poisson ratio printed.
+  assert.ok(!handbookT650976.properties.some(p => /^(nu12|E1c|F1c)/.test(p.key)));
+  assert.equal(handbookT650976.properties.length, 12);
+  const g = (key: string) => handbookEA9396.properties.find(p => p.key === key)!;
+  assert.equal(g("E1t").value, 3.62); // Measured, not the normalized 3.39.
+  assert.equal(g("nu12").value, .115);
+  assert.equal(g("nu12").basis, "Screening");
+  assert.equal(g("F1c").value, 49.6);
+  assert.equal(g("G12").value, .758);
+  assert.equal(g("F12").sourcePage, 437);
+  assert.match(handbookEA9396.conditions, /documentation presently required were not supplied/);
+  assert.equal(handbookEA9396.properties.length, 15);
+  assert.notEqual(handbookEA9396.id, qualifiedGlass.id); // Separate from the 7781 / E-765 prepreg record.
+  const out = exportCitedMaterial(handbookT650976);
+  assert.ok(!out.properties.some(p => [231, 202, 200].includes(p.value as number))); // Normalized and B-basis values stay in the handbook.
 });
