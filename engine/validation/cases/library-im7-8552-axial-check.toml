@@ -1,0 +1,19 @@
+title = "Analytical check of a library material: a zero-degree IM7/8552 ply at 100 MPa"
+source = "Constructed analytical check, not a printed problem: eps_x = sigma_x/E1, eps_y = -nu12*sigma_x/E1, Ex = E1. Material values come from the library dataset ncamp-im7-8552-2019-rtd-measured-v1 (NCAMP CAM-RP-2009-015 Rev B, measured RTD column: E1 = 23.51 Msi, nu12 = 0.316, ply thickness 0.0072 in). The applied stress is a specified practice input."
+units = "SI"
+
+[material]
+library = "im7-8552"  # the primary dataset; ply thickness comes from the dataset
+
+[laminate]
+layup = [0]
+
+[applied]
+stress = [100.0, 0.0, 0.0]
+
+[expected]
+tolerance = 1e-9
+strain_global = [0.0006169193438120341, -0.00019494651264460278, 0.0]
+Ex = 162.09574396238816  # GPa, 23.51 Msi converted with the exact inch and pound-force
+Ey = 8.96318448111887
+Gxy = 4.688434959354486

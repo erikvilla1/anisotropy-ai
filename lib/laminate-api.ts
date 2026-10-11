@@ -1,15 +1,24 @@
 import example from "../api/examples/zero-degree-tension.json";
+import { findLibraryOption } from "./material-library-options";
 
 export const loadNames = ["Nx", "Ny", "Nxy", "Mx", "My", "Mxy"] as const;
 export type LoadName = (typeof loadNames)[number];
 export type CalculatorForm = {
-  material: { E1_GPa: string; E2_GPa: string; G12_GPa: string; nu12: string; source_reference: string };
+  // library: "" for manually typed values, otherwise a library option value (materialId::datasetId).
+  material: { library: string; E1_GPa: string; E2_GPa: string; G12_GPa: string; nu12: string; source_reference: string };
   plies: { angle_deg: string; thickness_mm: string }[];
   loads: Record<LoadName, string>;
 };
+export type ExplicitMaterial = { E1_pa: number; E2_pa: number; G12_pa: number; nu12: number; source_reference: string };
+export type LibraryMaterialRef = { library_id: string; dataset_id: string };
+export type MaterialProvenance = {
+  material_id: string; name: string; dataset_id: string; dataset: string; record_revision: string | null; rights: string; citation: string;
+  E1_pa: number; E2_pa: number; G12_pa: number; nu12: number; ply_thickness_m: number | null; not_provided: string[];
+  values: { role: string; key: string; value: number; unit: string; source_value: number; source_unit: string; basis: string; page: number; printed_page: number | null; reference_url: string }[];
+};
 export type AnalysisRequest = {
   unit_system: "SI_BASE";
-  material: { E1_pa: number; E2_pa: number; G12_pa: number; nu12: number; source_reference: string };
+  material: ExplicitMaterial | LibraryMaterialRef;
   plies: { angle_deg: number; thickness_m: number }[];
   loads: Record<LoadName, number>;
 };
@@ -21,6 +30,7 @@ export type AnalysisResult = {
   D_N_m: number[][];
   midplane_strain: number[];
   curvature_per_m: number[];
+  material_provenance?: MaterialProvenance | null;
 };
 export type FieldErrors = Record<string, string>;
 
@@ -28,6 +38,7 @@ export type FieldErrors = Record<string, string>;
 export function exampleForm(): CalculatorForm {
   return {
     material: {
+      library: "",
       E1_GPa: String(example.material.E1_pa / 1e9),
       E2_GPa: String(example.material.E2_pa / 1e9),
       G12_GPa: String(example.material.G12_pa / 1e9),
@@ -50,18 +61,24 @@ export function buildAnalysisRequest(form: CalculatorForm): { request: AnalysisR
     else if (positive && converted <= 0) errors[field] = "Enter a value greater than zero.";
     return converted;
   }
+  const library = form.material.library ? findLibraryOption(form.material.library) : undefined;
+  if (form.material.library && !library) errors["material.library"] = "Choose a library material or enter values manually.";
   const source = form.material.source_reference.trim();
-  if (!source) errors["material.source_reference"] = "Enter the source of these material values.";
+  if (!library && !source) errors["material.source_reference"] = "Enter the source of these material values.";
   if (!form.plies.length) errors.plies = "Add at least one ply.";
-  const request: AnalysisRequest = {
-    unit_system: "SI_BASE",
-    material: {
+  // A library choice sends the dataset reference; the engine resolves and cites it (ADR-0020).
+  const material: AnalysisRequest["material"] = library
+    ? { library_id: library.materialId, dataset_id: library.datasetId }
+    : {
       E1_pa: number(form.material.E1_GPa, "material.E1_GPa", 1e9, true),
       E2_pa: number(form.material.E2_GPa, "material.E2_GPa", 1e9, true),
       G12_pa: number(form.material.G12_GPa, "material.G12_GPa", 1e9, true),
       nu12: number(form.material.nu12, "material.nu12"),
       source_reference: source,
-    },
+    };
+  const request: AnalysisRequest = {
+    unit_system: "SI_BASE",
+    material,
     plies: form.plies.map((ply, index) => ({
       angle_deg: number(ply.angle_deg, `plies.${index}.angle_deg`),
       thickness_m: number(ply.thickness_mm, `plies.${index}.thickness_mm`, 1e-3, true),
@@ -82,7 +99,9 @@ export function apiFieldErrors(payload: unknown): FieldErrors {
   for (const error of payload.detail) {
     if (!isObject(error) || !Array.isArray(error.loc) || typeof error.msg !== "string") continue;
     const key = error.loc.filter((part) => part !== "body").join(".")
+      .replace(/^material\.(explicit|library)(?=\.|$)/, "material") // discriminated-union tag
       .replace(/^material\.(E1|E2|G12)_pa$/, "material.$1_GPa")
+      .replace(/^material\.(library_id|dataset_id)$/, "material.library")
       .replace(/^(plies\.\d+)\.thickness_m$/, "$1.thickness_mm");
     fields[key] = error.msg;
   }

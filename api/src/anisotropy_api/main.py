@@ -9,10 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from anisotropy_engine.laminate import Ply, abd_matrices
+from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, PrescribedCurvatureRequest,
+    AnalysisRequest, AnalysisResponse, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest,
     PrescribedCurvatureResponse, VerificationResponse,
 )
 
@@ -31,7 +32,7 @@ app.add_middleware(
         "http://localhost:3000", "http://127.0.0.1:3000",
         "http://localhost:3001", "http://127.0.0.1:3001",
     ],
-    allow_methods=["POST"],
+    allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
     allow_credentials=False,
 )
@@ -48,10 +49,35 @@ async def invalid_request(_request: Request, exc: RequestValidationError) -> JSO
     })
 
 
+def resolve_material(choice) -> tuple[object, MaterialProvenance | None]:
+    """Explicit constants are used as given; a library choice is resolved and cited (ADR-0020)."""
+    if isinstance(choice, LibraryMaterialInput):
+        resolved = choice.resolve()
+        return resolved.lamina, MaterialProvenance.of(resolved)
+    return choice.to_engine(), None
+
+
+@app.get("/v1/materials")
+def list_materials() -> list[dict]:
+    """Every library dataset, and whether it has the elastic inputs an analysis needs."""
+    return list_datasets()
+
+
+@app.get("/v1/materials/{material_id}", response_model=MaterialProvenance)
+def material_detail(material_id: str, dataset: str | None = None) -> MaterialProvenance:
+    """The SI values the engine would use for a dataset, each with its page."""
+    try:
+        return MaterialProvenance.of(library_material(material_id, dataset))
+    except ValueError as error:
+        message = str(error)
+        raise HTTPException(status_code=404 if message.startswith("unknown library material") or "has no dataset" in message else 422,
+                            detail=message) from None
+
+
 @app.post("/v1/laminates/response", response_model=AnalysisResponse)
 def analyze_laminate(problem: AnalysisRequest) -> AnalysisResponse:
     """Validate a problem, call existing stiffness/response functions, and serialize their output."""
-    material = problem.material.to_engine()
+    material, provenance = resolve_material(problem.material)
     plies = [Ply(material=material, **ply.model_dump()) for ply in problem.plies]
     try:
         # Floating-point overflow/invalid operations must become errors, never JSON null/NaN.
@@ -66,7 +92,7 @@ def analyze_laminate(problem: AnalysisRequest) -> AnalysisResponse:
             detail="These inputs do not produce a finite, solvable laminate response. Check values and units.",
         ) from exc
 
-    return AnalysisResponse(
+    return AnalysisResponse(material_provenance=provenance, 
         engine_version=version("anisotropy-engine"),
         inputs=problem,
         A_N_per_m=A.tolist(), B_N=B.tolist(), D_N_m=D.tolist(),
@@ -83,7 +109,7 @@ def analyze_prescribed_curvature(problem: PrescribedCurvatureRequest) -> Prescri
     Unknown moments must be omitted, not sent as zero or null. All calculation
     and numerical verification happen in the engine.
     """
-    material = problem.material.to_engine()
+    material = resolve_material(problem.material)[0]
     plies = [Ply(material=material, **ply.model_dump()) for ply in problem.plies]
     try:
         result = prescribed_curvature_response(
@@ -96,7 +122,7 @@ def analyze_prescribed_curvature(problem: PrescribedCurvatureRequest) -> Prescri
             detail="These inputs do not produce a finite, numerically verified prescribed-curvature response. Check values, units and conditioning.",
         ) from exc
     check = result.verification
-    return PrescribedCurvatureResponse(
+    return PrescribedCurvatureResponse(material_provenance=resolve_material(problem.material)[1], 
         analysis_type="prescribed_curvature", engine_version=version("anisotropy-engine"), inputs=problem,
         A_N_per_m=result.A.tolist(), B_N=result.B.tolist(), D_N_m=result.D.tolist(),
         midplane_strain=result.midplane_strain.tolist(), moments_N_m_per_m=result.moments.tolist(),

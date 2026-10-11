@@ -68,6 +68,8 @@ def named(text, name):
 
 
 for name, table in TABLES.items():
+    if "library" in table:
+        continue  # Library values are cited data, not typed inputs; the screen below is for typing mistakes.
     for key in ("E1", "E2", "G12"):
         value = table[key] * U["modulus"][0]
         # This is an input-error screen inherited from the example, not a material validity criterion.
@@ -90,6 +92,13 @@ print(f"Case: {args.case.name}")
 if case.get("title"):
     print(f"Title: {case['title']}")
 print(f"Units: {UNITS}. Moduli: {U['modulus'][1]}; stress: {U['stress'][1]}; thickness: {U['length'][1]}.")
+for name, item in solution.library.items():
+    print(f"\nLibrary material {named(item.name, name)}: dataset {item.dataset_id} (record {item.record_revision})")
+    print(f"   {item.citation}")
+    for v in item.values:
+        print(f"   {v.role:>6} = {v.source_value:g} {v.source_unit}  (page {v.page}; {v.basis})")
+    if item.not_provided:
+        print("   not provided by this dataset: " + "; ".join(item.not_provided))
 if ONE_MATERIAL:
     print(f"Layup (bottom face first): {case['laminate']['layup']}")
 else:

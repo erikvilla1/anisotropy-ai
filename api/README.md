@@ -4,6 +4,10 @@ This local API accepts one material, a bottom-first ply stack and six explicit l
 
 Chunk 3 adds `POST /v1/laminates/prescribed-curvature`: known forces and explicit curvature in, required moments and a numerical forward check out. Use `examples/flat-cross-ply.json`; see the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md). The original forward endpoint below keeps its existing contract.
 
+## Library materials (chunk 4)
+
+`GET /v1/materials` lists every dataset of the cited material library; `GET /v1/materials/im7-8552` (optionally `?dataset=...`) returns the SI values the engine would use with the page of each. Either analysis endpoint accepts `"material": {"library_id": "im7-8552", "dataset_id": null}` in place of explicit constants, and the response then carries `material_provenance`. See [the loader note](../docs/material-loader-2026-10-10.md) and ADR-0020.
+
 ## Run it
 
 From the repository root, in PowerShell:
