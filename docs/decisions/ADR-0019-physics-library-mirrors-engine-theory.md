@@ -1,6 +1,6 @@
 # ADR-0019: The physics library presents every equation the engine implements, each naming its engine function and textbook location
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-10
 - Decided by: Erik Villa (founder) | Drafted by: Claude Code
 - Related: `lib/physics.ts`, `lib/physics-foundations.ts`, `lib/physics-latex.ts`, `engine/docs/theory.md`, `tests/physics-reference.test.ts`, `docs/physics-library-completion-2026-10-10.md`
