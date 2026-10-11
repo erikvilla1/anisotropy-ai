@@ -40,8 +40,11 @@ The equations behind each module, and the function that computes each one, are i
 | `thermal.py` | Rotated expansion coefficients, thermal force and moment resultants, the response to loads plus a temperature change, and residual ply stresses |
 | `engineering.py` | Effective laminate constants Ex, Ey, Gxy, Poisson ratios and shear coupling, the moduli a D3039 test measures |
 | `units.py` | SI, US (Msi, ksi) and psi unit systems for entering and reporting values |
+| `library.py` | Loads a cited dataset of the website's material library (`data/material-library.json`) as a `Lamina` in SI with the page of every value used (ADR-0020) |
 | `cases.py` | Reads cases (one material, or several named materials per ply), solves them with `solve_case`, and compares expected values with engine results |
 | `course_excel.py` | Reads the course Excel input template into a case |
+
+For a one-page guide to writing a case and reading the printout, see [docs/engine-cheat-sheet.md](../docs/engine-cheat-sheet.md).
 
 ## Validation and examples
 

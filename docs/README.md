@@ -80,6 +80,8 @@ Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [web
 | [material-property-expansion-2026-10-02.md](material-property-expansion-2026-10-02.md) | Material property expansion |
 | [physics-foundations-2026-10-02.md](physics-foundations-2026-10-02.md) | Physics reference foundation for the website library |
 | [physics-library-completion-2026-10-10.md](physics-library-completion-2026-10-10.md) | Physics library completion: a card for every engine operation (ADR-0019) |
+| [material-loader-2026-10-10.md](material-loader-2026-10-10.md) | Material loader: the engine, API and calculator take cited library datasets by name (ADR-0020) |
+| [engine-cheat-sheet.md](engine-cheat-sheet.md) | How to put a problem into the engine and read the answer: units, applied forms, failure search, expected keys |
 | [material-research-public-sources-2026-10-10.md](material-research-public-sources-2026-10-10.md) | Public data sources the website may show: NCAMP reports, MIL-HDBK-17F, NASA, open-access papers, datasheets |
 | [material-release-im7-8552-2026-10-10.md](material-release-im7-8552-2026-10-10.md) | Hexcel 8552 / IM7 record from the NCAMP 2019 reports |
 | [material-release-ncamp-5320-1-bt250e-6-2026-10-10.md](material-release-ncamp-5320-1-bt250e-6-2026-10-10.md) | Solvay 5320-1 / T650 and TenCate BT250E-6 / IM7 records from the NCAMP 2017 reports |

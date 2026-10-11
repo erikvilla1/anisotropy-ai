@@ -59,6 +59,8 @@ Per-ply results can list every row, or only the plies an answer key reports, as 
 9 = [66040.0, 15970.0, -13320.0]
 ```
 
+A `[material]` or `[materials.<name>]` table may name a library dataset instead of typing values: `library = "im7-8552"` with an optional `dataset = "..."`. The engine then takes E1, E2, G12, nu12, the strengths, the expansion coefficients and (for a one-material case) the ply thickness from the cited dataset, and the calculator prints the citation and page of every value (ADR-0020).
+
 Shear strains are engineering shear. Layups are listed from the bottom face up. Units follow `src/anisotropy_engine/units.py`: compliances are in 1/GPa (`SI`), 1/Msi (`US`) or 1/psi (`psi`), so multiply a value in m^2/N by 1e9 for an `SI` case; `a`, `b` and `d` use the case's force and length units, for example in/lb, 1/lb and 1/(lb*in).
 
 Case inputs reject unknown fields, partial strength sets and incomplete vectors. `loads`, `strains` and `forces_curvature` require all six components, including explicit zeros. Other applied vectors require three finite components. The calculator accepts this same format; `expected` is optional for calculation and required for an automated comparison. Tsai-Wu runs only when all strengths and an explicit `f12_star` are present.

@@ -7,6 +7,9 @@ source = "Where the answer comes from: book and problem number, or course, homew
 units = "SI"  # "SI" (GPa, MPa, mm, N/m, N*m/m), "US" (Msi, ksi, in, lb/in) or "psi"
 
 [material]
+# Or name a cited library dataset instead of typing values (see docs/material-loader-2026-10-10.md):
+#   library = "im7-8552"   with an optional   dataset = "nasa-tm-20230001560-im7-8552-rt-measured-v1"
+# Then ply_thickness below may be omitted when the dataset records a ply thickness.
 E1 = 0.0
 E2 = 0.0
 G12 = 0.0

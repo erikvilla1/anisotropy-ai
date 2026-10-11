@@ -485,4 +485,5 @@ Failure ratios with a temperature change hold the residual stress fixed and scal
 - Progressive ply failure and ultimate laminate strength
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
-- Maximum strain and Hashin failure criteria
+- Maximum strain, Tsai-Hill and Hashin failure criteria (maximum strain is what the course's failure strain allowables are for)
+- Buckling: no plate dimensions, edge conditions or stability equation. The specially orthotropic simply supported plate under in-plane compression has a closed form from D and would be the first step

@@ -107,3 +107,22 @@ test("calculator fits a mobile viewport and remains usable", async ({ page }) =>
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
 });
+
+test("picking a library material sends the dataset reference and shows the engine's cited values", async ({ page }) => {
+  await page.goto("/calculator");
+  await page.getByLabel("Library material", { exact: true }).selectOption("im7-8552::ncamp-im7-8552-2019-rtd-measured-v1");
+  await expect(page.getByLabel("E₁ (GPa)", { exact: true })).toHaveValue("162.096");
+  await expect(page.getByLabel("Ply 1 thickness (mm)", { exact: true })).toHaveValue("0.18288");
+  const posted = page.waitForRequest((r) => r.url().endsWith("/v1/laminates/response") && r.method() === "POST");
+  const answered = page.waitForResponse((r) => r.url().endsWith("/v1/laminates/response") && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Analyze laminate" }).click();
+  expect((await posted).postDataJSON().material).toEqual({ library_id: "im7-8552", dataset_id: "ncamp-im7-8552-2019-rtd-measured-v1" });
+  const result = await (await answered).json();
+  expect(result.material_provenance.dataset_id).toBe("ncamp-im7-8552-2019-rtd-measured-v1");
+  // Uniaxial check with the engine's own SI values: eps_x = (Nx/h)/E1.
+  expect(result.midplane_strain[0]).toBeCloseTo(25000 / result.material_provenance.ply_thickness_m / result.material_provenance.E1_pa, 12);
+  await expect(page.getByTestId("material-provenance")).toContainText("CAM-RP-2009-015");
+  await expect(page.getByTestId("material-provenance")).toContainText("E1 = 23.51 Msi");
+  await page.getByLabel("E₁ (GPa)", { exact: true }).fill("150");
+  await expect(page.getByLabel("Library material", { exact: true })).toHaveValue("");
+});
