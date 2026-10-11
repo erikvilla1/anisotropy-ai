@@ -14,6 +14,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- Library completion: three NCAMP plain weave records (8552S / AS4, 5320-1 / T650, TC250 / HTS40) with measured warp, fill, shear and physical entries, and two public-domain historical records from the canceled MIL-HDBK-17-2F (T650-35 / 976 tape and 7781 / EA 9396 wet lay-up fabric) sourced from the official DLA ASSIST copy with its cancellation notice, each value keeping the handbook data class as its basis. 25 materials in the public library; the public-sources research is closed out.
 - NASA 2023 IM7 / 8552 characterization (NASA/TM-20230001560) as a second dataset of the IM7 / 8552 record, selectable beside the NCAMP data: 24 room-temperature entries including through-thickness moduli and strengths, printed psi values kept as source values, publisher fingerprint, rights evidence and a monitor adapter. The material count is unchanged.
 - Toray TC380 / T1100GC and Syensqo EP2190 / IMS65 unidirectional records from the NCAMP 2025 qualification reports: 20 measured room-temperature entries each. EP2190 was tested at ambient condition and its compression measured directly; the record and its keys say so.
 - Solvay 5320-1 / T650 and TenCate BT250E-6 / IM7 unidirectional records from the NCAMP 2017 qualification reports: 19 measured room-temperature entries each with page references, publisher-confirmed fingerprints, rights evidence and one-record-per-report monitor adapters.
