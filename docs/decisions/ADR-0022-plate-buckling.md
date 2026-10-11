@@ -16,7 +16,7 @@ The engine solved the in-plane and bending response of a flat laminate but had n
 3. **General Ritz with beam functions for any edge condition** (Whitney Section 6.6): clamped and free edges too. More integrals, more validation, and no problem on hand that needs it yet.
 4. **Finite elements**: the deferred research phase.
 
-For an unsymmetric laminate (B ≠ 0): refuse, since the bending equation alone does not govern (Whitney Chapter 7 treats specific classes).
+For an unsymmetric laminate (B not zero): refuse, since the bending equation alone does not govern (Whitney Chapter 7 treats specific classes).
 
 ## Decision
 
@@ -24,7 +24,7 @@ Option 2. `plate_buckling` uses the Navier form when the laminate is specially o
 
 ## Why (evidence)
 
-- `test_buckling.py` reproduces Whitney's four worked results for the orthotropic plate with D11/D22 = 10 and (D12 + 2D66)/D22 = 1: 13π²D22/a² (square, uniaxial), (2√10 + 2)π²D22/b² at a/b = 10^¼ (absolute minimum), 6.5π²D22/a² (equal biaxial), 26π²D22/a² (transverse tension at half the compression).
+- `test_buckling.py` reproduces Whitney's four worked results for the orthotropic plate with D11/D22 = 10 and (D12 + 2D66)/D22 = 1: 13pi^2D22/a^2 (square, uniaxial), (2sqrt(10) + 2)pi^2D22/b^2 at a/b = 10^(1/4) (absolute minimum), 6.5pi^2D22/a^2 (equal biaxial), 26pi^2D22/a^2 (transverse tension at half the compression).
 - The Ritz series with D16 = D26 = 0 reproduces the closed form to 10 significant figures; with coupling it lies below the orthotropic estimate, as it must since the orthotropic mode is in its trial space; it decreases monotonically with more terms; mirroring the layup leaves compression unchanged and reverses the shear direction.
 - `constructed-cross-ply-plate-buckling.toml`: a hand-computed D matrix and critical load for a [0/90/90/0] square plate.
 - No course answer key for buckling has been checked yet; the first one the founder supplies becomes a validation case. Until then the anisotropic branch rests on the self-consistency tests above and on Whitney's description of the method.

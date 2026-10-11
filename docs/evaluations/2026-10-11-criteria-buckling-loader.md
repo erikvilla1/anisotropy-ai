@@ -32,7 +32,7 @@
 
 Three problems were put through the calculator from a blank template by the founder, with the engineer assisting. They are evidence of usability as much as of correctness:
 
-1. A [45/−45/90/0₂]s laminate under loads and cooling, first-ply failure: the course key's 25 values agreed, including Nx at failure 568.25 lb/in, ply 3, bottom face, matrix tension. Two input mistakes surfaced and were fixed in the file (unit suffixes on numbers; the "s" layup shorthand); the key's A matrix had to be entered in millions of lb/in.
+1. A [45/−45/90/02]s laminate under loads and cooling, first-ply failure: the course key's 25 values agreed, including Nx at failure 568.25 lb/in, ply 3, bottom face, matrix tension. Two input mistakes surfaced and were fixed in the file (unit suffixes on numbers; the "s" layup shorthand); the key's A matrix had to be entered in millions of lb/in.
 2. A [0/±45/90]s quasi-isotropic laminate: A11 = A22 and A66 = (A11 − A12)/2 as theory requires; B was pure roundoff and now prints as zeros.
 3. The same laminate against another tool's strains: the engine reproduced that tool's numbers exactly once the loads were read as N/mm rather than N/m. No engine fault; a units reading, now in the cheat sheet.
 
