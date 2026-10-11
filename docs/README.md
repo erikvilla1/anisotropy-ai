@@ -70,6 +70,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0021](decisions/ADR-0021-maximum-strain-and-tsai-hill.md) | Maximum strain and Tsai-Hill join the failure criteria; strain limits are explicit or derived only by stated choice |
 | [0022](decisions/ADR-0022-plate-buckling.md) | Plate buckling: Navier closed form for specially orthotropic laminates, Ritz sine series otherwise, simply supported edges |
 | [0023](decisions/ADR-0023-agent-skills-in-the-docs-vault.md) | Agent skills live in `docs/agents/skills`, and `docs/` is the Obsidian vault (proposed) |
+| [0024](decisions/ADR-0024-api-exposes-the-case-format.md) | The API exposes the engine's case format as one endpoint instead of one contract per operation |
 
 New decisions use the [template](decisions/_template.md).
 
@@ -87,6 +88,7 @@ Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [web
 | [physics-foundations-2026-10-02.md](physics-foundations-2026-10-02.md) | Physics reference foundation for the website library |
 | [physics-library-completion-2026-10-10.md](physics-library-completion-2026-10-10.md) | Physics library completion: a card for every engine operation (ADR-0019) |
 | [material-loader-2026-10-10.md](material-loader-2026-10-10.md) | Material loader: the engine, API and calculator take cited library datasets by name (ADR-0020) |
+| [api-case-endpoint-2026-10-11.md](api-case-endpoint-2026-10-11.md) | The API solves whole cases: every engine operation over HTTP in one call (ADR-0024) |
 | [engine-cheat-sheet.md](engine-cheat-sheet.md) | How to put a problem into the engine and read the answer: units, applied forms, failure search, expected keys |
 | [material-research-public-sources-2026-10-10.md](material-research-public-sources-2026-10-10.md) | Public data sources the website may show: NCAMP reports, MIL-HDBK-17F, NASA, open-access papers, datasheets |
 | [material-release-im7-8552-2026-10-10.md](material-release-im7-8552-2026-10-10.md) | Hexcel 8552 / IM7 record from the NCAMP 2019 reports |
