@@ -1,4 +1,4 @@
-# Component card: local laminate API | version 0.1 | updated 2026-10-03
+# Component card: local laminate API | version 0.1 | updated 2026-10-11
 
 ## Purpose and intended use
 
@@ -9,6 +9,10 @@ Expose the existing engine's stiffness and deformation calculations to local HTT
 `POST /v1/laminates/response`: explicit `SI_BASE` units, one elastic material and source-reference text, bottom-first ply stack and all six load resultants. Returns A/B/D, mid-plane engineering strains, curvatures, accepted inputs and engine package version. Unknown fields and invalid/non-finite values fail with 422.
 
 `POST /v1/laminates/prescribed-curvature`: explicit `SI_BASE`, `bottom_to_top`, material/source, plies, three forces and three prescribed curvatures. Returns A/B/D, required applied moments, strain and the engine's forward verification with residuals/tolerances. Supplied moments are rejected. Numerical failure returns 422. [Chunk 3 walkthrough](../walkthroughs/chunk-3-constrained-analysis.md).
+
+`POST /v1/cases/solve`: a whole problem in the engine's case format, as `{"case": {...}}` or `{"toml": "..."}`; returns every result the case determines in the case's units, the first-ply criteria evaluated, library provenance per material and the answer-key comparison when the case has `[expected]`. Engine validation messages return as 422. Covers mixed conditions, temperature change, several materials, all four failure criteria and plate buckling (ADR-0024; [note](../api-case-endpoint-2026-10-11.md)).
+
+`GET /v1/materials` and `GET /v1/materials/{material_id}?dataset=`: the library datasets and the SI values the engine would use, each with its page. Both analysis endpoints also accept `material: {"library_id": "...", "dataset_id": null}` in place of explicit constants and then return `material_provenance` (ADR-0020).
 
 ## Dependencies and connections
 
