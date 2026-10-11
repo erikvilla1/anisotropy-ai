@@ -33,6 +33,7 @@ F1c = 1200
 F2t = 40
 F2c = 200
 F6 = 70
+strain_limits = "from-strengths"   # maximum strain limits = strength / modulus; or give eps1t, eps1c, eps2t, eps2c, gamma12
 alpha1 = -0.3e-6    # expansion only with delta_T
 alpha2 = 28e-6
 
@@ -91,7 +92,7 @@ The engine finds R such that a ply first fails at `fixed + R × variable`, with 
 - "By what factor can these loads grow?" `variable` = the applied loads, `fixed` = zeros. R < 1 means already failed. Omitting `[failure]` does the same.
 - "Find Nx at failure while Mx and ΔT stay": `fixed = [0, 0, 0, Mx, 0, 0]`, `variable = [1, 0.5, 0, 0, 0, 0]` for Ny = Nx/2; then R is Nx itself.
 
-R is a strength ratio, not a failure index. For maximum stress FI = 1/R; for Tsai-Wu the two are not reciprocals. Tsai-Wu needs `f12_star` (−0.5 is the textbook assumption, Eq. 6.40).
+R is a strength ratio, not a failure index. For maximum stress, maximum strain and Tsai-Hill FI = 1/R (Tsai-Hill: FI = 1/R²); for Tsai-Wu the two are not reciprocals. Four criteria run when their inputs exist: maximum stress and Tsai-Hill with the five strengths; maximum strain with five strain limits (`eps1t … gamma12` as fractions) or `strain_limits = "from-strengths"` for the course's strength-over-modulus allowables; Tsai-Wu with `f12_star` (−0.5 is the textbook assumption, Eq. 6.40).
 
 ## Reading the printout, in order
 
@@ -107,7 +108,7 @@ R is a strength ratio, not a failure index. For maximum stress FI = 1/R; for Tsa
 
 ## Expected: keys you can check
 
-`Q11 Q12 Q22 Q66`, `S11 … S66`, `Qbar11 … Qbar66`, `Sbar11 … Sbar66` (one angle); `A11 A12 A16 A22 A26 A66` and the same for `B`, `D`, `a`, `b`, `d`; `strain_global`, `curvature`, `strain_local`, `stress_global`, `stress_local`; `ply_strain_global`, `ply_stress_local` and the `_bottom` / `_top` faces, as a full list or `[expected.ply_stress_local_top]` with `9 = [s1, s2, t12]`; `N_T`, `M_T`; `Nx … Mxy`, `sigma_x …`, `eps_x …`, `kappa_x …`; `Ex Ey Gxy nu_xy nu_yx`; `fpf_ratio_max_stress`, `fpf_ratio_tsai_wu`, `fpf_ply_…`, `fpf_z_…`, `fpf_forces_…`, `fpf_moments_…`.
+`Q11 Q12 Q22 Q66`, `S11 … S66`, `Qbar11 … Qbar66`, `Sbar11 … Sbar66` (one angle); `A11 A12 A16 A22 A26 A66` and the same for `B`, `D`, `a`, `b`, `d`; `strain_global`, `curvature`, `strain_local`, `stress_global`, `stress_local`; `ply_strain_global`, `ply_stress_local` and the `_bottom` / `_top` faces, as a full list or `[expected.ply_stress_local_top]` with `9 = [s1, s2, t12]`; `N_T`, `M_T`; `Nx … Mxy`, `sigma_x …`, `eps_x …`, `kappa_x …`; `Ex Ey Gxy nu_xy nu_yx`; `fpf_ratio_max_stress`, `fpf_ratio_max_strain`, `fpf_ratio_tsai_hill`, `fpf_ratio_tsai_wu`, `fpf_ply_…`, `fpf_z_…`, `fpf_forces_…`, `fpf_moments_…`.
 
 ## What the engine does not do
 

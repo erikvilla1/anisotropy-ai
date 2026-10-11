@@ -1,0 +1,2 @@
+# Generated library export: keep LF so the drift test compares content on every platform.
+engine/src/anisotropy_engine/data/material-library.json text eol=lf
