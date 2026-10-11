@@ -85,3 +85,19 @@ test("carbon qualification exports its complete elastic set and supporting speci
   await page.setViewportSize({ width:390, height:844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test("IM7 / 8552 offers the NASA 2023 dataset beside the NCAMP record without changing the material count", async ({ page }) => {
+  await page.goto("/library");
+  await expect(page.getByText("20 materials", { exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Search materials" }).fill("IM7 / 8552");
+  await expect(page.getByRole("heading", { name: "IM7 / 8552", exact: true })).toBeVisible();
+  await expect(page.locator('[data-property="E1t"]')).toContainText("23.51 Msi");
+  await page.getByRole("combobox", { name: "Property dataset" }).selectOption("nasa-tm-20230001560-im7-8552-rt-measured-v1");
+  await expect(page.locator(".dataset-summary")).toContainText("quasi-static");
+  await expect(page.locator('[data-property="E1t"]')).toContainText("23.1051 Msi");
+  await expect(page.locator('[data-property="G23"]')).toContainText("0.414695 Msi");
+  await expect(page.locator('[data-property="F1c"]')).toContainText("116.744 ksi");
+  await expect(page.locator('[data-property="F1c-derived"]')).toHaveCount(0);
+  await expect(page.locator('[data-property="E1t"] a')).toHaveAttribute("href", /ntrs\.nasa\.gov.+TM-20230001560\.pdf#page=18$/);
+  await expect(page.locator(".property-reference")).toContainText("February 2023");
+});

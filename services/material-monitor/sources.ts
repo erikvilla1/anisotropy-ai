@@ -83,7 +83,7 @@ sources.push(
     documentPattern: /$a/, identity: [], intervalHours: 24, kind: "reference-document" },
 );
 
-// NCAMP qualification reports for records other than AS4/8552 and 7781/E-765. Registered before
+// NCAMP qualification reports and the NASA IM7 / 8552 report for records other than AS4/8552 and 7781/E-765. Registered before
 // the loop below so each report attaches to its own record (the IM7 reports also contain "8552").
 const ncampRecords: Record<string, { id: string; name: string }> = {
   "im7-data": { id: "im7-8552", name: "IM7 / 8552" }, "im7-stats": { id: "im7-8552", name: "IM7 / 8552" },
@@ -91,6 +91,7 @@ const ncampRecords: Record<string, { id: string; name: string }> = {
   "bt250-data": { id: "im7-bt250e-6", name: "IM7 / BT250E-6" }, "bt250-stats": { id: "im7-bt250e-6", name: "IM7 / BT250E-6" },
   "tc380-data": { id: "t1100gc-tc380", name: "T1100GC / TC380" }, "tc380-stats": { id: "t1100gc-tc380", name: "T1100GC / TC380" },
   "ep2190-data": { id: "ims65-ep2190", name: "IMS65 / EP2190" }, "ep2190-stats": { id: "ims65-ep2190", name: "IMS65 / EP2190" },
+  "im7-nasa-2023": { id: "im7-8552", name: "IM7 / 8552" }, // NASA/TM-20230001560, second IM7 / 8552 dataset
 };
 for (const [key, material] of Object.entries(ncampRecords)) {
   const reference = qualificationReferences[key as keyof typeof qualificationReferences];
