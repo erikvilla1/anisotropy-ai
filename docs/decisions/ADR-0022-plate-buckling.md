@@ -1,6 +1,6 @@
 # ADR-0022: Plate buckling by the Navier closed form for specially orthotropic laminates and a Ritz sine series otherwise, simply supported edges only
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-11
 - Decided by: Erik Villa (founder) | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/buckling.py`, `engine/tests/test_buckling.py`, `engine/validation/cases/constructed-cross-ply-plate-buckling.toml`, `engine/docs/theory.md` §8, [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0004](ADR-0004-sign-and-stacking-conventions.md)
