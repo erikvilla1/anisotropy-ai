@@ -49,6 +49,14 @@ delta_T = -100
 fixed = [0, 0, 0, 0, 0, 0]
 variable = [800, 200, 100, 0, 0, 0]
 
+[plate]             # optional: buckling of the laminate as a simply supported plate (symmetric laminates only)
+a = 300
+b = 200
+edges = "simply-supported"
+[buckling]
+loads = [-1, 0, 0]  # reference [Nx, Ny, Nxy], compression negative; the result is the factor on them
+terms = 7           # Ritz terms per direction; needed when D16, D26 or Nxy are nonzero; raise it until the result stops changing
+
 [expected]          # optional: the answer you trust; the run ends with agrees / DIFFERS per value
 tolerance = 0.005
 A11 = 57.995
@@ -104,15 +112,16 @@ R is a strength ratio, not a failure index. For maximum stress, maximum strain a
 6. Ply strains and stresses, bottom and top face of every ply, in laminate axes and in fibre axes. With ΔT, stresses use mechanical strain = total strain − free thermal strain.
 7. Engineering constants Ex, Ey, Gxy, ν, η.
 8. Strength ratios per ply face and first-ply failure (ply, face, z, mode, loads at failure), when strengths are given.
+8b. Plate buckling (critical factor, mode or series terms, orthotropic estimate, critical resultants), when `[plate]` is given.
 9. `Answer key vs engine`, when `[expected]` is given.
 
 ## Expected: keys you can check
 
-`Q11 Q12 Q22 Q66`, `S11 … S66`, `Qbar11 … Qbar66`, `Sbar11 … Sbar66` (one angle); `A11 A12 A16 A22 A26 A66` and the same for `B`, `D`, `a`, `b`, `d`; `strain_global`, `curvature`, `strain_local`, `stress_global`, `stress_local`; `ply_strain_global`, `ply_stress_local` and the `_bottom` / `_top` faces, as a full list or `[expected.ply_stress_local_top]` with `9 = [s1, s2, t12]`; `N_T`, `M_T`; `Nx … Mxy`, `sigma_x …`, `eps_x …`, `kappa_x …`; `Ex Ey Gxy nu_xy nu_yx`; `fpf_ratio_max_stress`, `fpf_ratio_max_strain`, `fpf_ratio_tsai_hill`, `fpf_ratio_tsai_wu`, `fpf_ply_…`, `fpf_z_…`, `fpf_forces_…`, `fpf_moments_…`.
+`Q11 Q12 Q22 Q66`, `S11 … S66`, `Qbar11 … Qbar66`, `Sbar11 … Sbar66` (one angle); `A11 A12 A16 A22 A26 A66` and the same for `B`, `D`, `a`, `b`, `d`; `strain_global`, `curvature`, `strain_local`, `stress_global`, `stress_local`; `ply_strain_global`, `ply_stress_local` and the `_bottom` / `_top` faces, as a full list or `[expected.ply_stress_local_top]` with `9 = [s1, s2, t12]`; `N_T`, `M_T`; `Nx … Mxy`, `sigma_x …`, `eps_x …`, `kappa_x …`; `Ex Ey Gxy nu_xy nu_yx`; `fpf_ratio_max_stress`, `fpf_ratio_max_strain`, `fpf_ratio_tsai_hill`, `fpf_ratio_tsai_wu`, `fpf_ply_…`, `fpf_z_…`, `fpf_forces_…`, `fpf_moments_…`; `buckling_factor`, `buckling_loads`, `buckling_mode`, `buckling_orthotropic_factor`.
 
 ## What the engine does not do
 
-Maximum strain, Tsai-Hill and Hashin criteria; buckling; moisture; progressive failure after the first ply; through-thickness and free-edge stresses; holes; fatigue. A problem that asks for one of these is a gap, not an input mistake: tell the team.
+Maximum strain, Tsai-Hill and Hashin criteria; buckling with clamped or free edges, of unsymmetric laminates, or beyond the critical load; moisture; progressive failure after the first ply; through-thickness and free-edge stresses; holes; fatigue. A problem that asks for one of these is a gap, not an input mistake: tell the team.
 
 ## Other ways in
 

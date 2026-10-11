@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from anisotropy_engine.cases import compare, failure_loads, first_ply_failures, load_case, solve_case
+from anisotropy_engine.cases import buckling_result, compare, failure_loads, first_ply_failures, load_case, solve_case
 from anisotropy_engine.engineering import engineering_constants
 from anisotropy_engine.lamina import reduced_stiffness
 from anisotropy_engine.laminate import abd_matrices, ply_interfaces
@@ -229,6 +229,22 @@ else:
               f"({g.angle_deg:g} deg), {g.mode}, {face} face at z = {show(g.z_m, 'length'):g} {U['length'][1]}")
         print(f"   Loads at failure N [{U['N'][1]}]: " + "".join(f"{v:14.6g}" for v in show(fpf.failure_loads.as_vector()[:3], "N")))
         print(f"   Moments at failure M [{U['M'][1]}]: " + "".join(f"{v:14.6g}" for v in show(fpf.failure_loads.as_vector()[3:], "M")))
+
+buckling = buckling_result(case, solution)
+if buckling is not None:
+    plate = case["plate"]
+    print(f"\nPlate buckling: {plate['a']:g} x {plate['b']:g} {U['length'][1]}, all edges simply supported, "
+          f"reference loads [Nx, Ny, Nxy] = {case['buckling']['loads']} {U['N'][1]} (compression negative)")
+    if buckling.method == "navier":
+        print(f"   Specially orthotropic closed form (Whitney Eq. 5.72): critical factor = {buckling.load_factor:.6g}, "
+              f"mode m = {buckling.mode[0]}, n = {buckling.mode[1]}")
+    else:
+        print(f"   Ritz double sine series, {buckling.terms} terms per direction (Whitney Eq. 6.38): critical factor = {buckling.load_factor:.6g}; "
+              "an upper bound, so increase terms until it stops changing")
+        if buckling.orthotropic_factor is not None:
+            print(f"   Orthotropic estimate ignoring D16 and D26: {buckling.orthotropic_factor:.6g} "
+                  f"({100 * (buckling.orthotropic_factor / buckling.load_factor - 1):+.1f}% against the series)")
+    print(f"   Critical resultants [{U['N'][1]}]: " + "".join(f"{v:14.6g}" for v in show(buckling.critical_loads, "N")))
 
 if "expected" in case:
     comparisons, problems = compare(case)

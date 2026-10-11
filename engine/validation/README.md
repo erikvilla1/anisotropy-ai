@@ -51,6 +51,7 @@ The calculator also reads the course's Excel input template directly: `uv run py
 | `fpf_ratio_max_stress`, `fpf_ratio_max_strain`, `fpf_ratio_tsai_hill`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio R on the variable loads (maximum strain needs strain limits; Tsai-Wu needs `f12_star`) |
 | `fpf_forces_...`, `fpf_moments_...` | Loads at first-ply failure, fixed + R * variable (suffix `max_stress`, `max_strain`, `tsai_hill` or `tsai_wu`) |
 | `fpf_ply_...`, `fpf_z_...` | Ply number (1 at the bottom) and z of the face where the first ply fails |
+| `buckling_factor`, `buckling_loads`, `buckling_mode`, `buckling_orthotropic_factor` | Plate buckling with `[plate]` and `[buckling]`: factor on the reference resultants, critical [Nx, Ny, Nxy], (m, n) half-waves for the closed form, and the orthotropic estimate beside a Ritz result |
 
 Per-ply results can list every row, or only the plies an answer key reports, as a table keyed by ply number with ply 1 at the bottom:
 
@@ -58,6 +59,8 @@ Per-ply results can list every row, or only the plies an answer key reports, as 
 [expected.ply_stress_local_top]
 9 = [66040.0, 15970.0, -13320.0]
 ```
+
+A case may add `[plate]` (`a`, `b` in the length unit, `edges = "simply-supported"`) and `[buckling]` (`loads = [Nx, Ny, Nxy]` reference resultants, compression negative, and `terms` for the Ritz series when the laminate has D16, D26 or the loads include shear) to get the plate buckling load (ADR-0022).
 
 A `[material]` or `[materials.<name>]` table may name a library dataset instead of typing values: `library = "im7-8552"` with an optional `dataset = "..."`. The engine then takes E1, E2, G12, nu12, the strengths, the expansion coefficients and (for a one-material case) the ply thickness from the cited dataset, and the calculator prints the citation and page of every value (ADR-0020).
 

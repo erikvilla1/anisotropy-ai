@@ -37,6 +37,10 @@ const nasaReference = { title: "NASA RP-1351 · Basic Mechanics of Laminated Com
 const nasaMethod = (name: string, equation: string, detail: string, location: string, units: string): Method => ({
   name, equation, detail, units, reference: { ...nasaReference, location },
 });
+const whitneyReference = { title: "Whitney · Structural Analysis of Laminated Anisotropic Plates · Technomic, 1987 (ISBN 0-87762-518-2)", url: "https://www.worldcat.org/isbn/0877625182" };
+const whitneyMethod = (name: string, equation: string, detail: string, location: string, units: string): Method => ({
+  name, equation, detail, units, reference: { ...whitneyReference, location },
+});
 
 // Operations the engine implements beyond the foundation cards (ADR-0019). Each names its engine function.
 export const laminateExtensions: Method[] = [
@@ -52,6 +56,10 @@ export const laminateExtensions: Method[] = [
     "F + Fᵀ = K d,  d = [ε⁰; κ],  K = [[A, B], [B, D]]\nK_LL d_L = F_L + Fᵀ_L − K_LD d_D\nF_D = K_DL d_L + K_DD d_D − Fᵀ_D",
     "For each of the six load–deformation pairs exactly one quantity is known. Split the rows into known-load (L) and known-deformation (D) sets, solve the first system for the unknown deformations, then recover the unknown resultants. All loads known is the forward solve; forces plus curvatures is the prescribed-curvature case. Fᵀ is the thermal resultant, zero without a temperature change (mixed_response; ADR-0016).",
     "Section III.D, Eqs. 48–51, constitutive relation; row partitioning per engine theory §4", laminateUnits + " A force given as an average stress is σ = N/h."),
+  whitneyMethod("Plate buckling · simply supported",
+    "Specially orthotropic (D₁₆ = D₂₆ = 0), αₘ = mπ/a, βₙ = nπ/b:\nλₘₙ = [D₁₁αₘ⁴ + 2(D₁₂ + 2D₆₆)αₘ²βₙ² + D₂₂βₙ⁴] / (−Nₓαₘ² − N_yβₙ²)\nλ_cr = min over m, n ≥ 1\nGeneral symmetric laminate: K w = λ G w with a double sine series",
+    "Critical load factor on reference resultants (tension positive, so compression is negative) for a midplane-symmetric laminate on four simply supported edges. The closed form is exact when D₁₆ = D₂₆ = 0 and there is no shear; otherwise a Ritz double sine series handles the coupling and shear, converging from above as terms are added, with the orthotropic value shown beside it because it is nonconservative for angle-ply plates. Unsymmetric laminates, other edge conditions and postbuckling are not covered (navier_buckling, ritz_buckling, plate_buckling; ADR-0022).",
+    "Section 5.5, Eq. 5.72 (closed form); Sections 6.5–6.6, Eq. 6.38 (series)", "D in N·m, a and b in m, N in N/m; λ dimensionless; m, n integers."),
 ];
 
 export const failureExtensions: Method[] = [

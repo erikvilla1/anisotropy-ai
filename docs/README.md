@@ -66,6 +66,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0018](decisions/ADR-0018-source-rights-classes.md) | Every cited source carries a rights class that decides what the website shows |
 | [0019](decisions/ADR-0019-physics-library-mirrors-engine-theory.md) | The physics library presents every equation the engine implements, naming its function and source |
 | [0020](decisions/ADR-0020-material-library-as-engine-input.md) | The engine loads materials from the website's cited library through one exported JSON file |
+| [0022](decisions/ADR-0022-plate-buckling.md) | Plate buckling: Navier closed form for specially orthotropic laminates, Ritz sine series otherwise, simply supported edges |
 | [0021](decisions/ADR-0021-maximum-strain-and-tsai-hill.md) | Maximum strain and Tsai-Hill join the failure criteria; strain limits are explicit or derived only by stated choice |
 
 New decisions use the [template](decisions/_template.md).
