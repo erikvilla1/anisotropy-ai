@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("physics foundations show source locations, units and explicitly deferred research", async ({ page }) => {
   await page.goto("/library");
   await page.getByRole("tab", { name: "Physics & references" }).click();
-  await expect(page.locator(".physics-intro")).toContainText("29 reference cards");
+  await expect(page.locator(".physics-intro")).toContainText("38 reference cards");
   await page.getByRole("button", { name: /Constituents & material estimates/ }).click();
   await page.getByRole("textbox", { name: "Search this physics topic" }).fill("Halpin");
   const card = page.locator(".method-entry").filter({ hasText: "Halpin–Tsai estimate" });
@@ -14,6 +14,15 @@ test("physics foundations show source locations, units and explicitly deferred r
   await page.getByRole("button", { name: /Ply failure criteria/ }).click();
   await page.locator("summary").filter({ hasText: "Maximum strain" }).click();
   await expect(page.locator(".method-entry[open]")).toContainText("missing compression or shear");
+  await page.locator("summary").filter({ hasText: "Strength ratio with fixed & variable loads" }).click();
+  await expect(page.locator(".method-entry[open]").filter({ hasText: "fixed & variable" })).toContainText("Eqs. 9.26–9.28, p. 256");
+  await expect(page.locator(".method-entry[open]").filter({ hasText: "fixed & variable" }).locator(".physics-equation .katex")).not.toHaveCount(0);
+  await page.getByRole("button", { name: /Classical Laminate Theory/ }).click();
+  await page.getByRole("textbox", { name: "Search this physics topic" }).fill("Mixed load");
+  await expect(page.locator(".method-entry").filter({ hasText: "Mixed load & deformation conditions" })).toContainText("ADR-0016");
+  await page.getByRole("button", { name: /Thermal & moisture effects/ }).click();
+  await page.getByRole("textbox", { name: "Search this physics topic" }).fill("Residual");
+  await expect(page.locator(".method-entry").filter({ hasText: "Residual ply stress" })).toContainText("Eq. 8.16, p. 213");
   await page.locator("summary").filter({ hasText: "Worked examples & equation checks" }).click();
   await expect(page.locator(".physics-review-panel[open]")).toContainText("154.199 GPa");
   await page.locator("summary").filter({ hasText: "Later research:" }).click();
