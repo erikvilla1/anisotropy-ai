@@ -45,7 +45,7 @@ test("laminate coupling, thickness scaling and constituent limits are consistent
   assert.throws(() => stack([0], 0), /positive/);
 });
 test("every current formula has a location and unit convention; future solver workflows are separate", () => {
-  assert.equal(physicsTopics.flatMap(t => t.methods).length, 38);
+  assert.equal(physicsTopics.flatMap(t => t.methods).length, 39);
   assert.ok(!physicsTopics.some(t => t.id === "fea" || t.id === "optimization"));
   for (const topic of physicsTopics) for (const method of topic.methods) {
     assert.ok(method.reference?.location && method.units);
@@ -63,7 +63,7 @@ test("every engine theory section has a card that names its function, cites a lo
     abd_compliance: "Laminate compliance · ABD inverse", prescribed_curvature_response: "Known forces & prescribed curvature", mixed_response: "Mixed load & deformation conditions",
     engineering_constants: "Laminate engineering constants", first_ply_failure: "First-ply failure load", tsai_wu_ratio_combined: "Strength ratio with fixed & variable loads",
     thermal_resultants: "Thermal resultants · uniform ΔT", thermal_ply_surfaces: "Residual ply stress after ΔT",
-    max_strain_ratio: "Maximum strain", tsai_hill_ratio: "Tsai–Hill",
+    max_strain_ratio: "Maximum strain", tsai_hill_ratio: "Tsai–Hill", ritz_buckling: "Plate buckling · simply supported",
   };
   for (const [fn, name] of Object.entries(byFunction)) assert.match(card(name).detail, new RegExp(fn), `${name} should name ${fn}`);
   assert.match(card("Laminate compliance · ABD inverse").reference!.location, /7\.27–7\.28, p\. 166/);
@@ -74,5 +74,6 @@ test("every engine theory section has a card that names its function, cites a lo
   assert.match(card("Laminate engineering constants").detail, /full ABD inverse/);
   assert.equal(physicsTopics.find(t => t.id === "thermal")!.methods.length, 6);
   assert.equal(physicsTopics.find(t => t.id === "failure")!.methods.length, 9);
-  assert.equal(physicsTopics.find(t => t.id === "clt")!.methods.length, 17);
+  assert.equal(physicsTopics.find(t => t.id === "clt")!.methods.length, 18);
+  assert.match(card("Plate buckling · simply supported").reference!.title, /Whitney/);
 });
