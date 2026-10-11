@@ -14,6 +14,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- Solvay 5320-1 / T650 and TenCate BT250E-6 / IM7 unidirectional records from the NCAMP 2017 qualification reports: 19 measured room-temperature entries each with page references, publisher-confirmed fingerprints, rights evidence and one-record-per-report monitor adapters.
 - Hexcel 8552 / IM7 unidirectional record from the NCAMP 2019 qualification reports: 21 measured room-temperature entries with page references, fingerprints, rights evidence and monitor adapters; the first entry from the public-sources research.
 - Research record of public material data sources the website may show (`docs/material-research-public-sources-2026-10-10.md`): 20 NCAMP-qualified systems with room-temperature means for 12 of them, four systems from the public-domain MIL-HDBK-17-2F, and NASA, open-access and manufacturer sources, each with its rights evidence. No values entered yet.
 - Source rights classes: every cited source records whether it is public domain, open publisher data, a licensed reference or user supplied, with evidence. One policy table decides what the website shows for each class; the library displays the class beside each dataset and explains the classes on the references panel. Tests check that every public dataset has a class, that nothing copied is served and that no PDF exists under public assets (ADR-0018).

@@ -83,12 +83,17 @@ sources.push(
     documentPattern: /$a/, identity: [], intervalHours: 24, kind: "reference-document" },
 );
 
-// Hexcel 8552 / IM7 qualification reports (2019). Registered before the loop below so they
-// attach to the IM7 record, not the AS4 one that shares the "8552" name.
-for (const key of ["im7-data", "im7-stats"] as const) {
-  const reference = qualificationReferences[key];
+// NCAMP qualification reports for records other than AS4/8552 and 7781/E-765. Registered before
+// the loop below so each report attaches to its own record (the IM7 reports also contain "8552").
+const ncampRecords: Record<string, { id: string; name: string }> = {
+  "im7-data": { id: "im7-8552", name: "IM7 / 8552" }, "im7-stats": { id: "im7-8552", name: "IM7 / 8552" },
+  "t650-data": { id: "t650-5320-1", name: "T650 / 5320-1" }, "t650-stats": { id: "t650-5320-1", name: "T650 / 5320-1" },
+  "bt250-data": { id: "im7-bt250e-6", name: "IM7 / BT250E-6" }, "bt250-stats": { id: "im7-bt250e-6", name: "IM7 / BT250E-6" },
+};
+for (const [key, material] of Object.entries(ncampRecords)) {
+  const reference = qualificationReferences[key as keyof typeof qualificationReferences];
   sources.push({ id: reference.id, name: reference.title, publisher: reference.publisher,
-    materials: [{ id: "im7-8552", name: "IM7 / 8552" }], pageUrl: reference.url, hosts: [new URL(reference.url).hostname],
+    materials: [material], pageUrl: reference.url, hosts: [new URL(reference.url).hostname],
     documentPattern: /$a/, identity: [], intervalHours: 24, kind: "reference-document", maxDocumentBytes: 20_000_000 });
 }
 
