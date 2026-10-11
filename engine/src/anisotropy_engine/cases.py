@@ -12,7 +12,7 @@ plies, each with its own angle, material and thickness. Plies are listed bottom 
 
 import math
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +21,7 @@ from ._validation import finite_vector
 from .engineering import engineering_constants
 from .failure import FirstPlyFailure, first_ply_failure_combined
 from .lamina import Lamina, Strengths, ThermalExpansion, reduced_compliance, reduced_stiffness
+from .library import LibraryMaterial, library_material
 from .laminate import Ply, abd_matrices
 from .response import (
     Loads, PlySurface, PrescribedCurvatureResult, abd_compliance, abd_matrix, midplane_response, ply_surfaces,
@@ -74,6 +75,12 @@ def _is_number(value) -> bool:
 
 
 def _check_material(table: dict, name: str) -> None:
+    if isinstance(table, dict) and "library" in table:
+        # A library dataset supplies the values; typed values cannot be mixed in.
+        _fields(table, name, {"library"}, {"dataset"})
+        if not isinstance(table["library"], str) or not isinstance(table.get("dataset", ""), str):
+            raise ValueError(f"{name}: library and dataset must be a material id and a dataset id")
+        return
     _fields(table, name, set(ELASTIC_NAMES), set(STRENGTH_NAMES) | set(ALPHA_NAMES))
     supplied = set(STRENGTH_NAMES) & table.keys()
     if supplied and supplied != set(STRENGTH_NAMES):
@@ -81,6 +88,26 @@ def _check_material(table: dict, name: str) -> None:
     alphas = set(ALPHA_NAMES) & table.keys()
     if alphas and alphas != set(ALPHA_NAMES):
         raise ValueError(f"{name} needs both alpha1 and alpha2 or neither")
+
+
+def _resolve_library(tables: dict) -> dict[str, LibraryMaterial]:
+    """Load every library material a case names, so its contents can be checked like typed ones."""
+    resolved = {}
+    for name, table in tables.items():
+        if "library" in table:
+            try:
+                resolved[name] = library_material(table["library"], table.get("dataset"))
+            except ValueError as error:
+                where = "[material]" if name == "material" else f"[materials.{name}]"
+                raise ValueError(f"{where}: {error}") from None
+    return resolved
+
+
+def _supplies(tables: dict, resolved: dict, name: str, what: str) -> bool:
+    if name in resolved:
+        lamina = resolved[name].lamina
+        return (lamina.thermal_expansion if what == "alpha" else lamina.strengths) is not None
+    return ("alpha1" if what == "alpha" else "F1t") in tables[name]
 
 
 def validate_case_inputs(case: dict) -> None:
@@ -94,7 +121,9 @@ def validate_case_inputs(case: dict) -> None:
     laminate = case["laminate"]
     if "material" in case:
         _check_material(case["material"], "material")
-        _fields(laminate, "laminate", {"layup", "ply_thickness"}, set())
+        _fields(laminate, "laminate", {"layup"}, {"ply_thickness"})
+        if "ply_thickness" not in laminate and "library" not in case["material"]:
+            raise ValueError("laminate.ply_thickness is required unless [material] names a library dataset that records one")
         angles = np.asarray(laminate["layup"], dtype=float)
         if angles.ndim != 1 or not angles.size or not np.all(np.isfinite(angles)):
             raise ValueError("laminate.layup must be a nonempty vector of finite angles")
@@ -119,6 +148,9 @@ def validate_case_inputs(case: dict) -> None:
                 raise ValueError(f"laminate.plies ply {number}: material {ply['material']!r} is not in [materials]")
         tables = case["materials"]
         used = list(dict.fromkeys(ply["material"] for ply in plies))
+    resolved = _resolve_library(tables)
+    if "material" in case and "ply_thickness" not in laminate and resolved["material"].ply_thickness_m is None:
+        raise ValueError(f"library dataset {resolved['material'].dataset_id!r} has no ply thickness; give laminate.ply_thickness")
     applied = case["applied"]
     _fields(applied, "applied", set(), set(APPLIED_KINDS) | {"delta_T"})
     kinds = [kind for kind in APPLIED_KINDS if kind in applied]
@@ -140,7 +172,7 @@ def validate_case_inputs(case: dict) -> None:
     if "delta_T" in applied:
         if not _is_number(applied["delta_T"]):
             raise ValueError("applied.delta_T must be a finite number (a temperature change)")
-        missing = [name for name in used if "alpha1" not in tables[name]]
+        missing = [name for name in used if not _supplies(tables, resolved, name, "alpha")]
         if missing:
             where = "[material]" if "material" in case else f"materials {missing}"
             raise ValueError(f"applied.delta_T needs alpha1 and alpha2 in {where}")
@@ -150,7 +182,7 @@ def validate_case_inputs(case: dict) -> None:
             finite_vector(case["failure"][name], f"failure.{name}", 6)
         if not np.any(case["failure"]["variable"]):
             raise ValueError("failure.variable needs at least one nonzero load to scale")
-        no_strengths = [name for name in used if "F1t" not in tables[name]]
+        no_strengths = [name for name in used if not _supplies(tables, resolved, name, "strengths")]
         if no_strengths:
             raise ValueError(f"[failure] needs all five strengths for {no_strengths}")
     if "f12_star" in case and not -1 < case["f12_star"] < 1:
@@ -179,9 +211,12 @@ class CaseSolution:
     surfaces: list[PlySurface]  # bottom then top face of every ply
     constrained: PrescribedCurvatureResult | None  # set for forces_curvature
     mixed: MixedResult | None  # set for mixed
+    library: dict[str, LibraryMaterial] = field(default_factory=dict)  # library datasets by material name
 
 
-def _lamina(table: dict, si) -> Lamina:
+def _lamina(table: dict, si, resolved: dict[str, LibraryMaterial] | None = None, name: str = "material") -> Lamina:
+    if resolved and name in resolved:
+        return resolved[name].lamina
     strengths = expansion = None
     if "F1t" in table:
         strengths = Strengths(**{name: float(si(table[name], "stress")) for name in STRENGTH_NAMES})
@@ -200,12 +235,15 @@ def solve_case(case: dict) -> CaseSolution:
     def si(value, kind):
         return np.asarray(value, dtype=float) * units[kind][0]
 
+    tables = {"material": case["material"]} if "material" in case else case["materials"]
+    resolved = _resolve_library(tables)
     if "material" in case:
-        materials = {"material": _lamina(case["material"], si)}
-        thickness = float(si(case["laminate"]["ply_thickness"], "length"))
+        materials = {"material": _lamina(case["material"], si, resolved)}
+        thickness = (float(si(case["laminate"]["ply_thickness"], "length")) if "ply_thickness" in case["laminate"]
+                     else resolved["material"].ply_thickness_m)
         layers = [(angle, "material", thickness) for angle in case["laminate"]["layup"]]
     else:
-        materials = {name: _lamina(table, si) for name, table in case["materials"].items()}
+        materials = {name: _lamina(table, si, resolved, name) for name, table in case["materials"].items()}
         layers = [(ply["angle"], ply["material"], float(si(ply["thickness"], "length")))
                   for ply in case["laminate"]["plies"]]
     plies = [Ply(material=materials[name], angle_deg=angle, thickness_m=t) for angle, name, t in layers]
@@ -258,7 +296,7 @@ def solve_case(case: dict) -> CaseSolution:
     surfaces = (ply_surfaces(plies, eps0, kappa) if delta_T is None
                 else thermal_ply_surfaces(plies, eps0, kappa, delta_T))
     return CaseSolution(case["units"], materials, ply_materials, plies, kind, delta_T, N_T, M_T,
-                        loads, eps0, kappa, surfaces, constrained, mixed)
+                        loads, eps0, kappa, surfaces, constrained, mixed, resolved)
 
 
 def failure_loads(case: dict, solution: CaseSolution) -> tuple[Loads, Loads] | None:

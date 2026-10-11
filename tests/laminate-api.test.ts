@@ -1,4 +1,5 @@
 import test from "node:test";
+import { findLibraryOption, libraryOptions } from "../lib/material-library-options";
 import assert from "node:assert/strict";
 import example from "../api/examples/zero-degree-tension.json";
 import { apiFieldErrors, buildAnalysisRequest, exampleForm, readAnalysisResult } from "../lib/laminate-api";
@@ -66,4 +67,21 @@ test("malformed matrices, non-finite results and mismatched echoed inputs are re
     { ...result, inputs: { ...request, loads: { ...request.loads, Nx: 42 } } }]) {
     assert.throws(() => readAnalysisResult(invalid, request), /unexpected result/);
   }
+});
+
+test("a library selection sends the dataset reference, not the rounded display values", () => {
+  const im7 = findLibraryOption("im7-8552::ncamp-im7-8552-2019-rtd-measured-v1")!;
+  assert.equal(im7.E1_GPa, "162.096");
+  assert.equal(im7.thickness_mm, "0.18288");
+  assert.match(im7.citation, /CAM-RP-2009-015/);
+  assert.ok(libraryOptions.every(o => o.materialId && o.datasetId && Number(o.E1_GPa) > 0 && Number(o.nu12) >= 0));
+  assert.ok(!libraryOptions.some(o => o.materialId === "t650-35-976")); // No elastic input set.
+  const form = exampleForm();
+  form.material = { ...form.material, library: im7.value, E1_GPa: im7.E1_GPa, source_reference: "" };
+  const parsed = buildAnalysisRequest(form);
+  assert.deepEqual(parsed.request!.material, { library_id: "im7-8552", dataset_id: "ncamp-im7-8552-2019-rtd-measured-v1" });
+  form.material.library = "not-a-dataset";
+  assert.ok(buildAnalysisRequest(form).errors!["material.library"]);
+  assert.deepEqual(apiFieldErrors({ detail: [{ loc: ["body", "material", "library", "library_id"], msg: "unknown library material" }] }), { "material.library": "unknown library material" });
+  assert.deepEqual(apiFieldErrors({ detail: [{ loc: ["body", "material", "explicit"], msg: "Invalid compliance" }, { loc: ["body", "material", "explicit", "E1_pa"], msg: "Bad" }] }), { material: "Invalid compliance", "material.E1_GPa": "Bad" });
 });

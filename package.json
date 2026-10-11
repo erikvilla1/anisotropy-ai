@@ -11,6 +11,7 @@
     "start": "serve out -l 3000",
     "preview": "serve out -l 3001",
     "typecheck": "tsc --noEmit",
+    "export:library": "tsx scripts/export-material-library.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
     "test:calculator": "playwright test --config playwright.calculator.config.ts",
