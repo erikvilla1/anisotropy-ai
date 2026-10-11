@@ -1,0 +1,28 @@
+title = "Analytical check: a zero-degree ply under biaxial stress by maximum stress, maximum strain and Tsai-Hill"
+source = "Constructed analytical check, not a printed problem. Maximum stress: R = F1t/sigma1 = 2.28. Maximum strain with limits = strength/modulus (stated choice): eps1 = (sigma1 - nu12 sigma2)/E1, so R = F1t/(sigma1 - nu12 sigma2) = 2280/(1000 - 0.27*20) = 2.292378; the transverse limit gives 57/(20 - nu21*1000) = 52.7 and does not govern. Tsai-Hill (Daniel & Ishai Eq. 6.16, X = F1t, Y = F2t): FI = (1000/2280)^2 - 1000*20/2280^2 + (20/57)^2 = 0.311637, R = 1/sqrt(FI) = 1.791337. Material: Daniel & Ishai (2006) Table A.4, AS4/3501-6, p. 377."
+units = "SI"
+
+[material]
+E1 = 147.0
+E2 = 10.3
+G12 = 7.0
+nu12 = 0.27
+F1t = 2280.0
+F1c = 1725.0
+F2t = 57.0
+F2c = 228.0
+F6 = 76.0
+strain_limits = "from-strengths"
+
+[laminate]
+layup = [0]
+ply_thickness = 0.25
+
+[applied]
+stress = [1000.0, 20.0, 0.0]
+
+[expected]
+tolerance = 1e-6
+fpf_ratio_max_stress = 2.28
+fpf_ratio_max_strain = 2.2923788458
+fpf_ratio_tsai_hill = 1.7913371790

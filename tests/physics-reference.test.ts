@@ -63,6 +63,7 @@ test("every engine theory section has a card that names its function, cites a lo
     abd_compliance: "Laminate compliance · ABD inverse", prescribed_curvature_response: "Known forces & prescribed curvature", mixed_response: "Mixed load & deformation conditions",
     engineering_constants: "Laminate engineering constants", first_ply_failure: "First-ply failure load", tsai_wu_ratio_combined: "Strength ratio with fixed & variable loads",
     thermal_resultants: "Thermal resultants · uniform ΔT", thermal_ply_surfaces: "Residual ply stress after ΔT",
+    max_strain_ratio: "Maximum strain", tsai_hill_ratio: "Tsai–Hill",
   };
   for (const [fn, name] of Object.entries(byFunction)) assert.match(card(name).detail, new RegExp(fn), `${name} should name ${fn}`);
   assert.match(card("Laminate compliance · ABD inverse").reference!.location, /7\.27–7\.28, p\. 166/);

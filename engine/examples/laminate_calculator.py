@@ -44,21 +44,25 @@ TABLES = {"material": case["material"]} if ONE_MATERIAL else case["materials"]
 F12_STAR = case.get("f12_star")  # No unrecorded assumption for Tsai-Wu.
 
 
-def tidy(values):
-    """Print rounding noise such as 1e-17 as 0. Display only; calculations are unchanged."""
+def tidy(values, reference=None):
+    """Print rounding noise such as 1e-17 as 0. Display only; calculations are unchanged.
+
+    The noise threshold is relative to the largest entry, or to a stated reference when the
+    whole array may be noise, as B is for a symmetric laminate.
+    """
     values = np.array(values, dtype=float)
-    scale = np.abs(values).max(initial=0.0)
+    scale = np.abs(values).max(initial=0.0) if reference is None else reference
     values[np.abs(values) <= 1e-9 * scale] = 0.0
     return values + 0.0  # turns -0.0 into 0.0
 
 
-def show(value_si, kind):
-    return tidy(np.asarray(value_si) / U[kind][0])
+def show(value_si, kind, reference_si=None):
+    return tidy(np.asarray(value_si) / U[kind][0], None if reference_si is None else reference_si / U[kind][0])
 
 
-def print_matrix(title, matrix_si, kind):
+def print_matrix(title, matrix_si, kind, reference_si=None):
     print(f"\n{title}  [{U[kind][1]}]")
-    for row in show(matrix_si, kind):
+    for row in show(matrix_si, kind, reference_si):
         print("   " + "".join(f"{v:14.6g}" for v in row))
 
 
@@ -127,10 +131,10 @@ print(f"\nPly interfaces z, bottom to top  [{U['length'][1]}]")
 print("   " + "".join(f"{v:12.6g}" for v in show(z, "length")))
 
 A, B, D = abd_matrices(plies)
-print_matrix("A", A, "A")
-print_matrix("B", B, "B")
-print_matrix("D", D, "D")
 h = z[-1] - z[0]
+print_matrix("A", A, "A")
+print_matrix("B", B, "B", reference_si=np.abs(A).max() * h)  # B of a symmetric stack is pure roundoff
+print_matrix("D", D, "D")
 
 if dT is not None:
     print(f"\nThermal expansion of each ply angle [{U['alpha'][1]}]: alpha_x, alpha_y, alpha_xy"
@@ -204,16 +208,20 @@ else:
             print("\nFailure ratios below scale all N and M together, given and solved; they do not hold "
                   "prescribed deformations fixed.")
     failures = first_ply_failures(case, solution)
-    print("\nMaximum-stress strength ratios on each ply face")
+    labels = {"max_strain": "max strain", "tsai_hill": "Tsai-Hill", "tsai_wu": "Tsai-Wu"}
+    print("\nStrength ratios on each ply face: maximum stress (governing mode), then "
+          + ", ".join(labels[c] for c in failures if c != "max_stress"))
+    if "max_strain" not in failures:
+        print("Maximum strain skipped: give eps1t, eps1c, eps2t, eps2c and gamma12, or state strain_limits = \"from-strengths\".")
     if F12_STAR is None:
         print("Tsai-Wu skipped: the case does not supply f12_star.")
     else:
-        print(f"Tsai-Wu also evaluated with explicit f12* = {F12_STAR:g}.")
+        print(f"Tsai-Wu evaluated with explicit f12* = {F12_STAR:g}.")
     for k, check in enumerate(failures["max_stress"].checks):
         face = "bottom" if check.z_m == z[check.ply_index] else "top"
-        tw = f"   Tsai-Wu {failures['tsai_wu'].checks[k].strength_ratio:9.4g}" if "tsai_wu" in failures else ""
+        others = "".join(f"   {labels[c]} {failures[c].checks[k].strength_ratio:9.4g}" for c in failures if c != "max_stress")
         print(f"   ply {check.ply_index + 1:2d} {check.angle_deg:6g} deg {face:>6}   "
-              f"max stress {check.strength_ratio:9.4g} ({check.mode})" + tw)
+              f"max stress {check.strength_ratio:9.4g} ({check.mode})" + others)
     for criterion, fpf in failures.items():
         g = fpf.governing
         face = "bottom" if g.z_m == z[g.ply_index] else "top"

@@ -20,7 +20,7 @@ import numpy as np
 from ._validation import finite_vector
 from .engineering import engineering_constants
 from .failure import FirstPlyFailure, first_ply_failure_combined
-from .lamina import Lamina, Strengths, ThermalExpansion, reduced_compliance, reduced_stiffness
+from .lamina import Lamina, StrainLimits, Strengths, ThermalExpansion, reduced_compliance, reduced_stiffness, strain_limits_from_strengths
 from .library import LibraryMaterial, library_material
 from .laminate import Ply, abd_matrices
 from .response import (
@@ -39,6 +39,8 @@ QUANTITY_UNITS = {"Nx": "N", "Ny": "N", "Nxy": "N", "Mx": "M", "My": "M", "Mxy":
                   "eps_x": None, "eps_y": None, "gamma_xy": None,
                   "kappa_x": "kappa", "kappa_y": "kappa", "kappa_xy": "kappa"}
 STRENGTH_NAMES = ("F1t", "F1c", "F2t", "F2c", "F6")
+STRAIN_LIMIT_NAMES = ("eps1t", "eps1c", "eps2t", "eps2c", "gamma12")
+STRAIN_LIMITS_FROM_STRENGTHS = "from-strengths"
 ALPHA_NAMES = ("alpha1", "alpha2")
 ELASTIC_NAMES = ("E1", "E2", "G12", "nu12")
 PLY_FIELDS = ("angle", "material", "thickness")
@@ -76,18 +78,49 @@ def _is_number(value) -> bool:
 
 def _check_material(table: dict, name: str) -> None:
     if isinstance(table, dict) and "library" in table:
-        # A library dataset supplies the values; typed values cannot be mixed in.
-        _fields(table, name, {"library"}, {"dataset"})
+        # A library dataset supplies the values; typed values cannot be mixed in. The maximum-strain
+        # policy is a stated choice, not a value, so it may accompany a library dataset.
+        _fields(table, name, {"library"}, {"dataset", "strain_limits"})
         if not isinstance(table["library"], str) or not isinstance(table.get("dataset", ""), str):
             raise ValueError(f"{name}: library and dataset must be a material id and a dataset id")
+        _check_strain_limits(table, name)
         return
-    _fields(table, name, set(ELASTIC_NAMES), set(STRENGTH_NAMES) | set(ALPHA_NAMES))
+    _fields(table, name, set(ELASTIC_NAMES), set(STRENGTH_NAMES) | set(ALPHA_NAMES) | set(STRAIN_LIMIT_NAMES) | {"strain_limits"})
     supplied = set(STRENGTH_NAMES) & table.keys()
     if supplied and supplied != set(STRENGTH_NAMES):
         raise ValueError(f"{name} needs either all five strengths or none")
+    _check_strain_limits(table, name)
+    if "strain_limits" in table and "F1t" not in table:
+        raise ValueError(f"{name}: strain_limits = \"{STRAIN_LIMITS_FROM_STRENGTHS}\" needs all five strengths")
     alphas = set(ALPHA_NAMES) & table.keys()
     if alphas and alphas != set(ALPHA_NAMES):
         raise ValueError(f"{name} needs both alpha1 and alpha2 or neither")
+
+
+def _check_strain_limits(table: dict, name: str) -> None:
+    """Maximum-strain limits are five explicit magnitudes, or the stated from-strengths choice, not both."""
+    explicit = set(STRAIN_LIMIT_NAMES) & table.keys()
+    if explicit and explicit != set(STRAIN_LIMIT_NAMES):
+        raise ValueError(f"{name} needs either all five strain limits {STRAIN_LIMIT_NAMES} or none")
+    if explicit and any(not _is_number(table[k]) or table[k] <= 0 for k in STRAIN_LIMIT_NAMES):
+        raise ValueError(f"{name}: strain limits must be positive magnitudes (fractions, not percent)")
+    if "strain_limits" in table:
+        if table["strain_limits"] != STRAIN_LIMITS_FROM_STRENGTHS:
+            raise ValueError(f"{name}: strain_limits must be \"{STRAIN_LIMITS_FROM_STRENGTHS}\" (strength divided by modulus); "
+                             "give eps1t, eps1c, eps2t, eps2c and gamma12 for measured limits")
+        if explicit:
+            raise ValueError(f"{name}: give explicit strain limits or strain_limits = \"{STRAIN_LIMITS_FROM_STRENGTHS}\", not both")
+
+
+def _with_strain_limits(lamina: Lamina, table: dict, name: str) -> Lamina:
+    """Attach the case's maximum-strain limits to a lamina, explicit or derived by stated choice."""
+    if "eps1t" in table:
+        return lamina.model_copy(update={"strain_limits": StrainLimits(**{k: float(table[k]) for k in STRAIN_LIMIT_NAMES})})
+    if table.get("strain_limits") == STRAIN_LIMITS_FROM_STRENGTHS:
+        if lamina.strengths is None:
+            raise ValueError(f"{name}: strain_limits = \"{STRAIN_LIMITS_FROM_STRENGTHS}\" needs strengths, which this dataset does not provide")
+        return lamina.model_copy(update={"strain_limits": strain_limits_from_strengths(lamina)})
+    return lamina
 
 
 def _resolve_library(tables: dict) -> dict[str, LibraryMaterial]:
@@ -216,15 +249,16 @@ class CaseSolution:
 
 def _lamina(table: dict, si, resolved: dict[str, LibraryMaterial] | None = None, name: str = "material") -> Lamina:
     if resolved and name in resolved:
-        return resolved[name].lamina
+        return _with_strain_limits(resolved[name].lamina, table, name)
     strengths = expansion = None
     if "F1t" in table:
         strengths = Strengths(**{name: float(si(table[name], "stress")) for name in STRENGTH_NAMES})
     if "alpha1" in table:
         expansion = ThermalExpansion(**{name: float(si(table[name], "alpha")) for name in ALPHA_NAMES})
-    return Lamina(E1=float(si(table["E1"], "modulus")), E2=float(si(table["E2"], "modulus")),
-                  G12=float(si(table["G12"], "modulus")), nu12=table["nu12"],
-                  strengths=strengths, thermal_expansion=expansion)
+    lamina = Lamina(E1=float(si(table["E1"], "modulus")), E2=float(si(table["E2"], "modulus")),
+                    G12=float(si(table["G12"], "modulus")), nu12=table["nu12"],
+                    strengths=strengths, thermal_expansion=expansion)
+    return _with_strain_limits(lamina, table, name)
 
 
 def solve_case(case: dict) -> CaseSolution:
@@ -319,11 +353,20 @@ def failure_loads(case: dict, solution: CaseSolution) -> tuple[Loads, Loads] | N
 
 
 def first_ply_failures(case: dict, solution: CaseSolution) -> dict[str, FirstPlyFailure]:
-    """First-ply failure for each criterion the case supports: maximum stress, and Tsai-Wu with f12_star."""
+    """First-ply failure for each criterion the case supports.
+
+    Maximum stress and Tsai-Hill need strengths; maximum strain needs strain limits on every
+    ply (explicit, or from strengths by stated choice); Tsai-Wu needs f12_star as well.
+    """
     loads = failure_loads(case, solution)
     if loads is None:
         return {}
-    criteria = ("max_stress", "tsai_wu") if "f12_star" in case else ("max_stress",)
+    criteria = ["max_stress"]
+    if all(ply.material.strain_limits is not None for ply in solution.plies):
+        criteria.append("max_strain")
+    criteria.append("tsai_hill")
+    if "f12_star" in case:
+        criteria.append("tsai_wu")
     return {criterion: first_ply_failure_combined(solution.plies, *loads, solution.delta_T, criterion,
                                                   case.get("f12_star"))
             for criterion in criteria}

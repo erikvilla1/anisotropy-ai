@@ -5,8 +5,11 @@ import { exportMaterialLibrary, libraryExportPath, renderMaterialLibrary } from 
 import { curatedMaterials, materialDatasets } from "../lib/curated-materials";
 
 test("the committed engine library file is exactly what the website library exports (ADR-0020)", () => {
-  const committed = readFileSync(libraryExportPath, "utf8");
-  assert.equal(committed, renderMaterialLibrary(), "run: npx tsx scripts/export-material-library.ts");
+  // Windows checkouts may carry CRLF; the comparison is about content, not line endings.
+  const committed = readFileSync(libraryExportPath, "utf8").replace(/
+/g, "
+");
+  assert.equal(committed, renderMaterialLibrary(), "run: npm run export:library");
 });
 
 test("every library dataset is exported once, with its values as recorded and a page for each", () => {

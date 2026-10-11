@@ -23,6 +23,22 @@ class Strengths(BaseModel):
     F6: PositiveFloat
 
 
+class StrainLimits(BaseModel):
+    """Ultimate strains in fiber axes for the maximum strain criterion, as positive magnitudes.
+
+    eps1t, eps1c, eps2t, eps2c are normal strains; gamma12 is engineering shear strain. They
+    are measured values or an explicit assumption; see strain_limits_from_strengths.
+    """
+
+    model_config = ConfigDict(frozen=True, allow_inf_nan=False, extra="forbid")
+
+    eps1t: PositiveFloat
+    eps1c: PositiveFloat
+    eps2t: PositiveFloat
+    eps2c: PositiveFloat
+    gamma12: PositiveFloat
+
+
 class ThermalExpansion(BaseModel):
     """Coefficients of thermal expansion in fiber axes, in 1/K (the same number as 1/degC).
 
@@ -47,6 +63,7 @@ class Lamina(BaseModel):
     nu12: float
     strengths: Strengths | None = None
     thermal_expansion: ThermalExpansion | None = None
+    strain_limits: StrainLimits | None = None
 
     @property
     def nu21(self) -> float:
@@ -58,6 +75,20 @@ class Lamina(BaseModel):
         if 1 - self.nu12 * self.nu21 <= 0:
             raise ValueError("Elastic constants violate positive compliance: need nu12**2 < E1/E2")
         return self
+
+
+def strain_limits_from_strengths(ply: Lamina) -> StrainLimits:
+    """Strain limits as strength divided by modulus: F1t/E1, F1c/E1, F2t/E2, F2c/E2, F6/G12.
+
+    This is the linear-to-failure assumption, the "failure strain allowables computed from
+    moduli" of the course. It is a choice the case must state; the engine never applies it on
+    its own (ADR-0021).
+    """
+    if ply.strengths is None:
+        raise ValueError("Strain limits from strengths need all five strengths")
+    s = ply.strengths
+    return StrainLimits(eps1t=s.F1t / ply.E1, eps1c=s.F1c / ply.E1, eps2t=s.F2t / ply.E2,
+                        eps2c=s.F2c / ply.E2, gamma12=s.F6 / ply.G12)
 
 
 def reduced_compliance(ply: Lamina) -> np.ndarray:
