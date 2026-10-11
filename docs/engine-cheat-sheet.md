@@ -126,5 +126,5 @@ Maximum strain, Tsai-Hill and Hashin criteria; buckling with clamped or free edg
 ## Other ways in
 
 - The course Excel template runs directly: `uv run python examples/laminate_calculator.py path/to/input.xlsx`.
-- The API: `uv run uvicorn anisotropy_api.main:app --port 8000` from `api/`, then http://127.0.0.1:8000/docs. Accepts `material: {"library_id": "im7-8552"}`.
+- The API: `uv run uvicorn anisotropy_api.main:app --port 8000` from `api/`, then http://127.0.0.1:8000/docs. `POST /v1/cases/solve` takes the same case file (`{"toml": "<file text>"}` or `{"case": {...}}`) and returns every result and the answer-key comparison as JSON; the two older endpoints accept `material: {"library_id": "im7-8552"}`.
 - The website calculator with the library picker: stiffness and deformation only.

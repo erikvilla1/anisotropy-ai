@@ -4,6 +4,14 @@ This local API accepts one material, a bottom-first ply stack and six explicit l
 
 Chunk 3 adds `POST /v1/laminates/prescribed-curvature`: known forces and explicit curvature in, required moments and a numerical forward check out. Use `examples/flat-cross-ply.json`; see the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md). The original forward endpoint below keeps its existing contract.
 
+## The whole engine in one call (chunk 5)
+
+`POST /v1/cases/solve` takes a problem in the engine's case format, either as a JSON object under `case` or as the text of a `.toml` case under `toml`, and returns every result the case determines in the case's own units: stiffness and compliance, any of the seven applied forms including mixed conditions and a temperature change, library and several materials, first-ply failure by every criterion the inputs allow, plate buckling, and the answer-key comparison when the case has `[expected]`. Validation messages are the engine's own. Example: `examples/case-library-axial-check.json`; format: `../engine/validation/README.md`; see [the note](../docs/api-case-endpoint-2026-10-11.md) and ADR-0024.
+
+```powershell
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/v1/cases/solve' -ContentType 'application/json' -InFile 'api/examples/case-library-axial-check.json' | ConvertTo-Json -Depth 10
+```
+
 ## Library materials (chunk 4)
 
 `GET /v1/materials` lists every dataset of the cited material library; `GET /v1/materials/im7-8552` (optionally `?dataset=...`) returns the SI values the engine would use with the page of each. Either analysis endpoint accepts `"material": {"library_id": "im7-8552", "dataset_id": null}` in place of explicit constants, and the response then carries `material_provenance`. See [the loader note](../docs/material-loader-2026-10-10.md) and ADR-0020.

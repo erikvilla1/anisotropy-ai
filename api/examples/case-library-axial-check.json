@@ -1,0 +1,18 @@
+{
+  "case": {
+    "title": "Analytical check of a library material: a zero-degree IM7/8552 ply at 100 MPa",
+    "source": "Constructed analytical check; material values from the library dataset ncamp-im7-8552-2019-rtd-measured-v1. The same problem as engine/validation/cases/library-im7-8552-axial-check.toml.",
+    "units": "SI",
+    "f12_star": -0.5,
+    "material": {"library": "im7-8552"},
+    "laminate": {"layup": [0]},
+    "applied": {"stress": [100.0, 0.0, 0.0]},
+    "expected": {
+      "tolerance": 1e-9,
+      "strain_global": [0.0006169193438120341, -0.00019494651264460278, 0.0],
+      "Ex": 162.09574396238816,
+      "Ey": 8.96318448111887,
+      "Gxy": 4.688434959354486
+    }
+  }
+}
