@@ -1,6 +1,6 @@
 """Explicit JSON contracts for forward and prescribed-curvature laminate analysis."""
 
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, FiniteFloat, PositiveFloat, Tag, model_validator
 
@@ -109,6 +109,53 @@ class MaterialProvenance(Contract):
                    G12_pa=material.lamina.G12, nu12=material.lamina.nu12, ply_thickness_m=material.ply_thickness_m,
                    not_provided=list(material.not_provided),
                    values=[CitedValueOutput(**vars(v)) for v in material.values])
+
+
+class CaseRequest(Contract):
+    """A whole problem in the engine's case format, as a JSON object or as TOML text (ADR-0024).
+
+    The format is the one the calculator and the validation cases use (engine/validation/README.md):
+    units, one material or several, the laminate, exactly one applied form, and optional
+    f12_star, [failure], [plate] with [buckling], and [expected]. The engine validates every
+    field and rejects anything unknown or half filled, with the same messages as the calculator.
+    """
+
+    case: dict[str, Any] | None = None
+    toml: Annotated[str, Field(min_length=1)] | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_form(self) -> Self:
+        if (self.case is None) == (self.toml is None):
+            raise ValueError("Give exactly one of case (a JSON object) or toml (the case file text)")
+        return self
+
+
+class ComparisonOutput(Contract):
+    """One expected value of the case next to the engine's, in the case's units."""
+
+    key: str
+    expected: float
+    engine: float
+    allowed: float
+    agrees: bool
+
+
+class CaseResponse(Contract):
+    """Every result the case determines, in the case's units, keyed as engine/validation/README.md lists them.
+
+    Values are numbers or nested lists. A ratio that is unbounded (an unstressed ply) is null,
+    since JSON has no infinity. materials holds the library provenance of each material that
+    came from the library, by the case's material name; typed materials are absent.
+    """
+
+    engine_version: str
+    units: str
+    title: str | None
+    results: dict[str, Any]
+    criteria: list[str]
+    materials: dict[str, MaterialProvenance]
+    comparison: list[ComparisonOutput] | None
+    problems: list[str]
 
 
 class PlyInput(Contract):
