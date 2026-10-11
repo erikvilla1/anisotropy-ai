@@ -364,3 +364,202 @@ export const nasaCarbonIM7: CitedMaterial = {
     evidence: `${label}; printed page ${sourcePage - 6} (PDF page ${sourcePage}); ${detail}`,
   })),
 };
+
+// NCAMP woven fabric records. Warp is axis 1, fill is axis 2. Measured RTD column only;
+// compression is measured directly on [0] and [90] fabric specimens, so F1c and F2c are
+// measured means, not cross-ply back-outs.
+const pwConditions = (system: string) => `70°F (21.1°C), dry as fabricated. ${system}`;
+
+const as4pwConditions = pwConditions("Hexcel 8552S / AS4 3k plain weave fabric, 193 g/m², nominal 38% resin content; NMS 128/3, NPS 81228 cure cycle M; panels fabricated by Cessna, tested at NIAR; three prepreg lots.");
+export const qualifiedAS4PW: CitedMaterial = {
+  id: "as4-8552s-pw", name: "AS4 PW / 8552S", family: "Carbon / epoxy", architecture: "Woven · 3k plain weave · autoclave cured",
+  datasetId: "ncamp-as4-8552s-pw-2011-rtd-measured-v1", dataset: "2011 qualification · material properties",
+  conditions: as4pwConditions, reviewedOn: "2026-10-10", recordRevision: "2026-10-10.1", elasticInputs,
+  application: "Elastic ply and laminate analysis of the woven ply for the stated material and process, using the warp and fill tensile moduli, G12 and ν12. Strengths are test means, not design allowables. Shear strength is reported at 0.2% offset only for this condition.",
+  source: references["as4pw-data"],
+  supportingReferences: [references["as4pw-stats"], references["as4-base"], references["as4-process"]],
+  recordDetails: [
+    "Hexcel 8552S resin on AS4 3k plain weave, NMS 128/3. The detail specification link was not confirmed on 2026-10-10; the NMS 128 base and NPS 81228 process specifications are linked for the 8552 family. Warp is axis 1 and fill is axis 2 (p. 9).",
+    "Test environments are defined on p. 22: RTD is 70 ± 10°F, dry. Measured and normalized columns are separate in the report (normalized by the 0.0078 in average cured ply thickness, p. 27). This record uses the measured RTD column only.",
+    "Warp and fill compression were measured directly on [0]15 and [90]15 fabric specimens by ASTM D6641, so the compressive strengths are measured means. The report prints compressive Poisson ratios ν12c and ν21c; both are recorded.",
+    "In-plane shear at 5% strain is not reported for the RTD condition (Table 2-1 prints a dash), so only the 0.2% offset strength is recorded. Short-beam strength is an apparent interlaminar test result, not an in-plane shear input.",
+    "Table 3-1 of the statistical report (p. 33) gives the NCAMP recommended B-basis values; those limits are not replaced by the means shown here. NCAMP states the data is not applicable when the material is not procured to NMS 128/3 (p. 9).",
+  ],
+  properties: ncampProperties([
+    ["E1t", "Warp tensile modulus", 9.58, "Msi", 31, "ASTM D3039-00", "[0]15; 3 lots", "Warp", "Measured mean"],
+    ["E2t", "Fill tensile modulus", 9.66, "Msi", 32, "ASTM D3039-00", "[90]15; 3 lots", "Fill", "Measured mean"],
+    ["nu12", "Poisson ratio · tension", .046, "—", 29, "ASTM D3039-00", "Table 2-1, measured RTD column; warp tension", "Warp–fill", "Measured mean"],
+    ["G12", "In-plane shear modulus", .72, "Msi", 35, "ASTM D3518-94", "[45/-45]2S; 3 lots", "1–2 plane", "Measured mean"],
+    ["E1c", "Warp compressive modulus", 9.20, "Msi", 33, "ASTM D6641-01", "[0]15; 3 lots", "Warp", "Measured mean"],
+    ["E2c", "Fill compressive modulus", 9.01, "Msi", 34, "ASTM D6641-01e1", "[90]15; 3 lots", "Fill", "Measured mean"],
+    ["nu12c", "Poisson ratio · compression", .046, "—", 29, "ASTM D6641-01", "Table 2-1, measured RTD column; warp compression", "Warp–fill", "Measured mean"],
+    ["nu21c", "Minor Poisson ratio · compression", .054, "—", 29, "ASTM D6641-01e1", "Table 2-1, measured RTD column; fill compression", "Fill–warp", "Measured mean"],
+    ["F1t", "Warp tensile strength", 111.52, "ksi", 31, "ASTM D3039-00", "[0]15; 3 lots", "Warp", "Measured mean"],
+    ["F2t", "Fill tensile strength", 109.19, "ksi", 32, "ASTM D3039-00", "[90]15; 3 lots", "Fill", "Measured mean"],
+    ["F1c", "Warp compressive strength", 122.37, "ksi", 33, "ASTM D6641-01", "[0]15; 3 lots; measured directly on fabric specimens", "Warp", "Measured mean"],
+    ["F2c", "Fill compressive strength", 113.31, "ksi", 34, "ASTM D6641-01e1", "[90]15; 3 lots; measured directly on fabric specimens", "Fill", "Measured mean"],
+    ["F12-offset", "Shear strength · 0.2% offset", 8.11, "ksi", 35, "ASTM D3518-94", "[45/-45]2S; 3 lots; the 5% strain value is not reported for RTD", "1–2 plane", "Measured mean"],
+    ["SBS", "Short-beam strength", 13.36, "ksi", 29, "ASTM D2344", "Table 2-1, measured RTD column", "Interlaminar test", "Measured mean"],
+    ["tply", "Nominal cured ply thickness", .0078, "in", 27, "Normalization CPT, §1.5.8", "Average cured ply thickness used as the nominal value for normalization", "Through thickness", "Reported nominal"],
+    ["density-LT", "Density · warp-tension panels", 1.57, "g/cm³", 31, "Composite density, warp-tension panel summary", "Warp-tension panel summary; not a universal density for every tested panel", "Bulk", "Reported panel property"],
+    ["Vf-LT", "Fiber volume · warp-tension panels", 55.53, "%", 31, "Warp-tension panel summary", "Warp-tension panel summary; volume basis", "Bulk", "Reported panel property"],
+    ["resin-LT", "Resin content · warp-tension panels", 36.63, "%", 31, "Warp-tension panel summary", "Warp-tension panel summary; mass basis", "Bulk", "Reported panel property"],
+    ["Tg-dry", "Glass transition temperature · dry", 396.75, "°F", 29, "DMA, SACMA SRM 18-94", "Dry; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+    ["Tg-wet", "Glass transition temperature · wet", 332.02, "°F", 29, "DMA, SACMA SRM 18-94", "Wet; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+  ], rtd70),
+};
+
+const t650pwConditions = pwConditions("Cytec (Solvay) Cycom 5320-1 / T650 3k plain weave fabric, nominal 36% resin content; NMS 532/6, NPS 85321 baseline cure cycle C (out of autoclave); panels fabricated by Gulfstream, tested at NIAR; three prepreg lots.");
+export const qualifiedT650PW: CitedMaterial = {
+  id: "t650-5320-1-pw", name: "T650 PW / 5320-1", family: "Carbon / epoxy", architecture: "Woven · 3k plain weave · out-of-autoclave cured",
+  datasetId: "ncamp-t650-5320-1-pw-2015-rtd-measured-v1", dataset: "2015 qualification · material properties",
+  conditions: t650pwConditions, reviewedOn: "2026-10-10", recordRevision: "2026-10-10.1", elasticInputs,
+  application: "Elastic ply and laminate analysis of the woven ply for the stated material and process, using the warp and fill tensile moduli, G12 and ν12. Strengths are test means, not design allowables.",
+  source: references["t650pw-data"],
+  supportingReferences: [references["t650pw-stats"]],
+  recordDetails: [
+    "Cycom 5320-1 resin on T650 3k plain weave, NMS 532/6 and NPS 85321. Those specifications are published on the NCAMP site; their direct links were not confirmed on 2026-10-10 and are not recorded. Warp is axis 1 and fill is axis 2 (p. 9).",
+    "RTD is 70°F, dry (individual test summaries, p. 23). Measured and normalized columns are separate in the report (normalized by the 0.0077 in average cured ply thickness, p. 20). This record uses the measured RTD column only.",
+    "Warp and fill compression were measured directly on [0]15 and [90]15 fabric specimens by ASTM D6641-05, so the compressive strengths are measured means. Table 2-1 prints no compressive Poisson ratio.",
+    "In-plane shear is ASTM D3518-07 on [45/-45]3S; the 0.2% offset and 5% strain strengths are both reported for RTD. Short-beam strength is an apparent interlaminar test result, not an in-plane shear input.",
+    "Table 3-1 of the statistical report (p. 34) gives the NCAMP recommended B-basis values; those limits are not replaced by the means shown here. NCAMP states the data is not applicable when the material is not procured to NMS 532/6 (p. 8).",
+  ],
+  properties: ncampProperties([
+    ["E1t", "Warp tensile modulus", 9.990, "Msi", 23, "ASTM D3039-08", "[0]15; 3 lots", "Warp", "Measured mean"],
+    ["E2t", "Fill tensile modulus", 9.931, "Msi", 24, "ASTM D3039-08", "[90]15; 3 lots", "Fill", "Measured mean"],
+    ["nu12", "Poisson ratio · tension", .053, "—", 23, "ASTM D3039-08", "[0]15; 3 lots", "Warp–fill", "Measured mean"],
+    ["G12", "In-plane shear modulus", .735, "Msi", 27, "ASTM D3518-07", "[45/-45]3S; 3 lots", "1–2 plane", "Measured mean"],
+    ["E1c", "Warp compressive modulus", 9.370, "Msi", 25, "ASTM D6641-05", "[0]15; 3 lots", "Warp", "Measured mean"],
+    ["E2c", "Fill compressive modulus", 8.876, "Msi", 26, "ASTM D6641-05", "[90]15; 3 lots", "Fill", "Measured mean"],
+    ["F1t", "Warp tensile strength", 124.900, "ksi", 23, "ASTM D3039-08", "[0]15; 3 lots", "Warp", "Measured mean"],
+    ["F2t", "Fill tensile strength", 121.810, "ksi", 24, "ASTM D3039-08", "[90]15; 3 lots", "Fill", "Measured mean"],
+    ["F1c", "Warp compressive strength", 106.167, "ksi", 25, "ASTM D6641-05", "[0]15; 3 lots; measured directly on fabric specimens", "Warp", "Measured mean"],
+    ["F2c", "Fill compressive strength", 100.365, "ksi", 26, "ASTM D6641-05", "[90]15; 3 lots; measured directly on fabric specimens", "Fill", "Measured mean"],
+    ["F12-offset", "Shear strength · 0.2% offset", 8.299, "ksi", 27, "ASTM D3518-07", "[45/-45]3S; 3 lots", "1–2 plane", "Measured mean"],
+    ["F12-5pct", "Shear strength · at 5% strain", 14.650, "ksi", 27, "ASTM D3518-07", "[45/-45]3S; 3 lots", "1–2 plane", "Measured mean"],
+    ["SBS", "Short-beam strength", 11.035, "ksi", 21, "ASTM D2344", "Table 2-1, measured RTD column", "Interlaminar test", "Measured mean"],
+    ["tply", "Nominal cured ply thickness", .0077, "in", 20, "Normalization CPT, §1.5.8", "Average cured ply thickness used as the nominal value for normalization", "Through thickness", "Reported nominal"],
+    ["density-LT", "Density · warp-tension panels", 1.544, "g/cm³", 23, "Composite density, warp-tension panel summary", "Warp-tension panel summary; not a universal density for every tested panel", "Bulk", "Reported panel property"],
+    ["Vf-LT", "Fiber volume · warp-tension panels", 57.73, "%", 23, "Warp-tension panel summary", "Warp-tension panel summary; volume basis", "Bulk", "Reported panel property"],
+    ["resin-LT", "Resin content · warp-tension panels", 34.10, "%", 23, "Warp-tension panel summary", "Warp-tension panel summary; mass basis", "Bulk", "Reported panel property"],
+    ["Tg-dry", "Glass transition temperature · dry", 374.80, "°F", 21, "ASTM D7028", "Dry; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+    ["Tg-wet", "Glass transition temperature · wet", 318.62, "°F", 21, "ASTM D7028", "Wet; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+  ], rtd70),
+};
+
+const tc250Conditions = pwConditions("TenCate (Toray) TC250 / HTS40 F13 12k plain weave fabric (TCAC 12k HTS SFP OSI/TC250), nominal 42% resin content; NMS 688/2, NPS 81688 cure cycle C; panels fabricated by Advanced Composites Technologies, tested at NIAR; three prepreg lots.");
+export const qualifiedTC250: CitedMaterial = {
+  id: "hts40-tc250", name: "HTS40 PW / TC250", family: "Carbon / epoxy", architecture: "Woven · 12k plain weave · out-of-autoclave cured",
+  datasetId: "ncamp-hts40-tc250-2016-rtd-measured-v1", dataset: "2016 qualification · material properties",
+  conditions: tc250Conditions, reviewedOn: "2026-10-10", recordRevision: "2026-10-10.1", elasticInputs,
+  application: "Elastic ply and laminate analysis of the woven ply for the stated material and process, using the warp and fill tensile moduli, G12 and ν12. Strengths are test means, not design allowables. The glass transition temperature is low; the elevated-temperature condition in this program is 180°F.",
+  source: references["tc250-data"],
+  supportingReferences: [references["tc250-stats"]],
+  recordDetails: [
+    "TenCate TC250 resin on HTS40 F13 12k 800 tex plain weave, NMS 688/2 and NPS 81688. Those specifications are published on the NCAMP site; their direct links were not confirmed on 2026-10-10 and are not recorded. Warp is axis 1 and fill is axis 2 (p. 9).",
+    "Test environments are defined on p. 19: RTD is 70 ± 10°F, dry; ETD and ETW are 180°F for this material. Measured and normalized columns are separate in the report (normalized by the 0.0085 in average cured ply thickness, p. 24). This record uses the measured RTD column only.",
+    "Warp and fill compression were measured directly on [0]12 and [90]12 fabric specimens by ASTM D6641M-09, so the compressive strengths are measured means. The report prints compressive Poisson ratios ν12c and ν21c; both are recorded.",
+    "The composite density printed on the individual test summaries (1.207 g/cm³ on every page) is not entered: it is inconsistent with the fiber volume and resin content printed beside it and could not be verified. UNVERIFIED. Fiber volume and resin content from the warp-tension panels are recorded.",
+    "Table 3-1 of the statistical report (p. 32) gives the NCAMP recommended B-basis values; those limits are not replaced by the means shown here. NCAMP states the data is not applicable when the material is not procured to NMS 688/2 (p. 9).",
+  ],
+  properties: ncampProperties([
+    ["E1t", "Warp tensile modulus", 8.66, "Msi", 28, "ASTM D3039M-08", "[0]12; 3 lots", "Warp", "Measured mean"],
+    ["E2t", "Fill tensile modulus", 8.58, "Msi", 29, "ASTM D3039M-08", "[90]12; 3 lots", "Fill", "Measured mean"],
+    ["nu12", "Poisson ratio · tension", .040, "—", 28, "ASTM D3039M-08", "[0]12; 3 lots", "Warp–fill", "Measured mean"],
+    ["G12", "In-plane shear modulus", .52, "Msi", 32, "ASTM D3518-94", "[45/-45]2S; 3 lots", "1–2 plane", "Measured mean"],
+    ["E1c", "Warp compressive modulus", 8.02, "Msi", 30, "ASTM D6641M-09", "[0]12; 3 lots", "Warp", "Measured mean"],
+    ["E2c", "Fill compressive modulus", 8.04, "Msi", 31, "ASTM D6641M-09", "[90]12; 3 lots", "Fill", "Measured mean"],
+    ["nu12c", "Poisson ratio · compression", .051, "—", 26, "ASTM D6641M-09", "Table 2-1, measured RTD column; warp compression", "Warp–fill", "Measured mean"],
+    ["nu21c", "Minor Poisson ratio · compression", .049, "—", 26, "ASTM D6641M-09", "Table 2-1, measured RTD column; fill compression", "Fill–warp", "Measured mean"],
+    ["F1t", "Warp tensile strength", 126.33, "ksi", 28, "ASTM D3039M-08", "[0]12; 3 lots", "Warp", "Measured mean"],
+    ["F2t", "Fill tensile strength", 121.76, "ksi", 29, "ASTM D3039M-08", "[90]12; 3 lots", "Fill", "Measured mean"],
+    ["F1c", "Warp compressive strength", 100.14, "ksi", 30, "ASTM D6641M-09", "[0]12; 3 lots; measured directly on fabric specimens", "Warp", "Measured mean"],
+    ["F2c", "Fill compressive strength", 89.96, "ksi", 31, "ASTM D6641M-09", "[90]12; 3 lots; measured directly on fabric specimens", "Fill", "Measured mean"],
+    ["F12-offset", "Shear strength · 0.2% offset", 5.72, "ksi", 32, "ASTM D3518-94", "[45/-45]2S; 3 lots", "1–2 plane", "Measured mean"],
+    ["F12-5pct", "Shear strength · at 5% strain", 9.87, "ksi", 32, "ASTM D3518-94", "[45/-45]2S; 3 lots", "1–2 plane", "Measured mean"],
+    ["SBS", "Short-beam strength", 9.36, "ksi", 26, "ASTM D2344", "Table 2-1, measured RTD column", "Interlaminar test", "Measured mean"],
+    ["tply", "Nominal cured ply thickness", .0085, "in", 24, "Normalization CPT, §1.5.8", "Average cured ply thickness used as the nominal value for normalization", "Through thickness", "Reported nominal"],
+    ["Vf-LT", "Fiber volume · warp-tension panels", 49.29, "%", 28, "Warp-tension panel summary", "Warp-tension panel summary; volume basis", "Bulk", "Reported panel property"],
+    ["resin-LT", "Resin content · warp-tension panels", 41.16, "%", 28, "Warp-tension panel summary", "Warp-tension panel summary; mass basis", "Bulk", "Reported panel property"],
+    ["Tg-dry", "Glass transition temperature · dry", 259.26, "°F", 26, "DMA, SACMA SRM 18R-94", "Dry; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+    ["Tg-wet", "Glass transition temperature · wet", 198.49, "°F", 26, "DMA, SACMA SRM 18R-94", "Wet; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+  ], rtd70),
+};
+
+// MIL-HDBK-17-2F (2002, canceled 2013) historical records. Public domain (ADR-0018). The
+// handbook prints a data class for every value (Table 1.4.2(c)); the class is kept as the basis.
+// Pages are PDF pages of the ASSIST copy; printed pages are the handbook's own (for example 4-230).
+type HandbookRow = [key: string, label: string, value: number, unit: string, pdfPage: number, printed: string, method: string, detail: string, direction: string, basis: string];
+const handbookProperties = (rows: HandbookRow[], environment: string): CitedProperty[] =>
+  rows.map(([key, label, value, unit, sourcePage, printed, method, detail, direction, basis]) => ({
+    key, label, value, unit, sourcePage, method, direction, basis, symbol: ncampSymbols[key.split("-")[0]] || key,
+    conditions: `${environment}; ${detail}.`, sourceValue: value, sourceUnit: unit,
+    evidence: `${label}; handbook page ${printed} (PDF page ${sourcePage}); ${detail}`,
+  }));
+const handbookAmbient = "72°F (22.2°C), ambient moisture (handbook condition A)";
+const handbookCaveat = "Historical data from a canceled handbook (MIL-HDBK-17-2F, canceled 26 March 2013 and superseded by CMH-17); the data classes printed by the handbook are kept as the basis of every value.";
+
+const t650976Conditions = `${handbookAmbient}. ${handbookCaveat} ICI Fiberite T650-35 12k / 976 unidirectional tape prepreg, Amoco T650-35 fiber; autoclave cure 350°F, 90 min, 95 psi; tested 1993 to 1996.`;
+export const handbookT650976: CitedMaterial = {
+  id: "t650-35-976", name: "T650-35 / 976", family: "Carbon / epoxy", architecture: "Unidirectional · autoclave cured · historical handbook data",
+  datasetId: "mil-hdbk-17-2f-t650-35-976-2002-ambient-measured-v1", dataset: "MIL-HDBK-17-2F §4.2.29 · historical handbook data",
+  conditions: t650976Conditions, reviewedOn: "2026-10-10", recordRevision: "2026-10-10.1",
+  application: "Historical reference values for T650-35 / 976 tape at room temperature. Not an elastic input set: the handbook prints no Poisson ratio and no longitudinal compression for this material, and the transverse moduli are screening data. Strengths are means with the handbook's data class; B-basis values exist only for the B30 and B18 classes and stay in the handbook.",
+  source: references["milhdbk-17-2f"],
+  supportingReferences: [references["milhdbk-17-2f-notice-1"]],
+  recordDetails: [
+    "MIL-HDBK-17-2F, Volume 2, Section 4.2.29 (handbook pages 4-228 to 4-233). The handbook was canceled by Notice 1 on 26 March 2013; the notice names SAE R-423 (CMH-17 Volume 2, 2012) as a possible replacement. These values are shown as historical data and are not in the current CMH-17 public record this library holds.",
+    "Rights: the handbook cover carries Distribution Statement A and the document is a Department of Defense handbook; the official copy is on DLA ASSIST (ident 53882). Public domain under ADR-0018. The ASSIST download stamps every page with its download time, so the recorded fingerprint identifies this dated copy; page numbering matches the research copy.",
+    "Condition A is ambient moisture at 72°F; the handbook does not state a drying procedure. Longitudinal tension is normalized to 60% fiber volume (0.0052 in cured ply thickness); this record uses the measured column. Transverse and shear tests are not normalized.",
+    "Data classes (handbook Table 1.4.2(c)): B30 means a B-basis value from at least 30 specimens in 5 batches; B18 from 18 specimens in 3 batches; Mean, Interim and Screening carry no basis value. The class of each value is its basis here.",
+    "No Poisson ratio, longitudinal compression or strain to failure is printed for this material, so the record has no elastic input set. Physical values are the handbook's nominal column (page 4-229).",
+  ],
+  properties: handbookProperties([
+    ["E1t", "Longitudinal tensile modulus", 22.5, "Msi", 301, "4-230", "ASTM D3039-89", "Table 4.2.29(a); [0]9; 32 specimens, 5 batches; measured (normalized 22.0)", "Fiber direction", "Mean"],
+    ["E2t", "Transverse tensile modulus", 1.30, "Msi", 302, "4-231", "ASTM D3039-89", "Table 4.2.29(b); [90]24; 9 specimens, 3 batches; not normalized", "Transverse direction", "Screening"],
+    ["G12", "In-plane shear modulus", .745, "Msi", 304, "4-233", "ASTM D3518-82", "Table 4.2.29(d); [+45/-45]4s; 30 specimens, 5 batches; not normalized", "1–2 plane", "Mean"],
+    ["E2c", "Transverse compressive modulus", 1.38, "Msi", 303, "4-232", "ASTM D3410-87", "Table 4.2.29(c); [90]22; 9 specimens, 3 batches; not normalized", "Transverse direction", "Screening"],
+    ["F1t", "Longitudinal tensile strength", 236, "ksi", 301, "4-230", "ASTM D3039-89", "Table 4.2.29(a); [0]9; 32 specimens, 5 batches; measured (normalized 231); B-value 200 measured", "Fiber direction", "B30"],
+    ["F2t", "Transverse tensile strength", 5.71, "ksi", 302, "4-231", "ASTM D3039-89", "Table 4.2.29(b); [90]24; 18 specimens, 3 batches; B-value 4.42", "Transverse direction", "B18"],
+    ["F2c", "Transverse compressive strength", 33.6, "ksi", 303, "4-232", "ASTM D3410-87", "Table 4.2.29(c); [90]22; 18 specimens, 3 batches; B-value 28.1", "Transverse direction", "B18"],
+    ["F12", "In-plane shear strength", 14.9, "ksi", 304, "4-233", "ASTM D3518-82", "Table 4.2.29(d); [+45/-45]4s; 30 specimens, 5 batches; B-value 8.57", "1–2 plane", "B30"],
+    ["tply", "Nominal cured ply thickness", .0052, "in", 300, "4-229", "Physical property summary, nominal column", "Nominal value; as submitted 0.0049 to 0.0058 in", "Through thickness", "Reported nominal"],
+    ["Vf-nominal", "Fiber volume · nominal", 61, "%", 300, "4-229", "Physical property summary, nominal column", "Nominal value; as submitted 55.3 to 65.3%", "Bulk", "Reported nominal"],
+    ["Tg-dry", "Glass transition temperature · dry", 486, "°F", 299, "4-228", "DMA E′", "Section 4.2.29 summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+    ["Tg-wet", "Glass transition temperature · wet", 410, "°F", 299, "4-228", "DMA E′", "Section 4.2.29 summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+  ], handbookAmbient),
+};
+
+const ea9396Conditions = `${handbookAmbient}. ${handbookCaveat} E-glass 7781 8-harness satin fabric, wet lay-up with Dexter-Hysol EA 9396 epoxy; vacuum bag cure 200°F, 45 min, 25 in Hg; tested 1988 to 1991. The handbook marks every table of this material "all documentation presently required were not supplied".`;
+export const handbookEA9396: CitedMaterial = {
+  id: "7781-ea9396", name: "7781 / EA 9396", family: "Glass / epoxy", architecture: "Woven · eight-harness satin · wet lay-up · historical handbook data",
+  datasetId: "mil-hdbk-17-2f-7781-ea9396-2002-ambient-measured-v1", dataset: "MIL-HDBK-17-2F §6.2.4 · historical handbook data",
+  conditions: ea9396Conditions, reviewedOn: "2026-10-10", recordRevision: "2026-10-10.1", elasticInputs,
+  application: "Historical reference values for a wet lay-up E-glass / EA 9396 fabric at room temperature, using the warp and fill tensile moduli, G12 and ν12 as an elastic set with the handbook's Interim and Screening classes. Strengths are Interim-class means with no basis values. A different material and process from the 7781 / E-765 prepreg record.",
+  source: references["milhdbk-17-2f"],
+  supportingReferences: [references["milhdbk-17-2f-notice-1"]],
+  recordDetails: [
+    "MIL-HDBK-17-2F, Volume 2, Section 6.2.4 (handbook pages 6-36 to 6-44). The handbook was canceled by Notice 1 on 26 March 2013; these values are shown as historical data. Warp is axis 1 and fill is axis 2.",
+    "Rights: Distribution Statement A on the cover; Department of Defense handbook; official copy on DLA ASSIST (ident 53882). Public domain under ADR-0018. The ASSIST download stamps every page with its download time, so the recorded fingerprint identifies this dated copy.",
+    "Every table of this material carries the handbook's warning that required documentation was not supplied, and the tension tables note high batch variability. All values are Interim or Screening class; no B-basis values are printed. Void content is 3.7 to 5.4%.",
+    "Tension and compression are normalized to 50% fiber volume (0.0085 in cured ply thickness); this record uses the measured column. Shear is not normalized. Condition A is ambient moisture at 72°F with no stated drying.",
+    "No glass transition temperature is printed (the handbook refers to a data analysis note). Physical values are the handbook's nominal column (page 6-37).",
+  ],
+  properties: handbookProperties([
+    ["E1t", "Warp tensile modulus", 3.62, "Msi", 431, "6-38", "ASTM D3039-76", "Table 6.2.4(a); [0f]8; 15 specimens, 3 batches; measured (normalized 3.39)", "Warp", "Interim"],
+    ["E2t", "Fill tensile modulus", 3.67, "Msi", 432, "6-39", "ASTM D3039-76", "Table 6.2.4(b); [0f]8 fill; 15 specimens, 3 batches; measured (normalized 3.41)", "Fill", "Interim"],
+    ["nu12", "Poisson ratio · tension", .115, "—", 431, "6-38", "ASTM D3039-76", "Table 6.2.4(a); 6 specimens, 3 batches", "Warp–fill", "Screening"],
+    ["nu21", "Minor Poisson ratio · tension", .127, "—", 432, "6-39", "ASTM D3039-76", "Table 6.2.4(b); 6 specimens, 3 batches", "Fill–warp", "Screening"],
+    ["G12", "In-plane shear modulus", .758, "Msi", 437, "6-44", "ASTM D3518-76", "Table 6.2.4(g); [±45f]s; 22 specimens, 3 batches; not normalized", "1–2 plane", "Interim"],
+    ["E1c", "Warp compressive modulus", 3.68, "Msi", 434, "6-41", "ASTM D3410B-87", "Table 6.2.4(d); [0f]16; 15 specimens, 3 batches; measured (normalized 3.45)", "Warp", "Interim"],
+    ["E2c", "Fill compressive modulus", 3.66, "Msi", 435, "6-42", "ASTM D3410B-87", "Table 6.2.4(e); [0f]16 fill; 15 specimens, 3 batches; measured (normalized 3.37)", "Fill", "Interim"],
+    ["F1t", "Warp tensile strength", 51.8, "ksi", 431, "6-38", "ASTM D3039-76", "Table 6.2.4(a); [0f]8; 15 specimens, 3 batches; measured (normalized 48.3); most failures under the tabs", "Warp", "Interim"],
+    ["F2t", "Fill tensile strength", 54.3, "ksi", 432, "6-39", "ASTM D3039-76", "Table 6.2.4(b); [0f]8 fill; 15 specimens, 3 batches; measured (normalized 50.5)", "Fill", "Interim"],
+    ["F1c", "Warp compressive strength", 49.6, "ksi", 434, "6-41", "ASTM D3410B-87", "Table 6.2.4(d); [0f]16; 15 specimens, 3 batches; measured (normalized 46.4)", "Warp", "Interim"],
+    ["F2c", "Fill compressive strength", 40.8, "ksi", 435, "6-42", "ASTM D3410B-87", "Table 6.2.4(e); [0f]16 fill; 15 specimens, 3 batches; measured (normalized 37.7)", "Fill", "Interim"],
+    ["F12", "In-plane shear strength", 11.5, "ksi", 437, "6-44", "ASTM D3518-76", "Table 6.2.4(g); [±45f]s; 23 specimens, 3 batches; not normalized", "1–2 plane", "Interim"],
+    ["tply", "Nominal cured ply thickness", .0085, "in", 430, "6-37", "Physical property summary, nominal column", "Nominal value; as submitted 0.0083 to 0.0087 in", "Through thickness", "Reported nominal"],
+    ["Vf-nominal", "Fiber volume · nominal", 54, "%", 430, "6-37", "Physical property summary, nominal column (ASTM D2584)", "Nominal value; as submitted 51.2 to 56.9%", "Bulk", "Reported nominal"],
+    ["density-nominal", "Composite density · nominal", 1.91, "g/cm³", 430, "6-37", "Physical property summary, nominal column (ASTM D792)", "Nominal value assuming 0% void content; as submitted 1.88 to 1.96 g/cm³", "Bulk", "Reported nominal"],
+  ], handbookAmbient),
+};
