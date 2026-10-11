@@ -30,6 +30,10 @@ The full method is in `docs/documentation-guide.md`; the index is `docs/README.m
 6. Keep entries short.
 7. The PDF manual in `docs/manual/` is generated from these documents and the code. Edit the sources, never `docs/manual/generated/`. When `theory.md` says a function computes something, add a `<!-- code: name -->` marker where its listing belongs.
 
+## Agent skills
+
+- Skills for AI agents live in `docs/agents/skills/` (ADR-0023). Read `project-rules` first. Change a skill only through a pull request.
+
 ## Engine rules
 
 - The engine computes every number in a result (ADR-0001).
