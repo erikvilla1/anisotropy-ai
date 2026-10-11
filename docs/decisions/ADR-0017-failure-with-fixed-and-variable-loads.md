@@ -1,8 +1,8 @@
 # ADR-0017: First-ply failure holds fixed loads and thermal stress constant and scales the rest
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-03
-- Decided by: pending founder review | Drafted by: Claude Code
+- Decided by: Founder, 2026-10-10 | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/failure.py`, `engine/tests/test_failure_combined.py`, [evaluation](../evaluations/2026-10-03-validation-ply-failure-fixed-loads.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0014](ADR-0014-explicit-temperature-change.md) (amended)
 
 ## Context
