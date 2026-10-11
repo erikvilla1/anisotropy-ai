@@ -1,4 +1,4 @@
-# System overview | version 0.1 | last reviewed 2026-10-10 | owner: Founder
+# System overview | version 0.1 | last reviewed 2026-10-11 | owner: Founder
 
 ## Purpose
 
@@ -13,12 +13,12 @@ Tested, deterministic code computes every number. A language model, once added, 
 | Layer | What it does | Status | Where |
 | --- | --- | --- | --- |
 | Website | Product pages, materials library, physics references, chat/CSV previews and laminate calculator | Static export; calculator calls local API. Chat still uses a local parser | `app/`, `components/`, `lib/`, [calculator card](components/calculator.md) |
-| Material data | Cited property datasets with provenance and a rights class per source; a monitor that detects source changes | Built | `lib/curated-materials.ts`, `lib/source-rights.ts`, `services/material-monitor/` |
-| Engine | Laminate stiffness and compliance, forward, prescribed-curvature and mixed-condition response, temperature change and residual stresses, first-ply failure, engineering constants; plies of several materials and thicknesses | Built, version 0.1 | `engine/`, [constrained analysis](components/prescribed-curvature.md) |
-| Validation cases | Textbook/answer-key references and constructed analytical checks | Built, 28 cases | `engine/validation/` |
-| API | One-material forward response and required moments for prescribed curvature | Local development; FastAPI, explicit SI-base inputs | `api/`, [component card](components/api.md) |
-| Run records | Inputs, versions and results stored for every run | Planned (PostgreSQL) | |
-| Material loader | Engine reads material values from the cited library instead of typed numbers | Planned | |
+| Material data | 25 cited property datasets with provenance and a rights class per source (NCAMP, NASA, AGATE, MIL-HDBK-17F, datasheets, textbook values); a monitor that detects source changes; a physics page with a card for every engine equation | Built | `lib/curated-materials.ts`, `lib/source-rights.ts`, `lib/physics*.ts`, `services/material-monitor/` |
+| Engine | Laminate stiffness and compliance; forward, prescribed-curvature and mixed-condition response; temperature change and residual stresses; first-ply failure by maximum stress, maximum strain, Tsai-Hill and Tsai-Wu with fixed and variable loads; engineering constants; plate buckling of simply supported symmetric laminates; plies of several materials and thicknesses | Built, version 0.1 | `engine/`, [engine card](components/engine.md), [constrained analysis](components/prescribed-curvature.md) |
+| Validation cases | Textbook/answer-key references and constructed analytical checks | Built, 32 cases | `engine/validation/` |
+| API | Forward response and prescribed curvature with explicit contracts; the whole case format through `POST /v1/cases/solve`; library materials by id | Local development; FastAPI | `api/`, [component card](components/api.md) |
+| Material loader | Engine, API and calculator read material values from the cited library by dataset id, with the page of every value used | Built (ADR-0020) | `engine/src/anisotropy_engine/library.py`, [note](material-loader-2026-10-10.md) |
+| Run records | Inputs, versions and results stored for every run | Planned (PostgreSQL), next | |
 | Language model assistant | Drafts inputs from plain language; explains results | Planned | |
 | Report generator | Documented report built from a run record | Planned | |
 | Finite element analysis | Open-hole and other geometries | Later | |
@@ -27,7 +27,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 
 A problem (material, layup, and loads, stresses or strains) goes into the engine, which works in SI units and returns the results. Today the engine is used from Python, from `engine/examples/laminate_calculator.py` (which reads TOML cases or the course Excel input files and compares results with an answer key), and by the validation runner. The website's `/calculator` converts labelled GPa/mm inputs to SI base units, sends explicit load resultants to the local API and displays its stiffness/deformation response. See [the API walkthrough](../api/README.md) and [website walkthrough](walkthroughs/chunk-2-calculator.md). The chat preview remains separate.
 
-The new prescribed-curvature API accepts known forces plus three prescribed curvatures and solves for the required moments. A full forward solve must recover the target deformation within reported numerical tolerances. It is the first constrained-analysis tool for the planned chat harness; see [chunk 3](walkthroughs/chunk-3-constrained-analysis.md).
+The prescribed-curvature API accepts known forces plus three prescribed curvatures and solves for the required moments; a full forward solve must recover the target deformation within reported tolerances ([chunk 3](walkthroughs/chunk-3-constrained-analysis.md)). Since 11 October, `POST /v1/cases/solve` accepts a whole case, as JSON or TOML text, and returns every result the engine determines plus the answer-key comparison ([note](api-case-endpoint-2026-10-11.md)); a material can be named by its library dataset id anywhere a case or request takes one, and the result carries the citation of every value used. The founder's own problems go through the case calculator by the [cheat sheet](engine-cheat-sheet.md).
 
 ## Where AI and machine learning fit
 
@@ -54,9 +54,10 @@ Accounts: the repository is owned by erikvilla1, with cvv-mx-256 as collaborator
 ## Known limitations
 
 - The engine analyzes flat laminates under in-plane loads and moments with classical laminate theory. It does not model holes, through-thickness stresses or finite element geometry.
-- Failure checks give first-ply failure only: the onset of ply cracking, not the laminate's ultimate strength.
+- Failure checks give first-ply failure only: the onset of ply cracking, not the laminate's ultimate strength. Four criteria run; Hashin does not. Maximum strain limits derived from strengths assume linear behavior to failure and must be requested in the case.
+- Plate buckling covers simply supported, midplane-symmetric laminates. The series solution for angle-ply laminates is an upper bound to be converged by the user, and no external buckling answer key has been checked yet. Clamped or free edges, unsymmetric laminates and postbuckling are not modeled.
 - A uniform temperature change gives thermal resultants and residual ply stresses (ADR-0014), and first-ply failure includes them (ADR-0017). Moisture and temperature-dependent properties are not modeled.
-- Material values are typed in; the engine does not yet read the website's material library.
+- Material values can be typed or taken from the library by dataset id. Typed values are not checked against any source; library values are converted once and cited.
 - Copyrighted references (Daniel and Ishai, CMH-17, course material) are cited by table and page only; the website hosts no copies and shows only the individual values it records (ADR-0018). Public data comes from NCAMP, AGATE, NASA and manufacturer documents.
 - The engine is checked against textbook and course problems, not yet against our own coupon tests. It is not approved for design decisions.
 - The website's chat captures inputs but does not calculate results.
