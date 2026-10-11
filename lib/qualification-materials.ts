@@ -309,3 +309,58 @@ export const qualifiedEP2190: CitedMaterial = {
     ["Tg-wet", "Glass transition temperature · wet", 286.78, "°F", 33, "ASTM D7028", "Wet; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
   ], rta75),
 };
+
+// NASA/TM-20230001560 (Glenn Research Center and Arizona State University, 2023): a second,
+// independent IM7 / 8552 dataset shown beside the NCAMP record through the dataset picker.
+// Values are the printed averages in psi; the record stores Msi and ksi with the printed psi
+// value kept as the source value. Printed page = PDF page − 6.
+type NasaRow = [key: string, label: string, value: number, unit: string, sourceValue: number, sourceUnit: string, pdfPage: number, method: string, detail: string, direction: string, basis: string];
+const nasaConditions = "Room temperature, quasi-static loading; the report states no test temperature value or specimen conditioning. IM7 / 8552 unidirectional tape, nominal 190 g/m² and 35% resin content; 16-ply in-plane panels (PT1) and a 120-ply through-thickness panel (PT2); three replicates per test unless stated; strains by digital image correlation.";
+const nasaRows: NasaRow[] = [
+  ["E1t", "Longitudinal tensile modulus", 23.105148, "Msi", 23105148, "psi", 18, "ASTM D3039; MTS 810 frame", "Table 6; [0]16 specimens, 5 replicates (2 constant thickness, 3 reduced gage thickness)", "Fiber direction", "Measured mean"],
+  ["E2t", "Transverse tensile modulus", 1.299337, "Msi", 1299337, "psi", 21, "ASTM D3039; MTS 810 frame", "Table 8; [90]16 specimens, 3 replicates", "Transverse direction", "Measured mean"],
+  ["E3t", "Through-thickness tensile modulus", 1.089994, "Msi", 1089994, "psi", 24, "Non-standard geometry dictated by the 120-ply panel; MTS Exceed frame", "Table 10; 3 replicates; the report says the ASTM standard could not be followed (p. 16)", "Through thickness", "Measured mean"],
+  ["nu12", "Poisson ratio · tension", .3235, "—", .3235, "—", 18, "ASTM D3039; digital image correlation", "Table 6; [0]16 specimens, 5 replicates", "Longitudinal–transverse", "Measured mean"],
+  ["nu21", "Minor Poisson ratio · tension", .0208, "—", .0208, "—", 21, "ASTM D3039; digital image correlation", "Table 8; [90]16 specimens, 3 replicates", "2–1 directions", "Measured mean"],
+  ["nu31", "Poisson ratio · through-thickness tension", .026, "—", .026, "—", 24, "Non-standard geometry; digital image correlation in the 1–3 plane", "Table 10; 3 replicates; coefficient of variation 16.8%", "3–1 directions", "Measured mean"],
+  ["G12", "In-plane shear modulus", .650712, "Msi", 650712, "psi", 37, "ASTM D5379/D5379M-12 (V-notched beam)", "Table 18; engineering shear strain basis; 3 replicates", "1–2 plane", "Measured mean"],
+  ["G23", "Interlaminar shear modulus · 2–3 plane", .414695, "Msi", 414695, "psi", 40, "ASTM D5379/D5379M-12 (V-notched beam)", "Table 20; engineering shear strain basis; 3 replicates from the 120-ply panel", "2–3 plane", "Measured mean"],
+  ["G13", "Interlaminar shear modulus · 1–3 plane", .763931, "Msi", 763931, "psi", 44, "ASTM D5379/D5379M-12 (V-notched beam)", "Table 22; engineering shear strain basis; 3 replicates from the 120-ply panel", "1–3 plane", "Measured mean"],
+  ["E1c", "Longitudinal compressive modulus", 19.450971, "Msi", 19450971, "psi", 27, "ASTM D6641 geometry; combined loading compression fixture; Instron 1332 frame", "Table 12; [0]16 specimens, 3 replicates", "Fiber direction", "Measured mean"],
+  ["E2c", "Transverse compressive modulus", 1.334952, "Msi", 1334952, "psi", 31, "ASTM D3410 geometry; combined loading compression fixture; MTS 810 frame", "Table 14; [90]16 specimens, 3 replicates", "Transverse direction", "Measured mean"],
+  ["E3c", "Through-thickness compressive modulus", 1.459939, "Msi", 1459939, "psi", 33, "Cuboid adapted from ASTM D7291; Instron 1332 frame", "Table 16; 3 replicates from the 120-ply panel; no standard exists for this property (p. 26)", "Through thickness", "Measured mean"],
+  ["F1t", "Longitudinal tensile strength", 392.337, "ksi", 392337, "psi", 18, "ASTM D3039; MTS 810 frame", "Table 6; mean of the 3 reduced-thickness replicates carried to failure; the 2 constant-thickness specimens debonded their tabs first (p. 9)", "Fiber direction", "Measured mean"],
+  ["F2t", "Transverse tensile strength", 11.742, "ksi", 11742, "psi", 21, "ASTM D3039; MTS 810 frame", "Table 8; [90]16 specimens, 3 replicates", "Transverse direction", "Measured mean"],
+  ["F3t", "Through-thickness tensile strength", 7.846, "ksi", 7846, "psi", 24, "Non-standard geometry dictated by the 120-ply panel", "Table 10; 3 replicates; two failed near the grip region (p. 16)", "Through thickness", "Measured mean"],
+  ["F1c", "Longitudinal compressive strength", 116.744, "ksi", 116744, "psi", 27, "ASTM D6641 geometry; combined loading compression fixture", "Table 12; 3 replicates; the report records end-crushing and longitudinal matrix splitting in the gage area (p. 20); far below the NCAMP cross-ply back-out", "Fiber direction", "Measured mean"],
+  ["F2c", "Transverse compressive strength", 34.741, "ksi", 34741, "psi", 31, "ASTM D3410 geometry; combined loading compression fixture", "Table 14; 3 replicates; brooming in the middle of the gage (BGM) failure mode", "Transverse direction", "Measured mean"],
+  ["F3c", "Through-thickness compressive strength", 35.458, "ksi", 35458, "psi", 33, "Cuboid adapted from ASTM D7291", "Table 16; 3 replicates; brittle matrix failure in the 1–3 plane", "Through thickness", "Measured mean"],
+  ["F12-5pct", "Shear strength · at 5% strain", 14.492, "ksi", 14492, "psi", 37, "ASTM D5379/D5379M-12 (V-notched beam)", "Table 18; stress at 0.05 engineering shear strain; tests ran beyond 5% but not to failure (p. 28)", "1–2 plane", "Measured mean"],
+  ["F23", "Interlaminar shear strength · 2–3 plane", 7.410, "ksi", 7410, "psi", 40, "ASTM D5379/D5379M-12 (V-notched beam)", "Table 20; peak stress at failure, mean ultimate engineering shear strain 0.0197; angled cracking adjacent to the notches", "2–3 plane", "Measured mean"],
+  ["F13-5pct", "Interlaminar shear strength · 1–3 plane at 5% strain", 15.031, "ksi", 15031, "psi", 44, "ASTM D5379/D5379M-12 (V-notched beam)", "Table 22; stress at about 0.05 engineering shear strain (mean 0.0497); tests ran beyond 5% but not to failure (p. 36)", "1–3 plane", "Measured mean"],
+  ["tply", "Nominal cured ply thickness", .18, "mm", .18, "mm", 8, "Table 1, nominal composite characteristics", "Quoted by the report from the NCAMP specification (Ng and Tomblin, NMS 128/2 Rev B, 2013), not measured in this program", "Through thickness", "Reported nominal"],
+  ["resin-nominal", "Resin content · nominal", 35, "%", 35, "%", 8, "Table 1, nominal composite characteristics", "35 ± 2 wt.%, quoted from the NCAMP specification; fiber areal weight 190 g/m²", "Bulk", "Reported nominal"],
+  ["SG", "Specific gravity", 1.61, "—", 1.61, "—", 58, "ASTM D792-13 immersion", "Table 31; 3 edge samples of the 120-ply panel; specific gravity, multiply by the density of water for mass density", "Bulk", "Measured mean"],
+];
+export const nasaCarbonIM7: CitedMaterial = {
+  id: "im7-8552", name: "IM7 / 8552", family: "Carbon / epoxy", architecture: "Unidirectional",
+  datasetId: "nasa-tm-20230001560-im7-8552-rt-measured-v1", dataset: "NASA 2023 characterization · room-temperature means",
+  conditions: nasaConditions, reviewedOn: "2026-10-10", recordRevision: "2026-10-10.1", elasticInputs,
+  application: "Independent check of the NCAMP IM7 / 8552 in-plane elastic set, and the only through-thickness moduli (E3, G23, G13) in the library for this material. Elastic inputs E1t, E2t, G12 and ν12 come from one panel set with three to five replicates. Strengths are small-sample means, not design allowables; the longitudinal compressive strength is not comparable with the NCAMP cross-ply back-out.",
+  source: references["im7-nasa-2023"],
+  recordDetails: [
+    "Second, independent IM7 / 8552 dataset, shown beside the NCAMP qualification record through the dataset picker and never merged with it. The tests were run by Arizona State University and NASA Glenn to build MAT213 impact-model input, not as a qualification program: one panel set, three replicates per test (five for longitudinal tension modulus), no prepreg lots, and no statistics beyond mean and standard deviation.",
+    "The report says room temperature and quasi-static loading (pp. 1 and 52) and gives no temperature value or conditioning procedure. The record repeats that wording instead of assuming the 70°F dry condition of the NCAMP record.",
+    "Longitudinal compression (Table 12) was measured on 16-ply [0] specimens in a combined loading compression fixture per ASTM D6641. The report records end-crushing and longitudinal matrix splitting in the gage area. The 116.7 ksi mean is far below the 251 ksi NCAMP cross-ply back-out for the same material; the entry keeps the measured value with its method so the difference stays visible.",
+    "Two of the five longitudinal tension specimens, the constant-thickness ones, were not carried to failure because their tabs debonded (p. 9). The strength mean covers the three reduced-thickness specimens; the modulus and Poisson means cover all five.",
+    "Shear moduli are stated in terms of engineering shear strain (pp. 28, 32, 36). The 1–2 and 1–3 plane tests ran beyond 5% engineering strain but not to failure, so those strengths are the stress at 5% strain. The 2–3 plane specimens failed at about 2% strain, so that strength is a failure value.",
+    "Through-thickness tension and compression used geometries the report says depart from the ASTM standards (pp. 16 and 26): tension specimens sized by the 120-ply panel thickness, compression cuboids adapted from ASTM D7291. Those entries are for information with that caveat.",
+    "Nominal ply thickness and resin content in Table 1 are quoted by the report from the NCAMP specification (Ng and Tomblin, NMS 128/2 Rev B, 2013), not measured here. Specific gravity was measured by ASTM D792-13 on edge samples of the 120-ply panel (Table 31, p. 52).",
+    "The NASA Technical Reports Server citation page lists the report with Public Use Permitted and public distribution. The report is linked from the publisher, not copied.",
+  ],
+  properties: nasaRows.map(([key, label, value, unit, sourceValue, sourceUnit, sourcePage, method, detail, direction, basis]) => ({
+    key, label, value, unit, sourceValue, sourceUnit, sourcePage, printedPage: sourcePage - 6, method, direction, basis,
+    symbol: ncampSymbols[key.split("-")[0]] || key, conditions: `Room temperature, quasi-static; ${detail}.`,
+    evidence: `${label}; printed page ${sourcePage - 6} (PDF page ${sourcePage}); ${detail}`,
+  })),
+};

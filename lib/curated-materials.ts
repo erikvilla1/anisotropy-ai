@@ -1,7 +1,7 @@
 import publishedReferences from "./published-material-references.json";
 import type { MaterialFeed } from "./material-evidence";
 import { dualUnits, propertyDisplayValue } from "./property-units";
-import { qualifiedCarbon, qualifiedCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedGlass, glassSupportingReferences } from "./qualification-materials";
+import { qualifiedCarbon, qualifiedCarbonIM7, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedGlass, glassSupportingReferences } from "./qualification-materials";
 import { modernGlassAdditions, supplierAdditions } from "./material-property-additions";
 import { textbookMaterials } from "./textbook-materials";
 import type { SourceRights } from "./source-rights";
@@ -226,6 +226,7 @@ export function exportCitedMaterial(material: CitedMaterial) {
 
 export function materialDatasets(material: CitedMaterial): CitedMaterial[] {
   if (material.id === "as4-3501") return [as4Textbook, as4Model];
+  if (material.id === "im7-8552") return [qualifiedCarbonIM7, nasaCarbonIM7];
   return material.id === "7781-e765" ? [qualifiedGlass, ncamp] : [material];
 }
 
