@@ -82,6 +82,7 @@ Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [web
 | [material-research-public-sources-2026-10-10.md](material-research-public-sources-2026-10-10.md) | Public data sources the website may show: NCAMP reports, MIL-HDBK-17F, NASA, open-access papers, datasheets |
 | [material-release-im7-8552-2026-10-10.md](material-release-im7-8552-2026-10-10.md) | Hexcel 8552 / IM7 record from the NCAMP 2019 reports |
 | [material-release-ncamp-5320-1-bt250e-6-2026-10-10.md](material-release-ncamp-5320-1-bt250e-6-2026-10-10.md) | Solvay 5320-1 / T650 and TenCate BT250E-6 / IM7 records from the NCAMP 2017 reports |
+| [material-release-ncamp-tc380-ep2190-2026-10-10.md](material-release-ncamp-tc380-ep2190-2026-10-10.md) | Toray TC380 / T1100GC and Syensqo EP2190 / IMS65 records from the NCAMP 2025 reports |
 
 ## Added when the parts exist
 
