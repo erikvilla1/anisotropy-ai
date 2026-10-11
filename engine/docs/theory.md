@@ -510,6 +510,40 @@ These are the equations of Daniel and Ishai Chapter 8 (printed pp. 212-217) with
 
 Failure ratios with a temperature change hold the residual stress fixed and scale only the mechanical loads, as described under "Fixed and variable loading" (ADR-0017).
 
+## 8. Plate buckling (`buckling.py`)
+
+A midplane-symmetric laminate ($`\mathbf{B} = 0`$) as a rectangular plate $`0 \le x \le a`$, $`0 \le y \le b`$, simply supported on all four edges, under uniform in-plane resultants. The engine reports the load factor $`\lambda`$ on reference resultants $`(N_x, N_y, N_{xy})`$, tension positive, at which a slightly bent shape is first in equilibrium. Unsymmetric laminates are refused (Whitney, *Structural Analysis of Laminated Anisotropic Plates*, 1987, Chapter 7 treats specific classes; not implemented).
+
+Specially orthotropic laminates ($`D_{16} = D_{26} = 0`$) without shear, computed by `navier_buckling` (Whitney Section 5.5, Eq. 5.72). With $`\alpha_m = m\pi/a`$ and $`\beta_n = n\pi/b`$, the mode $`w = W \sin\alpha_m x \sin\beta_n y`$ satisfies the governing equation and the simply supported conditions exactly, and
+
+```math
+\lambda_{mn} = \frac{D_{11}\alpha_m^4 + 2(D_{12} + 2D_{66})\alpha_m^2\beta_n^2 + D_{22}\beta_n^4}{-N_x\alpha_m^2 - N_y\beta_n^2},
+\qquad \lambda_{cr} = \min_{m,n \ge 1} \lambda_{mn}
+```
+
+over the modes the load compresses (positive denominator). The course formula sheet writes the same with $`N_y = kN_x`$.
+
+<!-- code: navier_buckling -->
+
+General symmetric laminates, or shear, computed by `ritz_buckling` (Whitney Sections 6.5 and 6.6, Eq. 6.38; the Galerkin and Ritz forms coincide for this series). With $`w = \sum_{m,n=1}^{M} W_{mn}\sin\alpha_m x \sin\beta_n y`$, the bending energy $`\tfrac12\int \boldsymbol{\kappa}^T\mathbf{D}\boldsymbol{\kappa}\,dA`$ and the work of the in-plane loads give
+
+```math
+\mathbf{K}\,\mathbf{w} = \lambda\,\mathbf{G}\,\mathbf{w},
+\qquad
+K_{ij} = \int \big[D_{11}w_{i,xx}w_{j,xx} + D_{12}(w_{i,xx}w_{j,yy} + w_{i,yy}w_{j,xx}) + D_{22}w_{i,yy}w_{j,yy} + 4D_{66}w_{i,xy}w_{j,xy}
++ 2D_{16}(w_{i,xx}w_{j,xy} + w_{i,xy}w_{j,xx}) + 2D_{26}(w_{i,yy}w_{j,xy} + w_{i,xy}w_{j,yy})\big]\,dA
+```
+
+```math
+G_{ij} = -\int \big[N_x w_{i,x}w_{j,x} + N_y w_{i,y}w_{j,y} + N_{xy}(w_{i,x}w_{j,y} + w_{i,y}w_{j,x})\big]\,dA
+```
+
+The integrals are products of one-dimensional sine and cosine integrals, which are closed forms; the $`D_{16}`$, $`D_{26}`$ and $`N_{xy}`$ terms couple modes whose $`m`$ or $`n`$ differ by an odd number. $`\mathbf{K}`$ is positive definite, so the problem is reduced by its Cholesky factor to a symmetric eigenproblem and the smallest positive $`\lambda`$ governs. The series satisfies only the geometric boundary conditions, so $`\lambda`$ converges from above and the case must state the number of terms (ADR-0022). With $`D_{16} = D_{26} = N_{xy} = 0`$ the equations uncouple and reproduce the closed form. The orthotropic closed form is reported beside the series result; it is nonconservative for angle-ply plates (Whitney Section 6.5). The choice between the closed form and the series, and the refusal of unsymmetric laminates, is computed by `plate_buckling`.
+
+<!-- code: ritz_buckling, plate_buckling -->
+
+Checks: Whitney's four numerical results for $`D_{11}/D_{22} = 10`$ and $`(D_{12} + 2D_{66})/D_{22} = 1`$ (Eqs. 5.76, 5.81, 5.84, 5.87); the series against the closed form; a hand-computed cross-ply plate (validation case `constructed-cross-ply-plate-buckling`). No course answer key for buckling has been checked yet.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature
@@ -517,4 +551,4 @@ Failure ratios with a temperature change hold the residual stress fixed and scal
 - Through-thickness and interlaminar stresses
 - Holes and other geometry that needs finite element analysis
 - Hashin failure criteria
-- Buckling: no plate dimensions, edge conditions or stability equation. The specially orthotropic simply supported plate under in-plane compression has a closed form from D and would be the first step
+- Buckling with clamped or free edges, of unsymmetric laminates, or after the critical load (postbuckling); transverse shear deformation in thick plates

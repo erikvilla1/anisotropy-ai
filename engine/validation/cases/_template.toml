@@ -54,6 +54,15 @@ ply_thickness = 0.0  # same for every ply
 # fixed = [0, 0, 0, 0, 0, 0]
 # variable = [1, 0, 0, 0, 0, 0]
 
+# Optional plate buckling (symmetric laminate, all edges simply supported):
+# [plate]
+# a = 0.0                 # along x, in the length unit
+# b = 0.0
+# edges = "simply-supported"
+# [buckling]
+# loads = [-1, 0, 0]      # reference [Nx, Ny, Nxy], compression negative; the result is the factor on them
+# terms = 7               # Ritz terms per direction; needed unless D16 = D26 = 0 and Nxy = 0
+
 [expected]
 tolerance = 0.001  # relative; loosen it to match how the answer key rounds
 # Give only the results the answer key states. Available keys:
