@@ -1,6 +1,6 @@
 # ADR-0021: Maximum strain and Tsai-Hill join the failure criteria; strain limits are explicit or derived only by a stated choice
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-11
 - Decided by: Erik Villa (founder) | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/failure.py`, `engine/src/anisotropy_engine/lamina.py`, `engine/src/anisotropy_engine/cases.py`, `engine/tests/test_failure_criteria.py`, `engine/validation/cases/constructed-max-strain-biaxial-lamina.toml`, `engine/validation/cases/daniel-ishai-sample-problem-6-1-tsai-hill.toml`, [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0017](ADR-0017-failure-with-fixed-and-variable-loads.md)

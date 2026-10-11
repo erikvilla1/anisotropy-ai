@@ -47,6 +47,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 ### Changed
 
 - The founder accepted ADR-0016 (mixed load and deformation conditions), ADR-0017 (first-ply failure with fixed and variable loads) and ADR-0018 (source rights classes) on 2026-10-10.
+- The founder accepted ADR-0020 (library export as engine input), ADR-0021 (maximum strain and Tsai-Hill), ADR-0022 (plate buckling) and ADR-0024 (the API exposes the case format) on 2026-10-11, to be revisited at the first failure each one names.
 - The founder accepted ADR-0019 (the physics library presents every equation the engine implements) on 2026-10-10.
 - The founder accepted ADR-0014 (thermal analysis) and ADR-0015 (course inputs, several materials). The thermal theory now cites its Daniel and Ishai Chapter 8 equations, and ADR-0014 records the course validation.
 - The founder accepted ADR-0009 to ADR-0013 (calculator cases, citations, local API, browser calculator, prescribed curvature).
