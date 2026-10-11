@@ -14,6 +14,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 
+- NASA 2023 IM7 / 8552 characterization (NASA/TM-20230001560) as a second dataset of the IM7 / 8552 record, selectable beside the NCAMP data: 24 room-temperature entries including through-thickness moduli and strengths, printed psi values kept as source values, publisher fingerprint, rights evidence and a monitor adapter. The material count is unchanged.
 - Toray TC380 / T1100GC and Syensqo EP2190 / IMS65 unidirectional records from the NCAMP 2025 qualification reports: 20 measured room-temperature entries each. EP2190 was tested at ambient condition and its compression measured directly; the record and its keys say so.
 - Solvay 5320-1 / T650 and TenCate BT250E-6 / IM7 unidirectional records from the NCAMP 2017 qualification reports: 19 measured room-temperature entries each with page references, publisher-confirmed fingerprints, rights evidence and one-record-per-report monitor adapters.
 - Hexcel 8552 / IM7 unidirectional record from the NCAMP 2019 qualification reports: 21 measured room-temperature entries with page references, fingerprints, rights evidence and monitor adapters; the first entry from the public-sources research.

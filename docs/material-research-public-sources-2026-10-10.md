@@ -215,8 +215,8 @@ Each citation page on ntrs.nasa.gov states "Public Use Permitted" (newer records
 
 | Property | Value | Unit | Table, page |
 | --- | --- | --- | --- |
-| Cured ply thickness (nominal) | 0.18 | mm | Table 1, p. 1 |
-| E11 tension / nu12 / F1t | 23,105,148 / 0.3235 / 391,111 | psi / — / psi | Table 6, p. 12 |
+| Cured ply thickness (nominal) | 0.18 | mm | Table 1, p. 2 |
+| E11 tension / nu12 / F1t | 23,105,148 / 0.3235 / 392,337 (corrected on entry; 391,111 was the last replicate) | psi / — / psi | Table 6, p. 12 |
 | E22 tension / nu21 / F2t | 1,299,337 / 0.0208 / 11,742 | psi / — / psi | Table 8, p. 15 |
 | E33 tension | 1,089,994 | psi | Table 10, p. 18 |
 | E11 compression / F1c | 19,450,971 / 116,744 | psi | Table 12, p. 21 |
@@ -279,7 +279,7 @@ Daniel and Ishai Appendix A, CMH-17 Revisions G and H, Tsai's "Theory of Composi
 1. Hexcel 8552/IM7 unitape (NCAMP, system 1): complete elastic set with Poisson's ratio, strengths, ply thickness and the SAR for B-basis context. Pairs with the existing 8552/AS4 record. Done on 2026-10-10, see [the release note](material-release-im7-8552-2026-10-10.md).
 2. Solvay 5320-1/T650 unitape (system 4) and TenCate BT250E-6/IM7 (system 10): complete sets, cross-checked, clear rights sentence. Done on 2026-10-10, see [the release note](material-release-ncamp-5320-1-bt250e-6-2026-10-10.md). Correction: the 5320-1 distribution sentence is on p. 9, not p. 8.
 3. Toray TC380/T1100GC (system 15) and EP2190/IMS65 (system 13): current high-strength systems, after a visual check of the tables. Done on 2026-10-10, see [the release note](material-release-ncamp-tc380-ep2190-2026-10-10.md). Corrections from the visual check: EP2190 longitudinal compression is measured directly by SACMA SRM 1R-94, not a back-out; its room-temperature tests are ambient (RTA), not dried; the EP2190 statistical report cover is dated 28 August 2025.
-4. NASA/TM-20230001560 IM7/8552 as a second, independent IM7/8552 dataset with through-thickness moduli, kept separate from the NCAMP record.
+4. NASA/TM-20230001560 IM7/8552 as a second, independent IM7/8552 dataset with through-thickness moduli, kept separate from the NCAMP record. Done on 2026-10-10 as a second dataset of the IM7 / 8552 record, see [the release note](material-release-nasa-im7-8552-2026-10-10.md). Corrections from the visual check: the longitudinal tensile strength average is 392,337 psi (391,111 psi is the last replicate); Table 1 is on printed p. 2; the through-thickness compression (Table 16, p. 27: E33 1,459,939 psi, 35,458 psi), the through-thickness tensile strength (7,846 psi) and ν31 (0.026), the 2-3 and 1-3 plane shear strengths (7,410 and 15,031 psi) and the specific gravity 1.61 (Table 31, p. 52) were added.
 5. MIL-HDBK-17-2F T650-35/976 (B30 class) and 7781/EA9396 as public-domain historical records, labelled canceled handbook data.
 6. MTM45-1/IM7 only after NCAMP confirms the Rev C report's distribution terms.
 
