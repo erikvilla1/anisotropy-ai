@@ -1,4 +1,4 @@
-import { foundationTopics, maximumStrain, bookReference, coreReferences } from "./physics-foundations";
+import { foundationTopics, maximumStrain, bookReference, coreReferences, laminateExtensions, failureExtensions } from "./physics-foundations";
 export type Method = { name: string; equation: string; detail: string;
   reference?: { title: string; url: string; location: string }; units?: string };
 export type PhysicsTopic = {
@@ -92,8 +92,8 @@ const existingPhysicsTopics: PhysicsTopic[] = [
       ),
       m(
         "Laminate engineering constants",
-        "a = A⁻¹\nEx = 1/(h a₁₁)    Ey = 1/(h a₂₂)\nGxy = 1/(h a₆₆)    νxy = −a₁₂/a₁₁",
-        "These membrane expressions assume B = 0 and unrestrained lateral response. For coupled laminates, derive effective compliance from the full ABD system and state the loading constraints.",
+        "a = extensional block of [[A,B],[B,D]]⁻¹  (= A⁻¹ when B = 0)\nEx = 1/(h a₁₁)    Ey = 1/(h a₂₂)    Gxy = 1/(h a₆₆)\nνxy = −a₂₁/a₁₁    νyx = −a₁₂/a₂₂\nηxs = a₆₁/a₁₁    ηys = a₆₂/a₂₂",
+        "Effective in-plane constants of a laminate free to bend as it stretches. For a symmetric laminate a = A⁻¹; for a general laminate take the extensional block of the full ABD inverse (§7.12.3). The η terms are the shear coupling coefficients. Restrained bending gives different apparent constants (engineering_constants).",
       ),
     ],
   },
@@ -243,7 +243,7 @@ export const physicsTopics: PhysicsTopic[] = [
     methods: topic.methods.filter(m => !m.name.startsWith("Hashin")).map<Method>(method => ({
       ...method, units: coreReferences[method.name].units,
       reference: { ...bookReference, location: coreReferences[method.name].location },
-    })).concat(topic.id === "failure" ? [maximumStrain] : []),
+    })).concat(topic.id === "failure" ? [maximumStrain, ...failureExtensions] : laminateExtensions),
   })),
   ...foundationTopics,
 ];
@@ -252,5 +252,5 @@ export const deferredPhysicsTopics = [
   { title: "CAD & finite elements", detail: "Geometry, elements, meshing, boundary conditions and solver-specific validation need a separate research and implementation phase." },
   { title: "Open-hole strength & progressive damage", detail: "Requires local-field models, applicable failure formulations and calibrated damage or characteristic-length data." },
   { title: "Layup optimization", detail: "Requires a verified analysis model, explicit constraints and candidate checks before ranking designs." },
-  { title: "Mode-specific failure models", detail: "Hashin variants, required shear strengths and applicability to UD or woven materials need their own formulation review." },
+  { title: "Mode-specific failure models", detail: "Hashin–Rotem (1973) is presented as the textbook prints it. The later Hashin fiber and matrix mode variants, their required shear strengths and applicability to UD or woven materials need their own formulation review." },
 ];

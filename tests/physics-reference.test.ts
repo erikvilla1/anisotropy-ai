@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { physicsTopics } from "../lib/physics";
+import { physicsLatex } from "../lib/physics-latex";
 import { longitudinalMixture, thermalMixture, halpinTsai, planeStressQ, rotatedQ, transformations, multiplyVector, referenceABD, type Vector3 } from "../lib/physics-reference-checks";
 
 const near = (actual: number, expected: number, tolerance: number) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} ≠ ${expected} ± ${tolerance}`);
@@ -44,7 +45,7 @@ test("laminate coupling, thickness scaling and constituent limits are consistent
   assert.throws(() => stack([0], 0), /positive/);
 });
 test("every current formula has a location and unit convention; future solver workflows are separate", () => {
-  assert.equal(physicsTopics.flatMap(t => t.methods).length, 29);
+  assert.equal(physicsTopics.flatMap(t => t.methods).length, 38);
   assert.ok(!physicsTopics.some(t => t.id === "fea" || t.id === "optimization"));
   for (const topic of physicsTopics) for (const method of topic.methods) {
     assert.ok(method.reference?.location && method.units);
@@ -52,4 +53,25 @@ test("every current formula has a location and unit convention; future solver wo
   }
   const maxStrain = physicsTopics.flatMap(t => t.methods).find(m => m.name === "Maximum strain")!;
   assert.match(maxStrain.detail, /missing compression or shear/);
+});
+test("every engine theory section has a card that names its function, cites a location and has a typeset form (ADR-0019)", () => {
+  const methods = physicsTopics.flatMap(t => t.methods);
+  assert.equal(new Set(methods.map(m => m.name)).size, methods.length);
+  for (const m of methods) assert.ok(physicsLatex[m.name]?.length, `${m.name} has no typeset equation`);
+  const card = (name: string) => methods.find(m => m.name === name)!;
+  const byFunction: Record<string, string> = {
+    abd_compliance: "Laminate compliance · ABD inverse", prescribed_curvature_response: "Known forces & prescribed curvature", mixed_response: "Mixed load & deformation conditions",
+    engineering_constants: "Laminate engineering constants", first_ply_failure: "First-ply failure load", tsai_wu_ratio_combined: "Strength ratio with fixed & variable loads",
+    thermal_resultants: "Thermal resultants · uniform ΔT", thermal_ply_surfaces: "Residual ply stress after ΔT",
+  };
+  for (const [fn, name] of Object.entries(byFunction)) assert.match(card(name).detail, new RegExp(fn), `${name} should name ${fn}`);
+  assert.match(card("Laminate compliance · ABD inverse").reference!.location, /7\.27–7\.28, p\. 166/);
+  assert.match(card("Strength ratio with fixed & variable loads").reference!.location, /9\.26–9\.28, p\. 256/);
+  assert.match(card("Hashin–Rotem (1973) criteria").reference!.location, /6\.49–6\.50/);
+  assert.match(card("Hashin–Rotem (1973) criteria").detail, /not the later Hashin/);
+  assert.match(card("Mixed load & deformation conditions").reference!.url, /ntrs\.nasa\.gov/);
+  assert.match(card("Laminate engineering constants").detail, /full ABD inverse/);
+  assert.equal(physicsTopics.find(t => t.id === "thermal")!.methods.length, 6);
+  assert.equal(physicsTopics.find(t => t.id === "failure")!.methods.length, 9);
+  assert.equal(physicsTopics.find(t => t.id === "clt")!.methods.length, 17);
 });
