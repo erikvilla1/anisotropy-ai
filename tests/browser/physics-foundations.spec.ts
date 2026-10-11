@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("physics foundations show source locations, units and explicitly deferred research", async ({ page }) => {
   await page.goto("/library");
   await page.getByRole("tab", { name: "Physics & references" }).click();
-  await expect(page.locator(".physics-intro")).toContainText("38 reference cards");
+  await expect(page.locator(".physics-intro")).toContainText("39 reference cards");
   await page.getByRole("button", { name: /Constituents & material estimates/ }).click();
   await page.getByRole("textbox", { name: "Search this physics topic" }).fill("Halpin");
   const card = page.locator(".method-entry").filter({ hasText: "Halpin–Tsai estimate" });
