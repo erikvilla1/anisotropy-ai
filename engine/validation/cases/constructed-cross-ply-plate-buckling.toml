@@ -1,0 +1,30 @@
+title = "Analytical check: buckling of a simply supported square cross-ply plate under uniaxial compression"
+source = "Constructed analytical check, not a printed problem. [0/90/90/0] AS4/3501-6 (Daniel & Ishai Table A.4, p. 377), 0.25 mm plies, 100 mm square, simply supported. By hand: nu21 = 0.27*10.3/147, Q11 = 147.755 GPa, Q22 = 10.3529, Q12 = 2.7953, Q66 = 7; D11 = 10.881625 N*m, D22 = 2.294009, D12 = 0.232940, D66 = 0.583333. Whitney (1987) Eq. 5.72 with m = n = 1 and k = 0: N_cr = pi^2 [D11 + 2 (D12 + 2 D66) + D22] / a^2 = 15766.54 N/m; higher modes are larger for a square plate with D11 > D22."
+units = "SI"
+
+[material]
+E1 = 147.0
+E2 = 10.3
+G12 = 7.0
+nu12 = 0.27
+
+[laminate]
+layup = [0, 90, 90, 0]
+ply_thickness = 0.25
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]  # no response needed; the question is the buckling load
+
+[plate]
+a = 100.0   # mm, along x
+b = 100.0
+edges = "simply-supported"
+
+[buckling]
+loads = [-1.0, 0.0, 0.0]  # reference resultants [Nx, Ny, Nxy] in N/m, compression negative; the factor scales them
+
+[expected]
+tolerance = 1e-6
+buckling_factor = 15766.541988
+buckling_mode = [1, 1]
+buckling_loads = [-15766.541988, 0, 0]

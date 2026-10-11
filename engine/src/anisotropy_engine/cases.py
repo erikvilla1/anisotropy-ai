@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 
 from ._validation import finite_vector
+from .buckling import BucklingResult, plate_buckling
 from .engineering import engineering_constants
 from .failure import FirstPlyFailure, first_ply_failure_combined
 from .lamina import Lamina, StrainLimits, Strengths, ThermalExpansion, reduced_compliance, reduced_stiffness, strain_limits_from_strengths
@@ -146,7 +147,22 @@ def _supplies(tables: dict, resolved: dict, name: str, what: str) -> bool:
 def validate_case_inputs(case: dict) -> None:
     """Reject incomplete or misspelled case inputs before converting units or solving."""
     _fields(case, "case", {"units", "laminate", "applied"},
-            {"title", "source", "expected", "f12_star", "material", "materials", "failure"})
+            {"title", "source", "expected", "f12_star", "material", "materials", "failure", "plate", "buckling"})
+    if ("plate" in case) != ("buckling" in case):
+        raise ValueError("plate buckling needs both a [plate] table (a, b, edges) and a [buckling] table (loads, terms)")
+    if "plate" in case:
+        _fields(case["plate"], "plate", {"a", "b", "edges"}, set())
+        if case["plate"]["edges"] != "simply-supported":
+            raise ValueError('plate.edges must be "simply-supported"; other edge conditions are not implemented')
+        if any(not _is_number(case["plate"][k]) or case["plate"][k] <= 0 for k in ("a", "b")):
+            raise ValueError("plate.a and plate.b must be positive lengths")
+        _fields(case["buckling"], "buckling", {"loads"}, {"terms"})
+        finite_vector(case["buckling"]["loads"], "buckling.loads", 3)
+        if not np.any(case["buckling"]["loads"]):
+            raise ValueError("buckling.loads needs at least one nonzero reference resultant [Nx, Ny, Nxy]")
+        terms = case["buckling"].get("terms")
+        if terms is not None and (not isinstance(terms, int) or isinstance(terms, bool) or terms < 1):
+            raise ValueError("buckling.terms must be a positive integer (series terms per direction)")
     if ("material" in case) == ("materials" in case):
         raise ValueError("case needs exactly one of [material] (one material) or [materials.<name>] tables")
     if case["units"] not in UNIT_SYSTEMS:
@@ -333,6 +349,16 @@ def solve_case(case: dict) -> CaseSolution:
                         loads, eps0, kappa, surfaces, constrained, mixed, resolved)
 
 
+def buckling_result(case: dict, solution: CaseSolution) -> BucklingResult | None:
+    """Plate buckling for a case with [plate] and [buckling], in SI, or None without them."""
+    if "plate" not in case:
+        return None
+    units = UNIT_SYSTEMS[case["units"]]
+    a, b = (float(case["plate"][k]) * units["length"][0] for k in ("a", "b"))
+    loads = np.asarray(case["buckling"]["loads"], dtype=float) * units["N"][0]
+    return plate_buckling(solution.plies, a, b, loads, case["buckling"].get("terms"))
+
+
 def failure_loads(case: dict, solution: CaseSolution) -> tuple[Loads, Loads] | None:
     """The (fixed, variable) loads for first-ply failure, in SI, or None when it cannot be checked.
 
@@ -456,6 +482,16 @@ def engine_results(case: dict) -> dict:
         results[key] = (shown(getattr(constants, key), "modulus"), 0.0)
     results["nu_xy"] = (constants.nu_xy, 0.0)
     results["nu_yx"] = (constants.nu_yx, 0.0)
+
+    # Plate buckling: the factor on the reference loads, the critical loads, and the mode.
+    buckling = buckling_result(case, solution)
+    if buckling is not None:
+        results["buckling_factor"] = (buckling.load_factor, 0.0)
+        add("buckling_loads", shown(buckling.critical_loads, "N"))
+        if buckling.mode is not None:
+            add("buckling_mode", np.array(buckling.mode, dtype=float))
+        if buckling.orthotropic_factor is not None:
+            results["buckling_orthotropic_factor"] = (buckling.orthotropic_factor, 0.0)
 
     # First-ply failure: the ratio on the variable loads, the loads at failure, and where it occurs.
     for criterion, fpf in first_ply_failures(case, solution).items():
