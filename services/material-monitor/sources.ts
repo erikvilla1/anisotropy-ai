@@ -83,6 +83,15 @@ sources.push(
     documentPattern: /$a/, identity: [], intervalHours: 24, kind: "reference-document" },
 );
 
+// Hexcel 8552 / IM7 qualification reports (2019). Registered before the loop below so they
+// attach to the IM7 record, not the AS4 one that shares the "8552" name.
+for (const key of ["im7-data", "im7-stats"] as const) {
+  const reference = qualificationReferences[key];
+  sources.push({ id: reference.id, name: reference.title, publisher: reference.publisher,
+    materials: [{ id: "im7-8552", name: "IM7 / 8552" }], pageUrl: reference.url, hosts: [new URL(reference.url).hostname],
+    documentPattern: /$a/, identity: [], intervalHours: 24, kind: "reference-document", maxDocumentBytes: 20_000_000 });
+}
+
 // Only public edition/status metadata is retained. No ASTM standard text is stored or sent to AI.
 for (const reference of Object.values(qualificationReferences)) {
   if (sources.some(s => s.id === reference.id)) continue;
