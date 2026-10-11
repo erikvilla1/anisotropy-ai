@@ -1,5 +1,7 @@
 """A synchronous local API. It adapts HTTP to the engine; it contains no laminate math."""
 
+import math
+import tomllib
 from importlib.metadata import version
 
 import numpy as np
@@ -8,13 +10,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from anisotropy_engine.cases import compare, engine_results, solve_case, validate_case_inputs
 from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest,
-    PrescribedCurvatureResponse, VerificationResponse,
+    AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, LibraryMaterialInput,
+    MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, VerificationResponse,
 )
 
 
@@ -55,6 +58,51 @@ def resolve_material(choice) -> tuple[object, MaterialProvenance | None]:
         resolved = choice.resolve()
         return resolved.lamina, MaterialProvenance.of(resolved)
     return choice.to_engine(), None
+
+
+def _json_value(value):
+    """Engine results as JSON: numpy scalars and arrays to numbers and lists, non-finite to null."""
+    if isinstance(value, np.ndarray):
+        return [_json_value(v) for v in value.tolist()]
+    if isinstance(value, (list, tuple)):
+        return [_json_value(v) for v in value]
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+@app.post("/v1/cases/solve", response_model=CaseResponse)
+def solve_case_endpoint(problem: CaseRequest) -> CaseResponse:
+    """Solve a problem written in the engine's case format and return every result it determines.
+
+    One endpoint for everything the calculator does: stiffness, any of the seven applied forms
+    including mixed conditions and a temperature change, library materials, several materials,
+    first-ply failure by every criterion the inputs allow, plate buckling, and the answer-key
+    comparison when the case carries [expected]. Validation and calculation happen in the engine.
+    """
+    if problem.toml is not None:
+        try:
+            case = tomllib.loads(problem.toml)
+        except tomllib.TOMLDecodeError as exc:
+            raise HTTPException(status_code=422, detail=f"toml: {exc}") from exc
+    else:
+        case = problem.case
+    try:
+        validate_case_inputs(case)
+        with np.errstate(over="raise", invalid="raise", divide="raise"):
+            solution = solve_case(case)
+            results = engine_results(case)
+            comparisons, problems = compare(case) if "expected" in case else ([], [])
+    except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc) or exc.__class__.__name__) from exc
+    return CaseResponse(
+        engine_version=version("anisotropy-engine"), units=case["units"], title=case.get("title"),
+        results={key: _json_value(value) for key, (value, _scale) in results.items()},
+        criteria=[key.removeprefix("fpf_ratio_") for key in results if key.startswith("fpf_ratio_")],
+        materials={name: MaterialProvenance.of(item) for name, item in solution.library.items()},
+        comparison=[ComparisonOutput(key=c.key, expected=float(c.expected), engine=float(c.engine), allowed=float(c.allowed), agrees=c.agrees)
+                    for c in comparisons] if "expected" in case else None,
+        problems=problems,
+    )
 
 
 @app.get("/v1/materials")
