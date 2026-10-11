@@ -4,11 +4,12 @@ import { readFileSync } from "node:fs";
 import { exportMaterialLibrary, libraryExportPath, renderMaterialLibrary } from "../scripts/export-material-library";
 import { curatedMaterials, materialDatasets } from "../lib/curated-materials";
 
+const LF = "\n";
+const CRLF = "\r" + LF;
+
 test("the committed engine library file is exactly what the website library exports (ADR-0020)", () => {
   // Windows checkouts may carry CRLF; the comparison is about content, not line endings.
-  const committed = readFileSync(libraryExportPath, "utf8").replace(/
-/g, "
-");
+  const committed = readFileSync(libraryExportPath, "utf8").split(CRLF).join(LF);
   assert.equal(committed, renderMaterialLibrary(), "run: npm run export:library");
 });
 
