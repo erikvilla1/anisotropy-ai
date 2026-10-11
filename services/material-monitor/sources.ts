@@ -92,7 +92,19 @@ const ncampRecords: Record<string, { id: string; name: string }> = {
   "tc380-data": { id: "t1100gc-tc380", name: "T1100GC / TC380" }, "tc380-stats": { id: "t1100gc-tc380", name: "T1100GC / TC380" },
   "ep2190-data": { id: "ims65-ep2190", name: "IMS65 / EP2190" }, "ep2190-stats": { id: "ims65-ep2190", name: "IMS65 / EP2190" },
   "im7-nasa-2023": { id: "im7-8552", name: "IM7 / 8552" }, // NASA/TM-20230001560, second IM7 / 8552 dataset
+  "as4pw-data": { id: "as4-8552s-pw", name: "AS4 PW / 8552S" }, "as4pw-stats": { id: "as4-8552s-pw", name: "AS4 PW / 8552S" },
+  "t650pw-data": { id: "t650-5320-1-pw", name: "T650 PW / 5320-1" }, "t650pw-stats": { id: "t650-5320-1-pw", name: "T650 PW / 5320-1" },
+  "tc250-data": { id: "hts40-tc250", name: "HTS40 PW / TC250" }, "tc250-stats": { id: "hts40-tc250", name: "HTS40 PW / TC250" },
 };
+// MIL-HDBK-17-2F and its cancellation notice serve two historical records. The ASSIST record page
+// is monitored; the PDF itself is stamped per download, so a byte change is a review trigger only.
+for (const key of ["milhdbk-17-2f", "milhdbk-17-2f-notice-1"] as const) {
+  const reference = qualificationReferences[key];
+  sources.push({ id: reference.id, name: reference.title, publisher: reference.publisher,
+    materials: [{ id: "t650-35-976", name: "T650-35 / 976" }, { id: "7781-ea9396", name: "7781 / EA 9396" }],
+    pageUrl: reference.url, hosts: [new URL(reference.url).hostname],
+    documentPattern: /$a/, identity: [], intervalHours: 24 * 7, kind: "reference-document", maxDocumentBytes: 20_000_000 });
+}
 for (const [key, material] of Object.entries(ncampRecords)) {
   const reference = qualificationReferences[key as keyof typeof qualificationReferences];
   sources.push({ id: reference.id, name: reference.title, publisher: reference.publisher,

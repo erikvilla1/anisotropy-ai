@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("curated lookup has dated original references, dual units and no classroom fallback", async ({ page }) => {
   await page.goto("/library");
-  await expect(page.getByText("20 materials", { exact: true })).toBeVisible();
+  await expect(page.getByText("25 materials", { exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "English / imperial", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "SI / metric", exact: true })).toBeVisible();
   await expect(page.locator(".cited-properties")).not.toContainText(/Appendix F|School source|identity needed|unverified/i);
@@ -88,7 +88,7 @@ test("carbon qualification exports its complete elastic set and supporting speci
 
 test("IM7 / 8552 offers the NASA 2023 dataset beside the NCAMP record without changing the material count", async ({ page }) => {
   await page.goto("/library");
-  await expect(page.getByText("20 materials", { exact: true })).toBeVisible();
+  await expect(page.getByText("25 materials", { exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Search materials" }).fill("IM7 / 8552");
   await expect(page.getByRole("heading", { name: "IM7 / 8552", exact: true })).toBeVisible();
   await expect(page.locator('[data-property="E1t"]')).toContainText("23.51 Msi");
@@ -100,4 +100,22 @@ test("IM7 / 8552 offers the NASA 2023 dataset beside the NCAMP record without ch
   await expect(page.locator('[data-property="F1c-derived"]')).toHaveCount(0);
   await expect(page.locator('[data-property="E1t"] a')).toHaveAttribute("href", /ntrs\.nasa\.gov.+TM-20230001560\.pdf#page=18$/);
   await expect(page.locator(".property-reference")).toContainText("February 2023");
+});
+
+test("woven NCAMP and canceled-handbook records render with their own badges, directions and caveats", async ({ page }) => {
+  await page.goto("/library");
+  await page.getByRole("textbox", { name: "Search materials" }).fill("TC250");
+  await expect(page.getByRole("heading", { name: "HTS40 PW / TC250", exact: true })).toBeVisible();
+  await expect(page.locator('[data-property="E1t"]')).toContainText("8.66 Msi");
+  await expect(page.locator('[data-property="E1t"]')).toContainText("Warp");
+  await expect(page.locator('[data-property="F1c"]')).toContainText("Measured mean");
+  await expect(page.locator('[data-property="E1t"] a')).toHaveAttribute("href", /12k-HTS40-2\.pdf#page=28$/);
+  await page.getByRole("textbox", { name: "Search materials" }).fill("T650-35");
+  await expect(page.getByRole("heading", { name: "T650-35 / 976", exact: true })).toBeVisible();
+  await expect(page.locator(".source-rights")).toContainText("Public domain");
+  await expect(page.locator(".dataset-summary")).toContainText("canceled 26 March 2013");
+  await expect(page.locator('[data-property="F1t"]')).toContainText("236 ksi");
+  await expect(page.locator('[data-property="F1t"]')).toContainText("B30");
+  await expect(page.locator('[data-property="nu12"]')).toHaveCount(0);
+  await expect(page.locator('[data-property="F1t"] a')).toHaveAttribute("href", /quicksearch\.dla\.mil.+#page=301$/);
 });
