@@ -278,7 +278,7 @@ Daniel and Ishai Appendix A, CMH-17 Revisions G and H, Tsai's "Theory of Composi
 
 1. Hexcel 8552/IM7 unitape (NCAMP, system 1): complete elastic set with Poisson's ratio, strengths, ply thickness and the SAR for B-basis context. Pairs with the existing 8552/AS4 record. Done on 2026-10-10, see [the release note](material-release-im7-8552-2026-10-10.md).
 2. Solvay 5320-1/T650 unitape (system 4) and TenCate BT250E-6/IM7 (system 10): complete sets, cross-checked, clear rights sentence. Done on 2026-10-10, see [the release note](material-release-ncamp-5320-1-bt250e-6-2026-10-10.md). Correction: the 5320-1 distribution sentence is on p. 9, not p. 8.
-3. Toray TC380/T1100GC (system 15) and EP2190/IMS65 (system 13): current high-strength systems, after a visual check of the tables.
+3. Toray TC380/T1100GC (system 15) and EP2190/IMS65 (system 13): current high-strength systems, after a visual check of the tables. Done on 2026-10-10, see [the release note](material-release-ncamp-tc380-ep2190-2026-10-10.md). Corrections from the visual check: EP2190 longitudinal compression is measured directly by SACMA SRM 1R-94, not a back-out; its room-temperature tests are ambient (RTA), not dried; the EP2190 statistical report cover is dated 28 August 2025.
 4. NASA/TM-20230001560 IM7/8552 as a second, independent IM7/8552 dataset with through-thickness moduli, kept separate from the NCAMP record.
 5. MIL-HDBK-17-2F T650-35/976 (B30 class) and 7781/EA9396 as public-domain historical records, labelled canceled handbook data.
 6. MTM45-1/IM7 only after NCAMP confirms the Rev C report's distribution terms.
