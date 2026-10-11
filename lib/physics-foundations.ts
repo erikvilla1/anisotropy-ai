@@ -25,13 +25,64 @@ export const coreReferences: Record<string, { location: string; units: string }>
   "Thermal & moisture resultants": { location: "Chapter 8, §§8.4–8.5, pp. 212–220; integrated eigenstrain form", units: laminateUnits + " α: 1/K; β and concentration must share the same moisture definition." },
   "Global strain recovery": { location: "Chapter 7, §7.2, pp. 160–164; Chapter 8, §8.4 for free strains", units: "ε and γ: fractions; κ: 1/m; z: m; αΔT and βΔc: fractions." },
   "Local strains & local stresses": { location: "Chapters 4 and 7, §§4.4 and 7.3 (pp. 160–161); Chapter 8, §8.4 for mechanical strain", units: stressUnits },
-  "Laminate engineering constants": { location: "Chapter 7, §7.12; effective membrane constants with B = 0", units: "a = A⁻¹ in m/N, h in m; effective E and G in Pa; ν dimensionless." },
+  "Laminate engineering constants": { location: "Eq. 7.84, pp. 183–184; §7.12.3 general laminates use the extensional block of the full ABD inverse", units: "a in m/N, h in m; effective E and G in Pa; ν and η dimensionless." },
   "Maximum stress": { location: "Chapter 6, §6.3, pp. 124–125; plane-stress restriction", units: "Stresses and positive strength magnitudes use one stress unit; FI dimensionless." },
   "Tsai–Hill": { location: "Eqs. 6.16–6.17, p. 129; sign-selected strengths", units: "Stresses and strengths use one stress unit; FI dimensionless." },
   "Tsai–Wu coefficients": { location: "Eqs. 6.29–6.40, pp. 131–133; normalized interaction notation", units: "F₁, F₂: 1/Pa; F₁₁, F₂₂, F₁₂, F₆₆: 1/Pa²; f₁₂ dimensionless." },
   "Tsai–Wu failure index": { location: "Eqs. 6.29–6.40, pp. 131–133; plane stress", units: "Use stress units consistent with the coefficients; FI dimensionless." },
   "Strength ratio & safety margin": { location: "Eqs. 6.56–6.60, p. 139; margin convention MS = R/FS − 1 stated here", units: "R, FI, specified factor FS and margin MS are dimensionless. FS > 0." },
 };
+
+const nasaReference = { title: "NASA RP-1351 · Basic Mechanics of Laminated Composite Plates", url: "https://ntrs.nasa.gov/citations/19950009349" };
+const nasaMethod = (name: string, equation: string, detail: string, location: string, units: string): Method => ({
+  name, equation, detail, units, reference: { ...nasaReference, location },
+});
+
+// Operations the engine implements beyond the foundation cards (ADR-0019). Each names its engine function.
+export const laminateExtensions: Method[] = [
+  method("Laminate compliance · ABD inverse",
+    "[ε⁰; κ] = [[a, b], [bᵀ, d]] [N; M]\n[[a, b], [bᵀ, d]] = [[A, B], [B, D]]⁻¹\nSymmetric: b = 0, a = A⁻¹, d = D⁻¹",
+    "Deformation directly from loads. The lower-left block is the transpose of b. For an unsymmetric laminate a is not A⁻¹: extension and bending stay coupled. The engine solves the 6×6 system directly and forms this inverse only when the compliance itself is the result (abd_compliance).",
+    "Eqs. 7.27–7.28, p. 166", "a: m/N; b: 1/N; d: 1/(N·m), with A in N/m, B in N and D in N·m."),
+  nasaMethod("Known forces & prescribed curvature",
+    "A ε⁰ = N − B κ\nM = B ε⁰ + D κ",
+    "When all three force resultants and all three curvatures are known, the moments are the unknowns: solve the first system for the mid-plane strain, then recover M. Zero curvature enforces flatness in this model. The result is the moment applied to the laminate, not a fixture reaction. The engine re-solves the forward problem and rejects a result that does not recover the inputs (prescribed_curvature_response, forward_verification; ADR-0013).",
+    "Section III.D, Eqs. 48–51, constitutive relation; rearrangement per engine theory §4", laminateUnits),
+  nasaMethod("Mixed load & deformation conditions",
+    "F + Fᵀ = K d,  d = [ε⁰; κ],  K = [[A, B], [B, D]]\nK_LL d_L = F_L + Fᵀ_L − K_LD d_D\nF_D = K_DL d_L + K_DD d_D − Fᵀ_D",
+    "For each of the six load–deformation pairs exactly one quantity is known. Split the rows into known-load (L) and known-deformation (D) sets, solve the first system for the unknown deformations, then recover the unknown resultants. All loads known is the forward solve; forces plus curvatures is the prescribed-curvature case. Fᵀ is the thermal resultant, zero without a temperature change (mixed_response; ADR-0016).",
+    "Section III.D, Eqs. 48–51, constitutive relation; row partitioning per engine theory §4", laminateUnits + " A force given as an average stress is σ = N/h."),
+];
+
+export const failureExtensions: Method[] = [
+  method("Hashin–Rotem (1973) criteria",
+    "Fiber: σ₁ = F₁t (σ₁ > 0);  −σ₁ = F₁c (σ₁ < 0)\nInterfiber: (σ₂/F₂)² + (τ₁₂/F₆)² = 1\nF₂ = F₂t (σ₂ > 0);  F₂c (σ₂ < 0)",
+    "Two separate criteria, one for fiber failure and one for interfiber (matrix) failure, as the textbook prints them. They are not the later Hashin fiber and matrix mode equations with shear in the fiber mode; those stay deferred. With nonlinear shear the strengths may be proportionality limits rather than ultimate values.",
+    "Eqs. 6.49–6.50 and 6.52, p. 136", "Stresses and positive strength magnitudes in one stress unit; each criterion dimensionless."),
+  method("First-ply failure load",
+    "R_FPF = min over plies and faces of R(σ₁₂)\nN_FPF = R_FPF N,  M_FPF = R_FPF M",
+    "Evaluate the strength ratio on both faces of every ply from the recovered local stresses and take the smallest; the loads at failure follow. First-ply failure is the onset of cracking in one ply, not the ultimate laminate strength (first_ply_failure).",
+    "§9.4, pp. 251–253; minimum over plies, Eq. 9.9", "R dimensionless; N in N/m and M in N, the same units as the applied loads."),
+  method("Strength ratio with fixed & variable loads",
+    "σ(R) = σ_s + R σ_v\nTsai–Wu: aR² + bR + c = 0\na = q(σ_v, σ_v)\nb = f₁σ_v1 + f₂σ_v2 + 2 q(σ_s, σ_v)\nc = f₁σ_s1 + f₂σ_s2 + q(σ_s, σ_s) − 1\nR = −2c / (b + √(b² − 4ac))",
+    "Residual stress from a temperature change, and any loads held fixed, stays constant while the variable loads scale by R. q(x, y) is the bilinear Tsai–Wu form f₁₁x₁y₁ + f₂₂x₂y₂ + f₆₆x₆y₆ + f₁₂(x₁y₂ + x₂y₁). With c < 0 this is the single positive root; c ≥ 0 means the fixed stresses alone reach the envelope, R = 0. Maximum stress: R = (F_t − σ_s)/σ_v for σ_v > 0 and (−F_c − σ_s)/σ_v for σ_v < 0 (tsai_wu_ratio_combined, max_stress_ratio_combined; ADR-0017).",
+    "§9.8, Eqs. 9.26–9.28, p. 256; hygrothermal stresses held fixed", "Stresses and strengths in one unit; f coefficients in reciprocal stress units; R dimensionless."),
+];
+
+export const thermalExtensions: Method[] = [
+  method("Thermal resultants · uniform ΔT",
+    "Nᵀ = ΔT Σ Q̄ₖ αₖ (zₖ − zₖ₋₁)\nMᵀ = ½ ΔT Σ Q̄ₖ αₖ (zₖ² − zₖ₋₁²)\n[[A, B], [B, D]] [ε⁰; κ] = [N + Nᵀ; M + Mᵀ]",
+    "Closed form of the thermal resultants for a uniform temperature change with constant coefficients; αₖ is the rotated expansion vector with engineering shear. They are the resultants that would hold every ply at its free thermal strain, not applied loads. With no mechanical load a symmetric laminate has Mᵀ = 0 and stays flat; an unsymmetric one warps (thermal_resultants, thermomechanical_response; ADR-0014).",
+    "Eqs. 8.18 and 8.20, pp. 213–214; Eq. 8.25, p. 215; moisture terms omitted", laminateUnits + " α: 1/K; ΔT: K."),
+  method("Residual ply stress after ΔT",
+    "σₖ(z) = Q̄ₖ (ε⁰ + z κ − αₖ ΔT)",
+    "A ply is stressed only by the strain it is forced to take beyond its free thermal strain. Reported strains are total strains ε⁰ + zκ, as a gauge reads them. A free laminate can carry residual ply stresses with zero net force and moment (thermal_ply_surfaces).",
+    "Eq. 8.16, p. 213", stressUnits + " α: 1/K; ΔT: K; z: m; κ: 1/m."),
+  method("Laminate expansion coefficients",
+    "ᾱ = ε⁰ at ΔT = 1 with N = M = 0",
+    "Solve the thermomechanical system with a unit temperature change and no load; the mid-plane strains are the laminate's in-plane expansion coefficients. The book gives the closed form for balanced symmetric laminates; the engine takes them from the general solve, so unsymmetric laminates also report their curvature per kelvin.",
+    "Eq. 8.33, p. 217, balanced symmetric form", "ᾱ: 1/K; the corresponding curvature: 1/(m·K)."),
+];
 
 export const maximumStrain = method("Maximum strain",
   "r₁ = ε₁/ε₁tᵘ (ε₁ ≥ 0); −ε₁/ε₁cᵘ (ε₁ < 0)\nr₂ = ε₂/ε₂tᵘ (ε₂ ≥ 0); −ε₂/ε₂cᵘ (ε₂ < 0)\nFI = max(r₁, r₂, |γ₁₂|/γ₁₂ᵘ)",
@@ -73,6 +124,7 @@ export const foundationTopics: PhysicsTopic[] = [
       method("Moisture concentration basis", "M = (mwet − mdry) / mdry\nc = (ρdry composite / ρwater) M\nεmoisture = β Δc",
         "The book uses water volume per composite volume for c; M is relative mass gain. Density and volume references must match the coefficient definition. A coefficient based on mass fraction cannot be used with volume concentration without conversion. This defines expansion inputs; it is not a diffusion model.",
         "Eq. 10.19, p. 314", "M and c: fractions, not percentages; density ratio dimensionless. β is strain per unit c."),
+      ...thermalExtensions,
     ] },
 ];
 

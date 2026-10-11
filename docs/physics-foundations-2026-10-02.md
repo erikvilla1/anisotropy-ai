@@ -1,6 +1,6 @@
 # Physics reference foundation — 2 October 2026
 
-The current public catalog contains 29 equation/method cards across classical laminate theory, ply failure, constituent estimates, and thermal/moisture effects. It is an equation reference, not an interactive component solver.
+Superseded in part by [the 10 October 2026 completion note](physics-library-completion-2026-10-10.md), which adds nine cards for the operations the engine implements (ADR-0019). As of 2 October the public catalog contained 29 equation/method cards across classical laminate theory, ply failure, constituent estimates, and thermal/moisture effects. It is an equation reference, not an interactive component solver.
 
 ## Source basis and conventions
 
