@@ -84,3 +84,53 @@ export const qualifiedGlass: CitedMaterial = {
     ["F12", "In-plane shear strength · V-notched beam", 19.05, "ksi", "1–2 plane", "ASTM D5379-93", 33],
   ], glassConditions).concat(legacyGlassAdditions),
 };
+
+// Hexcel 8552 / IM7 unidirectional tape, NCAMP 2019 (Rev B) report. Measured RTD column only,
+// like the AS4 record above; the normalized column and the B-basis limits stay in the reports.
+const im7Conditions = "70°F (21.1°C), dry as fabricated. Hexcel 8552 / IM7 unidirectional tape, 190 g/m², nominal 35% resin content; NMS 128/2, NPS 81228 cure cycle M.";
+const im7Symbols: Record<string, string> = { density: "ρ", Vf: "Vf", resin: "wr", tply: "tply", Tg: "Tg" };
+type Im7Row = [key: string, label: string, value: number, unit: string, page: number, method: string, conditions: string, direction: string, basis: string];
+const im7Rows: Im7Row[] = [
+  ["E1t", "Longitudinal tensile modulus", 23.51, "Msi", 30, "ASTM D3039/D3039M-00ε1", "[0]6; 18 specimens, 3 lots", "Fiber direction", "Measured mean"],
+  ["E2t", "Transverse tensile modulus", 1.30, "Msi", 31, "ASTM D3039/D3039M-00", "[90]11; 20 specimens, 3 lots", "Transverse direction", "Measured mean"],
+  ["nu12", "Poisson ratio · tension", .316, "—", 30, "ASTM D3039/D3039M-00ε1", "[0]6; 18 specimens, 3 lots", "Longitudinal–transverse", "Measured mean"],
+  ["G12", "In-plane shear modulus", .68, "Msi", 34, "ASTM D3518/D3518M-94", "[+45/-45]3S; 16 specimens, 3 lots", "1–2 plane", "Measured mean"],
+  ["E1c", "Longitudinal compressive modulus", 20.44, "Msi", 32, "ASTM D6641/D6641M-01ε1", "[0]14; 15 specimens, 3 lots", "Fiber direction", "Measured mean"],
+  ["E2c", "Transverse compressive modulus", 1.41, "Msi", 33, "ASTM D6641/D6641M-01e1", "[90]14; 20 specimens, 3 lots", "Transverse direction", "Measured mean"],
+  ["nu12c", "Poisson ratio · compression", .356, "—", 32, "ASTM D6641/D6641M-01ε1", "[0]14; 15 specimens, 3 lots", "Longitudinal–transverse", "Measured mean"],
+  ["nu21c", "Minor Poisson ratio · compression", .024, "—", 33, "ASTM D6641/D6641M-01e1", "[90]14; 20 specimens, 3 lots", "2–1 directions", "Measured mean"],
+  ["F1t", "Longitudinal tensile strength", 371.08, "ksi", 30, "ASTM D3039/D3039M-00ε1", "[0]6; 18 specimens, 3 lots", "Fiber direction", "Measured mean"],
+  ["F2t", "Transverse tensile strength", 9.29, "ksi", 31, "ASTM D3039/D3039M-00", "[90]11; 20 specimens, 3 lots", "Transverse direction", "Measured mean"],
+  ["F1c-derived", "Longitudinal compressive strength · derived", 251.13, "ksi", 28, "UNC0 cross-ply compression; lamina back-calculation", "Table 2-1, measured RTD column; derived from [90/0] cross-ply tests with a back-out factor", "Fiber direction", "Derived lamina mean"],
+  ["F2c", "Transverse compressive strength", 41.44, "ksi", 33, "ASTM D6641/D6641M-01e1", "[90]14; 20 specimens, 3 lots", "Transverse direction", "Measured mean"],
+  ["F12-offset", "Shear strength · 0.2% offset", 7.76, "ksi", 34, "ASTM D3518/D3518M-94", "[+45/-45]3S; 16 specimens, 3 lots", "1–2 plane", "Measured mean"],
+  ["F12-5pct", "Shear strength · at 5% strain", 13.22, "ksi", 34, "ASTM D3518/D3518M-94", "[+45/-45]3S; 12 specimens, 3 lots", "1–2 plane", "Measured mean"],
+  ["SBS", "Short-beam strength", 17.13, "ksi", 37, "ASTM D2344/D2344M-00ε1", "[0]34; 18 specimens, 3 lots", "Interlaminar test", "Measured mean"],
+  ["tply", "Nominal cured ply thickness", .0072, "in", 28, "Normalization CPT, §1.5.8", "Nominal value used for normalization; grand average of the measured panels is 0.007229 in (p. 26)", "Through thickness", "Reported nominal"],
+  ["density-LT", "Density · longitudinal-tension panels", 1.58, "g/cm³", 30, "Composite density, LT panel summary", "Longitudinal-tension panel summary; not a universal density for every tested panel", "Bulk", "Reported panel property"],
+  ["Vf-LT", "Fiber volume · longitudinal-tension panels", 57.30, "%", 30, "LT panel summary", "Longitudinal-tension panel summary; volume basis", "Bulk", "Reported panel property"],
+  ["resin-LT", "Resin content · longitudinal-tension panels", 35.33, "%", 30, "LT panel summary", "Longitudinal-tension panel summary; mass basis", "Bulk", "Reported panel property"],
+  ["Tg-dry", "Glass transition temperature · dry", 406.43, "°F", 28, "DMA, SACMA SRM 18-94", "Dry; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+  ["Tg-wet", "Glass transition temperature · wet", 321.41, "°F", 28, "DMA, SACMA SRM 18-94", "Wet; lamina summary. Tg is not a maximum service temperature", "Bulk", "Reported transition temperature"],
+];
+export const qualifiedCarbonIM7: CitedMaterial = {
+  id: "im7-8552", name: "IM7 / 8552", family: "Carbon / epoxy", architecture: "Unidirectional · autoclave cured",
+  datasetId: "ncamp-im7-8552-2019-rtd-measured-v1", dataset: "2019 qualification · material properties",
+  conditions: im7Conditions, reviewedOn: "2026-10-10", recordRevision: "2026-10-10.1", elasticInputs,
+  application: "Elastic ply and laminate analysis for the stated material and process, using E1t, E2t, G12 and ν12. Strengths are test means, not design allowables; longitudinal compression is back-calculated from cross-ply tests.",
+  source: references["im7-data"],
+  supportingReferences: [references["im7-stats"], references["as4-base"], references["as4-process"]],
+  recordDetails: [
+    "Hexcel 8552/IM7 tape, NMS 128/2. The detail specification is published on the NCAMP site; its direct link could not be confirmed on 2026-10-10 and is not recorded. The NMS 128 base specification and NPS 81228 process specification linked here cover the 8552 family.",
+    "Test environments are defined on p. 22: RTD is 70 ± 10°F, dry. Panels were fabricated by Cessna and tested at NIAR; three prepreg lots.",
+    "Measured and normalized columns are separate in the report (normalized by the 0.0072 in nominal cured ply thickness, p. 26). This record uses the measured RTD column only.",
+    "Use tensile moduli with the tensile Poisson ratio for the elastic input set. Compressive moduli and Poisson ratios remain separately identified.",
+    "Longitudinal compressive strength is derived from [90/0] cross-ply (UNC0) tests with a back-out factor, as Table 2-1 states. Short-beam strength is an apparent interlaminar test result, not an in-plane shear input.",
+    "Table 3-1 of the statistical report gives the NCAMP recommended B-basis values; those limits are not replaced by the means shown here. NCAMP states the data is not applicable when the material is not procured to NMS 128/2 (p. 9).",
+  ],
+  properties: im7Rows.map(([key, label, value, unit, sourcePage, method, detail, direction, basis]) => ({
+    key, label, value, unit, sourcePage, method, direction, basis, symbol: im7Symbols[key.split("-")[0]] || key,
+    conditions: `70°F (21.1°C), dry as fabricated; ${detail}.`, sourceValue: value, sourceUnit: unit,
+    evidence: `${label}; original report p. ${sourcePage}; ${detail}`,
+  })),
+};
