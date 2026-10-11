@@ -44,6 +44,8 @@ The equations behind each module, and the function that computes each one, are i
 | `cases.py` | Reads cases (one material, or several named materials per ply), solves them with `solve_case`, and compares expected values with engine results |
 | `course_excel.py` | Reads the course Excel input template into a case |
 
+For a one-page guide to writing a case and reading the printout, see [docs/engine-cheat-sheet.md](../docs/engine-cheat-sheet.md).
+
 ## Validation and examples
 
 - `validation/cases/` holds solved problems from textbooks and answer keys; `tests/test_validation_cases.py` checks the engine against all of them. See [validation/README.md](validation/README.md).
