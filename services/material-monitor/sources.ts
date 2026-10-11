@@ -89,6 +89,8 @@ const ncampRecords: Record<string, { id: string; name: string }> = {
   "im7-data": { id: "im7-8552", name: "IM7 / 8552" }, "im7-stats": { id: "im7-8552", name: "IM7 / 8552" },
   "t650-data": { id: "t650-5320-1", name: "T650 / 5320-1" }, "t650-stats": { id: "t650-5320-1", name: "T650 / 5320-1" },
   "bt250-data": { id: "im7-bt250e-6", name: "IM7 / BT250E-6" }, "bt250-stats": { id: "im7-bt250e-6", name: "IM7 / BT250E-6" },
+  "tc380-data": { id: "t1100gc-tc380", name: "T1100GC / TC380" }, "tc380-stats": { id: "t1100gc-tc380", name: "T1100GC / TC380" },
+  "ep2190-data": { id: "ims65-ep2190", name: "IMS65 / EP2190" }, "ep2190-stats": { id: "ims65-ep2190", name: "IMS65 / EP2190" },
 };
 for (const [key, material] of Object.entries(ncampRecords)) {
   const reference = qualificationReferences[key as keyof typeof qualificationReferences];
