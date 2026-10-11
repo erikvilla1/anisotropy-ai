@@ -43,7 +43,7 @@ export function rightsPolicy(rights: SourceRights): RightsPolicy {
   return policy;
 }
 
-// Sources the website names without holding a dataset for them yet.
+// Handbooks the library names on its references panel. MIL-HDBK-17-2F also backs two historical records.
 export const handbookReferences = [
   { id: "mil-hdbk-17-2f", title: "MIL-HDBK-17-2F · Composite Materials Handbook, Volume 2: Polymer Matrix Composites, Materials Properties (2002; canceled 2013, superseded by CMH-17)",
     publisher: "US Department of Defense", rights: "public-domain" as const,

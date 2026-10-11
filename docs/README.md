@@ -84,6 +84,7 @@ Latest checks: [engine inputs](evaluations/2026-10-03-input-validation.md), [web
 | [material-release-ncamp-5320-1-bt250e-6-2026-10-10.md](material-release-ncamp-5320-1-bt250e-6-2026-10-10.md) | Solvay 5320-1 / T650 and TenCate BT250E-6 / IM7 records from the NCAMP 2017 reports |
 | [material-release-ncamp-tc380-ep2190-2026-10-10.md](material-release-ncamp-tc380-ep2190-2026-10-10.md) | Toray TC380 / T1100GC and Syensqo EP2190 / IMS65 records from the NCAMP 2025 reports |
 | [material-release-nasa-im7-8552-2026-10-10.md](material-release-nasa-im7-8552-2026-10-10.md) | NASA 2023 IM7 / 8552 characterization as a second dataset of the IM7 / 8552 record |
+| [material-release-library-completion-2026-10-10.md](material-release-library-completion-2026-10-10.md) | Three NCAMP plain weave records and two MIL-HDBK-17-2F historical records; close-out of the public-sources research |
 
 ## Added when the parts exist
 
