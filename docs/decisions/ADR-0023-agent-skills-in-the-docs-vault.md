@@ -34,7 +34,7 @@ Option 3, with option 4 as the fallback for Hermes if it does not follow the jun
 - Hermes project skill folders and the `skills.write_approval` setting: [Hermes skills documentation](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills).
 - Hermes on Windows requires WSL2: [Hermes WSL2 guide](https://hermes-agent.nousresearch.com/docs/user-guide/windows-wsl-quickstart).
 - `scripts/link-agent-dirs.ps1` created both junctions on 2026-10-11, listed `project-rules` through each, and a second run reported both as already in place; `git status` shows neither junction.
-- Claude Code loading a skill through the junction: UNVERIFIED until a new session lists `project-rules`.
+- Claude Code loaded `project-rules` through the junction: on 2026-10-11 the running Claude Code session listed it as an available skill after the script ran.
 - Hermes following the junction from WSL2: UNVERIFIED; Hermes is not installed yet.
 - Obsidian hiding dot-folders: no evidence recorded beyond the founder's planned use; check in the vault.
 
