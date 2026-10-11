@@ -313,5 +313,21 @@
     "verification": "Original publisher PDF downloaded; cover (report date 28 August 2025; the file name says 26 September) and Table 3-1 (p. 37) visually checked; distribution sentence on p. 11.",
     "rights": "open-publisher",
     "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 11) and the cover carries Distribution Statement A. Linked, not copied."
+  },
+  "im7-nasa-2023": {
+    "id": "nasa-tm-20230001560-im7-8552",
+    "title": "Experimental Tests to Characterize the Behavior and Properties of IM7-8552 Composite",
+    "authors": "Ashutosh Maurya, Seetha Pavan Tanneru, Subramaniam Rajan (Arizona State University); J. Michael Pereira, Sandi G. Miller (NASA Glenn Research Center)",
+    "publisher": "NASA Glenn Research Center · NASA Technical Reports Server",
+    "date": "2023-02",
+    "revision": "NASA/TM-20230001560 · E-20097",
+    "page": 18,
+    "role": "Measured property data",
+    "url": "https://ntrs.nasa.gov/api/citations/20230001560/downloads/TM-20230001560.pdf",
+    "sha256": "8720e1dce2830b9cae264627a637d74b1bca4d7a2cec078a29c52ae61e7e7eeb",
+    "accessed": "2026-10-10",
+    "verification": "Original publisher PDF downloaded from the NASA Technical Reports Server; cover, notice page, Table 1 (p. 2) and Tables 6, 8, 10, 12, 14, 16, 18, 20, 22 and 31 visually checked from rendered pages. Printed page = PDF page - 6.",
+    "rights": "open-publisher",
+    "rightsEvidence": "The NASA Technical Reports Server citation page (https://ntrs.nasa.gov/citations/20230001560) states \"Public Use Permitted\" with public distribution, and the report notice page says it is available in electronic form at sti.nasa.gov and ntrs.nasa.gov. Contractor authors are listed and no copyright notice appears, so the report is linked, not copied."
   }
 }
