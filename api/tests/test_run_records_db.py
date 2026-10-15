@@ -1,54 +1,25 @@
-"""The runs table against a real PostgreSQL (ADR-0025, ADR-0026).
+"""The runs table against a real PostgreSQL (ADR-0025, ADR-0026). Fixtures and the skip rule are in conftest.py."""
 
-Needs TEST_DATABASE_URL (a database the tests may empty), from the environment or the nearest .env.
-Without it these tests are skipped and say so; CI provides one.
-"""
-
-import os
 import uuid
-from pathlib import Path
 
 import pytest
 from alembic import command
-from alembic.config import Config
-from dotenv import find_dotenv, load_dotenv
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import inspect, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from anisotropy_api.main import app
 from anisotropy_api.records import ACTORS, Run, check_ready, connect
 from anisotropy_api.settings import DATABASE_VARIABLE, RECORDING_VARIABLE
+from conftest import TEST_URL, alembic_config, needs_test_database
 
-API_DIR = Path(__file__).resolve().parents[1]
-
-load_dotenv(find_dotenv(usecwd=True), override=False)
-TEST_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
-pytestmark = pytest.mark.skipif(not TEST_URL, reason="TEST_DATABASE_URL not set: no test database to run against")
+pytestmark = needs_test_database
 
 
-def alembic_config(url: str) -> Config:
-    config = Config(str(API_DIR / "alembic.ini"))
-    config.set_main_option("script_location", str(API_DIR / "alembic"))
-    config.set_main_option("sqlalchemy.url", url)
-    return config
-
-
-@pytest.fixture(scope="module")
-def engine():
-    """A freshly migrated test database: everything down, then everything up."""
-    command.downgrade(alembic_config(TEST_URL), "base")
-    command.upgrade(alembic_config(TEST_URL), "head")
-    engine = create_engine(TEST_URL)
-    yield engine
-    engine.dispose()
-
-
-@pytest.fixture(autouse=True)
-def empty_table(engine):
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE runs"))
+@pytest.fixture
+def engine(empty_runs):
+    return empty_runs
 
 
 def solved_row(**overrides) -> Run:
@@ -157,6 +128,7 @@ def test_api_starts_with_records_on_and_a_migrated_database(engine, monkeypatch)
         assert client.get("/v1/materials").status_code == 200
         assert app.state.settings.run_records is True
         assert app.state.records is not None
+    assert app.state.records is None  # released at shutdown
 
 
 def test_api_starts_with_records_explicitly_off(monkeypatch):

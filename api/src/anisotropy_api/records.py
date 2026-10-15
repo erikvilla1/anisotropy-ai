@@ -9,13 +9,17 @@ that with a trigger created by the first migration. A correction is a new row wh
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
+import subprocess
 import uuid
+from pathlib import Path
 
 from sqlalchemy import CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, inspect, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 # Who triggered a run. Adding one is a migration, so a new consumer is a reviewed change.
 ACTORS = ("founder-terminal", "calculator", "hermes", "assistant", "test")
@@ -86,3 +90,37 @@ def check_ready(engine: Engine) -> None:
                 )
     except OperationalError as exc:
         raise RuntimeError(f"Cannot reach the run records database at {shown}: {exc}") from exc
+
+
+def inputs_digest(inputs: dict) -> str:
+    """SHA-256 of the request in canonical JSON, so identical requests share a digest."""
+    canonical = json.dumps(inputs, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def git_commit() -> str | None:
+    """The repository commit the API runs from, or None when there is none (a plain install)."""
+    try:
+        done = subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent,
+                              capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    commit = done.stdout.strip()
+    return commit if done.returncode == 0 and len(commit) == 40 else None
+
+
+def record_run(engine: Engine, *, actor: str, inputs: dict, engine_version: str, api_version: str,
+               git_commit: str | None, response: dict | None = None, error: str | None = None) -> uuid.UUID:
+    """Insert one row and return its id. A database failure raises; the caller decides what that means."""
+    run = Run(actor=actor, status="solved" if error is None else "rejected", inputs=inputs,
+              inputs_sha256=inputs_digest(inputs), engine_version=engine_version, api_version=api_version,
+              git_commit=git_commit, response=response, error=error)
+    with Session(engine) as session:
+        session.add(run)
+        session.commit()
+        return run.id
+
+
+def fetch_run(engine: Engine, run_id: uuid.UUID) -> Run | None:
+    with Session(engine) as session:
+        return session.get(Run, run_id)
