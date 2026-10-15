@@ -2,6 +2,7 @@
 
 import math
 import tomllib
+from contextlib import asynccontextmanager
 from importlib.metadata import version
 
 import numpy as np
@@ -15,16 +16,32 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
+from .records import check_ready, connect
+from .settings import load_settings
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, LibraryMaterialInput,
     MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, VerificationResponse,
 )
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Read the configuration once and refuse to serve without the run records database (ADR-0026)."""
+    settings = load_settings()
+    app.state.settings = settings
+    app.state.records = connect(settings.database_url) if settings.run_records else None
+    if app.state.records is not None:
+        check_ready(app.state.records)
+    yield
+    if app.state.records is not None:
+        app.state.records.dispose()
+
+
 app = FastAPI(
     title="Anisotropy engine API",
     version=version("anisotropy-api"),
     description="Local development: one-material laminate stiffness and deformation in SI base units.",
+    lifespan=lifespan,
 )
 
 # Only the local website origins used by this development project may read API responses.

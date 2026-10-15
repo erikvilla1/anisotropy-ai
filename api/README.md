@@ -27,7 +27,14 @@ docker compose down         # stop, keep the data
 docker compose down -v      # stop and wipe the data
 ```
 
-The API does not read `DATABASE_URL` yet; the table and the write on every solve come in the next chunk.
+Then create the tables (once, and again after every new migration):
+
+```powershell
+cd api
+uv run alembic upgrade head
+```
+
+The API reads `DATABASE_URL` at startup, from the environment or the nearest `.env` found by walking up from the current directory. It refuses to start when the variable is missing, the server is unreachable or the table is absent, and each refusal names the fix. For an experiment without recording, set `ANISOTROPY_RUN_RECORDS=off` on purpose; the browser test does this. The tests use `TEST_DATABASE_URL` (the `anisotropy_test` database, created when the Docker volume is first initialised) and are skipped with a stated reason when it is absent. Nothing writes a row yet; that is the next chunk (ADR-0026).
 
 ## Run it
 
