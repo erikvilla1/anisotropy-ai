@@ -3,15 +3,17 @@
 import math
 import tomllib
 import uuid
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from importlib.metadata import version
-from typing import Annotated
+from typing import Annotated, TypeVar
 
 import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from anisotropy_engine.cases import compare, engine_results, solve_case, validate_case_inputs
@@ -107,18 +109,20 @@ def actor_from_header(x_anisotropy_actor: Annotated[str | None, Header()] = None
 Actor = Annotated[str, Depends(actor_from_header)]
 
 
-def _record(request: Request, actor: str, problem: CaseRequest, *, response: dict | None = None,
+def _record(request: Request, actor: str, problem: BaseModel, *, response: dict | None = None,
             error: str | None = None) -> uuid.UUID | None:
     """Write the run and return its id; None when recording is switched off.
 
-    When the row cannot be written the result is withheld (503) rather than returned without a
-    receipt, the same policy as refusing to start (ADR-0026).
+    `inputs` is the request as received: only the fields the client sent. When the row cannot be
+    written the result is withheld (503) rather than returned without a receipt, the same policy
+    as refusing to start (ADR-0026).
     """
     engine = getattr(request.app.state, "records", None)
     if engine is None:
         return None
     try:
-        return record_run(engine, actor=actor, inputs=problem.model_dump(mode="json", exclude_none=True),
+        return record_run(engine, actor=actor, endpoint=request.url.path,
+                          inputs=problem.model_dump(mode="json", exclude_unset=True),
                           engine_version=version("anisotropy-engine"), api_version=version("anisotropy-api"),
                           git_commit=getattr(request.app.state, "git_commit", None), response=response, error=error)
     except SQLAlchemyError as exc:
@@ -129,6 +133,29 @@ def _record(request: Request, actor: str, problem: CaseRequest, *, response: dic
 
 def _run_header(run_id: uuid.UUID | None) -> dict[str, str] | None:
     return None if run_id is None else {RUN_ID_HEADER: str(run_id)}
+
+
+Body = TypeVar("Body", bound=BaseModel)
+
+
+def _deliver(request: Request, response: Response, actor: str, problem: BaseModel, compute: Callable[[], Body]) -> Body:
+    """Compute, record the outcome, and attach the run id (ADR-0026).
+
+    A 422 raised while computing is recorded as a rejection and re-raised with the run id in its
+    header; a successful body is recorded as returned, without run_id, and returned with it.
+    """
+    try:
+        body = compute()
+    except HTTPException as exc:
+        if exc.status_code != 422:
+            raise
+        run_id = _record(request, actor, problem, error=str(exc.detail))
+        raise HTTPException(status_code=422, detail=exc.detail, headers=_run_header(run_id)) from exc
+    run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}))
+    if run_id is None:
+        return body
+    response.headers[RUN_ID_HEADER] = str(run_id)
+    return body.model_copy(update={"run_id": str(run_id)})
 
 
 @app.post("/v1/cases/solve", response_model=CaseResponse)
@@ -142,31 +169,28 @@ def solve_case_endpoint(problem: CaseRequest, actor: Actor, request: Request, re
     Every request that reaches the engine is recorded with its actor, solved or rejected, and the
     record's id comes back as run_id and in the X-Anisotropy-Run-Id header (ADR-0026).
     """
-    try:
-        case = tomllib.loads(problem.toml) if problem.toml is not None else problem.case
-        validate_case_inputs(case)
-        with np.errstate(over="raise", invalid="raise", divide="raise"):
-            solution = solve_case(case)
-            results = engine_results(case)
-            comparisons, problems = compare(case) if "expected" in case else ([], [])
-    except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError) as exc:
-        message = f"toml: {exc}" if isinstance(exc, tomllib.TOMLDecodeError) else (str(exc) or exc.__class__.__name__)
-        run_id = _record(request, actor, problem, error=message)
-        raise HTTPException(status_code=422, detail=message, headers=_run_header(run_id)) from exc
-    body = CaseResponse(
-        run_id=None, engine_version=version("anisotropy-engine"), units=case["units"], title=case.get("title"),
-        results={key: _json_value(value) for key, (value, _scale) in results.items()},
-        criteria=[key.removeprefix("fpf_ratio_") for key in results if key.startswith("fpf_ratio_")],
-        materials={name: MaterialProvenance.of(item) for name, item in solution.library.items()},
-        comparison=[ComparisonOutput(key=c.key, expected=float(c.expected), engine=float(c.engine), allowed=float(c.allowed), agrees=c.agrees)
-                    for c in comparisons] if "expected" in case else None,
-        problems=problems,
-    )
-    run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}))
-    if run_id is None:
-        return body
-    response.headers[RUN_ID_HEADER] = str(run_id)
-    return body.model_copy(update={"run_id": str(run_id)})
+    def compute() -> CaseResponse:
+        try:
+            case = tomllib.loads(problem.toml) if problem.toml is not None else problem.case
+            validate_case_inputs(case)
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                solution = solve_case(case)
+                results = engine_results(case)
+                comparisons, problems = compare(case) if "expected" in case else ([], [])
+        except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError) as exc:
+            message = f"toml: {exc}" if isinstance(exc, tomllib.TOMLDecodeError) else (str(exc) or exc.__class__.__name__)
+            raise HTTPException(status_code=422, detail=message) from exc
+        return CaseResponse(
+            run_id=None, engine_version=version("anisotropy-engine"), units=case["units"], title=case.get("title"),
+            results={key: _json_value(value) for key, (value, _scale) in results.items()},
+            criteria=[key.removeprefix("fpf_ratio_") for key in results if key.startswith("fpf_ratio_")],
+            materials={name: MaterialProvenance.of(item) for name, item in solution.library.items()},
+            comparison=[ComparisonOutput(key=c.key, expected=float(c.expected), engine=float(c.engine), allowed=float(c.allowed), agrees=c.agrees)
+                        for c in comparisons] if "expected" in case else None,
+            problems=problems,
+        )
+
+    return _deliver(request, response, actor, problem, compute)
 
 
 @app.get("/v1/runs/{run_id}", response_model=RunOutput)
@@ -202,62 +226,71 @@ def material_detail(material_id: str, dataset: str | None = None) -> MaterialPro
 
 
 @app.post("/v1/laminates/response", response_model=AnalysisResponse)
-def analyze_laminate(problem: AnalysisRequest) -> AnalysisResponse:
-    """Validate a problem, call existing stiffness/response functions, and serialize their output."""
-    material, provenance = resolve_material(problem.material)
-    plies = [Ply(material=material, **ply.model_dump()) for ply in problem.plies]
-    try:
-        # Floating-point overflow/invalid operations must become errors, never JSON null/NaN.
-        with np.errstate(over="raise", invalid="raise", divide="raise"):
-            A, B, D = abd_matrices(plies)
-            eps0, kappa = midplane_response(plies, problem.loads.to_engine())
-        if not all(np.isfinite(value).all() for value in (A, B, D, eps0, kappa)):
-            raise FloatingPointError("Non-finite solver output")
-    except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as exc:
-        raise HTTPException(
-            status_code=422,
-            detail="These inputs do not produce a finite, solvable laminate response. Check values and units.",
-        ) from exc
+def analyze_laminate(problem: AnalysisRequest, actor: Actor, request: Request, response: Response) -> AnalysisResponse:
+    """Validate a problem, call existing stiffness/response functions, and serialize their output.
 
-    return AnalysisResponse(material_provenance=provenance, 
-        engine_version=version("anisotropy-engine"),
-        inputs=problem,
-        A_N_per_m=A.tolist(), B_N=B.tolist(), D_N_m=D.tolist(),
-        midplane_strain=eps0.tolist(), curvature_per_m=kappa.tolist(),
-    )
+    Recorded with its actor like every analysis (ADR-0026); the website calculator sends `calculator`.
+    """
+    def compute() -> AnalysisResponse:
+        material, provenance = resolve_material(problem.material)
+        plies = [Ply(material=material, **ply.model_dump()) for ply in problem.plies]
+        try:
+            # Floating-point overflow/invalid operations must become errors, never JSON null/NaN.
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                A, B, D = abd_matrices(plies)
+                eps0, kappa = midplane_response(plies, problem.loads.to_engine())
+            if not all(np.isfinite(value).all() for value in (A, B, D, eps0, kappa)):
+                raise FloatingPointError("Non-finite solver output")
+        except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="These inputs do not produce a finite, solvable laminate response. Check values and units.",
+            ) from exc
+        return AnalysisResponse(material_provenance=provenance,
+            engine_version=version("anisotropy-engine"),
+            inputs=problem,
+            A_N_per_m=A.tolist(), B_N=B.tolist(), D_N_m=D.tolist(),
+            midplane_strain=eps0.tolist(), curvature_per_m=kappa.tolist(),
+        )
+
+    return _deliver(request, response, actor, problem, compute)
 
 
 @app.post("/v1/laminates/prescribed-curvature", response_model=PrescribedCurvatureResponse)
-def analyze_prescribed_curvature(problem: PrescribedCurvatureRequest) -> PrescribedCurvatureResponse:
+def analyze_prescribed_curvature(problem: PrescribedCurvatureRequest, actor: Actor, request: Request,
+                                 response: Response) -> PrescribedCurvatureResponse:
     """Find required moments from explicit force resultants and a curvature constraint.
 
     Set all curvatures to zero for a flat laminate. This is a local constitutive
     calculation, not a displacement boundary-value problem or fixture design.
     Unknown moments must be omitted, not sent as zero or null. All calculation
-    and numerical verification happen in the engine.
+    and numerical verification happen in the engine. Recorded with its actor (ADR-0026).
     """
-    material = resolve_material(problem.material)[0]
-    plies = [Ply(material=material, **ply.model_dump()) for ply in problem.plies]
-    try:
-        result = prescribed_curvature_response(
-            plies, [problem.forces.Nx, problem.forces.Ny, problem.forces.Nxy],
-            problem.prescribed_curvature_per_m,
+    def compute() -> PrescribedCurvatureResponse:
+        material = resolve_material(problem.material)[0]
+        plies = [Ply(material=material, **ply.model_dump()) for ply in problem.plies]
+        try:
+            result = prescribed_curvature_response(
+                plies, [problem.forces.Nx, problem.forces.Ny, problem.forces.Nxy],
+                problem.prescribed_curvature_per_m,
+            )
+        except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="These inputs do not produce a finite, numerically verified prescribed-curvature response. Check values, units and conditioning.",
+            ) from exc
+        check = result.verification
+        return PrescribedCurvatureResponse(material_provenance=resolve_material(problem.material)[1],
+            analysis_type="prescribed_curvature", engine_version=version("anisotropy-engine"), inputs=problem,
+            A_N_per_m=result.A.tolist(), B_N=result.B.tolist(), D_N_m=result.D.tolist(),
+            midplane_strain=result.midplane_strain.tolist(), moments_N_m_per_m=result.moments.tolist(),
+            verification=VerificationResponse(
+                passed=check.passed, recovered_midplane_strain=check.recovered_strain.tolist(),
+                recovered_curvature_per_m=check.recovered_curvature.tolist(),
+                strain_residual=check.strain_residual.tolist(), curvature_residual_per_m=check.curvature_residual.tolist(),
+                strain_allowed_error=check.strain_allowed_error.tolist(),
+                curvature_allowed_error_per_m=check.curvature_allowed_error.tolist(),
+            ),
         )
-    except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as exc:
-        raise HTTPException(
-            status_code=422,
-            detail="These inputs do not produce a finite, numerically verified prescribed-curvature response. Check values, units and conditioning.",
-        ) from exc
-    check = result.verification
-    return PrescribedCurvatureResponse(material_provenance=resolve_material(problem.material)[1], 
-        analysis_type="prescribed_curvature", engine_version=version("anisotropy-engine"), inputs=problem,
-        A_N_per_m=result.A.tolist(), B_N=result.B.tolist(), D_N_m=result.D.tolist(),
-        midplane_strain=result.midplane_strain.tolist(), moments_N_m_per_m=result.moments.tolist(),
-        verification=VerificationResponse(
-            passed=check.passed, recovered_midplane_strain=check.recovered_strain.tolist(),
-            recovered_curvature_per_m=check.recovered_curvature.tolist(),
-            strain_residual=check.strain_residual.tolist(), curvature_residual_per_m=check.curvature_residual.tolist(),
-            strain_allowed_error=check.strain_allowed_error.tolist(),
-            curvature_allowed_error_per_m=check.curvature_allowed_error.tolist(),
-        ),
-    )
+
+    return _deliver(request, response, actor, problem, compute)

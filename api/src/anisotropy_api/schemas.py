@@ -170,6 +170,7 @@ class RunOutput(Contract):
     run_id: str
     created_at: str
     actor: str
+    endpoint: str
     status: str
     inputs: dict[str, Any]
     inputs_sha256: str
@@ -184,7 +185,7 @@ class RunOutput(Contract):
 
     @classmethod
     def of(cls, run) -> "RunOutput":
-        return cls(run_id=str(run.id), created_at=run.created_at.isoformat(), actor=run.actor, status=run.status,
+        return cls(run_id=str(run.id), created_at=run.created_at.isoformat(), actor=run.actor, endpoint=run.endpoint, status=run.status,
                    inputs=run.inputs, inputs_sha256=run.inputs_sha256, engine_version=run.engine_version,
                    api_version=run.api_version, git_commit=run.git_commit, response=run.response, error=run.error,
                    supersedes_run_id=None if run.supersedes_run_id is None else str(run.supersedes_run_id),
@@ -227,8 +228,12 @@ Matrix3 = Annotated[list[Vector3], Field(min_length=3, max_length=3)]
 
 
 class AnalysisResponse(Contract):
-    """Engine results in base units, with the accepted inputs echoed for inspection."""
+    """Engine results in base units, with the accepted inputs echoed for inspection.
 
+    run_id is the record of this run (ADR-0026); it is null only when recording is switched off.
+    """
+
+    run_id: str | None = None
     engine_version: str
     inputs: AnalysisRequest
     A_N_per_m: Matrix3
@@ -283,6 +288,7 @@ class PrescribedCurvatureResponse(Contract):
     plies follow ADR-0004. No thermal/moisture effects or support/fixture design.
     """
 
+    run_id: str | None = Field(default=None, description="The record of this run (ADR-0026); null only when recording is switched off")
     analysis_type: Literal["prescribed_curvature"]
     engine_version: str
     inputs: PrescribedCurvatureRequest
