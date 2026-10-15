@@ -12,11 +12,15 @@ Expose the existing engine's stiffness and deformation calculations to local HTT
 
 `POST /v1/cases/solve`: a whole problem in the engine's case format, as `{"case": {...}}` or `{"toml": "..."}`; returns every result the case determines in the case's units, the first-ply criteria evaluated, library provenance per material and the answer-key comparison when the case has `[expected]`. Engine validation messages return as 422. Covers mixed conditions, temperature change, several materials, all four failure criteria and plate buckling (ADR-0024; [note](../api-case-endpoint-2026-10-11.md)).
 
+`POST /v1/cases/solve` also requires the `X-Anisotropy-Actor` header (which client sent the request) and records every request that reaches the engine, solved or rejected; the record's id comes back as `run_id` and in the `X-Anisotropy-Run-Id` header. `GET /v1/runs/{run_id}` returns the record as stored: the request as received, engine and API versions, git commit, the response or the error (ADR-0026). The two older endpoints are not recorded yet.
+
 `GET /v1/materials` and `GET /v1/materials/{material_id}?dataset=`: the library datasets and the SI values the engine would use, each with its page. Both analysis endpoints also accept `material: {"library_id": "...", "dataset_id": null}` in place of explicit constants and then return `material_provenance` (ADR-0020).
 
 ## Dependencies and connections
 
 Uvicorn -> FastAPI -> Pydantic contract -> existing `anisotropy_engine` -> NumPy. Separate `api/pyproject.toml` and `api/uv.lock`; no HTTP dependency added to the engine. pytest and HTTPX2 exercise the app in process.
+
+Run records (ADR-0025, ADR-0026): SQLAlchemy 2 and psycopg 3 reach a local PostgreSQL 17 started by `docker-compose.yml`; Alembic migrations under `api/alembic/` own the `runs` table. Configuration is `DATABASE_URL` and the explicit `ANISOTROPY_RUN_RECORDS=off` switch, read from the environment or the nearest `.env` (python-dotenv). The API refuses to start without a reachable, migrated database unless switched off, and withholds a result (503) when its row cannot be written.
 
 The website's `/calculator` now calls this endpoint. CORS allows credential-free JSON POST requests from localhost/127.0.0.1 on ports 3000/3001. See [the calculator card](calculator.md).
 

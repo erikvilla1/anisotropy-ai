@@ -9,7 +9,13 @@ Chunk 3 adds `POST /v1/laminates/prescribed-curvature`: known forces and explici
 `POST /v1/cases/solve` takes a problem in the engine's case format, either as a JSON object under `case` or as the text of a `.toml` case under `toml`, and returns every result the case determines in the case's own units: stiffness and compliance, any of the seven applied forms including mixed conditions and a temperature change, library and several materials, first-ply failure by every criterion the inputs allow, plate buckling, and the answer-key comparison when the case has `[expected]`. Validation messages are the engine's own. Example: `examples/case-library-axial-check.json`; format: `../engine/validation/README.md`; see [the note](../docs/api-case-endpoint-2026-10-11.md) and ADR-0024.
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/v1/cases/solve' -ContentType 'application/json' -InFile 'api/examples/case-library-axial-check.json' | ConvertTo-Json -Depth 10
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/v1/cases/solve' -ContentType 'application/json' -Headers @{ 'X-Anisotropy-Actor' = 'founder-terminal' } -InFile 'api/examples/case-library-axial-check.json' | ConvertTo-Json -Depth 10
+```
+
+The `X-Anisotropy-Actor` header is required: it says which client sent the request (`founder-terminal`, `calculator`, `hermes`, `assistant` or `test`) and is stored with the run. Every request that reaches the engine is recorded, solved or rejected; the response carries the record's id as `run_id` and in the `X-Anisotropy-Run-Id` header, and `GET /v1/runs/{run_id}` returns the record: the request as received, versions, the response or the error (ADR-0026).
+
+```powershell
+Invoke-RestMethod -Uri 'http://127.0.0.1:8000/v1/runs/<run_id>' | ConvertTo-Json -Depth 10
 ```
 
 ## Library materials (chunk 4)
@@ -27,7 +33,14 @@ docker compose down         # stop, keep the data
 docker compose down -v      # stop and wipe the data
 ```
 
-The API does not read `DATABASE_URL` yet; the table and the write on every solve come in the next chunk.
+Then create the tables (once, and again after every new migration):
+
+```powershell
+cd api
+uv run alembic upgrade head
+```
+
+The API reads `DATABASE_URL` at startup, from the environment or the nearest `.env` found by walking up from the current directory. It refuses to start when the variable is missing, the server is unreachable or the table is absent, and each refusal names the fix. For an experiment without recording, set `ANISOTROPY_RUN_RECORDS=off` on purpose; the browser test does this. The tests use `TEST_DATABASE_URL` (the `anisotropy_test` database, created when the Docker volume is first initialised) and are skipped with a stated reason when it is absent. If the database stops answering while the API runs, a solve returns 503 and no result: a result without its record is not delivered (ADR-0026).
 
 ## Run it
 

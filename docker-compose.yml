@@ -12,6 +12,8 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - anisotropy-pgdata:/var/lib/postgresql/data
+      # Runs once on an empty volume: creates the anisotropy_test database for the API tests.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U anisotropy -d anisotropy"]
       interval: 5s
