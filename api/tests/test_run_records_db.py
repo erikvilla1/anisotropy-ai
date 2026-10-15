@@ -24,7 +24,7 @@ def engine(empty_runs):
 
 def solved_row(**overrides) -> Run:
     fields = dict(
-        actor="test", status="solved", inputs={"case": {"units": "SI", "title": "t"}}, inputs_sha256="0" * 64,
+        actor="test", endpoint="/v1/cases/solve", status="solved", inputs={"case": {"units": "SI", "title": "t"}}, inputs_sha256="0" * 64,
         engine_version="0.1.0", api_version="0.1.0", response={"results": {"A": [[1.0]]}, "problems": []},
     )
     fields.update(overrides)
@@ -34,10 +34,12 @@ def solved_row(**overrides) -> Run:
 def test_migration_creates_the_table_with_every_column(engine):
     columns = {column["name"] for column in inspect(engine).get_columns("runs")}
     assert columns == {
-        "id", "created_at", "actor", "status", "inputs", "inputs_sha256", "engine_version", "api_version",
+        "id", "created_at", "actor", "endpoint", "status", "inputs", "inputs_sha256", "engine_version", "api_version",
         "git_commit", "response", "error", "supersedes_run_id", "llm_provider", "llm_model_version",
     }
-    assert {index["name"] for index in inspect(engine).get_indexes("runs")} == {"runs_created_at_idx", "runs_actor_idx"}
+    assert {index["name"] for index in inspect(engine).get_indexes("runs")} == {
+        "runs_created_at_idx", "runs_actor_idx", "runs_endpoint_idx",
+    }
 
 
 def test_a_solved_run_round_trips(engine):
