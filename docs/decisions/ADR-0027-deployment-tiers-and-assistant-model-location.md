@@ -41,6 +41,8 @@ The product makes no outbound network connection except to its own database and,
 
 Order of work (founder, 2026-10-14): the assistant comes before the self-hosted plumbing, because the assistant is the one component that sends data outside the deployment, and its shape must be right from the first line. (1) Hermes removal (ADR-0028). (2) The assistant's own decision record: one provider interface behind one setting, the guard that keeps the model from producing result numbers, what the model may see, evaluation against the validation cases. That record must require the interface and a test that a full solve makes no outbound request when the setting is empty; neither is optional. (3) The assistant, built for the public tier against that interface, so the self-hosted variant is a setting. (4) Customer material datasets loaded from a file outside the repository with the same provenance and rights handling as the public library, and authentication with per-user attribution in run records, when the first proprietary customer is in sight. (5) Container images, a software bill of materials and an offline install, when that customer is ready to deploy.
 
+Amended the same day (founder, 2026-10-14): the finite element phase (ADR-0029) comes before the assistant. Items 2 to 5 keep their order after it; the assistant's requirements above are unchanged.
+
 ## Why (evidence)
 
 - The components are already separable: the API depends only on `DATABASE_URL` (ADR-0025, "any host works with a changed `DATABASE_URL`"), and the website needs only a configured API address (ADR-0012).
