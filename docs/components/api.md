@@ -18,6 +18,8 @@ Expose the existing engine's stiffness and deformation calculations to local HTT
 
 Uvicorn -> FastAPI -> Pydantic contract -> existing `anisotropy_engine` -> NumPy. Separate `api/pyproject.toml` and `api/uv.lock`; no HTTP dependency added to the engine. pytest and HTTPX2 exercise the app in process.
 
+Run records (ADR-0025, ADR-0026): SQLAlchemy 2 and psycopg 3 reach a local PostgreSQL 17 started by `docker-compose.yml`; Alembic migrations under `api/alembic/` own the `runs` table. Configuration is `DATABASE_URL` and the explicit `ANISOTROPY_RUN_RECORDS=off` switch, read from the environment or the nearest `.env` (python-dotenv). The API refuses to start without a reachable, migrated database unless switched off. No endpoint writes or reads a row yet.
+
 The website's `/calculator` now calls this endpoint. CORS allows credential-free JSON POST requests from localhost/127.0.0.1 on ports 3000/3001. See [the calculator card](calculator.md).
 
 ## Evaluation

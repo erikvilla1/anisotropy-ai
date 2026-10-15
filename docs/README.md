@@ -75,12 +75,13 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0023](decisions/ADR-0023-agent-skills-in-the-docs-vault.md) | Agent skills live in `docs/agents/skills`, and `docs/` is the Obsidian vault (proposed) |
 | [0024](decisions/ADR-0024-api-exposes-the-case-format.md) | The API exposes the engine's case format as one endpoint instead of one contract per operation |
 | [0025](decisions/ADR-0025-run-records-in-local-postgresql.md) | Run records go in PostgreSQL, run locally in Docker, reached through SQLAlchemy and Alembic (proposed) |
+| [0026](decisions/ADR-0026-run-record-contents-and-startup-policy.md) | A run record is immutable, keeps rejected runs, names its actor; the API refuses to start without the database (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
-Latest checks: [run records database](evaluations/api/2026-10-14-run-records-database.md), [engine, 11 October](evaluations/2026-10-11-criteria-buckling-loader.md), [API case endpoint](evaluations/api/2026-10-11-case-endpoint.md), [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
+Latest checks: [run records table and startup policy](evaluations/api/2026-10-14-run-records-table.md), [run records database](evaluations/api/2026-10-14-run-records-database.md), [engine, 11 October](evaluations/2026-10-11-criteria-buckling-loader.md), [API case endpoint](evaluations/api/2026-10-11-case-endpoint.md), [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
 
 | Document | Contents |
 | --- | --- |

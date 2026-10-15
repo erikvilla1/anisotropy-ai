@@ -18,7 +18,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 | Validation cases | Textbook/answer-key references and constructed analytical checks | Built, 32 cases | `engine/validation/` |
 | API | Forward response and prescribed curvature with explicit contracts; the whole case format through `POST /v1/cases/solve`; library materials by id | Local development; FastAPI | `api/`, [component card](components/api.md) |
 | Material loader | Engine, API and calculator read material values from the cited library by dataset id, with the page of every value used | Built (ADR-0020) | `engine/src/anisotropy_engine/library.py`, [note](material-loader-2026-10-10.md) |
-| Run records | Inputs, versions and results stored for every run | Local PostgreSQL 17 runs from `docker-compose.yml` (ADR-0025); table and API writes next | `docker-compose.yml`, [evaluation](evaluations/api/2026-10-14-run-records-database.md) |
+| Run records | Inputs, versions and results stored for every run | Local PostgreSQL 17 from `docker-compose.yml` (ADR-0025); the immutable `runs` table exists and the API refuses to start without the database (ADR-0026); the write on every solve is next | `docker-compose.yml`, `api/alembic/`, `api/src/anisotropy_api/records.py`, [evaluation](evaluations/api/2026-10-14-run-records-table.md) |
 | Language model assistant | Drafts inputs from plain language; explains results | Planned | |
 | Report generator | Documented report built from a run record | Planned | |
 | Finite element analysis | Open-hole and other geometries | Later | |

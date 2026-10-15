@@ -22,6 +22,17 @@ jobs:
     defaults:
       run:
         working-directory: api
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: anisotropy
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: anisotropy_test
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U anisotropy -d anisotropy_test" --health-interval 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://anisotropy:ci-only@127.0.0.1:5432/anisotropy_test
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -45,6 +56,8 @@ jobs:
     env:
       NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
       BROWSER_CHANNEL: chromium
+      # The browser test's API has no database; recording is switched off on purpose (ADR-0026).
+      ANISOTROPY_RUN_RECORDS: "off"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
