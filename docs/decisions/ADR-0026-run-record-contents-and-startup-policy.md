@@ -32,9 +32,14 @@ Missing database at startup:
 2. Start with recording off and mark every response. Friendlier; one more field a reader can miss, more code.
 3. Refuse to start, naming the variable and the fix; an explicit `ANISOTROPY_RUN_RECORDS=off` for experiments and for test servers that have no database.
 
+How the API learns the actor:
+
+1. A field in the JSON body. Visible in the OpenAPI schema; but the body would no longer be exactly the engine's case format, which the validation files and the calculator share.
+2. A required HTTP header, `X-Anisotropy-Actor`. Metadata about the sender stays outside the problem; a request without it, or with an unknown value, is refused and not recorded, since there is nothing to attribute it to.
+
 ## Decision
 
-Option 2 for the contents, 2 for the actor, 2 for editing, 3 for startup (founder's choice, 2026-10-14). The table is `runs`: `id` (UUID), `created_at`, `actor`, `status` (`solved` or `rejected`), `inputs` (the request as received, JSONB), `inputs_sha256`, `engine_version`, `api_version`, `git_commit` (nullable), `response` (JSONB, present exactly when solved), `error` (present exactly when rejected), `supersedes_run_id`, and `llm_provider` and `llm_model_version` (nullable; filled only when the assistant drafted the inputs). Check constraints enforce the actor list, the status list and the solved/rejected pairing. Configuration comes from the process environment or the nearest `.env` (python-dotenv), the environment winning. Migrations are Alembic scripts under `api/alembic/`; tests run against a second database named by `TEST_DATABASE_URL` and are skipped, with the reason shown, when it is absent.
+Option 2 for the contents, 2 for the actor, 2 for editing, 3 for startup (founder's choice, 2026-10-14). The table is `runs`: `id` (UUID), `created_at`, `actor`, `status` (`solved` or `rejected`), `inputs` (the request as received, JSONB), `inputs_sha256`, `engine_version`, `api_version`, `git_commit` (nullable), `response` (JSONB, present exactly when solved), `error` (present exactly when rejected), `supersedes_run_id`, and `llm_provider` and `llm_model_version` (nullable; filled only when the assistant drafted the inputs). Check constraints enforce the actor list, the status list and the solved/rejected pairing. Configuration comes from the process environment or the nearest `.env` (python-dotenv), the environment winning. The actor arrives as the header (option 2). `POST /v1/cases/solve` records every request that reaches the engine, solved or rejected, and returns the id as `run_id` and in the `X-Anisotropy-Run-Id` header; a body that fails the HTTP contract before the engine (neither `case` nor `toml`) is not a run. At request time the startup policy holds: when the row cannot be written, the result is withheld with 503 rather than returned without a receipt. `GET /v1/runs/{id}` returns a row as stored. The two older endpoints are not recorded yet. Migrations are Alembic scripts under `api/alembic/`; tests run against a second database named by `TEST_DATABASE_URL` and are skipped, with the reason shown, when it is absent.
 
 ## Why (evidence)
 

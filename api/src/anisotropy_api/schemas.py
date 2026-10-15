@@ -145,9 +145,11 @@ class CaseResponse(Contract):
 
     Values are numbers or nested lists. A ratio that is unbounded (an unstressed ply) is null,
     since JSON has no infinity. materials holds the library provenance of each material that
-    came from the library, by the case's material name; typed materials are absent.
+    came from the library, by the case's material name; typed materials are absent. run_id is
+    the record of this run (ADR-0026); it is null only when recording is switched off.
     """
 
+    run_id: str | None
     engine_version: str
     units: str
     title: str | None
@@ -156,6 +158,37 @@ class CaseResponse(Contract):
     materials: dict[str, MaterialProvenance]
     comparison: list[ComparisonOutput] | None
     problems: list[str]
+
+
+class RunOutput(Contract):
+    """One run record as stored (ADR-0026).
+
+    inputs is the request as received. response is the CaseResponse body as returned, without
+    run_id, and is null for a rejected run; error is the rejection message and null otherwise.
+    """
+
+    run_id: str
+    created_at: str
+    actor: str
+    status: str
+    inputs: dict[str, Any]
+    inputs_sha256: str
+    engine_version: str
+    api_version: str
+    git_commit: str | None
+    response: dict[str, Any] | None
+    error: str | None
+    supersedes_run_id: str | None
+    llm_provider: str | None
+    llm_model_version: str | None
+
+    @classmethod
+    def of(cls, run) -> "RunOutput":
+        return cls(run_id=str(run.id), created_at=run.created_at.isoformat(), actor=run.actor, status=run.status,
+                   inputs=run.inputs, inputs_sha256=run.inputs_sha256, engine_version=run.engine_version,
+                   api_version=run.api_version, git_commit=run.git_commit, response=run.response, error=run.error,
+                   supersedes_run_id=None if run.supersedes_run_id is None else str(run.supersedes_run_id),
+                   llm_provider=run.llm_provider, llm_model_version=run.llm_model_version)
 
 
 class PlyInput(Contract):
