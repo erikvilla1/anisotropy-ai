@@ -2,10 +2,6 @@
 name: project-rules
 description: Rules for any work in the Anisotropy AI repository (composite laminate engine, material library, website, docs). Load before writing code, documents, data or skills here, and whenever deciding whether something belongs in the engine, the material library, the docs, or nowhere in the repository.
 version: 0.1.0
-metadata:
-  hermes:
-    tags: [rules, documentation, source-rights]
-    category: project
 ---
 
 # Project rules

@@ -44,6 +44,5 @@ public/materials/*.tmp
 
 # Obsidian vault (root: docs/). Vault settings and workspace layout are personal.
 docs/.obsidian/
-# Agent skill folders are local junctions to docs/agents/skills (scripts/link-agent-dirs.ps1, ADR-0023).
-/.agents/
+# The agent skill folder is a local junction to docs/agents/skills (scripts/link-agent-dirs.ps1, ADR-0023).
 /.claude/skills/

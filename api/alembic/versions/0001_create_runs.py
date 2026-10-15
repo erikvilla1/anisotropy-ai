@@ -9,7 +9,11 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-from anisotropy_api.records import ACTORS, STATUSES
+from anisotropy_api.records import STATUSES
+
+# The list as it stood at this revision. Migration 0003 renames one entry; this file must keep
+# creating what it created at the time, so it does not import the live ACTORS.
+ACTORS = ("founder-terminal", "calculator", "hermes", "assistant", "test")
 
 revision = "0001"
 down_revision = None
