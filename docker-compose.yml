@@ -1,0 +1,21 @@
+# Local PostgreSQL for run records (ADR-0025).
+# Start: docker compose up -d   Stop: docker compose down   Wipe data: docker compose down -v
+# POSTGRES_PASSWORD comes from the git-ignored .env next to this file; there is no default.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: anisotropy
+      POSTGRES_DB: anisotropy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - anisotropy-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anisotropy -d anisotropy"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  anisotropy-pgdata: {}

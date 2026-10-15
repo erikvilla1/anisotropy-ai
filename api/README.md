@@ -16,6 +16,19 @@ Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/v1/cases/solve' -Cont
 
 `GET /v1/materials` lists every dataset of the cited material library; `GET /v1/materials/im7-8552` (optionally `?dataset=...`) returns the SI values the engine would use with the page of each. Either analysis endpoint accepts `"material": {"library_id": "im7-8552", "dataset_id": null}` in place of explicit constants, and the response then carries `material_provenance`. See [the loader note](../docs/material-loader-2026-10-10.md) and ADR-0020.
 
+## Database (run records, ADR-0025)
+
+Run records will be stored in a local PostgreSQL 17 that Docker runs from `docker-compose.yml` at the repository root. Docker Desktop must be running. Copy `.env.example` to `.env`, set `POSTGRES_PASSWORD` (Compose refuses to start without it) and then, from the repository root:
+
+```powershell
+docker compose up -d        # start; `docker compose ps` shows "healthy" when ready
+docker compose exec db psql -U anisotropy -d anisotropy   # SQL prompt inside the server; \q to leave
+docker compose down         # stop, keep the data
+docker compose down -v      # stop and wipe the data
+```
+
+The API does not read `DATABASE_URL` yet; the table and the write on every solve come in the next chunk.
+
 ## Run it
 
 From the repository root, in PowerShell:
