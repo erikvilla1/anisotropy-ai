@@ -1,6 +1,6 @@
 # ADR-0023: Agent skills live in docs/agents/skills, and docs/ is the Obsidian vault
 
-- Status: Proposed
+- Status: Proposed; the Hermes parts are superseded by ADR-0028 (Hermes lives outside the repository)
 - Date: 2026-10-11
 - Decided by: Founder (pending review) | Drafted by: Claude Code
 - Related: `docs/agents/README.md`, `docs/agents/skills/project-rules/SKILL.md`, `scripts/link-agent-dirs.ps1`

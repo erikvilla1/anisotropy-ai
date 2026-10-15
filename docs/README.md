@@ -76,6 +76,8 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0024](decisions/ADR-0024-api-exposes-the-case-format.md) | The API exposes the engine's case format as one endpoint instead of one contract per operation |
 | [0025](decisions/ADR-0025-run-records-in-local-postgresql.md) | Run records go in PostgreSQL, run locally in Docker, reached through SQLAlchemy and Alembic (proposed) |
 | [0026](decisions/ADR-0026-run-record-contents-and-startup-policy.md) | A run record is immutable, keeps rejected runs, names its actor; the API refuses to start without the database (proposed) |
+| [0027](decisions/ADR-0027-deployment-tiers-and-assistant-model-location.md) | Regulated customers run the whole stack inside their own boundary; the assistant's model is a per-deployment setting, off until configured (proposed) |
+| [0028](decisions/ADR-0028-founder-tooling-outside-the-repository.md) | Hermes and post-drafting tooling live outside the repository and call the API as an outside client (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
