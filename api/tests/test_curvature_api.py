@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from anisotropy_api.main import app
 
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Anisotropy-Actor": "test"})  # no lifespan: nothing is recorded here
 ENDPOINT = "/v1/laminates/prescribed-curvature"
 
 

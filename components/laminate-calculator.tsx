@@ -165,7 +165,7 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
       </form>
 
       <section className="calc-output" aria-labelledby="results-title" aria-busy={pending}>
-        <div className="calc-panel-title"><span className="eyebrow">02 / INSPECT</span><span className="calc-hint">{result ? `Engine ${result.engine_version}` : "Engine results"}</span></div>
+        <div className="calc-panel-title"><span className="eyebrow">02 / INSPECT</span><span className="calc-hint" title={result?.run_id ?? undefined}>{result ? `Engine ${result.engine_version}${result.run_id ? ` · run ${result.run_id.slice(0, 8)}` : ""}` : "Engine results"}</span></div>
         <h2 id="results-title">Laminate response</h2>
         <p className="calc-status" role="status">{status}</p>
         {result ? <div className="calc-results" data-testid="calculation-results">

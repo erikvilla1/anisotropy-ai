@@ -18,7 +18,7 @@ Next.js static route -> React state -> boundary conversion/validation -> browser
 
 ## Failure behavior and limits
 
-Blank values never become zeros. Field errors are shown next to inputs, results are cleared after edits, inputs are frozen while a request is pending, and cancellation/network errors do not display fallback results. No configured service means calculation is disabled. Source text is caller supplied; dataset selection, persistent run records, AI, failure/stress outputs and deployment controls remain future work. The engine's physical applicability limits still apply. Reloading clears work.
+Blank values never become zeros. Field errors are shown next to inputs, results are cleared after edits, inputs are frozen while a request is pending, and cancellation/network errors do not display fallback results. No configured service means calculation is disabled. Source text is caller supplied. Every request is sent with `X-Anisotropy-Actor: calculator` and recorded by the API; the result panel shows the run id next to the engine version (ADR-0026). AI, failure/stress outputs and deployment controls remain future work. The engine's physical applicability limits still apply. Reloading clears work.
 
 ## Owner
 
