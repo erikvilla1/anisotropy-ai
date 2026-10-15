@@ -131,6 +131,55 @@ def test_the_older_endpoints_need_the_actor_too(recording, empty_runs):
     assert count_rows(empty_runs) == 0
 
 
+def three_runs(client) -> list[str]:
+    """A solved case by test, a solved forward request by calculator, a rejected case by hermes; ids in that order."""
+    first = client.post(ENDPOINT, headers=HEADERS, json=EXAMPLE).json()["run_id"]
+    second = client.post("/v1/laminates/response", headers={"X-Anisotropy-Actor": "calculator"}, json=FORWARD).json()["run_id"]
+    third = client.post(ENDPOINT, headers={"X-Anisotropy-Actor": "hermes"}, json={"case": {}}).headers[RUN_ID_HEADER]
+    return [first, second, third]
+
+
+def test_the_listing_is_newest_first_with_a_summary_per_run(recording):
+    first, second, third = three_runs(recording)
+    response = recording.get("/v1/runs")
+    assert response.status_code == 200, response.text
+    listing = response.json()
+    assert [run["run_id"] for run in listing] == [third, second, first]
+    assert set(listing[0]) == {
+        "run_id", "created_at", "actor", "endpoint", "status", "engine_version", "api_version", "git_commit",
+        "inputs_sha256", "error",
+    }
+    assert listing[0]["status"] == "rejected" and "missing fields" in listing[0]["error"]
+    assert listing[1]["actor"] == "calculator" and listing[1]["endpoint"] == "/v1/laminates/response"
+
+
+def test_the_listing_filters_by_actor_endpoint_status_and_limit(recording):
+    first, second, third = three_runs(recording)
+    assert [r["run_id"] for r in recording.get("/v1/runs", params={"actor": "calculator"}).json()] == [second]
+    assert [r["run_id"] for r in recording.get("/v1/runs", params={"status": "rejected"}).json()] == [third]
+    assert [r["run_id"] for r in recording.get("/v1/runs", params={"endpoint": ENDPOINT}).json()] == [third, first]
+    assert [r["run_id"] for r in recording.get("/v1/runs", params={"limit": 2}).json()] == [third, second]
+    assert recording.get("/v1/runs", params={"actor": "test", "status": "rejected"}).json() == []
+
+
+def test_the_listing_filters_by_time_with_an_offset(recording):
+    first, second, third = three_runs(recording)
+    created = {run_id: recording.get(f"/v1/runs/{run_id}").json()["created_at"] for run_id in (first, second, third)}
+    assert [r["run_id"] for r in recording.get("/v1/runs", params={"since": created[second]}).json()] == [third, second]
+    assert [r["run_id"] for r in recording.get("/v1/runs", params={"until": created[second]}).json()] == [first]
+    both = recording.get("/v1/runs", params={"since": created[first], "until": created[third]}).json()
+    assert [r["run_id"] for r in both] == [second, first]
+
+
+@pytest.mark.parametrize("params", [
+    {"actor": "somebody"}, {"status": "pending"}, {"since": "2026-10-14T00:00:00"}, {"until": "yesterday"},
+    {"limit": 0}, {"limit": 501},
+])
+def test_the_listing_refuses_unknown_filters(recording, params):
+    response = recording.get("/v1/runs", params=params)
+    assert response.status_code == 422, response.text
+
+
 def test_an_unknown_run_is_404_and_a_non_uuid_is_422(recording):
     assert recording.get(f"/v1/runs/{uuid.uuid4()}").status_code == 404
     assert recording.get("/v1/runs/not-a-uuid").status_code == 422
@@ -144,6 +193,7 @@ def test_switched_off_solves_without_a_run_id_and_has_nothing_to_read(monkeypatc
         assert RUN_ID_HEADER not in response.headers
         read = client.get(f"/v1/runs/{uuid.uuid4()}")
         assert read.status_code == 503 and "switched off" in read.json()["detail"]
+        assert client.get("/v1/runs").status_code == 503
 
 
 def test_a_result_is_withheld_when_it_cannot_be_recorded(recording):

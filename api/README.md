@@ -18,6 +18,12 @@ The `X-Anisotropy-Actor` header is required on all three analysis endpoints: it 
 Invoke-RestMethod -Uri 'http://127.0.0.1:8000/v1/runs/<run_id>' | ConvertTo-Json -Depth 10
 ```
 
+`GET /v1/runs` lists the newest runs first, one summary line each (id, time, actor, endpoint, status, versions, input digest, error), narrowed by `actor`, `endpoint`, `status`, `since` (inclusive) and `until` (exclusive, both with a timezone offset such as `2026-10-14T00:00:00Z`), and `limit` (1 to 500, default 50). An unknown actor or status is refused, not answered with an empty list.
+
+```powershell
+Invoke-RestMethod -Uri 'http://127.0.0.1:8000/v1/runs?actor=calculator&since=2026-10-14T00:00:00Z&limit=20' | Format-Table run_id, created_at, actor, endpoint, status
+```
+
 ## Library materials (chunk 4)
 
 `GET /v1/materials` lists every dataset of the cited material library; `GET /v1/materials/im7-8552` (optionally `?dataset=...`) returns the SI values the engine would use with the page of each. Either analysis endpoint accepts `"material": {"library_id": "im7-8552", "dataset_id": null}` in place of explicit constants, and the response then carries `material_provenance`. See [the loader note](../docs/material-loader-2026-10-10.md) and ADR-0020.

@@ -1,5 +1,6 @@
 """A synchronous local API. It adapts HTTP to the engine; it contains no laminate math."""
 
+import datetime as dt
 import math
 import tomllib
 import uuid
@@ -9,7 +10,7 @@ from importlib.metadata import version
 from typing import Annotated, TypeVar
 
 import numpy as np
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -21,11 +22,12 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
-from .records import ACTORS, check_ready, connect, fetch_run, git_commit, record_run
+from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run
 from .settings import load_settings
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, LibraryMaterialInput,
-    MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, VerificationResponse,
+    MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, RunSummary,
+    VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
@@ -193,12 +195,50 @@ def solve_case_endpoint(problem: CaseRequest, actor: Actor, request: Request, re
     return _deliver(request, response, actor, problem, compute)
 
 
-@app.get("/v1/runs/{run_id}", response_model=RunOutput)
-def run_detail(run_id: uuid.UUID, request: Request) -> RunOutput:
-    """One run record as stored (ADR-0026)."""
+def _records_engine(request: Request):
+    """The connection pool, or 503 when recording is switched off: there is nothing to read."""
     engine = getattr(request.app.state, "records", None)
     if engine is None:
         raise HTTPException(status_code=503, detail="Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read")
+    return engine
+
+
+def _aware(name: str, moment: dt.datetime | None) -> dt.datetime | None:
+    """A time filter must carry its offset; a naive time would be guessed (ADR-0003)."""
+    if moment is not None and moment.tzinfo is None:
+        raise HTTPException(status_code=422, detail=f"{name} must include a timezone offset, e.g. 2026-10-14T00:00:00Z")
+    return moment
+
+
+@app.get("/v1/runs", response_model=list[RunSummary])
+def list_runs_endpoint(
+    request: Request,
+    actor: str | None = None, endpoint: str | None = None, status: str | None = None,
+    since: dt.datetime | None = None, until: dt.datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+) -> list[RunSummary]:
+    """The newest runs first, narrowed by actor, endpoint, status and time (ADR-0026).
+
+    `since` is inclusive and `until` exclusive, both with a timezone offset. An unknown actor or
+    status is refused rather than answered with an empty list.
+    """
+    engine = _records_engine(request)
+    if actor is not None and actor not in ACTORS:
+        raise HTTPException(status_code=422, detail=f"actor must be one of {', '.join(ACTORS)}; got {actor!r}")
+    if status is not None and status not in STATUSES:
+        raise HTTPException(status_code=422, detail=f"status must be one of {', '.join(STATUSES)}; got {status!r}")
+    try:
+        runs = list_runs(engine, actor=actor, endpoint=endpoint, status=status,
+                         since=_aware("since", since), until=_aware("until", until), limit=limit)
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail=f"The run records database did not answer: {str(exc).splitlines()[0]}") from exc
+    return [RunSummary.of(run) for run in runs]
+
+
+@app.get("/v1/runs/{run_id}", response_model=RunOutput)
+def run_detail(run_id: uuid.UUID, request: Request) -> RunOutput:
+    """One run record as stored (ADR-0026)."""
+    engine = _records_engine(request)
     try:
         run = fetch_run(engine, run_id)
     except SQLAlchemyError as exc:

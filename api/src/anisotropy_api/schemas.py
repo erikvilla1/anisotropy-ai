@@ -160,6 +160,27 @@ class CaseResponse(Contract):
     problems: list[str]
 
 
+class RunSummary(Contract):
+    """One line of a run listing (ADR-0026): enough to pick a run; GET /v1/runs/{run_id} has the rest."""
+
+    run_id: str
+    created_at: str
+    actor: str
+    endpoint: str
+    status: str
+    engine_version: str
+    api_version: str
+    git_commit: str | None
+    inputs_sha256: str
+    error: str | None
+
+    @classmethod
+    def of(cls, run) -> "RunSummary":
+        return cls(run_id=str(run.id), created_at=run.created_at.isoformat(), actor=run.actor, endpoint=run.endpoint,
+                   status=run.status, engine_version=run.engine_version, api_version=run.api_version,
+                   git_commit=run.git_commit, inputs_sha256=run.inputs_sha256, error=run.error)
+
+
 class RunOutput(Contract):
     """One run record as stored (ADR-0026).
 
