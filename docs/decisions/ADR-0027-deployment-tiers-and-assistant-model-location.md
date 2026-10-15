@@ -33,13 +33,13 @@ Where the assistant's model runs, when a deployment turns the assistant on:
 
 ## Decision
 
-Option 3, self-hosted, is the deployment for regulated and secretive customers and is built first. Option 1 remains the plan for the public website tier (students, small shops, public data). Option 2 is not pursued until a customer asks for it.
+Option 3, self-hosted, is the deployment for regulated and secretive customers and is built first. Option 1 remains the plan for the public tier: students, professors and research groups, small shops, anyone working with public data. In that tier the assistant is a main feature, not an extra, because its users are learning the method or exploring problems rather than running a qualified test program. Option 2 is not pursued until a customer asks for it.
 
 The assistant is off unless a deployment names a model endpoint in its configuration; starting with the assistant requested and no endpoint named is refused with the variable named (ADR-0003). Self-hosted builds ship with it off. Which of model options 2 and 3 a customer uses is their choice and is recorded per deployment; option 1 is allowed only in the public tier.
 
 The product makes no outbound network connection except to its own database and, when configured, the named model endpoint. Customer data is never used for shared training; the "by default" qualifier in the system overview is removed.
 
-Work this decision creates, in order, each a separate chunk: (1) customer material datasets loaded from a file outside the repository with the same provenance and rights handling as the public library; (2) authentication and per-user attribution in run records; (3) container images, a software bill of materials and an offline install; (4) the assistant's provider setting.
+This decision does not defer the assistant itself. Its design (provider, number guard, evaluation against the validation cases) is a separate decision record and proceeds for the public tier on its own schedule. Work this decision creates for the self-hosted tier, in order, each a separate chunk: (1) customer material datasets loaded from a file outside the repository with the same provenance and rights handling as the public library; (2) authentication and per-user attribution in run records; (3) container images, a software bill of materials and an offline install; (4) the assistant's provider setting.
 
 ## Why (evidence)
 
