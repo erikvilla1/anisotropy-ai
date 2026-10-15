@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from anisotropy_engine.library import library_material
 from anisotropy_api.main import app
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Anisotropy-Actor": "test"})  # no lifespan: nothing is recorded here
 EXAMPLE = json.loads((Path(__file__).parents[1] / "examples/zero-degree-tension.json").read_text())
 
 

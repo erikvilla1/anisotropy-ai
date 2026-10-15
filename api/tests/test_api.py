@@ -13,7 +13,7 @@ from anisotropy_engine.response import Loads, midplane_response
 from anisotropy_api.main import app
 
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Anisotropy-Actor": "test"})  # no lifespan: nothing is recorded here
 ENDPOINT = "/v1/laminates/response"
 
 

@@ -40,6 +40,8 @@ class Run(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     actor: Mapped[str] = mapped_column(String(40), nullable=False)
+    # The route that answered, e.g. /v1/cases/solve; says how to read `inputs` and `response`.
+    endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(10), nullable=False)
     # The request exactly as received: {"case": {...}} or {"toml": "..."}.
     # none_as_null: a Python None is SQL NULL, not the JSON value null, so the check constraints see it.
@@ -109,10 +111,10 @@ def git_commit() -> str | None:
     return commit if done.returncode == 0 and len(commit) == 40 else None
 
 
-def record_run(engine: Engine, *, actor: str, inputs: dict, engine_version: str, api_version: str,
+def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engine_version: str, api_version: str,
                git_commit: str | None, response: dict | None = None, error: str | None = None) -> uuid.UUID:
     """Insert one row and return its id. A database failure raises; the caller decides what that means."""
-    run = Run(actor=actor, status="solved" if error is None else "rejected", inputs=inputs,
+    run = Run(actor=actor, endpoint=endpoint, status="solved" if error is None else "rejected", inputs=inputs,
               inputs_sha256=inputs_digest(inputs), engine_version=engine_version, api_version=api_version,
               git_commit=git_commit, response=response, error=error)
     with Session(engine) as session:

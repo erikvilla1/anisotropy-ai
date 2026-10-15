@@ -19,7 +19,10 @@ from conftest import TEST_URL, needs_test_database
 pytestmark = needs_test_database
 ENDPOINT = "/v1/cases/solve"
 HEADERS = {"X-Anisotropy-Actor": "test"}
-EXAMPLE = json.loads((Path(__file__).parents[1] / "examples/case-library-axial-check.json").read_text())
+EXAMPLES = Path(__file__).parents[1] / "examples"
+EXAMPLE = json.loads((EXAMPLES / "case-library-axial-check.json").read_text())
+FORWARD = json.loads((EXAMPLES / "zero-degree-tension.json").read_text())
+CURVATURE = json.loads((EXAMPLES / "flat-cross-ply.json").read_text())
 HEX = re.compile(r"^[0-9a-f]+$")
 
 
@@ -49,7 +52,7 @@ def test_a_solved_case_is_recorded_and_readable(recording):
     assert stored.status_code == 200, stored.text
     record = stored.json()
     assert record["run_id"] == run_id and record["actor"] == "test" and record["status"] == "solved"
-    assert record["inputs"] == EXAMPLE
+    assert record["endpoint"] == ENDPOINT and record["inputs"] == EXAMPLE
     assert record["response"]["results"] == body["results"] and record["response"]["materials"] == body["materials"]
     assert "run_id" not in record["response"]
     assert record["engine_version"] == body["engine_version"] == "0.1.0" and record["api_version"] == "0.1.0"
@@ -99,6 +102,33 @@ def test_identical_requests_share_a_digest_but_not_an_id(recording):
     assert first != second
     digests = {recording.get(f"/v1/runs/{run_id}").json()["inputs_sha256"] for run_id in (first, second)}
     assert len(digests) == 1
+
+
+def test_the_forward_endpoint_is_recorded_for_the_calculator(recording):
+    response = recording.post("/v1/laminates/response", headers={"X-Anisotropy-Actor": "calculator"}, json=FORWARD)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert response.headers[RUN_ID_HEADER] == body["run_id"]
+    record = recording.get(f"/v1/runs/{body['run_id']}").json()
+    assert record["endpoint"] == "/v1/laminates/response" and record["actor"] == "calculator"
+    assert record["inputs"] == FORWARD
+    assert record["response"]["midplane_strain"] == body["midplane_strain"] and "run_id" not in record["response"]
+    assert record["response"]["inputs"]["plies"] == FORWARD["plies"]
+
+
+def test_the_prescribed_curvature_endpoint_is_recorded(recording):
+    response = recording.post("/v1/laminates/prescribed-curvature", headers=HEADERS, json=CURVATURE)
+    assert response.status_code == 200, response.text
+    record = recording.get(f"/v1/runs/{response.json()['run_id']}").json()
+    assert record["endpoint"] == "/v1/laminates/prescribed-curvature" and record["inputs"] == CURVATURE
+    assert record["response"]["moments_N_m_per_m"] == response.json()["moments_N_m_per_m"]
+    assert record["response"]["verification"]["passed"] is True
+
+
+def test_the_older_endpoints_need_the_actor_too(recording, empty_runs):
+    assert recording.post("/v1/laminates/response", json=FORWARD).status_code == 422
+    assert recording.post("/v1/laminates/prescribed-curvature", json=CURVATURE).status_code == 422
+    assert count_rows(empty_runs) == 0
 
 
 def test_an_unknown_run_is_404_and_a_non_uuid_is_422(recording):

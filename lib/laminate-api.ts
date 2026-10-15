@@ -23,6 +23,8 @@ export type AnalysisRequest = {
   loads: Record<LoadName, number>;
 };
 export type AnalysisResult = {
+  /** The run record's id (ADR-0026); null when the service runs with recording switched off. */
+  run_id?: string | null;
   engine_version: string;
   inputs: AnalysisRequest;
   A_N_per_m: number[][];
@@ -133,7 +135,8 @@ export function readAnalysisResult(payload: unknown, request: AnalysisRequest): 
 /** Send one explicit request; errors never fall back to example or locally computed results. */
 export async function requestAnalysis(baseUrl: string, request: AnalysisRequest, signal: AbortSignal): Promise<AnalysisResult> {
   const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/laminates/response`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    // The actor header names this client in the run record (ADR-0026).
+    method: "POST", headers: { "Content-Type": "application/json", "X-Anisotropy-Actor": "calculator" },
     body: JSON.stringify(request), signal, credentials: "omit", cache: "no-store",
   });
   let payload: unknown;

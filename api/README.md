@@ -12,7 +12,7 @@ Chunk 3 adds `POST /v1/laminates/prescribed-curvature`: known forces and explici
 Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/v1/cases/solve' -ContentType 'application/json' -Headers @{ 'X-Anisotropy-Actor' = 'founder-terminal' } -InFile 'api/examples/case-library-axial-check.json' | ConvertTo-Json -Depth 10
 ```
 
-The `X-Anisotropy-Actor` header is required: it says which client sent the request (`founder-terminal`, `calculator`, `hermes`, `assistant` or `test`) and is stored with the run. Every request that reaches the engine is recorded, solved or rejected; the response carries the record's id as `run_id` and in the `X-Anisotropy-Run-Id` header, and `GET /v1/runs/{run_id}` returns the record: the request as received, versions, the response or the error (ADR-0026).
+The `X-Anisotropy-Actor` header is required on all three analysis endpoints: it says which client sent the request (`founder-terminal`, `calculator`, `hermes`, `assistant` or `test`) and is stored with the run. Every request that reaches the engine is recorded, solved or rejected; the response carries the record's id as `run_id` and in the `X-Anisotropy-Run-Id` header, and `GET /v1/runs/{run_id}` returns the record: the request as received, which endpoint answered, versions, the response or the error (ADR-0026).
 
 ```powershell
 Invoke-RestMethod -Uri 'http://127.0.0.1:8000/v1/runs/<run_id>' | ConvertTo-Json -Depth 10
@@ -57,7 +57,7 @@ Open <http://127.0.0.1:8000/docs>. This is FastAPI's interactive API explorer. E
 Or, from a second PowerShell terminal at the repository root:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/v1/laminates/response' -ContentType 'application/json' -InFile 'api/examples/zero-degree-tension.json' | ConvertTo-Json -Depth 10
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/v1/laminates/response' -ContentType 'application/json' -Headers @{ 'X-Anisotropy-Actor' = 'founder-terminal' } -InFile 'api/examples/zero-degree-tension.json' | ConvertTo-Json -Depth 10
 ```
 
 The example's material numbers cite Daniel & Ishai Table A.4 and match the existing analytical practice case. Its thickness and load are constructed practice inputs, not test measurements. At zero degrees, the axial strain should be approximately `0.0006802721088435374`; the integration test checks this against the independent uniaxial compliance relation.
