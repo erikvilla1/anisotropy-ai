@@ -45,14 +45,19 @@ Two deck habits of Abaqus/CAE are handled on purpose: the same set name defined 
 
 Four-node isoparametric plane-stress elements whose stiffness is the laminate membrane matrix `A` from the engine, 2 by 2 Gauss integration, sparse assembly, kinematic couplings as dof aliasing (every coupled node translates with its reference node, so the reference node's reaction is the sum over the region), prescribed displacements by partitioning, sparse LU solve, reactions as the residual, element strain at the centroid and the Gauss points, section forces `N = A eps`. The layups are symmetric (`B = 0`), the loading is in-plane and the plate is flat, so the bending problem has the trivial solution and the membrane problem is exact for these decks; the kernel refuses a layup whose `B` does not vanish, a singular system (a free rigid-body motion), a node in no element, and prescriptions that conflict through a coupling. Validation cases live in `validation/cases/` and are run by `tests/test_fe_validation_cases.py`; the format is documented at the top of `src/anisotropy_fea/cases.py`.
 
+## Ply stresses and first-ply failure
+
+`recovery.py` pushes each element's strain through its plies with the engine's `ply_surfaces` (zero curvature), giving every ply's strain and stress in laminate and material axes, and checks each ply with the engine's criterion dispatch (`face_strength_ratio`): maximum stress, Tsai-Hill, Tsai-Wu (the deck's `*Fail Stress` sixth value is the interaction term; refused without it) and maximum strain (refused: a deck carries no strain limits). The smallest ratio over the mesh is the first-ply-failure factor on the applied displacement or load; ties between identical plies resolve to the first element in deck order and the bottom-most ply. A deck without `*Fail Stress` is refused by name.
+
 ## Layout
 
 ```
 src/anisotropy_fea/   abaqus_reader.py (tokenize, parse_deck, read_deck), model.py (Deck and records, validate_deck, to_si), units.py,
                       mesh.py (mesh_from_deck, section_stiffness), membrane.py (the kernel: element, constraint_map, assemble, solve_membrane),
-                      results.py (MembraneSolution), cases.py (validation case format, compare, disagreements)
+                      results.py (MembraneSolution), recovery.py (element_ply_states, strength_ratios, deck_f12_star),
+                      cases.py (validation case format, compare, disagreements)
 docs/theory.md        every equation and the function that computes it, with code markers
-tests/                reader, units, element, solve, validation-case, theory-marker and local-deck tests
+tests/                reader, units, element, solve, recovery, validation-case, theory-marker and local-deck tests
 validation/decks/     committed fixture decks with public library materials; validation/cases/ the cases (fea/validation/README.md)
 examples/             deck_summary.py, solve_deck.py
 ```

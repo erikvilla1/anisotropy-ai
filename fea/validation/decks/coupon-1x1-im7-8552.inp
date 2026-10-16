@@ -5,7 +5,8 @@
 ** rights: open publisher), converted to MPa: E1 162095.74, E2 8963.18, nu12 0.316, G12 4688.43, ply 0.18288 mm.
 ** G13 is set equal to G12 and G23 is a nominal 3000 MPa; Abaqus syntax requires both and anisotropy_fea does not use them.
 ** *Fail Stress magnitudes are the same dataset's F1t, F1c, F2t, F2c, F6 in MPa. The sign Abaqus expects for the
-** compressive limits is UNVERIFIED; anisotropy_fea uses magnitudes (fea/docs/abaqus-export-recipe.md).
+** compressive limits is UNVERIFIED; anisotropy_fea uses magnitudes (docs/abaqus-export-recipe.md). The sixth value, the
+** Tsai-Wu interaction term f*, is 0: Abaqus's documented default, stated here so the Tsai-Wu criterion has an explicit input (ADR-0021).
 *Preprint, echo=NO, model=NO, history=NO, contact=NO
 *Part, name=Coupon
 *Node
@@ -47,7 +48,7 @@
 *Elastic, type=LAMINA
 162095.74, 8963.18, 0.316, 4688.43, 4688.43, 3000.
 *Fail Stress
-2558.51, -1731.48, 64.05, -285.72, 91.15
+2558.51, -1731.48, 64.05, -285.72, 91.15, 0.
 *Step, name=Step-1, nlgeom=NO
 *Static
 1., 1., 1e-05, 1.
