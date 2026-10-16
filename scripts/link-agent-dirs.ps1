@@ -1,5 +1,5 @@
-# Points the folders that agents scan for skills at docs/agents/skills (ADR-0023).
-# Claude Code reads .claude/skills; Hermes Agent reads .agents/skills.
+# Points the folder that Claude Code scans for skills, .claude/skills, at docs/agents/skills (ADR-0023).
+# Tooling that is not part of the product does not read this repository's skills (ADR-0028).
 # The junctions are local and ignored by git. Run once after cloning:
 #   powershell -ExecutionPolicy Bypass -File scripts/link-agent-dirs.ps1
 
@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $target = Join-Path $root 'docs\agents\skills'
 
-foreach ($relative in @('.claude\skills', '.agents\skills')) {
+foreach ($relative in @('.claude\skills')) {
     $link = Join-Path $root $relative
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $link) | Out-Null
 

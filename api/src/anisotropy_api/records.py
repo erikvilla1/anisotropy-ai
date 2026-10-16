@@ -22,7 +22,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 # Who triggered a run. Adding one is a migration, so a new consumer is a reviewed change.
-ACTORS = ("founder-terminal", "calculator", "hermes", "assistant", "test")
+# `founder-agent` is the founder's own tooling outside this repository, an outside client of the API (ADR-0028).
+ACTORS = ("founder-terminal", "calculator", "founder-agent", "assistant", "test")
 STATUSES = ("solved", "rejected")
 
 
