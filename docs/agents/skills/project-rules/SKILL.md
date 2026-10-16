@@ -22,6 +22,8 @@ Before any change in this repository, and whenever you must decide where content
 | Content | Where | Rule |
 | --- | --- | --- |
 | Any number in an analysis result | Computed by the engine, `engine/src/anisotropy_engine/` | ADR-0001 |
+| Any number in a finite element result | Computed by `fea/src/anisotropy_fea/` on the engine's laminate stiffness; an Abaqus deck is an input, never a source of results | ADR-0001, ADR-0029 |
+| A team Abaqus deck or result export whose material is not in the public library | `.local/abaqus/` only; committed fixtures use public library materials | ADR-0029 |
 | An equation the engine uses | `engine/docs/theory.md`, plus a card in the website physics library (`lib/physics*.ts`) | ADR-0019 |
 | A validation case | `engine/validation/cases/*.toml`: inputs, expected numbers and a source reference only | ADR-0007 |
 | A material value from a public-domain or open-publisher source (MIL-HDBK-17F, NASA, NCAMP, datasheets) | The website material library in `lib/`, with a rights class and evidence; then `npm run export:library` so the engine sees it | ADR-0018, ADR-0020 |

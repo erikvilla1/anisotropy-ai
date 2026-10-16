@@ -44,5 +44,21 @@ public/materials/*.tmp
 
 # Obsidian vault (root: docs/). Vault settings and workspace layout are personal.
 docs/.obsidian/
+# Abaqus job and result files: never committed. Input decks (*.inp) with public materials are committed as fixtures under fea/validation/decks/;
+# the team's decks and exports live in .local/abaqus/ (ADR-0029).
+*.odb
+*.dat
+*.msg
+*.sta
+*.sim
+*.prt
+*.com
+*.lck
+*.jnl
+*.rpy
+*.ipm
+*.rpt
+*.cae
+
 # The agent skill folder is a local junction to docs/agents/skills (scripts/link-agent-dirs.ps1, ADR-0023).
 /.claude/skills/

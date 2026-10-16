@@ -8,6 +8,7 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | --- | --- |
 | What have we built? | [System overview](00_system_overview.md) |
 | Why was it built this way? | [Decision records](decisions/) |
+| How do we read the team's Abaqus decks, and what do we refuse? | [Finite element card](components/fea.md), [what the team exports](abaqus-export-recipe.md) |
 | Does it work, and how do we know? | [Evaluation reports](evaluations/) and [validation cases](../engine/validation/) |
 | What changed, and when? | [Changelog](../CHANGELOG.md) and merged pull requests |
 | What could go wrong? | [Risk register](risks/risk_register.md) |
@@ -84,7 +85,7 @@ New decisions use the [template](decisions/_template.md).
 
 ## Material data documents
 
-Latest checks: [Hermes out, actor renamed](evaluations/api/2026-10-14-hermes-out.md), [calculator endpoints recorded](evaluations/api/2026-10-14-run-records-calculator.md), [run records written and read back](evaluations/api/2026-10-14-run-records-write.md), [run records table and startup policy](evaluations/api/2026-10-14-run-records-table.md), [run records database](evaluations/api/2026-10-14-run-records-database.md), [engine, 11 October](evaluations/2026-10-11-criteria-buckling-loader.md), [API case endpoint](evaluations/api/2026-10-11-case-endpoint.md), [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
+Latest checks: [Abaqus deck reader](evaluations/fea/2026-10-15-deck-reader.md), [Hermes out, actor renamed](evaluations/api/2026-10-14-hermes-out.md), [calculator endpoints recorded](evaluations/api/2026-10-14-run-records-calculator.md), [run records written and read back](evaluations/api/2026-10-14-run-records-write.md), [run records table and startup policy](evaluations/api/2026-10-14-run-records-table.md), [run records database](evaluations/api/2026-10-14-run-records-database.md), [engine, 11 October](evaluations/2026-10-11-criteria-buckling-loader.md), [API case endpoint](evaluations/api/2026-10-11-case-endpoint.md), [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
 
 | Document | Contents |
 | --- | --- |
