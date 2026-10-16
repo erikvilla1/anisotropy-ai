@@ -10,7 +10,10 @@ uv sync --locked
 uv run pytest -q -ra tests ../engine/tests
 uv run python examples/deck_summary.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
 uv run python examples/solve_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
+uv run python examples/plot_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea-plots
 ```
+
+`plot_deck.py` draws the mesh and deformed shape, the three strain fields, the axial section force and the first-ply-failure map as one PNG (matplotlib, a development dependency). Write the pictures of a team deck to `.local/`, never into the repository.
 
 The team's own decks go in `.local/abaqus/` (git-ignored; their materials may be proprietary). `tests/test_local_tension_deck.py` runs against `.local/abaqus/Tension-test.inp` when it is there and is skipped, with the reason shown, when it is not.
 
