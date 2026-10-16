@@ -39,7 +39,8 @@ def polygons(xy: np.ndarray, connectivity: np.ndarray, scale: float) -> list[np.
 
 def field_panel(ax, polys, values, title, label, diverging: bool, deformed=None):
     values = np.asarray(values, dtype=float)
-    changes_sign = float(values.min()) < 0.0 < float(values.max())
+    span = float(np.max(np.abs(values))) or 1.0
+    changes_sign = float(values.min()) < -1e-6 * span and float(values.max()) > 1e-6 * span  # roundoff is not a sign change
     if diverging and changes_sign:
         limit = float(np.max(np.abs(values))) or 1.0
         norm = plt.Normalize(-limit, limit)
