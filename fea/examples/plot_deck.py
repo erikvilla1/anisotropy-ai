@@ -5,8 +5,9 @@
 
 One PNG per deck. Lengths print in the deck's units; strains are dimensionless; section forces in force per length.
 A field that changes sign uses a two-hue scale with a neutral middle at zero; a field of one sign uses one hue from
-light to dark, so the whole scale carries information. Needs matplotlib (a development dependency: `uv sync` installs it). Nothing about the material is printed except the first-ply-failure map,
-which needs strengths; a deck without them gets the message in that panel instead.
+light to dark, so the whole scale carries information. Needs matplotlib (a development dependency: `uv sync` installs it).
+Nothing about the material is printed except the first-ply-failure map, which needs strengths; a deck without them gets
+the message in that panel instead. `plot_solution` is importable by other examples.
 """
 
 from __future__ import annotations
@@ -24,8 +25,9 @@ from matplotlib.collections import PolyCollection  # noqa: E402
 from anisotropy_fea.abaqus_reader import read_deck  # noqa: E402
 from anisotropy_fea.membrane import solve_membrane  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
-from anisotropy_fea.model import node_name, reference_node  # noqa: E402
+from anisotropy_fea.model import Deck, node_name, reference_node  # noqa: E402
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios  # noqa: E402
+from anisotropy_fea.results import MembraneSolution  # noqa: E402
 from anisotropy_fea.units import from_si  # noqa: E402
 
 INK, MUTED, GRID = "#1C1F22", "#5D636A", "#D9DCE0"
@@ -71,29 +73,21 @@ def style(ax):
     ax.set_ylabel("y", color=MUTED, fontsize=8)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("deck", type=Path)
-    parser.add_argument("--units", required=True)
-    parser.add_argument("--out", type=Path, required=True, help="folder for the PNG")
-    parser.add_argument("--magnify", type=float, default=None, help="deformation magnification; default makes the largest displacement 5 %% of the width")
-    args = parser.parse_args()
-    units = args.units
-    deck = read_deck(args.deck, units)
-    solution = solve_membrane(deck)
+def plot_solution(deck: Deck, solution: MembraneSolution, units: str, path: Path, magnify: float | None = None, title: str | None = None) -> Path:
+    """The six-panel figure for a solved deck, written to `path`."""
     mesh = solution.mesh
-    length = lambda v: from_si(v, "length", units)
+    length = lambda v: from_si(v, "length", units)  # noqa: E731
     xy = np.vectorize(length)(mesh.xy)
     u = np.vectorize(length)(solution.displacement)
     width = float(np.ptp(xy[:, 0])) or 1.0
-    magnify = args.magnify or (0.05 * width / (float(np.max(np.abs(u))) or 1.0))
-    base = polygons(xy, mesh.connectivity, 1.0)
-    deformed = polygons(xy + magnify * u, mesh.connectivity, 1.0)
+    magnify = magnify or (0.05 * width / (float(np.max(np.abs(u))) or 1.0))
+    corners = mesh.connectivity[:, :4]
+    base = polygons(xy, corners, 1.0)
+    deformed = polygons(xy + magnify * u, corners, 1.0)
     N = np.vectorize(lambda v: from_si(v, "force_per_length", units))(solution.section_force)
 
     fig, axes = plt.subplots(2, 3, figsize=(15, 9), constrained_layout=True)
     fig.patch.set_facecolor("white")
-    # 1. mesh and deformed shape
     ax = axes[0, 0]
     ax.add_collection(PolyCollection(base, facecolors="#EEF2F6", edgecolors=GRID, linewidths=0.5))
     ax.add_collection(PolyCollection(deformed, facecolors="none", edgecolors="#9A5A00", linewidths=0.8))
@@ -104,17 +98,22 @@ def main() -> None:
         rf = solution.reaction_of([key])
         ax.annotate(f"{node_name(key)}\nRF = ({from_si(rf[0], 'force', units):.4g}, {from_si(rf[1], 'force', units):.4g}) N",
                     point, textcoords="offset points", xytext=(8, 0), fontsize=7, color=INK)
+    if not deck.couplings:
+        for name in ("Grip-Top", "Grip-Bottom", "Top", "Bottom"):
+            if name in deck.nsets:
+                rf = solution.reaction_of(deck.nsets[name])
+                if np.any(rf != 0):
+                    point = xy[[mesh.node(k) for k in deck.nsets[name]]].mean(axis=0)
+                    ax.annotate(f"{name}\nRF = ({from_si(rf[0], 'force', units):.4g}, {from_si(rf[1], 'force', units):.4g}) N",
+                                point, textcoords="offset points", xytext=(8, 0), fontsize=7, color=INK)
     ax.autoscale()
     ax.set_aspect("equal")
     ax.set_title(f"Mesh ({mesh.element_count} elements) and deformed shape, displacements x{magnify:.3g}", color=INK, fontsize=10, loc="left")
     style(ax)
-    # 2 to 4. strains
     field_panel(axes[0, 1], base, solution.strain[:, 1], "Axial strain eps_y at element centroids", "eps_y", diverging=True)
     field_panel(axes[0, 2], base, solution.strain[:, 2], "Shear strain gamma_xy", "gamma_xy", diverging=True)
     field_panel(axes[1, 0], base, solution.strain[:, 0], "Transverse strain eps_x", "eps_x", diverging=True)
-    # 5. axial section force
     field_panel(axes[1, 1], base, N[:, 1], "Axial section force N_y", f"N_y (force per length, {units})", diverging=False)
-    # 6. first-ply failure
     ax = axes[1, 2]
     try:
         failure = strength_ratios(solution, "max_stress", deck_f12_star(deck), element_ply_states(solution))
@@ -130,11 +129,24 @@ def main() -> None:
                 wrap=True, transform=ax.transAxes, va="center")
         ax.set_title("First-ply failure", color=INK, fontsize=10, loc="left")
         ax.set_axis_off()
-    fig.suptitle(f"{args.deck.name}: {mesh.node_count} nodes, {mesh.element_count} elements, units {units}", color=INK, fontsize=12, x=0.01, ha="left")
-    args.out.mkdir(parents=True, exist_ok=True)
-    path = args.out / f"{args.deck.stem}.png"
+    fig.suptitle(title or f"{Path(deck.source_path or 'deck').name}: {mesh.node_count} nodes, {mesh.element_count} elements, units {units}",
+                 color=INK, fontsize=12, x=0.01, ha="left")
+    path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=130)
-    print("written", path)
+    plt.close(fig)
+    return path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("deck", type=Path)
+    parser.add_argument("--units", required=True, help="the unit system the deck is written in: mm-MPa or m-Pa")
+    parser.add_argument("--out", type=Path, required=True, help="folder for the PNG")
+    parser.add_argument("--magnify", type=float, default=None, help="deformation magnification; default makes the largest displacement 5 %% of the width")
+    args = parser.parse_args()
+    deck = read_deck(args.deck, args.units)
+    solution = solve_membrane(deck)
+    print("written", plot_solution(deck, solution, args.units, args.out / f"{args.deck.stem}.png", args.magnify))
 
 
 if __name__ == "__main__":

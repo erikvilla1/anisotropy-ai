@@ -48,6 +48,16 @@ Two deck habits of Abaqus/CAE are handled on purpose: the same set name defined 
 
 Four-node isoparametric plane-stress elements whose stiffness is the laminate membrane matrix `A` from the engine, 2 by 2 Gauss integration, sparse assembly, kinematic couplings as dof aliasing (every coupled node translates with its reference node, so the reference node's reaction is the sum over the region), prescribed displacements by partitioning, sparse LU solve, reactions as the residual, element strain at the centroid and the Gauss points, section forces `N = A eps`. The layups are symmetric (`B = 0`), the loading is in-plane and the plate is flat, so the bending problem has the trivial solution and the membrane problem is exact for these decks; the kernel refuses a layup whose `B` does not vanish, a singular system (a free rigid-body motion), a node in no element, and prescriptions that conflict through a coupling. Validation cases live in `validation/cases/` and are run by `tests/test_fe_validation_cases.py`; the format is documented at the top of `src/anisotropy_fea/cases.py`.
 
+## Models from a spec
+
+A coupon model is generated from one TOML file under `validation/specs/` (ADR-0030): kind (`unnotched_tension`, `open_hole_tension`, `compression`, `shear_pm45`, `three_point_bending`, `four_point_bending`), dimensions, mesh controls, layup, material from the engine's cited library or explicit constants with stated out-of-plane constants, grips (`nodal` or `coupling`, on the end rows or the whole tabs), loading by displacement or force, probe points and output requests. Every key is required and every invalid combination is refused by name; the format is documented at the top of `src/anisotropy_fea/spec.py`.
+
+```powershell
+uv run python examples/build_model.py validation/specs/unnotched-im7-8552-nodal.toml --out ../.local/fea-models/unnotched
+```
+
+writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite section, material with citations in the header, reference nodes and couplings when asked, step, boundaries, loads, output requests), a model preview (`<spec>-model.png`), then reads the deck back with our own reader, solves it with the kernel, and writes the result figure, the `.vtu` and `summary.txt`. Built today: unnotched tension and compression coupons on the structured mesher. Open-hole coupons (Gmsh), the CalculiX deck and runner, shear and bending follow chunk by chunk. The generated decks for the committed specs live in `validation/decks/generated/`; the tools are described in [docs/installation-fea-tools.md](../docs/installation-fea-tools.md).
+
 ## Ply stresses and first-ply failure
 
 `recovery.py` pushes each element's strain through its plies with the engine's `ply_surfaces` (zero curvature), giving every ply's strain and stress in laminate and material axes, and checks each ply with the engine's criterion dispatch (`face_strength_ratio`): maximum stress, Tsai-Hill, Tsai-Wu (the deck's `*Fail Stress` sixth value is the interaction term; refused without it) and maximum strain (refused: a deck carries no strain limits). The smallest ratio over the mesh is the first-ply-failure factor on the applied displacement or load; ties between identical plies resolve to the first element in deck order and the bottom-most ply. A deck without `*Fail Stress` is refused by name.
