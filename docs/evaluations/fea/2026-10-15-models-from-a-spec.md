@@ -8,10 +8,10 @@
 From `fea/`: `uv run pytest -q -ra tests ../engine/tests` (the CI job)
 
 ```text
-564 passed in 11.28s
+567 passed in 11.28s
 ```
 
-(156 fea tests, 50 of them new in `test_spec.py`, `test_mesher.py`, `test_femodel.py`, `test_write_abaqus.py`; 408 engine tests.)
+(159 fea tests, 53 of them new in `test_spec.py`, `test_mesher.py`, `test_femodel.py`, `test_write_abaqus.py`; 408 engine tests.)
 
 From `fea/`: `uv run python examples/build_model.py validation/specs/unnotched-im7-8552-nodal.toml --out ../.local/fea-models/unnotched-im7-8552-nodal` (last lines of `summary.txt`)
 
@@ -30,7 +30,7 @@ first-ply failure, tsai_hill: factor 0.9125 ...; tsai_wu: factor 0.886424 ... (s
 
 The same spec with coupled grips (`unnotched-im7-8552-coupling`): reaction at `RF-Top` = 16211.7 N and the same first-ply failure; the two grip idioms give identical displacements (test to 1e-15). The compression coupon (`compression-im7-8552`, 3360 elements, 0.1 mm shortening): reaction −8439.74 N, first-ply failure at 1.18 of the applied loading, a 90 degree ply in longitudinal compression, in the gauge.
 
-Generated decks committed under `fea/validation/decks/generated/`, SHA-256 (first 16 hex): nodal `8041a7ec43b41cc9`, coupling `f0ec052f7204c30a`, compression `c59bee690fb7aa6a`; a test regenerates each from its spec and asserts equality.
+Generated decks committed under `fea/validation/decks/generated/`, a test regenerates each from its spec and asserts byte equality; the header names the spec file and its SHA-256, never a path, so the deck is identical from any working directory.
 
 Figures written and viewed: `unnotched-im7-8552-nodal-model.png` (mesh with the tab and gauge element sets, the 319 gripped nodes at each end, probes, the pull arrow) and `unnotched-im7-8552-nodal-solved.png` (zero strain in the gripped tabs, uniform gauge strain, Poisson contraction, shear at the tab corners, first-ply failure marked at the first element row past the bottom tab). The `.vtu` files open in ParaView (not installed here: UNVERIFIED).
 
