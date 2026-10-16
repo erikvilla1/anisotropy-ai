@@ -47,7 +47,7 @@ def test_the_converted_deck_rewrites_what_calculix_needs():
     assert "*NODE PRINT, NSET=Coupled-Grip-Top, TOTALS=YES\nRF" in text and "*NODE PRINT, NSET=Nall\nU" in text
     assert "Assembly" not in text.split("*NODE, NSET=Nall")[1].split("*ELEMENT")[0]  # reference nodes are not carried over
     assert "transverse isotropy, stated by the caller" in text and "nu23 = 0.45 given by the caller" in text
-    assert "replaced by direct constraints on its 3 coupled nodes" in text  # order-1 set of 3 corners (midsides join at write time)
+    assert "replaced by direct constraints on its 5 coupled nodes" in text  # 3 corner nodes of the edge plus the 2 midside nodes between them
     assert text == calculix_from_deck(deck, TRANSVERSE)
 
 
