@@ -1,5 +1,5 @@
 % Anisotropy AI laminate engine manual.
-% Build with:  uv run --project engine python docs/manual/build.py
+% Build with:  uv run --project fea python docs/manual/build.py
 % The files in generated/ are written by build.py from the repository's documents, code and
 % engine results. Edit those sources, not the generated files.
 
@@ -80,6 +80,7 @@
     Source commit & \texttt{\GitCommit} \\
     Built & \BuildDate \\
     Engine tests & \TestSummary \\
+    Finite element layer & \FeaVersion, tests: \FeaTestSummary \\
   \end{tabular}}\par
   \vfill
   \colorbox{codebg}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small\color{ink}\textbf{Status: internal use.}
@@ -108,6 +109,7 @@ sections answer the questions set out in the documentation guide,
   \ref{sec:built} & What have we built? & \texttt{docs/00\_system\_overview.md} \\
   \ref{sec:theory} & How is each result calculated? & \texttt{engine/docs/theory.md} and the engine code \\
   \ref{sec:verification} & Does it work, and how do we know? & \texttt{engine/validation/cases} and \texttt{docs/evaluations} \\
+  \ref{sec:fea} & How are finite element models built and solved, and do they match? & \texttt{fea/docs/theory.md}, the \texttt{fea} code, \texttt{fea/validation/cases} and \texttt{docs/evaluations/fea} \\
   \ref{sec:decisions} & Why was it built this way? & \texttt{docs/decisions} \\
   \ref{sec:limits} & What could go wrong? & \texttt{docs/00\_system\_overview.md} and \texttt{docs/risks/risk\_register.md} \\
   \ref{sec:example} & What does a real calculation look like? & Computed by the engine while this manual was built \\
@@ -126,6 +128,16 @@ the code it describes.
 
 \section{Does it work?}\label{sec:verification}
 \input{generated/verification}
+
+\section{Finite element layer}\label{sec:fea}
+The finite element layer reads the Abaqus input decks the team builds for coupon models and solves them with our
+own laminate membrane kernel on the engine's stiffness, so the two can be compared number for number
+(decision record ADR-0029 in Section~\ref{sec:decisions}). Its equations follow, each with the code that computes
+it, under the same rule as the engine's: every function the text names is listed from the source with its real line
+numbers. The validation tables after the theory were produced by running the kernel while this manual was built;
+agreement with the team's Abaqus runs is recorded separately once their results exist.
+\input{generated/fea_theory}
+\input{generated/fea_verification}
 
 \section{Why it was built this way}\label{sec:decisions}
 These are the project's decision records: the context, the options considered, the choice, its evidence, and what
@@ -148,6 +160,10 @@ would make us revisit it. The full records, including consequences, are in \text
   \item I. M. Daniel and O. Ishai, \emph{Engineering Mechanics of Composite Materials}, 2nd edition. Oxford University
     Press, 2006. Lamina relations, Chapter 4; lamina strength and Tsai-Wu, Chapter 6; laminate theory and engineering
     properties, Chapter 7; first-ply failure, Chapter 9.
+  \item K.-J. Bathe, \emph{Finite Element Procedures}, 2nd edition. Watertown, MA: K.-J. Bathe, 2014. Isoparametric
+    element formulation and numerical integration, Chapter 5 (finite element layer, Section~\ref{sec:fea}).
+  \item S. P. Timoshenko and J. N. Goodier, \emph{Theory of Elasticity}, 3rd edition. McGraw-Hill, 1970. Plane stress,
+    Chapter 2 (isotropic validation cases of the finite element layer).
   \item NASA-STD-7009A, \emph{Standard for Models and Simulations}. NASA, 2016.
   \item ASME V\&V 10, \emph{Standard for Verification and Validation in Computational Solid Mechanics}. ASME.
   \item NIST AI 100-1, \emph{Artificial Intelligence Risk Management Framework (AI RMF 1.0)}. NIST, 2023.
