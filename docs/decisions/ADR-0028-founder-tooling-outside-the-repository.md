@@ -25,6 +25,10 @@ For the `hermes` value in the actor list (a check constraint, so a migration eit
 
 Option 2 for both. The follow-up chunk removes the `.agents/skills/` junction from `scripts/link-agent-dirs.ps1`, the Hermes rows and settings from `docs/agents/README.md` and the `project-rules` skill metadata, renames the actor by migration 0003 and updates the API README and tests. ADR-0023 stands for Claude Code and the Obsidian vault; its Hermes parts are superseded. Anything Hermes drafts stays in the founder's own storage and is never committed. Hermes may quote a number only when a run record backs it, as before, and it reads those records through the API from the founder's own deployment, never a customer's.
 
+## Amendment 2026-10-15 (founder, review of this record)
+
+Hermes stays in the plan as an internal tool for the founder's own use, later. When it is adopted and how it fits the founder's workflow is undecided: the founder wants to understand the tool first, and a separate decision record will cover its integration when that happens. Nothing about it enters the product repository or a customer deployment regardless of that timing; this record's decision stands.
+
 ## Why (evidence)
 
 - The founder's instruction of 2026-10-14 (this record's context).
