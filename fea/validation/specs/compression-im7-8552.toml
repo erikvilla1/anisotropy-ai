@@ -1,0 +1,49 @@
+# Compression coupon in the proportions of a combined-loading compression test (ASTM D6641 style: 140 mm by 12 mm, 63.5 mm gripped
+# at each end, 13 mm unsupported gauge), IM7/8552 [45/0/-45/90]s, nodal grips, 0.1 mm of shortening. Linear, in-plane only:
+# no buckling of the gauge is modelled. Units mm-MPa.
+title = "Compression coupon, IM7/8552 [45/0/-45/90]s, nodal grips, 0.1 mm shortening"
+kind = "compression"
+units = "mm-MPa"
+
+[geometry]
+length = 140.0
+width = 12.0
+tab_length = 63.5
+
+[mesh]
+mesher = "structured"
+element_order = 1
+nx = 12
+ny = 280            # 0.5 mm rows: the grip lines at 63.5 and 76.5 mm fall on node rows
+
+[layup]
+angles = [45, 0, -45, 90]
+symmetric = true
+ply_thickness = "library"
+
+[material]
+library = "im7-8552"
+dataset = "ncamp-im7-8552-2019-rtd-measured-v1"
+f12_star = 0.0
+[material.transverse]
+G13 = 4688.43
+G23 = 3000.0
+nu23 = 0.45
+transverse_isotropy = true
+
+[grips]
+kind = "nodal"
+region = "tabs"     # the whole tab is gripped, as in the team's decks
+
+[loading]
+control = "displacement"
+value = -0.1
+
+[probes]
+nodes = { centre = [6.0, 70.0] }
+elements = { centre = [6.0, 70.0] }
+
+[output]
+fpf_criteria = ["max_stress", "tsai_hill", "tsai_wu"]
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = true, el_print_global = true }
