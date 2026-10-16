@@ -1,0 +1,20 @@
+title = "One isotropic element, 1 % axial strain with free lateral edges: eps_x = -nu eps_y, Ny = E h eps_y"
+source = "Plane stress of an isotropic plate under uniform uniaxial stress: sigma_x = tau_xy = 0, sigma_y = E eps_y, eps_x = -nu eps_y (Timoshenko and Goodier, Theory of Elasticity, 3rd ed., Chapter 2, plane stress). By hand with E = 70000 MPa, nu = 0.33, h = 2 mm, width 10 mm, eps_y = 0.1 / 10: Ny = 1400 N/mm, RF = 14000 N, eps_x = -0.0033."
+units = "mm-MPa"
+
+[mesh]
+deck = "../decks/plate-1x1-isotropic.inp"
+
+[expected]
+tolerance = 1e-9
+[expected.rf]
+"Top" = [0.0, 14000.0]
+"Bottom" = [0.0, -14000.0]
+[expected.u]
+"Plate-1.2" = [-0.033, 0.0]
+"Plate-1.3" = [-0.033, 0.1]
+"Plate-1.4" = [0.0, 0.1]
+[expected.strain]
+"*" = [-0.0033000000000000004, 0.01, 0.0]
+[expected.section_force]
+"*" = [0.0, 1400.0, 0.0]
