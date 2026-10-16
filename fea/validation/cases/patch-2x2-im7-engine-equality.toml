@@ -1,0 +1,20 @@
+title = "The same coupon meshed 2 by 2: every element carries the engine's uniform strain"
+source = "As patch-1x1-im7-engine-equality.toml: the uniform state is exact for bilinear elements on any mesh, so the numbers are the same engine values; node 9 is the (10, 80) corner, node 5 the centre (5, 40)."
+units = "mm-MPa"
+
+[mesh]
+deck = "../decks/coupon-2x2-im7-8552.inp"
+
+[expected]
+tolerance = 1e-9
+[expected.rf]
+"Top" = [0.0, 4618.693051201622]
+"Bottom" = [0.0, -4618.693051201622]
+[expected.u]
+"Coupon-1.9" = [-0.1977058397712765, 0.8]
+"Coupon-1.5" = [-0.09885291988563825, 0.4]
+"Coupon-1.7" = [-0.1730761206266938, 0.8]
+[expected.strain]
+"*" = [-0.002462971914458269, 0.01, -0.0021634515078336725]
+[expected.section_force]
+"*" = [0.0, 461.86930512016227, 0.0]

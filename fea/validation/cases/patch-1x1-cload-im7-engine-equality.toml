@@ -1,0 +1,19 @@
+title = "One IM7/8552 element under 1000 N axial load on the top edge: the kernel reproduces the engine's forward solve"
+source = "Engine: anisotropy_engine.response.midplane_response(plies, Loads(Ny = 1000 N / 10 mm)) on the deck's plies gives the midplane strain; the two top nodes carry 500 N each, the consistent nodal loads of a uniform edge traction on a four-node element; the bottom edge reaction balances the load. Computed 2026-10-15; tests/test_membrane_solve.py recomputes these live."
+units = "mm-MPa"
+
+[mesh]
+deck = "../decks/coupon-1x1-cload-im7-8552.inp"
+
+[expected]
+tolerance = 1e-9
+[expected.rf]
+"Bottom" = [0.0, -1000.0]
+[expected.u]
+"Coupon-1.2" = [-0.005332616580392779, 0.0]
+"Coupon-1.3" = [-0.04280558105497838, 0.17320917219035978]
+"Coupon-1.4" = [-0.0374729644745856, 0.17320917219035978]
+[expected.strain]
+"*" = [-0.000533261658039278, 0.0021651146523794973, -0.00046841205593232]
+[expected.section_force]
+"*" = [0.0, 100.0, 0.0]

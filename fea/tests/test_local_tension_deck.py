@@ -30,3 +30,17 @@ def test_the_team_coupon_deck_is_read_in_full():
         assert reference_node(deck, coupling) not in coupled_nodes(deck, coupling)
         assert len(coupled_nodes(deck, coupling)) > 0
     assert deck.units == "mm-MPa"
+
+
+def test_the_team_coupon_deck_solves_in_equilibrium():
+    from anisotropy_fea.membrane import solve_membrane
+
+    deck = read_deck(LOCAL_DECK, "mm-MPa")
+    solution = solve_membrane(deck)
+    top, bottom = solution.reaction_of([(None, 1)]), solution.reaction_of([(None, 2)])
+    assert top[1] > 0 and top == pytest.approx(-bottom, abs=1e-9 * top[1])
+    assert solution.total_reaction == pytest.approx([0.0, 0.0], abs=1e-9 * top[1])
+    assert solution.free_residual < 1e-9 * top[1]
+    assert solution.displacement_of((None, 1)) == pytest.approx([0.0, 0.010])
+    assert solution.displacement_of((None, 2)) == pytest.approx([0.0, 0.0])
+    assert solution.strain[:, 1].max() > 0.0  # the numbers themselves stay in the local note, not here

@@ -1,0 +1,20 @@
+title = "One IM7/8552 [0/45/-45/45/0]s element, 1 % axial strain by edge displacement, lateral edges free: the kernel reproduces the engine"
+source = "Engine: anisotropy_engine.mixed.mixed_response(plies, {Nx: 0, eps_y: 0.01, Nxy: 0, Mx: 0, My: 0, Mxy: 0}) on the deck's plies (10 plies, IM7/8552 dataset ncamp-im7-8552-2019-rtd-measured-v1 in MPa) gives the midplane strain and Ny; the uniform displacement field u = eps_x x + gamma_xy y, v = eps_y y satisfies the edge conditions; RF = Ny times the 10 mm width. Computed 2026-10-15; tests/test_membrane_solve.py recomputes these live."
+units = "mm-MPa"
+
+[mesh]
+deck = "../decks/coupon-1x1-im7-8552.inp"
+
+[expected]
+tolerance = 1e-9
+[expected.rf]
+"Top" = [0.0, 4618.693051201622]
+"Bottom" = [0.0, -4618.693051201622]
+[expected.u]
+"Coupon-1.2" = [-0.02462971914458269, 0.0]
+"Coupon-1.3" = [-0.1977058397712765, 0.8]
+"Coupon-1.4" = [-0.1730761206266938, 0.8]
+[expected.strain]
+"*" = [-0.002462971914458269, 0.01, -0.0021634515078336725]
+[expected.section_force]
+"*" = [0.0, 461.86930512016227, 0.0]
