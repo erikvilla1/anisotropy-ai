@@ -223,7 +223,8 @@ def _mechanical_strain_12(material: Lamina, stress_12: np.ndarray) -> np.ndarray
     return reduced_compliance(material) @ stress_12
 
 
-def _check_criterion(plies: list[Ply], criterion: str, f12_star: float | None) -> None:
+def check_criterion(plies: list[Ply], criterion: str, f12_star: float | None) -> None:
+    """Refuse a criterion the plies cannot be checked by: unknown name, Tsai-Wu without f12_star, missing strengths or strain limits."""
     if criterion not in CRITERIA:
         raise ValueError(f"Unknown criterion {criterion!r}; use one of {CRITERIA}")
     if criterion == "tsai_wu" and f12_star is None:
@@ -238,8 +239,12 @@ def _check_criterion(plies: list[Ply], criterion: str, f12_star: float | None) -
             raise ValueError(f"Plies {missing} have no strengths")
 
 
-def _face_ratio(criterion: str, material: Lamina, held: PlySurface, scaled: PlySurface, f12_star: float | None) -> tuple[float, str]:
-    """Strength ratio on one face for fixed + R * variable stress, by the chosen criterion."""
+def face_strength_ratio(criterion: str, material: Lamina, held: PlySurface, scaled: PlySurface, f12_star: float | None) -> tuple[float, str]:
+    """Strength ratio on one face for fixed + R * variable stress, by the chosen criterion.
+
+    Public so a finite element kernel can check a ply state it computed itself (ADR-0029); `held` is the
+    fixed part of the stress (zero for a single loading) and `scaled` the part R multiplies.
+    """
     if criterion == "max_stress":
         return max_stress_ratio_combined(held.stress_12, scaled.stress_12, material.strengths)
     if criterion == "max_strain":
@@ -248,6 +253,11 @@ def _face_ratio(criterion: str, material: Lamina, held: PlySurface, scaled: PlyS
     if criterion == "tsai_hill":
         return tsai_hill_ratio_combined(held.stress_12, scaled.stress_12, material.strengths), "interactive"
     return tsai_wu_ratio_combined(held.stress_12, scaled.stress_12, material.strengths, f12_star), "interactive"
+
+
+# Earlier names, kept so nothing that imported them breaks.
+_check_criterion = check_criterion
+_face_ratio = face_strength_ratio
 
 
 def margin_of_safety(strength_ratio: float, factor_of_safety: float) -> float:
@@ -289,7 +299,7 @@ def first_ply_failure(
 
     First-ply failure is the onset of damage in one ply, not the ultimate strength of the laminate.
     """
-    _check_criterion(plies, criterion, f12_star)
+    check_criterion(plies, criterion, f12_star)
     if not np.any(loads.as_vector()):
         raise ValueError("Apply at least one nonzero load")
 
@@ -299,7 +309,7 @@ def first_ply_failure(
     for surface in ply_surfaces(plies, eps0, kappa):
         material = plies[surface.ply_index].material
         unloaded = PlySurface(surface.ply_index, surface.angle_deg, surface.z_m, zero, zero, zero, zero)
-        ratio, mode = _face_ratio(criterion, material, unloaded, surface, f12_star)
+        ratio, mode = face_strength_ratio(criterion, material, unloaded, surface, f12_star)
         checks.append(PlyCheck(
             ply_index=surface.ply_index,
             angle_deg=surface.angle_deg,
@@ -332,7 +342,7 @@ def first_ply_failure_combined(
     failure_loads is fixed + R * variable. With fixed = 0 and delta_T = None this equals
     first_ply_failure(plies, variable).
     """
-    _check_criterion(plies, criterion, f12_star)
+    check_criterion(plies, criterion, f12_star)
     if not np.any(variable.as_vector()):
         raise ValueError("Give at least one nonzero variable load")
 
@@ -347,7 +357,7 @@ def first_ply_failure_combined(
 
     checks = []
     for held, scaled in zip(fixed_faces, variable_faces):
-        ratio, mode = _face_ratio(criterion, plies[held.ply_index].material, held, scaled, f12_star)
+        ratio, mode = face_strength_ratio(criterion, plies[held.ply_index].material, held, scaled, f12_star)
         stress = held.stress_12 + (ratio * scaled.stress_12 if math.isfinite(ratio) else 0.0)
         checks.append(PlyCheck(ply_index=held.ply_index, angle_deg=held.angle_deg, z_m=held.z_m,
                                stress_12=stress, strength_ratio=ratio, mode=mode))
