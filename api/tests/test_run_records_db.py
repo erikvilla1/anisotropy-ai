@@ -5,7 +5,7 @@ import uuid
 import pytest
 from alembic import command
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
@@ -104,6 +104,33 @@ def test_a_correction_is_a_new_run_naming_the_old_one(engine):
         session.add(solved_row(supersedes_run_id=uuid.uuid4()))
         with pytest.raises(IntegrityError):
             session.commit()
+
+
+def test_migration_0003_renames_hermes_rows_and_keeps_the_trigger(engine):
+    """A row written under the old actor name reads back under the new one; the old name is refused; rows stay immutable."""
+    config = alembic_config(TEST_URL)
+    command.downgrade(config, "0002")
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "INSERT INTO runs (id, actor, endpoint, status, inputs, inputs_sha256, engine_version, api_version, response) "
+                "VALUES (:id, 'hermes', '/v1/cases/solve', 'solved', '{}'::jsonb, :sha, '0.1.0', '0.1.0', '{}'::jsonb)"
+            ), {"id": uuid.uuid4(), "sha": "0" * 64})
+        command.upgrade(config, "head")
+        with Session(engine) as session:
+            stored = session.scalars(select(Run)).one()
+            assert stored.actor == "founder-agent"
+            session.add(solved_row(actor="hermes"))
+            with pytest.raises(IntegrityError):
+                session.commit()
+            session.rollback()
+            stored = session.scalars(select(Run)).one()
+            stored.actor = "test"
+            with pytest.raises(DBAPIError, match="never edited or deleted"):
+                session.commit()
+            session.rollback()
+    finally:
+        command.upgrade(config, "head")
 
 
 def test_check_ready_needs_the_table(engine):

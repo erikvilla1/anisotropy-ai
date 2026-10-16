@@ -4,6 +4,10 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ## [Unreleased]
 
+### Changed
+
+- Hermes is no longer part of the repository: the `.agents/skills` junction, its rows in `docs/agents/README.md` and its metadata in the `project-rules` skill are removed, and migration 0003 renames the run-record actor `hermes` to `founder-agent`, rewriting existing rows (the one statement for which the immutability trigger is suspended) and replacing the check constraint (ADR-0028).
+
 ### Fixed
 
 - The course handout "SE143AB Appendix F: Material Properties" was being served from the website's public assets and linked from exported analysis packets. It now stays in ignored local storage, is never served or linked, and the website's asset test expects a 404 for its former URL (ADR-0018).
