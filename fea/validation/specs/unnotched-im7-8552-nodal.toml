@@ -1,0 +1,48 @@
+# Unnotched tension coupon in the proportions of ASTM D3039 (250 mm by 25 mm, 56 mm tabs), IM7/8552 quasi-isotropic [45/0/-45/90]s,
+# grips as direct constraints on the grip node sets. Public material from the engine library (open publisher). Units mm-MPa.
+title = "Unnotched tension coupon, IM7/8552 [45/0/-45/90]s, nodal grips, 1 mm pull"
+kind = "unnotched_tension"
+units = "mm-MPa"
+
+[geometry]
+length = 250.0
+width = 25.0
+tab_length = 56.0
+
+[mesh]
+mesher = "structured"
+element_order = 1
+nx = 10
+ny = 125            # 2 mm rows: the tab lines at 56 and 194 mm fall on node rows
+
+[layup]
+angles = [45, 0, -45, 90]
+symmetric = true
+ply_thickness = "library"
+
+[material]
+library = "im7-8552"
+dataset = "ncamp-im7-8552-2019-rtd-measured-v1"
+f12_star = 0.0      # Tsai-Wu interaction term, stated (Abaqus's documented default)
+[material.transverse]
+G13 = 4688.43       # set equal to G12: a stated choice, the dataset gives no G13
+G23 = 3000.0        # nominal, no source: only CalculiX's three-dimensional law reads it
+nu23 = 0.45         # nominal, no source
+transverse_isotropy = true
+
+[grips]
+kind = "nodal"
+region = "tabs"     # the whole tab is gripped, as in the team's decks
+
+[loading]
+control = "displacement"
+value = 1.0
+
+[probes]
+nodes = { centre = [12.5, 125.0], grip_corner = [0.0, 56.0] }
+elements = { centre = [12.5, 125.0], near_grip = [12.5, 57.0] }
+
+[output]
+fpf_criteria = ["max_stress", "tsai_hill", "tsai_wu"]
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = true, el_print_global = true }
