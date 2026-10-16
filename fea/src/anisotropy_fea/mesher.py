@@ -98,7 +98,10 @@ class Mesh2D:
         return self.xy[self.corners].mean(axis=1)
 
     def nearest_node(self, point: tuple[float, float]) -> int:
-        return int(np.argmin(np.linalg.norm(self.xy - np.asarray(point, dtype=float), axis=1)))
+        """The nearest corner node (midside nodes are skipped, so a probe names the same node at order 1 and 2)."""
+        candidates = np.unique(self.corners)
+        distances = np.linalg.norm(self.xy[candidates] - np.asarray(point, dtype=float), axis=1)
+        return int(candidates[int(np.argmin(distances))])
 
     def nearest_element(self, point: tuple[float, float]) -> int:
         return int(np.argmin(np.linalg.norm(self.centroids() - np.asarray(point, dtype=float), axis=1)))
