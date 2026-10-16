@@ -56,8 +56,8 @@ Option 2 for model creation, option 2 for the reference solver, option 1 now and
 
 - The manual pages listed in the context: they set S8R-only composites, the reaction-force limitation of couplings, the missing LAMINA type and the per-layer orientation rule.
 - `fea/tests/test_write_abaqus.py`: a generated deck round-trips through our reader with no error and no note, the nodal and coupled grip models give the same displacements and reaction, a free-lateral-edge generated coupon reproduces the engine's mixed-solver strain to 1e-10, force control balances the reaction to 1e-6 N; `fea/tests/test_spec.py`: twenty-one invalid specs refused by name; results in the chunk A1 evaluation note.
-- No comparison with CalculiX yet: no evidence. Agreement targets are set in the first comparison note (chunk B).
-- Installation of CalculiX, Gmsh and ParaView on the founder's machine and in CI: not done yet; every step in `docs/installation-fea-tools.md` is UNVERIFIED until run.
+- CalculiX 2.22 (PrePoMax v2.6.0 bundle) ran the generated unnotched coupon with no warnings; the conventions were detected by running it (`fea/validation/records/_calculix-conventions.toml`: first layer line is the bottom ply, two integration points per layer, points numbered by z level, global axes with per-ply orientation honoured, tensor shear strain); the first comparison record passes with the largest difference 0.3 % (reaction 16162 against 16212 N), ply stresses at the centre within 0.1 %; beside the grip the element types differ by up to 20 % on small components, reported in the note and excluded from the record ([comparison note](../evaluations/fea/2026-10-15-calculix-first-comparison.md)).
+- Installation on the founder's machine done ([tools](../installation-fea-tools.md)); CI's apt step and Gmsh: UNVERIFIED until run.
 
 ## Consequences
 

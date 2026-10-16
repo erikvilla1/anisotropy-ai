@@ -50,6 +50,8 @@ def main() -> None:
     parser.add_argument("spec", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--no-solve", action="store_true")
+    parser.add_argument("--target", choices=["kernel", "calculix", "both"], default="kernel",
+                        help="which decks to write: the Abaqus-dialect deck our kernel reads, the CalculiX deck (S8R; the mesh is promoted to order 2), or both")
     args = parser.parse_args()
     try:
         spec = load_spec(args.spec)
@@ -65,7 +67,19 @@ def main() -> None:
     print("written", deck_path)
     print("written", plot_model(model, args.out / f"{stem}-model.png"))
     report = summary(model, text, units)
-    if not args.no_solve:
+    if args.target in ("calculix", "both"):
+        from anisotropy_fea.write_calculix import CalculixWriterError, write_calculix  # noqa: E402
+
+        spec2 = spec if spec.mesh.element_order == 2 else spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})
+        try:
+            ccx_text = write_calculix(build_model(spec2))
+        except CalculixWriterError as exc:
+            raise SystemExit(f"CalculiX deck refused: {exc}") from None
+        ccx_path = args.out / f"{stem}-ccx.inp"
+        ccx_path.write_text(ccx_text, encoding="utf-8", newline="\n")
+        print("written", ccx_path, "(S8R; open it in PrePoMax or run examples/run_calculix.py)")
+        report += f"calculix deck sha256 {hashlib.sha256(ccx_text.encode('utf-8')).hexdigest()} (mesh promoted to order 2: S8R)\n"
+    if not args.no_solve and args.target != "calculix":
         from export_vtk import write_vtu  # noqa: E402
         from plot_deck import plot_solution  # noqa: E402
 

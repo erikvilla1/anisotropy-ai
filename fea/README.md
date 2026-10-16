@@ -58,6 +58,16 @@ uv run python examples/build_model.py validation/specs/unnotched-im7-8552-nodal.
 
 writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite section, material with citations in the header, reference nodes and couplings when asked, step, boundaries, loads, output requests), a model preview (`<spec>-model.png`), then reads the deck back with our own reader, solves it with the kernel, and writes the result figure, the `.vtu` and `summary.txt`. Built today: unnotched tension and compression coupons on the structured mesher. Open-hole coupons (Gmsh), the CalculiX deck and runner, shear and bending follow chunk by chunk. The generated decks for the committed specs live in `validation/decks/generated/`; the tools are described in [docs/installation-fea-tools.md](../docs/installation-fea-tools.md).
 
+## CalculiX, the independent solver
+
+```powershell
+uv run python examples/run_calculix.py validation/specs/unnotched-im7-8552-nodal.toml --out ../.local/calculix/unnotched
+```
+
+writes the CalculiX deck (`write_calculix`: S8R composite shells, four-field layer lines, one `*ORIENTATION` per ply angle, ENGINEERING CONSTANTS with the spec's out-of-plane constants, numeric boundaries, `*NODE PRINT` totals and `*EL PRINT, GLOBAL=YES` with COORD), runs the solver found through `ANISOTROPY_CCX` or on PATH (`calculix.run_calculix`), parses the `.dat` (`calculix.parse_dat`) and prints the reactions, probe displacements and strains next to the kernel's on the order-1 twin mesh. The `.frd` opens in PrePoMax (File, Open results). CalculiX refuses what its manual says it cannot do: order-1 composite shells, a reaction at a coupled reference node, force control on nodal grips.
+
+How CalculiX reports composite results (layer order, integration points, axes, shear strain) was detected by running it and is recorded in `validation/records/_calculix-conventions.toml`; the tests repeat the detection whenever the solver is present. `tools/record_from_dat.py` turns a run into a comparison record under `validation/records/` (numbers with provenance and both deck digests), and `tests/test_records.py` checks that the kernel reproduces every committed record within its tolerance and floor. The first record and its numbers: [the comparison note](../docs/evaluations/fea/2026-10-15-calculix-first-comparison.md).
+
 ## Ply stresses and first-ply failure
 
 `recovery.py` pushes each element's strain through its plies with the engine's `ply_surfaces` (zero curvature), giving every ply's strain and stress in laminate and material axes, and checks each ply with the engine's criterion dispatch (`face_strength_ratio`): maximum stress, Tsai-Hill, Tsai-Wu (the deck's `*Fail Stress` sixth value is the interaction term; refused without it) and maximum strain (refused: a deck carries no strain limits). The smallest ratio over the mesh is the first-ply-failure factor on the applied displacement or load; ties between identical plies resolve to the first element in deck order and the bottom-most ply. A deck without `*Fail Stress` is refused by name.
