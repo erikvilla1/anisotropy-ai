@@ -1,0 +1,57 @@
+*Heading
+** Fixture: the one-element IM7/8552 coupon (coupon-1x1-im7-8552.inp) meshed 2 by 2, same layup, material and edge conditions.
+** Units: mm-MPa. Same public dataset ncamp-im7-8552-2019-rtd-measured-v1 in MPa; G13 = G12 and G23 nominal, unused.
+*Part, name=Coupon
+*Node
+1, 0., 0., 0.
+2, 5., 0., 0.
+3, 10., 0., 0.
+4, 0., 40., 0.
+5, 5., 40., 0.
+6, 10., 40., 0.
+7, 0., 80., 0.
+8, 5., 80., 0.
+9, 10., 80., 0.
+*Element, type=S4R
+1, 1, 2, 5, 4
+2, 2, 3, 6, 5
+3, 4, 5, 8, 7
+4, 5, 6, 9, 8
+*Elset, elset=All, generate
+1, 4, 1
+*Orientation, name=Ori-1
+1., 0., 0., 0., 1., 0.
+3, 0.
+*Shell Section, elset=All, composite, orientation=Ori-1, layup=Layup-1, symmetric
+0.18288, 3, IM7-8552, 0., Ply-1
+0.18288, 3, IM7-8552, 45., Ply-2
+0.18288, 3, IM7-8552, -45., Ply-3
+0.18288, 3, IM7-8552, 45., Ply-4
+0.18288, 3, IM7-8552, 0., Ply-5
+*End Part
+*Assembly, name=Assembly
+*Instance, name=Coupon-1, part=Coupon
+*End Instance
+*Nset, nset=Bottom, instance=Coupon-1
+1, 2, 3
+*Nset, nset=Top, instance=Coupon-1
+7, 8, 9
+*Nset, nset=Corner, instance=Coupon-1
+1,
+*End Assembly
+*Material, name=IM7-8552
+*Elastic, type=LAMINA
+162095.74, 8963.18, 0.316, 4688.43, 4688.43, 3000.
+*Fail Stress
+2558.51, -1731.48, 64.05, -285.72, 91.15
+*Step, name=Step-1, nlgeom=NO
+*Static
+1., 1., 1e-05, 1.
+*Boundary
+Bottom, 2, 2
+*Boundary
+Corner, 1, 1
+*Boundary
+Top, 2, 2, 0.8
+*Output, field, variable=PRESELECT
+*End Step

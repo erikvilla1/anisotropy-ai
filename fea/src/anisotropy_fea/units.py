@@ -10,11 +10,11 @@ from __future__ import annotations
 # Factor that multiplies a deck value to give the SI base value. Force is the product of stress and
 # length squared, so MPa with mm gives newtons and Pa with m gives newtons: the factor is 1 in both.
 DECK_UNIT_SYSTEMS: dict[str, dict[str, float]] = {
-    "mm-MPa": {"length": 1e-3, "stress": 1e6, "force": 1.0},
-    "m-Pa": {"length": 1.0, "stress": 1.0, "force": 1.0},
+    "mm-MPa": {"length": 1e-3, "stress": 1e6, "force": 1.0, "force_per_length": 1e3},
+    "m-Pa": {"length": 1.0, "stress": 1.0, "force": 1.0, "force_per_length": 1.0},
 }
 
-KINDS = ("length", "stress", "force")
+KINDS = ("length", "stress", "force", "force_per_length")  # force_per_length: a section force resultant, N/mm or N/m
 
 
 def unit_factors(units: str | None) -> dict[str, float]:

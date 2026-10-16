@@ -1,6 +1,6 @@
 # anisotropy-fea
 
-The finite element layer (ADR-0029). It reads the Abaqus input decks the team builds for coupon models and, in the next chunk, solves them on the engine's laminate stiffness so the two can be compared number for number. Nothing here computes a result yet; this chunk is the reader.
+The finite element layer (ADR-0029). It reads the Abaqus input decks the team builds for coupon models and solves them on the engine's laminate stiffness with its own membrane kernel, so the two can be compared number for number. The theory behind every number is in [docs/theory.md](docs/theory.md), with the function that computes each equation.
 
 ## Run
 
@@ -9,6 +9,7 @@ cd fea
 uv sync --locked
 uv run pytest -q -ra tests ../engine/tests
 uv run python examples/deck_summary.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
+uv run python examples/solve_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
 ```
 
 The team's own decks go in `.local/abaqus/` (git-ignored; their materials may be proprietary). `tests/test_local_tension_deck.py` runs against `.local/abaqus/Tension-test.inp` when it is there and is skipped, with the reason shown, when it is not.
@@ -40,17 +41,20 @@ The subset is exactly what the team's Abaqus/CAE coupon decks use. Anything else
 
 Two deck habits of Abaqus/CAE are handled on purpose: the same set name defined twice is unioned, and a reference node listed inside its own coupled node set is dropped from the coupled nodes with a note in `Deck.notes`, since Abaqus runs such a deck as written.
 
-## Why a membrane model is enough for these decks
+## The kernel
 
-The layups are symmetric (`B = 0`), the loading is in-plane through the couplings, the plate is flat and the reference nodes' out-of-plane dofs are fixed, so the bending problem has the trivial solution and the in-plane problem is plane stress with the laminate stiffness `A`. `G13` and `G23` play no part. The kernel (next chunk) refuses a layup whose `B` does not vanish.
+Four-node isoparametric plane-stress elements whose stiffness is the laminate membrane matrix `A` from the engine, 2 by 2 Gauss integration, sparse assembly, kinematic couplings as dof aliasing (every coupled node translates with its reference node, so the reference node's reaction is the sum over the region), prescribed displacements by partitioning, sparse LU solve, reactions as the residual, element strain at the centroid and the Gauss points, section forces `N = A eps`. The layups are symmetric (`B = 0`), the loading is in-plane and the plate is flat, so the bending problem has the trivial solution and the membrane problem is exact for these decks; the kernel refuses a layup whose `B` does not vanish, a singular system (a free rigid-body motion), a node in no element, and prescriptions that conflict through a coupling. Validation cases live in `validation/cases/` and are run by `tests/test_fe_validation_cases.py`; the format is documented at the top of `src/anisotropy_fea/cases.py`.
 
 ## Layout
 
 ```
-src/anisotropy_fea/   abaqus_reader.py (tokenize, parse_deck, read_deck), model.py (Deck and records, validate_deck, to_si), units.py
-tests/                reader, units and local-deck tests
-validation/decks/     committed fixture decks with public library materials (fea/validation/README.md)
-examples/             deck_summary.py
+src/anisotropy_fea/   abaqus_reader.py (tokenize, parse_deck, read_deck), model.py (Deck and records, validate_deck, to_si), units.py,
+                      mesh.py (mesh_from_deck, section_stiffness), membrane.py (the kernel: element, constraint_map, assemble, solve_membrane),
+                      results.py (MembraneSolution), cases.py (validation case format, compare, disagreements)
+docs/theory.md        every equation and the function that computes it, with code markers
+tests/                reader, units, element, solve, validation-case, theory-marker and local-deck tests
+validation/decks/     committed fixture decks with public library materials; validation/cases/ the cases (fea/validation/README.md)
+examples/             deck_summary.py, solve_deck.py
 ```
 
 The component card is [docs/components/fea.md](../docs/components/fea.md); what the team must export for a comparison is in [docs/abaqus-export-recipe.md](../docs/abaqus-export-recipe.md).
