@@ -43,6 +43,8 @@ Order of work (founder, 2026-10-14): the assistant comes before the self-hosted 
 
 Amended the same day (founder, 2026-10-14): the finite element phase (ADR-0029) comes before the assistant. Items 2 to 5 keep their order after it; the assistant's requirements above are unchanged.
 
+Amended 2026-10-15 (founder, review of this record): the self-hosted tier is delivered as a forward-deployed engagement, not a self-service download. Our engineers deploy the stack inside the customer's ecosystem, configure it against their data and test program, validate it against their coupons, and support it there. The packaging work (item 5) serves that engagement: images and an offline install that our engineer brings in, not a product the customer installs alone. Consequences: the first regulated customers need our time inside their network; contract and licensing terms for such engagements: no evidence yet.
+
 ## Why (evidence)
 
 - The components are already separable: the API depends only on `DATABASE_URL` (ADR-0025, "any host works with a changed `DATABASE_URL`"), and the website needs only a configured API address (ADR-0012).
