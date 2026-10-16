@@ -21,7 +21,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 | Run records | Inputs, versions and results stored for every run | Local PostgreSQL 17 from `docker-compose.yml` (ADR-0025); every analysis request, from the calculator included, writes an immutable row with its actor and endpoint, and `GET /v1/runs/{id}` reads it; the API refuses to start without the database (ADR-0026). Next: a list endpoint | `docker-compose.yml`, `api/alembic/`, `api/src/anisotropy_api/records.py`, [evaluation](evaluations/api/2026-10-14-run-records-calculator.md) |
 | Language model assistant | Drafts inputs from plain language; explains results | Planned | |
 | Report generator | Documented report built from a run record | Planned | |
-| Finite element analysis | Open-hole and other geometries | Later | |
+| Finite element analysis | Coupon and laminate level: our own two-dimensional laminate membrane kernel reads the team's Abaqus decks and solves on their mesh; comparison against their Abaqus runs; Gmsh meshes, our deck writer and open-hole coupons after that | Next (ADR-0029) | `fea/` (planned) |
 
 ## How a result is produced today
 

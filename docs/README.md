@@ -78,6 +78,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0026](decisions/ADR-0026-run-record-contents-and-startup-policy.md) | A run record is immutable, keeps rejected runs, names its actor; the API refuses to start without the database (proposed) |
 | [0027](decisions/ADR-0027-deployment-tiers-and-assistant-model-location.md) | Regulated customers run the whole stack inside their own boundary; the assistant's model is a per-deployment setting, off until configured (proposed) |
 | [0028](decisions/ADR-0028-founder-tooling-outside-the-repository.md) | Hermes and post-drafting tooling live outside the repository and call the API as an outside client (proposed) |
+| [0029](decisions/ADR-0029-finite-elements-own-membrane-kernel-validated-against-abaqus.md) | Finite elements start with our own laminate membrane kernel solving the team's Abaqus decks on their mesh, numbers-only comparison records against their runs; Gmsh and our deck writer later (proposed, amended 2026-10-15) |
 
 New decisions use the [template](decisions/_template.md).
 
