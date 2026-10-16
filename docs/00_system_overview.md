@@ -36,7 +36,7 @@ The planned layers each use the validation evidence differently. None of them is
 - **Engine (built).** Its equations come from published laminate theory ([engine theory](../engine/docs/theory.md)). Validation cases, such as textbook examples and course answer keys, test that the code solves those equations. They are not training data, and they do not show that the theory predicts real parts; coupon tests will.
 - **Language-model assistant (planned).** A general model with tool access, not a model trained on our cases. It drafts a case from a plain-language request, asks for missing inputs, calls the engine through the API and explains the result with the theory references. Its requests pass the same input checks as any other caller (ADR-0003), and it never produces a result number (ADR-0001). Validation cases double as its tests: given a problem statement, it must build the inputs that reproduce the answer.
 - **Machine learning (later, once there is enough data).** Candidates are surrogate models trained on many engine runs, for faster layup search, and correction models trained on our coupon tests where theory and measurement disagree. Before use, their predictions are rechecked by the engine or against held-out tests.
-- **Run records (planned).** Saved inputs, versions, results and test outcomes are the data any later model learns from. Customer data is not used for shared training by default.
+- **Run records (planned).** Saved inputs, versions, results and test outcomes are the data any later model learns from. Customer data is never used for shared training (ADR-0027).
 
 ## External dependencies
 
