@@ -53,6 +53,13 @@ The team already produces Abaqus input decks (`.inp`) for coupon models and will
 
 Fixtures policy: decks and comparison records whose materials come from the public library are committed under `fea/validation/`; the team's decks and any record naming a material that is not public stay in `.local/abaqus/`. A reference node listed inside its own coupled node set (found in the team's deck) is dropped from the set with a recorded note, since Abaqus runs the deck as written. An export recipe for the team (print requests or field reports) is written in chunk 1; its Abaqus keyword semantics are UNVERIFIED until the team runs it.
 
+## Amendment 2026-10-15, second (founder, review of this record)
+
+Two additions:
+
+1. **The mathematics and physics behind every model are documented the way the engine's are, in the same manual.** `fea/docs/theory.md` states each equation the kernel implements (element shape functions, strain-displacement matrix, element stiffness from the laminate `A` matrix, assembly, constraint handling, reactions, strain and ply stress recovery, failure) with a `<!-- code: name -->` marker per function, and the LaTeX manual build (`docs/manual/build.py`, ADR-0008) is extended to read the `fea` package: its theory, tests, validation cases and evaluation. The theory document is part of chunk 2; extending the manual build is its own small chunk right after, since the build is engine-only today and the physics cards on the website (ADR-0019) need a separate decision on whether they mirror finite element theory too.
+2. **Published finite element models of composite coupons join the validation ladder.** After the engine-equality, closed-form and Abaqus steps, the kernel reproduces finite element models of coupons and laminates published in textbooks or research papers (open-access sources preferred; a licensed source is cited by table and figure only, ADR-0018). A literature search for suitable published models comes first and is recorded as a research note in `docs/`, with each candidate's geometry, material, element type, reported results and rights class. No candidate identified yet: no evidence.
+
 ## Why (evidence)
 
 - Gmsh ships a Windows wheel and the Python API through pip: [PyPI gmsh 4.15.1](https://pypi.org/project/gmsh/4.15.1/). Quadrilateral recombination options are shown in a [seamsh tutorial](https://jlambrechts.git-page.immc.ucl.ac.be/seamsh/examples/4-advanced-gmsh.html); a perforated-plate structured quad mesh built on Gmsh is in [EasyFEA's Mesh9 example](https://easyfea.readthedocs.io/en/v3.1.0/examples/Meshes/Mesh9.html). Our own open-hole mesh script: not written yet.
