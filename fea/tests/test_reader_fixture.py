@@ -46,7 +46,7 @@ def test_the_gripped_coupon_parses_as_written():
     assert material.elastic.kind == "LAMINA"
     assert (material.elastic.E1, material.elastic.E2, material.elastic.nu12, material.elastic.G12) == (162095.74, 8963.18, 0.316, 4688.43)
     assert material.elastic.G13 == 4688.43 and material.elastic.G23 == 3000.0
-    assert material.fail_stress.Xt == 2558.51 and material.fail_stress.Xc == -1731.48 and material.fail_stress.f_star is None
+    assert material.fail_stress.Xt == 2558.51 and material.fail_stress.Xc == -1731.48 and material.fail_stress.f_star == 0.0
     assert deck.instances["CFRP-Coupon-1"].part == "CFRP-Coupon"
     assert deck.assembly_nodes.labels.tolist() == [1, 2]
     assert deck.assembly_nodes.xyz.tolist() == [[5.0, 80.0, 0.0], [5.0, 0.0, 0.0]]

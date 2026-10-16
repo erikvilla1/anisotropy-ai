@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 LAYERS = "\n".join(f"0.18288, 3, IM7-8552, {angle}, Ply-{i}" for i, angle in enumerate(("0.", "45.", "-45.", "45.", "0."), start=1))
-MATERIAL = "*Material, name=IM7-8552\n*Elastic, type=LAMINA\n162095.74, 8963.18, 0.316, 4688.43, 4688.43, 3000.\n*Fail Stress\n2558.51, -1731.48, 64.05, -285.72, 91.15\n"
+MATERIAL = "*Material, name=IM7-8552\n*Elastic, type=LAMINA\n162095.74, 8963.18, 0.316, 4688.43, 4688.43, 3000.\n*Fail Stress\n2558.51, -1731.48, 64.05, -285.72, 91.15, 0.\n"
 
 
 def _grid(nx: int, ny: int, width: float, height: float) -> tuple[list[str], list[str], list[int], list[int]]:

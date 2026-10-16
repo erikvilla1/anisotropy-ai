@@ -19,6 +19,8 @@ The team wants typeset LaTeX documentation that is as easy to read as the equati
 
 Option 3. `docs/manual/build.py` writes LaTeX fragments; `docs/manual/main.tex` holds only layout and framing text. Tectonic compiles the PDF, as the v1 technical specification proposed for reports.
 
+Amended 2026-10-15 (ADR-0029): the same build also reads the finite element layer, `fea/docs/theory.md` with its code markers, `fea/validation/cases` solved by the kernel during the build, and the newest report in `docs/evaluations/fea`, and runs from the `fea` environment, which holds both packages. One rule, two packages.
+
 ## Why (evidence)
 
 - The first build reproduced all 5 validation cases and the worked coupon example by running the engine, with code listings carrying their real source line numbers.

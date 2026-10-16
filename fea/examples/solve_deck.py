@@ -15,7 +15,9 @@ import numpy as np
 
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.membrane import solve_membrane
+from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.model import node_name, reference_node
+from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
 from anisotropy_fea.units import from_si
 
 
@@ -47,6 +49,16 @@ def main() -> None:
     for i, label in enumerate(("Nx", "Ny", "Nxy")):
         values = np.array([from_si(v, "force_per_length", units) for v in solution.section_force[:, i]])
         print(f"{label}: min {values.min():.6g}  max {values.max():.6g} (force per length)")
+    f12_star = deck_f12_star(deck)
+    field = element_ply_states(solution)
+    for criterion in ("max_stress", "tsai_hill", "tsai_wu", "max_strain"):
+        try:
+            failure = strength_ratios(solution, criterion, f12_star, field)
+        except KernelError as exc:
+            print(f"first-ply failure, {criterion}: not available ({exc})")
+            continue
+        print(f"first-ply failure, {criterion}: factor {failure.factor:.6g} on the applied loading, element "
+              f"{failure.element[0]}.{failure.element[1]}, ply {failure.ply} (bottom = 1), mode {failure.governing_mode}")
 
 
 if __name__ == "__main__":

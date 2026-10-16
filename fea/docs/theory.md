@@ -128,7 +128,31 @@ The section forces are $`\mathbf{N} = \mathbf{A}\boldsymbol{\varepsilon}`$ at th
 
 <!-- code: section_forces -->
 
-Ply stresses and failure follow in the next chunk: the engine's `ply_surfaces` with zero curvature gives every ply's strain and stress in its material axes, and the engine's criterion functions give the strength ratio.
+## 6. Ply stresses in material axes
+
+A membrane state has no curvature, so every ply of an element carries the element's strain $`\boldsymbol{\varepsilon}`$. Each ply's stress in laminate axes and its strain and stress in material axes follow from the engine's ply recovery with $`\boldsymbol{\kappa} = \mathbf{0}`$ ([engine theory](../../engine/docs/theory.md), Section 4, ply surface recovery):
+
+```math
+\boldsymbol{\sigma}_{xy}^{(k)} = \bar{\mathbf{Q}}^{(k)} \boldsymbol{\varepsilon}, \qquad
+\boldsymbol{\varepsilon}_{12}^{(k)} = \mathbf{T}_\varepsilon(\theta_k)\, \boldsymbol{\varepsilon}, \qquad
+\boldsymbol{\sigma}_{12}^{(k)} = \mathbf{T}_\sigma(\theta_k)\, \boldsymbol{\sigma}_{xy}^{(k)} ,
+```
+
+with the bottom and top faces of a ply equal, so one value per ply is kept, bottom ply first. This is computed by `element_ply_states`, which calls the engine's `ply_surfaces`. Abaqus writes three section points per layer (Simpson); in a membrane state all three equal this one value, which is itself a check on a comparison.
+
+<!-- code: element_ply_states -->
+
+## 7. First-ply failure
+
+The strength ratio $`R`$ of a ply is the factor on its stress at which the chosen criterion is met; the engine defines it for maximum stress, maximum strain, Tsai-Hill and Tsai-Wu ([engine theory](../../engine/docs/theory.md), Section 5) and exposes the per-face dispatch as `face_strength_ratio`, which the kernel calls with the ply's stress as the scaled part and nothing held. Over the mesh the smallest ratio is the first-ply-failure factor: the problem is linear, so the applied displacement or load multiplied by this factor fails that ply of that element first,
+
+```math
+\lambda_{\mathrm{FPF}} = \min_{e,\,k} R^{(e,k)} ,
+```
+
+computed by `strength_ratios`, which also returns every ratio and governing mode and the element and ply that govern. Identical plies in a uniform state tie exactly; ratios within a relative $`10^{-9}`$ of the minimum count as tied and the first element in deck order, then the bottom-most ply, is reported, so the location is decided by position and not by roundoff. The Tsai-Wu interaction term $`f_{12}^*`$ comes from the deck's `*Fail Stress` sixth value when every material states the same one, computed by `deck_f12_star`; without it Tsai-Wu is refused, as the engine refuses it (ADR-0021). Maximum strain is refused when no strain limits exist, since an Abaqus deck carries none. First-ply failure is the onset of damage in one ply, not the coupon's ultimate strength.
+
+<!-- code: strength_ratios, deck_f12_star -->
 
 ## Checks
 
@@ -139,6 +163,7 @@ Ply stresses and failure follow in the next chunk: the engine's `ply_surfaces` w
 - Isotropic closed forms (`isotropic-uniaxial-plane-stress`, `isotropic-simple-shear`): $`\varepsilon_x = -\nu\varepsilon_y`$, $`N_y = E h \varepsilon_y`$; $`N_{xy} = G h \gamma_{xy}`$.
 - A coupled edge driven by a reference node gives the same displacements as the same edge prescribed node by node, and the reference node's reaction equals the summed edge reactions.
 - The gripped 2 by 8 coupon: reactions in equilibrium, top and bottom reference reactions equal and opposite, the finer 4 by 16 mesh no stiffer than the coarse one.
+- Ply stresses in material axes equal the engine's `ply_surfaces` on the uniform cases for all ten plies; the first-ply-failure factor, governing ply and mode equal the engine's `first_ply_failure` for maximum stress, Tsai-Hill and Tsai-Wu; the factor halves when the imposed displacement doubles; the gripped coupon fails first in an end row next to a grip; missing strengths, strain limits or $`f_{12}^*`$ are refused by name.
 
 ## Not modeled yet
 
@@ -146,4 +171,5 @@ Ply stresses and failure follow in the next chunk: the engine's `ply_surfaces` w
 - Rotated laminate axes (an `*Orientation` other than the global axes)
 - Triangles, higher-order shells, solids, membranes (M3D4)
 - Distributed loads and pressure; thermal strain
-- Ply stresses and failure (next chunk); finite element buckling; holes meshed by us (Gmsh chunk)
+- Abaqus-style failure indices (MSTRS, TSAIH, TSAIW) as numbers to compare against (comparison chunk); progressive failure
+- Finite element buckling; holes meshed by us (Gmsh chunk)

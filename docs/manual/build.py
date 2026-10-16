@@ -2,11 +2,13 @@
 
 From the repository root:
 
-    uv run --project engine python docs/manual/build.py
+    uv run --project fea python docs/manual/build.py
 
-LaTeX fragments are written to docs/manual/generated/. When Tectonic is installed the PDF
-is compiled to docs/manual/build/anisotropy-engine-manual.pdf. Change the Markdown sources
-and the code, never the generated files.
+The fea environment holds both packages (the engine as an editable dependency), so the manual
+covers the laminate engine and the finite element layer (ADR-0008, ADR-0029). LaTeX fragments are
+written to docs/manual/generated/. When Tectonic is installed the PDF is compiled to
+docs/manual/build/anisotropy-engine-manual.pdf. Change the Markdown sources and the code, never
+the generated files.
 """
 
 import importlib
@@ -27,6 +29,8 @@ from anisotropy_engine.lamina import Lamina, Strengths
 from anisotropy_engine.laminate import Ply
 from anisotropy_engine.response import Loads
 from anisotropy_engine.units import UNIT_SYSTEMS
+from anisotropy_fea.cases import compare as fea_compare
+from anisotropy_fea.cases import load_case as fea_load_case
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -34,6 +38,13 @@ GENERATED = HERE / "generated"
 BUILD = HERE / "build"
 REPO_URL = "https://github.com/erikvilla1/anisotropy-ai/blob/main/"
 ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library")
+FEA_MODULES = ("mesh", "membrane", "recovery", "results", "cases", "model", "abaqus_reader", "units")
+# Each package with its theory document and the modules a code marker may name.
+PACKAGES = {"anisotropy_engine": ("engine/docs/theory.md", ENGINE_MODULES), "anisotropy_fea": ("fea/docs/theory.md", FEA_MODULES)}
+# Unit labels for finite element case results, by the deck's unit system and result group.
+FEA_UNITS = {"mm-MPa": {"force": "N", "length": "mm", "stress": "MPa", "force_per_length": "N/mm"},
+             "m-Pa": {"force": "N", "length": "m", "stress": "Pa", "force_per_length": "N/m"}}
+FEA_GROUP_KIND = {"rf": "force", "u": "length", "section_force": "force_per_length", "ply_stress_local": "stress"}
 
 # --------------------------------------------------------------------- text to LaTeX
 
@@ -207,21 +218,21 @@ def read(relative: str) -> str:
 FUNCTION_REFERENCE = re.compile(r"(?:[Cc]omputed|[Cc]hecked) by ((?:`[\w.]+`(?:,\s*|\s+and\s+)?)+)")
 
 
-def find(name: str):
+def find(name: str, package: str = "anisotropy_engine"):
     head, _, attribute = name.partition(".")
-    for module_name in ENGINE_MODULES:
-        module = importlib.import_module(f"anisotropy_engine.{module_name}")
+    for module_name in PACKAGES[package][1]:
+        module = importlib.import_module(f"{package}.{module_name}")
         if hasattr(module, head):
             target = getattr(module, head)
             if attribute:
                 target = inspect.getattr_static(target, attribute)
                 target = target.fget if isinstance(target, property) else getattr(target, "wrapped", target)
             return target
-    raise LookupError(f"theory.md names {name}, which is not in the engine")
+    raise LookupError(f"{PACKAGES[package][0]} names {name}, which is not in {package}")
 
 
-def listing(name: str) -> str:
-    target = find(name)
+def listing(name: str, package: str = "anisotropy_engine") -> str:
+    target = find(name, package)
     lines, start = inspect.getsourcelines(target)
     path = Path(inspect.getsourcefile(target)).resolve().relative_to(ROOT).as_posix()
     end = start + len(lines) - 1
@@ -230,13 +241,14 @@ def listing(name: str) -> str:
             + rf"\begin{{enginecode}}[firstnumber={start}]" + "\n" + source + "\n" + r"\end{enginecode}")
 
 
-def theory() -> str:
-    """engine/docs/theory.md, with each function's source where its `<!-- code: ... -->` marker is."""
-    md = read("engine/docs/theory.md")
+def theory(package: str = "anisotropy_engine") -> str:
+    """A package's theory document, with each function's source where its `<!-- code: ... -->` marker is."""
+    relative = PACKAGES[package][0]
+    md = read(relative)
     named = {name for match in FUNCTION_REFERENCE.finditer(md) for name in re.findall(r"`([\w.]+)`", match.group(1))}
     marked = {name for marker in CODE_MARKER.finditer(md) for name in map(str.strip, marker.group(1).split(","))}
     if named != marked:
-        raise SystemExit("theory.md: every function it says computes or checks something needs a code marker, and "
+        raise SystemExit(f"{relative}: every function it says computes or checks something needs a code marker, and "
                          f"every marker needs that sentence. Without a marker: {sorted(named - marked)}. "
                          f"Without a sentence: {sorted(marked - named)}.")
     out = []
@@ -248,7 +260,7 @@ def theory() -> str:
         elif kind == "paragraph":
             out.append(inline(payload))
         elif kind == "code-ref":
-            out.extend(listing(name) for name in payload)
+            out.extend(listing(name, package) for name in payload)
         else:
             out.append(convert_block(kind, payload))
     return "\n\n".join(out)
@@ -332,6 +344,55 @@ def validation() -> str:
                rf"{agreeing} of {total} values from {len(paths)} cases agree with their sources within each case's tolerance. "
                rf"Cases are stored in {code('engine/validation/cases')}; see {code('engine/validation/README.md')} to add one.")
     return summary + "\n\n" + "\n\n".join(out)
+
+
+def fea_validation() -> str:
+    """Every finite element case in fea/validation/cases, solved by the kernel while the manual is built."""
+    paths = sorted(p for p in (ROOT / "fea/validation/cases").glob("*.toml") if not p.name.startswith("_"))
+    out, total, agreeing = [], 0, 0
+    for path in paths:
+        case = fea_load_case(path)
+        comparisons, problems = fea_compare(case)
+        if problems:
+            raise SystemExit(f"{path.name}: " + "; ".join(problems))
+        labels = FEA_UNITS[case["units"]]
+        rows = []
+        for c in comparisons:
+            kind = FEA_GROUP_KIND.get(c.key.split("[")[0])
+            unit = escape(labels[kind]) if kind else "--"
+            difference = abs(c.engine - c.expected)
+            relative = f"{100 * difference / abs(c.expected):.3f}" + r"\%" if c.expected else number(difference, 2)
+            rows.append(rf"{code(c.key)} & {unit} & {number(c.expected)} & {number(c.engine)} & {relative} & "
+                        + (r"\textcolor{passgreen}{yes}" if c.agrees else r"\textcolor{red}{\textbf{no}}") + r" \\")
+            total += 1
+            agreeing += c.agrees
+        tolerance = case["expected"]["tolerance"]
+        source = case["source"].rstrip(".")
+        out.append(rf"\subsubsection{{{inline(case['title'])}}}" + "\n"
+                   + rf"{{\small\color{{muted}}Source: {inline(source)}. File: {code(path.relative_to(ROOT).as_posix())}. "
+                   + rf"Deck: {code(case['mesh']['deck'])}. Units: {escape(case['units'])}. Tolerance {number(100 * tolerance, 3)}\%.}}" + "\n\n"
+                   + r"{\small\begin{xltabular}{\linewidth}{lllllY}\toprule" + "\n"
+                   + r"\textbf{Result} & \textbf{Unit} & \textbf{Source} & \textbf{Kernel} & \textbf{Difference} & \textbf{Agrees} \\\midrule\endhead" + "\n"
+                   + "\n".join(rows) + "\n" + r"\bottomrule\end{xltabular}}")
+    summary = (rf"The finite element kernel was run on every case while this manual was built. "
+               rf"{agreeing} of {total} values from {len(paths)} cases agree with their sources within each case's tolerance. "
+               rf"Cases are stored in {code('fea/validation/cases')}; see {code('fea/validation/README.md')} to add one. "
+               rf"Result labels read group, name, component: {code('rf[Top][1]')} is the second component of the reaction summed over "
+               rf"the node set Top, {code('ply_stress_local[Coupon-1.1][3][0]')} the fiber-direction stress of ply 3 of element 1.")
+    return summary + "\n\n" + "\n\n".join(out)
+
+
+def fea_verification() -> str:
+    """Finite element validation tables and the newest recorded report under docs/evaluations/fea."""
+    report_path = sorted((ROOT / "docs/evaluations/fea").glob("*.md"))[-1]
+    report = report_path.read_text(encoding="utf-8")
+    parts = sections(report)
+    title = re.search(r"^# (.+)$", report, re.M).group(1)
+    intro = convert(parts[""].split("\n", 1)[1])
+    body = "\n\n".join(heading(2, name) + "\n\n" + convert(text) for name, text in parts.items() if name)
+    return (heading(1, "Finite element validation cases") + "\n\n" + fea_validation() + "\n\n"
+            + heading(1, title) + "\n\n" + rf"{{\small\color{{muted}}Recorded report: {code(report_path.relative_to(ROOT).as_posix())}}}"
+            + "\n\n" + intro + "\n\n" + body)
 
 
 def coupon_example() -> str:
@@ -440,21 +501,28 @@ def run(*command: str) -> str:
     return subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
-def metadata() -> str:
-    version = tomllib.loads(read("engine/pyproject.toml"))["project"]["version"]
-    commit = run("git", "rev-parse", "--short", "HEAD")
-    if run("git", "status", "--porcelain", "--untracked-files=no"):
-        commit += " + local changes"
-    tests = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "engine/tests"],
+def test_summary(tests_dir: str, what: str) -> str:
+    """Run a package's tests; the manual is not built when they fail."""
+    tests = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", tests_dir],
                            cwd=ROOT, capture_output=True, text=True)
     summary = tests.stdout.strip().splitlines()[-1] if tests.stdout.strip() else "no output"
     if tests.returncode != 0:
-        raise SystemExit("Engine tests fail, so the manual is not built:\n" + tests.stdout[-2000:])
-    summary = re.sub(r" in [\d.]+s.*", "", summary)
+        raise SystemExit(f"{what} tests fail, so the manual is not built:\n" + tests.stdout[-2000:])
+    return re.sub(r" in [\d.]+s.*", "", summary)
+
+
+def metadata() -> str:
+    version = tomllib.loads(read("engine/pyproject.toml"))["project"]["version"]
+    fea_version = tomllib.loads(read("fea/pyproject.toml"))["project"]["version"]
+    commit = run("git", "rev-parse", "--short", "HEAD")
+    if run("git", "status", "--porcelain", "--untracked-files=no"):
+        commit += " + local changes"
     return "\n".join([rf"\newcommand{{\EngineVersion}}{{{escape(version)}}}",
+                      rf"\newcommand{{\FeaVersion}}{{{escape(fea_version)}}}",
                       rf"\newcommand{{\GitCommit}}{{{escape(commit)}}}",
                       rf"\newcommand{{\BuildDate}}{{{date.today().isoformat()}}}",
-                      rf"\newcommand{{\TestSummary}}{{{escape(summary)}}}"])
+                      rf"\newcommand{{\TestSummary}}{{{escape(test_summary('engine/tests', 'Engine'))}}}",
+                      rf"\newcommand{{\FeaTestSummary}}{{{escape(test_summary('fea/tests', 'Finite element'))}}}"])
 
 
 def tectonic() -> str | None:
@@ -466,6 +534,7 @@ def tectonic() -> str | None:
 def main() -> None:
     GENERATED.mkdir(exist_ok=True)
     fragments = {"meta": metadata(), "overview": overview(), "theory": theory(), "verification": verification(),
+                 "fea_theory": theory("anisotropy_fea"), "fea_verification": fea_verification(),
                  "decisions": decisions(), "limits": limits(), "example": coupon_example(), "units": units_table()}
     for name, text in fragments.items():
         (GENERATED / f"{name}.tex").write_text(text + "\n", encoding="utf-8")

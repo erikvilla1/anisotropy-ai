@@ -19,6 +19,15 @@ A case is a TOML file:
     "*" = [-0.0031, 0.01, 0.0004]
     [expected.section_force]              # [Nx, Ny, Nxy] at an element's centroid, force per length; "*" as above
     "*" = [0.0, 123.4, 0.0]
+    [expected.ply_stress_local."*"]       # per ply, bottom ply is 1: [sigma_1, sigma_2, tau_12] in material axes, stress units
+    1 = [1234.5, 12.3, -4.5]
+    [expected.ply_strain_local."Coupon-1.1"]   # per ply: [eps_1, eps_2, gamma_12]
+    2 = [0.004, -0.001, 0.002]
+    [expected.fpf.max_stress]             # first-ply failure by one criterion: the factor on the applied loading and, optionally, where and the mode
+    ratio = 12.3
+    element = "Coupon-1.1"                # omit element, ply and mode when identical plies tie (a uniform state)
+    ply = 2
+    mode = "transverse tension"
 
 Comparison labels read `group[name][component]`, like the engine's, so a disagreement names exactly one number.
 """
@@ -31,10 +40,12 @@ from pathlib import Path
 import numpy as np
 
 from anisotropy_engine.cases import Comparison
+from anisotropy_engine.failure import CRITERIA
 
 from .abaqus_reader import read_deck
 from .membrane import solve_membrane
 from .model import Deck, ElementKey, NodeKey
+from .recovery import deck_f12_star, element_ply_states, strength_ratios
 from .results import MembraneSolution
 from .units import from_si
 
@@ -45,6 +56,8 @@ GROUPS: dict[str, tuple[str | None, int, str]] = {
     "strain": (None, 3, "an element or *"),
     "section_force": ("force_per_length", 3, "an element or *"),
 }
+PLY_GROUPS: dict[str, str | None] = {"ply_stress_local": "stress", "ply_strain_local": None}
+FPF_FIELDS = ("ratio", "element", "ply", "mode")
 REQUIRED = ("title", "source", "units", "mesh", "expected")
 
 
@@ -74,14 +87,40 @@ def validate_case(case: dict) -> None:
     for group, rows in expected.items():
         if group == "tolerance":
             continue
-        if group not in GROUPS:
-            raise ValueError(f"[expected.{group}] is not a result group; known: {', '.join(GROUPS)}")
-        _, length, _ = GROUPS[group]
-        if not isinstance(rows, dict) or not rows:
-            raise ValueError(f"[expected.{group}] must be a table of name = [values]")
-        for name, vector in rows.items():
-            if not isinstance(vector, list) or len(vector) != length or not all(isinstance(v, (int, float)) for v in vector):
-                raise ValueError(f"[expected.{group}] {name!r} must be a list of {length} numbers")
+        if group in GROUPS:
+            _, length, _ = GROUPS[group]
+            if not isinstance(rows, dict) or not rows:
+                raise ValueError(f"[expected.{group}] must be a table of name = [values]")
+            for name, vector in rows.items():
+                _check_vector(f"[expected.{group}] {name!r}", vector, length)
+        elif group in PLY_GROUPS:
+            if not isinstance(rows, dict) or not rows:
+                raise ValueError(f"[expected.{group}] must be a table of element = {{ply = [values]}}")
+            for name, plies in rows.items():
+                if not isinstance(plies, dict) or not plies:
+                    raise ValueError(f"[expected.{group}.{name!r}] must be a table of ply number = [3 values]")
+                for ply, vector in plies.items():
+                    if not str(ply).isdigit() or int(ply) < 1:
+                        raise ValueError(f"[expected.{group}.{name!r}] ply keys are numbers from 1 (bottom); got {ply!r}")
+                    _check_vector(f"[expected.{group}.{name!r}] ply {ply}", vector, 3)
+        elif group == "fpf":
+            if not isinstance(rows, dict) or not rows:
+                raise ValueError("[expected.fpf] must hold one table per criterion")
+            for criterion, fields in rows.items():
+                if criterion not in CRITERIA:
+                    raise ValueError(f"[expected.fpf.{criterion}] is not a criterion; known: {', '.join(CRITERIA)}")
+                if not isinstance(fields, dict) or "ratio" not in fields or set(fields) - set(FPF_FIELDS):
+                    raise ValueError(f"[expected.fpf.{criterion}] needs `ratio` and may have element, ply, mode")
+                if not isinstance(fields["ratio"], (int, float)):
+                    raise ValueError(f"[expected.fpf.{criterion}] ratio must be a number")
+        else:
+            known = ", ".join(list(GROUPS) + list(PLY_GROUPS) + ["fpf"])
+            raise ValueError(f"[expected.{group}] is not a result group; known: {known}")
+
+
+def _check_vector(where: str, vector, length: int) -> None:
+    if not isinstance(vector, list) or len(vector) != length or not all(isinstance(v, (int, float)) for v in vector):
+        raise ValueError(f"{where} must be a list of {length} numbers")
 
 
 def deck_path(case: dict) -> Path:
@@ -108,23 +147,61 @@ def parse_element_name(name: str) -> ElementKey:
     return (instance, int(label))
 
 
-def fe_results(case: dict) -> dict[str, tuple[np.ndarray, float]]:
-    """Every requested quantity in the case's units, labelled `group[name]`, with the group's largest magnitude as scale."""
+def element_name(key: ElementKey) -> str:
+    return f"{key[0]}.{key[1]}"
+
+
+def fe_results(case: dict) -> tuple[dict[str, tuple[np.ndarray, float]], dict[str, object]]:
+    """Numbers: `label -> (vector in case units, group scale)`. Identities: `label -> value` for fpf element, ply and mode."""
     deck, solution = solve_case(case)
     units = case["units"]
-    out: dict[str, tuple[np.ndarray, float]] = {}
-    for group, rows in case["expected"].items():
+    numbers: dict[str, tuple[np.ndarray, float]] = {}
+    identities: dict[str, object] = {}
+    expected = case["expected"]
+    ply_field = element_ply_states(solution) if any(group in expected for group in PLY_GROUPS) or "fpf" in expected else None
+
+    def store(group: str, vectors: dict[str, np.ndarray], kind: str | None) -> None:
+        converted = {label: value if kind is None else np.array([from_si(float(v), kind, units) for v in value]) for label, value in vectors.items()}
+        scale = max((float(np.max(np.abs(v))) for v in converted.values()), default=0.0)
+        for label, value in converted.items():
+            numbers[f"{group}[{label}]"] = (value, scale)
+
+    for group, rows in expected.items():
         if group == "tolerance":
             continue
-        kind, _, _ = GROUPS[group]
-        vectors: dict[str, np.ndarray] = {}
-        for name in rows:
-            for label, value in _quantity(group, name, deck, solution).items():
-                vectors[label] = value if kind is None else np.array([from_si(float(v), kind, units) for v in value])
-        scale = max((float(np.max(np.abs(v))) for v in vectors.values()), default=0.0)
-        for label, value in vectors.items():
-            out[f"{group}[{label}]"] = (value, scale)
-    return out
+        if group in GROUPS:
+            kind = GROUPS[group][0]
+            vectors: dict[str, np.ndarray] = {}
+            for name in rows:
+                vectors.update(_quantity(group, name, deck, solution))
+            store(group, vectors, kind)
+        elif group in PLY_GROUPS:
+            field = ply_field.stress_12 if group == "ply_stress_local" else ply_field.strain_12
+            vectors = {}
+            for name, plies in rows.items():
+                for element_label, e in _elements(name, solution):
+                    for ply in plies:
+                        k = int(ply) - 1
+                        if k >= field[e].shape[0]:
+                            raise ValueError(f"{group}[{element_label}][{ply}]: element has {field[e].shape[0]} plies")
+                        vectors[f"{element_label}][{ply}"] = field[e][k]
+            store(group, vectors, PLY_GROUPS[group])
+        elif group == "fpf":
+            f12_star = deck_f12_star(deck)
+            for criterion in rows:
+                failure = strength_ratios(solution, criterion, f12_star, ply_field)
+                numbers[f"fpf[{criterion}][ratio]"] = (np.array([failure.factor]), failure.factor)
+                identities[f"fpf[{criterion}][element]"] = element_name(failure.element)
+                identities[f"fpf[{criterion}][ply]"] = failure.ply
+                identities[f"fpf[{criterion}][mode]"] = failure.governing_mode
+    return numbers, identities
+
+
+def _elements(name: str, solution: MembraneSolution) -> list[tuple[str, int]]:
+    mesh = solution.mesh
+    if name == "*":
+        return [(element_name(key), e) for e, key in enumerate(mesh.element_keys)]
+    return [(name, mesh.element(parse_element_name(name)))]
 
 
 def _quantity(group: str, name: str, deck: Deck, solution: MembraneSolution) -> dict[str, np.ndarray]:
@@ -137,34 +214,52 @@ def _quantity(group: str, name: str, deck: Deck, solution: MembraneSolution) -> 
     if group == "u":
         return {name: solution.displacement[mesh.node(parse_node_name(name))]}
     field = solution.strain if group == "strain" else solution.section_force
-    if name == "*":
-        return {f"{instance}.{label}": field[e] for e, (instance, label) in enumerate(mesh.element_keys)}
-    return {name: field[mesh.element(parse_element_name(name))]}
+    return {label: field[e] for label, e in _elements(name, solution)}
 
 
 def compare(case: dict) -> tuple[list[Comparison], list[str]]:
-    """Every expected number next to the kernel's, plus problems with names the case cannot produce."""
+    """Every expected number next to the kernel's, plus problems: names the case cannot produce and identities that differ."""
     expected = case["expected"]
     tolerance = float(expected["tolerance"])
     try:
-        results = fe_results(case)
+        numbers, identities = fe_results(case)
     except ValueError as exc:  # DeckError, KernelError and name errors are all ValueErrors
         return [], [str(exc)]
     comparisons: list[Comparison] = []
     problems: list[str] = []
+
+    def add(label: str, want: list) -> None:
+        if label not in numbers:
+            problems.append(f"{label}: not a result this case produces")
+            return
+        got, scale = numbers[label]
+        for i, w in enumerate(want):
+            allowed = tolerance * (abs(w) if w != 0 else scale)
+            comparisons.append(Comparison(f"{label}[{i}]", float(w), float(got[i]), float(allowed)))
+
     for group, rows in expected.items():
         if group == "tolerance":
             continue
-        for name, want in rows.items():
-            labels = [key for key in results if key.startswith(f"{group}[")] if name == "*" else [f"{group}[{name}]"]
-            if name != "*" and labels[0] not in results:
-                problems.append(f"{group}[{name}]: not a result this case produces")
-                continue
-            for label in labels:
-                got, scale = results[label]
-                for i, w in enumerate(want):
-                    allowed = tolerance * (abs(w) if w != 0 else scale)
-                    comparisons.append(Comparison(f"{label}[{i}]", float(w), float(got[i]), float(allowed)))
+        if group in GROUPS:
+            for name, want in rows.items():
+                labels = [key for key in numbers if key.startswith(f"{group}[")] if name == "*" else [f"{group}[{name}]"]
+                for label in labels:
+                    add(label, want)
+        elif group in PLY_GROUPS:
+            for name, plies in rows.items():
+                for ply, want in plies.items():
+                    labels = ([key for key in numbers if key.startswith(f"{group}[") and key.endswith(f"][{ply}]")]
+                              if name == "*" else [f"{group}[{name}][{ply}]"])
+                    for label in labels:
+                        add(label, want)
+        elif group == "fpf":
+            for criterion, fields in rows.items():
+                add(f"fpf[{criterion}][ratio]", [fields["ratio"]])
+                for field in ("element", "ply", "mode"):
+                    if field in fields:
+                        label = f"fpf[{criterion}][{field}]"
+                        if identities.get(label) != fields[field]:
+                            problems.append(f"{label}: expected {fields[field]!r}, kernel gives {identities.get(label)!r}")
     return comparisons, problems
 
 

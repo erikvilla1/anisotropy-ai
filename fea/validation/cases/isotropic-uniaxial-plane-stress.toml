@@ -18,3 +18,9 @@ tolerance = 1e-9
 "*" = [-0.0033000000000000004, 0.01, 0.0]
 [expected.section_force]
 "*" = [0.0, 1400.0, 0.0]
+
+# The homogeneous section is one ply at 0 degrees: material axes are the laminate axes, sigma_2 = E eps_y = 700 MPa.
+[expected.ply_stress_local."*"]
+1 = [0.0, 700.0, 0.0]
+[expected.ply_strain_local."*"]
+1 = [-0.0033, 0.01, 0.0]

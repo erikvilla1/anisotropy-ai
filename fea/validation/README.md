@@ -23,5 +23,8 @@ The team's own decks, exports and any record that names a material not in the pu
 - `patch-1x1-im7-engine-equality`, `patch-2x2-im7-engine-equality`: prescribed 1 % axial strain, lateral edges free; expected strain, section force, reactions and displacements come from the engine's mixed solver on the same plies (recomputed live in `tests/test_membrane_solve.py`).
 - `patch-1x1-cload-im7-engine-equality`: 1000 N edge load; expected values from the engine's forward solve.
 - `isotropic-uniaxial-plane-stress`, `isotropic-simple-shear`: closed forms of isotropic plane stress (Timoshenko and Goodier, Chapter 2), by hand.
+- The three IM7 cases also carry every ply's stress and strain in material axes (engine `ply_surfaces` on the same state) and the first-ply-failure factor by maximum stress, Tsai-Hill and Tsai-Wu (engine `first_ply_failure`, f* = 0 as the decks state). Only the factor is checked there: identical plies tie in a uniform state. The isotropic uniaxial case carries its one-ply stress, 700 MPa.
+
+Fixture decks state the Tsai-Wu interaction term f* = 0 as the sixth `*Fail Stress` value, Abaqus's documented default made explicit (ADR-0021: the engine never assumes it).
 
 Material numbers in the fixtures come from the library dataset `ncamp-im7-8552-2019-rtd-measured-v1` converted to MPa; `G13` and `G23` are nominal because Abaqus syntax requires them and this package does not use them.
