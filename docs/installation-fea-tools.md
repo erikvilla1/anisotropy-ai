@@ -10,7 +10,17 @@ What each tool is for, where to get it, and how our code finds it. Everything he
 | PrePoMax | a free Windows GUI bundling CalculiX: opens our CalculiX decks and `.frd` results | optional, founder's machine |
 | ParaView | opens the `.vtu` files our examples write | optional |
 
-## Founder's Windows 11 machine
+## Installed on the founder's machine (2026-10-15)
+
+- **PrePoMax v2.6.0** (portable zip from https://prepomax.fs.um.si/Files/Downloads/PrePoMax%20v2.6.0.zip, 209 MB, 223 files) unpacked to `C:\Tools\PrePoMax v2.6.0\`; the archive is kept in `C:\Tools\downloads\prepomax\`. It bundles **CalculiX 2.22** as `Solver\ccx_dynamic.exe` (its `-v` prints "This is Version 2.22"), a Gmsh caller, NetGen, and `Tools\abqodb_to_ccxfrd.py`. .NET Framework 4.8 is present.
+- **`ANISOTROPY_CCX`** is set for the user to `C:\Tools\PrePoMax v2.6.0\Solver\ccx_dynamic.exe` (new shells see it; this session's shells may not).
+- **Smoke run**: a one-element isotropic S4 plate (10 mm square, 2 mm thick, bottom edge fixed, top edge held in x and pulled 0.1 mm) ran in 0.2 s with no error. The `.dat` reports the total force on the top set as 1.571092E+04 N and the element stresses `sxx = 259.23`, `syy = 785.55` MPa at all eight integration points: with both edges held in x the state is `sigma_y = E eps / (1 - nu^2) = 70000 x 0.01 / 0.8911 = 785.5 MPa` and `sigma_x = nu sigma_y = 259.2 MPa`, so the solver and the deck conventions agree with the closed form. Files under `.local/calculix/smoke/`. The `.dat` block headers seen: `forces (fx,fy,fz) for set TOP and time`, `total force (fx,fy,fz) for set TOP and time`, `displacements (vx,vy,vz) for set TOP and time`, `stresses (elem, integ.pnt.,sxx,syy,szz,sxy,sxz,syz) for set EALL and time`, each stress row ending with a `_shell_0000000001` tag; a shell gives eight integration points per element. This resolves the "wording of the forces and totals blocks" item; the composite-shell conventions (layer order, points per layer, orientation, shear strain) remain for the detection run.
+
+### Opening our models in PrePoMax
+
+Start `C:\Tools\PrePoMax v2.6.0\PrePoMax.exe`. File, Import, choose an Abaqus input file, and pick a generated deck, for example `.local\fea-models\unnotched-im7-8552-nodal\unnotched-im7-8552-nodal-abaqus.inp` (written by `fea/examples/build_model.py`; the committed copy is `fea/validation/decks/generated/`). Whether PrePoMax takes the part-and-instance structure, the composite shell section with five-field layer lines and the LAMINA material of that deck is UNVERIFIED (the manual says its syntax is mostly common with Abaqus); the CalculiX-dialect deck that the next chunk writes is the one meant for it. Results from CalculiX (`.frd`) open through File, Open results. The smoke run's `.frd` under `.local/calculix/smoke/` is a first file to try.
+
+## Founder's Windows 11 machine (the steps, for a second machine)
 
 1. **Gmsh**: from `fea/`, `uv sync --extra mesh` (planned in chunk A2; the extra declares `gmsh>=4.13`, PyPI ships a Windows wheel). Check with `uv run python -c "import gmsh; print(gmsh.__version__)"`.
 2. **CalculiX through PrePoMax** (recommended): download the portable zip from https://prepomax.fs.um.si/downloads/, unzip to a folder such as `C:\Tools\PrePoMax\`, and find the bundled solver under its `Solver` folder (`ccx_*.exe`). Set the environment variable `ANISOTROPY_CCX` to that executable's full path, or add the folder to `PATH`. PrePoMax needs .NET Framework 4.8. The bundled CalculiX version is recorded when installed (planned v2.6.0 stable).
