@@ -26,6 +26,8 @@ The flat arrays the kernel works on, the nodes of every instance followed by the
 
 <!-- code: mesh_from_deck -->
 
+The reference solver is not a membrane. CalculiX expands a composite S8R shell into one twenty-node brick with the layers as integration-point materials, and its law is three-dimensional: the ply's thickness strain is $`\varepsilon_{33} = -\nu_{13}\sigma_{11}/E_1 - \nu_{23}\sigma_{22}/E_2 + \sigma_{33}/E_3`$. Plies at different angles want different $`\varepsilon_{33}`$ under the same in-plane state, but one brick has one quadratic displacement across the whole thickness, so the difference is taken up by a through-thickness stress $`\sigma_{33}`$ that feeds back into $`\sigma_{11}`$ and $`\sigma_{22}`$. Plane stress has no such term. A CalculiX deck meant to be compared with the kernel, or with an Abaqus LAMINA model, therefore states `plane_stress = true`, which writes $`\nu_{13} = \nu_{23} = 0`$ and makes the brick's in-plane response the plane-stress one; $`E_3`$, $`G_{13}`$ and $`G_{23}`$ stay as stated (ADR-0030, amendment 1).
+
 ## 2. The bilinear quadrilateral (`membrane.py`)
 
 In natural coordinates $`(\xi, \eta) \in [-1, 1]^2`$ the four nodes sit at $`(\xi_i, \eta_i) = (\mp 1, \mp 1)`$ counterclockwise. The shape functions (Bathe Eq. 5.18 for the two-dimensional case), computed by `shape_functions`:

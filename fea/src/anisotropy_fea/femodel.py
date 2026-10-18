@@ -164,7 +164,8 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
         f"material {material.name}: {material.source}; rights class {material.rights}",
         *[f"  {line}" for line in material.citation_lines],
         f"out-of-plane constants: G13 {material.G13:g}, G23 {material.G23:g}, E3 {material.E3:g}, nu13 {material.nu13:g}, nu23 {material.nu23:g} (SI; "
-        + ("transverse isotropy stated in the spec" if spec.material.transverse.transverse_isotropy else "given in the spec") + ")",
+        + ("transverse isotropy stated in the spec" if spec.material.transverse.transverse_isotropy else "given in the spec") + ")"
+        + ("; nu13 = nu23 = 0 written for plane stress, as Abaqus LAMINA and our kernel assume (plane_stress = true in the spec)" if material.plane_stress else ""),
         f"grips {spec.grips.kind} on the {'end node rows' if spec.grips.region == 'line' else 'whole tab regions'}; "
         f"loading {loading.control} {loading.value:g} " + ("m" if loading.control == "displacement" else "N"),
         f"units of this deck: {spec.units}",

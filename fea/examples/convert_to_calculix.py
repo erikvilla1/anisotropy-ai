@@ -28,7 +28,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("deck", type=Path)
     parser.add_argument("--units", required=True)
-    parser.add_argument("--nu23", type=float, required=True)
+    parser.add_argument("--nu23", type=float, default=None, help="required unless --plane-stress")
+    parser.add_argument("--plane-stress", action="store_true", help="write nu13 = nu23 = 0 so CalculiX's three-dimensional law reduces to plane stress like Abaqus LAMINA")
     parser.add_argument("--E3", type=float, default=None, help="in the deck's stress unit; with --nu13 it replaces transverse isotropy")
     parser.add_argument("--nu13", type=float, default=None)
     parser.add_argument("--out", type=Path, required=True)
@@ -37,7 +38,7 @@ def main() -> None:
     units = args.units
     deck = read_deck(args.deck, units)
     isotropy = args.E3 is None and args.nu13 is None
-    transverse = TransverseChoice(nu23=args.nu23, transverse_isotropy=isotropy,
+    transverse = TransverseChoice(nu23=args.nu23, transverse_isotropy=isotropy, plane_stress=args.plane_stress,
                                   E3=None if isotropy else to_si(args.E3, "stress", units), nu13=None if isotropy else args.nu13)
     mesh = mesh_from_deck(deck)
     centre = np.argmin(np.linalg.norm(mesh.xy[mesh.connectivity].mean(axis=1) - mesh.xy.mean(axis=0), axis=1))

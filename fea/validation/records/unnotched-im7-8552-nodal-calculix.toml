@@ -3,8 +3,8 @@ units = "mm-MPa"
 spec = "../specs/unnotched-im7-8552-nodal.toml"
 deck_kernel = "../decks/generated/unnotched-im7-8552-nodal-abaqus.inp"
 deck_reference = "../decks/generated/unnotched-im7-8552-nodal-ccx.inp"
-deck_kernel_sha256 = "14e959e1f5ba23cf7c6f25cc4d863b66752332aa21172d65c4732e13cc3410c9"
-deck_reference_sha256 = "51cb1b1bf81a7f46d601f073efc2365cb5c7e4960f1253bcc60f4a723e5aa82e"
+deck_kernel_sha256 = "e3082666d89e030408a3b468649f57afe7e98770834c8259eeed8c9c9ea01d15"
+deck_reference_sha256 = "3cdfa93da142cf45f79038a476fa3be3122ddaf28dcc05563e5514d37cd617a1"
 
 [solver]
 name = "calculix"

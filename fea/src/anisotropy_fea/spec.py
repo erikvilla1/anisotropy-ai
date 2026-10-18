@@ -72,12 +72,18 @@ class Layup(Record):
 
 
 class Transverse(Record):
-    """Out-of-plane constants: Abaqus LAMINA needs G13 and G23; CalculiX ENGINEERING CONSTANTS also needs E3, nu13, nu23."""
+    """Out-of-plane constants: Abaqus LAMINA needs G13 and G23; CalculiX ENGINEERING CONSTANTS also needs E3, nu13, nu23.
+
+    `plane_stress = true` writes nu13 = nu23 = 0, so CalculiX's three-dimensional law, which couples the plies' thickness
+    contraction through its single expanded brick, reduces to the plane stress that Abaqus LAMINA and our kernel assume;
+    nu23 and nu13 are then not given. `plane_stress = false` sends nu23 and the derived or given nu13 to CalculiX as they are.
+    """
 
     G13: PositiveFloat
     G23: PositiveFloat
-    nu23: float
+    plane_stress: bool
     transverse_isotropy: bool  # true: E3 = E2 and nu13 = nu12, a stated rule; false: E3 and nu13 must be given
+    nu23: float | None = None  # required unless plane_stress
     E3: PositiveFloat | None = None
     nu13: float | None = None
 
@@ -241,10 +247,18 @@ def validate_spec(spec: CouponSpec) -> None:
         strengths = [mat.F1t, mat.F1c, mat.F2t, mat.F2c, mat.F6]
         need(all(v is not None for v in strengths) or all(v is None for v in strengths), "give all five strengths F1t, F1c, F2t, F2c, F6 or none")
     t = mat.transverse
-    if t.transverse_isotropy:
-        need(t.E3 is None and t.nu13 is None, "material.transverse: with transverse_isotropy = true, E3 and nu13 are derived (E3 = E2, nu13 = nu12); do not give them")
+    if t.plane_stress:
+        need(t.nu23 is None and t.nu13 is None, "material.transverse: with plane_stress = true, nu13 = nu23 = 0 are written; do not give nu23 or nu13")
+        if t.transverse_isotropy:
+            need(t.E3 is None, "material.transverse: with transverse_isotropy = true, E3 is derived (E3 = E2); do not give it")
+        else:
+            need(t.E3 is not None, "material.transverse: with transverse_isotropy = false, E3 is required")
     else:
-        need(t.E3 is not None and t.nu13 is not None, "material.transverse: with transverse_isotropy = false, E3 and nu13 are required")
+        need(t.nu23 is not None, "material.transverse: nu23 is required unless plane_stress = true")
+        if t.transverse_isotropy:
+            need(t.E3 is None and t.nu13 is None, "material.transverse: with transverse_isotropy = true, E3 and nu13 are derived (E3 = E2, nu13 = nu12); do not give them")
+        else:
+            need(t.E3 is not None and t.nu13 is not None, "material.transverse: with transverse_isotropy = false, E3 and nu13 are required")
     # loading
     need(spec.loading.value != 0, "loading.value must not be zero")
     if kind == "compression":
@@ -348,6 +362,7 @@ class MaterialDefinition:
     E3: float
     nu13: float
     nu23: float
+    plane_stress: bool  # nu13 and nu23 above are 0 because the spec asked for plane stress
     strengths: Strengths | None
     f12_star: float | None
     source: str  # "library im7-8552 / <dataset>" or "explicit constants in the spec"
@@ -380,8 +395,9 @@ def spec_material(spec: CouponSpec) -> MaterialDefinition:
         strengths = Strengths(F1t=mat.F1t, F1c=mat.F1c, F2t=mat.F2t, F2c=mat.F2c, F6=mat.F6) if mat.F1t is not None else None
         citations, source, rights, name = (), "explicit constants in the spec", "spec", "EXPLICIT"
     E3 = E2 if t.transverse_isotropy else t.E3
-    nu13 = nu12 if t.transverse_isotropy else t.nu13
-    return MaterialDefinition(name=name, E1=E1, E2=E2, nu12=nu12, G12=G12, G13=t.G13, G23=t.G23, E3=E3, nu13=nu13, nu23=t.nu23,
+    nu13 = 0.0 if t.plane_stress else (nu12 if t.transverse_isotropy else t.nu13)
+    nu23 = 0.0 if t.plane_stress else t.nu23
+    return MaterialDefinition(name=name, E1=E1, E2=E2, nu12=nu12, G12=G12, G13=t.G13, G23=t.G23, E3=E3, nu13=nu13, nu23=nu23, plane_stress=t.plane_stress,
                               strengths=strengths, f12_star=mat.f12_star, source=source, rights=rights, citation_lines=citations)
 
 

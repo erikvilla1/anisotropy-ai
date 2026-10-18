@@ -125,3 +125,25 @@ def test_admissible_ny_names_counts_that_hit_every_line():
     assert admissible_ny(250.0, [56.0, 194.0], 100) == [] or all(ny % 125 == 0 for ny in admissible_ny(250.0, [56.0, 194.0], 100))
     assert 125 in admissible_ny(250.0, [56.0, 194.0], 125)
     assert admissible_ny(140.0, [63.5, 76.5], 280) == [280]
+
+
+PLANE_STRESS_LINE = "plane_stress = false  # nu23 and the derived nu13 go to CalculiX's three-dimensional law as given (the committed records were made this way)"
+
+
+def test_plane_stress_writes_zero_through_thickness_poisson_ratios_and_refuses_the_given_ones():
+    from anisotropy_fea.spec import SpecError
+
+    assert NODAL.count(PLANE_STRESS_LINE) == 1
+    without_nu23 = NODAL.replace("nu23 = 0.45         # nominal, no source\n", "")
+    material = spec_material(to_si(parse_spec(without_nu23.replace(PLANE_STRESS_LINE, "plane_stress = true"))))
+    assert material.plane_stress and material.nu13 == 0.0 and material.nu23 == 0.0
+    assert material.E3 == material.E2 and material.G13 == pytest.approx(4688.43e6) and material.G23 == pytest.approx(3000e6)
+    assert not spec_material(to_si(parse_spec(NODAL))).plane_stress
+    with pytest.raises(SpecError, match="do not give nu23 or nu13"):
+        parse_spec(NODAL.replace(PLANE_STRESS_LINE, "plane_stress = true"))
+    with pytest.raises(SpecError, match="nu23 is required unless plane_stress = true"):
+        parse_spec(without_nu23)
+    with pytest.raises(SpecError, match="E3 is required"):
+        parse_spec(without_nu23.replace(PLANE_STRESS_LINE, "plane_stress = true").replace("transverse_isotropy = true", "transverse_isotropy = false"))
+    explicit_E3 = without_nu23.replace(PLANE_STRESS_LINE, "plane_stress = true\nE3 = 9000.0").replace("transverse_isotropy = true", "transverse_isotropy = false")
+    assert spec_material(to_si(parse_spec(explicit_E3))).E3 == pytest.approx(9000e6)
