@@ -54,5 +54,7 @@
   Code: \textcolor{ink}{\textbf{#1}} in #2, lines #3}\par\nopagebreak}
 % \filefrom{file}: caption above a listed file.
 \newcommand{\filefrom}[1]{\par\smallskip\noindent{\sffamily\footnotesize\color{muted}File: \textcolor{ink}{#1}}\par\nopagebreak}
+% \evidence{TAG}: the evidence tag after a value in the rebuild guide (INP, INP-derived, SPEC, CALC, CAE-CHECK, MANUAL p.N, GUI-SEEN, ASSUMED, OPEN).
+\newcommand{\evidence}[1]{{\sffamily\scriptsize\color{accent}[#1]}}
 % \verdict{text}: the boxed statement on the title page and at the head of the summary.
 \newcommand{\verdict}[1]{\colorbox{codebg}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small\color{ink}#1}}}

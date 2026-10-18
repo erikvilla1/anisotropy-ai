@@ -46,6 +46,7 @@ def load_module(name: str, path: Path):
 
 
 manual = load_module("anisotropy_manual_build", ROOT / "docs/manual/build.py")
+rebuild = load_module("anisotropy_models_rebuild", HERE / "rebuild.py")
 plot_model_module = load_module("anisotropy_fea_plot_model", ROOT / "fea/examples/plot_model.py")
 plot_deck_module = load_module("anisotropy_fea_plot_deck", ROOT / "fea/examples/plot_deck.py")
 # The manual lists the kernel's modules; a comparison document also lists the record machinery and the readers.
@@ -65,8 +66,8 @@ from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import coupled_nodes, expanded_layers, node_name, reference_node  # noqa: E402
 from anisotropy_fea.report import (COMPONENTS, GROUP_KIND, ComparisonRow, GroupSummary, comparison_rows, element_centroids,  # noqa: E402
-                                   laminate_check, not_reported, solve_record, summarize)
-from anisotropy_fea.spec import load_spec  # noqa: E402
+                                   laminate_check, model_facts, not_reported, solve_record, summarize)
+from anisotropy_fea.spec import load_spec, spec_material  # noqa: E402
 from anisotropy_fea.units import from_si  # noqa: E402
 
 escape, code, inline, number, convert, heading = manual.escape, manual.code, manual.inline, manual.number, manual.convert, manual.heading
@@ -298,6 +299,7 @@ def about_section(reading_exists: bool) -> str:
     rows = [
         (r"\ref{sec:summary}", "Does the kernel reproduce the reference solver on this model?", "the record and the kernel, run during the build"),
         (r"\ref{sec:model}", "What exactly was modelled?", r"the spec, the generated decks and the kernel's solution"),
+        (r"\ref{sec:rebuild}", "How do I rebuild it by hand in Abaqus/CAE or PrePoMax?", r"the deck's facts (\texttt{report.model\_facts}), the team's report template, the PrePoMax 2.6.0 manual"),
         (r"\ref{sec:clt}", "What does classical laminate theory say the answer is?", "the engine, run during the build"),
         (r"\ref{sec:theory}", "What are the kernel's equations and code?", r"\texttt{fea/docs/theory.md} and the \texttt{fea} source"),
         (r"\ref{sec:reference}", "What did the reference solver run, and how does its element differ?", "the record's provenance and the reference deck"),
@@ -421,6 +423,32 @@ def model_section(record: dict, record_path: Path, deck, solution, units: str, f
     out.append(r"\begin{center}\includegraphics[width=\linewidth,height=0.6\textheight,keepaspectratio]{figures/solution.png}\end{center}")
     out.append(r"{\small\color{muted}Mesh and deformed shape, the three membrane strains, the axial section force and the maximum-stress first-ply-failure map, all computed by the kernel while this document was built.}")
     return "\n\n".join(out)
+
+
+def rebuild_section(record: dict, record_path: Path, deck, solution, units: str) -> str:
+    """The step-by-step guide to recreating the model in Abaqus/CAE and PrePoMax, from the deck's facts (rebuild.py)."""
+    base = record_path.parent
+    spec_path = (base / record["spec"]).resolve() if not record["spec"].startswith("none") else None
+    material_lines, material_source, transverse = (), None, None
+    if spec_path is not None and spec_path.is_file():
+        spec = load_spec(spec_path)
+        material = spec_material(spec)
+        material_lines, material_source = material.citation_lines, f"{material.source}; rights class {material.rights}"
+        t = spec.material.transverse
+        mpa = lambda v: from_si(v, "stress", units)  # noqa: E731  the loaded spec is in SI
+        transverse = (f"G13 {mpa(t.G13):g}, G23 {mpa(t.G23):g} ({units.split('-')[1]}); "
+                      + ("transverse isotropy stated (E3 = E2, nu13 = nu12)" if t.transverse_isotropy else f"E3 {mpa(t.E3):g}, nu13 {t.nu13:g} given")
+                      + ("; plane_stress = true: nu13 = nu23 = 0 written for CalculiX" if t.plane_stress else f"; nu23 {t.nu23:g}"))
+    else:
+        spec_path = None
+    helpers = rebuild.Helpers(escape=escape, code=code, inline=inline, number=number, heading=heading, kv_table=kv_table, long_table=long_table,
+                              listing_text=listing_text)
+    context = rebuild.Context(facts=model_facts(deck, solution), deck=deck, units=units, kernel_deck=(base / record["deck_kernel"]).resolve(),
+                              reference_deck=(base / record["deck_reference"]).resolve(), kernel_sha256=record["deck_kernel_sha256"],
+                              reference_sha256=record["deck_reference_sha256"], solver_name=record["solver"]["name"], spec_path=spec_path,
+                              spec_material_lines=material_lines, spec_material_source=material_source, spec_transverse=transverse,
+                              record_title=record["title"], report_date=date.today().isoformat())
+    return rebuild.render(context, helpers)
 
 
 def clt_section(deck, solution, record: dict, rows: list[ComparisonRow], units: str) -> str:
@@ -653,6 +681,7 @@ def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, the
         r"\section{About this document}", about_section(reading_exists),
         r"\section{Does the kernel reproduce the reference solver?}\label{sec:summary}", summary_section(record, rows, problems, summaries, units),
         r"\section{The model}\label{sec:model}", model_section(record, record_path, deck, solution, units, figures),
+        r"\section{How to rebuild this model, step by step}\label{sec:rebuild}", rebuild_section(record, record_path, deck, solution, units),
         r"\section{Classical laminate theory, the hand check}\label{sec:clt}", clt_section(deck, solution, record, rows, units),
         r"\section{The kernel: equations and code}\label{sec:theory}",
         theory_section() if theory else r"Omitted in this build (\texttt{--no-theory}); the equations and code are in \texttt{fea/docs/theory.md} and the engine manual.",

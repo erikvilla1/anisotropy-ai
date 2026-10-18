@@ -40,6 +40,19 @@ A defect found and fixed while reading the pages: the reaction of a coupled grip
 
 `test_report.py`: every label shape parsed; the rows equal `compare_record` one for one (59 numbers, no `nan`); group statistics consistent with their rows and all within 0.3 % of each group's largest magnitude; element centroids in the record's units; the hand check equals the kernel to 1e-12 (strain) and 1e-9 (section force, reaction, ply stress) on the one-element free-edge coupon where both must coincide; on the committed record it sits within 1 % of the kernel's reaction and centre strain; a deck with no gripped rows is refused by name; the generator writes a LaTeX file for the committed record that starts and ends as a document, labels every section, states the verdict, lists the spec, prints the reading note and writes the two figures but no element map (one probe element).
 
+## The rebuild guide (same day, ADR-0031 amendment 1)
+
+- Scope: `anisotropy_fea.report.model_facts` (the deck's facts for a rebuild guide), `docs/models/rebuild.py` (Section 4 of every document in the team's template structure with evidence tags, Abaqus/CAE and PrePoMax 2.6 steps, keyword boxes quoted from both decks), the `\evidence` macro in the preamble, two more tests. The team's template is a local copy under `.local/abaqus/team-files/template/`; the PrePoMax 2.6.0 manual (v1.0.0, 6 September 2026) was downloaded from prepomax.fs.um.si and read for every PrePoMax step; the PrePoMax executable's resource strings were searched for a composite or layup dialog (none).
+- From `fea/`: `uv run python -m pytest -q -ra tests ../engine/tests`
+
+```text
+615 passed, 6 skipped in 64.08s
+```
+
+- Both documents rebuilt and every page rendered and read: the committed record's document is now 44 pages (Section 4 on pages 8 to 20), the local one 40 pages. On the team deck the facts extractor recovers the four partition lines the template states by hand, 15, 35.97, 44.03 and 65 mm, from the changes in node-row spacing and the gripped groups, and the seeds by number 15, 21, 8, 21, 15; the expanded stack lists ten plies with z from -0.5 to 0.5 mm and names the 0.2 mm double layer at the midplane, as the template does.
+- Defects found by reading the pages and fixed: a `%` inside an `\href` in a tabularx body comments out the rest of the row (the URL's `#` is now written `\#`); the spec's out-of-plane constants printed in Pa instead of the deck's MPa; a generated deck has no CAE job name and now cites the spec instead of OPEN; a hand-built deck's job and tool names are read from the heading comments.
+- UNVERIFIED: every Abaqus/CAE click path (tagged CAE-CHECK, no CAE available) and every PrePoMax click path of route B (tagged MANUAL p.N, quoted from the manual but not performed here); route A is the one this project has performed (GUI-SEEN).
+
 ## Not run, UNVERIFIED
 
 - CI: the new build step and artifact upload, until the first run of this pull request's checks.

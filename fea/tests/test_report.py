@@ -90,6 +90,46 @@ def test_laminate_check_refuses_a_deck_with_no_gripped_rows():
         laminate_check(deck, solution)
 
 
+def test_model_facts_of_the_generated_coupon():
+    """The facts a rebuild guide prints, read from the generated unnotched coupon deck (nodal grips, 10 by 125 grid)."""
+    from anisotropy_fea.report import model_facts
+
+    record = load_record(RECORD)
+    deck, solution = solve_record(record)
+    f = model_facts(deck, solution)
+    assert f.parts == (("Coupon", 1386, 1250, "S4R"),) and f.instances == (("Coupon-1", "Coupon"),)
+    assert f.extent_x == pytest.approx((0.0, 0.025)) and f.extent_y == pytest.approx((0.0, 0.25))
+    assert f.grid == (10, 125) and len(f.node_rows_y) == 126
+    assert f.partition_lines_y == pytest.approx((0.0, 0.056, 0.194, 0.25)) and f.row_counts == (28, 69, 28)
+    assert [(b[2], b[3], b[4]) for b in f.element_bands] == [(280, 1, 280), (690, 281, 970), (280, 971, 1250)]
+    assert f.edge_length_range == pytest.approx((0.002, 0.0025))
+    grips = {s.name: s for s in f.node_sets if s.name.startswith("Grip")}
+    assert grips["Grip-Bottom"].count == 319 and grips["Grip-Bottom"].y_range == pytest.approx((0.0, 0.056))
+    assert f.couplings == () and f.reference_nodes == () and f.loads == () and f.step == ("Step-1", False)
+    pulls = [b for b in f.boundaries if b.value]
+    assert len(pulls) == 1 and pulls[0].target == "Grip-Top" and pulls[0].dof_first == 2 and pulls[0].value == pytest.approx(0.001)
+    (section,) = f.sections
+    assert section.symmetric and section.layup_name == "Layup-1" and section.orientation == "Ori-1"
+    assert [p.angle_deg for p in section.listed] == [45, 0, -45, 90]
+    assert [p.angle_deg for p in section.expanded] == [45, 0, -45, 90, 90, -45, 0, 45]
+    assert section.expanded[0].z_bottom_m == pytest.approx(-section.total_thickness_m / 2) and section.expanded[-1].z_top_m == pytest.approx(section.total_thickness_m / 2)
+    assert section.expanded[3].z_top_m == pytest.approx(0.0, abs=1e-12)
+    assert section.angle_fractions == ((45.0, 2), (0.0, 2), (-45.0, 2), (90.0, 2))
+    assert "*output" in f.ignored_keywords
+
+
+def test_model_facts_of_the_coupled_grips_fixture():
+    from anisotropy_fea.report import model_facts
+
+    deck = read_deck(DECKS / "coupon-2x8-grips-im7-8552.inp", "mm-MPa")
+    f = model_facts(deck, solve_membrane(deck))
+    assert f.grid == (2, 8)
+    assert [(c.name, c.reference, c.slaves, c.dofs) for c in f.couplings] == [("Grip-Top", "Assembly.1", 3, (1, 2, 3, 4, 5, 6)), ("Grip-Bottom", "Assembly.2", 3, (1, 2, 3, 4, 5, 6))]
+    assert f.reference_nodes == (("Assembly.1", (pytest.approx(0.005), pytest.approx(0.08))), ("Assembly.2", (pytest.approx(0.005), pytest.approx(0.0))))
+    assert f.partition_lines_y == pytest.approx((0.0, 0.08)) and f.row_counts == (8,)  # the end rows are the grips: no inner partition
+    assert {s[0] for s in f.surfaces} == {"s_Surf-1", "s_Top_CNS_", "s_Bottom_CNS_"}
+
+
 def test_the_generator_writes_a_document_for_the_committed_record(tmp_path):
     """docs/models/build.py on the committed record, LaTeX only, without the twenty-page theory section."""
     pytest.importorskip("matplotlib")
@@ -98,8 +138,10 @@ def test_the_generator_writes_a_document_for_the_committed_record(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     tex = (tmp_path / "unnotched-im7-8552-nodal-calculix.tex").read_text(encoding="utf-8")
     assert tex.startswith(r"\documentclass") and tex.rstrip().endswith(r"\end{document}")
-    for label in ("sec:summary", "sec:model", "sec:clt", "sec:theory", "sec:reference", "sec:method", "sec:comparison", "sec:reading"):
+    for label in ("sec:summary", "sec:model", "sec:rebuild", "sec:clt", "sec:theory", "sec:reference", "sec:method", "sec:comparison", "sec:reading"):
         assert rf"\label{{{label}}}" in tex
+    assert tex.count(r"\evidence{INP}") > 20 and r"\evidence{MANUAL p.8}" in tex and r"\evidence{OPEN}" in tex  # the rebuild guide tags every value
+    assert "Ply table as entered (4 rows)" in tex and "Expanded stack (8 plies" in tex
     assert "59 of 59 compared values agree" in tex
     assert r"\filefrom" in tex and "unnotched-im7-8552-nodal.toml" in tex  # the spec is listed
     assert "Reading: the unnotched IM7/8552 coupon" in tex  # the reading note beside the record
