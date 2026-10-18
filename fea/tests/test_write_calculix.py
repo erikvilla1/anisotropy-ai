@@ -59,3 +59,11 @@ def test_the_committed_calculix_deck_matches_its_spec():
     text = write_calculix(build_model(spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})))
     committed = (SPECS.parent / "decks" / "generated" / "unnotched-im7-8552-nodal-ccx.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
     assert committed == text, "regenerate with examples/run_calculix.py and copy the deck into validation/decks/generated/"
+
+
+def test_plane_stress_puts_zero_poisson_ratios_in_the_engineering_constants_and_says_so():
+    text = write_calculix(build_model(order2(NODAL.replace("nu23 = 0.45         # nominal, no source\n", "")
+                                                  .replace("plane_stress = false", "plane_stress = true"))))
+    assert "*ELASTIC, TYPE=ENGINEERING CONSTANTS\n162095.744, 8963.184481, 8963.184481, 0.316, 0., 0., 4688.434959, 4688.43\n3000., 293." in text
+    assert "nu13 = nu23 = 0 written for plane stress, as Abaqus LAMINA and our kernel assume (plane_stress = true in the spec)" in text
+    assert "plane stress" not in write_calculix(build_model(order2()))
