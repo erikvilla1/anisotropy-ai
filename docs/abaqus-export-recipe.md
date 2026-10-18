@@ -40,6 +40,15 @@ Open questions for you to settle on your machine (each is UNVERIFIED by us):
 
 Request `S`, `E`, `SF`, `SE` as field output with "Output at shell section points: all plies" for the layup, run, then Report > Field Output at the element centroid for the probe element set and at nodes for `U` and `RF`, saved as `.rpt`. Tell us how the report labels the assembly-level reference nodes.
 
+## Route 3: what you did on 2026-10-16, and what it settled
+
+You saved Report > Field Output as CSV (`Test_01_S11.csv`, `Test_01_S22.csv`, `Test_01_Mises.csv`): one row per element and section point with the centroid coordinates. We read that format directly now (`fea/src/anisotropy_fea/abaqus_report.py`), so keep using it. It settled three of the questions above: values are at the element centroid (`IntPt` 1), `Layer = 1` with `SNEG` is the bottom ply, and S11, S22 of the outer plies come in the ply's material axes. What the files did not carry, and what would complete the record:
+
+- **All section points.** The export held only the outer faces (`SNEG` layer 1, `SPOS` layer 10), CAE's default. In Report > Field Output choose all section points (or at least one per layer), so the 45-degree plies are compared too; they are the ones that answer question 2 beyond doubt.
+- **S12** alongside S11 and S22, and **E** (strains) if the report dialog allows.
+- **RF** at the two reference points and **U** at a few nodes (a node report, same dialog, position: nodal).
+- The report blocks may repeat (your S11 file held three identical copies); that is fine, we check they agree.
+
 ## What we need with the numbers
 
 - The exact `.inp` that produced them (we check its SHA-256).

@@ -144,6 +144,10 @@ with the bottom and top faces of a ply equal, so one value per ply is kept, bott
 
 <!-- code: element_ply_states -->
 
+The von Mises stress of a ply's in-plane state, $`\sigma_\mathrm{M} = \sqrt{\sigma_1^2 - \sigma_1\sigma_2 + \sigma_2^2 + 3\tau_{12}^2}`$, is an invariant, the same in material or laminate axes, and is what Abaqus reports as S-Mises at a shell section point. It is computed by `ply_mises` for comparison records only; the engine's failure criteria, not Mises, judge a ply.
+
+<!-- code: ply_mises -->
+
 ## 7. First-ply failure
 
 The strength ratio $`R`$ of a ply is the factor on its stress at which the chosen criterion is met; the engine defines it for maximum stress, maximum strain, Tsai-Hill and Tsai-Wu ([engine theory](../../engine/docs/theory.md), Section 5) and exposes the per-face dispatch as `face_strength_ratio`, which the kernel calls with the ply's stress as the scaled part and nothing held. Over the mesh the smallest ratio is the first-ply-failure factor: the problem is linear, so the applied displacement or load multiplied by this factor fails that ply of that element first,

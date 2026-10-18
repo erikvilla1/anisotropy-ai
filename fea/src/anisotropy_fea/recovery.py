@@ -64,6 +64,15 @@ def element_ply_states(solution: MembraneSolution) -> PlyField:
     return PlyField(angles_deg=angles, strain_xy=strain_xy, stress_xy=stress_xy, strain_12=strain_12, stress_12=stress_12)
 
 
+def ply_mises(field: PlyField) -> list[np.ndarray]:
+    """Von Mises stress of each ply's in-plane state, element -> (plies, 1): an invariant, so the same in laminate or material axes;
+    Abaqus's S-Mises at a shell section point is this plane-stress value."""
+    out = []
+    for s in field.stress_12:
+        out.append(np.sqrt(s[:, 0] ** 2 - s[:, 0] * s[:, 1] + s[:, 1] ** 2 + 3.0 * s[:, 2] ** 2)[:, None])
+    return out
+
+
 def deck_f12_star(deck: Deck) -> float | None:
     """The Tsai-Wu interaction term the deck states (`*Fail Stress` sixth value), if every material states the same one."""
     values = {material.fail_stress.f_star for material in deck.materials.values() if material.fail_stress is not None}
