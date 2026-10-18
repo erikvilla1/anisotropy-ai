@@ -23,6 +23,8 @@ A case is a TOML file:
     1 = [1234.5, 12.3, -4.5]
     [expected.ply_strain_local."Coupon-1.1"]   # per ply: [eps_1, eps_2, gamma_12]
     2 = [0.004, -0.001, 0.002]
+    [expected.ply_mises."Coupon-1.1"]          # per ply: [von Mises of the in-plane ply stress]
+    1 = [1234.5]
     [expected.fpf.max_stress]             # first-ply failure by one criterion: the factor on the applied loading and, optionally, where and the mode
     ratio = 12.3
     element = "Coupon-1.1"                # omit element, ply and mode when identical plies tie (a uniform state)
@@ -30,10 +32,12 @@ A case is a TOML file:
     mode = "transverse tension"
 
 Comparison labels read `group[name][component]`, like the engine's, so a disagreement names exactly one number.
+A component written as `nan` was not reported by the source (an Abaqus report without S12, say) and is skipped.
 """
 
 from __future__ import annotations
 
+import math
 import tomllib
 from pathlib import Path
 
@@ -45,7 +49,7 @@ from anisotropy_engine.failure import CRITERIA
 from .abaqus_reader import read_deck
 from .membrane import solve_membrane
 from .model import Deck, ElementKey, NodeKey
-from .recovery import deck_f12_star, element_ply_states, strength_ratios
+from .recovery import deck_f12_star, element_ply_states, ply_mises, strength_ratios
 from .results import MembraneSolution
 from .units import from_si
 
@@ -56,7 +60,8 @@ GROUPS: dict[str, tuple[str | None, int, str]] = {
     "strain": (None, 3, "an element or *"),
     "section_force": ("force_per_length", 3, "an element or *"),
 }
-PLY_GROUPS: dict[str, str | None] = {"ply_stress_local": "stress", "ply_strain_local": None}
+# ply group -> (unit kind, vector length)
+PLY_GROUPS: dict[str, tuple[str | None, int]] = {"ply_stress_local": ("stress", 3), "ply_strain_local": (None, 3), "ply_mises": ("stress", 1)}
 FPF_FIELDS = ("ratio", "element", "ply", "mode")
 REQUIRED = ("title", "source", "units", "mesh", "expected")
 
@@ -96,13 +101,14 @@ def validate_case(case: dict) -> None:
         elif group in PLY_GROUPS:
             if not isinstance(rows, dict) or not rows:
                 raise ValueError(f"[expected.{group}] must be a table of element = {{ply = [values]}}")
+            length = PLY_GROUPS[group][1]
             for name, plies in rows.items():
                 if not isinstance(plies, dict) or not plies:
-                    raise ValueError(f"[expected.{group}.{name!r}] must be a table of ply number = [3 values]")
+                    raise ValueError(f"[expected.{group}.{name!r}] must be a table of ply number = [{length} values]")
                 for ply, vector in plies.items():
                     if not str(ply).isdigit() or int(ply) < 1:
                         raise ValueError(f"[expected.{group}.{name!r}] ply keys are numbers from 1 (bottom); got {ply!r}")
-                    _check_vector(f"[expected.{group}.{name!r}] ply {ply}", vector, 3)
+                    _check_vector(f"[expected.{group}.{name!r}] ply {ply}", vector, length)
         elif group == "fpf":
             if not isinstance(rows, dict) or not rows:
                 raise ValueError("[expected.fpf] must hold one table per criterion")
@@ -176,7 +182,7 @@ def fe_results(case: dict) -> tuple[dict[str, tuple[np.ndarray, float]], dict[st
                 vectors.update(_quantity(group, name, deck, solution))
             store(group, vectors, kind)
         elif group in PLY_GROUPS:
-            field = ply_field.stress_12 if group == "ply_stress_local" else ply_field.strain_12
+            field = {"ply_stress_local": ply_field.stress_12, "ply_strain_local": ply_field.strain_12, "ply_mises": ply_mises(ply_field)}[group]
             vectors = {}
             for name, plies in rows.items():
                 for element_label, e in _elements(name, solution):
@@ -185,7 +191,7 @@ def fe_results(case: dict) -> tuple[dict[str, tuple[np.ndarray, float]], dict[st
                         if k >= field[e].shape[0]:
                             raise ValueError(f"{group}[{element_label}][{ply}]: element has {field[e].shape[0]} plies")
                         vectors[f"{element_label}][{ply}"] = field[e][k]
-            store(group, vectors, PLY_GROUPS[group])
+            store(group, vectors, PLY_GROUPS[group][0])
         elif group == "fpf":
             f12_star = deck_f12_star(deck)
             for criterion in rows:
@@ -234,6 +240,8 @@ def compare(case: dict) -> tuple[list[Comparison], list[str]]:
             return
         got, scale = numbers[label]
         for i, w in enumerate(want):
+            if isinstance(w, float) and math.isnan(w):
+                continue  # not reported by the source
             allowed = tolerance * (abs(w) if w != 0 else scale)
             comparisons.append(Comparison(f"{label}[{i}]", float(w), float(got[i]), float(allowed)))
 
