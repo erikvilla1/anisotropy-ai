@@ -18,6 +18,8 @@ __pycache__/
 # Engine manual build output (rebuilt from sources)
 docs/manual/generated/
 docs/manual/build/
+# Model comparison documents (rebuilt from the records; docs/models/README.md)
+docs/models/build/
 
 # Local references and assistant-specific instructions
 .local/

@@ -1,0 +1,58 @@
+% Preamble shared by every model comparison document (docs/models/build.py pastes it into each generated .tex,
+% so a document is one self-contained file). The same families, colours and code style as the engine manual.
+
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=1in,headheight=14pt]{geometry}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{booktabs,array,xltabular}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{hyperref}
+
+\definecolor{accent}{HTML}{9A5A00}
+\definecolor{ink}{HTML}{1C1F22}
+\definecolor{muted}{HTML}{5D636A}
+\definecolor{codebg}{HTML}{F3F4F1}
+\definecolor{passgreen}{HTML}{2F6B3F}
+
+\hypersetup{colorlinks=true, linkcolor=ink, urlcolor=accent, citecolor=ink, pdfauthor={Anisotropy AI}}
+
+\titleformat{\section}{\sffamily\Large\bfseries\color{ink}}{\color{accent}\thesection}{0.7em}{}
+\titleformat{\subsection}{\sffamily\large\bfseries\color{ink}}{\color{accent}\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\sffamily\normalsize\bfseries\color{ink}}{\thesubsubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{2.2ex plus 1ex}{1.2ex}
+\titlespacing*{\subsection}{0pt}{2ex plus 1ex}{0.8ex}
+
+\setlist{nosep, leftmargin=1.4em, topsep=0.3ex}
+\setlength{\emergencystretch}{3em}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\renewcommand{\arraystretch}{1.25}
+
+\lstdefinestyle{engine}{
+  language=Python, basicstyle=\ttfamily\footnotesize, columns=fullflexible, keepspaces=true,
+  numbers=left, numberstyle=\tiny\color{muted}, numbersep=7pt,
+  backgroundcolor=\color{codebg}, frame=leftline, framerule=2pt, rulecolor=\color{accent},
+  xleftmargin=2.8em, framexleftmargin=2.2em, aboveskip=0.4ex, belowskip=1.2ex,
+  keywordstyle=\color{accent}\bfseries, commentstyle=\color{muted}\itshape,
+  stringstyle=\color{passgreen}, showstringspaces=false, breaklines=true}
+\lstnewenvironment{enginecode}[1][]{\lstset{style=engine,#1}}{}
+% Plain text files (a spec, a record, a deck header): the same box without Python highlighting.
+\lstdefinestyle{plain}{
+  language={}, basicstyle=\ttfamily\footnotesize, columns=fullflexible, keepspaces=true,
+  numbers=none, backgroundcolor=\color{codebg}, frame=leftline, framerule=2pt, rulecolor=\color{muted},
+  xleftmargin=1.2em, framexleftmargin=0.8em, aboveskip=0.4ex, belowskip=1.2ex, breaklines=true}
+\lstnewenvironment{plainfile}[1][]{\lstset{style=plain,#1}}{}
+
+% \codefrom{function}{file}{lines}: caption above a code listing.
+\newcommand{\codefrom}[3]{\par\smallskip\noindent{\sffamily\footnotesize\color{muted}%
+  Code: \textcolor{ink}{\textbf{#1}} in #2, lines #3}\par\nopagebreak}
+% \filefrom{file}: caption above a listed file.
+\newcommand{\filefrom}[1]{\par\smallskip\noindent{\sffamily\footnotesize\color{muted}File: \textcolor{ink}{#1}}\par\nopagebreak}
+% \verdict{text}: the boxed statement on the title page and at the head of the summary.
+\newcommand{\verdict}[1]{\colorbox{codebg}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small\color{ink}#1}}}
