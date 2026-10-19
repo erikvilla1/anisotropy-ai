@@ -241,7 +241,8 @@ def render(ctx: Context, h: Helpers) -> str:
             for line in ctx.spec_material_lines:
                 text, _, url = line.partition(": http")
                 url = "http" + url if url else ""
-                cite = h.inline(text) + (rf": \href{{{url.replace('#', r'\#')}}}{{{h.code(url)}}}" if url else "")  # a breakable, clickable URL (no % inside a tabularx body)
+                safe = url.replace("%", r"\%").replace("#", r"\#")  # neither % nor # may appear raw inside a tabularx body
+                cite = h.inline(text) + (rf": \href{{{safe}}}{{{h.code(url)}}}" if url else "")  # a breakable, clickable URL
                 rows.append(rf"\quad citation & {cite} & {tag('SPEC')} \\")
         else:
             rows.append(rf"Origin of values (datasheet, test, supplier) & not stated in the deck & {tag('OPEN')} \\")
