@@ -18,6 +18,7 @@ from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
+from anisotropy_fea.mesher import MeshError
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
 from anisotropy_fea.spec import SpecError, load_spec
 from anisotropy_fea.units import from_si
@@ -56,7 +57,7 @@ def main() -> None:
     try:
         spec = load_spec(args.spec)
         model = build_model(spec)
-    except SpecError as exc:
+    except (SpecError, MeshError) as exc:
         raise SystemExit(f"spec refused: {exc}") from None
     units = spec.units
     args.out.mkdir(parents=True, exist_ok=True)
@@ -90,10 +91,14 @@ def main() -> None:
             raise SystemExit(f"the kernel refused the generated deck: {exc}") from None
         print("written", plot_solution(deck, solution, units, args.out / f"{stem}-solved.png"))
         print("written", write_vtu(deck, solution, units, args.out / f"{stem}.vtu"))
-        reaction_set = "RF-Top" if model.couplings else "Grip-Top"
+        # under displacement control the moving grip carries the reaction; under force control the fixed grip does
+        moving = spec.loading.control == "displacement"
+        reaction_set = ("RF-Top" if moving else "RF-Bottom") if model.couplings else ("Grip-Top" if moving else "Grip-Bottom")
         rf = solution.reaction_of(deck.nsets[reaction_set])
+        applied = sum(load.value for load in model.loads)
+        residual = max(abs(solution.total_reaction[0]), abs(solution.total_reaction[1] + applied))
         report += f"\nkernel solve: reaction at {reaction_set} = [{from_si(rf[0], 'force', units):.6g}, {from_si(rf[1], 'force', units):.6g}] N; " \
-                  f"equilibrium residual {max(abs(solution.total_reaction)):.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n"
+                  f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n"
         field = element_ply_states(solution)
         for criterion in spec.output.fpf_criteria:
             try:

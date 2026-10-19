@@ -21,6 +21,10 @@ def test_the_committed_specs_load_and_convert_to_si():
         assert spec.si and spec.source_sha256 and spec.source_path == str(path)
         assert spec.geometry.length < 1.0  # metres now
         material = spec_material(spec)
+        if spec.material.library is None:
+            # the Kirsch plate: nominal isotropic constants written in the spec, no dataset to cite; its title and comments say so
+            assert "Kirsch" in spec.title and material.rights == "spec" and material.E1 == material.E2 and material.strengths is None
+            continue
         assert material.rights in ("open-publisher", "public-domain"), f"{path.name}: committed specs use public materials only (R-16)"
         assert material.E1 > 1e9 and material.strengths is not None and material.citation_lines
         plies = spec_plies(spec)

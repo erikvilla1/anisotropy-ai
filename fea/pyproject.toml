@@ -10,6 +10,11 @@ dependencies = [
     "pydantic>=2.11,<3",
 ]
 
+[project.optional-dependencies]
+mesh = [
+    "gmsh>=4.13",
+]
+
 [dependency-groups]
 dev = [
     "matplotlib>=3.11.2",
