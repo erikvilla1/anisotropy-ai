@@ -18,15 +18,10 @@ GENERATED = ROOT / "validation" / "decks" / "generated"
 sys.path.insert(0, str(ROOT / "tools"))
 from kirsch_hole import kirsch_polar, kirsch_xy  # noqa: E402
 
-def _has_gmsh() -> bool:
-    try:
-        import gmsh  # noqa: F401
-    except ImportError:
-        return False
-    return True
+from anisotropy_fea.mesher import gmsh_available  # noqa: E402
 
-
-needs_gmsh = pytest.mark.skipif(not _has_gmsh(), reason="Gmsh is not installed: from fea/ run `uv sync --extra mesh`")
+needs_gmsh = pytest.mark.skipif(gmsh_available() is None,
+                                reason="Gmsh is not available: from fea/ run `uv sync --extra mesh` (on Linux also apt install libglu1-mesa)")
 
 IM7 = (SPECS / "open-hole-im7-8552.toml").read_text(encoding="utf-8")
 KIRSCH = (SPECS / "open-hole-isotropic-kirsch.toml").read_text(encoding="utf-8")

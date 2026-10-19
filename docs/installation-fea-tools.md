@@ -23,14 +23,14 @@ odalNnotched-im7-8552-nodal-abaqus.inp` (written by `fea/examples/build_model.py
 
 ## Founder's Windows 11 machine (the steps, for a second machine)
 
-1. **Gmsh**: from `fea/`, `uv sync --extra mesh` (the extra declares `gmsh>=4.13`; PyPI's Windows wheel gave 4.15.2 on 2026-10-19). Check with `uv run python -c "import gmsh; print(gmsh.__version__)"`. Only `fea/examples/build_model.py` and `run_calculix.py` on an `open_hole_tension` spec need it; the committed decks and the validation cases do not.
+1. **Gmsh**: from `fea/`, `uv sync --extra mesh` (the extra declares `gmsh>=4.13`; PyPI's Windows wheel gave 4.15.2 on 2026-10-19). Check with `uv run python -c "import gmsh; print(gmsh.__version__)"`. Only `fea/examples/build_model.py`, `run_calculix.py` and `docs/models/build.py` on an `open_hole_tension` spec or record need it; the committed decks and the validation cases do not. On Ubuntu the wheel also needs the system library libGLU (`sudo apt-get install -y libglu1-mesa`); without it `import gmsh` raises `OSError` and `gmsh_available()` reports None.
 2. **CalculiX through PrePoMax** (recommended): download the portable zip from https://prepomax.fs.um.si/downloads/, unzip to a folder such as `C:\Tools\PrePoMax\`, and find the bundled solver under its `Solver` folder (`ccx_*.exe`). Set the environment variable `ANISOTROPY_CCX` to that executable's full path, or add the folder to `PATH`. PrePoMax needs .NET Framework 4.8. The bundled CalculiX version is recorded when installed (planned v2.6.0 stable).
    - Alternatives: the Windows builds listed on http://www.dhondt.de (bConverged, calculixforwin on SourceForge, the GE GitHub build) for a newer `ccx`; or WSL Ubuntu-24.04 with `sudo apt install calculix-ccx` (2.21), which our runner can only use through a wrapper script (not provided yet).
 3. **ParaView**: installer from https://www.paraview.org/download/. Open a `.vtu` from `.local/fea/scratch/vtk/` or any `ours/` folder under `.local/fea/`, press Apply, colour by a field, Warp By Vector on Displacement.
 
 ## Continuous integration (GitHub Actions, ubuntu-latest)
 
-The `fea` job runs `sudo apt-get update && sudo apt-get install -y calculix-ccx` (package in Ubuntu 24.04 universe, binary `/usr/bin/ccx`, version 2.21), prints `ccx -v` into the log (it exits with code 201 after printing, so the step tolerates that), then `uv sync --locked --extra mesh` so Gmsh is present (chunk A2). Tests that need a tool skip with a stated reason when it is absent, so a missing tool never fails the suite silently.
+The `fea` job runs `sudo apt-get update && sudo apt-get install -y calculix-ccx` (package in Ubuntu 24.04 universe, binary `/usr/bin/ccx`, version 2.21), prints `ccx -v` into the log (it exits with code 201 after printing, so the step tolerates that), then `uv sync --locked --extra mesh` so Gmsh is present (chunk A2; `libglu1-mesa` is installed beside CalculiX because the Gmsh wheel loads libGLU). The `manual` job installs the same library and runs the model documents with `--extra mesh`, since the open-hole record's document regenerates its mesh. Tests that need a tool skip with a stated reason when it is absent, so a missing tool never fails the suite silently.
 
 ## How the code finds the tools
 

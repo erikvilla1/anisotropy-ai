@@ -200,7 +200,7 @@ def gmsh_available() -> str | None:
     """The installed Gmsh version, or None. Gmsh is the optional extra `mesh`: from fea/, `uv sync --extra mesh`."""
     try:
         import gmsh
-    except ImportError:
+    except (ImportError, OSError):  # OSError: the wheel's shared library needs libGLU on Linux (apt install libglu1-mesa)
         return None
     return str(gmsh.__version__)
 
@@ -221,8 +221,9 @@ def gmsh_open_hole_plate(width: float, length: float, hole_diameter: float, elem
     """
     try:
         import gmsh
-    except ImportError:
-        raise MeshError("Gmsh is not installed; from fea/ run `uv sync --extra mesh` (the optional extra declared in pyproject.toml)") from None
+    except (ImportError, OSError) as exc:
+        raise MeshError("Gmsh is not available; from fea/ run `uv sync --extra mesh` (the optional extra declared in pyproject.toml); "
+                        f"on Linux the wheel also needs the system library libGLU (apt install libglu1-mesa). Python said: {exc}") from None
     if order not in (1, 2):
         raise MeshError("order must be 1 or 2")
     if circumferential < 8 or circumferential % 4:
