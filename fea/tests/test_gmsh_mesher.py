@@ -10,7 +10,8 @@ import pytest
 
 from anisotropy_fea.mesher import MeshError, gmsh_available, gmsh_open_hole_plate
 
-gmsh = pytest.importorskip("gmsh", reason="Gmsh is not installed: from fea/ run `uv sync --extra mesh`")
+pytestmark = pytest.mark.skipif(gmsh_available() is None,
+                                reason="Gmsh is not available: from fea/ run `uv sync --extra mesh` (on Linux also apt install libglu1-mesa)")
 
 W, L, D, H = 0.120, 0.360, 0.006, 0.003  # the Kirsch plate, metres
 
@@ -22,6 +23,8 @@ def plate(**overrides):
 
 
 def test_gmsh_is_reported_available_with_its_version():
+    import gmsh
+
     assert gmsh_available() == gmsh.__version__
 
 
