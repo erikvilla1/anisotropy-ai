@@ -8,7 +8,7 @@ Evidence that the finite element layer reads and solves what it claims (ADR-0029
 | `cases/` | validation cases: a deck, expected numbers, a source, a tolerance (ADR-0007 style); format at the top of `src/anisotropy_fea/cases.py` | always |
 | `abaqus/` (chunk 4) | comparison records: numbers the team exported from Abaqus, with provenance | the material is public |
 
-The team's own decks, exports and any record that names a material not in the public library stay in `.local/abaqus/` and are never committed (AGENTS.md). The local test `tests/test_local_tension_deck.py` reads them when present.
+The team's own decks, exports and any record that names a material not in the public library stay under `.local/fea/<tool>/<test>/` (ADR-0032) and are never committed (AGENTS.md). The local test `tests/test_local_tension_deck.py` reads them when present.
 
 ## Fixtures
 

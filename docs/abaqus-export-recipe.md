@@ -57,7 +57,7 @@ You saved Report > Field Output as CSV (`Test_01_S11.csv`, `Test_01_S22.csv`, `T
 
 ## What we do with them
 
-A comparison record (numbers only, with the provenance above) under `fea/validation/abaqus/` when the material is from the public library, otherwise under `.local/abaqus/` where it stays private. The first comparison note sets the agreement targets and states what did and did not match.
+A comparison record (numbers only, with the provenance above) under `fea/validation/abaqus/` when the material is from the public library, otherwise under `.local/fea/abaqus/<test>/comparison/` where it stays private (ADR-0032). The first comparison note sets the agreement targets and states what did and did not match.
 
 ## A note on the current tension coupon
 

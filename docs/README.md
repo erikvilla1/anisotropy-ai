@@ -21,6 +21,7 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | How does the website call the API? | [Chunk 2 walkthrough](walkthroughs/chunk-2-calculator.md) and [calculator component card](components/calculator.md) |
 | How do we solve for moments under a curvature constraint? | [Chunk 3 walkthrough](walkthroughs/chunk-3-constrained-analysis.md) and [analysis card](components/prescribed-curvature.md) |
 | What do AI agents read before working here? | [Agent skills](agents/README.md) |
+| Where do the team's FEA files, our models, and the homework files go? | [ADR-0032](decisions/ADR-0032-local-workspace-layout-by-tool-and-test.md) and the [workspace-layout skill](agents/skills/workspace-layout/SKILL.md) |
 | All of the above as one typeset PDF | [Engine manual](manual/) |
 | The complete argument for one finite element model comparison: model, theory, code, reference solver, every number and its error | [Model comparison documents](models/), one per record |
 | Where do material values come from? | The material data documents below |
@@ -84,6 +85,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0029](decisions/ADR-0029-finite-elements-own-membrane-kernel-validated-against-abaqus.md) | Finite elements start with our own laminate membrane kernel solving the team's Abaqus decks on their mesh, numbers-only comparison records against their runs; Gmsh and our deck writer later (proposed, amended 2026-10-15) |
 | [0030](decisions/ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) | Coupon models are generated from a parametric spec; CalculiX is the independent reference solver while Abaqus is unavailable (proposed) |
 | [0031](decisions/ADR-0031-one-generated-document-per-model-comparison.md) | Every model comparison gets its own generated LaTeX document, separate from the manual (proposed) |
+| [0032](decisions/ADR-0032-local-workspace-layout-by-tool-and-test.md) | Local finite element files sit test by test under each tool with team, ours and comparison folders; homework assignments and the code that solves them share folder names (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 

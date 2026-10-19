@@ -5,10 +5,10 @@ From the repository root:
 
     uv run --project fea python docs/models/build.py fea/validation/records/unnotched-im7-8552-nodal-calculix.toml
     uv run --project fea python docs/models/build.py --all                 # every committed record
-    uv run --project fea python docs/models/build.py .local/abaqus/comparisons/tension-test-abaqus.toml
+    uv run --project fea python docs/models/build.py .local/fea/abaqus/tension-coupon/comparison/tension-test-abaqus.toml
 
 A committed record's document is written to docs/models/build/<record>/ (git-ignored, rebuilt like the manual); a
-record under .local/ goes to .local/model-reports/<record>/ and stays there, since its material may not be public. The
+record under .local/ goes to report/<record>/ beside the record (ADR-0032) and stays there, since its material may not be public. The
 LaTeX file is self-contained; when Tectonic is installed the PDF is compiled next to it. The prose, equations and code
 listings come from the same converters as the engine manual (docs/manual/build.py), so the two cannot disagree. Every
 number in the document is the reference solver's, the kernel's, or the engine's, computed while the document is built.
@@ -649,7 +649,7 @@ def output_dir(record_path: Path, requested: Path | None) -> Path:
     if requested is not None:
         return requested
     if ".local" in record_path.resolve().parts:
-        return ROOT / ".local/model-reports" / record_path.stem
+        return record_path.parent / "report" / record_path.stem
     return HERE / "build" / record_path.stem
 
 
@@ -714,7 +714,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("record", type=Path, nargs="?", help="a comparison record (TOML)")
     parser.add_argument("--all", action="store_true", help="every committed record under fea/validation/records")
-    parser.add_argument("--out", type=Path, default=None, help="output folder (default: docs/models/build/<record>, or .local/model-reports/<record> for a local record)")
+    parser.add_argument("--out", type=Path, default=None, help="output folder (default: docs/models/build/<record>, or <record folder>/report/<record> for a local record)")
     parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX only")
     parser.add_argument("--no-theory", action="store_true", help="leave out the kernel theory and code section")
     parser.add_argument("--full-tables", action="store_true", help=f"print every compared number even when there are more than {FULL_TABLE_LIMIT}")

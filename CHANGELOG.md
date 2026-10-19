@@ -4,9 +4,10 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ## [Unreleased]
 
-### Changed
 
+### Changed
 - Hermes is no longer part of the repository: the `.agents/skills` junction, its rows in `docs/agents/README.md` and its metadata in the `project-rules` skill are removed, and migration 0003 renames the run-record actor `hermes` to `founder-agent`, rewriting existing rows (the one statement for which the immutability trigger is suspended) and replacing the check constraint (ADR-0028).
+- Local files are laid out by tool and test: `.local/fea/<abaqus|calculix-prepomax>/<test>/{team,ours,comparison}/`, with the same test name under every tool, and course homework as `.local/homework/assignments/<HW>/` beside `.local/homework/code/<HW>/`. A local comparison document now builds to `report/` beside its record; tests, examples, tools and documents point at the new paths; the `workspace-layout` skill tells agents where to file new tests and homework (ADR-0032).
 
 ### Fixed
 
