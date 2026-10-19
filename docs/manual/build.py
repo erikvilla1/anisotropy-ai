@@ -325,13 +325,14 @@ def validation() -> str:
         total += count
         agreeing += ok
         verdict = rf"\textcolor{{passgreen}}{{{ok}}}" if ok == count else rf"\textcolor{{red}}{{\textbf{{{ok}}}}}"
-        rows.append(rf"{inline(case['title'])} & {inline(case['source'].rstrip('.'))} & {count} & {verdict} & {code(path.stem)} \\")
+        # a title that starts with "[" would be read as the optional argument of the previous row's \\, so every row opens with {}
+        rows.append(rf"{{}}{inline(case['title'])} & {inline(case['source'].rstrip('.'))} & {count} & {verdict} & {code(path.stem)} \\")
     summary = (rf"The engine was run on every validation case while this manual was built. "
                rf"{agreeing} of {total} values from {len(paths)} cases agree with their sources within each case's tolerance. "
                rf"Cases are stored in {code('engine/validation/cases')}; see {code('engine/validation/README.md')} to add one. "
                rf"Each problem has its own generated document with every step, intermediate number and the source's answers "
                rf"({code('docs/problems/build.py')}, ADR-0033); this table is the index of what has been solved.")
-    table_tex = (r"{\scriptsize\begin{xltabular}{\linewidth}{>{\hsize=1.1\hsize}Y>{\hsize=0.9\hsize}Yrrl}\toprule" + "\n"
+    table_tex = (r"{\scriptsize\begin{xltabular}{\linewidth}{YYrrl}\toprule" + "\n"
                  + r"\textbf{Problem} & \textbf{Source} & \textbf{Values} & \textbf{Agree} & \textbf{Case} \\\midrule\endhead" + "\n"
                  + "\n".join(rows) + "\n" + r"\bottomrule\end{xltabular}}")
     return summary + "\n\n" + table_tex
