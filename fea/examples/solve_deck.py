@@ -1,7 +1,7 @@
 """Solve an Abaqus deck with the membrane kernel and print reactions, reference-node displacements and strain ranges.
 
     uv run python examples/solve_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
-    uv run python examples/solve_deck.py ../.local/abaqus/Tension-test.inp --units mm-MPa
+    uv run python examples/solve_deck.py ../.local/fea/abaqus/tension-coupon/team/Tension-test.inp --units mm-MPa
 
 Results print in the deck's units. Material values are never printed here; use deck_summary.py for those.
 """
