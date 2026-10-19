@@ -345,6 +345,17 @@ def material_rows(name: str, lamina, units: Units, solution) -> list[tuple[str, 
     if library is not None:
         rows.append(("Library dataset", escape(f"{library.material_id} / {library.dataset_id} (record {library.record_revision}); rights class {library.rights}; {library.citation}")))
         rows += [("Cited value", escape(f"{v.role} = {v.source_value:g} {v.source_unit} ({v.basis}), page {v.page}: {v.reference_url}")) for v in library.values]
+    derived = solution.constituents.get(name)
+    if derived is not None:
+        modulus = units.text("modulus")
+        rows.insert(0, ("Stated by", "fiber, matrix and fiber volume ratio; the constants above are the micromechanics estimates of Step 0"))
+        rows += [(r"Fiber $E_{1f}$, $E_{2f}$, $G_{12f}$, $\nu_{12f}$",
+                  ", ".join(number(float(units.shown(v, "modulus"))) + " " + modulus for v in (derived.fiber.E1, derived.fiber.E2, derived.fiber.G12)) + f", {number(derived.fiber.nu12)}"),
+                 (r"Matrix $E_m$, $\nu_m$, $G_m = E_m / 2(1 + \nu_m)$",
+                  f"{number(float(units.shown(derived.matrix.E, 'modulus')))} {modulus}, {number(derived.matrix.nu)}, {number(float(units.shown(derived.matrix.G, 'modulus')))} {modulus}"),
+                 (r"$V_f$, $V_m$", f"{number(derived.Vf)}, {number(derived.Vm)}"),
+                 (r"Model for $E_2$", escape(derived.E2_model) + (rf", $\xi = {number(derived.xi_E2)}$" if derived.xi_E2 is not None else "")),
+                 (r"Model for $G_{12}$", escape(derived.G12_model) + (rf", $\xi = {number(derived.xi_G12)}$" if derived.xi_G12 is not None else ""))]
     return rows
 
 
@@ -414,6 +425,27 @@ def steps_section(case: dict, solution, units: Units, theory: bool) -> str:
             out.append(render_theory(fragment))
             out.append(r"\paragraph{For this problem.}")
         out.extend(body)
+
+    # 0 lamina constants from constituents, when the case states a material that way
+    if solution.constituents:
+        body = []
+        for name, derived in solution.constituents.items():
+            tag = "" if len(materials) == 1 else rf" ({escape(name)})"
+            m = units.text("modulus")
+            body.append(rf"\textbf{{Rule of mixtures{tag}.}} $E_1 = V_f E_{{1f}} + V_m E_m = {mnumber(derived.Vf)} \times {mnumber(float(units.shown(derived.fiber.E1, 'modulus')))} + "
+                        rf"{mnumber(derived.Vm)} \times {mnumber(float(units.shown(derived.matrix.E, 'modulus')))} = {mnumber(float(units.shown(derived.E1, 'modulus')))}${units.math('modulus')}; "
+                        rf"$\nu_{{12}} = {mnumber(derived.Vf)} \times {mnumber(derived.fiber.nu12)} + {mnumber(derived.Vm)} \times {mnumber(derived.matrix.nu)} = {mnumber(derived.nu12)}$.")
+            body.append(rf"\textbf{{Transverse modulus{tag}, model {escape(derived.E2_model)}"
+                        + (rf" with $\xi = {mnumber(derived.xi_E2)}$" if derived.xi_E2 is not None else "") + rf".}} $E_2 = {mnumber(float(units.shown(derived.E2, 'modulus')))}${units.math('modulus')} "
+                        rf"from $E_{{2f}} = {mnumber(float(units.shown(derived.fiber.E2, 'modulus')))}$ and $E_m = {mnumber(float(units.shown(derived.matrix.E, 'modulus')))}${units.math('modulus')}"
+                        + (rf" ($E'_m = {mnumber(float(units.shown(derived.matrix.E / (1 - derived.matrix.nu**2), 'modulus')))}${units.math('modulus')})" if derived.E2_model == "series_constrained" else "") + ".")
+            body.append(rf"\textbf{{In-plane shear modulus{tag}, model {escape(derived.G12_model)}"
+                        + (rf" with $\xi = {mnumber(derived.xi_G12)}$" if derived.xi_G12 is not None else "") + rf".}} $G_{{12}} = {mnumber(float(units.shown(derived.G12, 'modulus')))}${units.math('modulus')} "
+                        rf"from $G_{{12f}} = {mnumber(float(units.shown(derived.fiber.G12, 'modulus')))}$ and $G_m = {mnumber(float(units.shown(derived.matrix.G, 'modulus')))}${units.math('modulus')}.")
+            body.append(rf"Resulting lamina{tag}: $E_1 = {mnumber(float(units.shown(derived.E1, 'modulus')))}$, $E_2 = {mnumber(float(units.shown(derived.E2, 'modulus')))}$, "
+                        rf"$G_{{12}} = {mnumber(float(units.shown(derived.G12, 'modulus')))}${units.math('modulus')}, $\nu_{{12}} = {mnumber(derived.nu12)}$, $\nu_{{21}} = {mnumber(derived.nu21)}$. "
+                        r"The steps below use these constants.")
+        step("Step 0. Lamina constants from fiber and matrix", "Lamina constants from fiber and matrix", body)
 
     # 1 ply stiffness
     body = []

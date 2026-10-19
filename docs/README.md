@@ -88,6 +88,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0031](decisions/ADR-0031-one-generated-document-per-model-comparison.md) | Every model comparison gets its own generated LaTeX document, separate from the manual (proposed) |
 | [0032](decisions/ADR-0032-local-workspace-layout-by-tool-and-test.md) | Local finite element files sit test by test under each tool with team, ours and comparison folders; homework assignments and the code that solves them share folder names (proposed) |
 | [0033](decisions/ADR-0033-one-generated-document-per-solved-problem.md) | Every solved problem gets its own generated document; the manual keeps one summary table (proposed) |
+| [0034](decisions/ADR-0034-micromechanics-models-stated-by-the-caller.md) | Lamina constants from fiber and matrix: rule of mixtures, series models, Halpin-Tsai and the square-array combination model, each named by the caller (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
