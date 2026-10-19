@@ -2,7 +2,7 @@
 
 Each file in `cases/` is one solved problem: the inputs, and the answers from a source independent of this code (a textbook, an answer key, and later our own lab measurements). `tests/test_validation_cases.py` runs every case on each `uv run pytest`. A case fails when the engine and the source disagree by more than the case's tolerance.
 
-Together these cases are the evidence that the engine gives the right numbers, and they show which kinds of problems it can already solve.
+Together these cases are the evidence that the engine gives the right numbers, and they show which kinds of problems it can already solve. Each case also has a generated document with every step, intermediate number and the source's answers: `uv run --project fea python docs/problems/build.py --all` from the repository root (`docs/problems/README.md`, ADR-0033).
 
 ## Add a case
 

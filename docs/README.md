@@ -11,6 +11,7 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | How do we read the team's Abaqus decks, solve them, and what do we refuse? | [Finite element card](components/fea.md), [finite element theory](../fea/docs/theory.md), [what the team exports](abaqus-export-recipe.md) |
 | How do we build our own coupon models, and which tools do they need? | [ADR-0030](decisions/ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), the specs under `fea/validation/specs/`, [installing the tools](installation-fea-tools.md) |
 | Does it work, and how do we know? | [Evaluation reports](evaluations/) and [validation cases](../engine/validation/) |
+| What problems has the engine solved, and how, step by step? | [Solved problem documents](problems/), one per validation case, with `index.md` as the list |
 | What changed, and when? | [Changelog](../CHANGELOG.md) and merged pull requests |
 | What could go wrong? | [Risk register](risks/risk_register.md) |
 | How is each result calculated? | [Engine theory](../engine/docs/theory.md) |
@@ -86,6 +87,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0030](decisions/ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) | Coupon models are generated from a parametric spec; CalculiX is the independent reference solver while Abaqus is unavailable (proposed) |
 | [0031](decisions/ADR-0031-one-generated-document-per-model-comparison.md) | Every model comparison gets its own generated LaTeX document, separate from the manual (proposed) |
 | [0032](decisions/ADR-0032-local-workspace-layout-by-tool-and-test.md) | Local finite element files sit test by test under each tool with team, ours and comparison folders; homework assignments and the code that solves them share folder names (proposed) |
+| [0033](decisions/ADR-0033-one-generated-document-per-solved-problem.md) | Every solved problem gets its own generated document; the manual keeps one summary table (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 

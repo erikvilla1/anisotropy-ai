@@ -20,6 +20,8 @@ docs/manual/generated/
 docs/manual/build/
 # Model comparison documents (rebuilt from the records; docs/models/README.md)
 docs/models/build/
+# Solved problem documents (rebuilt from the cases; docs/problems/README.md)
+docs/problems/build/
 
 # Local references and assistant-specific instructions
 .local/
