@@ -11,15 +11,15 @@ from anisotropy_engine.units import DEG_F, INCH, PSI
 CASES = Path(__file__).parents[1] / "validation" / "cases"
 
 
-def test_library_file_is_a_schema_1_export_with_the_25_public_materials():
+def test_library_file_is_a_schema_1_export_with_the_26_public_materials():
     data = load_library()
     assert data["schemaVersion"] == 1
     ids = {d["materialId"] for d in data["datasets"]}
-    assert len(ids) == 25
+    assert len(ids) == 26
     assert len({d["datasetId"] for d in data["datasets"]}) == len(data["datasets"])
     summaries = list_datasets()
     assert {s["material_id"] for s in summaries} == ids
-    assert sum(s["primary"] for s in summaries) == 25
+    assert sum(s["primary"] for s in summaries) == 26
 
 
 def test_im7_8552_defaults_to_the_ncamp_dataset_and_converts_printed_units_to_si():
