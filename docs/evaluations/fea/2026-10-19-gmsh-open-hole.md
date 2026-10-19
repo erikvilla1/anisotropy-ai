@@ -65,4 +65,5 @@ probe element hole_top (element 1658): CalculiX mean strain [-0.004078, 0.001072
 ## Not run, and UNVERIFIED
 
 - Not run: Abaqus on either generated deck (the team has not run them); the website and API suites (no change there).
-- UNVERIFIED: the article number of the Kirsch solution in Timoshenko and Goodier (cited by chapter; no copy in the reference archive); whether the committed Gmsh decks regenerate to the same text on Linux (CI runs the check with the `mesh` extra; the rounding and renumbering were added for it); opening `open-hole-im7-8552-ccx.inp` and its `.frd` in PrePoMax was not done in this session.
+- Verified after the first CI run: the committed Gmsh decks regenerate to the same text on Ubuntu (the `fea` job's `test_open_hole.py` passed once `libglu1-mesa` was installed; the first run could not import the Gmsh wheel without it), and the `manual` job builds the open-hole document with the `mesh` extra.
+- UNVERIFIED: the article number of the Kirsch solution in Timoshenko and Goodier (cited by chapter; no copy in the reference archive); opening `open-hole-im7-8552-ccx.inp` and its `.frd` in PrePoMax was not done in this session.
