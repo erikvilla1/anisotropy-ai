@@ -181,7 +181,7 @@ const chenSource: CitedMaterial["source"] = {
   accessed: "2026-10-18", sha256: "90c28413213c8c76a96befed174d019b39648b1b5cadb21affdae551e89f0233", page: 99, printedPage: 79,
   verification: "Tables 3.1 and 3.2 read from the PDF text layer and checked against the rendered page (PDF p. 99, printed p. 79) on 2026-10-18; the fabric row matches the team's Abaqus deck constants exactly.",
   rights: "licensed-reference",
-  rightsEvidence: "Copyright Zhi Ming Chen, 2015, all rights reserved (title verso). A public copy on eScholarship could not be confirmed on 2026-10-18 (the search link is recorded, not a document link). Individual values cited by table and page; the dissertation is not copied. Founder to confirm the class.",
+  rightsEvidence: "Copyright Zhi Ming Chen, 2015, all rights reserved (title verso). Read through the cofounder's university access; a public copy on eScholarship could not be confirmed on 2026-10-18 or 2026-10-20 (the search link is recorded, not a document link). Individual values cited by table and page; the dissertation is not copied. Class confirmed by the founder on 2026-10-20.",
 };
 const chenProp = (key: string, label: string, value: number, unit: string, direction: string, table: string, symbol?: string): CitedProperty => ({
   key, label, value, unit, direction, symbol: symbol ?? key, basis: "Manufacturer-provided value, as reported in the dissertation",

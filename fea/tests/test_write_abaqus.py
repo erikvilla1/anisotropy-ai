@@ -96,7 +96,8 @@ def test_force_control_deck_carries_the_consistent_loads_and_balances(tmp_path):
     assert solution.reaction_of(deck.nsets["Grip-Bottom"])[1] == pytest.approx(-5000.0, rel=1e-10)
 
 
-@pytest.mark.parametrize("name", ["unnotched-im7-8552-nodal", "unnotched-im7-8552-coupling", "compression-im7-8552"])
+@pytest.mark.parametrize("name", ["unnotched-im7-8552-nodal", "unnotched-im7-8552-coupling", "compression-im7-8552",
+                                  "tension-coupon-x840-nodal", "tension-coupon-x840-coupling"])
 def test_the_committed_generated_decks_match_their_specs(name):
     """A committed deck is what the writer produces from its spec today; regenerate it when the spec or the writer changes."""
     text = write_abaqus(build_model(load_spec(SPECS / f"{name}.toml")))

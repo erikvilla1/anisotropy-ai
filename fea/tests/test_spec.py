@@ -25,10 +25,15 @@ def test_the_committed_specs_load_and_convert_to_si():
             # the Kirsch plate: nominal isotropic constants written in the spec, no dataset to cite; its title and comments say so
             assert "Kirsch" in spec.title and material.rights == "spec" and material.E1 == material.E2 and material.strengths is None
             continue
-        assert material.rights in ("open-publisher", "public-domain"), f"{path.name}: committed specs use public materials only (R-16)"
+        # A committed spec names a library record whose values may be cited publicly: public-domain, open-publisher, or a licensed
+        # reference cited by table and page (ADR-0018; ADR-0030 amendment 4). User-supplied data and explicit constants stay local (R-16).
+        assert material.rights in ("open-publisher", "public-domain", "licensed-reference"), f"{path.name}: committed specs cite library materials only (R-16)"
         assert material.E1 > 1e9 and material.strengths is not None and material.citation_lines
         plies = spec_plies(spec)
-        assert len(plies) == 8 and plies[0].thickness_m == pytest.approx(0.18288e-3)
+        if spec.material.library == "im7-8552":
+            assert len(plies) == 8 and plies[0].thickness_m == pytest.approx(0.18288e-3)
+        else:
+            assert spec.material.library == "x840-z60-pw" and len(plies) == 10 and plies[0].thickness_m == pytest.approx(0.1e-3)
 
 
 def test_units_are_converted_once_and_only_dimensioned_numbers_change():
