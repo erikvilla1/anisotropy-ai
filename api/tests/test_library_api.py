@@ -17,7 +17,7 @@ def test_the_library_lists_every_dataset_and_whether_it_can_be_analyzed():
     response = client.get("/v1/materials")
     assert response.status_code == 200
     rows = response.json()
-    assert len({r["material_id"] for r in rows}) == 25
+    assert len({r["material_id"] for r in rows}) == 26
     im7 = [r for r in rows if r["material_id"] == "im7-8552"]
     assert [r["dataset_id"] for r in im7] == ["ncamp-im7-8552-2019-rtd-measured-v1", "nasa-tm-20230001560-im7-8552-rt-measured-v1"]
     assert im7[0]["primary"] and not im7[1]["primary"] and all(r["elastic_inputs"] for r in im7)

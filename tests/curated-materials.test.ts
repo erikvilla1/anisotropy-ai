@@ -13,7 +13,7 @@ import { buildCatalog } from "../services/material-monitor/catalog";
 
 test("every original record is explicitly curated or archived; public values have complete citations", () => {
   const active = curatedMaterials.map(m => m.id);
-  assert.equal(active.length, 25);
+  assert.equal(active.length, 26);
   assert.equal(Object.keys(archivedMaterialReasons).length, 13);
   assert.deepEqual([...active.filter(id => materials.some(m => m.id === id)), ...Object.keys(archivedMaterialReasons)].sort(), materials.map(m => m.id).sort());
   for (const m of curatedMaterials.flatMap(materialDatasets)) {
