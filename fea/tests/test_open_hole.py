@@ -85,7 +85,8 @@ def test_the_written_deck_reads_back_and_the_kernel_solves_it(tmp_path):
 
 
 @needs_gmsh
-@pytest.mark.parametrize("name", ["open-hole-im7-8552-abaqus", "open-hole-isotropic-kirsch-abaqus"])
+@pytest.mark.parametrize("name", ["open-hole-im7-8552-abaqus", "open-hole-isotropic-kirsch-abaqus", "open-hole-coupon-x840-coupling-abaqus",
+                                  "open-hole-coupon-x840-nodal-abaqus"])
 def test_the_committed_open_hole_decks_match_their_specs(name):
     spec_name = name.removesuffix("-abaqus")
     text = write_abaqus(build_model(load_spec(SPECS / f"{spec_name}.toml")))
@@ -94,20 +95,22 @@ def test_the_committed_open_hole_decks_match_their_specs(name):
 
 
 @needs_gmsh
-def test_the_committed_open_hole_calculix_deck_matches_its_spec():
+@pytest.mark.parametrize("name", ["open-hole-im7-8552", "open-hole-coupon-x840-nodal"])
+def test_the_committed_open_hole_calculix_deck_matches_its_spec(name):
     from anisotropy_fea.write_calculix import write_calculix
 
-    spec = load_spec(SPECS / "open-hole-im7-8552.toml")
+    spec = load_spec(SPECS / f"{name}.toml")
     spec2 = spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})
     text = write_calculix(build_model(spec2))
-    committed = (GENERATED / "open-hole-im7-8552-ccx.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
+    committed = (GENERATED / f"{name}-ccx.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
     assert committed == text, "regenerate with examples/build_model.py --target both and copy the deck into validation/decks/generated/"
     assert "*ELEMENT, TYPE=S8R" in text and "NSET=Hole" in text
 
 
 def test_the_committed_open_hole_decks_are_what_the_kirsch_case_and_prepomax_read():
     """Without Gmsh the decks still exist and read back: the validation case needs no mesher."""
-    for name, probe, hole in (("open-hole-im7-8552-abaqus", "Probe-far", 32), ("open-hole-isotropic-kirsch-abaqus", "Probe-far_side", 60)):
+    for name, probe, hole in (("open-hole-im7-8552-abaqus", "Probe-far", 32), ("open-hole-isotropic-kirsch-abaqus", "Probe-far_side", 60),
+                              ("open-hole-coupon-x840-coupling-abaqus", "Probe-far", 32)):
         deck = read_deck(GENERATED / f"{name}.inp", "mm-MPa")
         assert len(deck.elsets[probe]) == 1 and len(deck.nsets["Hole"]) == hole
 

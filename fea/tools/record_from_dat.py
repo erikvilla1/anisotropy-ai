@@ -1,10 +1,10 @@
 """Turn a CalculiX run of one of our specs into a committed comparison record: numbers plus provenance (ADR-0030, ADR-0007).
 
-    uv run python tools/record_from_dat.py validation/specs/unnotched-im7-8552-nodal.toml ../.local/fea/calculix-prepomax/unnotched-im7-8552/ours/unnotched-s8r.dat \
-        --deck-reference validation/decks/generated/unnotched-im7-8552-nodal-ccx.inp \
-        --deck-kernel validation/decks/generated/unnotched-im7-8552-nodal-abaqus.inp \
+    uv run python tools/record_from_dat.py validation/specs/tension-coupon-x840-nodal.toml ../.local/fea/calculix-prepomax/tension-coupon/ours/tension-coupon-x840-nodal-ccx.dat \
+        --deck-reference validation/decks/generated/tension-coupon-x840-nodal-ccx.inp \
+        --deck-kernel validation/decks/generated/tension-coupon-x840-nodal-abaqus.inp \
         --version 2.22 --run-by "Erik Villa" --machine "founder Windows 11, PrePoMax v2.6.0 bundle" \
-        --tolerance 0.03 --floor 0.02 --element-probes centre --out validation/records/unnotched-im7-8552-nodal-calculix.toml
+        --tolerance 0.03 --floor 0.02 --element-probes centre --out validation/records/tension-coupon-x840-nodal-calculix.toml
 
 The reference deck is the one CalculiX ran (order 2, S8R); the kernel deck is the order-1 twin on the same corner nodes.
 The record stores both digests, so a changed deck is noticed. The .dat itself stays out of the repository.

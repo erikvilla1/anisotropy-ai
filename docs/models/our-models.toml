@@ -1,0 +1,26 @@
+# Our coupon models in one folder for the team (docs/models/share.py, ADR-0035 amendment 2). Paths are relative to the
+# repository root; the .frd files are local CalculiX runs (run_calculix.py writes them into .local/fea/calculix-prepomax/<test>/ours).
+#   uv run --project fea python docs/models/share.py docs/models/our-models.toml
+
+name = "our-models"
+title = "Our coupon models, built the team's way: X840-Z60, [0/45/-45/45/0]s, coupled tabs, the team's names"
+units = "mm-MPa"
+share = ".local/fea/share/our-models"
+
+[[models]]
+test = "tension-coupon"
+spec = "fea/validation/specs/tension-coupon-x840-coupling.toml"
+record = "fea/validation/records/tension-coupon-x840-nodal-calculix.toml"
+results = ".local/fea/calculix-prepomax/tension-coupon/ours/tension-coupon-x840-nodal-ccx.frd"
+
+[[models]]
+test = "compression-coupon"
+spec = "fea/validation/specs/compression-coupon-x840-coupling.toml"
+record = "fea/validation/records/compression-coupon-x840-nodal-calculix.toml"
+results = ".local/fea/calculix-prepomax/compression-coupon/ours/compression-coupon-x840-nodal-ccx.frd"
+
+[[models]]
+test = "open-hole-coupon"
+spec = "fea/validation/specs/open-hole-coupon-x840-coupling.toml"
+record = "fea/validation/records/open-hole-coupon-x840-nodal-calculix.toml"
+results = ".local/fea/calculix-prepomax/open-hole-coupon/ours/open-hole-coupon-x840-nodal-ccx.frd"

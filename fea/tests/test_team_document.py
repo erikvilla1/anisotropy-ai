@@ -68,3 +68,41 @@ def test_a_folder_the_script_did_not_write_is_never_replaced(tmp_path):
     result = run(manifest(tmp_path, "share/theirs"))
     assert result.returncode != 0 and "was not written by this script" in result.stdout + result.stderr
     assert (foreign / "notes.txt").read_text(encoding="utf-8") == "keep me\n"
+
+
+SHARE = ROOT / "docs/models/share.py"
+
+
+def share_manifest(tmp: Path, folder: str) -> Path:
+    frd = tmp / "twin.frd"
+    frd.write_text("results placeholder\n", encoding="utf-8")
+    path = tmp / "models.toml"
+    path.write_text("\n".join([
+        'name = "models"', 'title = "Two coupons"', 'units = "mm-MPa"', f'share = "{(tmp / folder).as_posix()}"',
+        "[[models]]", 'test = "tension-coupon"', 'spec = "fea/validation/specs/tension-coupon-x840-coupling.toml"',
+        'record = "fea/validation/records/tension-coupon-x840-nodal-calculix.toml"', f'results = "{frd.as_posix()}"',
+        "[[models]]", 'test = "unnotched-im7"', 'spec = "fea/validation/specs/unnotched-im7-8552-nodal.toml"',
+        'record = "fea/validation/records/unnotched-im7-8552-nodal-calculix.toml"', f'results = "{frd.as_posix()}"',
+    ]) + "\n", encoding="utf-8")
+    return path
+
+
+def test_our_models_are_written_to_one_folder_and_zipped(tmp_path):
+    result = subprocess.run([sys.executable, str(SHARE), str(share_manifest(tmp_path, "share/models")), "--no-pdf"], capture_output=True, text=True, cwd=ROOT)
+    assert result.returncode == 0, result.stdout + result.stderr
+    share = tmp_path / "share" / "models"
+    for name in ("README.txt", "1-tension-coupon/abaqus/tension-coupon-x840-coupling-abaqus.inp", "1-tension-coupon/calculix/tension-coupon-x840-nodal-ccx.inp",
+                 "1-tension-coupon/calculix/twin.frd", "1-tension-coupon/spec/tension-coupon-x840-nodal.toml", "2-unnotched-im7/spec/unnotched-im7-8552-nodal.toml",
+                 "material/x840-z60-pw.csv", "material/im7-8552.csv"):
+        assert (share / name).is_file(), name
+    readme = (share / "README.txt").read_text(encoding="utf-8")
+    assert "69 of 69 compared values agree" in readme and "59 of 59 compared values agree" in readme
+    deck = (share / "1-tension-coupon/abaqus/tension-coupon-x840-coupling-abaqus.inp").read_text(encoding="utf-8")
+    assert deck == (ROOT / "fea/validation/decks/generated/tension-coupon-x840-coupling-abaqus.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
+    with zipfile.ZipFile(tmp_path / "share" / "models.zip") as zf:
+        assert "models/material/x840-z60-pw.csv" in zf.namelist()
+    foreign = tmp_path / "theirs"
+    foreign.mkdir()
+    (foreign / "keep.txt").write_text("keep\n", encoding="utf-8")
+    refused = subprocess.run([sys.executable, str(SHARE), str(share_manifest(tmp_path, "theirs")), "--no-pdf"], capture_output=True, text=True, cwd=ROOT)
+    assert refused.returncode != 0 and (foreign / "keep.txt").exists()
