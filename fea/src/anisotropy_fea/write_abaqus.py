@@ -48,7 +48,7 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
     out.append("1., 0., 0., 0., 1., 0.")
     out.append("3, 0.")
     section = model.section
-    out.append(f"*Shell Section, elset={section.elset}, composite, orientation=Ori-1, layup=Layup-1" + (", symmetric" if section.symmetric else ""))
+    out.append(f"*Shell Section, elset={section.elset}, composite, orientation=Ori-1, layup={section.layup}" + (", symmetric" if section.symmetric else ""))
     for ply in section.listed:
         out.append(f"{number(length(ply.thickness_m))}, 3, {ply.material}, {number(ply.angle_deg)}, {ply.name}")
     out.append("*End Part")

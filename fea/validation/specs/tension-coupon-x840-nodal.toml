@@ -46,6 +46,13 @@ value = 10.0
 nodes = { centre = [5.0, 40.0] }
 elements = { centre = [5.0, 40.0], near_grip = [5.0, 16.0] }
 
+[names]             # the team's names, as in Tension-test.inp, so the deck opens in Abaqus/CAE as their model (ADR-0035, amendment 1)
+part = "CFRP-Coupon"
+instance = "CFRP-Coupon-1"
+material = "X840-Z60"
+layup = "CompositeLayup-1"
+section_set = "CompositeLayup-1-1"
+
 [output]
 fpf_criteria = ["max_stress", "tsai_hill"]   # strengths from Table 3.2; Tsai-Wu would need a stated f12*
 abaqus = { field_preselect = true, node_print = true, el_print = true }

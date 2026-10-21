@@ -60,7 +60,7 @@ def main() -> None:
         print(f"{grip}: CalculiX total force [{total[0]:.6g}, {total[1]:.6g}] N; kernel [{from_si(ours[0], 'force', units):.6g}, {from_si(ours[1], 'force', units):.6g}] N")
     for name, index in twin.probe_nodes.items():
         theirs = dat.displacements(f"Probe-{name}").row(index + 1)
-        ours = solution.displacement_of(("Coupon-1", index + 1))
+        ours = solution.displacement_of((twin.instance, index + 1))
         print(f"probe node {name} (node {index + 1}): CalculiX U [{theirs[0]:.6g}, {theirs[1]:.6g}]; kernel [{from_si(ours[0], 'length', units):.6g}, {from_si(ours[1], 'length', units):.6g}]")
     for name, index in twin.probe_elements.items():
         strains = dat.strains(f"Probe-{name}").values[:, [0, 1, 3]].mean(axis=0)

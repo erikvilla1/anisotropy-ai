@@ -111,3 +111,25 @@ def test_order_two_decks_are_written_as_s8r_with_nine_entries_per_element():
     assert "*Element, type=S8R" in text
     first = [line for line in text.splitlines() if line.startswith("1, ") and line.count(",") == 8][0]
     assert first.split(", ")[1:5] == ["1", "2", "5", "4"]
+
+
+def test_a_names_table_gives_the_deck_the_teams_names_and_our_names_otherwise():
+    """[names] reaches every place a name appears in the deck; without it the deck keeps our names (ADR-0035, amendment 1)."""
+    named = write_abaqus(build_model(load_spec(SPECS / "tension-coupon-x840-coupling.toml")))
+    for line in ("*Part, name=CFRP-Coupon", "*Instance, name=CFRP-Coupon-1, part=CFRP-Coupon", "*Material, name=X840-Z60",
+                 "*Elset, elset=CompositeLayup-1-1, generate",
+                 "*Shell Section, elset=CompositeLayup-1-1, composite, orientation=Ori-1, layup=CompositeLayup-1, symmetric",
+                 "0.1, 3, X840-Z60, 0., Ply-1", "*Nset, nset=Grip-Top, instance=CFRP-Coupon-1"):
+        assert line in named.splitlines(), line
+    deck = read_deck_text(named)
+    assert set(deck.parts) == {"CFRP-Coupon"} and set(deck.instances) == {"CFRP-Coupon-1"} and set(deck.materials) == {"X840-Z60"}
+    plain = write_abaqus(build_model(to_si(parse_spec(NODAL))))
+    assert "*Part, name=Coupon" in plain and "*Instance, name=Coupon-1, part=Coupon" in plain and "layup=Layup-1" in plain
+    with pytest.raises(ValueError, match="names.material"):
+        parse_spec((SPECS / "tension-coupon-x840-coupling.toml").read_text(encoding="utf-8").replace('material = "X840-Z60"', 'material = "X840 Z60"'))
+    with pytest.raises(ValueError, match="must differ"):
+        parse_spec((SPECS / "tension-coupon-x840-coupling.toml").read_text(encoding="utf-8").replace('instance = "CFRP-Coupon-1"', 'instance = "CFRP-Coupon"'))
+
+
+def read_deck_text(text: str):
+    return parse_deck(text)

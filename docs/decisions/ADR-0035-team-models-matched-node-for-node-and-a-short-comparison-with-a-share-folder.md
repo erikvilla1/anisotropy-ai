@@ -50,3 +50,13 @@ A team test now needs one manifest and one reading note to produce a document an
 ## How we will know it was wrong
 
 Revisit if the team builds a model our spec cannot seed node for node, such as an unstructured or Gmsh mesh. Revisit if the team reports that the share folder is not what they open. Revisit if they need our deck to carry their names to run their own scripts on it.
+
+## Amendment 1, 2026-10-20 (the deck carries the team's names)
+
+**Context.** The founder asked for the deck to match too ("also do the deck"). Our generated deck used our names: part Coupon, instance Coupon-1, material X840-Z60-PW, layup Layup-1, section set All. When the team opened it in Abaqus/CAE, the model tree did not read as their model, and our CSV did not carry their instance and material names.
+
+**Options.** (1) An optional `[names]` table in the spec (part, instance, material, layup, section set), with our names as the stated defaults, threaded through the model builder, both writers and the CalculiX record tool. (2) Rename the decks after writing them. Rejected: the deck digest and the record keys would no longer follow from the spec. (3) Copy the team's numbering of nodes and elements as well. Rejected: CAE numbers by its own partition order, which a spec cannot state without listing every label. The share folder maps the team's numbers to ours instead.
+
+**Decision.** Option 1. Names must start with a letter and hold only letters, digits, - and _, at most 80, and the part and instance must differ. The tension coupon specs name the model as `Tension-test.inp` does: CFRP-Coupon, CFRP-Coupon-1, X840-Z60, CompositeLayup-1, CompositeLayup-1-1. The equivalence check now reads names as "same" when they match, and only lists a name that differs. A deck header now names a source's authors when the library record has them.
+
+**Evidence.** The committed IM7/8552 decks are byte-identical under the defaults (`test_the_committed_generated_decks_match_their_specs`). The coupling twin against `Tension-test.inp` gives 23 of 23 items the same, names included. Our `ours-S22.csv` matches the team's `Test_01_S22.csv` row for row through its first block, with the same instance, section and material names. Evaluation note: `docs/evaluations/fea/2026-10-20-deck-names.md`.

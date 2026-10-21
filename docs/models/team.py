@@ -412,7 +412,8 @@ def models_section(c: Comparison, figures: Path) -> str:
         rf"The team built the coupon in Abaqus/CAE ({code(c.team_deck_path.name)}). We built it from a spec ({code(c.spec_path.name)}) with our model "
         r"generator, which writes an Abaqus deck from it. Both decks were read by the same reader and compared item by item below. Nodes and "
         r"elements are numbered differently in the two decks, so nodes are matched by position and elements by their corner nodes. "
-        r"``Listed'' items are shown but not judged: names do not change the solution, and a linear solve does not read strengths.",
+        r"Names read ``same'' when they match; a name that differs is only ``listed'', because names do not change the solution. "
+        r"Strengths are always listed: a linear solve does not read them.",
         table(["Item", "Team", "Ours", ""], rows, r">{\raggedright\arraybackslash}p{3.2cm}YY>{\raggedright\arraybackslash}p{1.1cm}", r"\footnotesize"),
         rf"Our kernel solved both decks. Over all {len(c.equivalence.element_map)} elements and every ply, the stress from the team's deck and from ours "
         rf"differs by at most {number(difference, 3)} {c.stress_unit}, against a largest stress of {number(largest, 5)} {c.stress_unit}: the node "
@@ -639,9 +640,12 @@ def write_share(c: Comparison, pdf: Path | None) -> Path:
 
     odb, step, frame = f"anisotropy-fea {fea_version} kernel on {stem}-abaqus.inp (no .odb)", "Step-1", "linear static solve"
     our_instance = next(iter(c.our_deck.instances))
-    section = f"{our_instance}_{next(iter(c.our_deck.parts.values())).sections[0].elset}".upper()
+    section = f"ASSEMBLY_{our_instance}_{next(iter(c.our_deck.parts.values())).sections[0].elset}".upper()  # as Abaqus/CAE names it in a report
     for report in c.reports:
-        rows = [(p.reference_element, p.layer, report.faces[(p.reference_element, p.layer)], p.x, p.y, p.ours) for p in c.paired if p.quantity == report.quantity]
+        # rows in the order of the team's own report (its first block), so the two files line up row by row
+        ours_of = {(p.reference_element, p.layer): p for p in c.paired if p.quantity == report.quantity}
+        rows = [(element, layer, report.faces[(element, layer)], ours_of[(element, layer)].x, ours_of[(element, layer)].y, ours_of[(element, layer)].ours)
+                for element, layer in report.values]
         write_field_report(share / "4-results" / f"ours-{report.quantity}.csv", report.quantity, rows, odb, step, frame, report.instance, section,
                            c.material.name)
     with (share / "4-results" / "team-vs-ours.csv").open("w", encoding="utf-8", newline="") as handle:

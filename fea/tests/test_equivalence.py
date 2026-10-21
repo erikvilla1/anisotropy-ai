@@ -98,15 +98,15 @@ def test_renumbered_nodes_and_elements_are_matched_by_position():
                      element_sets={k: np.sort(ne - 1 - v) for k, v in mesh.element_sets.items()}, order=1, mesher="structured")
     eq = deck_equivalence(deck_of(write_abaqus(model)), deck_of(write_abaqus(build_model(spec, flipped))), TOLERANCE, "mm-MPa")
     assert eq.same_model, [(i.item, i.team, i.ours) for i in eq.differences]
-    assert eq.node_map[("Coupon-1", 1)] == ("Coupon-1", n) and eq.element_map[("Coupon-1", 1)] == ("Coupon-1", ne)
+    assert eq.node_map[("CFRP-Coupon-1", 1)] == ("CFRP-Coupon-1", n) and eq.element_map[("CFRP-Coupon-1", 1)] == ("CFRP-Coupon-1", ne)
     assert len(eq.element_map) == 800 and len([k for k in eq.node_map if k[0] is None]) == 2
 
 
 CHANGES = [
     ("RF-Top, 2, 2, 10.", "RF-Top, 2, 2, 9.", "Boundary conditions, node by node"),
-    ("0.1, 3, X840-Z60-PW, -45., Ply-3", "0.1, 3, X840-Z60-PW, 45., Ply-3", "Layup, bottom first"),
-    ("0.1, 3, X840-Z60-PW, 0., Ply-1", "0.2, 3, X840-Z60-PW, 0., Ply-1", "Ply thickness"),
-    ("0.1, 3, X840-Z60-PW, 45., Ply-2", "0.1, 5, X840-Z60-PW, 45., Ply-2", "Integration points per ply"),
+    ("0.1, 3, X840-Z60, -45., Ply-3", "0.1, 3, X840-Z60, 45., Ply-3", "Layup, bottom first"),
+    ("0.1, 3, X840-Z60, 0., Ply-1", "0.2, 3, X840-Z60, 0., Ply-1", "Ply thickness"),
+    ("0.1, 3, X840-Z60, 45., Ply-2", "0.1, 5, X840-Z60, 45., Ply-2", "Integration points per ply"),
     ("80000., 80000., 0.06,", "80000., 79000., 0.06,", "Material E2 (MPa)"),
     ("RF-Top, 1, 1\n", "", "Boundary conditions, node by node"),
 ]
@@ -120,10 +120,15 @@ def test_a_physical_change_is_named(old, new, item):
     assert not eq.same_model and [i.item for i in eq.differences] == [item]
 
 
-def test_a_renamed_material_is_listed_not_judged():
+def test_names_read_same_when_they_match_and_are_only_listed_when_they_differ():
     text = generated()
-    eq = deck_equivalence(deck_of(text), deck_of(text.replace("X840-Z60-PW", "X840-Z60")), TOLERANCE, "mm-MPa")
-    assert eq.same_model and [i.ours for i in eq.items if i.item == "Material names"] == ["X840-Z60"]
+    same = {i.item: i.same for i in deck_equivalence(deck_of(text), deck_of(text), TOLERANCE, "mm-MPa").items}
+    assert same["Part / instance names"] is True and same["Material names"] is True and same["Section set / layup names"] is True
+    renamed = text.replace("X840-Z60", "MY-FABRIC").replace("CFRP-Coupon", "Strip")
+    eq = deck_equivalence(deck_of(text), deck_of(renamed), TOLERANCE, "mm-MPa")
+    listed = {i.item: i for i in eq.items if i.same is None}
+    assert eq.same_model and set(listed) == {"Part / instance names", "Material names", "Strengths (*Fail Stress)"}  # strengths are always listed
+    assert listed["Material names"].ours == "MY-FABRIC" and listed["Part / instance names"].ours == "Strip / Strip-1"
 
 
 def test_a_moved_node_or_a_missing_node_is_refused():
