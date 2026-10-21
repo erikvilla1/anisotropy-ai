@@ -1,0 +1,30 @@
+# How CalculiX reports composite shell results, detected by running it, not assumed (ADR-0030, risk R-18).
+# Read by anisotropy_fea.compare when a CalculiX .dat is mapped to our per-ply quantities. Re-run the detection when
+# the CalculiX major version changes; the tests in fea/tests/test_calculix.py repeat the detection when ccx is present.
+
+calculix_version = "2.22"
+detected_on = "2026-10-15"
+detected_by = "Claude Code on the founder's machine, PrePoMax v2.6.0 bundle (C:/Tools/PrePoMax v2.6.0/Solver/ccx_dynamic.exe)"
+
+# *SHELL SECTION, COMPOSITE: the first layer line is the bottom ply (most negative z along the shell normal).
+# Seen on the unnotched IM7/8552 [45/0/-45/90]s coupon: the integration points with the lowest z carry the +45 ply's global
+# stresses (sxy = +191.9 MPa against the engine's +192.0 for ply 1), the next ones the 0 ply's (sxx = -353.4 against -353.4).
+layer_order = "first-line-bottom"
+
+# An S8R composite shell expands to one C3D20R brick with 2 integration points through each layer and 4 in plane
+# (reduced integration): 8 plies gave 64 points, 16 z levels, each level holding 4 points.
+points_per_layer_thickness = 2
+in_plane_points = 4
+
+# *EL PRINT numbers the integration points by z level from the bottom up, 4 in-plane points per level: points 1-4 at the
+# lowest level, 5-8 at the next, and so on. Seen with *EL PRINT ... COORD on CalculiX 2.22.
+point_order = "z-level ascending, in-plane points consecutive within a level"
+
+# With *EL PRINT, GLOBAL=YES the stresses and strains are in the global axes, and each layer's *ORIENTATION is honoured:
+# the +45 and -45 plies print sxy of opposite sign and equal magnitude as the engine predicts.
+stress_axes = "global"
+
+# The printed exy is the tensor shear strain: a one-element S8R shell with the exact field u = 0.01 y printed exy = 5.000E-03
+# at every point while sxy = 263.16 MPa = G gamma with gamma = 0.01 and the reaction 5263.16 N = tau h w. The engine's
+# gamma_xy is twice the printed exy.
+shear_strain = "tensor"
