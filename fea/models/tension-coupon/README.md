@@ -27,7 +27,7 @@ Differences are ours minus the reference, as a share of the reference; agreement
 
 ## Attempt log
 
-Every try, failed ones included, oldest first. Before 2026-10-21 the runs were overwritten, so these rows are rebuilt from the evaluation notes and the local notes they name; from chunk 2 of ADR-0039 on, each attempt keeps its own folder under `.local/fea/<test>/attempts/`.
+Every try, failed ones included, oldest first. Each row has a folder `.local/fea/<test>/attempts/attempt-NN_<date>/` on the founder's machine with `prompt.md`, `notes.md` and the runs it kept (ADR-0039). Before 2026-10-21 the runs were overwritten, so the earlier rows and their notes are rebuilt from the evaluation notes and the local notes they name. Start a new attempt with `tools/new_attempt.py`.
 
 | # | Date | What was tried | Result | Outcome | Evidence |
 | --- | --- | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ Every try, failed ones included, oldest first. Before 2026-10-21 the runs were o
 | 10 | 2026-10-20 | The team's names in our deck | 23 of 23 items the same; numbers unchanged | accepted | [deck names](../../../docs/evaluations/fea/2026-10-20-deck-names.md) (#63) |
 | 11 | 2026-10-21 | CalculiX rerun after the files moved to one folder per test | values unchanged apart from roundoff | accepted | [one folder per test](../../../docs/evaluations/fea/2026-10-21-one-folder-per-test.md) (#65) |
 | 12 | 2026-10-21 | CalculiX rerun for the coupon name in the deck heading | values unchanged to 3.8e-8 | accepted: the current record | [coupon identity](../../../docs/evaluations/fea/2026-10-21-coupon-identity.md) (#68) |
+| 13 | 2026-10-21 | CalculiX rerun in the first attempt folder made by `tools/new_attempt.py` | all 71 numbers as attempt 12's record to 2.9e-8 | same as 12; the record stays | [attempt folders](../../../docs/evaluations/fea/2026-10-21-attempt-folders.md) |
 
 ## Where to look
 
@@ -62,9 +63,10 @@ From `fea/`:
 
 ```sh
 uv run python tools/regenerate_decks.py tension-coupon tension-coupon-nodal
-uv run python examples/build_model.py models/tension-coupon/tension-coupon.toml --out ../.local/fea/tension-coupon/runs/kernel
-uv run python examples/run_calculix.py models/tension-coupon/tension-coupon-nodal.toml --out ../.local/fea/tension-coupon/runs/calculix
-uv run python tools/record_from_dat.py models/tension-coupon/tension-coupon-nodal.toml ../.local/fea/tension-coupon/runs/calculix/tension-coupon-nodal-ccx.dat \
+uv run python tools/new_attempt.py tension-coupon --prompt "<the request, word for word>"   # prints the folder attempt-NN_<date>
+uv run python examples/build_model.py models/tension-coupon/tension-coupon.toml --out ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/kernel
+uv run python examples/run_calculix.py models/tension-coupon/tension-coupon-nodal.toml --out ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/calculix
+uv run python tools/record_from_dat.py models/tension-coupon/tension-coupon-nodal.toml ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/calculix/tension-coupon-nodal-ccx.dat \
     --version 2.22 --run-by "..." --machine "..." --notes "..." --tolerance 0.03 --floor 0.02 --element-probes centre --out models/tension-coupon/records/tension-coupon-calculix.toml
 ```
 

@@ -5,7 +5,7 @@ import tomllib
 import pytest
 
 from anisotropy_fea import paths  # where the files live (ADR-0036)
-from anisotropy_fea.case_pages import CasePageError, model_folders, pages, read_case
+from anisotropy_fea.case_pages import CasePageError, local_index, model_folders, pages, read_case
 
 TENSION = paths.MODELS / "tension-coupon"
 
@@ -57,3 +57,9 @@ def test_the_team_summary_holds_figures_only_and_is_not_a_record():
     assert all(set(a) == {"band", "y", "quantity", "values", "agree", "within", "largest_difference"} for a in data["agreement"])
     assert data["coupon"] == "X840PW-UNT-L1" and data["equivalence"]["same"] == data["equivalence"]["items"] == 23
     assert summary not in paths.all_records()
+
+
+def test_the_local_index_has_the_four_categories_with_or_without_the_local_folders():
+    text = local_index()  # on CI there is no .local/: the attempt folders count 0 and homework says so
+    assert all(f"## {category}" in text for category in ("Team tests", "Benchmarks", "Homework", "Projects"))
+    assert all(f"**{name}**" in text for name in ("X840PW-UNT-L1", "X840PW-UNC-L1", "X840PW-OHT-L1"))

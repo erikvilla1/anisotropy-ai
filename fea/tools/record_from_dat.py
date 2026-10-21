@@ -1,6 +1,6 @@
 """Turn a CalculiX run of one of our specs into a committed comparison record: numbers plus provenance (ADR-0030, ADR-0007).
 
-    uv run python tools/record_from_dat.py models/tension-coupon/tension-coupon-nodal.toml ../.local/fea/tension-coupon/runs/calculix/tension-coupon-nodal-ccx.dat \
+    uv run python tools/record_from_dat.py models/tension-coupon/tension-coupon-nodal.toml ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/calculix/tension-coupon-nodal-ccx.dat \
         --version 2.22 --run-by "Erik Villa" --machine "founder Windows 11, PrePoMax v2.6.0 bundle" \
         --tolerance 0.03 --floor 0.02 --element-probes centre --out models/tension-coupon/records/tension-coupon-calculix.toml
 

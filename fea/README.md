@@ -53,7 +53,7 @@ Four-node isoparametric plane-stress elements whose stiffness is the laminate me
 A coupon model is generated from one TOML file in its test folder, `models/<test>/` or `checks/<test>/` (ADR-0030, ADR-0036): kind (`unnotched_tension`, `open_hole_tension`, `compression`, `shear_pm45`, `three_point_bending`, `four_point_bending`), dimensions, mesh controls, layup, material from the engine's cited library or explicit constants with stated out-of-plane constants, grips (`nodal` or `coupling`, on the end rows or the whole tabs), loading by displacement or force, probe points and output requests. Every key is required and every invalid combination is refused by name; the format is documented at the top of `src/anisotropy_fea/spec.py`.
 
 ```powershell
-uv run python examples/build_model.py models/tension-coupon/tension-coupon.toml --out ../.local/fea/tension-coupon/runs/kernel
+uv run python examples/build_model.py models/tension-coupon/tension-coupon.toml --out ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/kernel
 ```
 
 writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite section, material with citations in the header, reference nodes and couplings when asked, step, boundaries, loads, output requests), a model preview (`<spec>-model.png`), then reads the deck back with our own reader, solves it with the kernel, and writes the result figure, the `.vtu` and `summary.txt`. Built today: unnotched tension and compression coupons on the structured mesher, and open-hole coupons on a Gmsh transfinite O-grid (`mesher.gmsh_open_hole_plate`, optional extra `mesh`: `uv sync --extra mesh`; ADR-0030, amendment 3). Shear and bending follow chunk by chunk. Each spec's generated decks live in its test folder's `decks/` (rewrite them with `tools/regenerate_decks.py`); the tools are described in [docs/installation-fea-tools.md](../docs/installation-fea-tools.md).
@@ -61,7 +61,7 @@ writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite s
 ## CalculiX, the independent solver
 
 ```powershell
-uv run python examples/run_calculix.py models/tension-coupon/tension-coupon-nodal.toml --out ../.local/fea/tension-coupon/runs/calculix
+uv run python examples/run_calculix.py models/tension-coupon/tension-coupon-nodal.toml --out ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/calculix
 ```
 
 writes the CalculiX deck (`write_calculix`: S8R composite shells, four-field layer lines, one `*ORIENTATION` per ply angle, ENGINEERING CONSTANTS with the spec's out-of-plane constants, numeric boundaries, `*NODE PRINT` totals and `*EL PRINT, GLOBAL=YES` with COORD), runs the solver found through `ANISOTROPY_CCX` or on PATH (`calculix.run_calculix`), parses the `.dat` (`calculix.parse_dat`) and prints the reactions, probe displacements and strains next to the kernel's on the order-1 twin mesh. The `.frd` opens in PrePoMax (File, Open results). CalculiX refuses what its manual says it cannot do: order-1 composite shells, a reaction at a coupled reference node, force control on nodal grips. `plane_stress = true` in `[material.transverse]` writes nu13 = nu23 = 0: CalculiX expands a composite S8R into a single brick, and nonzero through-thickness Poisson ratios then couple the plies' thickness contraction and raise the in-plane stresses, which neither Abaqus LAMINA nor our kernel does (ADR-0030, amendment 1). Use it whenever the reference is plane stress.

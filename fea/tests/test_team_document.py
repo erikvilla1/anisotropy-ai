@@ -3,6 +3,7 @@
 import subprocess
 import sys
 import zipfile
+from datetime import date
 from pathlib import Path
 
 from test_equivalence import FIXTURE_SPEC, GRIPS_FIXTURE
@@ -61,7 +62,7 @@ def test_the_document_and_the_zip_are_built(tmp_path):
                 "2-our-model/calculix/unnotched-im7-8552-nodal-ccx.inp", "2-our-model/spec/grips-coupon.toml",
                 "3-material/im7-8552.csv", "4-results/ours-S11.csv", "4-results/ours-S22.csv", "4-results/ours-Mises.csv", "4-results/team-vs-ours.csv",
                 "4-results/ours-all-plies.csv"]
-    archive = tmp_path / "share" / "grips-comparison.zip"
+    archive = tmp_path / "share" / f"{date.today().isoformat()}_grips-comparison.zip"  # dated (ADR-0039)
     with zipfile.ZipFile(archive) as zf:
         names = set(zf.namelist())
         assert {f"grips/{name}" for name in expected} <= names
@@ -83,7 +84,7 @@ def test_a_comparison_names_its_coupon(tmp_path):
 
 def test_a_zip_the_project_did_not_write_is_never_replaced(tmp_path):
     (tmp_path / "share").mkdir()
-    foreign = tmp_path / "share" / "theirs.zip"
+    foreign = tmp_path / "share" / f"{date.today().isoformat()}_theirs.zip"  # the name the build would write today
     with zipfile.ZipFile(foreign, "w") as zf:
         zf.writestr("theirs/notes.txt", "keep me\n")
     result = run(BUILD, str(manifest(tmp_path, "share/theirs.zip")))

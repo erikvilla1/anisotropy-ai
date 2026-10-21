@@ -3,7 +3,7 @@
 coupon = "X840PW-UNT-L1"
 units = "mm-MPa"
 built = "2026-10-21"
-commit = "273db8b + local changes"
+commit = "44569f3 + local changes"
 
 [team]
 deck = "Tension-test.inp"

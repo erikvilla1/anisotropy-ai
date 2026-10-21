@@ -1,6 +1,6 @@
 # Reading: X840PW-UNT-L1, the team's tension coupon with the cited X840 / Z60 material, CalculiX 2.22 S8R against the kernel
 
-The reading note of the record with the same name. It is printed as the last section of the model's comparison document (`docs/models/build.py`). Numbers quoted here are from the CalculiX run of 2026-10-20 on the re-seeded mesh (`.local/fea/tension-coupon/runs/calculix/`, 3.1 s, 0 warnings; re-run 2026-10-21 after the move to one folder per test, every recorded value unchanged to 6e-8 apart from roundoff-sized lateral displacements, ADR-0036) and the record; the document's own tables are recomputed at every build.
+The reading note of the record with the same name. It is printed as the last section of the model's comparison document (`docs/models/build.py`). Numbers quoted here are from the CalculiX run of 2026-10-20 on the re-seeded mesh (3.1 s, 0 warnings; re-run 2026-10-21 after the move to one folder per test, every recorded value unchanged to 6e-8 apart from roundoff-sized lateral displacements, ADR-0036; again for the coupon's name, ADR-0038; that latest run is in `.local/fea/tension-coupon/attempts/attempt-12_2026-10-21/run/calculix/`, ADR-0039) and the record; the document's own tables are recomputed at every build.
 
 ## What the numbers show
 

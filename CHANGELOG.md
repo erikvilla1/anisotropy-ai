@@ -18,6 +18,13 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
+- Every try at a test keeps its own folder (ADR-0039, chunk 2).
+  - **Attempt folders.** `fea/tools/new_attempt.py <test> --prompt "..."` makes `.local/fea/<test>/attempts/attempt-NN_<date>/`. It holds the request word for word, `notes.md` (prefilled with the engine commit and spec digests) and `run/`. Folders are numbered and never reused.
+  - **Results kept.** A `.frd` is kept only in the latest run of each kind.
+  - **The migration.** The old `runs/` folders moved into the attempts that made them; the other backfilled attempts carry notes only. Tension attempt 13, the first made with the tool, reproduces the record to 2.9e-8.
+  - **New local folders and files.** `case_pages.py --local` writes `.local/INDEX.md` for tests, benchmarks, homework and projects; `.local/sessions/` holds one transcript per session and `.local/projects/` future cases.
+  - **Dated zips.** They are now `<date>_<name>.zip`.
+  - **The skill.** The workspace-layout skill (0.4.0) has the procedures for every attempt, an accepted attempt and the end of a session.
 - Each model folder's README is a case page (ADR-0039, chunk 1).
   - **The page.** The coupon's name, a case line (category; status in progress, verified or validated; accepted attempt), the problem, a generated result table, the attempt log and where to look.
   - **The attempt logs** are rebuilt from the evaluation notes, failed tries included. Tension has 12 attempts, including the 2.8 % CalculiX stiffness fixed by plane stress; compression and open-hole have 3 each.

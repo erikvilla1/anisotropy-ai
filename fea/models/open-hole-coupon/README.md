@@ -22,7 +22,7 @@ Differences are ours minus the reference, as a share of the reference; agreement
 
 ## Attempt log
 
-Every try, failed ones included, oldest first. Before 2026-10-21 the runs were overwritten, so these rows are rebuilt from the evaluation notes and the local notes they name; from chunk 2 of ADR-0039 on, each attempt keeps its own folder under `.local/fea/<test>/attempts/`.
+Every try, failed ones included, oldest first. Each row has a folder `.local/fea/<test>/attempts/attempt-NN_<date>/` on the founder's machine with `prompt.md`, `notes.md` and the runs it kept (ADR-0039). Before 2026-10-21 the runs were overwritten, so the earlier rows and their notes are rebuilt from the evaluation notes and the local notes they name. Start a new attempt with `tools/new_attempt.py`.
 
 | # | Date | What was tried | Result | Outcome | Evidence |
 | --- | --- | --- | --- | --- | --- |
@@ -47,9 +47,10 @@ From `fea/`:
 
 ```sh
 uv run python tools/regenerate_decks.py open-hole-coupon open-hole-coupon-nodal
-uv run python examples/build_model.py models/open-hole-coupon/open-hole-coupon.toml --out ../.local/fea/open-hole-coupon/runs/kernel
-uv run python examples/run_calculix.py models/open-hole-coupon/open-hole-coupon-nodal.toml --out ../.local/fea/open-hole-coupon/runs/calculix
-uv run python tools/record_from_dat.py models/open-hole-coupon/open-hole-coupon-nodal.toml ../.local/fea/open-hole-coupon/runs/calculix/open-hole-coupon-nodal-ccx.dat \
+uv run python tools/new_attempt.py open-hole-coupon --prompt "<the request, word for word>"   # prints the folder attempt-NN_<date>
+uv run python examples/build_model.py models/open-hole-coupon/open-hole-coupon.toml --out ../.local/fea/open-hole-coupon/attempts/attempt-NN_<date>/run/kernel
+uv run python examples/run_calculix.py models/open-hole-coupon/open-hole-coupon-nodal.toml --out ../.local/fea/open-hole-coupon/attempts/attempt-NN_<date>/run/calculix
+uv run python tools/record_from_dat.py models/open-hole-coupon/open-hole-coupon-nodal.toml ../.local/fea/open-hole-coupon/attempts/attempt-NN_<date>/run/calculix/open-hole-coupon-nodal-ccx.dat \
     --version 2.22 --run-by "..." --machine "..." --notes "..." --tolerance 0.03 --floor 0.02 --element-probes far --node-probes gauge --out models/open-hole-coupon/records/open-hole-coupon-calculix.toml
 ```
 

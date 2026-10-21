@@ -63,6 +63,14 @@ Option 1.
 
   Chunk 2 amends the local layout of ADR-0036.
 
+## Chunk 2, as built (2026-10-21)
+
+- **The tool.** `fea/tools/new_attempt.py` and `anisotropy_fea.attempts` make `attempt-NN_<date>/` with `prompt.md`, `notes.md` and `run/`. The number is never reused, and anything else in `attempts/` is refused.
+- **Which `.frd` files are kept.** The founder's rule was "only for the latest attempt". As built, a `.frd` is deleted only when a later attempt has a run of the same kind (kernel, calculix or team-in-calculix). Otherwise a new CalculiX run of our model would delete the only CalculiX run of the team's deck, the one the founder opens in PrePoMax.
+- **The migration.** The current runs moved into the attempts that made them, judged by file times and deck headings. The other backfilled attempts have `notes.md` only, saying their outputs were overwritten. A notes file names a pull request's head commit only as an approximation of the run's own commit, and says so.
+- **The local index.** `.local/INDEX.md`, from `case_pages.py --local`, becomes the second top-level file in `.local/`, which amends the no-loose-files rule of ADR-0037. `.local/sessions/` and `.local/projects/` are new.
+- **Dated zips.** `team.py` and `share.py` write `<date>_<name>.zip`.
+
 ## Why (evidence)
 
 - The generator is idempotent: a second run rewrites 0 files. Its numbers match the records: tension reaction 105884 N against 105993 N, +0.10 %. The team rows match the figures `docs/models/team.py` prints: 23 of 23 items, inner band 0.425 / 0.160 / 0.200 %.
