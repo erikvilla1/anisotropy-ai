@@ -67,7 +67,7 @@ from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import coupled_nodes, expanded_layers, node_name, reference_node  # noqa: E402
 from anisotropy_fea.report import (COMPONENTS, GROUP_KIND, ComparisonRow, GroupSummary, comparison_rows, element_centroids,  # noqa: E402
                                    laminate_check, model_facts, not_reported, solve_record, summarize)
-from anisotropy_fea.spec import load_spec, spec_material  # noqa: E402
+from anisotropy_fea.spec import coupon_card, load_spec, spec_material  # noqa: E402
 from anisotropy_fea.units import from_si  # noqa: E402
 
 escape, code, inline, number, convert, heading = manual.escape, manual.code, manual.inline, manual.number, manual.convert, manual.heading
@@ -256,8 +256,17 @@ def element_map(rows: list[ComparisonRow], summaries: list[GroupSummary], centro
 
 # --------------------------------------------------------------------------------------------- sections
 
+def record_coupon(record: dict, record_path: Path) -> dict[str, str]:
+    """The identity card of the coupon the record's spec builds (ADR-0038); empty for a hand-built deck or a spec without one."""
+    if record["spec"].startswith("none"):
+        return {}
+    spec_path = (record_path.parent / record["spec"]).resolve()
+    return dict(coupon_card(load_spec(spec_path))) if spec_path.is_file() else {}
+
+
 def title_page(record: dict, record_path: Path, rows: list[ComparisonRow], problems: list[str]) -> str:
     solver = record["solver"]
+    card = record_coupon(record, record_path)
     agreeing = sum(row.agrees for row in rows)
     disagreeing = len(rows) - agreeing
     worst = max(rows, key=lambda row: row.of_allowed) if rows else None
@@ -280,12 +289,19 @@ def title_page(record: dict, record_path: Path, rows: list[ComparisonRow], probl
         ("Source commit", code(git_commit())),
         ("Built", escape(date.today().isoformat())),
     ]
+    if card:  # the coupon's name is the title; the record's own title, after the name, is the subtitle
+        facts = [(label, escape(value)) for label, value in card.items() if label not in ("Coupon", "Test")] + facts
+        heading = [rf"{{\fontsize{{22}}{{28}}\selectfont\bfseries\color{{ink}} {escape(card['Coupon'])}}}\par", r"\vspace{0.3cm}",
+                   rf"{{\large\bfseries\color{{ink}} {escape(card['Test'].capitalize())} coupon}}\par", r"\vspace{0.3cm}",
+                   rf"{{\color{{ink}} {inline(record['title'].split(': ', 1)[1])}}}\par", r"\vspace{0.6cm}"]
+    else:
+        heading = [rf"{{\fontsize{{22}}{{28}}\selectfont\bfseries\color{{ink}} {inline(record['title'])}}}\par", r"\vspace{0.6cm}"]
     return "\n".join([
         r"\hypersetup{pageanchor=false}", r"\begin{titlepage}", r"\sffamily",
         r"{\color{accent}\bfseries\small ANISOTROPY AI \textperiodcentered{} MODEL COMPARISON}\par", r"\vspace*{2.5cm}",
-        rf"{{\fontsize{{22}}{{28}}\selectfont\bfseries\color{{ink}} {inline(record['title'])}}}\par", r"\vspace{0.6cm}",
+        *heading,
         r"{\large\color{muted} The model, its mathematics and code, the reference solver, every compared number with its error, and the reading}\par",
-        r"\vspace{2cm}", r"{\small\begin{tabular}{@{}p{3cm}p{\dimexpr\linewidth-3.5cm}@{}}",
+        r"\vspace{1cm}" if card else r"\vspace{2cm}", r"{\small\begin{tabular}{@{}p{3cm}p{\dimexpr\linewidth-3.5cm}@{}}",
         *[rf"{label} & {value} \\[0.3ex]" for label, value in facts], r"\end{tabular}}\par", r"\vfill",
         rf"\verdict{{{verdict}}}\par", r"\vspace{0.8cm}",
         r"{\small\color{muted} This document is generated from the repository by \texttt{docs/models/build.py}: its equations and prose come from "

@@ -21,7 +21,7 @@ Options: `--no-pdf` writes the LaTeX only; `--no-theory` leaves out the kernel t
 
 ## The short comparison for the team (ADR-0035)
 
-When the team built the model in Abaqus, `docs/models/team.py` writes a short document for them and one zip they can open. The document says, in order: here is the team's model and here is ours, the same item by item; our material comes from the library, and this is its source and page; here are the results side by side. The results cover stress at named points, agreement over the coupon, maps, reaction force and first-ply failure. Each test needs a manifest at `.local/fea/<test>/comparison/team-comparison.toml` (format in `Manifest` in the script) and a reading `team-comparison.md` beside it.
+When the team built the model in Abaqus, `docs/models/team.py` writes a short document for them and one zip they can open. The document says, in order: here is the team's model and here is ours, the same item by item; our material comes from the library, and this is its source and page; here are the results side by side. The results cover stress at named points, agreement over the coupon, maps, reaction force and first-ply failure. Each test needs a manifest at `.local/fea/<test>/comparison/team-comparison.toml` (format in `Manifest` in the script) and a reading `team-comparison.md` beside it. The document's title is the coupon's name from the `[coupon]` card of our spec, such as X840PW-UNT-L1, with the card printed under it (ADR-0038); a spec without a card is refused.
 
 ```sh
 uv run --project fea python docs/models/team.py .local/fea/tension-coupon/comparison/team-comparison.toml
@@ -33,7 +33,7 @@ The numbers come from `anisotropy_fea.equivalence` (the two decks matched node b
 
 ## Our models in one zip for the team (ADR-0035 amendment 2, ADR-0036)
 
-`docs/models/share.py` zips every folder under `fea/models/` into `.local/fea/share/our-models.zip`, found by convention: the spec `<test>.toml` and the record `records/<test>-calculix.toml`. A new test folder joins the zip by itself. Each coupon gets the Abaqus deck to import, the CalculiX twin's deck, both specs, and the comparison document of its CalculiX record. The material record is written once. There are no CalculiX results in the zip. Every deck is regenerated and must equal the committed one. Use it for coupons the team has not built yet; a coupon they did build also gets the team comparison above.
+`docs/models/share.py` zips every folder under `fea/models/` into `.local/fea/share/our-models.zip`, found by convention: the spec `<test>.toml` and the record `records/<test>-calculix.toml`. A new test folder joins the zip by itself. Each coupon gets a folder named by its coupon name (ADR-0038), holding the Abaqus deck to import, the CalculiX twin's deck, both specs, and the comparison document of its CalculiX record. The material record is written once. There are no CalculiX results in the zip. Every deck is regenerated and must equal the committed one. Use it for coupons the team has not built yet; a coupon they did build also gets the team comparison above.
 
 ```sh
 uv run --project fea python docs/models/share.py                    # every model

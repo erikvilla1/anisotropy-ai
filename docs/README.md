@@ -92,6 +92,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0035](decisions/ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md) | Our models reproduce the team's node for node; each team test gets a short comparison document and a share folder (proposed) |
 | [0036](decisions/ADR-0036-one-folder-per-fea-test.md) | One folder per finite element test: `fea/models/<test>/` and `fea/checks/` in the repository, `.local/fea/<test>/` locally; supersedes the FEA layout of 0032 (proposed) |
 | [0037](decisions/ADR-0037-every-private-file-under-local-by-purpose.md) | Every private file lives under `.local/`, in a folder named for its purpose; `References/` and `output/` folded in (proposed) |
+| [0038](decisions/ADR-0038-coupon-identity-card-and-designation.md) | Every coupon model carries an identity card and a name of the form material-test-layup, such as X840PW-UNT-L1 (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 

@@ -1,10 +1,10 @@
-title = "Compression coupon, X840-Z60 [0/45/-45/45/0]s, nodal grips on 63.5 mm tabs, 0.1 mm shortening (CalculiX twin of the team's build): CalculiX 2.22 S8R against the kernel"
+title = "X840PW-UNC-L1, unnotched compression: X840-Z60 plain weave [0/45/-45/45/0]s, nodal grips on 63.5 mm tabs, 0.1 mm shortening (CalculiX twin of the team's build): CalculiX 2.22 S8R against the kernel"
 units = "mm-MPa"
 spec = "../compression-coupon-nodal.toml"
 deck_kernel = "../decks/compression-coupon-nodal-abaqus.inp"
 deck_reference = "../decks/compression-coupon-nodal-ccx.inp"
-deck_kernel_sha256 = "efd2681808fafd68e04ff8f691474b2eeff125a99178010fef33408f15311910"
-deck_reference_sha256 = "e7628c084407b9a9a007e919cd69909838f9a2b06f82ce6bc1c3f1a0ee2294c8"
+deck_kernel_sha256 = "40dcbfa70792f14d2e3c6c8a29aa2cf235e5db51b3323a633dc2600cff057b5e"
+deck_reference_sha256 = "31bc7f6e43ea828b8520d1be2f873248da82b16e833e1785f0a5b2c58a4cae4d"
 
 [solver]
 name = "calculix"
@@ -30,7 +30,7 @@ floor = 0.02
 "Grip-Bottom" = [0.01038187, 5050.673]
 
 [expected.u]
-"CFRP-Coupon-1.1827" = [-3.0938e-15, -0.05]
+"CFRP-Coupon-1.1827" = [-3.111153e-15, -0.05]
 
 [expected.strain]
 "CFRP-Coupon-1.1687" = [0.003034233225, -0.0084679958, -1.268166585e-05]
