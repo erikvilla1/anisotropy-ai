@@ -14,8 +14,9 @@ from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.model import section_plies
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
 from _decks import gripped_coupon
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-DECKS = Path(__file__).parents[1] / "validation" / "decks"
+DECKS = paths.CHECK_DECKS
 ONE = DECKS / "coupon-1x1-im7-8552.inp"
 TWO = DECKS / "coupon-2x2-im7-8552.inp"
 

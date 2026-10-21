@@ -39,14 +39,14 @@ Committed counterparts: `fea/validation/{specs,decks,records}` for models whose 
 3. `ours/` is what our generator wrote. Pass `--out ../.local/fea/<tool>/<test>/ours` to `build_model.py` and `run_calculix.py`.
 4. `comparison/` holds the record and everything derived from it. Record paths are relative to the record (`../team/...`, `../ours/...`). `docs/models/build.py` writes the document to `comparison/report/<record>/` by default.
 5. Homework: the same folder name on both sides. Provided files stay unchanged in `assignments/`; a corrected copy goes to `code/` with `-fixed` in its name and the correction stated in the README.
-6. Never commit anything under `.local/`. A local model moves to `fea/validation/` only when its material is a library record that may be cited (ADR-0029, ADR-0030 amendment 4). The team's own files never move.
+6. Never commit anything under `.local/`. A local model moves to `fea/models/<test>/` only when its material is a library record that may be cited (ADR-0029, ADR-0030 amendment 4). The team's own files never move.
 7. A new coupon we build the team's way goes into `docs/models/our-models.toml`; rerun `docs/models/share.py` so the share folder holds it.
 
 ## Procedure: a new FEA test arrives
 
 1. Pick the test name. Create `.local/fea/<tool>/<test>/team/` and move the files there as received.
 2. Write `team/README.md`: who made the files, when, with which software version, and what each file is. Name the material and whether its rights class is known.
-3. Build our model into `ours/` from a spec; keep the spec in `ours/` (local) or `fea/validation/specs/` (public material).
+3. Build our model into `ours/` from a spec; keep the spec in `ours/` (local) or `fea/models/<test>/` (a material that may be cited).
 4. Write the record into `comparison/` with `fea/tools/record_from_report.py` (Abaqus CSV field reports) or `fea/tools/record_from_dat.py` (CalculiX `.dat`), then the document with `docs/models/build.py`.
 5. When the team built the model, seed our spec as they seeded theirs (`mesh.y_partitions`, `mesh.y_seeds` from their partitions and seeds) so every node lands on theirs. Then write `comparison/team-comparison.toml` and its reading `team-comparison.md`, and run `docs/models/team.py` on it. Hand over `.local/fea/share/<test>.zip`.
 6. Add the test's row to `.local/fea/README.md`. Mirror the folder under the other tool when that side exists.

@@ -61,6 +61,7 @@ from matplotlib.collections import PolyCollection  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap, Normalize, TwoSlopeNorm  # noqa: E402
 
 from anisotropy_engine.library import library_material  # noqa: E402
+from anisotropy_fea import paths as fea_paths  # noqa: E402  where the files live (ADR-0036)
 from anisotropy_fea import __version__ as fea_version  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck, read_deck  # noqa: E402
 from anisotropy_fea.abaqus_report import FieldReport, read_field_report, write_field_report  # noqa: E402
@@ -215,7 +216,7 @@ class Comparison:
         # the two models
         self.spec = load_spec(self.spec_path)
         self.our_text = write_abaqus(build_model(self.spec))
-        self.committed_deck = ROOT / "fea/validation/decks/generated" / f"{self.spec_path.stem}-abaqus.inp"
+        self.committed_deck = fea_paths.deck_path(self.spec_path, "abaqus")
         if self.committed_deck.exists() and self.committed_deck.read_text(encoding="utf-8").replace("\r\n", "\n") != self.our_text:
             raise SystemExit(f"{rel(self.committed_deck)} is not what the generator writes from {rel(self.spec_path)} today; regenerate it first")
         self.team_deck = read_deck(self.team_deck_path, units=m.units)

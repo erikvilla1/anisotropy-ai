@@ -12,11 +12,13 @@ from anisotropy_fea.femodel import build_model
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import mesh_from_deck
 from anisotropy_fea.model import section_plies, validate_deck
+from anisotropy_fea import paths  # where the files live (ADR-0036)
+from anisotropy_fea.mesher import gmsh_available
 from anisotropy_fea.spec import load_spec, parse_spec, to_si
 from anisotropy_fea.write_abaqus import number, write_abaqus
 
-SPECS = Path(__file__).parents[1] / "validation" / "specs"
-NODAL = (SPECS / "unnotched-im7-8552-nodal.toml").read_text(encoding="utf-8")
+NODAL = paths.spec_path("unnotched-im7-8552-nodal").read_text(encoding="utf-8")
+TEAM = paths.spec_path("tension-coupon")
 
 
 def test_numbers_are_written_with_a_decimal_point_and_ten_digits():
@@ -25,7 +27,7 @@ def test_numbers_are_written_with_a_decimal_point_and_ten_digits():
 
 
 def test_the_deck_is_deterministic_and_round_trips_through_our_reader(tmp_path):
-    spec = load_spec(SPECS / "unnotched-im7-8552-nodal.toml")
+    spec = load_spec(paths.spec_path("unnotched-im7-8552-nodal"))
     model = build_model(spec)
     text = write_abaqus(model)
     assert text == write_abaqus(model)
@@ -53,7 +55,7 @@ def test_nodal_and_coupled_grips_give_the_same_solution(tmp_path):
     solutions = {}
     for name in ("unnotched-im7-8552-nodal", "unnotched-im7-8552-coupling"):
         path = tmp_path / f"{name}.inp"
-        path.write_text(write_abaqus(build_model(load_spec(SPECS / f"{name}.toml"))), encoding="utf-8")
+        path.write_text(write_abaqus(build_model(load_spec(paths.spec_path(name)))), encoding="utf-8")
         deck = read_deck(path, "mm-MPa")
         solutions[name] = (deck, solve_membrane(deck))
     nodal_deck, nodal = solutions["unnotched-im7-8552-nodal"]
@@ -96,14 +98,50 @@ def test_force_control_deck_carries_the_consistent_loads_and_balances(tmp_path):
     assert solution.reaction_of(deck.nsets["Grip-Bottom"])[1] == pytest.approx(-5000.0, rel=1e-10)
 
 
-@pytest.mark.parametrize("name", ["unnotched-im7-8552-nodal", "unnotched-im7-8552-coupling", "compression-im7-8552",
-                                  "tension-coupon-x840-nodal", "tension-coupon-x840-coupling", "compression-coupon-x840-coupling",
-                                  "compression-coupon-x840-nodal"])
-def test_the_committed_generated_decks_match_their_specs(name):
-    """A committed deck is what the writer produces from its spec today; regenerate it when the spec or the writer changes."""
-    text = write_abaqus(build_model(load_spec(SPECS / f"{name}.toml")))
-    committed = (SPECS.parent / "decks" / "generated" / f"{name}-abaqus.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
-    assert committed == text, f"{name}: regenerate with examples/build_model.py --no-solve and copy the deck into validation/decks/generated/"
+SPECS = paths.all_specs()
+GMSH = gmsh_available() is not None
+
+
+def needs_mesher(spec_path):
+    if not GMSH and parse_spec(spec_path.read_text(encoding="utf-8")).mesh.mesher == "gmsh":
+        pytest.skip("Gmsh is not installed (uv sync --extra mesh); the Gmsh specs are checked where it is")
+
+
+@pytest.mark.parametrize("spec_path", SPECS, ids=[p.stem for p in SPECS])
+def test_every_committed_abaqus_deck_is_what_its_spec_writes_today(spec_path):
+    """Every spec in a test folder has its Abaqus deck in decks/; regenerate with tools/regenerate_decks.py when a spec or the writer changes."""
+    needs_mesher(spec_path)
+    deck = paths.deck_path(spec_path, "abaqus")
+    assert deck.is_file(), f"{spec_path.name} has no committed deck {deck.name}; run tools/regenerate_decks.py"
+    text = write_abaqus(build_model(load_spec(spec_path)))
+    assert deck.read_text(encoding="utf-8").replace("\r\n", "\n") == text, f"{deck.name}: regenerate with tools/regenerate_decks.py"
+
+
+CCX_SPECS = [p for p in SPECS if paths.deck_path(p, "ccx").is_file()]
+
+
+@pytest.mark.parametrize("spec_path", CCX_SPECS, ids=[p.stem for p in CCX_SPECS])
+def test_every_committed_calculix_deck_is_what_its_spec_writes_today(spec_path):
+    """A CalculiX deck is the same spec promoted to order 2 (S8R), as examples/run_calculix.py writes it."""
+    from anisotropy_fea.write_calculix import write_calculix
+
+    needs_mesher(spec_path)
+    spec = load_spec(spec_path)
+    order2 = spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})
+    text = write_calculix(build_model(order2))
+    deck = paths.deck_path(spec_path, "ccx")
+    assert deck.read_text(encoding="utf-8").replace("\r\n", "\n") == text, f"{deck.name}: regenerate with tools/regenerate_decks.py"
+    assert "*ELEMENT, TYPE=S8R" in text
+
+
+def test_every_test_folder_has_the_same_shape():
+    """A spec at the root, its decks in decks/, records in records/ with a reading beside each (ADR-0036)."""
+    assert len(paths.test_dirs()) >= 7 and {d.name for d in paths.test_dirs() if d.parent == paths.MODELS} >= {"tension-coupon", "compression-coupon", "open-hole-coupon"}
+    for folder in paths.test_dirs():
+        assert set(p.name for p in folder.iterdir()) <= {"decks", "records", "README.md"} | {p.name for p in folder.glob("*.toml")}, folder
+        for record in (folder / "records").glob("*.toml"):
+            assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
+    assert len(paths.all_records()) == 5 and paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
 
 
 def test_order_two_decks_are_written_as_s8r_with_nine_entries_per_element():
@@ -116,7 +154,7 @@ def test_order_two_decks_are_written_as_s8r_with_nine_entries_per_element():
 
 def test_a_names_table_gives_the_deck_the_teams_names_and_our_names_otherwise():
     """[names] reaches every place a name appears in the deck; without it the deck keeps our names (ADR-0035, amendment 1)."""
-    named = write_abaqus(build_model(load_spec(SPECS / "tension-coupon-x840-coupling.toml")))
+    named = write_abaqus(build_model(load_spec(TEAM)))
     for line in ("*Part, name=CFRP-Coupon", "*Instance, name=CFRP-Coupon-1, part=CFRP-Coupon", "*Material, name=X840-Z60",
                  "*Elset, elset=CompositeLayup-1-1, generate",
                  "*Shell Section, elset=CompositeLayup-1-1, composite, orientation=Ori-1, layup=CompositeLayup-1, symmetric",
@@ -127,9 +165,9 @@ def test_a_names_table_gives_the_deck_the_teams_names_and_our_names_otherwise():
     plain = write_abaqus(build_model(to_si(parse_spec(NODAL))))
     assert "*Part, name=Coupon" in plain and "*Instance, name=Coupon-1, part=Coupon" in plain and "layup=Layup-1" in plain
     with pytest.raises(ValueError, match="names.material"):
-        parse_spec((SPECS / "tension-coupon-x840-coupling.toml").read_text(encoding="utf-8").replace('material = "X840-Z60"', 'material = "X840 Z60"'))
+        parse_spec(TEAM.read_text(encoding="utf-8").replace('material = "X840-Z60"', 'material = "X840 Z60"'))
     with pytest.raises(ValueError, match="must differ"):
-        parse_spec((SPECS / "tension-coupon-x840-coupling.toml").read_text(encoding="utf-8").replace('instance = "CFRP-Coupon-1"', 'instance = "CFRP-Coupon"'))
+        parse_spec(TEAM.read_text(encoding="utf-8").replace('instance = "CFRP-Coupon-1"', 'instance = "CFRP-Coupon"'))
 
 
 def read_deck_text(text: str):

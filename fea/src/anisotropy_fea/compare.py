@@ -1,13 +1,13 @@
 """Comparison records: the numbers an independent solver produced for one of our models, with provenance, checked
 against our kernel (ADR-0030, ADR-0007).
 
-A record is a TOML file under `fea/validation/records/`:
+A record is a TOML file in a test folder's `records/` (`fea/models/<test>/records/`, `fea/checks/<test>/records/`, ADR-0036):
 
     title = "..."
     units = "mm-MPa"
     spec = "../specs/unnotched-im7-8552-nodal.toml"
-    deck_kernel = "../decks/generated/unnotched-im7-8552-nodal-kernel.inp"       # read by our reader; order 1
-    deck_reference = "../decks/generated/unnotched-im7-8552-nodal-ccx.inp"       # what the reference solver ran; order 2
+    deck_kernel = "../decks/unnotched-im7-8552-nodal-abaqus.inp"         # read by our reader; order 1
+    deck_reference = "../decks/unnotched-im7-8552-nodal-ccx.inp"          # what the reference solver ran; order 2
     deck_kernel_sha256 = "..."                                                   # both digests are checked before comparing
     deck_reference_sha256 = "..."
 

@@ -7,6 +7,7 @@ import pytest
 
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.model import coupled_nodes, reference_node
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
 LOCAL_DECK = Path(__file__).parents[2] / ".local" / "fea" / "abaqus" / "tension-coupon" / "team" / "Tension-test.inp"
 
@@ -66,7 +67,7 @@ def test_our_committed_coupling_deck_is_the_teams_model():
     """Our generated twin, seeded as the team seeded it, is the same model item by item (ADR-0035)."""
     from anisotropy_fea.equivalence import deck_equivalence
 
-    ours = Path(__file__).parents[1] / "validation" / "decks" / "generated" / "tension-coupon-x840-coupling-abaqus.inp"
+    ours = paths.deck_path(paths.spec_path("tension-coupon"), "abaqus")
     eq = deck_equivalence(read_deck(LOCAL_DECK, "mm-MPa"), read_deck(ours, "mm-MPa"), 1e-8, "mm-MPa")
     assert eq.same_model, [(i.item, i.team, i.ours) for i in eq.differences]
     assert len(eq.element_map) == 800 and eq.largest_node_offset < 1e-8

@@ -112,7 +112,7 @@ def build(manifest_path: Path, pdf: bool, root: Path = ROOT) -> Path:
         results_path = existing(model.results, "CalculiX results", root)
         spec = load_spec(spec_path)
         text = write_abaqus(build_model(spec))
-        committed = root / "fea/validation/decks/generated" / f"{spec_path.stem}-abaqus.inp"
+        committed = team.fea_paths.deck_path(spec_path, "abaqus")
         if committed.exists() and committed.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
             raise SystemExit(f"{committed} is not what the generator writes from {spec_path.name} today; regenerate it first")
         record = load_record(record_path)

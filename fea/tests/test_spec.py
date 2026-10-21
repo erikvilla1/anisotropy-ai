@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.spec import (SpecError, admissible_ny, full_angles, load_spec, mesh_counts, parse_spec, row_coordinates, spec_material, spec_plies,
                                  to_si)
 
-SPECS = Path(__file__).parents[1] / "validation" / "specs"
-NODAL = (SPECS / "unnotched-im7-8552-nodal.toml").read_text(encoding="utf-8")
+NODAL = (paths.spec_path("unnotched-im7-8552-nodal")).read_text(encoding="utf-8")
 
 
 def spec_with(old: str, new: str, base: str = NODAL):
@@ -17,7 +17,7 @@ def spec_with(old: str, new: str, base: str = NODAL):
 
 
 def test_the_committed_specs_load_and_convert_to_si():
-    for path in sorted(SPECS.glob("*.toml")):
+    for path in paths.all_specs():
         spec = load_spec(path)
         assert spec.si and spec.source_sha256 and spec.source_path == str(path)
         assert spec.geometry.length < 1.0  # metres now
@@ -100,7 +100,7 @@ def test_invalid_specs_are_refused_by_name(old, new, message):
 def test_tabs_grips_need_tabs_and_compression_needs_a_negative_value():
     with pytest.raises(SpecError, match="positive geometry.tab_length"):
         spec_with("tab_length = 56.0", "tab_length = 0.0")
-    compression = (SPECS / "compression-im7-8552.toml").read_text(encoding="utf-8")
+    compression = (paths.spec_path("compression-im7-8552")).read_text(encoding="utf-8")
     with pytest.raises(SpecError, match="compression needs a negative loading.value"):
         spec_with("value = -0.1", "value = 0.1", base=compression)
 
@@ -131,7 +131,7 @@ def test_bending_rules():
         parse_spec(text.replace("[loading]", "[grips]\nkind = \"nodal\"\nregion = \"line\"\n\n[loading]"))
 
 
-TEAM_COUPON = (SPECS / "tension-coupon-x840-coupling.toml").read_text(encoding="utf-8")
+TEAM_COUPON = (paths.spec_path("tension-coupon")).read_text(encoding="utf-8")
 TEAM_SEEDS = ("y_partitions = [15.0, 35.97, 44.03, 65.0]", "y_seeds = [15, 21, 8, 21, 15]")
 
 

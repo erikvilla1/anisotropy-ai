@@ -339,8 +339,8 @@ def validation() -> str:
 
 
 def fea_validation() -> str:
-    """Every finite element case in fea/validation/cases, solved by the kernel while the manual is built."""
-    paths = sorted(p for p in (ROOT / "fea/validation/cases").glob("*.toml") if not p.name.startswith("_"))
+    """Every finite element case in fea/checks/cases, solved by the kernel while the manual is built."""
+    paths = sorted(p for p in (ROOT / "fea/checks/cases").glob("*.toml") if not p.name.startswith("_"))
     out, total, agreeing = [], 0, 0
     for path in paths:
         case = fea_load_case(path)
@@ -368,7 +368,7 @@ def fea_validation() -> str:
                    + "\n".join(rows) + "\n" + r"\bottomrule\end{xltabular}}")
     summary = (rf"The finite element kernel was run on every case while this manual was built. "
                rf"{agreeing} of {total} values from {len(paths)} cases agree with their sources within each case's tolerance. "
-               rf"Cases are stored in {code('fea/validation/cases')}; see {code('fea/validation/README.md')} to add one. "
+               rf"Cases are stored in {code('fea/checks/cases')}; see {code('fea/checks/README.md')} to add one. "
                rf"Result labels read group, name, component: {code('rf[Top][1]')} is the second component of the reaction summed over "
                rf"the node set Top, {code('ply_stress_local[Coupon-1.1][3][0]')} the fiber-direction stress of ply 3 of element 1.")
     return summary + "\n\n" + "\n\n".join(out)

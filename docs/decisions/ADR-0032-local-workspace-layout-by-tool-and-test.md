@@ -1,6 +1,6 @@
 # ADR-0032: Local finite element files are laid out by tool and test with team, ours and comparison folders; homework assignments and their code share folder names
 
-- Status: Proposed
+- Status: Proposed; its finite element layout is superseded by ADR-0036 (2026-10-21, one folder per test), its homework layout stands
 - Date: 2026-10-19
 - Decided by: Founder (pending review) | Drafted by: Claude Code
 - Related: ADR-0029, ADR-0030, ADR-0031 (what the files are), ADR-0023 (skills), `docs/agents/skills/workspace-layout/SKILL.md`, `.local/fea/README.md`, `.local/homework/README.md`, `fea/tests/test_local_tension_deck.py`

@@ -8,9 +8,9 @@ The finite element layer (ADR-0029). It reads the Abaqus input decks the team bu
 cd fea
 uv sync --locked
 uv run pytest -q -ra tests ../engine/tests
-uv run python examples/deck_summary.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
-uv run python examples/solve_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
-uv run python examples/plot_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea/scratch/plots
+uv run python examples/deck_summary.py checks/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
+uv run python examples/solve_deck.py checks/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
+uv run python examples/plot_deck.py checks/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea/checks/plots
 ```
 
 `export_vtk.py` writes the solved model as a `.vtu` file for ParaView (points: displacement, reaction; cells: strains, section forces, failure indices with the worst ply, every ply's material-axis stresses), so the result can be rotated, probed and coloured like in any finite element tool. `plot_deck.py` draws the mesh and deformed shape, the three strain fields, the axial section force and the first-ply-failure map as one PNG (matplotlib, a development dependency). Write the pictures of a team deck to `.local/`, never into the repository.
@@ -46,29 +46,29 @@ Two deck habits of Abaqus/CAE are handled on purpose: the same set name defined 
 
 ## The kernel
 
-Four-node isoparametric plane-stress elements whose stiffness is the laminate membrane matrix `A` from the engine, 2 by 2 Gauss integration, sparse assembly, kinematic couplings as dof aliasing (every coupled node translates with its reference node, so the reference node's reaction is the sum over the region), prescribed displacements by partitioning, sparse LU solve, reactions as the residual, element strain at the centroid and the Gauss points, section forces `N = A eps`. The layups are symmetric (`B = 0`), the loading is in-plane and the plate is flat, so the bending problem has the trivial solution and the membrane problem is exact for these decks; the kernel refuses a layup whose `B` does not vanish, a singular system (a free rigid-body motion), a node in no element, and prescriptions that conflict through a coupling. Validation cases live in `validation/cases/` and are run by `tests/test_fe_validation_cases.py`; the format is documented at the top of `src/anisotropy_fea/cases.py`.
+Four-node isoparametric plane-stress elements whose stiffness is the laminate membrane matrix `A` from the engine, 2 by 2 Gauss integration, sparse assembly, kinematic couplings as dof aliasing (every coupled node translates with its reference node, so the reference node's reaction is the sum over the region), prescribed displacements by partitioning, sparse LU solve, reactions as the residual, element strain at the centroid and the Gauss points, section forces `N = A eps`. The layups are symmetric (`B = 0`), the loading is in-plane and the plate is flat, so the bending problem has the trivial solution and the membrane problem is exact for these decks; the kernel refuses a layup whose `B` does not vanish, a singular system (a free rigid-body motion), a node in no element, and prescriptions that conflict through a coupling. Validation cases live in `checks/cases/` and are run by `tests/test_fe_validation_cases.py`; the format is documented at the top of `src/anisotropy_fea/cases.py`.
 
 ## Models from a spec
 
-A coupon model is generated from one TOML file under `validation/specs/` (ADR-0030): kind (`unnotched_tension`, `open_hole_tension`, `compression`, `shear_pm45`, `three_point_bending`, `four_point_bending`), dimensions, mesh controls, layup, material from the engine's cited library or explicit constants with stated out-of-plane constants, grips (`nodal` or `coupling`, on the end rows or the whole tabs), loading by displacement or force, probe points and output requests. Every key is required and every invalid combination is refused by name; the format is documented at the top of `src/anisotropy_fea/spec.py`.
+A coupon model is generated from one TOML file in its test folder, `models/<test>/` or `checks/<test>/` (ADR-0030, ADR-0036): kind (`unnotched_tension`, `open_hole_tension`, `compression`, `shear_pm45`, `three_point_bending`, `four_point_bending`), dimensions, mesh controls, layup, material from the engine's cited library or explicit constants with stated out-of-plane constants, grips (`nodal` or `coupling`, on the end rows or the whole tabs), loading by displacement or force, probe points and output requests. Every key is required and every invalid combination is refused by name; the format is documented at the top of `src/anisotropy_fea/spec.py`.
 
 ```powershell
-uv run python examples/build_model.py validation/specs/tension-coupon-x840-coupling.toml --out ../.local/fea/abaqus/tension-coupon/ours
+uv run python examples/build_model.py models/tension-coupon/tension-coupon.toml --out ../.local/fea/tension-coupon/runs/kernel
 ```
 
-writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite section, material with citations in the header, reference nodes and couplings when asked, step, boundaries, loads, output requests), a model preview (`<spec>-model.png`), then reads the deck back with our own reader, solves it with the kernel, and writes the result figure, the `.vtu` and `summary.txt`. Built today: unnotched tension and compression coupons on the structured mesher, and open-hole coupons on a Gmsh transfinite O-grid (`mesher.gmsh_open_hole_plate`, optional extra `mesh`: `uv sync --extra mesh`; ADR-0030, amendment 3). Shear and bending follow chunk by chunk. The generated decks for the committed specs live in `validation/decks/generated/`; the tools are described in [docs/installation-fea-tools.md](../docs/installation-fea-tools.md).
+writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite section, material with citations in the header, reference nodes and couplings when asked, step, boundaries, loads, output requests), a model preview (`<spec>-model.png`), then reads the deck back with our own reader, solves it with the kernel, and writes the result figure, the `.vtu` and `summary.txt`. Built today: unnotched tension and compression coupons on the structured mesher, and open-hole coupons on a Gmsh transfinite O-grid (`mesher.gmsh_open_hole_plate`, optional extra `mesh`: `uv sync --extra mesh`; ADR-0030, amendment 3). Shear and bending follow chunk by chunk. Each spec's generated decks live in its test folder's `decks/` (rewrite them with `tools/regenerate_decks.py`); the tools are described in [docs/installation-fea-tools.md](../docs/installation-fea-tools.md).
 
 ## CalculiX, the independent solver
 
 ```powershell
-uv run python examples/run_calculix.py validation/specs/tension-coupon-x840-nodal.toml --out ../.local/fea/calculix-prepomax/tension-coupon/ours
+uv run python examples/run_calculix.py models/tension-coupon/tension-coupon-nodal.toml --out ../.local/fea/tension-coupon/runs/calculix
 ```
 
 writes the CalculiX deck (`write_calculix`: S8R composite shells, four-field layer lines, one `*ORIENTATION` per ply angle, ENGINEERING CONSTANTS with the spec's out-of-plane constants, numeric boundaries, `*NODE PRINT` totals and `*EL PRINT, GLOBAL=YES` with COORD), runs the solver found through `ANISOTROPY_CCX` or on PATH (`calculix.run_calculix`), parses the `.dat` (`calculix.parse_dat`) and prints the reactions, probe displacements and strains next to the kernel's on the order-1 twin mesh. The `.frd` opens in PrePoMax (File, Open results). CalculiX refuses what its manual says it cannot do: order-1 composite shells, a reaction at a coupled reference node, force control on nodal grips. `plane_stress = true` in `[material.transverse]` writes nu13 = nu23 = 0: CalculiX expands a composite S8R into a single brick, and nonzero through-thickness Poisson ratios then couple the plies' thickness contraction and raise the in-plane stresses, which neither Abaqus LAMINA nor our kernel does (ADR-0030, amendment 1). Use it whenever the reference is plane stress.
 
 A deck our reader has read, such as the team's Abaqus coupon, converts to CalculiX too: `examples/convert_to_calculix.py <deck> --units mm-MPa --nu23 <value> --out <dir>` promotes the mesh to S8R, turns each coupling into direct constraints carrying the reference node's values, rewrites the material with the stated out-of-plane constants (`--plane-stress` for nu13 = nu23 = 0), runs the solver and prints the reactions and centre strain next to the kernel's. The converted deck opens laminated in PrePoMax.
 
-How CalculiX reports composite results (layer order, integration points, axes, shear strain) was detected by running it and is recorded in `validation/records/_calculix-conventions.toml`; the tests repeat the detection whenever the solver is present. `tools/record_from_dat.py` turns a run into a comparison record under `validation/records/` (numbers with provenance and both deck digests), and `tests/test_records.py` checks that the kernel reproduces every committed record within its tolerance and floor. The first record and its numbers: [the comparison note](../docs/evaluations/fea/2026-10-15-calculix-first-comparison.md).
+How CalculiX reports composite results (layer order, integration points, axes, shear strain) was detected by running it and is recorded in `checks/calculix-conventions.toml`; the tests repeat the detection whenever the solver is present. `tools/record_from_dat.py` turns a run into a comparison record in the test's `records/` folder (numbers with provenance and both deck digests), and `tests/test_records.py` checks that the kernel reproduces every committed record within its tolerance and floor. The first record and its numbers: [the comparison note](../docs/evaluations/fea/2026-10-15-calculix-first-comparison.md).
 
 ## Ply stresses and first-ply failure
 
@@ -83,7 +83,8 @@ src/anisotropy_fea/   abaqus_reader.py (tokenize, parse_deck, read_deck), model.
                       cases.py (validation case format, compare, disagreements)
 docs/theory.md        every equation and the function that computes it, with code markers
 tests/                reader, units, element, solve, recovery, validation-case, theory-marker and local-deck tests
-validation/decks/     committed fixture decks with public library materials; validation/cases/ the cases (fea/validation/README.md)
+models/<test>/        the models we show the team: spec(s), decks/, records/, README (models/README.md)
+checks/              proofs that are not team models: cases/, decks/ (tiny fixtures), the IM7/8552 regression set, the Kirsch plate (checks/README.md)
 examples/             deck_summary.py, solve_deck.py
 ```
 
