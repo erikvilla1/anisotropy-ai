@@ -72,6 +72,8 @@ def test_the_document_and_the_zip_are_built(tmp_path):
     assert ours == (tmp_path / "team/Test_S22.csv").read_text(encoding="utf-8").splitlines()[0]  # the team's columns, in the team's order
     assert not (tmp_path / "share" / "grips").exists()  # no unzipped copy is kept
     assert run(BUILD, str(path)).returncode == 0  # a second build replaces the zip it wrote
+    summary = (tmp_path / "ours" / "records" / "ours-team-summary.toml").read_text(encoding="utf-8")  # the figures beside our records (ADR-0039)
+    assert 'coupon = "IM7-UNT-L9"' in summary and "[equivalence]" in summary and "[[agreement]]" in summary
 
 
 def test_a_comparison_names_its_coupon(tmp_path):

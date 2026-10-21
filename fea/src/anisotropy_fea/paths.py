@@ -8,7 +8,8 @@
     .local/fea/<test>/        the same test name locally: team/ (as received), runs/ (what our tools write), comparison/
 
 A spec is a TOML file at the root of a test folder; its generated decks are `decks/<spec stem>-abaqus.inp` and
-`decks/<spec stem>-ccx.inp`; its records are `records/*.toml`, each with a reading `records/<record>.md`. Tools and tests
+`decks/<spec stem>-ccx.inp`; its records are `records/*.toml`, each with a reading `records/<record>.md`. A model the team
+built also has `records/<test>-team-summary.toml`, the team comparison in figures (ADR-0039), which is not a record. Tools and tests
 take every location from here, so a later move changes this module and nothing else. The paths are those of the source
 tree: the package is used from the repository, never from an installed copy.
 """
@@ -26,6 +27,7 @@ CHECK_DECKS = CHECKS / "decks"
 CONVENTIONS = CHECKS / "calculix-conventions.toml"
 LOCAL = ROOT / ".local" / "fea"
 NOT_TESTS = {"cases", "decks"}  # folders under checks/ that hold no test of their own
+TEAM_SUMMARY = "-team-summary"  # stem suffix of the team comparison's figures in records/ (ADR-0039); not a comparison record
 
 DECK_KINDS = ("abaqus", "ccx")
 
@@ -43,8 +45,13 @@ def all_specs() -> list[Path]:
 
 
 def all_records() -> list[Path]:
-    """Every committed comparison record, sorted by path."""
-    return sorted(record for d in test_dirs() for record in (d / "records").glob("*.toml"))
+    """Every committed comparison record, sorted by path; the team summaries are not records."""
+    return sorted(record for d in test_dirs() for record in (d / "records").glob("*.toml") if not record.stem.endswith(TEAM_SUMMARY))
+
+
+def team_summary(test_dir: Path) -> Path:
+    """Where the team comparison's figures for a model folder are committed: `records/<test>-team-summary.toml`."""
+    return Path(test_dir) / "records" / f"{Path(test_dir).name}{TEAM_SUMMARY}.toml"
 
 
 def spec_path(name: str) -> Path:

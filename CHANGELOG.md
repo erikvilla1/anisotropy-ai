@@ -18,6 +18,11 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
+- Each model folder's README is a case page (ADR-0039, chunk 1).
+  - **The page.** The coupon's name, a case line (category; status in progress, verified or validated; accepted attempt), the problem, a generated result table, the attempt log and where to look.
+  - **The attempt logs** are rebuilt from the evaluation notes, failed tries included. Tension has 12 attempts, including the 2.8 % CalculiX stiffness fixed by plane stress; compression and open-hole have 3 each.
+  - **Generated, never typed.** `fea/tools/case_pages.py` writes the result tables and two indexes from the records: tests in `fea/models/README.md`, and benchmarks in `fea/checks/README.md` (check records, cases and the engine's validation cases). `tests/test_case_pages.py` fails when they are out of date.
+  - **The team summary.** `docs/models/team.py` also writes `records/<test>-team-summary.toml`, the team comparison in figures with no team values, and `paths.all_records()` skips it.
 - Every coupon model carries an identity card and a name (ADR-0038).
   - **The card.** A `[coupon]` table in the spec holds the name, the test standard, where the size comes from, the team's own model and the test data. The rest of the card (test, material, layup and size) is read from the spec.
   - **The names.** A name reads `<material>-<test>-<layup>`: X840PW-UNT-L1 (the team's Tension-test), X840PW-UNC-L1 and X840PW-OHT-L1. The test code must match the spec's `kind`, and every title starts with the name.

@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
 description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Finite element files sit in one folder per test (team files as received, our runs per solver, the comparison), with the same test name as the committed fea/models/<test>/; the zips for the team sit in one share folder; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, homework file or input file, and when a new test or a new homework arrives.
-version: 0.3.1
+version: 0.3.2
 ---
 
 # Workspace layout
@@ -66,7 +66,7 @@ Committed counterparts: `fea/models/<test>/` (specs, `decks/`, `records/`, READM
 1. Pick the test name. Create `.local/fea/<test>/team/<date>/` and move the files there as received.
 2. Write `team/<date>/README.md`: who made the files, when, with which software version, and what each file is. Name the material and whether its rights class is known.
 3. Build our model in `fea/models/<test>/` (see `fea/models/README.md`). Give it its coupon name and identity card (`[coupon]`, ADR-0038): the team's own model of the same coupon has the same name. Seed the spec as the team seeded theirs (`mesh.y_partitions`, `mesh.y_seeds`) so every node lands on theirs, write the decks with `fea/tools/regenerate_decks.py`, run CalculiX into `runs/calculix/` and write the record.
-4. Write `comparison/team-comparison.toml` and its reading `team-comparison.md`, run `docs/models/team.py` on it, and hand over `.local/fea/share/<test>-comparison.zip`. Rerun `docs/models/share.py` so `our-models.zip` holds the new coupon.
+4. Write `comparison/team-comparison.toml` and its reading `team-comparison.md`, run `docs/models/team.py` on it, and hand over `.local/fea/share/<test>-comparison.zip`. Commit the `records/<test>-team-summary.toml` it writes, add a row to the case page's attempt log (ADR-0039) and run `fea/tools/case_pages.py`. Rerun `docs/models/share.py` so `our-models.zip` holds the new coupon.
 5. Add the test's row to `.local/fea/README.md` and `fea/models/README.md`.
 
 ## Procedure: a new homework arrives

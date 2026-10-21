@@ -140,7 +140,8 @@ def test_every_test_folder_has_the_same_shape():
     for folder in paths.test_dirs():
         assert set(p.name for p in folder.iterdir()) <= {"decks", "records", "README.md"} | {p.name for p in folder.glob("*.toml")}, folder
         for record in (folder / "records").glob("*.toml"):
-            assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
+            if not record.stem.endswith(paths.TEAM_SUMMARY):  # the team summary's reading is the local team-comparison.md (ADR-0039)
+                assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
     assert len(paths.all_records()) == 5 and paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
 
 

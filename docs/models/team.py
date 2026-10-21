@@ -719,6 +719,56 @@ def fill_share(c: Comparison, pdf: Path | None, share: Path) -> None:
     (share / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
+# --------------------------------------------------------------------------------------------- summary
+
+def toml_value(value) -> str:
+    if isinstance(value, str):
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(toml_value(v) for v in value) + "]"
+    return f"{value:.9g}" if isinstance(value, float) else str(value)
+
+
+def write_team_summary(c: Comparison) -> Path:
+    """The comparison in figures, committed beside our model's records (ADR-0039): the equivalence counts and the agreement per
+    quantity and band. Derived numbers only; no value from the team's deck or reports is written."""
+    path = fea_paths.team_summary(c.spec_path.parent)
+    judged = [i for i in c.equivalence.items if i.same is not None]
+    lines = [
+        "# The team comparison in figures, written by docs/models/team.py (ADR-0039). Derived from the team's deck and field reports,",
+        "# which stay local; no value of theirs is in this file. The case page's result table is generated from it (fea/tools/case_pages.py).",
+        f"coupon = {toml_value(c.card['Coupon'])}",
+        f"units = {toml_value(c.units)}",
+        f"built = {toml_value(date.today().isoformat())}",
+        f"commit = {toml_value(git_commit())}",
+        "",
+        "[team]",
+        f"deck = {toml_value(c.team_deck_path.name)}",
+        f"deck_sha256 = {toml_value(sha256(c.team_deck_path))}",
+        f"solver = {toml_value(c.manifest.team.solver)}",
+        f"run_date = {toml_value(c.manifest.team.run_date)}",
+        f"reports = {toml_value([p.name for p in c.report_paths])}",
+        "",
+        "[equivalence]",
+        f"items = {len(judged)}",
+        f"same = {sum(bool(i.same) for i in judged)}",
+        f"elements_matched = {len(c.equivalence.element_map)}",
+        f"largest_node_offset = {toml_value(from_si(c.equivalence.largest_node_offset, 'length', c.units))}  # {c.length_unit}",
+    ]
+    for band, (lo, hi) in c.bands.items():
+        for q in c.quantities:
+            a = c.agreements[(q, band)]
+            lines += ["", "[[agreement]]", f"band = {toml_value(band)}", f"y = {toml_value([float(lo), float(hi)])}  # {c.length_unit}",
+                      f"quantity = {toml_value(q)}", f"values = {a.count}", f"agree = {a.within}",
+                      f"within = {toml_value(a.fraction)}  # of the quantity's largest team value in the band",
+                      f"largest_difference = {toml_value(a.worst_fraction)}  # the same fraction, for the worst value"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    return path
+
+
 # --------------------------------------------------------------------------------------------- build
 
 def build(manifest_path: Path, pdf: bool) -> tuple[Path, Path]:
@@ -766,6 +816,7 @@ def build(manifest_path: Path, pdf: bool) -> tuple[Path, Path]:
             print("Document written to", result)
     archive = write_share(c, result)
     print(f"Zip written to {archive}")
+    print(f"Figures written to {write_team_summary(c)}")
     return tex if result is None else result, archive
 
 
