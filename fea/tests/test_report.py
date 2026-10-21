@@ -12,11 +12,12 @@ from anisotropy_fea.compare import compare_record, load_record
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.report import COMPONENTS, comparison_rows, element_centroids, laminate_check, not_reported, parse_key, solve_record, summarize
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
 FEA = Path(__file__).parents[1]
 ROOT = FEA.parent
-RECORD = FEA / "validation" / "records" / "unnotched-im7-8552-nodal-calculix.toml"
-DECKS = FEA / "validation" / "decks"
+RECORD = paths.CHECKS / "unnotched-im7-8552" / "records" / "unnotched-im7-8552-nodal-calculix.toml"
+DECKS = paths.CHECK_DECKS
 
 
 def test_parse_key_reads_every_label_shape():

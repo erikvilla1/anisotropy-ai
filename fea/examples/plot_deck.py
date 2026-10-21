@@ -1,6 +1,6 @@
 """Draw what the membrane kernel computed for a deck: mesh and deformed shape, strain fields, section forces, first-ply failure.
 
-    uv run python examples/plot_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea/scratch/plots
+    uv run python examples/plot_deck.py checks/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea/checks/plots
     uv run python examples/plot_deck.py ../.local/fea/abaqus/tension-coupon/team/Tension-test.inp --units mm-MPa --out ../.local/fea/scratch/plots
 
 One PNG per deck. Lengths print in the deck's units; strains are dimensionless; section forces in force per length.

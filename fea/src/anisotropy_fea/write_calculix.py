@@ -45,7 +45,7 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
     out: list[str] = ["*HEADING"]
     out.append(f"CalculiX deck written by anisotropy_fea from {spec.title}")
     out += [f"** {line}" for line in model.heading]
-    out.append("** Layer lines are listed bottom-first; CalculiX's own convention is detected by the conventions run and recorded in fea/validation/records/_calculix-conventions.toml.")
+    out.append("** Layer lines are listed bottom-first; CalculiX's own convention is detected by the conventions run and recorded in fea/checks/calculix-conventions.toml.")
     out.append("*NODE, NSET=Nall")
     for index, (x, y) in enumerate(mesh.xy, start=1):
         out.append(f"{index}, {number(length(x))}, {number(length(y))}, 0.")

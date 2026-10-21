@@ -12,9 +12,10 @@ from anisotropy_fea.compare import RecordError, format_record, load_record, reco
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.recovery import element_ply_states, ply_mises
 from anisotropy_fea.units import from_si
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
 FIXTURES = Path(__file__).parent / "fixtures"
-DECKS = Path(__file__).parents[1] / "validation" / "decks"
+DECKS = paths.CHECK_DECKS
 GRIPS = DECKS / "coupon-2x8-grips-im7-8552.inp"
 SAMPLE = (FIXTURES / "field-report-S22.csv").read_text(encoding="utf-8")
 HEADER = SAMPLE.splitlines()[0]

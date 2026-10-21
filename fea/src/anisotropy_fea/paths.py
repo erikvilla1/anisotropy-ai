@@ -1,0 +1,72 @@
+"""Where the finite element files live: one folder per test, in the repository and on the founder's machine (ADR-0036).
+
+    fea/models/<test>/        the models we show the team: the spec(s) at the folder root, decks/, records/, README.md
+    fea/checks/<test>/        the same shape for the proofs that are not team models (the public IM7/8552 regression set,
+                              the isotropic Kirsch plate)
+    fea/checks/cases/         validation cases: a deck, expected numbers, a source, a tolerance
+    fea/checks/decks/         the tiny hand-made decks the cases and tests read
+    .local/fea/<test>/        the same test name locally: team/ (as received), runs/ (what our tools write), comparison/
+
+A spec is a TOML file at the root of a test folder; its generated decks are `decks/<spec stem>-abaqus.inp` and
+`decks/<spec stem>-ccx.inp`; its records are `records/*.toml`, each with a reading `records/<record>.md`. Tools and tests
+take every location from here, so a later move changes this module and nothing else. The paths are those of the source
+tree: the package is used from the repository, never from an installed copy.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+FEA = Path(__file__).resolve().parents[2]  # fea/
+ROOT = FEA.parent  # the repository
+MODELS = FEA / "models"
+CHECKS = FEA / "checks"
+CASES = CHECKS / "cases"
+CHECK_DECKS = CHECKS / "decks"
+CONVENTIONS = CHECKS / "calculix-conventions.toml"
+LOCAL = ROOT / ".local" / "fea"
+NOT_TESTS = {"cases", "decks"}  # folders under checks/ that hold no test of their own
+
+DECK_KINDS = ("abaqus", "ccx")
+
+
+def test_dirs() -> list[Path]:
+    """Every test folder: a folder under models/ or checks/ with at least one spec at its root, sorted by path."""
+    dirs = [d for base in (MODELS, CHECKS) if base.is_dir() for d in sorted(base.iterdir())
+            if d.is_dir() and d.name not in NOT_TESTS and any(d.glob("*.toml"))]
+    return sorted(dirs)
+
+
+def all_specs() -> list[Path]:
+    """Every committed spec, sorted by path."""
+    return sorted(spec for d in test_dirs() for spec in d.glob("*.toml"))
+
+
+def all_records() -> list[Path]:
+    """Every committed comparison record, sorted by path."""
+    return sorted(record for d in test_dirs() for record in (d / "records").glob("*.toml"))
+
+
+def spec_path(name: str) -> Path:
+    """The committed spec with this stem, wherever its test folder is."""
+    found = [spec for spec in all_specs() if spec.stem == name]
+    if len(found) != 1:
+        raise FileNotFoundError(f"no single committed spec named {name!r} ({len(found)} found)")
+    return found[0]
+
+
+def deck_path(spec: Path, kind: str) -> Path:
+    """Where the deck the generator writes from `spec` is committed: `decks/<stem>-abaqus.inp` or `decks/<stem>-ccx.inp`."""
+    if kind not in DECK_KINDS:
+        raise ValueError(f"deck kind must be one of {DECK_KINDS}")
+    return Path(spec).parent / "decks" / f"{Path(spec).stem}-{kind}.inp"
+
+
+def check_deck(name: str) -> Path:
+    """A hand-made deck under checks/decks/, by file name."""
+    return CHECK_DECKS / name
+
+
+def local_test(name: str) -> Path:
+    """The test's folder on the founder's machine (git-ignored): team/, runs/, comparison/."""
+    return LOCAL / name

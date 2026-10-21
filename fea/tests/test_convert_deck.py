@@ -11,8 +11,9 @@ from anisotropy_fea.convert_deck import TransverseChoice, calculix_from_deck, pr
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import mesh_from_deck
 from anisotropy_fea.write_calculix import CalculixWriterError
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-DECKS = Path(__file__).parents[1] / "validation" / "decks"
+DECKS = paths.CHECK_DECKS
 GRIPS = DECKS / "coupon-2x8-grips-im7-8552.inp"
 LOCAL_DECK = Path(__file__).parents[2] / ".local" / "fea" / "abaqus" / "tension-coupon" / "team" / "Tension-test.inp"
 needs_ccx = pytest.mark.skipif(find_ccx() is None, reason="CalculiX not found: set ANISOTROPY_CCX or put ccx on PATH (docs/installation-fea-tools.md)")

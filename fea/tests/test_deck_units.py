@@ -7,8 +7,9 @@ import pytest
 from anisotropy_fea.abaqus_reader import parse_deck
 from anisotropy_fea.model import to_si as deck_to_si
 from anisotropy_fea.units import DECK_UNIT_SYSTEMS, from_si, to_si, unit_factors
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-DECK = Path(__file__).parents[1] / "validation" / "decks" / "coupon-1x1-im7-8552.inp"
+DECK = paths.CHECK_DECKS / "coupon-1x1-im7-8552.inp"
 
 
 def test_the_two_systems_and_their_factors():

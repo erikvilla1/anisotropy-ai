@@ -1,12 +1,11 @@
 """Turn a CalculiX run of one of our specs into a committed comparison record: numbers plus provenance (ADR-0030, ADR-0007).
 
-    uv run python tools/record_from_dat.py validation/specs/tension-coupon-x840-nodal.toml ../.local/fea/calculix-prepomax/tension-coupon/ours/tension-coupon-x840-nodal-ccx.dat \
-        --deck-reference validation/decks/generated/tension-coupon-x840-nodal-ccx.inp \
-        --deck-kernel validation/decks/generated/tension-coupon-x840-nodal-abaqus.inp \
+    uv run python tools/record_from_dat.py models/tension-coupon/tension-coupon-nodal.toml ../.local/fea/tension-coupon/runs/calculix/tension-coupon-nodal-ccx.dat \
         --version 2.22 --run-by "Erik Villa" --machine "founder Windows 11, PrePoMax v2.6.0 bundle" \
-        --tolerance 0.03 --floor 0.02 --element-probes centre --out validation/records/tension-coupon-x840-nodal-calculix.toml
+        --tolerance 0.03 --floor 0.02 --element-probes centre --out models/tension-coupon/records/tension-coupon-calculix.toml
 
-The reference deck is the one CalculiX ran (order 2, S8R); the kernel deck is the order-1 twin on the same corner nodes.
+The reference deck is the one CalculiX ran (order 2, S8R); the kernel deck is the order-1 twin on the same corner nodes. Both
+default to the spec's committed decks, `decks/<spec>-ccx.inp` and `decks/<spec>-abaqus.inp` (ADR-0036).
 The record stores both digests, so a changed deck is noticed. The .dat itself stays out of the repository.
 """
 
@@ -16,6 +15,7 @@ import argparse
 import datetime as dt
 from pathlib import Path
 
+from anisotropy_fea import paths
 from anisotropy_fea.calculix import parse_dat
 from anisotropy_fea.compare import format_record, load_conventions, reference_quantities, sha256_of
 from anisotropy_fea.femodel import build_model
@@ -32,9 +32,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("spec", type=Path)
     parser.add_argument("dat", type=Path)
-    parser.add_argument("--deck-reference", type=Path, required=True)
-    parser.add_argument("--deck-kernel", type=Path, required=True)
-    parser.add_argument("--conventions", type=Path, default=Path("validation/records/_calculix-conventions.toml"))
+    parser.add_argument("--deck-reference", type=Path, default=None, help="the deck CalculiX ran; default the spec's decks/<spec>-ccx.inp")
+    parser.add_argument("--deck-kernel", type=Path, default=None, help="the order-1 twin; default the spec's decks/<spec>-abaqus.inp")
+    parser.add_argument("--conventions", type=Path, default=paths.CONVENTIONS)
     parser.add_argument("--version", required=True, help="CalculiX version as `ccx -v` prints it")
     parser.add_argument("--run-by", required=True)
     parser.add_argument("--machine", required=True)
@@ -49,6 +49,8 @@ def main() -> None:
     parser.add_argument("--notes", default="")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
+    args.deck_reference = args.deck_reference or paths.deck_path(args.spec, "ccx")
+    args.deck_kernel = args.deck_kernel or paths.deck_path(args.spec, "abaqus")
 
     spec = load_spec(args.spec)
     spec2 = spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})
@@ -69,7 +71,8 @@ def main() -> None:
         "deck_kernel_sha256": sha256_of(args.deck_kernel),
         "deck_reference_sha256": sha256_of(args.deck_reference),
         "solver": {"name": "calculix", "version": args.version, "element_type": "S8R", "run_by": args.run_by, "run_date": args.run_date,
-                   "machine": args.machine, "source": "dat", "conventions": args.conventions.name, "notes": args.notes},
+                   "machine": args.machine, "source": "dat",
+                   "conventions": args.conventions.resolve().relative_to(out_dir.resolve(), walk_up=True).as_posix(), "notes": args.notes},
         "known_differences": KNOWN_DIFFERENCES,
         "expected": expected,
     }

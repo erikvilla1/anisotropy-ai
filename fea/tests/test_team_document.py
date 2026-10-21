@@ -10,7 +10,7 @@ from test_side_by_side import kernel_reports
 
 ROOT = Path(__file__).parents[2]
 BUILD = ROOT / "docs/models/team.py"
-RECORD = ROOT / "fea/validation/records/unnotched-im7-8552-nodal-calculix.toml"
+RECORD = ROOT / "fea/checks/unnotched-im7-8552/records/unnotched-im7-8552-nodal-calculix.toml"
 LIBRARY_SPEC = FIXTURE_SPEC.replace("E1 = 162095.74\nE2 = 8963.18\nG12 = 4688.43\nnu12 = 0.316\nF1t = 2558.51\nF1c = 1731.48\nF2t = 64.05\nF2c = 285.72\nF6 = 91.15\n",
                                     'library = "im7-8552"\ndataset = "ncamp-im7-8552-2019-rtd-measured-v1"\n')
 
@@ -79,10 +79,10 @@ def share_manifest(tmp: Path, folder: str) -> Path:
     path = tmp / "models.toml"
     path.write_text("\n".join([
         'name = "models"', 'title = "Two coupons"', 'units = "mm-MPa"', f'share = "{(tmp / folder).as_posix()}"',
-        "[[models]]", 'test = "tension-coupon"', 'spec = "fea/validation/specs/tension-coupon-x840-coupling.toml"',
-        'record = "fea/validation/records/tension-coupon-x840-nodal-calculix.toml"', f'results = "{frd.as_posix()}"',
-        "[[models]]", 'test = "unnotched-im7"', 'spec = "fea/validation/specs/unnotched-im7-8552-nodal.toml"',
-        'record = "fea/validation/records/unnotched-im7-8552-nodal-calculix.toml"', f'results = "{frd.as_posix()}"',
+        "[[models]]", 'test = "tension-coupon"', 'spec = "fea/models/tension-coupon/tension-coupon.toml"',
+        'record = "fea/models/tension-coupon/records/tension-coupon-calculix.toml"', f'results = "{frd.as_posix()}"',
+        "[[models]]", 'test = "unnotched-im7"', 'spec = "fea/checks/unnotched-im7-8552/unnotched-im7-8552-nodal.toml"',
+        'record = "fea/checks/unnotched-im7-8552/records/unnotched-im7-8552-nodal-calculix.toml"', f'results = "{frd.as_posix()}"',
     ]) + "\n", encoding="utf-8")
     return path
 
@@ -91,14 +91,14 @@ def test_our_models_are_written_to_one_folder_and_zipped(tmp_path):
     result = subprocess.run([sys.executable, str(SHARE), str(share_manifest(tmp_path, "share/models")), "--no-pdf"], capture_output=True, text=True, cwd=ROOT)
     assert result.returncode == 0, result.stdout + result.stderr
     share = tmp_path / "share" / "models"
-    for name in ("README.txt", "1-tension-coupon/abaqus/tension-coupon-x840-coupling-abaqus.inp", "1-tension-coupon/calculix/tension-coupon-x840-nodal-ccx.inp",
-                 "1-tension-coupon/calculix/twin.frd", "1-tension-coupon/spec/tension-coupon-x840-nodal.toml", "2-unnotched-im7/spec/unnotched-im7-8552-nodal.toml",
+    for name in ("README.txt", "1-tension-coupon/abaqus/tension-coupon-abaqus.inp", "1-tension-coupon/calculix/tension-coupon-nodal-ccx.inp",
+                 "1-tension-coupon/calculix/twin.frd", "1-tension-coupon/spec/tension-coupon-nodal.toml", "2-unnotched-im7/spec/unnotched-im7-8552-nodal.toml",
                  "material/x840-z60-pw.csv", "material/im7-8552.csv"):
         assert (share / name).is_file(), name
     readme = (share / "README.txt").read_text(encoding="utf-8")
     assert "69 of 69 compared values agree" in readme and "59 of 59 compared values agree" in readme
-    deck = (share / "1-tension-coupon/abaqus/tension-coupon-x840-coupling-abaqus.inp").read_text(encoding="utf-8")
-    assert deck == (ROOT / "fea/validation/decks/generated/tension-coupon-x840-coupling-abaqus.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
+    deck = (share / "1-tension-coupon/abaqus/tension-coupon-abaqus.inp").read_text(encoding="utf-8")
+    assert deck == (ROOT / "fea/models/tension-coupon/decks/tension-coupon-abaqus.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
     with zipfile.ZipFile(tmp_path / "share" / "models.zip") as zf:
         assert "models/material/x840-z60-pw.csv" in zf.namelist()
     foreign = tmp_path / "theirs"

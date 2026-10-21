@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 
 from anisotropy_fea.cases import compare, disagreements, load_case
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-CASE_DIR = Path(__file__).parents[1] / "validation" / "cases"
+CASE_DIR = paths.CASES
 CASES = sorted(path for path in CASE_DIR.glob("*.toml") if not path.name.startswith("_"))
 
 

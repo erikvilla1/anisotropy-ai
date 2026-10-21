@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 
 from anisotropy_fea.abaqus_reader import DeckError, parse_deck, read_deck
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-DECKS = Path(__file__).parents[1] / "validation" / "decks"
+DECKS = paths.CHECK_DECKS
 ONE = (DECKS / "coupon-1x1-im7-8552.inp").read_text(encoding="utf-8")
 GRIPS = (DECKS / "coupon-2x8-grips-im7-8552.inp").read_text(encoding="utf-8")
 

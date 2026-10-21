@@ -1,6 +1,6 @@
 """Write what the membrane kernel computed for a deck as a VTK unstructured grid (.vtu), for ParaView or any VTK viewer.
 
-    uv run python examples/export_vtk.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea/scratch/vtk
+    uv run python examples/export_vtk.py checks/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea/checks/vtk
     uv run python examples/export_vtk.py ../.local/fea/abaqus/tension-coupon/team/Tension-test.inp --units mm-MPa --out ../.local/fea/scratch/vtk
 
 Points carry the displacement (deck length units) and the reaction (N); cells carry the three strains, the three

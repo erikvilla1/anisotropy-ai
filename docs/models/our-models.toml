@@ -1,5 +1,5 @@
 # Our coupon models in one folder for the team (docs/models/share.py, ADR-0035 amendment 2). Paths are relative to the
-# repository root; the .frd files are local CalculiX runs (run_calculix.py writes them into .local/fea/calculix-prepomax/<test>/ours).
+# repository root; the .frd files are local CalculiX runs (run_calculix.py writes them into .local/fea/<test>/runs/calculix).
 #   uv run --project fea python docs/models/share.py docs/models/our-models.toml
 
 name = "our-models"
@@ -9,18 +9,18 @@ share = ".local/fea/share/our-models"
 
 [[models]]
 test = "tension-coupon"
-spec = "fea/validation/specs/tension-coupon-x840-coupling.toml"
-record = "fea/validation/records/tension-coupon-x840-nodal-calculix.toml"
-results = ".local/fea/calculix-prepomax/tension-coupon/ours/tension-coupon-x840-nodal-ccx.frd"
+spec = "fea/models/tension-coupon/tension-coupon.toml"
+record = "fea/models/tension-coupon/records/tension-coupon-calculix.toml"
+results = ".local/fea/tension-coupon/runs/calculix/tension-coupon-nodal-ccx.frd"
 
 [[models]]
 test = "compression-coupon"
-spec = "fea/validation/specs/compression-coupon-x840-coupling.toml"
-record = "fea/validation/records/compression-coupon-x840-nodal-calculix.toml"
-results = ".local/fea/calculix-prepomax/compression-coupon/ours/compression-coupon-x840-nodal-ccx.frd"
+spec = "fea/models/compression-coupon/compression-coupon.toml"
+record = "fea/models/compression-coupon/records/compression-coupon-calculix.toml"
+results = ".local/fea/compression-coupon/runs/calculix/compression-coupon-nodal-ccx.frd"
 
 [[models]]
 test = "open-hole-coupon"
-spec = "fea/validation/specs/open-hole-coupon-x840-coupling.toml"
-record = "fea/validation/records/open-hole-coupon-x840-nodal-calculix.toml"
-results = ".local/fea/calculix-prepomax/open-hole-coupon/ours/open-hole-coupon-x840-nodal-ccx.frd"
+spec = "fea/models/open-hole-coupon/open-hole-coupon.toml"
+record = "fea/models/open-hole-coupon/records/open-hole-coupon-calculix.toml"
+results = ".local/fea/open-hole-coupon/runs/calculix/open-hole-coupon-nodal-ccx.frd"

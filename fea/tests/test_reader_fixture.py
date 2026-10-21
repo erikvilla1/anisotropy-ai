@@ -8,6 +8,7 @@ import pytest
 
 from anisotropy_engine.laminate import abd_matrices
 from anisotropy_fea.abaqus_reader import SUPPORTED_KEYWORDS, parse_deck, read_deck
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.model import (
     ElementSurface,
     NodeSurface,
@@ -21,7 +22,7 @@ from anisotropy_fea.model import (
     validate_deck,
 )
 
-DECKS = Path(__file__).parents[1] / "validation" / "decks"
+DECKS = paths.CHECK_DECKS
 GRIPS = DECKS / "coupon-2x8-grips-im7-8552.inp"
 ONE = DECKS / "coupon-1x1-im7-8552.inp"
 ISOTROPIC = DECKS / "plate-1x1-isotropic.inp"

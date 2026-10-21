@@ -3,7 +3,7 @@ solver, every compared number with its error, and the reading (ADR-0031).
 
 From the repository root:
 
-    uv run --project fea python docs/models/build.py fea/validation/records/unnotched-im7-8552-nodal-calculix.toml
+    uv run --project fea python docs/models/build.py fea/models/tension-coupon/records/tension-coupon-calculix.toml
     uv run --project fea python docs/models/build.py --all                 # every committed record
     uv run --project fea python docs/models/build.py .local/fea/abaqus/tension-coupon/comparison/tension-test-abaqus.toml
 
@@ -30,7 +30,7 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-RECORDS = ROOT / "fea/validation/records"
+from anisotropy_fea import paths as fea_paths  # where the files live (ADR-0036)
 PREAMBLE = (HERE / "preamble.tex").read_text(encoding="utf-8")
 FULL_TABLE_LIMIT = 400  # rows: a longer comparison table goes to the appendix only with --full-tables
 MAP_ELEMENTS = 20  # draw the errors on the mesh when the record covers at least this many elements
@@ -536,7 +536,7 @@ def reference_section(record: dict, record_path: Path) -> str:
         out.append(kv_table([("Our kernel", escape(known.get("kernel", ""))), ("Reference", escape(known.get("reference", "")))], "p{2.5cm}Y"))
     conventions_name = solver.get("conventions")
     if conventions_name:
-        conventions_path = (RECORDS / conventions_name) if not (base / conventions_name).is_file() else base / conventions_name
+        conventions_path = (base / conventions_name) if (base / conventions_name).is_file() else fea_paths.CONVENTIONS
         if conventions_path.is_file():
             conventions = tomllib.loads(conventions_path.read_text(encoding="utf-8"))
             out.append(heading(1, "How the solver reports composite results (detected, not assumed)"))
@@ -713,7 +713,7 @@ def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, the
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("record", type=Path, nargs="?", help="a comparison record (TOML)")
-    parser.add_argument("--all", action="store_true", help="every committed record under fea/validation/records")
+    parser.add_argument("--all", action="store_true", help="every committed record (fea/models/*/records, fea/checks/*/records)")
     parser.add_argument("--out", type=Path, default=None, help="output folder (default: docs/models/build/<record>, or <record folder>/report/<record> for a local record)")
     parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX only")
     parser.add_argument("--no-theory", action="store_true", help="leave out the kernel theory and code section")
@@ -721,7 +721,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.all == (args.record is not None):
         raise SystemExit("give a record or --all, not both and not neither")
-    records = sorted(p for p in RECORDS.glob("*.toml") if not p.name.startswith("_")) if args.all else [args.record]
+    records = fea_paths.all_records() if args.all else [args.record]
     for path in records:
         build(path, args.out if not args.all else None, pdf=not args.no_pdf, full_tables=args.full_tables, theory=not args.no_theory)
 

@@ -1,0 +1,57 @@
+# A wide isotropic plate with a small central hole under a uniform far-field stress, for the Kirsch validation case
+# (fea/checks/cases/open-hole-isotropic-kirsch.toml): d/w = 0.05 and a length of three widths keep the finite-width
+# and grip effects small, so the kernel's stresses beside the hole can be compared with the infinite-plate closed form.
+# The material is nominal (E = 70000 MPa, nu = 0.25, G = E / (2 (1 + nu)) = 28000 MPa), not a cited dataset; the Kirsch
+# solution does not depend on the elastic constants. One ply of 1 mm at 0 degrees: the laminate is the plate. Units mm-MPa.
+title = "Isotropic plate 120 mm by 360 mm with a 6 mm hole, 12000 N (100 MPa far field): Kirsch stress concentration"
+kind = "open_hole_tension"
+units = "mm-MPa"
+
+[geometry]
+length = 360.0
+width = 120.0
+tab_length = 0.0
+hole_diameter = 6.0
+
+[mesh]
+mesher = "gmsh"
+element_order = 1
+element_size = 3.0
+[mesh.hole]
+circumferential = 60  # 15 per quarter: odd, so one element sits exactly on each axis through the hole centre
+radial_layers = 10    # first layer 0.15 mm thick beside the hole (tools/kirsch_hole.py: the convergence study chose this mesh)
+ring_ratio = 2.0
+growth = 1.15
+
+[layup]
+angles = [0]
+symmetric = false
+ply_thickness = 1.0
+
+[material]
+E1 = 70000.0
+E2 = 70000.0
+G12 = 28000.0
+nu12 = 0.25
+[material.transverse]
+G13 = 28000.0
+G23 = 28000.0
+transverse_isotropy = true
+plane_stress = true
+
+[grips]
+kind = "nodal"
+region = "line"
+
+[loading]
+control = "force"
+value = 12000.0     # 100 MPa on the 120 mm by 1 mm gross section
+
+[probes]
+nodes = { hole_side = [63.0, 180.0], hole_top = [60.0, 183.0] }
+elements = { hole_side = [63.0, 180.0], hole_top = [60.0, 183.0], ring_side = [66.0, 180.0], far_side = [90.0, 180.0] }
+
+[output]
+fpf_criteria = []
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = true, el_print_global = true }

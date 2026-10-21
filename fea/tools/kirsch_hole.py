@@ -1,7 +1,7 @@
 """The Kirsch closed form at the probe elements of an open-hole spec, beside the kernel's values: the source of the Kirsch validation case.
 
-    uv run python tools/kirsch_hole.py validation/specs/open-hole-isotropic-kirsch.toml
-    uv run python tools/kirsch_hole.py validation/specs/open-hole-isotropic-kirsch.toml --element-size 1.5 --circumferential 72 --radial-layers 12
+    uv run python tools/kirsch_hole.py checks/open-hole-isotropic-kirsch/open-hole-isotropic-kirsch.toml
+    uv run python tools/kirsch_hole.py checks/open-hole-isotropic-kirsch/open-hole-isotropic-kirsch.toml --element-size 1.5 --circumferential 72 --radial-layers 12
 
 An infinite isotropic plate with a circular hole of radius a under a uniform far-field stress sigma along y has, in polar
 components about the hole centre with theta measured from the loading axis (Timoshenko and Goodier, Theory of Elasticity,

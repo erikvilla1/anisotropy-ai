@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 
 from anisotropy_fea.compare import RecordError, compare_record, format_record, load_record, record_disagreements, validate_record
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-RECORDS = Path(__file__).parents[1] / "validation" / "records"
-COMMITTED = sorted(path for path in RECORDS.glob("*.toml") if not path.name.startswith("_"))
+RECORDS = paths.CHECKS / "unnotched-im7-8552" / "records"  # the first record
+COMMITTED = paths.all_records()
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=[p.stem for p in COMMITTED])

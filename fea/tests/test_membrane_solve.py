@@ -12,8 +12,9 @@ from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.model import section_plies
 from _decks import edge_coupon, gripped_coupon
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-DECKS = Path(__file__).parents[1] / "validation" / "decks"
+DECKS = paths.CHECK_DECKS
 ONE = DECKS / "coupon-1x1-im7-8552.inp"
 GRIPS = DECKS / "coupon-2x8-grips-im7-8552.inp"
 WIDTH_M = 0.010

@@ -19,7 +19,7 @@ What each tool is for, where to get it, and how our code finds it. Everything he
 ### Opening our models in PrePoMax
 
 Start `C:\Tools\PrePoMax v2.6.0\PrePoMax.exe`. File, Import, choose an Abaqus input file, and pick a generated deck, for example `.localeabaqusNnotched-im7-8552ours
-odalNnotched-im7-8552-nodal-abaqus.inp` (written by `fea/examples/build_model.py`; the committed copy is `fea/validation/decks/generated/`). Whether PrePoMax takes the part-and-instance structure, the composite shell section with five-field layer lines and the LAMINA material of that deck is UNVERIFIED (the manual says its syntax is mostly common with Abaqus); the CalculiX-dialect deck that the next chunk writes is the one meant for it. Results from CalculiX (`.frd`) open through File, Open results. The smoke run's `.frd` under `.local/fea/scratch/calculix/smoke/` is a first file to try.
+odalNnotched-im7-8552-nodal-abaqus.inp` (written by `fea/examples/build_model.py`; the committed copy is in `fea/checks/unnotched-im7-8552/decks/`). Whether PrePoMax takes the part-and-instance structure, the composite shell section with five-field layer lines and the LAMINA material of that deck is UNVERIFIED (the manual says its syntax is mostly common with Abaqus); the CalculiX-dialect deck that the next chunk writes is the one meant for it. Results from CalculiX (`.frd`) open through File, Open results. The smoke run's `.frd` under `.local/fea/scratch/calculix/smoke/` is a first file to try.
 
 ## Founder's Windows 11 machine (the steps, for a second machine)
 
