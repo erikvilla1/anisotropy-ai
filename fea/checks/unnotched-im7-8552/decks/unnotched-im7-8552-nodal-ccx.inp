@@ -19,7 +19,7 @@ CalculiX deck written by anisotropy_fea from Unnotched tension coupon, IM7/8552 
 ** out-of-plane constants: G13 4.68843e+09, G23 3e+09, E3 8.96318e+09, nu13 0.316, nu23 0.45 (SI; transverse isotropy stated in the spec)
 ** grips nodal on the whole tab regions; loading displacement 0.001 m
 ** units of this deck: mm-MPa
-** Layer lines are listed bottom-first; CalculiX's own convention is detected by the conventions run and recorded in fea/validation/records/_calculix-conventions.toml.
+** Layer lines are listed bottom-first; CalculiX's own convention is detected by the conventions run and recorded in fea/checks/calculix-conventions.toml.
 *NODE, NSET=Nall
 1, 0., 0., 0.
 2, 2.5, 0., 0.

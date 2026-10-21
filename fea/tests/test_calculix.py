@@ -18,9 +18,9 @@ from anisotropy_fea.recovery import element_ply_states
 from anisotropy_fea.spec import parse_spec, to_si
 from anisotropy_fea.write_abaqus import write_abaqus
 from anisotropy_fea.write_calculix import write_calculix
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
 FIXTURES = Path(__file__).parent / "fixtures"
-RECORDS = Path(__file__).parents[1] / "validation" / "records"
 needs_ccx = pytest.mark.skipif(find_ccx() is None, reason=f"CalculiX not found: set {ENV_VARIABLE} or put ccx on PATH (docs/installation-fea-tools.md)")
 
 
@@ -70,7 +70,7 @@ def test_parse_dat_refuses_malformed_rows():
 
 
 def test_conventions_file_is_complete_and_what_the_mapper_implements():
-    conventions = load_conventions(RECORDS / "_calculix-conventions.toml")
+    conventions = load_conventions(paths.CONVENTIONS)
     assert conventions["layer_order"] == "first-line-bottom" and conventions["shear_strain"] == "tensor"
     assert conventions["points_per_layer_thickness"] == 2 and conventions["in_plane_points"] == 4
     assert conventions["calculix_version"].startswith("2.")

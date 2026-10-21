@@ -1,5 +1,5 @@
 # A wide isotropic plate with a small central hole under a uniform far-field stress, for the Kirsch validation case
-# (fea/validation/cases/open-hole-isotropic-kirsch.toml): d/w = 0.05 and a length of three widths keep the finite-width
+# (fea/checks/cases/open-hole-isotropic-kirsch.toml): d/w = 0.05 and a length of three widths keep the finite-width
 # and grip effects small, so the kernel's stresses beside the hole can be compared with the infinite-plate closed form.
 # The material is nominal (E = 70000 MPa, nu = 0.25, G = E / (2 (1 + nu)) = 28000 MPa), not a cited dataset; the Kirsch
 # solution does not depend on the elastic constants. One ply of 1 mm at 0 degrees: the laminate is the plate. Units mm-MPa.
