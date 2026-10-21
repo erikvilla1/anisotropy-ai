@@ -602,6 +602,27 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
     ]
 
 
+def write_material_csv(path: Path, lib, material, units: str) -> None:
+    """The library record a model uses: every value with its unit, basis and source page, the source and its rights class."""
+    length_unit, stress_unit, _ = UNITS[units]
+    # utf-8-sig: the citation holds characters beyond ASCII (a section sign, middle dots); the byte-order mark makes Excel read them
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["material", lib.material_id, lib.name])
+        writer.writerow(["dataset", lib.dataset_id, lib.dataset])
+        writer.writerow(["record revision", lib.record_revision or ""])
+        writer.writerow(["source", source_text(lib)])
+        writer.writerow(["rights class", lib.rights, "values cited by table and page; the source is not reproduced"])
+        writer.writerow([])
+        writer.writerow(["property", f"value ({units})", "unit", "value as the source gives it", "source unit", "basis", "source page (PDF)", "printed page", "link"])
+        for v in lib.values:
+            shown = from_si(v.value, "stress", units) if v.unit == "Pa" else (from_si(v.value, "length", units) if v.unit == "m" else v.value)
+            unit = stress_unit if v.unit == "Pa" else (length_unit if v.unit == "m" else v.unit)
+            writer.writerow([v.role, f"{shown:.10g}", unit, f"{v.source_value:.10g}", v.source_unit, v.basis, v.page, v.printed_page or "", v.reference_url])
+        for name, value in (("G13", material.G13), ("G23", material.G23)):
+            writer.writerow([name, f"{from_si(value, 'stress', units):.10g}", stress_unit, "", "", "stated in our spec", "", "", ""])
+
+
 def write_share(c: Comparison, pdf: Path | None) -> Path:
     share = c.share
     if share.exists():
@@ -620,23 +641,7 @@ def write_share(c: Comparison, pdf: Path | None) -> Path:
     if pdf is not None and pdf.exists():
         shutil.copy2(pdf, share / f"{c.manifest.name}-comparison.pdf")
 
-    lib = c.library
-    # utf-8-sig: the citation holds characters beyond ASCII (a section sign, middle dots); the byte-order mark makes Excel read them
-    with (share / "3-material" / f"{lib.material_id}.csv").open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(["material", lib.material_id, lib.name])
-        writer.writerow(["dataset", lib.dataset_id, lib.dataset])
-        writer.writerow(["record revision", lib.record_revision or ""])
-        writer.writerow(["source", source_text(lib)])
-        writer.writerow(["rights class", lib.rights, "values cited by table and page; the source is not reproduced"])
-        writer.writerow([])
-        writer.writerow(["property", f"value ({c.units})", "unit", "value as the source gives it", "source unit", "basis", "source page (PDF)", "printed page", "link"])
-        for v in lib.values:
-            shown = from_si(v.value, "stress", c.units) if v.unit == "Pa" else (from_si(v.value, "length", c.units) if v.unit == "m" else v.value)
-            unit = c.stress_unit if v.unit == "Pa" else (c.length_unit if v.unit == "m" else v.unit)
-            writer.writerow([v.role, f"{shown:.10g}", unit, f"{v.source_value:.10g}", v.source_unit, v.basis, v.page, v.printed_page or "", v.reference_url])
-        for name, value in (("G13", c.material.G13), ("G23", c.material.G23)):
-            writer.writerow([name, f"{from_si(value, 'stress', c.units):.10g}", c.stress_unit, "", "", "stated in our spec", "", "", ""])
+    write_material_csv(share / "3-material" / f"{c.library.material_id}.csv", c.library, c.material, c.units)
 
     odb, step, frame = f"anisotropy-fea {fea_version} kernel on {stem}-abaqus.inp (no .odb)", "Step-1", "linear static solve"
     our_instance = next(iter(c.our_deck.instances))

@@ -1,6 +1,6 @@
 """Build a coupon model from a spec: write the deck, draw the model, solve it with our kernel, draw and export the result.
 
-    uv run python examples/build_model.py validation/specs/unnotched-im7-8552-nodal.toml --out ../.local/fea/abaqus/unnotched-im7-8552/ours
+    uv run python examples/build_model.py validation/specs/tension-coupon-x840-coupling.toml --out ../.local/fea/abaqus/tension-coupon/ours
 
 Writes into the output folder: <spec>-abaqus.inp (the complete model in our Abaqus dialect), <spec>-model.png (the mesh
 and sets before solving), summary.txt (counts, sets, layup, material citation, boundary table, SHA-256 of the deck),

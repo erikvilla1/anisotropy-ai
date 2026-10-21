@@ -31,6 +31,14 @@ The document goes to `comparison/report/<test>-comparison/`. The share folder go
 
 The numbers come from `anisotropy_fea.equivalence` (the two decks matched node by node and item by item) and `anisotropy_fea.side_by_side` (the team's reports paired with our kernel). The hand check and first-ply failure come from the engine.
 
+## Our models in one folder for the team (ADR-0035, amendment 2)
+
+`docs/models/share.py` collects every coupon we built the team's way into `.local/fea/share/our-models/` and `our-models.zip`. The coupons are listed in [`our-models.toml`](our-models.toml). Each coupon folder holds the Abaqus deck to import, the CalculiX twin with its `.frd`, both specs, and the comparison document of its CalculiX record. The material record is written once. Every deck is regenerated and must equal the committed one. Use it for coupons the team has not built yet; a coupon they did build also gets the team comparison above.
+
+```sh
+uv run --project fea python docs/models/share.py docs/models/our-models.toml
+```
+
 ## Where the content comes from
 
 | In the document | Comes from |

@@ -97,7 +97,8 @@ def test_force_control_deck_carries_the_consistent_loads_and_balances(tmp_path):
 
 
 @pytest.mark.parametrize("name", ["unnotched-im7-8552-nodal", "unnotched-im7-8552-coupling", "compression-im7-8552",
-                                  "tension-coupon-x840-nodal", "tension-coupon-x840-coupling"])
+                                  "tension-coupon-x840-nodal", "tension-coupon-x840-coupling", "compression-coupon-x840-coupling",
+                                  "compression-coupon-x840-nodal"])
 def test_the_committed_generated_decks_match_their_specs(name):
     """A committed deck is what the writer produces from its spec today; regenerate it when the spec or the writer changes."""
     text = write_abaqus(build_model(load_spec(SPECS / f"{name}.toml")))

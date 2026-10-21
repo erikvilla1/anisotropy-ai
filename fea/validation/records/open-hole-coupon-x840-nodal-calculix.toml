@@ -1,0 +1,60 @@
+title = "Open-hole tension coupon, X840-Z60 [0/45/-45/45/0]s, 6 mm hole in 36 mm, nodal grips on 50 mm tabs, 1 mm pull (CalculiX twin of the team's build): CalculiX 2.22 S8R against the kernel"
+units = "mm-MPa"
+spec = "../specs/open-hole-coupon-x840-nodal.toml"
+deck_kernel = "../decks/generated/open-hole-coupon-x840-nodal-abaqus.inp"
+deck_reference = "../decks/generated/open-hole-coupon-x840-nodal-ccx.inp"
+deck_kernel_sha256 = "708022d8c9261e95e8c50e90c8d49d8ce0b2416f88037c7497f8a9dde9ecd992"
+deck_reference_sha256 = "f88557a32c3bf082a3ec8effc2bd87a8cdd4cd966a7fdea2e9eadee97602d474"
+
+[solver]
+name = "calculix"
+version = "2.22"
+element_type = "S8R"
+run_by = "Claude Code for Erik Villa"
+run_date = "2026-10-20"
+machine = "founder Windows 11, PrePoMax v2.6.0 bundle"
+source = "dat"
+conventions = "_calculix-conventions.toml"
+notes = "The open-hole coupon built the team's way (X840-Z60 from the library, Chen 2015; [0/45/-45/45/0]s of 0.1 mm plies; the team's names), D5766 proportions on the Gmsh O-grid, grips as nodal constraints on the whole tabs, plane stress; gauge node and far element only: beside the hole the bilinear kernel element and S8R differ in the small components (reading note)."
+
+[known_differences]
+kernel = "bilinear four-node membrane element, full 2 by 2 integration, membrane only (B = 0), no transverse shear, strain at the element centroid"
+reference = "S8R expanded to a C3D20R brick, reduced integration, three-dimensional constitutive law with E3, nu13, nu23, transverse shear, drilling rotation removed, values averaged over the element's integration points"
+
+[expected]
+tolerance = 0.03
+floor = 0.02
+
+[expected.rf]
+"Grip-Top" = [0.0003806906, 9415.727]
+"Grip-Bottom" = [-0.000380645, -9415.727]
+
+[expected.u]
+"CFRP-Coupon-1.1061" = [-1.061295e-07, 0.2452923]
+
+[expected.strain]
+"CFRP-Coupon-1.1011" = [-0.0019125003250000001, 0.004986246975, 8.7706125e-07]
+
+[expected.ply_stress_local."CFRP-Coupon-1.1011"]
+1 = [-129.5319375, 391.1279875, 0.0056819065]
+2 = [130.83092683375, 130.76473941625002, 44.70387937500001]
+3 = [130.7645802725, 130.8307759775, -44.703884374999994]
+4 = [130.83068813625002, 130.76448686375002, 44.703900000000004]
+5 = [-129.532625, 391.12772500000005, 0.0056842856249999995]
+6 = [-129.532625, 391.12772500000005, 0.005684296374999999]
+7 = [130.830688325, 130.76448667500003, 44.703900000000004]
+8 = [130.76457995625, 130.83077629375, -44.703884374999994]
+9 = [130.83092665125002, 130.76473834875003, 44.703880000000005]
+10 = [-129.5319375, 391.12798749999996, 0.005682004625000001]
+
+[expected.ply_strain_local."CFRP-Coupon-1.1011"]
+1 = [-0.0019124951249999999, 0.004986248625, 8.768375e-07]
+2 = [0.0015373129291375005, 0.0015364359458625006, 0.0068987461250000015]
+3 = [0.0015364342659500002, 0.0015373113590500004, -0.0068987478750000015]
+4 = [0.0015373102084375002, 0.0015364330415625, 0.006898749000000001]
+5 = [-0.001912503875, 0.004986245875, 8.772045499999999e-07]
+6 = [-0.001912503875, 0.004986245875, 8.772062e-07]
+7 = [0.0015373102109375002, 0.0015364330390625, 0.006898749000000001]
+8 = [0.0015364342617625003, 0.0015373113632375004, -0.0068987478750000015]
+9 = [0.0015373129350250002, 0.001536435939975, 0.006898746125000001]
+10 = [-0.0019124951249999999, 0.004986248625000001, 8.768526e-07]

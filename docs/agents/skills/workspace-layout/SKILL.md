@@ -28,7 +28,9 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
 .local/homework/code/<HW>/           what we made to solve it, with a README mapping each problem to its engine case and input
 ```
 
-Committed counterparts: `fea/validation/{specs,decks,records}` for models with public library materials; `engine/validation/cases/se142-*.toml` for homework numbers with a source reference.
+Under each tool, `public-im7-8552/` holds the earlier builds on the public IM7/8552 material. They are a regression set, not team models (ADR-0035). `.local/fea/share/our-models/` and `our-models.zip` hold every coupon we built the team's way, written by `docs/models/share.py` from `docs/models/our-models.toml`.
+
+Committed counterparts: `fea/validation/{specs,decks,records}` for models whose library material may be cited (ADR-0030, amendment 4); `engine/validation/cases/se142-*.toml` for homework numbers with a source reference.
 
 ## Rules
 
@@ -37,7 +39,8 @@ Committed counterparts: `fea/validation/{specs,decks,records}` for models with p
 3. `ours/` is what our generator wrote. Pass `--out ../.local/fea/<tool>/<test>/ours` to `build_model.py` and `run_calculix.py`.
 4. `comparison/` holds the record and everything derived from it. Record paths are relative to the record (`../team/...`, `../ours/...`). `docs/models/build.py` writes the document to `comparison/report/<record>/` by default.
 5. Homework: the same folder name on both sides. Provided files stay unchanged in `assignments/`; a corrected copy goes to `code/` with `-fixed` in its name and the correction stated in the README.
-6. Never commit anything under `.local/`. A local model moves to `fea/validation/` only when its material is in the public library (ADR-0029, ADR-0030).
+6. Never commit anything under `.local/`. A local model moves to `fea/validation/` only when its material is a library record that may be cited (ADR-0029, ADR-0030 amendment 4). The team's own files never move.
+7. A new coupon we build the team's way goes into `docs/models/our-models.toml`; rerun `docs/models/share.py` so the share folder holds it.
 
 ## Procedure: a new FEA test arrives
 

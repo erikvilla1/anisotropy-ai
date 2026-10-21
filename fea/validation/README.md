@@ -9,6 +9,13 @@ Evidence that the finite element layer reads and solves what it claims (ADR-0029
 | `cases/` | validation cases: a deck, expected numbers, a source, a tolerance (ADR-0007 style); format at the top of `src/anisotropy_fea/cases.py` | always |
 | `records/` | comparison records: a reference solver's numbers on one of our specs, with provenance, and a reading note beside each | as for `decks/` |
 
+## Two sets of models (ADR-0035)
+
+| Set | Specs | What it is for |
+| --- | --- | --- |
+| The team's build | `tension-coupon-x840-{coupling,nodal}`, `compression-coupon-x840-{coupling,nodal}`, `open-hole-coupon-x840-{coupling,nodal}` | The models we show the team: X840-Z60 from the library (Chen 2015), [0/45/-45/45/0]s of 0.1 mm plies, the team's names. Each `-coupling` spec grips the whole tab through reference points as the team does, and is the deck to open in Abaqus/CAE. Each `-nodal` twin writes the same grips as direct constraints for CalculiX and carries the CalculiX record. The tension coupon is also seeded node for node as the team's deck. |
+| Public regression | `unnotched-im7-8552-{nodal,coupling}`, `compression-im7-8552`, `open-hole-im7-8552`, `open-hole-isotropic-kirsch` | The earlier models on the public NCAMP IM7/8552 material, and the isotropic Kirsch plate. The tests, the manual and CI use them, and their data may be published. They are not team models. Add an IM7/8552 model only when a problem needs that material. |
+
 The team's own decks and exports, and any record that names user-supplied data or a material not in the library, stay under `.local/fea/<tool>/<test>/` (ADR-0032) and are never committed (AGENTS.md). The local test `tests/test_local_tension_deck.py` reads them when present. The team's coupon material X840-Z60 is in the library from a cited dissertation (licensed reference), so our generated twins of that coupon are committed as `tension-coupon-x840-*`; the team's own deck is still theirs and stays local.
 
 ## Fixtures

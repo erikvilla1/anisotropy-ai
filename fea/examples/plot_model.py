@@ -1,6 +1,6 @@
 """Draw a generated model before any solve: mesh, element sets, node sets, reference points and boundary conditions.
 
-    uv run python examples/plot_model.py validation/specs/unnotched-im7-8552-nodal.toml --out ../.local/fea/abaqus/<test>/ours
+    uv run python examples/plot_model.py validation/specs/tension-coupon-x840-coupling.toml --out ../.local/fea/abaqus/<test>/ours
 
 One PNG named after the spec. Element sets are filled in distinct muted colours, node sets drawn as markers,
 fixed grips as filled triangles, the moving grip or load as an arrow, midside nodes as small dots at order 2.
