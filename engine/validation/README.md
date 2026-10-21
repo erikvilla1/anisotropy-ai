@@ -18,6 +18,8 @@ The calculator also reads the course's Excel input template directly: `uv run py
 
 ## One material or several
 
+- **From fiber and matrix (micromechanics, ADR-0034):** instead of E1, E2, G12 and nu12, a `[material]` or `[materials.<name>]` table may give `fiber = {E1, E2, G12, nu12}` (transversely isotropic; an isotropic fiber has E1 = E2 and G12 = E / (2 (1 + nu))), `matrix = {E, nu}`, `Vf` (a fraction), `E2_model` (`series`, `series_constrained`, `halpin_tsai`, `combination_square`) and `G12_model` (`series`, `halpin_tsai`, `combination_square`), with `xi_E2` and `xi_G12` required for `halpin_tsai` and refused otherwise. E1 and nu12 always use the rule of mixtures. Strengths and expansion coefficients may be added as measured values. See `se142-hw5-p2-micromechanics-im7-977-3-vf-0-65.toml`.
+
 - **One material:** `[material]` with the elastic constants, and `[laminate]` with `layup` (angles, bottom first) and one `ply_thickness`.
 - **Several materials or thicknesses:** a `[materials.<name>]` table for each material, and `[laminate]` with `plies`, a list of `{angle = ..., material = "<name>", thickness = ...}`, bottom ply first. See `se142-hw4-p4ab-hybrid-woven-thermal.toml`.
 
@@ -48,6 +50,7 @@ The calculator also reads the course's Excel input template directly: `uv run py
 | the same keys ending `_bottom` or `_top` | One [3-value] row per ply on that face |
 | `N_T`, `M_T` | Thermal force and moment resultants, when the case has `delta_T` |
 | `Ex`, `Ey`, `Gxy`, `nu_xy`, `nu_yx` | Laminate engineering constants |
+| `E1`, `E2`, `G12`, `nu12`, `nu21` | Lamina constants from fiber and matrix (one material stated by constituents) |
 | `fpf_ratio_max_stress`, `fpf_ratio_max_strain`, `fpf_ratio_tsai_hill`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio R on the variable loads (maximum strain needs strain limits; Tsai-Wu needs `f12_star`) |
 | `fpf_forces_...`, `fpf_moments_...` | Loads at first-ply failure, fixed + R * variable (suffix `max_stress`, `max_strain`, `tsai_hill` or `tsai_wu`) |
 | `fpf_ply_...`, `fpf_z_...` | Ply number (1 at the bottom) and z of the face where the first ply fails |

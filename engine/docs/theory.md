@@ -548,6 +548,56 @@ The integrals are products of one-dimensional sine and cosine integrals, which a
 
 Checks: Whitney's four numerical results for $`D_{11}/D_{22} = 10`$ and $`(D_{12} + 2D_{66})/D_{22} = 1`$ (Eqs. 5.76, 5.81, 5.84, 5.87); the series against the closed form; a hand-computed cross-ply plate (validation case `constructed-cross-ply-plate-buckling`). No course answer key for buckling has been checked yet.
 
+## 9. Lamina constants from fiber and matrix (`micromechanics.py`)
+
+Everything above starts from the lamina constants $`E_1, E_2, G_{12}, \nu_{12}`$. This section estimates them from the fiber, the matrix and the fiber volume ratio $`V_f`$ ($`V_m = 1 - V_f`$, no voids), for continuous aligned fibers with a perfect bond, a transversely isotropic fiber ($`E_{1f}, E_{2f}, G_{12f}, \nu_{12f}`$) and an isotropic matrix ($`E_m, \nu_m`$, $`G_m = E_m / 2(1 + \nu_m)`$). The models are those of Daniel and Ishai, chapter 3 (2nd ed., 2006, pp. 46-57); the caller names the model for $`E_2`$ and for $`G_{12}`$ and, for Halpin-Tsai, the parameter $`\xi`$, so a case records exactly what was used (ADR-0003). Strengths and expansion coefficients are not predicted; when a case gives them they are attached to the lamina as measured values.
+
+The fiber-direction modulus and the major Poisson's ratio follow from equal strain in fiber and matrix, the parallel (Voigt) model or rule of mixtures (Daniel and Ishai Eqs. 3.23 and 3.24, pp. 49-50), computed by `rule_of_mixtures`:
+
+```math
+E_1 = V_f E_{1f} + V_m E_m, \qquad \nu_{12} = V_f \nu_{12f} + V_m \nu_m
+```
+
+<!-- code: rule_of_mixtures -->
+
+The transverse modulus and the in-plane shear modulus are matrix dominated and the simplest model assumes equal stress in fiber and matrix, the series (Reuss) model (Eqs. 3.29-3.30 for $`E_2`$ with $`E_{2f}`$, Eqs. 3.48-3.49 for $`G_{12}`$ with $`G_{12f}`$ and $`G_m`$; pp. 52 and 57), computed by `series_model`:
+
+```math
+\frac{1}{P} = \frac{V_f}{P_f} + \frac{V_m}{P_m}
+```
+
+<!-- code: series_model -->
+
+The series model underestimates both. Daniel and Ishai (Eq. 3.31, p. 52) usually replace the matrix modulus in the transverse series model by the modulus of a matrix the fibers keep from contracting along them, computed by `constrained_matrix_modulus`; the series model with it is the `series_constrained` choice for $`E_2`$ (Eq. 3.32):
+
+```math
+E'_m = \frac{E_m}{1 - \nu_m^2}
+```
+
+<!-- code: constrained_matrix_modulus -->
+
+The Halpin-Tsai relation interpolates between the series and parallel models with a reinforcing-efficiency parameter $`\xi`$ (Eq. 3.17, p. 48; for $`E_2`$ Eqs. 3.35-3.36, p. 53; for $`G_{12}`$ Eq. 3.50, p. 57), computed by `halpin_tsai`. $`\xi = 0`$ gives the series model and $`\xi \to \infty`$ the parallel one (Eqs. 3.19-3.20). Daniel and Ishai quote $`1 \le \xi \le 2`$ for $`E_2`$ (1 for hexagonal arrays of glass and carbon at high $`V_f`$, 2 for square arrays) and $`\xi = 1`$ for $`G_{12}`$; the value is an input, never assumed:
+
+```math
+\eta = \frac{P_f - P_m}{P_f + \xi P_m}, \qquad P = P_m\,\frac{1 + \xi\,\eta\,V_f}{1 - \eta\,V_f}
+```
+
+<!-- code: halpin_tsai -->
+
+Shaffer's combined series-parallel model (Daniel and Ishai Eqs. 3.33-3.34, p. 52, and Problems 3.9 and 3.18) puts the column that holds the fiber, fiber and matrix in series, in parallel with the pure-matrix columns beside it. For a square array of square fibers in a cell of side $`L`$ the fiber side is $`a`$ with $`V_f = (a/L)^2`$, so the fiber column takes the width fraction $`\sqrt{V_f}`$ and within it the fiber the height fraction $`\sqrt{V_f}`$; the derivation of the closed form below is this repository's, since the book asks for it as a problem and prints no answer. It is computed by `combination_square_array` and applies to $`E_2`$ (with $`E_{2f}, E_m`$) and to $`G_{12}`$ (with $`G_{12f}, G_m`$):
+
+```math
+P = P_m\,(1 - \sqrt{V_f}) + \sqrt{V_f}\;\frac{P_f P_m}{P_m \sqrt{V_f} + P_f\,(1 - \sqrt{V_f})}
+```
+
+<!-- code: combination_square_array -->
+
+The lamina is assembled from the named models, computed by `lamina_from_constituents`, which refuses an unnamed model, a Halpin-Tsai model without its $`\xi`$, an $`\xi`$ given for another model, and a volume ratio outside $`(0, 1)`$:
+
+<!-- code: lamina_from_constituents -->
+
+Not estimated here: strengths, expansion coefficients, $`E_3`$, $`G_{23}`$ and $`\nu_{23}`$, void content, discontinuous fibers, and the self-consistent and bounding methods of the same chapter.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature

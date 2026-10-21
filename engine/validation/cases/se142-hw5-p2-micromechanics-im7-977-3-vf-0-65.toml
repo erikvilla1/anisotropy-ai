@@ -1,0 +1,26 @@
+title = "IM7/977-3 lamina constants from fiber and matrix at a fiber volume ratio of 0.65 (micromechanics)"
+source = "SE142/253A (Fall 2025) Homework 5, Problem 2(a), course solution, numbers only: E1 = 190 GPa, E2 = 8.76 GPa, nu12 = 0.25, G12 = 3.31 GPa by the course's 'hybrid Voigt-Reuss' model. The course's Lecture Pack 2 tables are not in this repository; the constituent constants are Daniel and Ishai, Engineering Mechanics of Composite Materials, 2nd ed. (2006), Table A.2 p. 375 (IM7 carbon fiber) and Table A.3 p. 376 (977-3 epoxy). The rule of mixtures for E1 and nu12 (Eqs. 3.23-3.24, p. 49-50), the series model with the constrained matrix modulus for E2 (Eqs. 3.31-3.32, p. 52) and the series model for G12 (Eq. 3.49, p. 57) reproduce the key within its two to three significant figures; which model the course calls hybrid Voigt-Reuss is UNVERIFIED until Lecture Pack 2 is on hand."
+units = "SI"
+
+[material]
+# Daniel and Ishai Table A.2 (p. 375), IM7 carbon fiber: E1f = 290 GPa, E2f = 21 GPa, G12f = 14 GPa, nu12f = 0.20.
+fiber = {E1 = 290.0, E2 = 21.0, G12 = 14.0, nu12 = 0.20}
+# Daniel and Ishai Table A.3 (p. 376), epoxy 977-3: Em = 3.7 GPa, num = 0.35 (Gm = 1.37 GPa follows from E / (2 (1 + nu))).
+matrix = {E = 3.7, nu = 0.35}
+Vf = 0.65
+E2_model = "series_constrained"   # E'm = Em / (1 - num^2) in the series model (Daniel and Ishai Eqs. 3.31-3.32)
+G12_model = "series"              # 1 / G12 = Vf / G12f + Vm / Gm (Eq. 3.49)
+
+[laminate]
+layup = [0]
+ply_thickness = 0.125   # nominal, not part of the problem; the compared values do not depend on it
+
+[applied]
+loads = [0, 0, 0, 0, 0, 0]  # constants only
+
+[expected]
+tolerance = 0.015  # the key prints two to three significant figures (0.25 for nu12 = 0.2525)
+E1 = 190.0    # GPa; rule of mixtures gives 189.8
+E2 = 8.76     # GPa; constrained series model gives 8.78
+G12 = 3.31    # GPa; series model gives 3.312
+nu12 = 0.25   # rule of mixtures gives 0.2525
