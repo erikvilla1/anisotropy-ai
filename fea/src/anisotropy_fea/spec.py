@@ -211,13 +211,19 @@ def validate_spec(spec: CouponSpec) -> None:
         need(spec.grips is not None, "in-plane kinds need a [grips] table with kind = \"nodal\" or \"coupling\" and region = \"line\" or \"tabs\"")
         if spec.grips is not None and spec.grips.region == "tabs":
             need(g.tab_length > 0, "grips.region = \"tabs\" needs a positive geometry.tab_length")
+    need((m.mesher == "gmsh") == (kind == "open_hole_tension"),
+         "mesh.mesher = \"gmsh\" goes with open_hole_tension and open_hole_tension needs mesh.mesher = \"gmsh\": the structured mesher cannot cut a hole and makes every other kind")
     if g.hole_diameter is not None:
         need(g.hole_diameter < g.width, "geometry.hole_diameter must be smaller than the width")
-        need(m.mesher == "gmsh", "open_hole_tension needs mesh.mesher = \"gmsh\"; the structured mesher cannot cut a hole")
+        need(m.element_size is not None, "mesh.mesher = \"gmsh\" takes mesh.element_size for the blocks around the hole; nx and ny describe the structured rectangle only")
         hole = m.hole
         need(hole.circumferential >= 8 and hole.circumferential % 4 == 0, "mesh.hole.circumferential must be a multiple of 4, at least 8")
         need(hole.radial_layers >= 1 and hole.growth >= 1.0, "mesh.hole.radial_layers must be at least 1 and growth at least 1")
         need(hole.ring_ratio > 1.0 and hole.ring_ratio * g.hole_diameter / 2 < g.width / 2, "mesh.hole.ring_ratio must exceed 1 and keep the inner square inside the width")
+        half = hole.ring_ratio * g.hole_diameter / 2
+        need(half < g.length / 2, "mesh.hole.ring_ratio must keep the inner square inside the length")
+        need(not g.tab_length or g.tab_length < g.length / 2 - half,
+             f"the tabs (tab_length {g.tab_length:g}) must end before the inner square around the hole begins at y = {g.length / 2 - half:g}")
     # mesh counts
     need((m.element_size is None) != (m.nx is None and m.ny is None), "give mesh.element_size or both mesh.nx and mesh.ny, not both and not neither")
     need((m.nx is None) == (m.ny is None), "mesh.nx and mesh.ny go together")

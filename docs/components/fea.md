@@ -2,7 +2,7 @@
 
 ## Purpose and intended use
 
-Read the Abaqus input decks the team builds for coupon and laminate models, solve them with our own laminate membrane kernel on the engine's stiffness, and compare the two number for number (ADR-0029). Built so far: the reader (chunk 1), the membrane kernel with its validation cases (chunk 2), ply stresses in material axes with first-ply failure per element through the engine's criteria (chunk 3), coupon models generated from a parametric spec with a structured mesher and an Abaqus-dialect writer (chunk A1, ADR-0030), and CalculiX as the independent solver with a CalculiX-dialect writer, a runner, a `.dat` parser, detected composite conventions and comparison records (chunk B). Gmsh open-hole meshes, shear and bending models and the eight-node element follow.
+Read the Abaqus input decks the team builds for coupon and laminate models, solve them with our own laminate membrane kernel on the engine's stiffness, and compare the two number for number (ADR-0029). Built so far: the reader (chunk 1), the membrane kernel with its validation cases (chunk 2), ply stresses in material axes with first-ply failure per element through the engine's criteria (chunk 3), coupon models generated from a parametric spec with a structured mesher and an Abaqus-dialect writer (chunk A1, ADR-0030), CalculiX as the independent solver with a CalculiX-dialect writer, a runner, a `.dat` parser, detected composite conventions and comparison records (chunk B), and open-hole coupons on a Gmsh transfinite O-grid with the Kirsch validation case and a CalculiX record (chunk A2). Shear and bending models and the eight-node element follow.
 
 ## Out of scope / do not use for
 

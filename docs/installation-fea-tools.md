@@ -5,7 +5,7 @@ What each tool is for, where to get it, and how our code finds it. Everything he
 | Tool | What it is for | Needed by |
 | --- | --- | --- |
 | Python packages in `fea/` (`uv sync`) | our reader, mesher, writers, kernel, plots, VTK export | every chunk |
-| Gmsh (Python package `gmsh`) | meshing geometries the structured mesher cannot: the open-hole coupon | chunk A2 onward, optional |
+| Gmsh (Python package `gmsh`, 4.15.2 installed 2026-10-19) | meshing geometries the structured mesher cannot: the open-hole coupon's O-grid (chunk A2) | optional extra `mesh`; tests skip with a reason without it |
 | CalculiX (`ccx`) | the independent reference solver that runs our generated decks | chunk B onward, optional |
 | PrePoMax | a free Windows GUI bundling CalculiX: opens our CalculiX decks and `.frd` results | optional, founder's machine |
 | ParaView | opens the `.vtu` files our examples write | optional |
@@ -23,19 +23,19 @@ odalNnotched-im7-8552-nodal-abaqus.inp` (written by `fea/examples/build_model.py
 
 ## Founder's Windows 11 machine (the steps, for a second machine)
 
-1. **Gmsh**: from `fea/`, `uv sync --extra mesh` (planned in chunk A2; the extra declares `gmsh>=4.13`, PyPI ships a Windows wheel). Check with `uv run python -c "import gmsh; print(gmsh.__version__)"`.
+1. **Gmsh**: from `fea/`, `uv sync --extra mesh` (the extra declares `gmsh>=4.13`; PyPI's Windows wheel gave 4.15.2 on 2026-10-19). Check with `uv run python -c "import gmsh; print(gmsh.__version__)"`. Only `fea/examples/build_model.py`, `run_calculix.py` and `docs/models/build.py` on an `open_hole_tension` spec or record need it; the committed decks and the validation cases do not. On Ubuntu the wheel also needs the system library libGLU (`sudo apt-get install -y libglu1-mesa`); without it `import gmsh` raises `OSError` and `gmsh_available()` reports None.
 2. **CalculiX through PrePoMax** (recommended): download the portable zip from https://prepomax.fs.um.si/downloads/, unzip to a folder such as `C:\Tools\PrePoMax\`, and find the bundled solver under its `Solver` folder (`ccx_*.exe`). Set the environment variable `ANISOTROPY_CCX` to that executable's full path, or add the folder to `PATH`. PrePoMax needs .NET Framework 4.8. The bundled CalculiX version is recorded when installed (planned v2.6.0 stable).
    - Alternatives: the Windows builds listed on http://www.dhondt.de (bConverged, calculixforwin on SourceForge, the GE GitHub build) for a newer `ccx`; or WSL Ubuntu-24.04 with `sudo apt install calculix-ccx` (2.21), which our runner can only use through a wrapper script (not provided yet).
 3. **ParaView**: installer from https://www.paraview.org/download/. Open a `.vtu` from `.local/fea/scratch/vtk/` or any `ours/` folder under `.local/fea/`, press Apply, colour by a field, Warp By Vector on Displacement.
 
 ## Continuous integration (GitHub Actions, ubuntu-latest)
 
-Planned for chunk B in the `fea` job: `sudo apt-get update && sudo apt-get install -y calculix-ccx` (package in Ubuntu 24.04 universe, binary `/usr/bin/ccx`), `uv sync --locked --extra mesh`, and `ccx -v` printed into the log. Tests that need a tool skip with a stated reason when it is absent, so a missing tool never fails the suite silently.
+The `fea` job runs `sudo apt-get update && sudo apt-get install -y calculix-ccx` (package in Ubuntu 24.04 universe, binary `/usr/bin/ccx`, version 2.21), prints `ccx -v` into the log (it exits with code 201 after printing, so the step tolerates that), then `uv sync --locked --extra mesh` so Gmsh is present (chunk A2; `libglu1-mesa` is installed beside CalculiX because the Gmsh wheel loads libGLU). The `manual` job installs the same library and runs the model documents with `--extra mesh`, since the open-hole record's document regenerates its mesh. Tests that need a tool skip with a stated reason when it is absent, so a missing tool never fails the suite silently.
 
 ## How the code finds the tools
 
 - `anisotropy_fea.calculix.find_ccx()` (chunk B): an explicit path argument, then `ANISOTROPY_CCX`, then `ccx` on `PATH`.
-- Gmsh: `import gmsh` inside a try; `gmsh_available()` returns the version or None.
+- Gmsh: `anisotropy_fea.mesher.gmsh_available()` returns the version or None; `gmsh_open_hole_plate` raises `MeshError` with the install command when the package is missing.
 
 ## What stays out of the repository
 

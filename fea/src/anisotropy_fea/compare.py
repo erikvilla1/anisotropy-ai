@@ -193,9 +193,9 @@ def layer_values(block_values: np.ndarray, z: np.ndarray, plies: int, points_per
 
 
 def reference_quantities(model: FEModel, dat: DatResults, conventions: dict, instance: str = "Coupon-1",
-                         element_probes: list[str] | None = None) -> dict:
-    """The `[expected]` tables a CalculiX run gives for a model: reactions, probe displacements, and for the element probes
-    named (all by default) the mean strain, per-ply stresses and per-ply strains."""
+                         element_probes: list[str] | None = None, node_probes: list[str] | None = None) -> dict:
+    """The `[expected]` tables a CalculiX run gives for a model: reactions, the displacements of the node probes named (all by
+    default), and for the element probes named (all by default) the mean strain, per-ply stresses and per-ply strains."""
     shear = 2.0 if conventions["shear_strain"] == "tensor" else 1.0
     per_layer = int(conventions["points_per_layer_thickness"])
     expected: dict = {}
@@ -210,6 +210,8 @@ def reference_quantities(model: FEModel, dat: DatResults, conventions: dict, ins
         expected["rf"] = rf
     u = {}
     for name, index in model.probe_nodes.items():
+        if node_probes is not None and name not in node_probes:
+            continue
         block = dat.displacements(f"Probe-{name}")
         values = block.row(index + 1)
         u[f"{instance}.{index + 1}"] = [float(values[0]), float(values[1])]

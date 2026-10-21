@@ -26,8 +26,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
       - name: Install CalculiX (the independent reference solver; tests skip with a reason if absent)
-        run: sudo apt-get update && sudo apt-get install -y calculix-ccx && ccx -v
-      - run: uv sync --locked
+        # ccx -v prints the version and exits with code 201, so the step needs the fallback
+        run: sudo apt-get update && sudo apt-get install -y calculix-ccx libglu1-mesa && (ccx -v || true)
+      - run: uv sync --locked --extra mesh   # Gmsh (the wheel needs libGLU, installed above)
       - run: uv run pytest tests ../engine/tests
 
   api:
@@ -99,8 +100,8 @@ jobs:
         with:
           name: engine-manual
           path: docs/manual/build/anisotropy-engine-manual.pdf
-      - name: Build one comparison document per committed record (ADR-0031)
-        run: uv run --project fea python docs/models/build.py --all
+      - name: Build one comparison document per committed record (ADR-0031; the open-hole model is meshed by Gmsh)
+        run: sudo apt-get update && sudo apt-get install -y libglu1-mesa && uv run --project fea --extra mesh python docs/models/build.py --all
       - uses: actions/upload-artifact@v7
         with:
           name: model-documents

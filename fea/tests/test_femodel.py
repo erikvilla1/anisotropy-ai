@@ -73,7 +73,7 @@ def test_unbuilt_kinds_are_refused_with_the_planned_chunk():
     with pytest.raises(SpecError, match="bending chunk"):
         mesh_for_spec(spec_from(bending))
     gmsh = NODAL.replace('mesher = "structured"', 'mesher = "gmsh"')
-    with pytest.raises(SpecError, match="open-hole chunk"):
+    with pytest.raises(SpecError, match="goes with open_hole_tension"):
         mesh_for_spec(spec_from(gmsh))
     with pytest.raises(SpecError, match="needs the spec in SI"):
         build_model(parse_spec(NODAL))

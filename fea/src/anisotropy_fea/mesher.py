@@ -1,8 +1,11 @@
-"""Meshes we generate ourselves (ADR-0030): a structured rectangle now, Gmsh geometries in a later chunk.
+"""Meshes we generate ourselves (ADR-0030): a structured rectangle, and an open-hole plate meshed by Gmsh as a transfinite O-grid.
 
 `Mesh2D` is the solver-neutral mesh: node coordinates in metres, four corner nodes per element listed
 counterclockwise, optional midside nodes for 8-node elements, and named node and element sets. Its
 invariants are checked on construction, so a deck written from it is a valid S4R or S8R mesh by construction.
+
+Both meshers share the same code for midside nodes and for the named sets, which are found from coordinates
+(end rows, side edges, tab lines, tab bands, the hole circle) rather than from mesher bookkeeping.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ import numpy as np
 
 DUPLICATE_TOLERANCE = 1e-9  # relative to the characteristic size
 MIDSIDE_TOLERANCE = 1e-9
+COORDINATE_DECIMALS = 12  # Gmsh coordinates are rounded to 1 pm so a generated deck's text is the same on every platform
 
 
 class MeshError(ValueError):
@@ -111,38 +115,35 @@ def counts_from_size(width: float, length: float, element_size: float) -> tuple[
     return max(1, math.ceil(width / element_size - 1e-9)), max(1, math.ceil(length / element_size - 1e-9))
 
 
-def structured_rectangle(width: float, length: float, nx: int, ny: int, order: int = 1,
-                         node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
-                         node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9) -> Mesh2D:
-    """A rectangle [0, width] x [0, length] with nx by ny elements, loading axis y.
+# --- shared by both meshers ------------------------------------------------------------------------
 
-    Node sets: Grip-Bottom (y = 0), Grip-Top (y = length), Edge-Left (x = 0), Edge-Right (x = width), one set per
-    entry of `node_rows` (name -> y) which must coincide with a node row, and one per entry of `node_bands`
-    (name -> (y0, y1)) holding every node in the band; a band set replaces a default set of the same name.
-    Element sets: one per entry of `element_bands` (name -> (y0, y1)) holding the elements whose centroid lies in the band.
+
+def with_midside_nodes(xy: list[tuple[float, float]], corners: np.ndarray) -> tuple[list[tuple[float, float]], np.ndarray]:
+    """One new node at the midpoint of every element edge, shared between neighbours; appended after the corner nodes."""
+    xy = list(xy)
+    edge_node: dict[tuple[int, int], int] = {}
+    mids = np.zeros_like(corners)
+    for e, nodes in enumerate(corners):
+        for k in range(4):
+            a, b = int(nodes[k]), int(nodes[(k + 1) % 4])
+            key = (min(a, b), max(a, b))
+            if key not in edge_node:
+                edge_node[key] = len(xy)
+                xy.append(((xy[a][0] + xy[b][0]) / 2, (xy[a][1] + xy[b][1]) / 2))
+            mids[e, k] = edge_node[key]
+    return xy, mids
+
+
+def sets_by_coordinates(points: np.ndarray, corners: np.ndarray, width: float, length: float,
+                        node_rows: dict[str, float] | None, element_bands: dict[str, tuple[float, float]] | None,
+                        node_bands: dict[str, tuple[float, float]] | None, tolerance: float) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """The named sets of a plate [0, width] x [0, length] with loading axis y, found from coordinates.
+
+    Node sets: Grip-Bottom (y = 0), Grip-Top (y = length), Edge-Left (x = 0), Edge-Right (x = width), one per entry of
+    `node_rows` (name -> y) which must coincide with a node row, and one per entry of `node_bands` (name -> (y0, y1))
+    holding every node in the band; a band set replaces a default set of the same name. Midside nodes on a line belong
+    to its set. Element sets: one per entry of `element_bands` (name -> (y0, y1)) holding the elements whose centroid lies in the band.
     """
-    if nx < 1 or ny < 1:
-        raise MeshError("nx and ny must be at least 1")
-    if order not in (1, 2):
-        raise MeshError("order must be 1 or 2")
-    label = lambda i, j: i + (nx + 1) * j  # noqa: E731
-    xs, ys = np.linspace(0.0, width, nx + 1), np.linspace(0.0, length, ny + 1)
-    xy = [(float(x), float(y)) for y in ys for x in xs]
-    corners = np.array([[label(i, j), label(i + 1, j), label(i + 1, j + 1), label(i, j + 1)] for j in range(ny) for i in range(nx)], dtype=int)
-    midside = None
-    if order == 2:
-        edge_node: dict[tuple[int, int], int] = {}
-        mids = np.zeros_like(corners)
-        for e, nodes in enumerate(corners):
-            for k in range(4):
-                a, b = int(nodes[k]), int(nodes[(k + 1) % 4])
-                key = (min(a, b), max(a, b))
-                if key not in edge_node:
-                    edge_node[key] = len(xy)
-                    xy.append(((xy[a][0] + xy[b][0]) / 2, (xy[a][1] + xy[b][1]) / 2))
-                mids[e, k] = edge_node[key]
-        midside = mids
-    points = np.asarray(xy, dtype=float)
 
     def nodes_on(predicate) -> np.ndarray:
         return np.flatnonzero(np.array([predicate(x, y) for x, y in points]))
@@ -156,11 +157,183 @@ def structured_rectangle(width: float, length: float, nx: int, ny: int, order: i
     }
     for name, y_line in (node_rows or {}).items():
         found = nodes_on(lambda x, y, y_line=y_line: abs(y - y_line) <= tol_y)
-        if found.size < nx + 1:
-            raise MeshError(f"no node row lies on {name!r} at y = {y_line:g}; choose ny so that {y_line:g} / ({length:g} / ny) is an integer")
+        if found.size == 0:
+            raise MeshError(f"no node row lies on {name!r} at y = {y_line:g}; choose the mesh so that a node row falls on {y_line:g}")
         node_sets[name] = found
     for name, (y0, y1) in (node_bands or {}).items():
         node_sets[name] = nodes_on(lambda x, y, y0=y0, y1=y1: y0 - tol_y <= y <= y1 + tol_y)
     centroid_y = points[corners].mean(axis=1)[:, 1]
     element_sets = {name: np.flatnonzero((centroid_y >= y0) & (centroid_y <= y1)) for name, (y0, y1) in (element_bands or {}).items()}
+    return node_sets, element_sets
+
+
+# --- structured rectangle --------------------------------------------------------------------------
+
+
+def structured_rectangle(width: float, length: float, nx: int, ny: int, order: int = 1,
+                         node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
+                         node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9) -> Mesh2D:
+    """A rectangle [0, width] x [0, length] with nx by ny elements, loading axis y; sets as in `sets_by_coordinates`."""
+    if nx < 1 or ny < 1:
+        raise MeshError("nx and ny must be at least 1")
+    if order not in (1, 2):
+        raise MeshError("order must be 1 or 2")
+    label = lambda i, j: i + (nx + 1) * j  # noqa: E731
+    xs, ys = np.linspace(0.0, width, nx + 1), np.linspace(0.0, length, ny + 1)
+    xy = [(float(x), float(y)) for y in ys for x in xs]
+    corners = np.array([[label(i, j), label(i + 1, j), label(i + 1, j + 1), label(i, j + 1)] for j in range(ny) for i in range(nx)], dtype=int)
+    midside = None
+    if order == 2:
+        xy, midside = with_midside_nodes(xy, corners)
+    points = np.asarray(xy, dtype=float)
+    for name, y_line in (node_rows or {}).items():
+        if not any(abs(float(y) - y_line) <= tolerance * length for y in ys):
+            raise MeshError(f"no node row lies on {name!r} at y = {y_line:g}; choose ny so that {y_line:g} / ({length:g} / ny) is an integer")
+    node_sets, element_sets = sets_by_coordinates(points, corners, width, length, node_rows, element_bands, node_bands, tolerance)
     return Mesh2D(xy=points, corners=corners, midside=midside, node_sets=node_sets, element_sets=element_sets, order=order, mesher="structured")
+
+
+# --- Gmsh: open-hole plate as a transfinite O-grid -------------------------------------------------
+
+
+def gmsh_available() -> str | None:
+    """The installed Gmsh version, or None. Gmsh is the optional extra `mesh`: from fea/, `uv sync --extra mesh`."""
+    try:
+        import gmsh
+    except (ImportError, OSError):  # OSError: the wheel's shared library needs libGLU on Linux (apt install libglu1-mesa)
+        return None
+    return str(gmsh.__version__)
+
+
+def gmsh_open_hole_plate(width: float, length: float, hole_diameter: float, element_size: float, circumferential: int, radial_layers: int,
+                         ring_ratio: float, growth: float, order: int = 1, tab_length: float = 0.0,
+                         node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
+                         node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9) -> Mesh2D:
+    """A plate [0, width] x [0, length] with a central circular hole, meshed by Gmsh as a transfinite butterfly O-grid.
+
+    Blocks: four annular blocks between the hole and an inner square of half-side `ring_ratio` times the hole radius
+    (`circumferential` / 4 elements along each quarter arc, `radial_layers` layers growing outwards by `growth`), and
+    the rectangular blocks that fill the plate around that square, split at the tab lines when `tab_length` > 0 so the
+    tab lines are node rows. Every block is transfinite and recombined, so the mesh is quadrilaterals only. Gmsh
+    makes the corner nodes; midside nodes (order 2) and the named sets come from the same code as the structured
+    mesher, and the extra set `Hole` holds the nodes on the circle (with the midside nodes of its edges at order 2).
+    Nodes are ordered by (y, x) and elements by centroid, so the result does not depend on Gmsh's internal numbering.
+    """
+    try:
+        import gmsh
+    except (ImportError, OSError) as exc:
+        raise MeshError("Gmsh is not available; from fea/ run `uv sync --extra mesh` (the optional extra declared in pyproject.toml); "
+                        f"on Linux the wheel also needs the system library libGLU (apt install libglu1-mesa). Python said: {exc}") from None
+    if order not in (1, 2):
+        raise MeshError("order must be 1 or 2")
+    if circumferential < 8 or circumferential % 4:
+        raise MeshError("circumferential must be a multiple of 4, at least 8")
+    if radial_layers < 1 or growth < 1.0:
+        raise MeshError("radial_layers must be at least 1 and growth at least 1")
+    if element_size <= 0:
+        raise MeshError("element_size must be positive")
+    radius = hole_diameter / 2
+    half = ring_ratio * radius
+    cx, cy = width / 2, length / 2
+    if not radius < half < min(cx, cy):
+        raise MeshError(f"the inner square (half-side {half:g}) must enclose the hole (radius {radius:g}) and lie inside the plate ({cx:g} by {cy:g} half-sizes)")
+    if tab_length < 0 or (tab_length and tab_length >= cy - half):
+        raise MeshError(f"tab_length {tab_length:g} must be zero or end before the inner square at y = {cy - half:g}")
+    n_quarter = circumferential // 4
+    xs = [0.0, cx - half, cx + half, width]
+    ys = [0.0] + ([tab_length] if tab_length else []) + [cy - half, cy + half] + ([length - tab_length] if tab_length else []) + [length]
+    jc = ys.index(cy - half)  # the band holding the inner square
+    count = lambda span: max(1, math.ceil(span / element_size - 1e-9))  # noqa: E731
+    col_nodes = [count(xs[1] - xs[0]) + 1, n_quarter + 1, count(xs[3] - xs[2]) + 1]
+    band_nodes = [n_quarter + 1 if j == jc else count(ys[j + 1] - ys[j]) + 1 for j in range(len(ys) - 1)]
+
+    owned = not gmsh.isInitialized()
+    if owned:
+        gmsh.initialize()
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.option.setNumber("General.Verbosity", 0)
+        gmsh.model.add("open-hole-plate")
+        geo = gmsh.model.geo
+        P = [[geo.addPoint(x, y, 0.0) for y in ys] for x in xs]
+        H = [[geo.addLine(P[i][j], P[i + 1][j]) for j in range(len(ys))] for i in range(3)]
+        V = [[geo.addLine(P[i][j], P[i][j + 1]) for j in range(len(ys) - 1)] for i in range(4)]
+        for i in range(3):
+            for j in range(len(ys)):
+                geo.mesh.setTransfiniteCurve(H[i][j], col_nodes[i])
+        for i in range(4):
+            for j in range(len(ys) - 1):
+                geo.mesh.setTransfiniteCurve(V[i][j], band_nodes[j])
+        surfaces = []
+        for i in range(3):
+            for j in range(len(ys) - 1):
+                if i == 1 and j == jc:
+                    continue
+                surfaces.append(geo.addPlaneSurface([geo.addCurveLoop([H[i][j], V[i + 1][j], -H[i][j + 1], -V[i][j]])]))
+        centre = geo.addPoint(cx, cy, 0.0)
+        C = [geo.addPoint(cx + radius * math.cos(a), cy + radius * math.sin(a), 0.0) for a in (math.pi / 4 + k * math.pi / 2 for k in range(4))]
+        square = [P[2][jc + 1], P[1][jc + 1], P[1][jc], P[2][jc]]  # NE, NW, SW, SE, matching the circle points at 45, 135, 225, 315 degrees
+        A = [geo.addCircleArc(C[k], centre, C[(k + 1) % 4]) for k in range(4)]
+        D = [geo.addLine(C[k], square[k]) for k in range(4)]  # from the hole outwards, so the progression grows away from the hole
+        sides = [H[1][jc + 1], V[1][jc], -H[1][jc], -V[2][jc]]  # square side from corner k+1 to corner k
+        for arc in A:
+            geo.mesh.setTransfiniteCurve(arc, n_quarter + 1)
+        for diagonal in D:
+            geo.mesh.setTransfiniteCurve(diagonal, radial_layers + 1, "Progression", growth)
+        for k in range(4):
+            surfaces.append(geo.addPlaneSurface([geo.addCurveLoop([A[k], D[(k + 1) % 4], sides[k], -D[k]])]))
+        for surface in surfaces:
+            geo.mesh.setTransfiniteSurface(surface)
+            geo.mesh.setRecombine(2, surface)
+        geo.synchronize()
+        gmsh.model.mesh.generate(2)
+        node_tags, coords, _ = gmsh.model.mesh.getNodes()
+        types, _, element_nodes = gmsh.model.mesh.getElements(2)
+    finally:
+        if owned:
+            gmsh.finalize()
+        else:
+            gmsh.model.remove()
+
+    if [int(t) for t in types] != [3]:
+        raise MeshError(f"Gmsh produced element types {[int(t) for t in types]}; the transfinite blocks must give 4-node quadrilaterals (type 3) only")
+    quads = np.asarray(element_nodes[0], dtype=np.int64).reshape(-1, 4)
+    node_tags = np.asarray(node_tags, dtype=np.int64)
+    coords = np.asarray(coords, dtype=float).reshape(-1, 3)[:, :2]
+    used = np.unique(quads)  # the hole's centre point is meshed as a node but belongs to no element
+    position = np.searchsorted(node_tags[np.argsort(node_tags)], used)
+    xy = np.round(coords[np.argsort(node_tags)][position], COORDINATE_DECIMALS)
+    corners = np.searchsorted(used, quads)
+    # counterclockwise corners, whatever the orientation Gmsh gave each block
+    p = xy[corners]
+    area2 = np.zeros(len(corners))
+    for i in range(4):
+        area2 += p[:, i, 0] * p[:, (i + 1) % 4, 1] - p[:, (i + 1) % 4, 0] * p[:, i, 1]
+    clockwise = area2 < 0
+    corners[clockwise] = corners[clockwise][:, [0, 3, 2, 1]]
+    # a numbering that does not depend on Gmsh: nodes by (y, x), elements by centroid (y, x), each element starting at its lowest node
+    node_order = np.lexsort((xy[:, 0], xy[:, 1]))
+    new_index = np.empty_like(node_order)
+    new_index[node_order] = np.arange(node_order.size)
+    xy = xy[node_order]
+    corners = new_index[corners]
+    corners = np.array([np.roll(c, -int(np.argmin(c))) for c in corners], dtype=int)
+    centroid = xy[corners].mean(axis=1)
+    corners = corners[np.lexsort((centroid[:, 0], centroid[:, 1]))]
+
+    points_list = [(float(x), float(y)) for x, y in xy]
+    midside = None
+    if order == 2:
+        points_list, midside = with_midside_nodes(points_list, corners)
+    points = np.asarray(points_list, dtype=float)
+    node_sets, element_sets = sets_by_coordinates(points, corners, width, length, node_rows, element_bands, node_bands, tolerance)
+    size = max(width, length)
+    on_circle = np.abs(np.hypot(points[:, 0] - cx, points[:, 1] - cy) - radius) <= tolerance * size
+    hole = set(np.flatnonzero(on_circle).tolist())
+    if midside is not None:
+        for nodes, mids in zip(corners, midside):
+            for k in range(4):
+                if int(nodes[k]) in hole and int(nodes[(k + 1) % 4]) in hole:
+                    hole.add(int(mids[k]))
+    node_sets["Hole"] = np.array(sorted(hole), dtype=int)
+    return Mesh2D(xy=points, corners=corners, midside=midside, node_sets=node_sets, element_sets=element_sets, order=order, mesher="gmsh")
