@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -136,6 +137,26 @@ class CalculixOutput(Record):
     el_print_global: bool
 
 
+ABAQUS_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]{0,79}$")  # a letter, then letters, digits, - or _: no spaces or commas, at most 80
+
+
+class Names(Record):
+    """The names a deck gives its model, so a generated deck opens in Abaqus/CAE as the team named theirs (ADR-0035, amendment 1).
+
+    Without a [names] table a deck uses our names, stated here: part "Coupon", instance "Coupon-1", the library material id in
+    capitals (or "EXPLICIT"), layup "Layup-1", section set "All". Names never change the solution.
+    """
+
+    part: str
+    instance: str
+    material: str
+    layup: str
+    section_set: str
+
+
+DEFAULT_NAMES = {"part": "Coupon", "instance": "Coupon-1", "layup": "Layup-1", "section_set": "All"}
+
+
 class OutputRequests(Record):
     fpf_criteria: list[str]
     abaqus: AbaqusOutput
@@ -154,6 +175,7 @@ class CouponSpec(Record):
     output: OutputRequests
     grips: Grips | None = None  # required for in-plane kinds, absent for bending
     probes: Probes = Probes()
+    names: Names | None = None  # the deck's part, instance, material, layup and section-set names; our names when absent
     source_sha256: str = ""
     source_path: str | None = None
     si: bool = False  # True once `to_si` has run
@@ -305,6 +327,12 @@ def validate_spec(spec: CouponSpec) -> None:
     for group, probes in (("nodes", spec.probes.nodes), ("elements", spec.probes.elements)):
         for name, (x, y) in probes.items():
             need(0 <= x <= g.width and 0 <= y <= g.length, f"probes.{group} {name!r} at ({x:g}, {y:g}) lies outside the coupon")
+    # names
+    if spec.names is not None:
+        for field in ("part", "instance", "material", "layup", "section_set"):
+            value = getattr(spec.names, field)
+            need(bool(ABAQUS_NAME.match(value)), f"names.{field} = {value!r}: a name starts with a letter and holds only letters, digits, - and _ (at most 80)")
+        need(spec.names.part != spec.names.instance, "names.part and names.instance must differ")
 
 
 def full_angles(spec: CouponSpec) -> list[float]:
@@ -433,12 +461,16 @@ def spec_material(spec: CouponSpec) -> MaterialDefinition:
         lamina = lib.lamina
         citations = tuple(f"{v.role} = {v.source_value:g} {v.source_unit} ({v.basis}), page {v.page}: {v.reference_url}" for v in lib.values)
         source, rights, name = f"library {lib.material_id} / {lib.dataset_id} (record {lib.record_revision}; {lib.citation})", lib.rights, lib.material_id.upper()
+        if lib.authors:
+            source = f"library {lib.material_id} / {lib.dataset_id} (record {lib.record_revision}; {lib.authors}, {lib.citation})"
         strengths = lamina.strengths
         E1, E2, G12, nu12 = lamina.E1, lamina.E2, lamina.G12, lamina.nu12
     else:
         E1, E2, G12, nu12 = mat.E1, mat.E2, mat.G12, mat.nu12
         strengths = Strengths(F1t=mat.F1t, F1c=mat.F1c, F2t=mat.F2t, F2c=mat.F2c, F6=mat.F6) if mat.F1t is not None else None
         citations, source, rights, name = (), "explicit constants in the spec", "spec", "EXPLICIT"
+    if spec.names is not None:
+        name = spec.names.material
     E3 = E2 if t.transverse_isotropy else t.E3
     nu13 = 0.0 if t.plane_stress else (nu12 if t.transverse_isotropy else t.nu13)
     nu23 = 0.0 if t.plane_stress else t.nu23

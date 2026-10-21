@@ -192,10 +192,12 @@ def layer_values(block_values: np.ndarray, z: np.ndarray, plies: int, points_per
     return out
 
 
-def reference_quantities(model: FEModel, dat: DatResults, conventions: dict, instance: str = "Coupon-1",
+def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
                          element_probes: list[str] | None = None, node_probes: list[str] | None = None) -> dict:
     """The `[expected]` tables a CalculiX run gives for a model: reactions, the displacements of the node probes named (all by
-    default), and for the element probes named (all by default) the mean strain, per-ply stresses and per-ply strains."""
+    default), and for the element probes named (all by default) the mean strain, per-ply stresses and per-ply strains.
+    Node and element keys carry the model's instance name, as the kernel deck written from the same model does."""
+    instance = model.instance
     shear = 2.0 if conventions["shear_strain"] == "tensor" else 1.0
     per_layer = int(conventions["points_per_layer_thickness"])
     expected: dict = {}
