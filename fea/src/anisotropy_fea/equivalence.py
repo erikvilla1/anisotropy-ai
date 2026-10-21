@@ -121,7 +121,9 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
         items.append(EquivalenceItem(item, team, mine, same))
 
     # names: listed, not judged
-    add("Part / instance names", f"{ref_part.name} / {ref_inst.name}", f"{our_part.name} / {our_inst.name}", None)
+    # names: "same" when they match, listed (never a difference) when they do not
+    add("Part / instance names", f"{ref_part.name} / {ref_inst.name}", f"{our_part.name} / {our_inst.name}",
+        True if (ref_part.name, ref_inst.name) == (our_part.name, our_inst.name) else None)
 
     # nodes by position
     instance_index, offset_instance = _match_points(ref_part.nodes.xyz, our_part.nodes.xyz, tolerance, "instance nodes")
@@ -178,7 +180,9 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
 
     ref_materials = {layer.material for layer in ref_layers}
     our_materials = {layer.material for layer in our_layers}
-    add("Material names", ", ".join(sorted(ref_materials)), ", ".join(sorted(our_materials)), None)
+    add("Material names", ", ".join(sorted(ref_materials)), ", ".join(sorted(our_materials)), True if ref_materials == our_materials else None)
+    add("Section set / layup names", f"{ref_section.elset} / {ref_section.layup_name}", f"{our_section.elset} / {our_section.layup_name}",
+        True if (ref_section.elset, ref_section.layup_name) == (our_section.elset, our_section.layup_name) else None)
     for name, label in (("E1", "E1"), ("E2", "E2"), ("nu12", "nu12"), ("G12", "G12"), ("G13", "G13"), ("G23", "G23")):
         ref_values = [getattr(reference.materials[layer.material].elastic, name) for layer in ref_layers]
         our_values = [getattr(ours.materials[layer.material].elastic, name) for layer in our_layers]
