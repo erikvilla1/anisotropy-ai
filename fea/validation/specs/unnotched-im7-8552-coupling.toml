@@ -29,6 +29,7 @@ G13 = 4688.43
 G23 = 3000.0
 nu23 = 0.45
 transverse_isotropy = true
+plane_stress = false  # nu23 and the derived nu13 go to CalculiX's three-dimensional law as given (the committed records were made this way)
 
 [grips]
 kind = "coupling"

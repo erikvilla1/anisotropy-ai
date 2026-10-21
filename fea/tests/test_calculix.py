@@ -150,3 +150,40 @@ def test_calculix_prints_tensor_shear_strain(tmp_path):
 def test_the_environment_variable_is_documented():
     assert ENV_VARIABLE == "ANISOTROPY_CCX" and "ANISOTROPY_CCX" in (Path(__file__).parents[2] / "docs" / "installation-fea-tools.md").read_text(encoding="utf-8")
     assert os.environ.get(ENV_VARIABLE) is None or find_ccx() is not None
+
+
+def synthetic_fabric_spec(transverse: str):
+    """The small fixture coupon with a [0/45]s layup of a made-up fabric-like material (E1 = E2, nu12 far below nu23): the layup whose
+    plies want different thickness contractions. The constants are test inputs, not a material; no source."""
+    base = (FIXTURES / "small-coupon-spec.toml").read_text(encoding="utf-8").replace("\r\n", "\n")
+    head, rest = base.split("[material]")
+    _, tail = rest.split("[grips]")
+    head = head.replace("angles = [45, 0, -45, 90]", "angles = [0, 45]").replace('ply_thickness = "library"', "ply_thickness = 0.125")
+    tail = tail.replace('fpf_criteria = ["max_stress", "tsai_hill", "tsai_wu"]', "fpf_criteria = []")
+    material = "[material]\nE1 = 50000.0\nE2 = 50000.0\nG12 = 5000.0\nnu12 = 0.05\n[material.transverse]\nG13 = 4000.0\nG23 = 4000.0\ntransverse_isotropy = true\n"
+    return to_si(parse_spec(head + material + transverse + "\n[grips]" + tail))
+
+
+@needs_ccx
+@pytest.mark.parametrize("transverse, coupled", [("plane_stress = false\nnu23 = 0.4\n", True), ("plane_stress = true\n", False)], ids=["nu23-given", "plane-stress"])
+def test_plane_stress_removes_the_through_thickness_coupling_of_calculix_composite_shells(tmp_path, transverse, coupled):
+    """CalculiX expands the composite S8R into one brick: with nonzero nu13, nu23 the plies' different thickness contractions are locked
+    together and a through-thickness stress appears (12 % of the axial stress seen); with plane_stress = true it vanishes (ADR-0030, amendment 1)."""
+    spec = synthetic_fabric_spec(transverse)
+    model = build_model(spec)
+    deck = tmp_path / "fabric.inp"
+    deck.write_text(write_calculix(model, el_print_coord=True), encoding="utf-8")
+    dat = parse_dat(run_calculix(deck, workdir=tmp_path).dat_text)
+    S = dat.stresses("Probe-centre").values
+    szz_ratio = np.abs(S[:, 2]).max() / np.abs(S[:, 1]).max()
+    twin = build_model(spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 1})}), model.mesh.corner_mesh())
+    kernel_deck = tmp_path / "twin.inp"
+    kernel_deck.write_text(write_abaqus(twin), encoding="utf-8")
+    read = read_deck(kernel_deck, spec.units)
+    ours = solve_membrane(read).reaction_of(read.nsets["Grip-Top"])[1]
+    top = dat.total_force("Grip-Top")[1]
+    if coupled:
+        assert szz_ratio > 0.05, "the coupled run must show the through-thickness stress this test exists for"
+    else:
+        assert szz_ratio < 0.005
+        assert top == pytest.approx(ours, rel=0.02)  # 4686 against 4724 N on the coarse 2 by 8 mesh: S8R against Q4
