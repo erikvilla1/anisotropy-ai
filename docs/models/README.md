@@ -9,34 +9,35 @@ From the repository root, with [Tectonic](https://tectonic-typesetting.github.io
 ```sh
 uv run --project fea python docs/models/build.py fea/models/tension-coupon/records/tension-coupon-calculix.toml
 uv run --project fea python docs/models/build.py --all        # every committed record
-uv run --project fea python docs/models/build.py .local/fea/abaqus/tension-coupon/comparison/tension-test-abaqus.toml
+uv run --project fea python docs/models/build.py .local/fea/tension-coupon/comparison/tension-test-abaqus.toml
 ```
 
 | Record | Document goes to | Committed? |
 | --- | --- | --- |
 | `fea/models/<test>/records/<name>.toml` or `fea/checks/<test>/records/<name>.toml` | `docs/models/build/<name>/<name>.pdf` | No: rebuilt from sources, like the manual; CI uploads the PDFs as the `model-documents` artifact |
-| anything under `.local/` (a record at `.local/fea/<tool>/<test>/comparison/<name>.toml`) | `report/<name>/<name>.pdf` beside the record | Never: the material may not be public (R-16) |
+| anything under `.local/` (a record at `.local/fea/<test>/comparison/<name>.toml`) | `report/<name>/<name>.pdf` beside the record | Never: the material may not be public (R-16) |
 
 Options: `--no-pdf` writes the LaTeX only; `--no-theory` leaves out the kernel theory and code section (about 20 pages, the same in every document); `--full-tables` prints every compared number even for records with more than 400 of them (otherwise each group shows its twenty numbers closest to the limit). Without Tectonic the `.tex` is still written and is self-contained.
 
 ## The short comparison for the team (ADR-0035)
 
-When the team built the model in Abaqus, `docs/models/team.py` writes a short document for them and a folder they can open. The document says, in order: here is the team's model and here is ours, the same item by item; our material comes from the library, and this is its source and page; here are the results side by side. The results cover stress at named points, agreement over the coupon, maps, reaction force and first-ply failure. Each test needs a manifest at `.local/fea/abaqus/<test>/comparison/team-comparison.toml` (format in `Manifest` in the script) and a reading `team-comparison.md` beside it.
+When the team built the model in Abaqus, `docs/models/team.py` writes a short document for them and one zip they can open. The document says, in order: here is the team's model and here is ours, the same item by item; our material comes from the library, and this is its source and page; here are the results side by side. The results cover stress at named points, agreement over the coupon, maps, reaction force and first-ply failure. Each test needs a manifest at `.local/fea/<test>/comparison/team-comparison.toml` (format in `Manifest` in the script) and a reading `team-comparison.md` beside it.
 
 ```sh
-uv run --project fea python docs/models/team.py .local/fea/abaqus/tension-coupon/comparison/team-comparison.toml
+uv run --project fea python docs/models/team.py .local/fea/tension-coupon/comparison/team-comparison.toml
 ```
 
-The document goes to `comparison/report/<test>-comparison/`. The share folder goes to `.local/fea/share/<test>/`, zipped as `<test>.zip`. It holds the PDF, the team's deck, our Abaqus and CalculiX decks, the spec, the material record, and our S11, S22 and Mises in the layout of the team's own field reports with their element numbers. It also holds an element-by-element table and every ply's stress. Both stay local because they carry the team's results. The script replaces only a share folder it wrote itself.
+The document goes to `comparison/report/<test>-comparison/`. The zip goes where the manifest's `zip` key says, normally `.local/fea/share/<test>-comparison.zip`, and no unzipped copy is kept (ADR-0036). It holds the PDF, the team's deck, our Abaqus and CalculiX decks, the spec, the material record, and our S11, S22 and Mises in the layout of the team's own field reports with their element numbers. It also holds an element-by-element table and every ply's stress. It holds no CalculiX results: the team runs our decks. Both stay local because they carry the team's results. The script replaces only a zip this project wrote.
 
 The numbers come from `anisotropy_fea.equivalence` (the two decks matched node by node and item by item) and `anisotropy_fea.side_by_side` (the team's reports paired with our kernel). The hand check and first-ply failure come from the engine.
 
-## Our models in one folder for the team (ADR-0035, amendment 2)
+## Our models in one zip for the team (ADR-0035 amendment 2, ADR-0036)
 
-`docs/models/share.py` collects every coupon we built the team's way into `.local/fea/share/our-models/` and `our-models.zip`. The coupons are listed in [`our-models.toml`](our-models.toml). Each coupon folder holds the Abaqus deck to import, the CalculiX twin with its `.frd`, both specs, and the comparison document of its CalculiX record. The material record is written once. Every deck is regenerated and must equal the committed one. Use it for coupons the team has not built yet; a coupon they did build also gets the team comparison above.
+`docs/models/share.py` zips every folder under `fea/models/` into `.local/fea/share/our-models.zip`, found by convention: the spec `<test>.toml` and the record `records/<test>-calculix.toml`. A new test folder joins the zip by itself. Each coupon gets the Abaqus deck to import, the CalculiX twin's deck, both specs, and the comparison document of its CalculiX record. The material record is written once. There are no CalculiX results in the zip. Every deck is regenerated and must equal the committed one. Use it for coupons the team has not built yet; a coupon they did build also gets the team comparison above.
 
 ```sh
-uv run --project fea python docs/models/share.py docs/models/our-models.toml
+uv run --project fea python docs/models/share.py                    # every model
+uv run --project fea python docs/models/share.py tension-coupon --out <zip> --no-pdf
 ```
 
 ## Where the content comes from
@@ -57,7 +58,7 @@ uv run --project fea python docs/models/share.py docs/models/our-models.toml
 
 ## The rebuild guide (Section 4 of every document)
 
-A step-by-step guide to recreating the model by hand, in Abaqus/CAE and in PrePoMax, generated by `docs/models/rebuild.py` from the deck's facts (`anisotropy_fea.report.model_facts`: extents, partition lines where the node-row spacing changes or a gripped group ends, seeds by number, element bands, sets with their coordinate ranges, reference points, couplings, boundary conditions, loads, step, the ply table as entered and the expanded stack with z positions, ply fractions, edge-length range, output requests). It follows the team's FEA model report template (local copy under `.local/fea/abaqus/tension-coupon/team/template/`, 2026-10-18): document control, evidence tags, a summary card, then one subsection per modelling step with a settings table, the GUI steps for both tools, and the input-file keywords quoted from the decks.
+A step-by-step guide to recreating the model by hand, in Abaqus/CAE and in PrePoMax, generated by `docs/models/rebuild.py` from the deck's facts (`anisotropy_fea.report.model_facts`: extents, partition lines where the node-row spacing changes or a gripped group ends, seeds by number, element bands, sets with their coordinate ranges, reference points, couplings, boundary conditions, loads, step, the ply table as entered and the expanded stack with z positions, ply fractions, edge-length range, output requests). It follows the team's FEA model report template (local copy under `.local/fea/tension-coupon/team/2026-10-16/template/`, 2026-10-18): document control, evidence tags, a summary card, then one subsection per modelling step with a settings table, the GUI steps for both tools, and the input-file keywords quoted from the decks.
 
 Every value carries an evidence tag: `[INP]` read from the deck, `[INP-derived]` computed from it, `[SPEC]` from the spec, `[CALC]` computed by the generator, `[CAE-CHECK]` an Abaqus/CAE click path the deck does not store, `[MANUAL p.N]` a PrePoMax click path quoted from page N of the PrePoMax 2.6.0 manual, `[GUI-SEEN]` a PrePoMax step this project has performed on the model, `[ASSUMED]`, `[OPEN]`. A value that cannot carry a tag is written `[OPEN]` and listed at the end of the guide; the generator never fills one from memory.
 

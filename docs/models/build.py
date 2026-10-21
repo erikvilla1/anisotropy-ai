@@ -5,7 +5,7 @@ From the repository root:
 
     uv run --project fea python docs/models/build.py fea/models/tension-coupon/records/tension-coupon-calculix.toml
     uv run --project fea python docs/models/build.py --all                 # every committed record
-    uv run --project fea python docs/models/build.py .local/fea/abaqus/tension-coupon/comparison/tension-test-abaqus.toml
+    uv run --project fea python docs/models/build.py .local/fea/tension-coupon/comparison/tension-test-abaqus.toml
 
 A committed record's document is written to docs/models/build/<record>/ (git-ignored, rebuilt like the manual); a
 record under .local/ goes to report/<record>/ beside the record (ADR-0032) and stays there, since its material may not be public. The
