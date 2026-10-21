@@ -75,12 +75,12 @@ def test_a_zip_the_project_did_not_write_is_never_replaced(tmp_path):
 
 def test_our_models_are_zipped_by_convention(tmp_path):
     archive = tmp_path / "our-models.zip"
-    result = run(SHARE, "tension-coupon", "open-hole-coupon", "--out", str(archive))
+    result = run(SHARE, "tension-coupon", "compression-coupon", "--out", str(archive))  # structured meshes: no Gmsh needed (the manual job has none)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "2 models zipped" in result.stdout
     with zipfile.ZipFile(archive) as zf:
         names = set(zf.namelist())
-        for name in ("README.txt", "1-open-hole-coupon/abaqus/open-hole-coupon-abaqus.inp", "1-open-hole-coupon/calculix/open-hole-coupon-nodal-ccx.inp",
+        for name in ("README.txt", "1-compression-coupon/abaqus/compression-coupon-abaqus.inp", "1-compression-coupon/calculix/compression-coupon-nodal-ccx.inp",
                      "2-tension-coupon/abaqus/tension-coupon-abaqus.inp", "2-tension-coupon/spec/tension-coupon-nodal.toml", "material/x840-z60-pw.csv"):
             assert f"our-models/{name}" in names, name
         assert not any(name.endswith(".frd") for name in names)
