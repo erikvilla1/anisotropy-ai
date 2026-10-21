@@ -1,0 +1,54 @@
+# Open-hole tension coupon in the proportions of ASTM D5766 (36 mm wide, 6 mm hole, d/w = 1/6; 300 mm long with 50 mm tabs),
+# IM7/8552 quasi-isotropic [45/0/-45/90]s, grips as direct constraints on the whole tab regions. Gmsh transfinite O-grid
+# around the hole. Public material from the engine library (open publisher). Units mm-MPa.
+title = "Open-hole tension coupon, IM7/8552 [45/0/-45/90]s, 6 mm hole in 36 mm, nodal grips, 1 mm pull"
+kind = "open_hole_tension"
+units = "mm-MPa"
+
+[geometry]
+length = 300.0
+width = 36.0
+tab_length = 50.0
+hole_diameter = 6.0
+
+[mesh]
+mesher = "gmsh"
+element_order = 1
+element_size = 2.0    # the blocks around the hole; the inner square and the arcs follow [mesh.hole]
+[mesh.hole]
+circumferential = 32  # nodes around the hole, 8 per quarter
+radial_layers = 6
+ring_ratio = 2.0      # inner square half-side = 2 hole radii = 6 mm
+growth = 1.2          # radial element growth away from the hole
+
+[layup]
+angles = [45, 0, -45, 90]
+symmetric = true
+ply_thickness = "library"
+
+[material]
+library = "im7-8552"
+dataset = "ncamp-im7-8552-2019-rtd-measured-v1"
+f12_star = 0.0      # Tsai-Wu interaction term, stated (Abaqus's documented default)
+[material.transverse]
+G13 = 4688.43       # set equal to G12: a stated choice, the dataset gives no G13
+G23 = 3000.0        # nominal, no source: only CalculiX's three-dimensional law reads it
+transverse_isotropy = true
+plane_stress = true   # nu13 = nu23 = 0 for CalculiX, the plane stress Abaqus LAMINA and our kernel assume (ADR-0030, amendment 1)
+
+[grips]
+kind = "nodal"
+region = "tabs"     # the whole tab is gripped, as in the team's decks
+
+[loading]
+control = "displacement"
+value = 1.0
+
+[probes]
+nodes = { centre_top = [18.0, 153.0], hole_side = [21.0, 150.0], gauge = [18.0, 100.0] }
+elements = { hole_side = [21.2, 150.0], hole_top = [18.0, 153.2], far = [18.0, 100.0] }
+
+[output]
+fpf_criteria = ["max_stress", "tsai_hill", "tsai_wu"]
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = true, el_print_global = true }
