@@ -28,7 +28,7 @@ The dataset selector also retains all 12 measured properties from [CAM-RP-2023-0
 
 ## Traceability and monitoring
 
-`lib/qualification-references.json` records the 11 exact publisher URLs, source identifiers, publication precision, document revisions, page anchors and SHA-256 fingerprints. All original downloaded PDFs are preserved in the local monitor's immutable snapshot store; research copies and page renders remain under ignored `.local/qualification/`. Publisher PDFs are linked, not republished in the public site.
+`lib/qualification-references.json` records the 11 exact publisher URLs, source identifiers, publication precision, document revisions, page anchors and SHA-256 fingerprints. All original downloaded PDFs are preserved in the local monitor's immutable snapshot store; research copies and page renders remain under ignored `.local/research/qualification/`. Publisher PDFs are linked, not republished in the public site.
 
 Every displayed property links to its exact PDF page. JSON exports preserve the dataset, original numeric values and units, English/SI displays, conditions, methods, basis, source fingerprint, supporting references, record revision and elastic-input mapping. A changed supporting specification also triggers the reference-details update notice. Exported records remain pinned.
 
