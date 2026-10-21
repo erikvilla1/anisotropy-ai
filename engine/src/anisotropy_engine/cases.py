@@ -24,6 +24,7 @@ from .failure import FirstPlyFailure, first_ply_failure_combined
 from .lamina import Lamina, StrainLimits, Strengths, ThermalExpansion, reduced_compliance, reduced_stiffness, strain_limits_from_strengths
 from .library import LibraryMaterial, library_material
 from .laminate import Ply, abd_matrices
+from .micromechanics import E2_MODELS, G12_MODELS, Fiber, Matrix, MicromechanicsResult, lamina_from_constituents
 from .response import (
     Loads, PlySurface, PrescribedCurvatureResult, abd_compliance, abd_matrix, midplane_response, ply_surfaces,
     prescribed_curvature_response,
@@ -77,7 +78,47 @@ def _is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+CONSTITUENT_NAMES = ("fiber", "matrix", "Vf", "E2_model", "G12_model")
+FIBER_NAMES = ("E1", "E2", "G12", "nu12")
+MATRIX_NAMES = ("E", "nu")
+
+
+def _check_constituents(table: dict, name: str) -> None:
+    """A material stated by its fiber, matrix, fiber volume ratio and the named models (micromechanics)."""
+    _fields(table, name, set(CONSTITUENT_NAMES),
+            {"xi_E2", "xi_G12"} | set(STRENGTH_NAMES) | set(ALPHA_NAMES) | set(STRAIN_LIMIT_NAMES) | {"strain_limits"})
+    _fields(table["fiber"], f"{name}.fiber", set(FIBER_NAMES), set())
+    _fields(table["matrix"], f"{name}.matrix", set(MATRIX_NAMES), set())
+    for group, keys in (("fiber", FIBER_NAMES), ("matrix", MATRIX_NAMES)):
+        bad = [key for key in keys if not _is_number(table[group][key])]
+        if bad:
+            raise ValueError(f"{name}.{group}: {bad} must be finite numbers")
+    if not _is_number(table["Vf"]) or not 0 < table["Vf"] < 1:
+        raise ValueError(f"{name}.Vf must be a fiber volume ratio strictly between 0 and 1 (a fraction, not percent)")
+    if table["E2_model"] not in E2_MODELS:
+        raise ValueError(f"{name}.E2_model must be one of {E2_MODELS}")
+    if table["G12_model"] not in G12_MODELS:
+        raise ValueError(f"{name}.G12_model must be one of {G12_MODELS}")
+    for key, model in (("xi_E2", table["E2_model"]), ("xi_G12", table["G12_model"])):
+        if model == "halpin_tsai" and key not in table:
+            raise ValueError(f"{name}: {key} is required with the halpin_tsai model and is never assumed")
+        if model != "halpin_tsai" and key in table:
+            raise ValueError(f"{name}: {key} belongs to the halpin_tsai model only")
+        if key in table and (not _is_number(table[key]) or table[key] < 0):
+            raise ValueError(f"{name}.{key} must be a finite number, zero or positive")
+
+
 def _check_material(table: dict, name: str) -> None:
+    if isinstance(table, dict) and "fiber" in table:
+        _check_constituents(table, name)
+        supplied = set(STRENGTH_NAMES) & table.keys()
+        if supplied and supplied != set(STRENGTH_NAMES):
+            raise ValueError(f"{name} needs either all five strengths or none")
+        _check_strain_limits(table, name)
+        alphas = set(ALPHA_NAMES) & table.keys()
+        if alphas and alphas != set(ALPHA_NAMES):
+            raise ValueError(f"{name} needs both alpha1 and alpha2 or neither")
+        return
     if isinstance(table, dict) and "library" in table:
         # A library dataset supplies the values; typed values cannot be mixed in. The maximum-strain
         # policy is a stated choice, not a value, so it may accompany a library dataset.
@@ -261,11 +302,28 @@ class CaseSolution:
     constrained: PrescribedCurvatureResult | None  # set for forces_curvature
     mixed: MixedResult | None  # set for mixed
     library: dict[str, LibraryMaterial] = field(default_factory=dict)  # library datasets by material name
+    constituents: dict[str, MicromechanicsResult] = field(default_factory=dict)  # materials stated by fiber, matrix and Vf
+
+
+def _constituents(table: dict, si, name: str = "material") -> MicromechanicsResult:
+    """The micromechanics result of a material stated by its constituents, in SI."""
+    fiber = Fiber(E1=float(si(table["fiber"]["E1"], "modulus")), E2=float(si(table["fiber"]["E2"], "modulus")),
+                  G12=float(si(table["fiber"]["G12"], "modulus")), nu12=float(table["fiber"]["nu12"]))
+    matrix = Matrix(E=float(si(table["matrix"]["E"], "modulus")), nu=float(table["matrix"]["nu"]))
+    strengths = Strengths(**{k: float(si(table[k], "stress")) for k in STRENGTH_NAMES}) if "F1t" in table else None
+    expansion = ThermalExpansion(**{k: float(si(table[k], "alpha")) for k in ALPHA_NAMES}) if "alpha1" in table else None
+    try:
+        return lamina_from_constituents(fiber, matrix, float(table["Vf"]), table["E2_model"], table["G12_model"],
+                                        table.get("xi_E2"), table.get("xi_G12"), strengths, expansion)
+    except ValueError as error:
+        raise ValueError(f"{name}: {error}") from None
 
 
 def _lamina(table: dict, si, resolved: dict[str, LibraryMaterial] | None = None, name: str = "material") -> Lamina:
     if resolved and name in resolved:
         return _with_strain_limits(resolved[name].lamina, table, name)
+    if "fiber" in table:
+        return _with_strain_limits(_constituents(table, si, name).lamina, table, name)
     strengths = expansion = None
     if "F1t" in table:
         strengths = Strengths(**{name: float(si(table[name], "stress")) for name in STRENGTH_NAMES})
@@ -298,6 +356,7 @@ def solve_case(case: dict) -> CaseSolution:
                   for ply in case["laminate"]["plies"]]
     plies = [Ply(material=materials[name], angle_deg=angle, thickness_m=t) for angle, name, t in layers]
     ply_materials = [name for _, name, _ in layers]
+    constituents = {name: _constituents(table, si, name) for name, table in tables.items() if "fiber" in table}
     h = sum(ply.thickness_m for ply in plies)
 
     applied = case["applied"]
@@ -346,7 +405,7 @@ def solve_case(case: dict) -> CaseSolution:
     surfaces = (ply_surfaces(plies, eps0, kappa) if delta_T is None
                 else thermal_ply_surfaces(plies, eps0, kappa, delta_T))
     return CaseSolution(case["units"], materials, ply_materials, plies, kind, delta_T, N_T, M_T,
-                        loads, eps0, kappa, surfaces, constrained, mixed, resolved)
+                        loads, eps0, kappa, surfaces, constrained, mixed, resolved, constituents)
 
 
 def buckling_result(case: dict, solution: CaseSolution) -> BucklingResult | None:
@@ -423,6 +482,13 @@ def engine_results(case: dict) -> dict:
 
     results = {}
     used = list(dict.fromkeys(solution.ply_materials))
+    if len(used) == 1 and used[0] in solution.constituents:
+        # The lamina constants the micromechanics models produced, as answer keys state them.
+        derived = solution.constituents[used[0]]
+        for key in ("E1", "E2", "G12"):
+            results[key] = (float(shown(getattr(derived, key), "modulus")), 0.0)
+        results["nu12"] = (derived.nu12, 0.0)
+        results["nu21"] = (derived.nu21, 0.0)
     if len(used) == 1:
         material = solution.materials[used[0]]
         add_matrix("Q", reduced_stiffness(material), "modulus")

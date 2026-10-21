@@ -37,7 +37,7 @@ ROOT = HERE.parents[1]
 GENERATED = HERE / "generated"
 BUILD = HERE / "build"
 REPO_URL = "https://github.com/erikvilla1/anisotropy-ai/blob/main/"
-ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library")
+ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library", "micromechanics")
 FEA_MODULES = ("mesh", "membrane", "recovery", "results", "cases", "model", "abaqus_reader", "units")
 # Each package with its theory document and the modules a code marker may name.
 PACKAGES = {"anisotropy_engine": ("engine/docs/theory.md", ENGINE_MODULES), "anisotropy_fea": ("fea/docs/theory.md", FEA_MODULES)}
@@ -294,7 +294,7 @@ def number(value: float, digits: int = 6) -> str:
     return text.replace("-", "$-$")
 
 
-UNIT_OF = {"stress_global": "stress", "stress_local": "stress", "Ex": "modulus", "Ey": "modulus",
+UNIT_OF = {"stress_global": "stress", "stress_local": "stress", "Ex": "modulus", "Ey": "modulus", "E1": "modulus", "E2": "modulus", "G12": "modulus",
            "Gxy": "modulus", "curvature": "kappa", "moments": "M", "N_T": "N", "M_T": "M",
            "Nx": "N", "Ny": "N", "Nxy": "N", "Mx": "M", "My": "M", "Mxy": "M",
            "sigma_x": "stress", "sigma_y": "stress", "tau_xy": "stress",
