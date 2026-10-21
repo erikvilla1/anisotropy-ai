@@ -18,7 +18,10 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
 .local/fea/<tool>/<test>/            tool: abaqus | calculix-prepomax
   team/                              files made by others that we compare against; never edited
   ours/                              the model our generator wrote for the same test (spec, deck, run, pictures, summary)
-  comparison/                        <record>.toml, <record>.md, notes/, figures/, report/<record>/
+  comparison/                        <record>.toml, <record>.md, notes/, figures/, report/<record>/,
+                                     team-comparison.toml + .md and report/<test>-comparison/ (the short document for the team)
+.local/fea/share/<test>/             what we hand the team: the short PDF, their deck, our decks, our results in their CSV layout,
+.local/fea/share/<test>.zip          the material record; written and zipped by docs/models/team.py, never edited by hand (ADR-0035)
 .local/fea/scratch/                  regenerable output of the committed fixtures; safe to delete
 
 .local/homework/assignments/<HW>/    what the course provided, as received (PDFs, *_Input.xlsx)
@@ -42,7 +45,8 @@ Committed counterparts: `fea/validation/{specs,decks,records}` for models with p
 2. Write `team/README.md`: who made the files, when, with which software version, and what each file is. Name the material and whether its rights class is known.
 3. Build our model into `ours/` from a spec; keep the spec in `ours/` (local) or `fea/validation/specs/` (public material).
 4. Write the record into `comparison/` with `fea/tools/record_from_report.py` (Abaqus CSV field reports) or `fea/tools/record_from_dat.py` (CalculiX `.dat`), then the document with `docs/models/build.py`.
-5. Add the test's row to `.local/fea/README.md`. Mirror the folder under the other tool when that side exists.
+5. When the team built the model, seed our spec as they seeded theirs (`mesh.y_partitions`, `mesh.y_seeds` from their partitions and seeds) so every node lands on theirs. Then write `comparison/team-comparison.toml` and its reading `team-comparison.md`, and run `docs/models/team.py` on it. Hand over `.local/fea/share/<test>.zip`.
+6. Add the test's row to `.local/fea/README.md`. Mirror the folder under the other tool when that side exists.
 
 ## Procedure: a new homework arrives
 

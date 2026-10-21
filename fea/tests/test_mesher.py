@@ -26,6 +26,18 @@ def test_rows_bands_and_counts():
     assert counts_from_size(25.0, 250.0, 2.5) == (10, 100) and counts_from_size(10.0, 80.0, 3.0) == (4, 27)
 
 
+def test_rows_given_explicitly_seed_the_mesh_by_segment():
+    ys = [0.0, 10.0, 15.0, 20.0, 40.0, 60.0, 65.0, 70.0, 80.0]  # spacing changes at 10, 20, 60 and 70
+    mesh = structured_rectangle(10.0, 80.0, 2, 8, ys=ys, node_rows={"Tab-Bottom-Line": 15.0})
+    assert sorted(set(mesh.xy[:, 1].tolist())) == ys and mesh.node_sets["Tab-Bottom-Line"].tolist() == [6, 7, 8]
+    with pytest.raises(MeshError, match="ny \\+ 1 = 9 node rows"):
+        structured_rectangle(10.0, 80.0, 2, 8, ys=ys[:-1])
+    with pytest.raises(MeshError, match="increase strictly"):
+        structured_rectangle(10.0, 80.0, 2, 8, ys=[0.0, 10.0, 10.0, 20.0, 40.0, 60.0, 65.0, 70.0, 80.0])
+    with pytest.raises(MeshError, match="end at the length"):
+        structured_rectangle(10.0, 80.0, 2, 8, ys=ys[:-1] + [79.0])
+
+
 def test_order_two_adds_one_midside_node_per_edge_in_the_s8r_order():
     mesh = structured_rectangle(10.0, 20.0, 2, 2, order=2)
     assert mesh.node_count == 9 + 12 and mesh.midside.shape == (4, 4)

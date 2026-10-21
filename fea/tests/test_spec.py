@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from anisotropy_fea.spec import SpecError, admissible_ny, full_angles, load_spec, mesh_counts, parse_spec, spec_material, spec_plies, to_si
+from anisotropy_fea.spec import (SpecError, admissible_ny, full_angles, load_spec, mesh_counts, parse_spec, row_coordinates, spec_material, spec_plies,
+                                 to_si)
 
 SPECS = Path(__file__).parents[1] / "validation" / "specs"
 NODAL = (SPECS / "unnotched-im7-8552-nodal.toml").read_text(encoding="utf-8")
@@ -128,6 +129,40 @@ def test_bending_rules():
         parse_spec(text.replace("three_point_bending", "four_point_bending"))
     with pytest.raises(SpecError, match="take no \\[grips\\] table"):
         parse_spec(text.replace("[loading]", "[grips]\nkind = \"nodal\"\nregion = \"line\"\n\n[loading]"))
+
+
+TEAM_COUPON = (SPECS / "tension-coupon-x840-coupling.toml").read_text(encoding="utf-8")
+TEAM_SEEDS = ("y_partitions = [15.0, 35.97, 44.03, 65.0]", "y_seeds = [15, 21, 8, 21, 15]")
+
+
+def test_a_mesh_seeded_by_segment_has_the_teams_node_rows():
+    """The team's CAE mesh: partitions at 15, 35.97, 44.03 and 65 mm, seeded 15, 21, 8, 21, 15 (their report template)."""
+    spec = parse_spec(TEAM_COUPON)
+    assert mesh_counts(spec) == (10, 80)
+    rows = row_coordinates(spec)
+    assert len(rows) == 81 and rows[0] == 0.0 and rows[-1] == 80.0
+    assert rows[15] == 15.0 and rows[36] == pytest.approx(35.97, abs=1e-12) and rows[44] == pytest.approx(44.03, abs=1e-12) and rows[65] == 65.0
+    assert rows[16] - rows[15] == pytest.approx(20.97 / 21) and rows[37] - rows[36] == pytest.approx(8.06 / 8)
+    si = to_si(spec)
+    assert si.mesh.y_partitions == pytest.approx([0.015, 0.03597, 0.04403, 0.065]) and row_coordinates(si)[36] == pytest.approx(0.03597)
+    assert row_coordinates(parse_spec(NODAL)) is None  # a uniform mesh keeps np.linspace in the mesher, so older decks do not change
+
+
+SEED_REFUSALS = [
+    (TEAM_SEEDS[1], "", "go together"),  # leaves the comment that followed it
+    (TEAM_SEEDS[0], TEAM_SEEDS[0] + "\nny = 80", "replaces mesh.ny"),
+    (TEAM_SEEDS[1], "y_seeds = [15, 21, 8, 21]", "one count per segment"),
+    (TEAM_SEEDS[1], "y_seeds = [15, 21, 0, 21, 15]", "at least 1"),
+    (TEAM_SEEDS[0], "y_partitions = [15.0, 44.03, 35.97, 65.0]", "increase strictly"),
+    (TEAM_SEEDS[0], "y_partitions = [15.0, 35.97, 44.03, 85.0]", "increase strictly"),
+    (TEAM_SEEDS[0], "y_partitions = [14.0, 35.97, 44.03, 65.0]", "no node row on the line\\(s\\) \\['Tab-Bottom-Line'\\]"),
+]
+
+
+@pytest.mark.parametrize("old, new, message", SEED_REFUSALS, ids=[r[2][:30] for r in SEED_REFUSALS])
+def test_invalid_seeding_is_refused_by_name(old, new, message):
+    with pytest.raises(SpecError, match=message):
+        spec_with(old, new, base=TEAM_COUPON)
 
 
 def test_admissible_ny_names_counts_that_hit_every_line():

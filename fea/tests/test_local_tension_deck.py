@@ -60,3 +60,13 @@ def test_the_kernel_reproduces_the_teams_abaqus_field_reports():
     comparisons, problems = compare_record(record)
     assert not problems and len(comparisons) >= 24
     assert record_disagreements(record) == []
+
+
+def test_our_committed_coupling_deck_is_the_teams_model():
+    """Our generated twin, seeded as the team seeded it, is the same model item by item (ADR-0035)."""
+    from anisotropy_fea.equivalence import deck_equivalence
+
+    ours = Path(__file__).parents[1] / "validation" / "decks" / "generated" / "tension-coupon-x840-coupling-abaqus.inp"
+    eq = deck_equivalence(read_deck(LOCAL_DECK, "mm-MPa"), read_deck(ours, "mm-MPa"), 1e-8, "mm-MPa")
+    assert eq.same_model, [(i.item, i.team, i.ours) for i in eq.differences]
+    assert len(eq.element_map) == 800 and eq.largest_node_offset < 1e-8

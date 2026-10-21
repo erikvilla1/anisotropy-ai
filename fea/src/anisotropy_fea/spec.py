@@ -59,9 +59,13 @@ class HoleMesh(Record):
 class MeshControls(Record):
     mesher: Literal["structured", "gmsh"]
     element_order: Literal[1, 2]
-    element_size: PositiveFloat | None = None  # exactly one of element_size or (nx, ny)
+    element_size: PositiveFloat | None = None  # exactly one of element_size, (nx, ny) or (nx, y_partitions, y_seeds)
     nx: int | None = None
     ny: int | None = None
+    # Structured mesher, seeded by segment as in Abaqus/CAE: the interior partition lines along y (bottom first) and the number
+    # of element rows in each segment between 0, the partitions and the length. Replaces ny; reproduces a CAE mesh node for node.
+    y_partitions: list[PositiveFloat] | None = None
+    y_seeds: list[int] | None = None
     hole: HoleMesh | None = None
 
 
@@ -225,17 +229,35 @@ def validate_spec(spec: CouponSpec) -> None:
         need(not g.tab_length or g.tab_length < g.length / 2 - half,
              f"the tabs (tab_length {g.tab_length:g}) must end before the inner square around the hole begins at y = {g.length / 2 - half:g}")
     # mesh counts
-    need((m.element_size is None) != (m.nx is None and m.ny is None), "give mesh.element_size or both mesh.nx and mesh.ny, not both and not neither")
-    need((m.nx is None) == (m.ny is None), "mesh.nx and mesh.ny go together")
-    if m.nx is not None:
-        need(m.nx >= 1 and m.ny >= 1, "mesh.nx and mesh.ny must be at least 1")
+    seeded = m.y_partitions is not None or m.y_seeds is not None
+    if seeded:
+        need(m.y_partitions is not None and m.y_seeds is not None, "mesh.y_partitions and mesh.y_seeds go together")
+        need(m.mesher == "structured", "mesh.y_partitions and mesh.y_seeds seed the structured mesher only")
+        need(m.nx is not None and m.ny is None and m.element_size is None,
+             "mesh.y_seeds replaces mesh.ny: give mesh.nx with mesh.y_partitions and mesh.y_seeds, and neither mesh.ny nor mesh.element_size")
+        need(len(m.y_seeds) == len(m.y_partitions) + 1, "mesh.y_seeds needs one count per segment, one more than mesh.y_partitions")
+        need(m.nx >= 1 and all(seed >= 1 for seed in m.y_seeds), "mesh.nx and every mesh.y_seeds count must be at least 1")
+        edges = [0.0, *m.y_partitions, g.length]
+        need(all(a < b for a, b in zip(edges, edges[1:])), "mesh.y_partitions must increase strictly and lie inside the length")
+    else:
+        need((m.element_size is None) != (m.nx is None and m.ny is None), "give mesh.element_size or both mesh.nx and mesh.ny, not both and not neither")
+        need((m.nx is None) == (m.ny is None), "mesh.nx and mesh.ny go together")
+        if m.nx is not None:
+            need(m.nx >= 1 and m.ny >= 1, "mesh.nx and mesh.ny must be at least 1")
     if m.mesher == "structured":
         nx, ny = mesh_counts(spec)
         lines = node_lines(spec)
-        bad = [name for name, y in lines.items() if not on_a_row(y, g.length, ny)]
-        if bad:
-            raise SpecError(f"mesh.ny = {ny} puts no node row on the line(s) {bad} (y = {[f'{lines[b]:g}' for b in bad]}); "
-                            f"admissible ny near {ny}: {admissible_ny(g.length, list(lines.values()), ny)}")
+        if seeded:
+            rows = row_coordinates(spec)
+            bad = [name for name, y in lines.items() if not any(abs(y - row) <= LINE_TOLERANCE * g.length for row in rows)]
+            if bad:
+                raise SpecError(f"mesh.y_partitions and mesh.y_seeds put no node row on the line(s) {bad} (y = {[f'{lines[b]:g}' for b in bad]}); "
+                                f"add each line to mesh.y_partitions")
+        else:
+            bad = [name for name, y in lines.items() if not on_a_row(y, g.length, ny)]
+            if bad:
+                raise SpecError(f"mesh.ny = {ny} puts no node row on the line(s) {bad} (y = {[f'{lines[b]:g}' for b in bad]}); "
+                                f"admissible ny near {ny}: {admissible_ny(g.length, list(lines.values()), ny)}")
     # layup
     need(len(spec.layup.angles) >= 1, "layup.angles must list at least one ply")
     if kind == "shear_pm45":
@@ -292,9 +314,25 @@ def full_angles(spec: CouponSpec) -> list[float]:
 
 def mesh_counts(spec: CouponSpec) -> tuple[int, int]:
     m, g = spec.mesh, spec.geometry
+    if m.y_seeds is not None:
+        return m.nx, sum(m.y_seeds)
     if m.nx is not None:
         return m.nx, m.ny
     return max(1, math.ceil(g.width / m.element_size - 1e-9)), max(1, math.ceil(g.length / m.element_size - 1e-9))
+
+
+def row_coordinates(spec: CouponSpec) -> list[float] | None:
+    """The y of every node row of a mesh seeded by segment (bottom first, 0 to the length), or None for a uniform mesh.
+
+    Each segment between 0, the partition lines and the length is divided evenly into its seed count, as Abaqus/CAE's
+    "seed edge by number" does; the rows therefore change spacing at the partition lines, exactly like a CAE mesh.
+    """
+    m, g = spec.mesh, spec.geometry
+    if m.y_seeds is None:
+        return None
+    edges = [0.0, *m.y_partitions, g.length]
+    rows = [a + (b - a) * k / n for a, b, n in zip(edges, edges[1:], m.y_seeds) for k in range(n)]
+    return rows + [g.length]
 
 
 def node_lines(spec: CouponSpec) -> dict[str, float]:
@@ -338,7 +376,8 @@ def to_si(spec: CouponSpec) -> CouponSpec:
                                          "tab_length": scale(spec.geometry.tab_length, L), "hole_diameter": scale(spec.geometry.hole_diameter, L),
                                          "span": scale(spec.geometry.span, L), "overhang": scale(spec.geometry.overhang, L),
                                          "load_span": scale(spec.geometry.load_span, L)})
-    m = spec.mesh.model_copy(update={"element_size": scale(spec.mesh.element_size, L)})
+    m = spec.mesh.model_copy(update={"element_size": scale(spec.mesh.element_size, L),
+                                     "y_partitions": None if spec.mesh.y_partitions is None else [p * L for p in spec.mesh.y_partitions]})
     layup = spec.layup.model_copy(update={"ply_thickness": spec.layup.ply_thickness if spec.layup.ply_thickness == "library" else spec.layup.ply_thickness * L})
     t = spec.material.transverse
     transverse = t.model_copy(update={"G13": t.G13 * S, "G23": t.G23 * S, "E3": scale(t.E3, S)})

@@ -75,6 +75,7 @@ class LibraryMaterial:
     ply_thickness_m: float | None
     values: tuple[CitedValue, ...]
     not_provided: tuple[str, ...]  # what this dataset cannot supply, and why
+    authors: str | None = None  # the source's authors when the record names them; not part of `citation`, so deck headers stay as they were
 
     def value(self, role: str) -> CitedValue:
         for item in self.values:
@@ -190,4 +191,4 @@ def library_material(material_id: str, dataset_id: str | None = None) -> Library
     return LibraryMaterial(material_id=d["materialId"], name=d["name"], dataset_id=d["datasetId"], dataset=d["dataset"],
                            record_revision=d["recordRevision"], rights=source["rights"], citation=citation,
                            lamina=lamina, ply_thickness_m=ply_thickness_m, values=tuple(cited),
-                           not_provided=tuple(not_provided))
+                           not_provided=tuple(not_provided), authors=source.get("authors"))

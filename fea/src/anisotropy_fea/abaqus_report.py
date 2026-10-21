@@ -112,6 +112,31 @@ def read_field_report(path: Path | str) -> FieldReport:
                        instance=meta["Part Instance Name"], values=values, faces=faces, centroids=centroids, blocks=blocks, rows=rows)
 
 
+FACE_FRACTION = {"SNEG": "-1.0", "SPOS": "1.0", "SMID": "0.0"}
+
+
+def write_field_report(path: Path | str, quantity: str, rows: list[tuple[int, int, str, float, float, float]], odb: str, step: str, frame: str,
+                       instance: str, section: str, material: str) -> None:
+    """Values written in the layout of an Abaqus/CAE field report, so they open beside the team's own reports.
+
+    One block with the columns `read_field_report` reads; `rows` are (element label, layer from 1 at the bottom, face SNEG,
+    SPOS or SMID, centroid x, centroid y, value), one per element and section point, all at integration point 1 (the centroid).
+    The section point text has the shape Abaqus writes: `shell < composite > < elset = ... > : SNEG, (fraction = -1.0), Layer = 1`.
+    """
+    if quantity not in QUANTITIES:
+        raise ReportError(f"quantity {quantity!r} is not one of {list(QUANTITIES)}")
+    header = ["ODB Name", "Step", "Frame", "Part Instance Name", "Element Label", "IntPt", "X", "Y", "Z", "Section Name", "Material Name",
+              "Section Point", f"S-{quantity}"]
+    lines = [header]
+    for element, layer, face, x, y, value in rows:
+        if face not in FACE_FRACTION:
+            raise ReportError(f"element {element} layer {layer}: face {face!r} is not SNEG, SPOS or SMID")
+        point = f"shell < composite > < elset = {section} > : {face}, (fraction = {FACE_FRACTION[face]}), Layer = {layer}"
+        lines.append([odb, step, frame, instance, str(element), "1", f"{x:.9g}", f"{y:.9g}", "0.", section, material, point, f"{value:.9g}"])
+    with Path(path).open("w", encoding="utf-8", newline="") as handle:
+        csv.writer(handle, lineterminator="\n").writerows(lines)
+
+
 def instance_in_deck(report: FieldReport, deck: Deck) -> str:
     """The deck's spelling of the report's instance (Abaqus/CAE upper-cases it in reports)."""
     for name in deck.instances:
