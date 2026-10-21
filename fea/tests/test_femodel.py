@@ -8,9 +8,9 @@ import pytest
 from anisotropy_fea.femodel import BoundaryDefinition, build_model, consistent_edge_loads, mesh_for_spec
 from anisotropy_fea.mesher import structured_rectangle
 from anisotropy_fea.spec import SpecError, load_spec, parse_spec, to_si
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-SPECS = Path(__file__).parents[1] / "validation" / "specs"
-NODAL = (SPECS / "unnotched-im7-8552-nodal.toml").read_text(encoding="utf-8")
+NODAL = (paths.spec_path("unnotched-im7-8552-nodal")).read_text(encoding="utf-8")
 
 
 def spec_from(text: str):
@@ -18,7 +18,7 @@ def spec_from(text: str):
 
 
 def test_nodal_grips_on_the_tabs():
-    model = build_model(load_spec(SPECS / "unnotched-im7-8552-nodal.toml"))
+    model = build_model(load_spec(paths.spec_path("unnotched-im7-8552-nodal")))
     mesh = model.mesh
     assert mesh.element_count == 1250 and mesh.node_count == 1386
     assert mesh.node_sets["Grip-Bottom"].size == 11 * 29 and mesh.node_sets["Grip-Top"].size == 11 * 29  # 56 mm of 2 mm rows plus the end row
@@ -33,7 +33,7 @@ def test_nodal_grips_on_the_tabs():
 
 
 def test_coupling_grips_add_reference_points_and_couplings():
-    model = build_model(load_spec(SPECS / "unnotched-im7-8552-coupling.toml"))
+    model = build_model(load_spec(paths.spec_path("unnotched-im7-8552-coupling")))
     assert [p.set_name for p in model.reference_points] == ["RF-Bottom", "RF-Top"]
     assert model.reference_points[1].xy == pytest.approx((0.0125, 0.250))
     assert [(c.reference_set, c.node_set) for c in model.couplings] == [("RF-Bottom", "Grip-Bottom"), ("RF-Top", "Grip-Top")]
@@ -80,7 +80,7 @@ def test_unbuilt_kinds_are_refused_with_the_planned_chunk():
 
 
 def test_compression_spec_builds_a_fine_tabbed_mesh():
-    model = build_model(load_spec(SPECS / "compression-im7-8552.toml"))
+    model = build_model(load_spec(paths.spec_path("compression-im7-8552")))
     assert model.mesh.element_count == 3360 and model.boundaries[-1].value == pytest.approx(-0.1e-3)
     assert model.mesh.element_sets["Gauge"].size == 26 * 12
     assert np.all(model.mesh.xy[model.mesh.node_sets["Grip-Top"]][:, 1] >= 0.0765 - 1e-12)

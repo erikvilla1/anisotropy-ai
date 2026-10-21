@@ -22,7 +22,7 @@ The manual is generated, so it cannot drift from the repository ([ADR-0008](../d
 | What we built, known limitations | `docs/00_system_overview.md` |
 | Equations and explanations | `engine/docs/theory.md` and `fea/docs/theory.md` |
 | Code listings with line numbers | The engine and `fea` source, at the places marked `<!-- code: name -->` in each theory file |
-| Validation tables | Running the engine on every case in `engine/validation/cases`, and the kernel on every case in `fea/validation/cases` |
+| Validation tables | Running the engine on every case in `engine/validation/cases`, and the kernel on every case in `fea/checks/cases` |
 | Verification reports | The newest file in `docs/evaluations` (engine) and in `docs/evaluations/fea` (finite element layer) |
 | Decisions | `docs/decisions/ADR-*.md` |
 | Risk register | `docs/risks/risk_register.md` |

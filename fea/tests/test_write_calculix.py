@@ -7,9 +7,9 @@ import pytest
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.spec import load_spec, parse_spec, to_si
 from anisotropy_fea.write_calculix import CalculixWriterError, orientation_name, write_calculix
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-SPECS = Path(__file__).parents[1] / "validation" / "specs"
-NODAL = (SPECS / "unnotched-im7-8552-nodal.toml").read_text(encoding="utf-8")
+NODAL = (paths.spec_path("unnotched-im7-8552-nodal")).read_text(encoding="utf-8")
 
 
 def order2(text: str = NODAL):
@@ -45,7 +45,7 @@ def test_the_deck_has_calculix_syntax_and_is_deterministic():
 
 def test_refusals():
     with pytest.raises(CalculixWriterError, match="S8R only"):
-        write_calculix(build_model(load_spec(SPECS / "unnotched-im7-8552-nodal.toml")))
+        write_calculix(build_model(load_spec(paths.spec_path("unnotched-im7-8552-nodal"))))
     coupling = order2(NODAL.replace('kind = "nodal"', 'kind = "coupling"'))
     with pytest.raises(CalculixWriterError, match="cannot print the reaction at a coupled reference node"):
         write_calculix(build_model(coupling))
@@ -55,10 +55,10 @@ def test_refusals():
 
 
 def test_the_committed_calculix_deck_matches_its_spec():
-    spec = load_spec(SPECS / "unnotched-im7-8552-nodal.toml")
+    spec = load_spec(paths.spec_path("unnotched-im7-8552-nodal"))
     text = write_calculix(build_model(spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})))
-    committed = (SPECS.parent / "decks" / "generated" / "unnotched-im7-8552-nodal-ccx.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
-    assert committed == text, "regenerate with examples/run_calculix.py and copy the deck into validation/decks/generated/"
+    committed = (paths.deck_path(paths.spec_path("unnotched-im7-8552-nodal"), "ccx")).read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert committed == text, "regenerate with examples/run_calculix.py into the test's decks/ folder"
 
 
 def test_plane_stress_puts_zero_poisson_ratios_in_the_engineering_constants_and_says_so():

@@ -20,4 +20,4 @@ The reading note of the record with the same name. It is printed as the last sec
 
 ## What would settle the open items
 
-Run the same spec with the kernel's eight-node element and record the near-grip probe; have the team run the generated Abaqus deck `fea/validation/decks/generated/unnotched-im7-8552-nodal-abaqus.inp` and export per the recipe in `docs/abaqus-export-recipe.md`.
+Run the same spec with the kernel's eight-node element and record the near-grip probe; have the team run the generated Abaqus deck `fea/checks/unnotched-im7-8552/decks/unnotched-im7-8552-nodal-abaqus.inp` and export per the recipe in `docs/abaqus-export-recipe.md`.

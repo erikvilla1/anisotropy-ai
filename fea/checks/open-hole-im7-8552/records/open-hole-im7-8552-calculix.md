@@ -10,7 +10,7 @@ The reading note of the record with the same name. It is printed as the last sec
 
 ## What explains the differences
 
-- The two formulations differ most where the field has a gradient: the kernel's bilinear four-node element gives one centroid value, CalculiX's eight-node shell expanded to a twenty-node brick gives the mean of its integration points over an element that spans the same corners but bends with the stress concentration. On the free edge of the hole the small components are differences of large numbers. The isotropic Kirsch case (`fea/validation/cases/open-hole-isotropic-kirsch.toml`) shows the same element on a finer O-grid converging to the closed form: 1.8 % of the far-field stress beside the hole at the committed mesh, 1.0 % one refinement finer.
+- The two formulations differ most where the field has a gradient: the kernel's bilinear four-node element gives one centroid value, CalculiX's eight-node shell expanded to a twenty-node brick gives the mean of its integration points over an element that spans the same corners but bends with the stress concentration. On the free edge of the hole the small components are differences of large numbers. The isotropic Kirsch case (`fea/checks/cases/open-hole-isotropic-kirsch.toml`) shows the same element on a finer O-grid converging to the closed form: 1.8 % of the far-field stress beside the hole at the committed mesh, 1.0 % one refinement finer.
 - The spec states `plane_stress = true`, so CalculiX's three-dimensional law carries nu13 = nu23 = 0 and does not couple the plies' thickness contraction (ADR-0030, amendment 1); the reaction difference of 0.3 % is the element difference alone, the same size as on the unnotched coupon.
 
 ## Verified, and not
@@ -20,4 +20,4 @@ The reading note of the record with the same name. It is printed as the last sec
 
 ## What would settle the open items
 
-Run the same spec with the kernel's eight-node element and record the `hole_side` and `hole_top` probes; have the team run the generated Abaqus deck `fea/validation/decks/generated/open-hole-im7-8552-abaqus.inp` and export per the recipe in `docs/abaqus-export-recipe.md`.
+Run the same spec with the kernel's eight-node element and record the `hole_side` and `hole_top` probes; have the team run the generated Abaqus deck `fea/checks/open-hole-im7-8552/decks/open-hole-im7-8552-abaqus.inp` and export per the recipe in `docs/abaqus-export-recipe.md`.

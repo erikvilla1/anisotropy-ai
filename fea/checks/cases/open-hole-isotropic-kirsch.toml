@@ -3,7 +3,7 @@ source = "Kirsch's closed form for an infinite isotropic plate with a circular h
 units = "mm-MPa"
 
 [mesh]
-deck = "../decks/generated/open-hole-isotropic-kirsch-abaqus.inp"
+deck = "../open-hole-isotropic-kirsch/decks/open-hole-isotropic-kirsch-abaqus.inp"
 
 [expected]
 tolerance = 0.02
