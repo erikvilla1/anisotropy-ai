@@ -9,7 +9,7 @@ First record added from the [public sources research](material-research-public-s
 | Qualification material property data report | CAM-RP-2009-015 Rev B | 2019-04-16 | `640c215e…211387` | Cover, p. 9, Table 2-1 (p. 28), pp. 22, 26, 30 to 34, 37 read from rendered page images |
 | Qualification statistical analysis report | NCP-RP-2009-028 Rev B | 2019-04-16 | `6313ba07…9628d` | Cover, p. 10, Table 3-1 (p. 35) |
 
-Both covers carry "Distribution Statement A. Approved for public release; distribution is unlimited." Page 9 of the data report states the data "is intended for general distribution to the public, either freely or at a price that does not exceed the cost of reproduction". The publisher's site blocks automated downloads; the copies came from a browser-equivalent fetch and are kept in ignored `.local/ncamp/`, never in the repository.
+Both covers carry "Distribution Statement A. Approved for public release; distribution is unlimited." Page 9 of the data report states the data "is intended for general distribution to the public, either freely or at a price that does not exceed the cost of reproduction". The publisher's site blocks automated downloads; the copies came from a browser-equivalent fetch and are kept in ignored `.local/sources/ncamp/`, never in the repository.
 
 ## What the record holds
 
