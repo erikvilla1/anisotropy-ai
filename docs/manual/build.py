@@ -313,37 +313,29 @@ def unit_kind(base: str) -> str | None:
 
 
 def validation() -> str:
+    """One row per validation case; the step-by-step document of each problem is built by docs/problems/build.py (ADR-0033)."""
     paths = sorted(p for p in (ROOT / "engine/validation/cases").glob("*.toml") if not p.name.startswith("_"))
-    out, total, agreeing = [], 0, 0
+    rows, total, agreeing = [], 0, 0
     for path in paths:
         case = load_case(path)
         comparisons, problems = compare(case)
         if problems:
             raise SystemExit(f"{path.name}: " + "; ".join(problems))
-        units = UNIT_SYSTEMS[case["units"]]
-        rows = []
-        for c in comparisons:
-            base = c.key.split("[")[0]
-            kind = unit_kind(base)
-            unit = unit_label(units[kind][1]) if kind else "--"
-            difference = abs(c.engine - c.expected)
-            relative = f"{100 * difference / abs(c.expected):.3f}" + r"\%" if c.expected else number(difference, 2)
-            rows.append(rf"{code(c.key)} & {unit} & {number(c.expected)} & {number(c.engine)} & {relative} & "
-                        + (r"\textcolor{passgreen}{yes}" if c.agrees else r"\textcolor{red}{\textbf{no}}") + r" \\")
-            total += 1
-            agreeing += c.agrees
-        tolerance = case["expected"]["tolerance"]
-        source = case["source"].rstrip(".")
-        out.append(rf"\subsubsection{{{inline(case['title'])}}}" + "\n"
-                   + rf"{{\small\color{{muted}}Source: {inline(source)}. File: {code(path.relative_to(ROOT).as_posix())}. "
-                   + rf"Tolerance {number(100 * tolerance, 3)}\%.}}" + "\n\n"
-                   + r"{\small\begin{xltabular}{\linewidth}{lllllY}\toprule" + "\n"
-                   + r"\textbf{Result} & \textbf{Unit} & \textbf{Source} & \textbf{Engine} & \textbf{Difference} & \textbf{Agrees} \\\midrule\endhead" + "\n"
-                   + "\n".join(rows) + "\n" + r"\bottomrule\end{xltabular}}")
+        count, ok = len(comparisons), sum(c.agrees for c in comparisons)
+        total += count
+        agreeing += ok
+        verdict = rf"\textcolor{{passgreen}}{{{ok}}}" if ok == count else rf"\textcolor{{red}}{{\textbf{{{ok}}}}}"
+        # a title that starts with "[" would be read as the optional argument of the previous row's \\, so every row opens with {}
+        rows.append(rf"{{}}{inline(case['title'])} & {inline(case['source'].rstrip('.'))} & {count} & {verdict} & {code(path.stem)} \\")
     summary = (rf"The engine was run on every validation case while this manual was built. "
                rf"{agreeing} of {total} values from {len(paths)} cases agree with their sources within each case's tolerance. "
-               rf"Cases are stored in {code('engine/validation/cases')}; see {code('engine/validation/README.md')} to add one.")
-    return summary + "\n\n" + "\n\n".join(out)
+               rf"Cases are stored in {code('engine/validation/cases')}; see {code('engine/validation/README.md')} to add one. "
+               rf"Each problem has its own generated document with every step, intermediate number and the source's answers "
+               rf"({code('docs/problems/build.py')}, ADR-0033); this table is the index of what has been solved.")
+    table_tex = (r"{\scriptsize\begin{xltabular}{\linewidth}{YYrrl}\toprule" + "\n"
+                 + r"\textbf{Problem} & \textbf{Source} & \textbf{Values} & \textbf{Agree} & \textbf{Case} \\\midrule\endhead" + "\n"
+                 + "\n".join(rows) + "\n" + r"\bottomrule\end{xltabular}}")
+    return summary + "\n\n" + table_tex
 
 
 def fea_validation() -> str:
