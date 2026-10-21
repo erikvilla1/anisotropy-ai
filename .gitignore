@@ -49,7 +49,7 @@ public/materials/*.tmp
 # Obsidian vault (root: docs/). Vault settings and workspace layout are personal.
 docs/.obsidian/
 # Abaqus job and result files: never committed. Input decks (*.inp) with public materials are committed in their test folders, fea/models/<test>/decks/ and fea/checks/ (ADR-0036);
-# the team's decks and exports live in .local/fea/abaqus/<test>/team/ (ADR-0029, ADR-0032).
+# the team's decks and exports live in .local/fea/<test>/team/<date>/ (ADR-0029, ADR-0036).
 *.odb
 *.dat
 *.msg

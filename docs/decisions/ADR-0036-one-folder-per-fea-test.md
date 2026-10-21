@@ -47,3 +47,11 @@ This supersedes the finite element layout of ADR-0032; its homework layout stand
 ## How we will know it was wrong
 
 Revisit if a test needs files that fit neither `decks/` nor `records/`, such as meshes from another tool or a second solver's runs committed. Revisit too if the founder still cannot find a test's files from its name.
+
+## Chunk 2, 2026-10-21 (the local folders and the zips)
+
+**Local layout.** The local folders follow the same layout: `.local/fea/<test>/` holds `team/<date>/` (the team's files as received), `runs/kernel/`, `runs/calculix/` and `runs/team-in-calculix/`, and `comparison/`. Our runs of the committed checks go in `.local/fea/checks/`, and `.local/fea/share/` holds zips only. The founder approved deleting the superseded files: the `prepomax-tension-*` runs and record, the runs under the old spec names, the IM7/8552 local runs, `scratch/` and the unzipped share folders.
+
+**Zips.** `docs/models/team.py` writes `<test>-comparison.zip` (manifest key `zip`). `docs/models/share.py` zips every folder under `fea/models/` by convention, with no manifest, so `docs/models/our-models.toml` is deleted. Both build in a temporary folder, keep no unzipped copy, leave out CalculiX results, and replace only a zip whose README carries the project's mark.
+
+**Evidence.** The before and after inventories account for every file: 60 moved unchanged, including every file the team sent; 8 moved and then rebuilt or path-edited; 8 old readmes replaced; 193 deleted as approved. `.local/fea` went from 849 MB to 218 MB. The zips went from 31 MB to 2.2 MB and from 3.7 MB to 0.4 MB. The local tests found the team's deck and record in their new places. Evaluation note: `docs/evaluations/fea/2026-10-21-local-one-folder.md`.

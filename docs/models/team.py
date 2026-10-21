@@ -1,17 +1,17 @@
-"""The short comparison handed back to the team, and a folder of files they can open (ADR-0035).
+"""The short comparison handed back to the team, and one zip of files they can open (ADR-0035, ADR-0036).
 
 The document says, in this order: here is the model the team built in Abaqus, here is ours, item by item they are the same
 model; our model takes its material from our library, and this is where the values come from; here are the results side
-by side (stress at named points, agreement over the coupon, maps, reaction, first-ply failure). The share folder holds the
-PDF, the team's deck as received, our Abaqus and CalculiX decks, our results in the layout of the team's field reports, an
-element-by-element table and the material record, and is zipped beside itself.
+by side (stress at named points, agreement over the coupon, maps, reaction, first-ply failure). The zip holds the PDF, the
+team's deck as received, our Abaqus and CalculiX decks, our results in the layout of the team's field reports, an
+element-by-element table and the material record. It holds no CalculiX results: the team runs our decks themselves.
 
 From the repository root:
 
-    uv run --project fea python docs/models/team.py .local/fea/abaqus/tension-coupon/comparison/team-comparison.toml
+    uv run --project fea python docs/models/team.py .local/fea/tension-coupon/comparison/team-comparison.toml
 
 The manifest (format in `Manifest` below; every key required, paths relative to the manifest) names the team's deck and
-field reports, our spec, the CalculiX record of our twin, the bands and points to compare and the share folder. Every number
+field reports, our spec, the CalculiX record of our twin, the bands and points to compare and the zip. Every number
 is computed while the document is built: the equivalence from both parsed decks (`anisotropy_fea.equivalence`), our results
 from the kernel on our generated deck, the pairing from the team's reports (`anisotropy_fea.side_by_side`), the hand check
 from the engine. The reading beside the manifest (`<manifest stem>.md`) is written by a person; without it the section says so.
@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+import tempfile
 import zipfile
 from datetime import date
 from pathlib import Path
@@ -40,7 +41,7 @@ from pydantic import BaseModel, ConfigDict, PositiveFloat, ValidationError
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 PREAMBLE = (HERE / "preamble.tex").read_text(encoding="utf-8")
-README_MARK = "Anisotropy AI share folder"  # first line of every README.txt this script writes; only such a folder is ever replaced
+README_MARK = "Anisotropy AI share folder"  # first line of every README.txt in our zips; only such a zip is ever replaced
 
 
 def load_module(name: str, path: Path):
@@ -104,11 +105,10 @@ class TeamSide(Record):
 class OurSide(Record):
     spec: str  # the spec our generator builds the model from
     calculix_record: str  # the committed CalculiX record of our twin (an independent second solver)
-    calculix_results: str  # the CalculiX .frd of that run, for PrePoMax
 
 
 class Manifest(Record):
-    name: str  # file stem of the document and the share folder, lower case with hyphens
+    name: str  # file stem of the document and the folder inside the zip, lower case with hyphens
     title: str
     units: str  # the unit system of the team's deck and reports, and of the document
     node_tolerance: PositiveFloat  # length: a node of ours counts as at the team's position within this
@@ -116,7 +116,7 @@ class Manifest(Record):
     edge_band: PositiveFloat  # length beside each tab line left out of the inner band (the tab-line corners are singular)
     map_layer: int  # the layer the maps show, 1 at the bottom
     locations: dict[str, tuple[float, float]]  # named points (x, y) at which the stress table compares
-    share: str  # the folder the share package is written to; the zip goes beside it
+    zip: str  # the zip the package is written to, normally .local/fea/share/<name>-comparison.zip
     team: TeamSide
     ours: OurSide
 
@@ -197,7 +197,7 @@ def style(ax) -> None:
 # --------------------------------------------------------------------------------------------- the computation
 
 class Comparison:
-    """Everything the document and the share folder print, computed once."""
+    """Everything the document and the zip print, computed once."""
 
     def __init__(self, manifest_path: Path):
         self.manifest_path = manifest_path.resolve()
@@ -209,9 +209,10 @@ class Comparison:
         self.report_paths = [resolve(base, r, "team field report") for r in m.team.reports]
         self.spec_path = resolve(base, m.ours.spec, "our spec")
         self.calculix_record_path = resolve(base, m.ours.calculix_record, "CalculiX record")
-        self.calculix_results_path = resolve(base, m.ours.calculix_results, "CalculiX results")
         self.reading_path = self.manifest_path.with_suffix(".md")
-        self.share = (base / m.share).resolve()
+        self.zip = (base / m.zip).resolve()
+        if self.zip.suffix != ".zip":
+            raise SystemExit(f"{manifest_path}: zip must name a .zip file, not {self.zip.name}")
 
         # the two models
         self.spec = load_spec(self.spec_path)
@@ -563,8 +564,8 @@ def reading_section(c: Comparison) -> str:
 def files_section(c: Comparison) -> str:
     rows = [[code(path), escape(what)] for path, what in share_contents(c)]
     return "\n\n".join([
-        rf"Everything is in one folder, {code(c.share.name)}, and in {code(c.share.name + '.zip')} beside it. Numbers in the files are in "
-        rf"{c.length_unit}, {c.stress_unit} and {c.force_unit}.",
+        rf"Everything is in {code(c.zip.name)}; unzipped, it is one folder, {code(c.manifest.name)}. It holds no CalculiX results: run our "
+        rf"decks to get them. Numbers in the files are in {c.length_unit}, {c.stress_unit} and {c.force_unit}.",
         table(["File", "What it is and how to open it"], rows, r">{\raggedright\arraybackslash}p{6.4cm}Y", r"\footnotesize"),
     ])
 
@@ -592,8 +593,7 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
         (f"1-team-model/{c.team_deck_path.name}", "the team's deck, as we received it"),
         (f"2-our-model/abaqus/{stem}-abaqus.inp", "our deck of the same coupon, for Abaqus. Abaqus/CAE: File, Import, Model, choose the .inp file "
                                                   "(this click path is not checked by us); or run it as a job from the command line"),
-        (f"2-our-model/calculix/{c.calculix_deck_path.name}", "our twin for CalculiX, with the grips as direct constraints. PrePoMax: File, Import"),
-        (f"2-our-model/calculix/{c.calculix_results_path.name}", "the CalculiX results of that deck. PrePoMax: File, Open"),
+        (f"2-our-model/calculix/{c.calculix_deck_path.name}", "our twin for CalculiX, with the grips as direct constraints. PrePoMax: File, Import, then run it"),
         (f"2-our-model/spec/{c.spec_path.name}", "the spec our generator builds the deck from: every dimension, the seeds, the layup, the material record"),
         (f"3-material/{c.library.material_id}.csv", "the material from our library: every value, its unit, basis and source page, and the source"),
         *[(f"4-results/ours-{q}.csv", f"our {q} in the layout of the team's field report Test_01_{q}.csv: same columns, the team's element numbers, "
@@ -624,20 +624,47 @@ def write_material_csv(path: Path, lib, material, units: str) -> None:
             writer.writerow([name, f"{from_si(value, 'stress', units):.10g}", stress_unit, "", "", "stated in our spec", "", "", ""])
 
 
+def zip_is_ours(archive: Path) -> bool:
+    """True when the zip's top-level README.txt starts with README_MARK: a zip this project wrote, safe to replace."""
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            readmes = [n for n in zf.namelist() if n.endswith("/README.txt") and n.count("/") == 1]
+            return bool(readmes) and zf.read(readmes[0]).decode("utf-8").startswith(README_MARK)
+    except (zipfile.BadZipFile, OSError):
+        return False
+
+
+def write_zip(archive: Path, folder: str, fill) -> Path:
+    """Fill a temporary folder named `folder` with `fill(path)` and zip it to `archive` (one top-level folder inside).
+
+    No unzipped copy is kept. An existing zip is replaced only when this project wrote it (`zip_is_ours`)."""
+    if archive.exists() and not zip_is_ours(archive):
+        raise SystemExit(f"{archive} exists and was not written by this project; choose another name")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / folder
+        root.mkdir()
+        fill(root)
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        partial = archive.with_name(archive.name + ".part")
+        with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(root.rglob("*")):
+                if path.is_file():
+                    zf.write(path, Path(folder) / path.relative_to(root))
+        partial.replace(archive)
+    return archive
+
+
 def write_share(c: Comparison, pdf: Path | None) -> Path:
-    share = c.share
-    if share.exists():
-        readme = share / "README.txt"
-        if not readme.exists() or not readme.read_text(encoding="utf-8").startswith(README_MARK):
-            raise SystemExit(f"{share} exists and was not written by this script; choose another share folder")
-        shutil.rmtree(share)
+    return write_zip(c.zip, c.manifest.name, lambda share: fill_share(c, pdf, share))
+
+
+def fill_share(c: Comparison, pdf: Path | None, share: Path) -> None:
     for sub in ("1-team-model", "2-our-model/abaqus", "2-our-model/calculix", "2-our-model/spec", "3-material", "4-results"):
         (share / sub).mkdir(parents=True, exist_ok=True)
     stem = c.spec_path.stem
     shutil.copy2(c.team_deck_path, share / "1-team-model" / c.team_deck_path.name)
     (share / "2-our-model/abaqus" / f"{stem}-abaqus.inp").write_text(c.our_text, encoding="utf-8", newline="\n")
     shutil.copy2(c.calculix_deck_path, share / "2-our-model/calculix" / c.calculix_deck_path.name)
-    shutil.copy2(c.calculix_results_path, share / "2-our-model/calculix" / c.calculix_results_path.name)
     shutil.copy2(c.spec_path, share / "2-our-model/spec" / c.spec_path.name)
     if pdf is not None and pdf.exists():
         shutil.copy2(pdf, share / f"{c.manifest.name}-comparison.pdf")
@@ -681,13 +708,6 @@ def write_share(c: Comparison, pdf: Path | None) -> Path:
     width = max(len(path) for path, _ in share_contents(c))
     lines += [f"{path.ljust(width)}  {what}" for path, what in share_contents(c)]
     (share / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
-
-    archive = share.parent / f"{share.name}.zip"
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(share.rglob("*")):
-            if path.is_file():
-                zf.write(path, Path(share.name) / path.relative_to(share))
-    return archive
 
 
 # --------------------------------------------------------------------------------------------- build
@@ -736,14 +756,14 @@ def build(manifest_path: Path, pdf: bool) -> tuple[Path, Path]:
             result = out_dir / f"{stem}.pdf"
             print("Document written to", result)
     archive = write_share(c, result)
-    print(f"Share folder written to {c.share} and zipped to {archive}")
+    print(f"Zip written to {archive}")
     return tex if result is None else result, archive
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("manifest", type=Path, help="a team comparison manifest (TOML)")
-    parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX and the share folder only")
+    parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX and the zip only")
     args = parser.parse_args()
     build(args.manifest, pdf=not args.no_pdf)
 

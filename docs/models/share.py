@@ -1,18 +1,17 @@
-"""Our models in one folder the team can open, zipped beside itself (ADR-0035, amendment 2).
+"""Our models in one zip the team can open (ADR-0035, ADR-0036).
 
-For each coupon in the manifest: the Abaqus deck to import (the team's build, coupled grips, the team's names), the
-CalculiX twin with its results for PrePoMax, both specs, and the comparison document of its CalculiX record. The library
-record of every material the models use is written once. This is for coupons the team has not built yet as much as for the
-ones they have; a coupon the team did build also gets the side-by-side comparison of `docs/models/team.py`.
+Every folder under `fea/models/` is one coupon and goes in, found by convention: the spec `<test>.toml` (the team's
+build, the deck they import), its twin's record `records/<test>-calculix.toml`, and the twin spec the record names. A new
+test folder joins the zip by itself. For each coupon the zip holds the Abaqus deck to import, the CalculiX twin's deck,
+both specs and the comparison document of its CalculiX record; the library record of every material is written once.
+No CalculiX results go in: the team runs our decks themselves.
 
 From the repository root:
 
-    uv run --project fea python docs/models/share.py docs/models/our-models.toml
+    uv run --project fea python docs/models/share.py                       # every model, to .local/fea/share/our-models.zip
+    uv run --project fea python docs/models/share.py tension-coupon --out <zip> --no-pdf
 
-The manifest (format in `Manifest` below; every key required; paths relative to the repository root) names the folder and,
-per model, the coupled spec, the CalculiX record of its nodal twin and that run's `.frd`. Every deck is regenerated from its
-spec and must equal the committed one. The folder goes under `.local/` because the `.frd` files and PDFs are build outputs;
-the decks and specs are also committed, so anyone with the repository has them.
+Every deck is regenerated from its spec and must equal the committed one.
 """
 
 from __future__ import annotations
@@ -22,12 +21,8 @@ import importlib.util
 import shutil
 import sys
 import tempfile
-import tomllib
-import zipfile
 from datetime import date
 from pathlib import Path
-
-from pydantic import BaseModel, ConfigDict, ValidationError
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -46,121 +41,96 @@ documents = load_module("anisotropy_models_build", HERE / "build.py")
 
 from anisotropy_engine.library import library_material  # noqa: E402
 from anisotropy_fea import __version__ as fea_version  # noqa: E402
+from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.compare import load_record  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.report import comparison_rows  # noqa: E402
 from anisotropy_fea.spec import load_spec, spec_material  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
-
-class Record(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-
-class Model(Record):
-    test: str  # the test name, as the local folders use it
-    spec: str  # the coupled spec: the deck the team imports
-    record: str  # the committed CalculiX record of its nodal twin
-    results: str  # that CalculiX run's .frd
+DEFAULT_ZIP = paths.LOCAL / "share" / "our-models.zip"
+TITLE = "Our coupon models, built the team's way: X840-Z60, [0/45/-45/45/0]s, coupled tabs, the team's names"
 
 
-class Manifest(Record):
-    name: str
-    title: str
-    units: str
-    share: str
-    models: list[Model]
+def model_tests(names: list[str] | None) -> list[str]:
+    """The test folders under fea/models/, all or the ones named, each with its spec and record present."""
+    found = sorted(d.name for d in paths.MODELS.iterdir() if d.is_dir() and (d / f"{d.name}.toml").is_file())
+    if names:
+        unknown = sorted(set(names) - set(found))
+        if unknown:
+            raise SystemExit(f"no model folder for {unknown}; the models are {found}")
+        found = [n for n in found if n in names]
+    for name in found:
+        record = paths.MODELS / name / "records" / f"{name}-calculix.toml"
+        if not record.is_file():
+            raise SystemExit(f"{name}: no CalculiX record {record.relative_to(ROOT).as_posix()}")
+    return found
 
 
-def load_manifest(path: Path) -> Manifest:
-    try:
-        manifest = Manifest(**tomllib.loads(path.read_text(encoding="utf-8")))
-    except (tomllib.TOMLDecodeError, ValidationError) as exc:
-        raise SystemExit(f"{path}: {exc}") from None
-    if manifest.units not in team.UNITS or not manifest.models:
-        raise SystemExit(f"{path}: units must be one of {list(team.UNITS)} and at least one model is needed")
-    return manifest
-
-
-def existing(relative: str, what: str, root: Path) -> Path:
-    path = (root / relative).resolve()
-    if not path.exists():
-        raise SystemExit(f"{what} not found: {path}")
-    return path
-
-
-def build(manifest_path: Path, pdf: bool, root: Path = ROOT) -> Path:
-    m = load_manifest(manifest_path)
-    share = (root / m.share).resolve()
-    if share.exists():
-        readme = share / "README.txt"
-        if not readme.exists() or not readme.read_text(encoding="utf-8").startswith(team.README_MARK):
-            raise SystemExit(f"{share} exists and was not written by this script; choose another share folder")
-        shutil.rmtree(share)
-    share.mkdir(parents=True)
-    lines = [team.README_MARK, f"{m.title}", "",
+def fill(folder: Path, tests: list[str], pdf: bool) -> None:
+    lines = [team.README_MARK, TITLE, "",
              f"Built {date.today().isoformat()} by docs/models/share.py (anisotropy-fea {fea_version}, commit {team.git_commit()}).",
-             f"Numbers are in {', '.join(team.UNITS[m.units])}. Each folder is one coupon:", "",
+             "Numbers are in mm, MPa and N. Each folder is one coupon:", "",
              "  abaqus/    the deck to open in Abaqus/CAE (File, Import, Model; this click path is not checked by us), the team's build",
-             "  calculix/  the CalculiX twin (grips as direct constraints) and its results; PrePoMax: File, Import the .inp, File, Open the .frd",
+             "  calculix/  the CalculiX twin (grips as direct constraints); PrePoMax: File, Import, then run it",
              "  spec/      the specs our generator builds both decks from",
              "  *.pdf      the comparison of CalculiX against our kernel on that model, with a step-by-step rebuild guide", ""]
-    materials: dict[tuple[str, str | None], tuple] = {}
-    for k, model in enumerate(m.models, start=1):
-        spec_path = existing(model.spec, "spec", root)
-        record_path = existing(model.record, "record", root)
-        results_path = existing(model.results, "CalculiX results", root)
+    materials = {}
+    for k, test in enumerate(tests, start=1):
+        spec_path = paths.MODELS / test / f"{test}.toml"
+        record_path = paths.MODELS / test / "records" / f"{test}-calculix.toml"
         spec = load_spec(spec_path)
         text = write_abaqus(build_model(spec))
-        committed = team.fea_paths.deck_path(spec_path, "abaqus")
-        if committed.exists() and committed.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
-            raise SystemExit(f"{committed} is not what the generator writes from {spec_path.name} today; regenerate it first")
+        committed = paths.deck_path(spec_path, "abaqus")
+        if not committed.is_file() or committed.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
+            raise SystemExit(f"{committed.relative_to(ROOT).as_posix()} is not what the generator writes from {spec_path.name} today; "
+                             "run fea/tools/regenerate_decks.py first")
         record = load_record(record_path)
         ccx_deck = (record_path.parent / record["deck_reference"]).resolve()
         twin_spec = (record_path.parent / record["spec"]).resolve()
-        folder = share / f"{k}-{model.test}"
+        out = folder / f"{k}-{test}"
         for sub in ("abaqus", "calculix", "spec"):
-            (folder / sub).mkdir(parents=True)
-        (folder / "abaqus" / f"{spec_path.stem}-abaqus.inp").write_text(text, encoding="utf-8", newline="\n")
-        shutil.copy2(ccx_deck, folder / "calculix" / ccx_deck.name)
-        shutil.copy2(results_path, folder / "calculix" / results_path.name)
-        shutil.copy2(spec_path, folder / "spec" / spec_path.name)
+            (out / sub).mkdir(parents=True)
+        (out / "abaqus" / committed.name).write_text(text, encoding="utf-8", newline="\n")
+        shutil.copy2(ccx_deck, out / "calculix" / ccx_deck.name)
+        shutil.copy2(spec_path, out / "spec" / spec_path.name)
         if twin_spec != spec_path:
-            shutil.copy2(twin_spec, folder / "spec" / twin_spec.name)
+            shutil.copy2(twin_spec, out / "spec" / twin_spec.name)
         rows, problems = comparison_rows(record)
         if pdf:
             with tempfile.TemporaryDirectory() as tmp:
                 document = documents.build(record_path, Path(tmp), True, False, False)
                 if document.suffix == ".pdf":
-                    shutil.copy2(document, folder / f"{record_path.stem}.pdf")
-        material = spec.material
-        materials[(material.library, material.dataset)] = (material, spec)
-        lines.append(f"{folder.name}/  {spec.title}")
+                    shutil.copy2(document, out / f"{record_path.stem}.pdf")
+        materials[(spec.material.library, spec.material.dataset)] = spec
+        lines.append(f"{out.name}/  {spec.title}")
         lines.append(f"    CalculiX {record['solver']['version']} against our kernel: {sum(r.agrees for r in rows)} of {len(rows)} compared values agree"
                      + (f"; {len(problems)} problems" if problems else ""))
-    (share / "material").mkdir()
+    (folder / "material").mkdir()
     lines += ["", "material/  the library record of each material the models use: every value, its unit, basis and source page, and the source"]
-    for (library, dataset), (_, spec) in materials.items():
-        if library is None:
-            continue
-        lib = library_material(library, dataset)
-        team.write_material_csv(share / "material" / f"{lib.material_id}.csv", lib, spec_material(spec), m.units)
-    (share / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
-    archive = share.parent / f"{share.name}.zip"
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(share.rglob("*")):
-            if path.is_file():
-                zf.write(path, Path(share.name) / path.relative_to(share))
-    print(f"{len(m.models)} models written to {share} and zipped to {archive}")
+    for (library, dataset), spec in materials.items():
+        if library is not None:
+            lib = library_material(library, dataset)
+            team.write_material_csv(folder / "material" / f"{lib.material_id}.csv", lib, spec_material(spec), "mm-MPa")
+    (folder / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
+def build(out: Path, pdf: bool, names: list[str] | None = None) -> Path:
+    if out.suffix != ".zip":
+        raise SystemExit(f"--out must name a .zip file, not {out.name}")
+    tests = model_tests(names)
+    archive = team.write_zip(out, out.stem, lambda folder: fill(folder, tests, pdf))
+    print(f"{len(tests)} models zipped to {archive}")
     return archive
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("manifest", type=Path, help="the share manifest (TOML)")
+    parser.add_argument("tests", nargs="*", help="model folders to include; default every folder under fea/models/")
+    parser.add_argument("--out", type=Path, default=DEFAULT_ZIP, help="the zip to write (default .local/fea/share/our-models.zip)")
     parser.add_argument("--no-pdf", action="store_true", help="leave out the comparison documents")
     args = parser.parse_args()
-    build(args.manifest, pdf=not args.no_pdf)
+    build(args.out, pdf=not args.no_pdf, names=args.tests or None)
 
 
 if __name__ == "__main__":

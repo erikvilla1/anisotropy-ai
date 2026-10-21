@@ -15,7 +15,7 @@ uv run python examples/plot_deck.py checks/decks/coupon-2x8-grips-im7-8552.inp -
 
 `export_vtk.py` writes the solved model as a `.vtu` file for ParaView (points: displacement, reaction; cells: strains, section forces, failure indices with the worst ply, every ply's material-axis stresses), so the result can be rotated, probed and coloured like in any finite element tool. `plot_deck.py` draws the mesh and deformed shape, the three strain fields, the axial section force and the first-ply-failure map as one PNG (matplotlib, a development dependency). Write the pictures of a team deck to `.local/`, never into the repository.
 
-The team's own decks go in `.local/fea/abaqus/<test>/team/` (git-ignored; their materials may be proprietary; layout in ADR-0032 and the `workspace-layout` skill). `tests/test_local_tension_deck.py` runs against `.local/fea/abaqus/tension-coupon/team/Tension-test.inp` when it is there and is skipped, with the reason shown, when it is not.
+The team's own decks go in `.local/fea/<test>/team/<date>/` (git-ignored; their materials may be proprietary; layout in ADR-0036 and the `workspace-layout` skill). `tests/test_local_tension_deck.py` runs against `.local/fea/tension-coupon/team/2026-10-16/Tension-test.inp` when it is there and is skipped, with the reason shown, when it is not.
 
 ## Units
 
@@ -90,7 +90,7 @@ examples/             deck_summary.py, solve_deck.py
 
 ## Abaqus field reports
 
-The team exports results from Abaqus/CAE as CSV field reports (Report > Field Output). `abaqus_report.read_field_report` reads one quantity (S11, S22, S12 or Mises; one row per element and section point, repeated header blocks allowed, `IntPt` must be 1 so the value is the centroid's, the layer taken from the section-point text with layer 1 at the bottom), `report_quantities` maps several into the record tables (`nan` for a component not exported, which the comparison skips; Mises into `ply_mises`), and `tools/record_from_report.py` writes the record. Records of the team's decks stay under `.local/fea/abaqus/<test>/comparison/` and are checked by `tests/test_local_tension_deck.py` when present. Format samples and the round-trip test: `tests/test_abaqus_report.py`.
+The team exports results from Abaqus/CAE as CSV field reports (Report > Field Output). `abaqus_report.read_field_report` reads one quantity (S11, S22, S12 or Mises; one row per element and section point, repeated header blocks allowed, `IntPt` must be 1 so the value is the centroid's, the layer taken from the section-point text with layer 1 at the bottom), `report_quantities` maps several into the record tables (`nan` for a component not exported, which the comparison skips; Mises into `ply_mises`), and `tools/record_from_report.py` writes the record. Records of the team's decks stay under `.local/fea/<test>/comparison/` and are checked by `tests/test_local_tension_deck.py` when present. Format samples and the round-trip test: `tests/test_abaqus_report.py`.
 
 ## Model comparison documents
 
