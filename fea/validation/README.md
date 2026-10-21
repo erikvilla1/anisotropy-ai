@@ -4,11 +4,12 @@ Evidence that the finite element layer reads and solves what it claims (ADR-0029
 
 | Folder | Holds | Committed when |
 | --- | --- | --- |
-| `decks/` | Abaqus input decks used as fixtures: the team's model structure on small meshes | the material is from the public library and named in the deck's header comments |
+| `decks/` | Abaqus input decks used as fixtures: the team's model structure on small meshes; `generated/` holds the decks the generator writes from `specs/` | the material is a library record the deck's header can cite: public-domain, open-publisher, or a licensed reference cited by table and page (ADR-0018, ADR-0030 amendment 4) |
+| `specs/` | model specs the generator builds (ADR-0030): geometry, mesh, layup, library material, grips, loading, probes | as for `decks/` |
 | `cases/` | validation cases: a deck, expected numbers, a source, a tolerance (ADR-0007 style); format at the top of `src/anisotropy_fea/cases.py` | always |
-| `abaqus/` (chunk 4) | comparison records: numbers the team exported from Abaqus, with provenance | the material is public |
+| `records/` | comparison records: a reference solver's numbers on one of our specs, with provenance, and a reading note beside each | as for `decks/` |
 
-The team's own decks, exports and any record that names a material not in the public library stay under `.local/fea/<tool>/<test>/` (ADR-0032) and are never committed (AGENTS.md). The local test `tests/test_local_tension_deck.py` reads them when present.
+The team's own decks and exports, and any record that names user-supplied data or a material not in the library, stay under `.local/fea/<tool>/<test>/` (ADR-0032) and are never committed (AGENTS.md). The local test `tests/test_local_tension_deck.py` reads them when present. The team's coupon material X840-Z60 is in the library from a cited dissertation (licensed reference), so our generated twins of that coupon are committed as `tension-coupon-x840-*`; the team's own deck is still theirs and stays local.
 
 ## Fixtures
 
