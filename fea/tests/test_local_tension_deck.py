@@ -1,4 +1,4 @@
-"""The team's own coupon deck, when it is present locally. Its material may be proprietary, so the file lives in `.local/abaqus/`,
+"""The team's own coupon deck, when it is present locally. Its material may be proprietary, so the file lives in `.local/fea/abaqus/tension-coupon/team/`,
 is never committed, and this test prints no material values (ADR-0029, AGENTS.md)."""
 
 from pathlib import Path
@@ -8,9 +8,9 @@ import pytest
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.model import coupled_nodes, reference_node
 
-LOCAL_DECK = Path(__file__).parents[2] / ".local" / "abaqus" / "Tension-test.inp"
+LOCAL_DECK = Path(__file__).parents[2] / ".local" / "fea" / "abaqus" / "tension-coupon" / "team" / "Tension-test.inp"
 
-pytestmark = pytest.mark.skipif(not LOCAL_DECK.exists(), reason="team deck not present at .local/abaqus/Tension-test.inp")
+pytestmark = pytest.mark.skipif(not LOCAL_DECK.exists(), reason="team deck not present at .local/fea/abaqus/tension-coupon/team/Tension-test.inp")
 
 
 def test_the_team_coupon_deck_is_read_in_full():
@@ -46,10 +46,10 @@ def test_the_team_coupon_deck_solves_in_equilibrium():
     assert solution.strain[:, 1].max() > 0.0  # the numbers themselves stay in the local note, not here
 
 
-LOCAL_RECORD = LOCAL_DECK.parent / "comparisons" / "tension-test-abaqus.toml"
+LOCAL_RECORD = LOCAL_DECK.parents[1] / "comparison" / "tension-test-abaqus.toml"
 
 
-@pytest.mark.skipif(not LOCAL_RECORD.exists(), reason="team Abaqus record not present at .local/abaqus/comparisons/tension-test-abaqus.toml")
+@pytest.mark.skipif(not LOCAL_RECORD.exists(), reason="team Abaqus record not present at .local/fea/abaqus/tension-coupon/comparison/tension-test-abaqus.toml")
 def test_the_kernel_reproduces_the_teams_abaqus_field_reports():
     """The team's Abaqus/CAE field reports (S11, S22, Mises at the outer plies) at gauge elements, within the record's tolerance;
     the numbers stay in the local record and note (ADR-0030, amendment 2)."""

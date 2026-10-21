@@ -1,6 +1,6 @@
 """Turn a CalculiX run of one of our specs into a committed comparison record: numbers plus provenance (ADR-0030, ADR-0007).
 
-    uv run python tools/record_from_dat.py validation/specs/unnotched-im7-8552-nodal.toml ../.local/calculix/unnotched/unnotched-s8r.dat \
+    uv run python tools/record_from_dat.py validation/specs/unnotched-im7-8552-nodal.toml ../.local/fea/calculix-prepomax/unnotched-im7-8552/ours/unnotched-s8r.dat \
         --deck-reference validation/decks/generated/unnotched-im7-8552-nodal-ccx.inp \
         --deck-kernel validation/decks/generated/unnotched-im7-8552-nodal-abaqus.inp \
         --version 2.22 --run-by "Erik Villa" --machine "founder Windows 11, PrePoMax v2.6.0 bundle" \

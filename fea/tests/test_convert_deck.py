@@ -14,7 +14,7 @@ from anisotropy_fea.write_calculix import CalculixWriterError
 
 DECKS = Path(__file__).parents[1] / "validation" / "decks"
 GRIPS = DECKS / "coupon-2x8-grips-im7-8552.inp"
-LOCAL_DECK = Path(__file__).parents[2] / ".local" / "abaqus" / "Tension-test.inp"
+LOCAL_DECK = Path(__file__).parents[2] / ".local" / "fea" / "abaqus" / "tension-coupon" / "team" / "Tension-test.inp"
 needs_ccx = pytest.mark.skipif(find_ccx() is None, reason="CalculiX not found: set ANISOTROPY_CCX or put ccx on PATH (docs/installation-fea-tools.md)")
 TRANSVERSE = TransverseChoice(nu23=0.45)
 
@@ -81,7 +81,7 @@ def test_the_converted_fixture_runs_and_agrees_with_the_kernel(tmp_path):
 
 
 @needs_ccx
-@pytest.mark.skipif(not LOCAL_DECK.exists(), reason="team deck not present at .local/abaqus/Tension-test.inp")
+@pytest.mark.skipif(not LOCAL_DECK.exists(), reason="team deck not present at .local/fea/abaqus/tension-coupon/team/Tension-test.inp")
 def test_the_team_coupon_converts_runs_and_agrees_with_the_kernel(tmp_path):
     deck = read_deck(LOCAL_DECK, "mm-MPa")
     path = tmp_path / "tension.inp"

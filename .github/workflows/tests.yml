@@ -99,3 +99,9 @@ jobs:
         with:
           name: engine-manual
           path: docs/manual/build/anisotropy-engine-manual.pdf
+      - name: Build one comparison document per committed record (ADR-0031)
+        run: uv run --project fea python docs/models/build.py --all
+      - uses: actions/upload-artifact@v7
+        with:
+          name: model-documents
+          path: docs/models/build/*/*.pdf

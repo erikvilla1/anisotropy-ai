@@ -1,7 +1,7 @@
 """Draw what the membrane kernel computed for a deck: mesh and deformed shape, strain fields, section forces, first-ply failure.
 
-    uv run python examples/plot_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea-plots
-    uv run python examples/plot_deck.py ../.local/abaqus/Tension-test.inp --units mm-MPa --out ../.local/fea-plots
+    uv run python examples/plot_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --out ../.local/fea/scratch/plots
+    uv run python examples/plot_deck.py ../.local/fea/abaqus/tension-coupon/team/Tension-test.inp --units mm-MPa --out ../.local/fea/scratch/plots
 
 One PNG per deck. Lengths print in the deck's units; strains are dimensionless; section forces in force per length.
 A field that changes sign uses a two-hue scale with a neutral middle at zero; a field of one sign uses one hue from
@@ -13,6 +13,7 @@ the message in that panel instead. `plot_solution` is importable by other exampl
 from __future__ import annotations
 
 import argparse
+import textwrap
 from pathlib import Path
 
 import matplotlib
@@ -86,9 +87,13 @@ def plot_solution(deck: Deck, solution: MembraneSolution, units: str, path: Path
     deformed = polygons(xy + magnify * u, corners, 1.0)
     N = np.vectorize(lambda v: from_si(v, "force_per_length", units))(solution.section_force)
 
-    fig, axes = plt.subplots(2, 3, figsize=(15, 9), constrained_layout=True)
+    # a long coupon (length more than three times the width) gets its six panels in one row, so each stays readable
+    aspect = float(np.ptp(xy[:, 1])) / width
+    fig, axes = plt.subplots(1, 6, figsize=(16, 9), constrained_layout=True) if aspect > 3 else plt.subplots(2, 3, figsize=(15, 9), constrained_layout=True)
     fig.patch.set_facecolor("white")
-    ax = axes[0, 0]
+    panels = list(axes.flat)
+    wrap = (lambda text: textwrap.fill(text, 30)) if aspect > 3 else (lambda text: text)  # narrow panels get wrapped titles
+    ax = panels[0]
     ax.add_collection(PolyCollection(base, facecolors="#EEF2F6", edgecolors=GRID, linewidths=0.5))
     ax.add_collection(PolyCollection(deformed, facecolors="none", edgecolors="#9A5A00", linewidths=0.8))
     for coupling in deck.couplings:
@@ -108,17 +113,17 @@ def plot_solution(deck: Deck, solution: MembraneSolution, units: str, path: Path
                                 point, textcoords="offset points", xytext=(8, 0), fontsize=7, color=INK)
     ax.autoscale()
     ax.set_aspect("equal")
-    ax.set_title(f"Mesh ({mesh.element_count} elements) and deformed shape, displacements x{magnify:.3g}", color=INK, fontsize=10, loc="left")
+    ax.set_title(wrap(f"Mesh ({mesh.element_count} elements) and deformed shape, displacements x{magnify:.3g}"), color=INK, fontsize=10, loc="left")
     style(ax)
-    field_panel(axes[0, 1], base, solution.strain[:, 1], "Axial strain eps_y at element centroids", "eps_y", diverging=True)
-    field_panel(axes[0, 2], base, solution.strain[:, 2], "Shear strain gamma_xy", "gamma_xy", diverging=True)
-    field_panel(axes[1, 0], base, solution.strain[:, 0], "Transverse strain eps_x", "eps_x", diverging=True)
-    field_panel(axes[1, 1], base, N[:, 1], "Axial section force N_y", f"N_y (force per length, {units})", diverging=False)
-    ax = axes[1, 2]
+    field_panel(panels[1], base, solution.strain[:, 1], wrap("Axial strain eps_y at element centroids"), "eps_y", diverging=True)
+    field_panel(panels[2], base, solution.strain[:, 2], wrap("Shear strain gamma_xy"), "gamma_xy", diverging=True)
+    field_panel(panels[3], base, solution.strain[:, 0], wrap("Transverse strain eps_x"), "eps_x", diverging=True)
+    field_panel(panels[4], base, N[:, 1], wrap("Axial section force N_y"), f"N_y (force per length, {units})", diverging=False)
+    ax = panels[5]
     try:
         failure = strength_ratios(solution, "max_stress", deck_f12_star(deck), element_ply_states(solution))
         index = np.array([1.0 / r.min() for r in failure.ratio])  # 1/R: the fraction of a ply's strength used by the applied loading
-        field_panel(ax, base, index, "Maximum-stress failure index 1/R, worst ply per element", "1/R (1 = first-ply failure)", diverging=False)
+        field_panel(ax, base, index, wrap("Maximum-stress failure index 1/R, worst ply per element"), "1/R (1 = first-ply failure)", diverging=False)
         e = mesh.element_keys.index(failure.element)
         centre = np.mean(base[e], axis=0)
         ax.plot(*centre, marker="x", markersize=9, color=INK, markeredgewidth=1.5)

@@ -1,10 +1,10 @@
 """Turn Abaqus/CAE field reports (CSV) of a deck into a comparison record: numbers plus provenance (ADR-0030, amendment 2).
 
-    uv run python tools/record_from_report.py ../.local/abaqus/Tension-test.inp --units mm-MPa \
-        --reports ../.local/abaqus/team-files/results/Test_01_S11.csv ../.local/abaqus/team-files/results/Test_01_S22.csv \
-                  ../.local/abaqus/team-files/results/Test_01_Mises.csv \
+    uv run python tools/record_from_report.py ../.local/fea/abaqus/tension-coupon/team/Tension-test.inp --units mm-MPa \
+        --reports ../.local/fea/abaqus/tension-coupon/team/results/Test_01_S11.csv ../.local/fea/abaqus/tension-coupon/team/results/Test_01_S22.csv \
+                  ../.local/fea/abaqus/tension-coupon/team/results/Test_01_Mises.csv \
         --elements 545 546 --version 2026 --run-by "the team" --machine "UCSD lab, Abaqus/CAE 2026" \
-        --tolerance 0.01 --floor 0.02 --title "..." --out ../.local/abaqus/comparisons/tension-test-abaqus.toml
+        --tolerance 0.01 --floor 0.02 --title "..." --out ../.local/fea/abaqus/tension-coupon/comparison/tension-test-abaqus.toml
 
 Both solvers ran the same deck, so `deck_kernel` and `deck_reference` are that deck. A record of a deck whose material is not
 public stays under `.local/` (R-16). Choose `--elements` away from the tab-line corners, where the stress is singular and the
