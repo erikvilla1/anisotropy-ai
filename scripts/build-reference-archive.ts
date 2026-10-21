@@ -14,7 +14,7 @@ type Source = { id: string; title: string; publisher: string; date: string | nul
 type Reference = Source & { roles: string[]; localFile: string; localSha256: string; fingerprintCheck: string; bytes: number };
 
 async function main() {
-  const destination = path.resolve(root, process.argv[2] || `References/${new Date().toISOString().slice(0, 10)}`);
+  const destination = path.resolve(root, process.argv[2] || `.local/sources/references/${new Date().toISOString().slice(0, 10)}`);
   const allowed = path.resolve(root, "References") + path.sep;
   if (!destination.startsWith(allowed)) throw Error("Archive destination must be inside this project's References folder.");
   try { await stat(destination); throw Error(`Archive already exists: ${destination}. Choose a new snapshot folder; existing evidence is never overwritten.`); }
@@ -39,7 +39,7 @@ async function main() {
     ["volume-2", "Composite Materials Handbook · Volume 2: Polymer Matrix Composites, Materials Properties", "2002", "MIL-HDBK-17-2F"],
     ["volume-3", "Composite Materials Handbook · Volume 3: Materials Usage, Design, and Analysis", "2012", "CMH-17-3G"],
   ]) {
-    const metadata = JSON.parse(await readFile(path.join(root, `.local/cmh17/${key}-metadata.json`), "utf8"));
+    const metadata = JSON.parse(await readFile(path.join(root, `.local/sources/cmh17/${key}-metadata.json`), "utf8"));
     register({ id: key, title, date, revision, publisher: "As identified in supplied handbook", url: "", sha256: metadata.sha256 }, "User-supplied background handbook; not a numerical source for the current released property records", "01-Books");
   }
   const schoolPath = path.join(root, materialSource.localPath);
@@ -51,7 +51,7 @@ async function main() {
     path.join(process.env.USERPROFILE!, "Downloads/Composite materials handbook volume 2 _ polymer matrix composites.pdf"),
     path.join(process.env.USERPROFILE!, "Downloads/Composite materials handbook. Volume 3, Polymer matrix composites _ materials usage, design, and analysis.pdf"),
   ];
-  for (const dir of [".local/material-audit", ".local/qualification"])
+  for (const dir of [".local/research/material-audit", ".local/research/qualification"])
     for (const file of await readdir(path.join(root, dir))) if (file.toLowerCase().endsWith(".pdf")) candidates.push(path.join(root, dir, file));
   const byHash = new Map<string, { file: string; size: number }>();
   for (const file of candidates) {

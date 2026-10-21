@@ -24,7 +24,7 @@ test("calculator sends converted inputs to the real engine and displays its resp
   await page.getByRole("button", { name: "Analyze laminate" }).click();
   await expect(page.getByTestId("strain-0")).toHaveText((-100e6 / 147e9).toExponential(6));
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  await page.screenshot({ path: ".local/calculator-desktop.png", fullPage: true });
+  await page.screenshot({ path: ".local/website/screenshots/calculator-desktop.png", fullPage: true });
   expect(browserErrors).toEqual([]);
 });
 
@@ -101,7 +101,7 @@ test("calculator fits a mobile viewport and remains usable", async ({ page }) =>
   await expect(page.getByTestId("strain-0")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  await page.screenshot({ path: ".local/calculator-mobile.png", fullPage: true });
+  await page.screenshot({ path: ".local/website/screenshots/calculator-mobile.png", fullPage: true });
   for (const width of [768, 1024]) {
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

@@ -9,7 +9,7 @@ import { buildCatalog, publishReference, writeCatalog } from "./catalog";
 
 const port = Number(process.env.MATERIAL_MONITOR_PORT || 3210);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid monitor port");
-const store = new MonitorStore(resolve(process.env.MATERIAL_MONITOR_DB || ".local/material-monitor/monitor.sqlite"), sources);
+const store = new MonitorStore(resolve(process.env.MATERIAL_MONITOR_DB || ".local/services/material-monitor/monitor.sqlite"), sources);
 const token = randomBytes(32).toString("hex");
 let busy = false;
 let workerError: string | null = null;
