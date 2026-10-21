@@ -91,3 +91,17 @@ def test_the_team_coupon_converts_runs_and_agrees_with_the_kernel(tmp_path):
     top = dat.total_force("Coupled-Constraint-1")
     assert top[1] == pytest.approx(solution.reaction_of([(None, 1)])[1], rel=0.05)
     assert dat.displacements("Nall").values[:, 1].max() == pytest.approx(10.0, abs=1e-6)  # the numbers stay in the local note
+
+
+def test_plane_stress_in_the_converter():
+    deck = read_deck(GRIPS, "mm-MPa")
+    text = calculix_from_deck(deck, TransverseChoice(plane_stress=True))
+    assert "*ELASTIC, TYPE=ENGINEERING CONSTANTS\n162095.74, 8963.18, 8963.18, 0.316, 0., 0., 4688.43, 4688.43\n3000., 293." in text
+    out_of_plane = next(line for line in text.splitlines() if line.startswith("** Out-of-plane constants"))
+    assert "nu13 = nu23 = 0 written for plane stress" in out_of_plane and "nu23 = 0.45" not in out_of_plane
+    explicit = calculix_from_deck(deck, TransverseChoice(plane_stress=True, transverse_isotropy=False, E3=9000e6))
+    assert "162095.74, 8963.18, 9000., 0.316, 0., 0., 4688.43, 4688.43" in explicit
+    with pytest.raises(CalculixWriterError, match="do not give them"):
+        calculix_from_deck(deck, TransverseChoice(nu23=0.45, plane_stress=True))
+    with pytest.raises(CalculixWriterError, match="nu23 must be given unless plane_stress"):
+        calculix_from_deck(deck, TransverseChoice())

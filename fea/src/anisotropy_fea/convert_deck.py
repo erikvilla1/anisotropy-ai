@@ -27,19 +27,28 @@ from .write_calculix import REFERENCE_TEMPERATURE, CalculixWriterError, orientat
 class TransverseChoice:
     """The out-of-plane constants CalculiX's three-dimensional law needs and an Abaqus LAMINA material lacks."""
 
-    nu23: float
+    nu23: float | None = None  # required unless plane_stress
     transverse_isotropy: bool = True  # E3 = E2, nu13 = nu12
     E3: float | None = None  # Pa, when transverse_isotropy is False
     nu13: float | None = None
+    plane_stress: bool = False  # nu13 = nu23 = 0: the three-dimensional law reduces to the plane stress that Abaqus LAMINA and our kernel assume
 
-    def resolve(self, E2: float, nu12: float) -> tuple[float, float]:
+    def resolve(self, E2: float, nu12: float) -> tuple[float, float, float]:
+        """E3, nu13 and nu23 for the ENGINEERING CONSTANTS line."""
+        if self.plane_stress:
+            if self.nu23 is not None or self.nu13 is not None:
+                raise CalculixWriterError("with plane_stress, nu13 = nu23 = 0 are written; do not give them")
+        elif self.nu23 is None:
+            raise CalculixWriterError("nu23 must be given unless plane_stress")
         if self.transverse_isotropy:
             if self.E3 is not None or self.nu13 is not None:
                 raise CalculixWriterError("with transverse_isotropy, E3 and nu13 are derived (E3 = E2, nu13 = nu12); do not give them")
-            return E2, nu12
-        if self.E3 is None or self.nu13 is None:
-            raise CalculixWriterError("without transverse_isotropy, E3 and nu13 must be given")
-        return self.E3, self.nu13
+            E3, nu13 = E2, nu12
+        else:
+            if self.E3 is None or (self.nu13 is None and not self.plane_stress):
+                raise CalculixWriterError("without transverse_isotropy, E3 and nu13 must be given")
+            E3, nu13 = self.E3, self.nu13
+        return (E3, 0.0, 0.0) if self.plane_stress else (E3, nu13, self.nu23)
 
 
 @dataclass(frozen=True)
@@ -102,8 +111,15 @@ def calculix_from_deck(deck: Deck, transverse: TransverseChoice, probe_elements:
     out.append(f"** Source deck: {mesh.node_count} corner nodes, {mesh.element_count} four-node shell elements, promoted to S8R with "
                f"{promoted.xy.shape[0] - corner_count} midside nodes (CalculiX composite shells are S8R only).")
     out.append(f"** Units of this deck: {units}. Numbers are the source deck's, converted from SI.")
-    E3_note = "E3 = E2 and nu13 = nu12 (transverse isotropy, stated by the caller)" if transverse.transverse_isotropy else "E3 and nu13 given by the caller"
-    out.append(f"** Out-of-plane constants, absent from the Abaqus LAMINA material: {E3_note}; nu23 = {transverse.nu23:g} given by the caller.")
+    if transverse.plane_stress:
+        E3_note = "E3 = E2 (transverse isotropy, stated by the caller)" if transverse.transverse_isotropy else "E3 given by the caller"
+        out.append(f"** Out-of-plane constants, absent from the Abaqus LAMINA material: {E3_note}; nu13 = nu23 = 0 written for plane stress, "
+                   "as the LAMINA law and our kernel assume (chosen by the caller).")
+    else:
+        if transverse.nu23 is None:
+            raise CalculixWriterError("nu23 must be given unless plane_stress")
+        E3_note = "E3 = E2 and nu13 = nu12 (transverse isotropy, stated by the caller)" if transverse.transverse_isotropy else "E3 and nu13 given by the caller"
+        out.append(f"** Out-of-plane constants, absent from the Abaqus LAMINA material: {E3_note}; nu23 = {transverse.nu23:g} given by the caller.")
     for name, ref in grips:
         held = prescribed_dofs(deck, ref)
         out.append(f"** Coupling {name[8:]}: reference node {node_name(ref)} replaced by direct constraints on its {promoted.node_sets[name].size} coupled nodes "
@@ -137,12 +153,12 @@ def calculix_from_deck(deck: Deck, transverse: TransverseChoice, probe_elements:
         e = material.elastic
         if e is None:
             raise CalculixWriterError(f"material {material.name!r} has no elastic definition")
-        E3, nu13 = transverse.resolve(e.E2, e.nu12)
+        E3, nu13, nu23 = transverse.resolve(e.E2, e.nu12)
         if e.G13 is None or e.G23 is None:
             raise CalculixWriterError(f"material {material.name!r}: LAMINA needs G13 and G23 for the three-dimensional law")
         out.append(f"*MATERIAL, NAME={material.name}")
         out.append("*ELASTIC, TYPE=ENGINEERING CONSTANTS")
-        out.append(", ".join(number(stress(v)) for v in (e.E1, e.E2, E3)) + f", {number(e.nu12)}, {number(nu13)}, {number(transverse.nu23)}, "
+        out.append(", ".join(number(stress(v)) for v in (e.E1, e.E2, E3)) + f", {number(e.nu12)}, {number(nu13)}, {number(nu23)}, "
                    + ", ".join(number(stress(v)) for v in (e.G12, e.G13)))
         out.append(f"{number(stress(e.G23))}, {number(REFERENCE_TEMPERATURE)}")
     for part in deck.parts.values():
