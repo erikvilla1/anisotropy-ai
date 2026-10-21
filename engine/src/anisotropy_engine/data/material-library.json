@@ -23,6 +23,7 @@
       "source": {
         "id": "daniel-ishai-2006",
         "title": "Engineering Mechanics of Composite Materials",
+        "authors": "Isaac M. Daniel and Ori Ishai",
         "publisher": "Oxford University Press",
         "revision": "Second edition · ISBN 978-0-19-515097-1",
         "date": "2006",
@@ -428,6 +429,7 @@
       "source": {
         "id": "nasa-maddocks-as4",
         "title": "Microcracking in Composite Laminates Under Thermal and Mechanical Loading",
+        "authors": "Jason R. Maddocks",
         "publisher": "MIT · NASA Technical Reports Server",
         "revision": "NASA-CR-199802 · Table 6.2",
         "date": "1995-05",
@@ -537,6 +539,7 @@
       "source": {
         "id": "ncamp-as4-8552-data",
         "title": "Hexcel 8552 AS4 unidirectional prepreg · qualification material property data report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2010-002 · Rev A",
         "date": "2011-05-06",
@@ -814,6 +817,7 @@
       "source": {
         "id": "ncamp-im7-8552-data",
         "title": "Hexcel 8552 IM7 unidirectional prepreg 190 gsm 35% RC · qualification material property data report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2009-015 · Rev B",
         "date": "2019-04-16",
@@ -1119,6 +1123,7 @@
       "source": {
         "id": "nasa-tm-20230001560-im7-8552",
         "title": "Experimental Tests to Characterize the Behavior and Properties of IM7-8552 Composite",
+        "authors": "Ashutosh Maurya, Seetha Pavan Tanneru, Subramaniam Rajan (Arizona State University); J. Michael Pereira, Sandi G. Miller (NASA Glenn Research Center)",
         "publisher": "NASA Glenn Research Center · NASA Technical Reports Server",
         "revision": "NASA/TM-20230001560 · E-20097",
         "date": "2023-02",
@@ -1487,6 +1492,7 @@
       "source": {
         "id": "ncamp-t650-5320-1-data",
         "title": "Solvay Cytec Cycom 5320-1 T650 unitape Gr 145 33% RC · qualification material property data report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2013-002 · Rev A",
         "date": "2017-01-27",
@@ -1766,6 +1772,7 @@
       "source": {
         "id": "ncamp-im7-bt250e-6-data",
         "title": "TenCate BT250E-6 IM7 GP 12k unitape 148 gsm 33% RC · qualification material property data report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2015-038 · Rev N/C",
         "date": "2017-10-25",
@@ -2045,6 +2052,7 @@
       "source": {
         "id": "ncamp-t1100gc-tc380-data",
         "title": "Toray Advanced Composites TC380 T1100GC 24K 120 gsm unitape 35% RC · qualification material property data report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2025-021 · Rev –",
         "date": "2025-09-24",
@@ -2337,6 +2345,7 @@
       "source": {
         "id": "ncamp-ims65-ep2190-data",
         "title": "Syensqo (formerly Solvay) EP2190 IMS65 unitape Gr 145 RC 35% · qualification material property data report, phases 1, 2 and 3",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2022-001 · Rev –",
         "date": "2025-09-18",
@@ -2629,6 +2638,7 @@
       "source": {
         "id": "ncamp-as4-8552s-pw-data",
         "title": "Hexcel 8552S AS4 plain weave fabric prepreg 193 gsm & 38% RC · qualification material property data report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2010-006 · Rev N/C",
         "date": "2011-04-14",
@@ -2921,6 +2931,7 @@
       "source": {
         "id": "ncamp-t650-5320-1-pw-data",
         "title": "Cytec Cycom 5320-1 T650 3k-PW fabric · qualification material property data report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2012-017 · Rev N/C",
         "date": "2015-10-13",
@@ -3200,6 +3211,7 @@
       "source": {
         "id": "ncamp-hts40-tc250-data",
         "title": "TCAC 12k HTS40 SFP OSI/TC250 42% fabric prepreg · material property data report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2011-005 · Rev A",
         "date": "2016-09-26",
@@ -3487,6 +3499,7 @@
       "source": {
         "id": "mil-hdbk-17-2f-volume-2",
         "title": "MIL-HDBK-17-2F · Composite Materials Handbook, Volume 2: Polymer Matrix Composites, Materials Properties",
+        "authors": null,
         "publisher": "US Department of Defense · DLA ASSIST (ident 53882)",
         "revision": "MIL-HDBK-17-2F · Volume 2 of 5 · canceled by Notice 1, 26 March 2013",
         "date": "2002-06-17",
@@ -3670,6 +3683,7 @@
       "source": {
         "id": "icf11-agp370",
         "title": "Three-dimensional characterization of constitutive behavior and failure of textile composites",
+        "authors": "I. M. Daniel, J. L. Abot, J.-J. Luo and P. M. Schubel",
         "publisher": "International Conference on Fracture · ICF11",
         "revision": "Figures 3–5",
         "date": "2005",
@@ -3824,6 +3838,7 @@
       "source": {
         "id": "chen-2015-ucsd-x840",
         "title": "Experimental and Numerical Investigation of Wide Area Blunt Impact Damage to Composite Aircraft Structures",
+        "authors": "Zhi Ming Chen",
         "publisher": "University of California, San Diego · PhD dissertation in Structural Engineering (chair Hyonny Kim)",
         "revision": "Tables 3.1 and 3.2, §3.2.1",
         "date": "2015",
@@ -4000,6 +4015,7 @@
       "source": {
         "id": "agate-e765-2001",
         "title": "B-Basis Design Allowables for Epoxy-Based Prepreg FiberCote E-Glass Fabric 7781 / E765",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / AGATE",
         "revision": "AGATE-WP3.3-033051-105",
         "date": "2001-09",
@@ -4257,6 +4273,7 @@
       "source": {
         "id": "ncamp-e765-2025",
         "title": "Park Aerospace Corp. 7781 E765 Glass · Material Property Data Report",
+        "authors": null,
         "publisher": "Wichita State University · NIAR / NCAMP",
         "revision": "CAM-RP-2023-010 · Rev N/C",
         "date": "2025-02-25",
@@ -4486,6 +4503,7 @@
       "source": {
         "id": "mil-hdbk-17-2f-volume-2",
         "title": "MIL-HDBK-17-2F · Composite Materials Handbook, Volume 2: Polymer Matrix Composites, Materials Properties",
+        "authors": null,
         "publisher": "US Department of Defense · DLA ASSIST (ident 53882)",
         "revision": "MIL-HDBK-17-2F · Volume 2 of 5 · canceled by Notice 1, 26 March 2013",
         "date": "2002-06-17",
@@ -4708,6 +4726,7 @@
       "source": {
         "id": "toray-ex1515",
         "title": "EX-1515 · Cyanate Ester Prepreg System",
+        "authors": null,
         "publisher": "Toray Advanced Composites",
         "revision": "Version 5.1",
         "date": "2020-01-28",
@@ -4814,6 +4833,7 @@
       "source": {
         "id": "hexcel-hrh10-us",
         "title": "HexWeb HRH-10 · Aramid Fiber/Phenolic Resin Honeycomb",
+        "authors": null,
         "publisher": "Hexcel",
         "revision": "Manufacturer product datasheet",
         "date": null,
@@ -4988,6 +5008,7 @@
       "source": {
         "id": "hexcel-criii",
         "title": "HexWeb CR III · Corrosion Resistant Specification Grade Aluminum Honeycomb",
+        "authors": null,
         "publisher": "Hexcel",
         "revision": "ATA361USDC17–DS2100 · Table I",
         "date": null,
@@ -5169,6 +5190,7 @@
       "source": {
         "id": "diab-divinycell-h-si",
         "title": "Divinycell H · SI technical data",
+        "authors": null,
         "publisher": "Diab",
         "revision": "Revision 26 · SI",
         "date": "2026-05",
@@ -5354,6 +5376,7 @@
       "source": {
         "id": "diab-divinycell-h-si",
         "title": "Divinycell H · SI technical data",
+        "authors": null,
         "publisher": "Diab",
         "revision": "Revision 26 · SI",
         "date": "2026-05",
@@ -5544,6 +5567,7 @@
       "source": {
         "id": "daniel-ishai-2006",
         "title": "Engineering Mechanics of Composite Materials",
+        "authors": "Isaac M. Daniel and Ori Ishai",
         "publisher": "Oxford University Press",
         "revision": "Second edition · ISBN 978-0-19-515097-1",
         "date": "2006",
@@ -5814,6 +5838,7 @@
       "source": {
         "id": "daniel-ishai-2006",
         "title": "Engineering Mechanics of Composite Materials",
+        "authors": "Isaac M. Daniel and Ori Ishai",
         "publisher": "Oxford University Press",
         "revision": "Second edition · ISBN 978-0-19-515097-1",
         "date": "2006",
@@ -6084,6 +6109,7 @@
       "source": {
         "id": "daniel-ishai-2006",
         "title": "Engineering Mechanics of Composite Materials",
+        "authors": "Isaac M. Daniel and Ori Ishai",
         "publisher": "Oxford University Press",
         "revision": "Second edition · ISBN 978-0-19-515097-1",
         "date": "2006",
@@ -6368,6 +6394,7 @@
       "source": {
         "id": "daniel-ishai-2006",
         "title": "Engineering Mechanics of Composite Materials",
+        "authors": "Isaac M. Daniel and Ori Ishai",
         "publisher": "Oxford University Press",
         "revision": "Second edition · ISBN 978-0-19-515097-1",
         "date": "2006",
@@ -6722,6 +6749,7 @@
       "source": {
         "id": "daniel-ishai-2006",
         "title": "Engineering Mechanics of Composite Materials",
+        "authors": "Isaac M. Daniel and Ori Ishai",
         "publisher": "Oxford University Press",
         "revision": "Second edition · ISBN 978-0-19-515097-1",
         "date": "2006",
@@ -7160,6 +7188,7 @@
       "source": {
         "id": "daniel-ishai-2006",
         "title": "Engineering Mechanics of Composite Materials",
+        "authors": "Isaac M. Daniel and Ori Ishai",
         "publisher": "Oxford University Press",
         "revision": "Second edition · ISBN 978-0-19-515097-1",
         "date": "2006",
