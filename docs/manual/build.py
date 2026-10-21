@@ -52,7 +52,7 @@ SPECIAL = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$", "#": r
            "{": r"\{", "}": r"\}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
 UNICODE = {"–": "--", "—": "---", "−": "$-$", "×": r"$\times$", "·": r"$\cdot$", "≥": r"$\geq$",
            "≤": r"$\leq$", "→": r"$\rightarrow$", "±": r"$\pm$", "…": r"\ldots{}", "θ": r"$\theta$",
-           "≈": r"$\approx$", "’": "'", "“": "``", "”": "''"}
+           "≈": r"$\approx$", "’": "'", "“": "``", "”": "''", "§": r"\S{}"}
 UNMAPPED: set[str] = set()
 
 

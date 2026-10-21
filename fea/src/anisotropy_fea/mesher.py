@@ -172,14 +172,28 @@ def sets_by_coordinates(points: np.ndarray, corners: np.ndarray, width: float, l
 
 def structured_rectangle(width: float, length: float, nx: int, ny: int, order: int = 1,
                          node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
-                         node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9) -> Mesh2D:
-    """A rectangle [0, width] x [0, length] with nx by ny elements, loading axis y; sets as in `sets_by_coordinates`."""
+                         node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9,
+                         ys: list[float] | None = None) -> Mesh2D:
+    """A rectangle [0, width] x [0, length] with nx by ny elements, loading axis y; sets as in `sets_by_coordinates`.
+
+    The node rows are evenly spaced unless `ys` gives all ny + 1 of them (bottom first, from 0 to the length, increasing):
+    a mesh seeded by segment, as `spec.row_coordinates` computes from partition lines and seed counts.
+    """
     if nx < 1 or ny < 1:
         raise MeshError("nx and ny must be at least 1")
     if order not in (1, 2):
         raise MeshError("order must be 1 or 2")
     label = lambda i, j: i + (nx + 1) * j  # noqa: E731
-    xs, ys = np.linspace(0.0, width, nx + 1), np.linspace(0.0, length, ny + 1)
+    xs = np.linspace(0.0, width, nx + 1)
+    if ys is None:
+        ys = np.linspace(0.0, length, ny + 1)
+    else:
+        ys = np.asarray(ys, dtype=float)
+        if ys.shape != (ny + 1,):
+            raise MeshError(f"ys must give ny + 1 = {ny + 1} node rows; it gives {ys.size}")
+        if abs(ys[0]) > tolerance * length or abs(ys[-1] - length) > tolerance * length or np.any(np.diff(ys) <= 0):
+            raise MeshError("ys must start at 0, end at the length and increase strictly")
+        ys[0], ys[-1] = 0.0, length
     xy = [(float(x), float(y)) for y in ys for x in xs]
     corners = np.array([[label(i, j), label(i + 1, j), label(i + 1, j + 1), label(i, j + 1)] for j in range(ny) for i in range(nx)], dtype=int)
     midside = None

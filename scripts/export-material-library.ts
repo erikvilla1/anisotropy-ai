@@ -15,14 +15,14 @@ import { curatedMaterials, materialDatasets, type CitedMaterial } from "../lib/c
 export const libraryExportPath = resolve(__dirname, "../engine/src/anisotropy_engine/data/material-library.json");
 
 function dataset(material: CitedMaterial, primary: boolean) {
-  const { id, title, publisher, revision, date, url, sha256, page, rights } = material.source;
+  const { id, title, authors, publisher, revision, date, url, sha256, page, rights } = material.source;
   return {
     materialId: material.id, name: material.name, family: material.family, architecture: material.architecture,
     datasetId: material.datasetId, dataset: material.dataset, primary,
     recordRevision: material.recordRevision ?? null, reviewedOn: material.reviewedOn ?? null,
     conditions: material.conditions, application: material.application,
     elasticInputs: material.elasticInputs ?? null,
-    source: { id, title, publisher, revision, date, url, sha256, page, rights },
+    source: { id, title, authors: authors ?? null, publisher, revision, date, url, sha256, page, rights },
     properties: material.properties.map(p => ({
       key: p.key, label: p.label, value: p.value,
       ...(p.valueEnd === undefined ? {} : { valueEnd: p.valueEnd }),

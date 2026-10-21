@@ -14,7 +14,8 @@ import numpy as np
 
 from . import __version__ as package_version
 from .mesher import Mesh2D, gmsh_open_hole_plate, structured_rectangle
-from .spec import BENDING_KINDS, CouponSpec, MaterialDefinition, SpecError, full_angles, mesh_counts, node_lines, spec_material, spec_ply_thickness
+from .spec import (BENDING_KINDS, CouponSpec, MaterialDefinition, SpecError, full_angles, mesh_counts, node_lines, row_coordinates, spec_material,
+                   spec_ply_thickness)
 
 STEP_NAME = "Step-1"
 ALL_ELEMENTS = "All"
@@ -118,7 +119,7 @@ def mesh_for_spec(spec: CouponSpec) -> Mesh2D:
                                     node_rows=node_lines(spec), element_bands=bands, node_bands=node_bands)
     nx, ny = mesh_counts(spec)
     return structured_rectangle(g.width, g.length, nx, ny, spec.mesh.element_order, node_rows=node_lines(spec), element_bands=bands,
-                                node_bands=node_bands)
+                                node_bands=node_bands, ys=row_coordinates(spec))
 
 
 def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
