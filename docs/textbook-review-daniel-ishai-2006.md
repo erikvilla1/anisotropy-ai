@@ -153,7 +153,7 @@ Recalculated three problems using the printed SI inputs and independent arithmet
 | 7.11 | p. 201 / PDF 220, using Problem 7.8 inputs: [0/+45/−45], 0.25 mm each, E1 145 GPa, E2 10.5 GPa, G12 7 GPa, ν12 0.28 | Axx = 60.24465, Axy = 17.52687, Ayy = 26.42767, Ass = 20.55928 MN/m | p. 393 / PDF 413: 60.24, 17.53, 26.43, 20.56 MN/m |
 | 8.1 | p. 239 / PDF 258: isotropic glass/matrix inputs, Vf 0.55, Ef 69 GPa, Em 3.8 GPa, νf 0.22, νm 0.36, αf 4.5 and αm 90 microstrain/K | α1 = 8.18646; α2 = 55.78273 microstrain/K | p. 394 / PDF 414: 8.19; 55.8 microstrain/K |
 
-All three agree within the precision of the printed answers. Local reproducibility files are `.local/textbook-daniel-ishai/check-examples.py` and `example-checks.json`; they are ignored research artifacts, not shipped software tests.
+All three agree within the precision of the printed answers. Local reproducibility files are `.local/sources/textbook-daniel-ishai/check-examples.py` and `example-checks.json`; they are ignored research artifacts, not shipped software tests.
 
 Before a future solver release, build a broader test set covering axis rotations, reciprocity, stiffness positivity, symmetric/unsymmetric laminates, thermal restraint, zero-load failure evaluation and agreement with an independent implementation. This review did not execute the app's test suite because it made no app changes.
 

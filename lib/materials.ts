@@ -19,7 +19,7 @@ export type Material = {
 };
 // The course appendix is course material: it is kept in ignored local storage and is never
 // served from the website (ADR-0018). The transcription below records numbers and a reference only.
-export const materialSource = { localPath: ".local/course/material-properties-2026-v2.pdf", public: false as const };
+export const materialSource = { localPath: ".local/sources/course/material-properties-2026-v2.pdf", public: false as const };
 // Source transcription. Strings intentionally retain printed units, signs, and unresolved values.
 const full = [
   ["Vf", "Fiber volume", "%"],

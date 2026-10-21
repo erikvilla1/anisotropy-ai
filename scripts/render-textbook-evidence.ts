@@ -12,7 +12,7 @@ async function main() {
   const pdf = path.resolve(input);
   const hash = (data: Buffer) => createHash("sha256").update(data).digest("hex");
   if (hash(await readFile(pdf)) !== textbookSource.sha256) throw new Error("This PDF does not match the reviewed textbook edition and fingerprint.");
-  const output = path.resolve(".local", "textbook-evidence", textbookSource.id);
+  const output = path.resolve(".local", "sources", "textbook-evidence", textbookSource.id);
   await mkdir(output, { recursive: true });
   const pages = [];
   for (const page of textbookPages) {

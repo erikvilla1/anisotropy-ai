@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
-description: Where files go in the local workspace of the Anisotropy AI repository. Finite element files sit in one folder per test (team files as received, our runs per solver, the comparison), with the same test name as the committed fea/models/<test>/; the zips for the team sit in one share folder; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, homework file or input file, and when a new test or a new homework arrives.
-version: 0.2.0
+description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Finite element files sit in one folder per test (team files as received, our runs per solver, the comparison), with the same test name as the committed fea/models/<test>/; the zips for the team sit in one share folder; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, homework file or input file, and when a new test or a new homework arrives.
+version: 0.3.0
 ---
 
 # Workspace layout
@@ -10,7 +10,27 @@ version: 0.2.0
 
 Whenever a file arrives from the team or the course, whenever our tools write a deck, run, record, picture or document, and whenever you look for one. Read `project-rules` first: it decides what is committed; this skill decides where the rest sits.
 
-## The two trees (ADR-0036 for FEA, ADR-0032 for homework)
+## The top level (ADR-0037)
+
+Every private file lives under `.local/`, in a folder named for its purpose; there are no loose files at the top. `.local/README.md` has the full table.
+
+```
+.local/
+  fea/          FEA tests and the zips for the team (below)
+  homework/     course homework (below)
+  sources/      copies of what our values cite: ncamp/ nasa/ milhdbk/ cmh17/ textbook-daniel-ishai/ textbook-evidence/ course/ references/<date>/
+  research/     material-audit/ qualification/, with their scripts
+  website/      screenshots/ and the scripts/ that take them
+  manual/       the built manual PDF, rendered pages for review, their scripts
+  services/     runtime data of local services (material-monitor/monitor.sqlite)
+  questions/    the founder's own engine problems
+  notes/        one-pager, purge script and support request, project-docs/
+  backup/       git bundles from the 2026-10-10 history purge; never delete without the founder
+```
+
+`References/` and `output/` at the repository root are gone: dated reference snapshots go to `.local/sources/references/<date>/`, a built manual to `.local/manual/`. A downloaded source document goes to the `sources/` folder of its publisher; a screenshot to `website/screenshots/`; a one-off script beside the files it reads or writes.
+
+## The two trees inside (ADR-0036 for FEA, ADR-0032 for homework)
 
 Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local/homework/README.md` carry the current inventory.
 
@@ -58,5 +78,5 @@ Committed counterparts: `fea/models/<test>/` (specs, `decks/`, `records/`, READM
 
 ## Verification
 
-- `git status` shows nothing under `.local/`, `output/` or `References/` and no `*.pdf`.
+- `git status` shows nothing under `.local/` and no `*.pdf`; nothing is left at the top of `.local/` outside its folders.
 - `fea/tests/test_local_tension_deck.py` finds the team deck at `.local/fea/tension-coupon/team/2026-10-16/Tension-test.inp` and the record at `.local/fea/tension-coupon/comparison/tension-test-abaqus.toml` (it skips, with the reason shown, on a machine without them).

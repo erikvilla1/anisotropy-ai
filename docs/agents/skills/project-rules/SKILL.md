@@ -47,5 +47,5 @@ Before any change in this repository, and whenever you must decide where content
 
 ## Verification
 
-- `git status` shows no file under `.local/`, `References/`, `output/` or any `*.pdf`.
+- `git status` shows no file under `.local/` (which since 2026-10-21 also holds the former `References/` and `output/`, ADR-0037) and no `*.pdf`.
 - The tests that cover the change pass, with their output shown: `cd engine && uv run pytest`, `npm test`, `npm run typecheck`.

@@ -21,7 +21,7 @@ npm run monitor:check -- --force
 npm run test:monitor
 ```
 
-`MATERIAL_MONITOR_DB` overrides the default `.local/material-monitor/monitor.sqlite`. `MATERIAL_MONITOR_PORT` overrides port 3210. Original PDFs, full extracted text and reviewer identities/notes remain in the ignored local SQLite database. A sanitized public feed contains source metadata, structured candidates and released reference properties. Back up SQLite consistently (stop the service before copying its database files).
+`MATERIAL_MONITOR_DB` overrides the default `.local/services/material-monitor/monitor.sqlite`. `MATERIAL_MONITOR_PORT` overrides port 3210. Original PDFs, full extracted text and reviewer identities/notes remain in the ignored local SQLite database. A sanitized public feed contains source metadata, structured candidates and released reference properties. Back up SQLite consistently (stop the service before copying its database files).
 
 ## Behavior
 
