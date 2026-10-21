@@ -18,7 +18,7 @@ A record is a TOML file under `fea/validation/records/`:
     run_by = "..."
     run_date = "2026-10-15"
     machine = "..."
-    source = "dat"                 # dat | rpt
+    source = "dat"                 # dat | rpt | csv (an Abaqus/CAE field report, abaqus_report.py)
     conventions = "_calculix-conventions.toml"
     notes = "..."
 
@@ -34,12 +34,14 @@ A record is a TOML file under `fea/validation/records/`:
 The kernel passes the record when every number agrees within `tolerance` of the reference value, or within
 `tolerance * floor * scale` for components that are small against their group (a 1 MPa shear stress beside a
 1000 MPa axial stress is judged against the group, not against itself). `record_from_dat` builds the `[expected]`
-tables from a CalculiX `.dat` using the detected conventions, so a committed record is numbers plus provenance.
+tables from a CalculiX `.dat` using the detected conventions, and `record_from_report` from Abaqus/CAE field reports,
+so a committed record is numbers plus provenance. A `nan` component was not reported by the solver and is skipped.
 """
 
 from __future__ import annotations
 
 import hashlib
+import math
 import tomllib
 from pathlib import Path
 
@@ -87,8 +89,8 @@ def validate_record(record: dict) -> None:
             raise RecordError(f"[solver] needs {field!r} as text")
     if solver["name"] not in ("calculix", "abaqus"):
         raise RecordError("[solver] name must be calculix or abaqus")
-    if solver["source"] not in ("dat", "rpt"):
-        raise RecordError("[solver] source must be dat or rpt")
+    if solver["source"] not in ("dat", "rpt", "csv"):
+        raise RecordError("[solver] source must be dat, rpt or csv")
     expected = record["expected"]
     floor = expected.get("floor", 0.0)
     if not isinstance(floor, (int, float)) or not 0.0 <= floor < 1.0:
@@ -133,6 +135,8 @@ def compare_record(record: dict) -> tuple[list[Comparison], list[str]]:
             return
         got, scale = numbers[label]
         for i, w in enumerate(want):
+            if isinstance(w, float) and math.isnan(w):
+                continue  # not reported by the reference solver
             allowed = tolerance * max(abs(w), floor * scale)
             comparisons.append(Comparison(f"{label}[{i}]", float(w), float(got[i]), float(allowed)))
 
@@ -241,6 +245,8 @@ def format_record(record: dict) -> str:
     def value(v) -> str:
         if isinstance(v, bool):
             return "true" if v else "false"
+        if isinstance(v, float) and math.isnan(v):
+            return "nan"
         if isinstance(v, (int, float)):
             return repr(float(v)) if isinstance(v, float) else str(v)
         if isinstance(v, list):

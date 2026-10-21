@@ -44,3 +44,19 @@ def test_the_team_coupon_deck_solves_in_equilibrium():
     assert solution.displacement_of((None, 1)) == pytest.approx([0.0, 0.010])
     assert solution.displacement_of((None, 2)) == pytest.approx([0.0, 0.0])
     assert solution.strain[:, 1].max() > 0.0  # the numbers themselves stay in the local note, not here
+
+
+LOCAL_RECORD = LOCAL_DECK.parent / "comparisons" / "tension-test-abaqus.toml"
+
+
+@pytest.mark.skipif(not LOCAL_RECORD.exists(), reason="team Abaqus record not present at .local/abaqus/comparisons/tension-test-abaqus.toml")
+def test_the_kernel_reproduces_the_teams_abaqus_field_reports():
+    """The team's Abaqus/CAE field reports (S11, S22, Mises at the outer plies) at gauge elements, within the record's tolerance;
+    the numbers stay in the local record and note (ADR-0030, amendment 2)."""
+    from anisotropy_fea.compare import compare_record, load_record, record_disagreements
+
+    record = load_record(LOCAL_RECORD)
+    assert record["solver"]["name"] == "abaqus" and record["solver"]["source"] == "csv"
+    comparisons, problems = compare_record(record)
+    assert not problems and len(comparisons) >= 24
+    assert record_disagreements(record) == []
