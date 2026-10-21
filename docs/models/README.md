@@ -19,6 +19,18 @@ uv run --project fea python docs/models/build.py .local/fea/abaqus/tension-coupo
 
 Options: `--no-pdf` writes the LaTeX only; `--no-theory` leaves out the kernel theory and code section (about 20 pages, the same in every document); `--full-tables` prints every compared number even for records with more than 400 of them (otherwise each group shows its twenty numbers closest to the limit). Without Tectonic the `.tex` is still written and is self-contained.
 
+## The short comparison for the team (ADR-0035)
+
+When the team built the model in Abaqus, `docs/models/team.py` writes a short document for them and a folder they can open. The document says, in order: here is the team's model and here is ours, the same item by item; our material comes from the library, and this is its source and page; here are the results side by side. The results cover stress at named points, agreement over the coupon, maps, reaction force and first-ply failure. Each test needs a manifest at `.local/fea/abaqus/<test>/comparison/team-comparison.toml` (format in `Manifest` in the script) and a reading `team-comparison.md` beside it.
+
+```sh
+uv run --project fea python docs/models/team.py .local/fea/abaqus/tension-coupon/comparison/team-comparison.toml
+```
+
+The document goes to `comparison/report/<test>-comparison/`. The share folder goes to `.local/fea/share/<test>/`, zipped as `<test>.zip`. It holds the PDF, the team's deck, our Abaqus and CalculiX decks, the spec, the material record, and our S11, S22 and Mises in the layout of the team's own field reports with their element numbers. It also holds an element-by-element table and every ply's stress. Both stay local because they carry the team's results. The script replaces only a share folder it wrote itself.
+
+The numbers come from `anisotropy_fea.equivalence` (the two decks matched node by node and item by item) and `anisotropy_fea.side_by_side` (the team's reports paired with our kernel). The hand check and first-ply failure come from the engine.
+
 ## Where the content comes from
 
 | In the document | Comes from |
