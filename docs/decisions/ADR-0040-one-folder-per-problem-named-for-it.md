@@ -34,7 +34,10 @@ Option 1, in three chunks.
   - **`documents/`** holds every document of the coupon, written by the three scripts: the PDFs on top, their LaTeX in `latex/<document>/`, and the dated zips. `team.py`'s manifest key `zip` becomes `documents`. `share.py` writes one `<date>_<coupon>-model.zip` per coupon.
   - **Gone:** `.local/fea/share/` and the all-coupons `our-models.zip`.
   - **Paths.** `paths.py` names the four folders once (`TEAM_FILES`, `RUNS`, `COMPARISON`, `DOCUMENTS`) and gives `documents(coupon)`.
-- **Chunk 2, homework:** `.local/homework/<HW>/{provided, ours, documents}`, with each problem's document built into its set's `documents/`.
+- **Chunk 2, homework (done):**
+  - `.local/homework/<set>/{provided, ours, documents}` for HW1 to HW5, PRACTICE and course-reader, with `course_audit.py` beside them.
+  - One document per set (founder's choice), `docs/problems/homework.py <set>`: the physics chapter once, then one chapter per problem, built into the set's `documents/`.
+  - The per-problem documents of `docs/problems/build.py` remain for the other problems and for CI.
 - **Chunk 3, benchmarks:** `.local/benchmarks/<name>/documents/` for the textbook and constructed problems and for the IM7/8552 and Kirsch checks, and the checks' local runs.
 
 This supersedes the naming rule of ADR-0036 (lower-case test names) and its local layout, and ADR-0038's rejection of renaming the folders. It also moves the zips of ADR-0039 from `share/` into `documents/`.

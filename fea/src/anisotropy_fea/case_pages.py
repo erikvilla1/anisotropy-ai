@@ -224,7 +224,7 @@ def pages() -> dict[Path, str]:
 LOCAL_INDEX = paths.ROOT / ".local" / "INDEX.md"
 HOMEWORK_README = paths.ROOT / ".local" / "homework" / "README.md"
 PROJECTS = paths.ROOT / ".local" / "projects"
-HOMEWORK_ROW = re.compile(r"^\| (?P<hw>HW\d+|PRACTICE) \| [^|]* \| [^|]* \| (?P<status>[^|]*?) \|$", re.M)
+HOMEWORK_ROW = re.compile(r"^\| (?P<hw>HW\d+|PRACTICE|course-reader) \| [^|]* \| [^|]* \| (?P<status>[^|]*?) \|$", re.M)
 
 
 def local_index() -> str:
@@ -243,9 +243,12 @@ def local_index() -> str:
     homework = []
     if HOMEWORK_README.is_file():
         for m in HOMEWORK_ROW.finditer(HOMEWORK_README.read_text(encoding="utf-8")):
-            cases = sorted(ENGINE_CASES.glob(f"se142-{m['hw'].lower()}-*.toml"))
-            code = HOMEWORK_README.parent / "code" / m["hw"]
-            homework.append([m["hw"], m["status"], str(len(cases)), f"`.local/homework/code/{m['hw']}/`" if code.is_dir() else "none"])
+            prefix = f"se142-{m['hw'].lower()}-" if m["hw"].startswith("HW") else f"{m['hw']}-"
+            cases = sorted(ENGINE_CASES.glob(f"{prefix}*.toml"))
+            folder = HOMEWORK_README.parent / m["hw"]
+            document = folder / "documents" / f"{m['hw']}.pdf"
+            homework.append([m["hw"], m["status"], str(len(cases)), f"`.local/homework/{m['hw']}/ours/`" if (folder / "ours").is_dir() else "none",
+                             f"`.local/homework/{m['hw']}/documents/{m['hw']}.pdf`" if document.is_file() else "not built"])
     projects = sorted(d for d in PROJECTS.iterdir() if d.is_dir()) if PROJECTS.is_dir() else []
     parts = [
         "# Every case, on this machine",
@@ -261,7 +264,7 @@ def local_index() -> str:
         benchmarks_block(),
         "## Homework",
         "",
-        table(["HW", "Status (from homework/README.md)", "Engine cases", "Our code"], homework) if homework else "No homework folder on this machine.\n",
+        table(["Set", "Status (from homework/README.md)", "Engine cases", "Ours", "Document"], homework) if homework else "No homework folder on this machine.\n",
         "## Projects",
         "",
         table(["Project", "Folder"], [[d.name, f"`.local/projects/{d.name}/`"] for d in projects]) if projects

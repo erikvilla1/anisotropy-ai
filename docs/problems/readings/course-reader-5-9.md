@@ -8,7 +8,7 @@ A [0/90]s laminate cooled from its cure temperature with no mechanical load: the
 
 ## What explains the differences
 
-The key misprints two values: the thermal resultant N_T for AS4 and the mid-plane strain for S-glass. The cases record the values the engine and an independent hand calculation agree on, and say so in their source lines; `.local/homework/code/course-reader/cr59_reference.py` is that hand calculation, written with explicit cosine and sine formulas and without importing the engine.
+The key misprints two values: the thermal resultant N_T for AS4 and the mid-plane strain for S-glass. The cases record the values the engine and an independent hand calculation agree on, and say so in their source lines; `.local/homework/course-reader/ours/cr59_reference.py` is that hand calculation, written with explicit cosine and sine formulas and without importing the engine.
 
 ## Verified, and not
 

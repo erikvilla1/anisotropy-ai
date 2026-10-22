@@ -2,14 +2,23 @@
 
 One typeset document per solved problem, separate from the engine manual ([ADR-0033](../decisions/ADR-0033-one-generated-document-per-solved-problem.md)). Each document is the complete argument for one problem: what the problem was as the validation case states it, every step the engine took with the equation from the theory and the function that computes it, the numbers of each step, the source's answers next to the engine's with their differences, how the inputs were read and judged, and the reading.
 
-## Build
+## Homework: one document per set (ADR-0040)
+
+A homework set has one document, `docs/problems/homework.py <set>`, written to `.local/homework/<set>/documents/<set>.pdf` with its LaTeX in `documents/latex/<set>/`. The set is HW<n> (the cases `se142-hw<n>-*.toml`) or `course-reader`. It has the engine's theory once, as the physics chapter, then one chapter per problem: does the engine reproduce the key, the problem as the case states it, the solution step by step with its numbers, and every compared number. The set's reading and the case files follow. `--all` builds every set; `--no-theory` and `--no-pdf` as below.
+
+```sh
+uv run --project fea python docs/problems/homework.py HW3
+uv run --project fea python docs/problems/homework.py --all
+```
+
+## Build one problem
 
 From the repository root, with [Tectonic](https://tectonic-typesetting.github.io/) installed (the same as for the manual):
 
 ```sh
 uv run --project fea python docs/problems/build.py engine/validation/cases/se142-hw3-p3a-boron-symmetric.toml
 uv run --project fea python docs/problems/build.py --all        # every committed case, and index.md
-uv run --project fea python docs/problems/build.py .local/homework/code/course-reader/cr-5-9-as4.toml
+uv run --project fea python docs/problems/build.py .local/homework/course-reader/ours/cr-5-9-as4.toml
 ```
 
 | Case | Document goes to | Committed? |

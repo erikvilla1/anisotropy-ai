@@ -18,6 +18,11 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
+- One folder per homework set, with one document (ADR-0040, chunk 2).
+  - **Folders.** `.local/homework/<set>/{provided, ours, documents}` replaces `assignments/<HW>/` beside `code/<HW>/`.
+  - **The document.** `docs/problems/homework.py <set>` writes `<set>/documents/<set>.pdf`: the engine's theory once, then one chapter per problem (does the engine reproduce the key, the problem, every step with its numbers, every compared number), and the set's reading.
+  - **Results.** HW3 has 6 problems, and all 128 compared values agree.
+  - **Index and readings.** The local index lists each set's document, and the readings point at the new folders.
 - One document per coupon, in chapters, to show engineers and investors that the engine works (ADR-0041).
   - **The builder.** `docs/models/coupon.py <coupon>` writes `.local/fea/<coupon>/documents/<coupon>.pdf` and one dated zip.
   - **The chapters:** the problem; the physics (laminate theory, the finite element kernel and the failure criteria, each equation with its code); building the part in our engine; building it in Abaqus/CAE, step by step and item by item against the team's model; our results with first-ply failure; verification against CalculiX and the team's Abaqus; and what it shows and does not.
