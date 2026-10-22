@@ -16,7 +16,7 @@ from anisotropy_fea import paths  # where the files live (ADR-0036)
 
 ROOT = Path(__file__).parents[1]
 GRIPS_FIXTURE = paths.CHECK_DECKS / "coupon-2x8-grips-im7-8552.inp"
-TEAM_SPEC = paths.spec_path("tension-coupon")
+TEAM_SPEC = paths.spec_path("X840PW-UNT-L1")
 TOLERANCE = 1e-8  # m, 0.01 micrometre
 
 # The grips fixture (the team's CAE structure: CFRP-Coupon, CompositeLayup-1, Set-9-style sets, a reference node listed in its own

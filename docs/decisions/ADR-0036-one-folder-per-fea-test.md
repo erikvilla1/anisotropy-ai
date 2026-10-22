@@ -1,6 +1,6 @@
 # ADR-0036: One folder per finite element test, in the repository and on the founder's machine
 
-- Status: Proposed; local `runs/` replaced by `attempts/` and the zips dated by [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md)
+- Status: Proposed; local `runs/` replaced by `attempts/` and the zips dated by [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md); folder names, the local layout and `share/` replaced by [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md)
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (test first locally, the repository too, superseded local files deleted, no `.frd` in the zips) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/paths.py`, `fea/tools/regenerate_decks.py`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0032](ADR-0032-local-workspace-layout-by-tool-and-test.md) (its FEA layout superseded; its homework layout stands), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [evaluation](../evaluations/fea/2026-10-21-one-folder-per-test.md)

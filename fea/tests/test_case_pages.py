@@ -7,7 +7,7 @@ import pytest
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.case_pages import CasePageError, local_index, model_folders, pages, read_case
 
-TENSION = paths.MODELS / "tension-coupon"
+TENSION = paths.MODELS / "X840PW-UNT-L1"
 
 
 @pytest.fixture(scope="module")

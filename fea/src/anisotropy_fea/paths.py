@@ -1,11 +1,13 @@
 """Where the finite element files live: one folder per test, in the repository and on the founder's machine (ADR-0036).
 
-    fea/models/<test>/        the models we show the team: the spec(s) at the folder root, decks/, records/, README.md
+    fea/models/<coupon>/      the models we show the team, named by the coupon (ADR-0040): the spec(s) at the folder root,
+                              decks/, records/, README.md (the case page)
     fea/checks/<test>/        the same shape for the proofs that are not team models (the public IM7/8552 regression set,
                               the isotropic Kirsch plate)
     fea/checks/cases/         validation cases: a deck, expected numbers, a source, a tolerance
     fea/checks/decks/         the tiny hand-made decks the cases and tests read
-    .local/fea/<test>/        the same test name locally: team/ (as received), attempts/ (one folder per try, ADR-0039), comparison/
+    .local/fea/<coupon>/      the same name locally (ADR-0040): from-team/ (as received), our-runs/ (one folder per try, ADR-0039),
+                              comparison/ (what we compare with), documents/ (every PDF, its LaTeX and the zips to send)
 
 A spec is a TOML file at the root of a test folder; its generated decks are `decks/<spec stem>-abaqus.inp` and
 `decks/<spec stem>-ccx.inp`; its records are `records/*.toml`, each with a reading `records/<record>.md`. A model the team
@@ -27,6 +29,7 @@ CHECK_DECKS = CHECKS / "decks"
 CONVENTIONS = CHECKS / "calculix-conventions.toml"
 LOCAL = ROOT / ".local" / "fea"
 NOT_TESTS = {"cases", "decks"}  # folders under checks/ that hold no test of their own
+TEAM_FILES, RUNS, COMPARISON, DOCUMENTS = "from-team", "our-runs", "comparison", "documents"  # a coupon's local folders (ADR-0040)
 TEAM_SUMMARY = "-team-summary"  # stem suffix of the team comparison's figures in records/ (ADR-0039); not a comparison record
 
 DECK_KINDS = ("abaqus", "ccx")
@@ -75,5 +78,10 @@ def check_deck(name: str) -> Path:
 
 
 def local_test(name: str) -> Path:
-    """The test's folder on the founder's machine (git-ignored): team/, attempts/, comparison/ (anisotropy_fea.attempts)."""
+    """The coupon's folder on the founder's machine (git-ignored): from-team/, our-runs/, comparison/, documents/ (ADR-0040)."""
     return LOCAL / name
+
+
+def documents(name: str) -> Path:
+    """Where every document of a coupon goes: its PDFs on top, their LaTeX in latex/<document>/, and the zips to send."""
+    return LOCAL / name / DOCUMENTS

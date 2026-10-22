@@ -1,4 +1,4 @@
-"""The team's own coupon deck, when it is present locally. Its material may be proprietary, so the file lives in `.local/fea/tension-coupon/team/<date>/`,
+"""The team's own coupon deck, when it is present locally. Its material may be proprietary, so the file lives in `.local/fea/X840PW-UNT-L1/from-team/<date>/`,
 is never committed, and this test prints no material values (ADR-0029, AGENTS.md)."""
 
 from pathlib import Path
@@ -9,9 +9,9 @@ from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.model import coupled_nodes, reference_node
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 
-LOCAL_DECK = paths.local_test("tension-coupon") / "team" / "2026-10-16" / "Tension-test.inp"
+LOCAL_DECK = paths.local_test("X840PW-UNT-L1") / paths.TEAM_FILES / "2026-10-16" / "Tension-test.inp"
 
-pytestmark = pytest.mark.skipif(not LOCAL_DECK.exists(), reason="team deck not present at .local/fea/tension-coupon/team/2026-10-16/Tension-test.inp")
+pytestmark = pytest.mark.skipif(not LOCAL_DECK.exists(), reason="team deck not present at .local/fea/X840PW-UNT-L1/from-team/2026-10-16/Tension-test.inp")
 
 
 def test_the_team_coupon_deck_is_read_in_full():
@@ -47,10 +47,10 @@ def test_the_team_coupon_deck_solves_in_equilibrium():
     assert solution.strain[:, 1].max() > 0.0  # the numbers themselves stay in the local note, not here
 
 
-LOCAL_RECORD = paths.local_test("tension-coupon") / "comparison" / "tension-test-abaqus.toml"
+LOCAL_RECORD = paths.local_test("X840PW-UNT-L1") / "comparison" / "tension-test-abaqus.toml"
 
 
-@pytest.mark.skipif(not LOCAL_RECORD.exists(), reason="team Abaqus record not present at .local/fea/tension-coupon/comparison/tension-test-abaqus.toml")
+@pytest.mark.skipif(not LOCAL_RECORD.exists(), reason="team Abaqus record not present at .local/fea/X840PW-UNT-L1/comparison/tension-test-abaqus.toml")
 def test_the_kernel_reproduces_the_teams_abaqus_field_reports():
     """The team's Abaqus/CAE field reports (S11, S22, Mises at the outer plies) at gauge elements, within the record's tolerance;
     the numbers stay in the local record and note (ADR-0030, amendment 2)."""
@@ -67,7 +67,7 @@ def test_our_committed_coupling_deck_is_the_teams_model():
     """Our generated twin, seeded as the team seeded it, is the same model item by item (ADR-0035)."""
     from anisotropy_fea.equivalence import deck_equivalence
 
-    ours = paths.deck_path(paths.spec_path("tension-coupon"), "abaqus")
+    ours = paths.deck_path(paths.spec_path("X840PW-UNT-L1"), "abaqus")
     eq = deck_equivalence(read_deck(LOCAL_DECK, "mm-MPa"), read_deck(ours, "mm-MPa"), 1e-8, "mm-MPa")
     assert eq.same_model, [(i.item, i.team, i.ours) for i in eq.differences]
     assert len(eq.element_map) == 800 and eq.largest_node_offset < 1e-8
