@@ -6,7 +6,7 @@ From the repository root:
 
     uv run --project fea python docs/problems/build.py engine/validation/cases/se142-hw3-p3a-boron-symmetric.toml
     uv run --project fea python docs/problems/build.py --all                 # every committed case, plus an index
-    uv run --project fea python docs/problems/build.py .local/homework/code/course-reader/cr-5-9-as4.toml
+    uv run --project fea python docs/problems/build.py .local/homework/course-reader/ours/cr-5-9-as4.toml
 
 A committed case's document is written to docs/problems/build/<case>/ (git-ignored, rebuilt like the manual; CI uploads
 the PDFs); a case under .local/ goes to report/<case>/ beside the case and stays there. The LaTeX file is self-contained;
