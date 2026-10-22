@@ -1,6 +1,8 @@
-# compression-coupon
+# X840PW-UNC-L1, unnotched compression (`compression-coupon`)
 
 Our compression coupon built the team's way: X840-Z60, [0/45/-45/45/0]s of 0.1 mm plies, the whole 63.5 mm tabs coupled to reference points, the team's names. D6641-style geometry: 140 mm by 12 mm with a 13 mm unsupported gauge, shortened 0.1 mm. Linear and in-plane: buckling of the gauge is not modelled.
+
+**Coupon.** No test standard and no test data yet; the full identity card is the `[coupon]` table of the spec (ADR-0038).
 
 **Status.** The team has not built it yet. When they do, put their files in `.local/fea/compression-coupon/team/<date>/`, seed our spec as they seed theirs, and add a team comparison.
 
@@ -22,7 +24,7 @@ uv run python tools/regenerate_decks.py compression-coupon compression-coupon-no
 uv run python examples/build_model.py models/compression-coupon/compression-coupon.toml --out ../.local/fea/compression-coupon/runs/kernel
 uv run python examples/run_calculix.py models/compression-coupon/compression-coupon-nodal.toml --out ../.local/fea/compression-coupon/runs/calculix
 uv run python tools/record_from_dat.py models/compression-coupon/compression-coupon-nodal.toml ../.local/fea/compression-coupon/runs/calculix/compression-coupon-nodal-ccx.dat \
-    --version 2.22 --run-by "..." --machine "..." --tolerance 0.03 --floor 0.02 --element-probes centre --out models/compression-coupon/records/compression-coupon-calculix.toml
+    --version 2.22 --run-by "..." --machine "..." --notes "..." --tolerance 0.03 --floor 0.02 --element-probes centre --out models/compression-coupon/records/compression-coupon-calculix.toml
 ```
 
 From the repository root, the record's document: `uv run --project fea python docs/models/build.py fea/models/compression-coupon/records/compression-coupon-calculix.toml`.

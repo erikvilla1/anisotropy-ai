@@ -73,7 +73,7 @@ from anisotropy_fea.model import expanded_layers, to_si  # noqa: E402
 from anisotropy_fea.recovery import deck_f12_star, strength_ratios  # noqa: E402
 from anisotropy_fea.report import laminate_check  # noqa: E402
 from anisotropy_fea.side_by_side import Agreement, PairedValue, agreement, kernel_difference, pair_reports, ply_values  # noqa: E402
-from anisotropy_fea.spec import load_spec, spec_material  # noqa: E402
+from anisotropy_fea.spec import coupon_card, load_spec, spec_material  # noqa: E402
 from anisotropy_fea.units import from_si, to_si as value_to_si  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
@@ -108,8 +108,7 @@ class OurSide(Record):
 
 
 class Manifest(Record):
-    name: str  # file stem of the document and the folder inside the zip, lower case with hyphens
-    title: str
+    name: str  # file stem of the document and the folder inside the zip, lower case with hyphens; the title is the coupon's name in our spec
     units: str  # the unit system of the team's deck and reports, and of the document
     node_tolerance: PositiveFloat  # length: a node of ours counts as at the team's position within this
     agreement: PositiveFloat  # fraction of a quantity's largest magnitude in a band within which two values "agree"
@@ -216,6 +215,10 @@ class Comparison:
 
         # the two models
         self.spec = load_spec(self.spec_path)
+        self.card = dict(coupon_card(self.spec))
+        if not self.card:
+            raise SystemExit(f"{rel(self.spec_path)} has no [coupon] table: a team comparison names the coupon it compares (ADR-0038)")
+        self.headline = f"{self.card['Coupon']}, {self.card['Test']}"
         self.our_text = write_abaqus(build_model(self.spec))
         self.committed_deck = fea_paths.deck_path(self.spec_path, "abaqus")
         if self.committed_deck.exists() and self.committed_deck.read_text(encoding="utf-8").replace("\r\n", "\n") != self.our_text:
@@ -386,18 +389,23 @@ def title_block(c: Comparison) -> str:
     m = c.manifest
     lib = c.library
     facts = [
-        ("Team's model", escape(f"{c.team_deck_path.name} (sha256 {sha256(c.team_deck_path)[:16]}), {m.team.solver}, run by {m.team.run_by} on {m.team.run_date}")),
+        ("Team's deck", escape(f"{c.team_deck_path.name} (sha256 {sha256(c.team_deck_path)[:16]}), {m.team.solver}, run by {m.team.run_by} on {m.team.run_date}")),
         ("Our model", escape(f"{c.spec_path.name} built by anisotropy-fea {fea_version} (deck sha256 {sha256(c.our_text)[:16]}), solved by our engine's "
                              "finite element kernel (four-node membrane element on the engine's laminate stiffness)")),
-        ("Material", escape(f"our library record {lib.material_id}, dataset {lib.dataset_id}: {source_text(lib)}")),
+        ("Material source", escape(f"our library record {lib.material_id}, dataset {lib.dataset_id}: {source_text(lib)}")),
         ("Compared", escape(f"{len(c.paired)} values ({', '.join(c.quantities)} at layers {', '.join(map(str, c.layers()))}) from the team's field reports")),
         ("Built", escape(f"{date.today().isoformat()}, commit {git_commit()}, by docs/models/team.py")),
     ]
     return "\n".join([
         r"\begin{center}", r"{\sffamily\color{accent}\bfseries\small ANISOTROPY AI \textperiodcentered{} THE TEAM'S MODEL AND OURS}\par\medskip",
-        rf"{{\sffamily\fontsize{{20}}{{26}}\selectfont\bfseries\color{{ink}} {escape(m.title)}}}\par\smallskip",
+        rf"{{\sffamily\fontsize{{20}}{{26}}\selectfont\bfseries\color{{ink}} {escape(c.card['Coupon'])}}}\par\smallskip",
+        rf"{{\sffamily\large\color{{ink}} {escape(c.card['Test'].capitalize())} coupon}}\par\smallskip",
         r"{\sffamily\color{muted} What the team built in Abaqus, what we built with our engine, where our material comes from, and the results side by side}",
         r"\end{center}", r"\medskip",
+        r"{\sffamily\bfseries\small The coupon}\par\smallskip",
+        r"{\small\begin{tabular}{@{}p{2.6cm}p{\dimexpr\linewidth-3.1cm}@{}}",
+        *[rf"{label} & {escape(value)} \\[0.3ex]" for label, value in c.card.items() if label not in ("Coupon", "Test")], r"\end{tabular}}\par", r"\medskip",
+        r"{\sffamily\bfseries\small The comparison}\par\smallskip",
         r"{\small\begin{tabular}{@{}p{2.6cm}p{\dimexpr\linewidth-3.1cm}@{}}", *[rf"{label} & {value} \\[0.3ex]" for label, value in facts], r"\end{tabular}}\par",
         r"\medskip", rf"\verdict{{{verdict(c)}}}",
     ])
@@ -702,7 +710,8 @@ def fill_share(c: Comparison, pdf: Path | None, share: Path) -> None:
             for k, angle in enumerate(angles):
                 writer.writerow([team, key[1], f"{x:.9g}", f"{y:.9g}", k + 1, f"{angle:g}"] + [f"{values[q][index, k]:.9g}" for q in ("S11", "S22", "S12", "Mises")])
 
-    lines = [README_MARK, f"{c.manifest.title}: the team's Abaqus model and ours", "",
+    lines = [README_MARK, f"{c.headline}: the team's Abaqus model and ours", "",
+             *[f"{label + ':':14} {value}" for label, value in c.card.items()], "",
              f"Built {date.today().isoformat()} by docs/models/team.py (anisotropy-fea {fea_version}, commit {git_commit()}).",
              "Start with the PDF. Numbers in the files are in " + f"{c.length_unit}, {c.stress_unit} and {c.force_unit}.", ""]
     width = max(len(path) for path, _ in share_contents(c))
@@ -720,9 +729,9 @@ def build(manifest_path: Path, pdf: bool) -> tuple[Path, Path]:
     stem = f"{c.manifest.name}-comparison"
     parts = [
         r"\documentclass[11pt,letterpaper]{article}", PREAMBLE, r"\usepackage{float}",
-        rf"\hypersetup{{pdftitle={{{escape(c.manifest.title)}: the team's model and ours}}}}",
+        rf"\hypersetup{{pdftitle={{{escape(c.headline)}: the team's model and ours}}}}",
         r"\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0pt}",
-        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy AI \textperiodcentered{{}} The team's model and ours \textperiodcentered{{}} {escape(c.manifest.title)}}}",
+        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy AI \textperiodcentered{{}} The team's model and ours \textperiodcentered{{}} {escape(c.headline)}}}",
         r"\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}",
         r"\fancyfoot[C]{\sffamily\scriptsize\color{muted}Internal. A solver-to-solver comparison is verification, not validation against a coupon test.}",
         r"\begin{document}",

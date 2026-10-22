@@ -1,12 +1,20 @@
-# Our open-hole tension coupon built the way the team builds its coupons (test `open-hole-coupon`): their material X840-Z60
+# X840PW-OHT-L1, our open-hole tension coupon built the way the team builds its coupons (test `open-hole-coupon`): their material X840-Z60
 # from the library (Chen 2015, Tables 3.1 and 3.2), their layup [0/45/-45/45/0]s of 0.1 mm plies, the whole tab coupled to a
 # reference point at each end, their names. This twin writes the same grips as direct constraints on the tab nodes for CalculiX. Geometry in the proportions of ASTM D5766 (36 mm wide, 6 mm hole, d/w = 1/6;
 # 300 mm long with 50 mm tabs), as our earlier IM7/8552 coupon, on the Gmsh transfinite O-grid around the hole. Bottom point
 # encastre, top point held in 1, 3, 4, 5, 6 and pulled 1 mm in 2. The team has not built this coupon yet; when they do, mesh
 # it as they mesh theirs. Units mm-MPa.
-title = "Open-hole tension coupon, X840-Z60 [0/45/-45/45/0]s, 6 mm hole in 36 mm, nodal grips on 50 mm tabs, 1 mm pull (CalculiX twin of the team's build)"
+title = "X840PW-OHT-L1, open-hole tension: X840-Z60 plain weave [0/45/-45/45/0]s, 6 mm hole in 36 mm, nodal grips on 50 mm tabs, 1 mm pull (CalculiX twin of the team's build)"
 kind = "open_hole_tension"
 units = "mm-MPa"
+
+# the identity card (ADR-0038): X840-Z60 plain-weave fabric, open-hole tension, layup L1 = [0/45/-45/45/0]s
+[coupon]
+designation = "X840PW-OHT-L1"
+standard = "none"
+size_from = "our design, in the proportions of an ASTM D5766 open-hole tension specimen (36 mm wide, 6 mm hole, 300 mm long, 50 mm tabs)"
+team_model = "not built yet"
+test_data = "none yet: Chen 2015 tested no open-hole coupons, and its lamina values are the manufacturer's (printed p. 79)"
 
 [geometry]
 length = 300.0

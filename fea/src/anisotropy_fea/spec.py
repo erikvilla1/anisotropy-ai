@@ -1,6 +1,6 @@
 """Coupon model specifications: everything a finite element model is made from, stated in one TOML file (ADR-0030).
 
-A spec names the coupon kind, its dimensions, the mesh controls, the layup, the material (from the engine's
+A spec names the coupon (its identity card, ADR-0038) and kind, its dimensions, the mesh controls, the layup, the material (from the engine's
 cited library or explicit constants, with the out-of-plane constants every deck needs), the grips, the loading,
 probe points and the output requests. Numbers are written in the spec's `units` and converted to SI once at
 load (ADR-0002). Every key is required unless a default is stated here, and every invalid combination is
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, PositiveFloat, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, ValidationError
 
 from anisotropy_engine.failure import CRITERIA
 from anisotropy_engine.lamina import Lamina, Strengths
@@ -156,6 +156,31 @@ class Names(Record):
 
 DEFAULT_NAMES = {"part": "Coupon", "instance": "Coupon-1", "layup": "Layup-1", "section_set": "All"}
 
+TEST_CODES = {  # per kind: the test code of a coupon designation and the test's name, in the style of NCAMP's test names (ADR-0038)
+    "unnotched_tension": ("UNT", "unnotched tension"),
+    "compression": ("UNC", "unnotched compression"),
+    "open_hole_tension": ("OHT", "open-hole tension"),
+    "shear_pm45": ("IPS", "in-plane shear"),
+    "three_point_bending": ("3PB", "three-point bending"),
+    "four_point_bending": ("4PB", "four-point bending"),
+}
+DESIGNATION = re.compile(r"^(?P<material>[A-Z][A-Z0-9]*)-(?P<test>[A-Z0-9]+)-(?P<layup>L[1-9][0-9]*)$")
+
+
+class Coupon(Record):
+    """The coupon's identity card (ADR-0038): its name, and what it is measured against.
+
+    `designation` is <material code>-<test code>-<layup code>, for example X840PW-UNT-L1: the material code names one library
+    record, the test code follows from `kind` (TEST_CODES), and the layup code names one stacking sequence. The spec's title
+    starts with the designation and the test's name. Material, layup and size are read from the rest of the spec.
+    """
+
+    designation: str
+    standard: str = Field(min_length=1)  # the test standard the specimen follows, or "none"
+    size_from: str = Field(min_length=1)  # where the dimensions come from
+    team_model: str = Field(min_length=1)  # the team's own model of this coupon, or "not built yet"
+    test_data: str = Field(min_length=1)  # measured results to benchmark against, or "none" and why
+
 
 class OutputRequests(Record):
     fpf_criteria: list[str]
@@ -165,6 +190,7 @@ class OutputRequests(Record):
 
 class CouponSpec(Record):
     title: str
+    coupon: Coupon | None = None  # the identity card; every model under fea/models/ has one (ADR-0038)
     kind: Kind
     units: str  # the unit system of this file and of every deck written from it
     geometry: Geometry
@@ -333,6 +359,15 @@ def validate_spec(spec: CouponSpec) -> None:
             value = getattr(spec.names, field)
             need(bool(ABAQUS_NAME.match(value)), f"names.{field} = {value!r}: a name starts with a letter and holds only letters, digits, - and _ (at most 80)")
         need(spec.names.part != spec.names.instance, "names.part and names.instance must differ")
+    # the coupon's identity card
+    if spec.coupon is not None:
+        designation = spec.coupon.designation
+        code, name = TEST_CODES[kind]
+        match = DESIGNATION.match(designation)
+        need(match is not None, f"coupon.designation = {designation!r}: write <material code>-<test code>-<layup code> in capitals, "
+                                f"for example X840PW-{code}-L1")
+        need(match.group("test") == code, f"coupon.designation = {designation!r}: kind {kind} has the test code {code}, not {match.group('test')}")
+        need(spec.title.startswith(f"{designation}, {name}: "), f"title must start with the coupon's name and test: \"{designation}, {name}: ...\"")
 
 
 def full_angles(spec: CouponSpec) -> list[float]:
@@ -488,6 +523,45 @@ def spec_ply_thickness(spec: CouponSpec) -> float:
     if lib.ply_thickness_m is None:
         raise SpecError(f"layup.ply_thickness = \"library\": dataset {lib.dataset_id!r} has no ply thickness ({'; '.join(lib.not_provided) or 'not provided'})")
     return lib.ply_thickness_m
+
+
+def layup_text(spec: CouponSpec) -> str:
+    """The stacking sequence as written on a coupon, for example [0/45/-45/45/0]s."""
+    return "[" + "/".join(f"{angle:g}" for angle in spec.layup.angles) + "]" + ("s" if spec.layup.symmetric else "")
+
+
+def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
+    """The identity card as (label, value) rows, lengths in the spec's units; empty when the spec has no [coupon] table."""
+    c = spec.coupon
+    if c is None:
+        return []
+    unit, metres = spec.units.split("-")[0], unit_factors(spec.units)["length"]
+    factor = metres if spec.si else 1.0  # the spec's lengths are in SI once `to_si` has run
+    length = lambda v: f"{v / factor:g} {unit}"  # noqa: E731
+    g = spec.geometry
+    plies = len(full_angles(spec))
+    thickness = spec_ply_thickness(spec) / (metres if spec.layup.ply_thickness == "library" else factor)  # a library thickness is always SI
+    mat = spec.material
+    material = (f"{library_material(mat.library, mat.dataset).name} (library record {mat.library}, dataset {mat.dataset})"
+                if mat.library is not None else "explicit constants in the spec")
+    size = f"{length(g.length)} long, {length(g.width)} wide"
+    if g.tab_length:
+        size += f", {length(g.tab_length)} tabs at each end"
+    if g.hole_diameter:
+        size += f", central hole of {length(g.hole_diameter)}"
+    if g.span:
+        size += f", span {length(g.span)}"
+    return [
+        ("Coupon", c.designation),
+        ("Test", TEST_CODES[spec.kind][1]),
+        ("Material", material),
+        ("Layup", f"{layup_text(spec)}, {plies} plies of {thickness:g} {unit}, {plies * thickness:g} {unit} thick"),
+        ("Size", size),
+        ("Size from", c.size_from),
+        ("Standard", c.standard),
+        ("Team's model", c.team_model),
+        ("Test data", c.test_data),
+    ]
 
 
 def spec_plies(spec: CouponSpec) -> list[Ply]:
