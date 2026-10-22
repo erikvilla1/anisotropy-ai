@@ -97,3 +97,5 @@ The founder read the backfilled `notes.md` files and decided that `prompt.md`, `
 - What remains holds runs only: tension 04, 11, 12 and 13, and compression and open-hole 02 and 03.
 
 The case pages' attempt logs are the record of every try and are unchanged, apart from their introduction.
+
+The founder also dropped the session transcripts, finding no value in them. `.local/sessions/` and the skill's end-of-session step are removed.

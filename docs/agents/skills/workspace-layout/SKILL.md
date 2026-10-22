@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
-description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Finite element files sit in one folder per test (team files as received, one folder per attempt with its runs, the comparison), with the same test name as the committed fea/models/<test>/ whose README is the case page; the zips for the team sit in one share folder; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, homework file or input file, when a new test or a new homework arrives, before every new attempt at a problem, and at the end of a session.
-version: 0.4.1
+description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Finite element files sit in one folder per test (team files as received, one folder per attempt with its runs, the comparison), with the same test name as the committed fea/models/<test>/ whose README is the case page; the zips for the team sit in one share folder; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, homework file or input file, when a new test or a new homework arrives, and before every new attempt at a problem.
+version: 0.4.2
 ---
 
 # Workspace layout
@@ -26,7 +26,6 @@ Every private file lives under `.local/`, in a folder named for its purpose; the
   questions/    the founder's own engine problems
   notes/        one-pager, purge script and support request, project-docs/
   backup/       git bundles from the 2026-10-10 history purge; never delete without the founder
-  sessions/     one exported Claude Code transcript per session: <date>-<topic>.md (ADR-0039)
   projects/     customer or research problems, one folder per case with a case-page README (none yet)
   INDEX.md      every case in the four categories, written by fea/tools/case_pages.py --local
 ```
@@ -84,10 +83,6 @@ Committed counterparts: `fea/models/<test>/` (specs, `decks/`, `records/`, READM
 1. Its record goes to `fea/models/<test>/records/` (`record_from_dat.py`, with `--notes`), and the case line's accepted attempt becomes its number. The committed model folder is the final result; nothing is copied to a `final/` folder.
 2. Set the case line's status: verified when it agrees with a reference solver, validated when it agrees with test data.
 3. Run `fea/tools/case_pages.py --local` and rebuild the documents that quote the record.
-
-## Procedure: the end of a session
-
-Remind the founder to run `/export` and save it as `.local/sessions/<date>-<topic>.md`.
 
 ## Procedure: a new homework arrives
 
