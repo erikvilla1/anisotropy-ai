@@ -93,6 +93,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0036](decisions/ADR-0036-one-folder-per-fea-test.md) | One folder per finite element test: `fea/models/<test>/` and `fea/checks/` in the repository, `.local/fea/<test>/` locally; supersedes the FEA layout of 0032 (proposed) |
 | [0037](decisions/ADR-0037-every-private-file-under-local-by-purpose.md) | Every private file lives under `.local/`, in a folder named for its purpose; `References/` and `output/` folded in (proposed) |
 | [0038](decisions/ADR-0038-coupon-identity-card-and-designation.md) | Every coupon model carries an identity card and a name of the form material-test-layup, such as X840PW-UNT-L1 (proposed) |
+| [0039](decisions/ADR-0039-case-pages-attempt-history-and-one-index.md) | Case pages, attempt history and one index, inside the existing layout; result tables and indexes generated from the records (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
