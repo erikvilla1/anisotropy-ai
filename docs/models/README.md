@@ -11,7 +11,7 @@ uv run --project fea python docs/models/coupon.py X840PW-UNT-L1        # one cou
 uv run --project fea python docs/models/coupon.py --all                 # every coupon under fea/models/
 ```
 
-The document goes to the coupon's `.local/fea/<coupon>/documents/<coupon>.pdf`, with its LaTeX in `documents/latex/<coupon>/` (ADR-0040). One dated zip goes beside it, `<date>_<coupon>.zip`. The zip holds the PDF, the Abaqus deck to import, the CalculiX deck, both specs and the material record. When the team built the coupon, it also holds their deck and our results in the layout of their field reports. It holds no CalculiX results, since the team runs our decks. A zip is replaced only when this project wrote it.
+The document is built straight into the coupon's `.local/fea/<coupon>/documents/` (ADR-0040): `<coupon>.tex` and `<coupon>.pdf` side by side, with the `figures/` they use. There is one copy of it, no build folder. One dated zip goes beside it, `<date>_<coupon>.zip`. The zip holds the PDF, the Abaqus deck to import, the CalculiX deck, both specs and the material record. When the team built the coupon, it also holds their deck and our results in the layout of their field reports. It holds no CalculiX results, since the team runs our decks. A zip is replaced only when this project wrote it.
 
 Options:
 - `--no-pdf` writes the LaTeX and the zip only;

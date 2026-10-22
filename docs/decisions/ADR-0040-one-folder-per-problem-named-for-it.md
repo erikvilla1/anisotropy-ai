@@ -31,7 +31,7 @@ Option 1, in three chunks.
 - **Chunk 1, the coupons:**
   - **Names.** `fea/models/<coupon>/` and `.local/fea/<coupon>/` carry the designation (X840PW-UNT-L1, X840PW-UNC-L1, X840PW-OHT-L1). So do their specs, decks and records. A test checks that each folder's name is its coupon's name.
   - **Local folders:** `from-team/<date>/` (the team's files as received), `our-runs/attempt-NN_<date>/run/` (ADR-0039), `comparison/` (manifest, local records, notes, figures) and `documents/`.
-  - **`documents/`** holds every document of the coupon, written by the three scripts: the PDFs on top, their LaTeX in `latex/<document>/`, and the dated zips. `team.py`'s manifest key `zip` becomes `documents`. `share.py` writes one `<date>_<coupon>-model.zip` per coupon.
+  - **`documents/`** holds every document of the coupon, written by the three scripts: now, by ADR-0041, one document built in place (`<coupon>.tex`, `<coupon>.pdf`, `figures/`) and one dated zip. `team.py`'s manifest key `zip` becomes `documents`. `share.py` writes one `<date>_<coupon>-model.zip` per coupon.
   - **Gone:** `.local/fea/share/` and the all-coupons `our-models.zip`.
   - **Paths.** `paths.py` names the four folders once (`TEAM_FILES`, `RUNS`, `COMPARISON`, `DOCUMENTS`) and gives `documents(coupon)`.
 - **Chunk 2, homework (done):**

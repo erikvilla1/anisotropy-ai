@@ -2,8 +2,8 @@
 # which stay local; no value of theirs is in this file. The case page's result table is generated from it (fea/tools/case_pages.py).
 coupon = "X840PW-UNT-L1"
 units = "mm-MPa"
-built = "2026-10-21"
-commit = "4c78c3e + local changes"
+built = "2026-10-22"
+commit = "f7390eb + local changes"
 
 [team]
 deck = "Tension-test.inp"

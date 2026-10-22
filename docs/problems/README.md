@@ -4,7 +4,7 @@ One typeset document per solved problem, separate from the engine manual ([ADR-0
 
 ## Homework: one document per set (ADR-0040)
 
-A homework set has one document, `docs/problems/homework.py <set>`, written to `.local/homework/<set>/documents/<set>.pdf` with its LaTeX in `documents/latex/<set>/`. The set is HW<n> (the cases `se142-hw<n>-*.toml`) or `course-reader`. It has the engine's theory once, as the physics chapter, then one chapter per problem: does the engine reproduce the key, the problem as the case states it, the solution step by step with its numbers, and every compared number. The set's reading and the case files follow. `--all` builds every set; `--no-theory` and `--no-pdf` as below.
+A homework set has one document, `docs/problems/homework.py <set>`, built straight into `.local/homework/<set>/documents/`: `<set>.tex` and `<set>.pdf` side by side, one copy. The set is HW<n> (the cases `se142-hw<n>-*.toml`) or `course-reader`. It has the engine's theory once, as the physics chapter, then one chapter per problem: does the engine reproduce the key, the problem as the case states it, the solution step by step with its numbers, and every compared number. The set's reading and the case files follow. `--all` builds every set; `--no-theory` and `--no-pdf` as below.
 
 ```sh
 uv run --project fea python docs/problems/homework.py HW3

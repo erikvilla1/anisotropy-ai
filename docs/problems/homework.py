@@ -8,7 +8,7 @@ From the repository root:
     options: --root <folder> (the folder holding one folder per set; default .local/homework), --no-pdf, --no-theory
 
 A set is HW<n>, whose problems are the cases `engine/validation/cases/se142-hw<n>-*.toml`, or course-reader
-(`course-reader-*.toml`). The document goes to <root>/<set>/documents/<set>.pdf, its LaTeX to documents/latex/<set>/. The
+(`course-reader-*.toml`). The document goes to <root>/<set>/documents/: <set>.tex and <set>.pdf side by side. The
 cases carry numbers and a source reference only, never the problem text (AGENTS.md); the reading of the set is the note
 under docs/problems/readings/ that the per-problem documents use. Every number of the engine is computed while the document
 is built; the key's numbers come from the case files.
@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import re
-import shutil
 import subprocess
 import sys
 from datetime import date
@@ -118,7 +117,7 @@ def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
     if not cases:
         raise SystemExit(f"no committed case for {set_name}; the sets are {all_sets()}")
     documents = root / set_name / "documents"
-    out_dir = documents / "latex" / set_name
+    out_dir = documents  # built where it is looked for: one .tex and one .pdf (no copy)
     out_dir.mkdir(parents=True, exist_ok=True)
     chapters, rows = [], []
     for k, case_path in enumerate(cases, start=1):
@@ -158,7 +157,6 @@ def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
     compiler = manual.tectonic()
     if pdf and compiler is not None:
         subprocess.run([compiler, "--outdir", str(out_dir), str(tex)], check=True)
-        shutil.copy2(out_dir / f"{set_name}.pdf", documents / f"{set_name}.pdf")
         print(f"{set_name}: document written to {documents / f'{set_name}.pdf'}")
         return documents / f"{set_name}.pdf"
     if pdf:

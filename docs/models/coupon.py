@@ -7,7 +7,7 @@ From the repository root:
     uv run --project fea python docs/models/coupon.py --all                 # every coupon under fea/models/
     options: --root <folder> (the folder holding one folder per coupon; default .local/fea), --no-pdf, --no-theory
 
-The document is written to <root>/<coupon>/documents/<coupon>.pdf with its LaTeX in documents/latex/<coupon>/, and one zip
+The document is written to <root>/<coupon>/documents/: <coupon>.tex and <coupon>.pdf side by side with the figures/ they use, and one zip
 beside it, <today>_<coupon>.zip, holds the PDF, the Abaqus deck to import, the CalculiX deck, the specs and the material
 record. When <root>/<coupon>/comparison/team-comparison.toml exists, the team's Abaqus model is compared item by item and
 side by side (docs/models/team.py): those sections join the document, their files join the zip, and the comparison's
@@ -425,7 +425,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     committed = paths.deck_path(src.spec, "abaqus")
     if committed.is_file() and committed.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
         raise SystemExit(f"{documents.rel(committed)} is not what the generator writes from {src.spec.name} today; run fea/tools/regenerate_decks.py first")
-    deck_file = committed if committed.is_file() else src.documents / "latex" / src.coupon / f"{src.spec.stem}-abaqus.inp"
+    deck_file = committed if committed.is_file() else src.documents / f"{src.spec.stem}-abaqus.inp"
     deck = to_si(parse_deck(text, source_path=deck_file.name), units)
     solution = solve_membrane(deck)
     record = load_record(src.record)
@@ -436,7 +436,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     if c is not None and c.spec_path != src.spec.resolve():
         raise SystemExit(f"{documents.rel(src.manifest)}: ours.spec must be the coupon's spec {documents.rel(src.spec)}")
 
-    out_dir = src.documents / "latex" / src.coupon
+    out_dir = src.documents  # the document is built where it is looked for: one .tex, one .pdf, figures/ (no copy)
     figures = out_dir / "figures"
     figures.mkdir(parents=True, exist_ok=True)
     if not committed.is_file():
@@ -488,8 +488,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
             print("Tectonic not found; no PDF.")
         else:
             subprocess.run([compiler, "--outdir", str(out_dir), str(tex)], check=True)
-            result = src.documents / f"{src.coupon}.pdf"
-            shutil.copy2(out_dir / f"{src.coupon}.pdf", result)
+            result = out_dir / f"{src.coupon}.pdf"
             print(f"{src.coupon}: document written to {result}")
     archive = team.write_zip(archive, src.coupon, lambda folder: fill(folder, src, spec, text, result, card, c))
     print(f"{src.coupon}: zip written to {archive}")
