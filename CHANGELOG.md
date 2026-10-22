@@ -11,6 +11,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Fixed
 
+- The Abaqus/CAE partition step of the rebuild guide gave only part y values, but a sketch on a face measures from the face centre. It now names the edge to pick, shows how to confirm the origin, and lists the start and end points to type for each line. A datum-plane route that uses the part's y values directly is also given.
 - The course handout "SE143AB Appendix F: Material Properties" was being served from the website's public assets and linked from exported analysis packets. It now stays in ignored local storage, is never served or linked, and the website's asset test expects a 404 for its former URL (ADR-0018).
 
 - Chat preview preserves signed, zero and decimal inputs for validation instead of converting negative values to positive values or retaining an earlier value. Explicit hole dimensions are not cleared by selecting D3039.

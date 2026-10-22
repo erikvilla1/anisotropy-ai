@@ -142,6 +142,9 @@ def test_the_generator_writes_a_document_for_the_committed_record(tmp_path):
     for label in ("sec:summary", "sec:model", "sec:rebuild", "sec:clt", "sec:theory", "sec:reference", "sec:method", "sec:comparison", "sec:reading"):
         assert rf"\label{{{label}}}" in tex
     assert tex.count(r"\evidence{INP}") > 20 and r"\evidence{MANUAL p.8}" in tex and r"\evidence{OPEN}" in tex  # the rebuild guide tags every value
+    # the partition lines y = 56 and 194 mm of the 25 by 250 mm coupon, typed in sketch coordinates centred on the face (12.5, 125)
+    assert r"\texttt{-12.5,-69} & \texttt{12.5,-69}" in tex and r"\texttt{-12.5,69} & \texttt{12.5,69}" in tex
+    assert "vertical and on the right" in tex and "Offset From Principal Plane" in tex
     assert "Ply table as entered (4 rows)" in tex and "Expanded stack (8 plies" in tex
     assert "59 of 59 compared values agree" in tex
     assert r"\filefrom" in tex and "unnotched-im7-8552-nodal.toml" in tex  # the spec is listed
