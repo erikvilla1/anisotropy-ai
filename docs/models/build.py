@@ -3,7 +3,7 @@ solver, every compared number with its error, and the reading (ADR-0031).
 
 From the repository root:
 
-    uv run --project fea python docs/models/build.py fea/models/X840PW-UNT-L1/records/X840PW-UNT-L1-calculix.toml
+    uv run --project fea python docs/models/build.py fea/checks/unnotched-im7-8552/records/unnotched-im7-8552-nodal-calculix.toml
     uv run --project fea python docs/models/build.py --all                 # every committed record
     uv run --project fea python docs/models/build.py .local/fea/X840PW-UNT-L1/comparison/tension-test-abaqus.toml
 
@@ -391,6 +391,22 @@ def model_section(record: dict, record_path: Path, deck, solution, units: str, f
     if comments:
         out.append(rf"The deck {code(rel(kernel_deck))} (SHA-256 {code(record['deck_kernel_sha256'][:16])}\ldots) opens with these header lines:")
         out.append(r"\begin{plainfile}" + "\n" + listing_text("\n".join(comments)) + "\n" + r"\end{plainfile}")
+    out.append(kv_table(deck_facts(deck, units)))
+    plot_deck_module.plot_solution(deck, solution, units, figures / "solution.png", title=f"The kernel's solution, units {units}")
+    out.append(heading(1, "The kernel's solution"))
+    mesh = solution.mesh
+    out.append(escape(f"{mesh.node_count} nodes, {mesh.element_count} elements, {len(mesh.sections)} section(s). The largest axial displacement is "
+                      f"{from_si(float(np.max(np.abs(solution.displacement[:, 1]))), 'length', units):.6g} {labels['length']}; the sum of all reactions is "
+                      f"[{from_si(solution.total_reaction[0], 'force', units):.3g}, {from_si(solution.total_reaction[1], 'force', units):.3g}] {labels['force']} "
+                      f"and the largest residual at a free degree of freedom {solution.free_residual:.3g} N, both roundoff when the model is in equilibrium."))
+    out.append(r"\begin{center}\includegraphics[width=\linewidth,height=0.6\textheight,keepaspectratio]{figures/solution.png}\end{center}")
+    out.append(r"{\small\color{muted}Mesh and deformed shape, the three membrane strains, the axial section force and the maximum-stress first-ply-failure map, all computed by the kernel while this document was built.}")
+    return "\n\n".join(out)
+
+
+def deck_facts(deck, units: str) -> list[tuple[str, str]]:
+    """What a parsed deck holds, as (label, value) rows: parts, sections, materials, couplings, boundaries, loads and steps."""
+    labels = UNIT_LABEL[units]
     facts: list[tuple[str, str]] = []
     for part in deck.parts.values():
         elements = f"{len(part.elements)} {part.elements.element_type}" if part.elements is not None else "no"
@@ -430,17 +446,7 @@ def model_section(record: dict, record_path: Path, deck, solution, units: str, f
         facts.append(("Skipped output requests", escape(", ".join(sorted({k.split(': ')[1] for k in deck.ignored_keywords})))))
     for note in deck.notes:
         facts.append(("Reader note", escape(note)))
-    out.append(kv_table(facts))
-    plot_deck_module.plot_solution(deck, solution, units, figures / "solution.png", title=f"The kernel's solution, units {units}")
-    out.append(heading(1, "The kernel's solution"))
-    mesh = solution.mesh
-    out.append(escape(f"{mesh.node_count} nodes, {mesh.element_count} elements, {len(mesh.sections)} section(s). The largest axial displacement is "
-                      f"{from_si(float(np.max(np.abs(solution.displacement[:, 1]))), 'length', units):.6g} {labels['length']}; the sum of all reactions is "
-                      f"[{from_si(solution.total_reaction[0], 'force', units):.3g}, {from_si(solution.total_reaction[1], 'force', units):.3g}] {labels['force']} "
-                      f"and the largest residual at a free degree of freedom {solution.free_residual:.3g} N, both roundoff when the model is in equilibrium."))
-    out.append(r"\begin{center}\includegraphics[width=\linewidth,height=0.6\textheight,keepaspectratio]{figures/solution.png}\end{center}")
-    out.append(r"{\small\color{muted}Mesh and deformed shape, the three membrane strains, the axial section force and the maximum-stress first-ply-failure map, all computed by the kernel while this document was built.}")
-    return "\n\n".join(out)
+    return facts
 
 
 def rebuild_section(record: dict, record_path: Path, deck, solution, units: str) -> str:
@@ -664,27 +670,13 @@ def appendix_record(record_path: Path) -> str:
 # --------------------------------------------------------------------------------------------- the document
 
 def output_dir(record_path: Path, requested: Path | None) -> Path:
-    """Where a record's document is built. A coupon's record, committed (fea/models/<coupon>/records/) or local
-    (.local/fea/<coupon>/comparison/), goes to that coupon's documents/latex/<record>/ (ADR-0040); any other local record to
-    report/<record>/ beside it; the rest to docs/models/build/<record>/."""
+    """Where a record's document is built: the requested folder, report/<record>/ beside a record under .local/, or
+    docs/models/build/<record>/. A coupon's own document, the one in its documents/ folder, is docs/models/coupon.py (ADR-0041)."""
     if requested is not None:
         return requested
-    resolved = record_path.resolve()
-    if fea_paths.MODELS in resolved.parents:
-        return fea_paths.documents(resolved.parent.parent.name) / "latex" / record_path.stem
-    if ".local" in resolved.parts and resolved.parent.name == fea_paths.COMPARISON:
-        return resolved.parent.parent / fea_paths.DOCUMENTS / "latex" / record_path.stem
-    if ".local" in resolved.parts:
+    if ".local" in record_path.resolve().parts:
         return record_path.parent / "report" / record_path.stem
     return HERE / "build" / record_path.stem
-
-
-def publish(pdf: Path) -> Path:
-    """A PDF built in documents/latex/<document>/ is also put on top of documents/, where it is looked for (ADR-0040)."""
-    if pdf.parent.parent.name == "latex":
-        shutil.copy2(pdf, pdf.parent.parent.parent / pdf.name)
-        return pdf.parent.parent.parent / pdf.name
-    return pdf
 
 
 def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, theory: bool) -> Path:
@@ -740,7 +732,7 @@ def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, the
         print("Tectonic not found; no PDF.")
         return tex
     subprocess.run([compiler, "--outdir", str(out_dir), str(tex)], check=True)
-    print("Document written to", publish(out_dir / f"{stem}.pdf"))
+    print("Document written to", out_dir / f"{stem}.pdf")
     return out_dir / f"{stem}.pdf"
 
 
@@ -755,7 +747,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.all == (args.record is not None):
         raise SystemExit("give a record or --all, not both and not neither")
-    records = fea_paths.all_records() if args.all else [args.record]
+    # a coupon's CalculiX record is a chapter of its coupon document (docs/models/coupon.py, ADR-0041); --all builds the checks' records
+    records = [r for r in fea_paths.all_records() if fea_paths.MODELS not in r.resolve().parents] if args.all else [args.record]
     for path in records:
         build(path, args.out if not args.all else None, pdf=not args.no_pdf, full_tables=args.full_tables, theory=not args.no_theory)
 

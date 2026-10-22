@@ -241,8 +241,10 @@ def listing(name: str, package: str = "anisotropy_engine") -> str:
             + rf"\begin{{enginecode}}[firstnumber={start}]" + "\n" + source + "\n" + r"\end{enginecode}")
 
 
-def theory(package: str = "anisotropy_engine") -> str:
-    """A package's theory document, with each function's source where its `<!-- code: ... -->` marker is."""
+def theory(package: str = "anisotropy_engine", only: tuple[str, ...] | None = None) -> str:
+    """A package's theory document, with each function's source where its `<!-- code: ... -->` marker is. With `only`, just
+    the numbered top-level sections named (for example ("1", "2")), each with its subsections; the code markers are still
+    checked over the whole file."""
     relative = PACKAGES[package][0]
     md = read(relative)
     named = {name for match in FUNCTION_REFERENCE.finditer(md) for name in re.findall(r"`([\w.]+)`", match.group(1))}
@@ -251,6 +253,14 @@ def theory(package: str = "anisotropy_engine") -> str:
         raise SystemExit(f"{relative}: every function it says computes or checks something needs a code marker, and "
                          f"every marker needs that sentence. Without a marker: {sorted(named - marked)}. "
                          f"Without a sentence: {sorted(marked - named)}.")
+    if only is not None:
+        kept, keep = [], False
+        for line in md.splitlines():
+            if line.startswith("## "):
+                keep = line[3:].split(".")[0].strip() in only
+            if keep:
+                kept.append(line)
+        md = "\n".join(kept)
     out = []
     for kind, payload in blocks(md):
         if kind == "heading":

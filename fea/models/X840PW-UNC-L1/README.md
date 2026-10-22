@@ -33,7 +33,8 @@ Every try, failed ones included, oldest first; this table is the record of each 
 
 ## Where to look
 
-- The reading of the CalculiX record: [records/X840PW-UNC-L1-calculix.md](records/X840PW-UNC-L1-calculix.md); its document: `uv run --project fea python docs/models/build.py fea/models/X840PW-UNC-L1/records/X840PW-UNC-L1-calculix.toml`.
+- **The coupon document**, written for engineers and investors: `.local/fea/X840PW-UNC-L1/documents/X840PW-UNC-L1.pdf` (the problem, the physics, building the part in our engine and in Abaqus/CAE, our results, verification), built by `uv run --project fea python docs/models/coupon.py X840PW-UNC-L1` from the repository root (ADR-0041). Its zip, `<date>_X840PW-UNC-L1.zip`, sits beside it.
+- The reading of the CalculiX record: [records/X840PW-UNC-L1-calculix.md](records/X840PW-UNC-L1-calculix.md).
 
 | File | What it is |
 | --- | --- |
@@ -55,4 +56,4 @@ uv run python tools/record_from_dat.py models/X840PW-UNC-L1/X840PW-UNC-L1-nodal.
     --version 2.22 --run-by "..." --machine "..." --notes "..." --tolerance 0.03 --floor 0.02 --element-probes centre --out models/X840PW-UNC-L1/records/X840PW-UNC-L1-calculix.toml
 ```
 
-From the repository root, the record's document: `uv run --project fea python docs/models/build.py fea/models/X840PW-UNC-L1/records/X840PW-UNC-L1-calculix.toml`.
+From the repository root, the coupon document: `uv run --project fea python docs/models/coupon.py X840PW-UNC-L1`.

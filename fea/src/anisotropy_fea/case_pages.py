@@ -5,7 +5,7 @@ case line, the problem, the result, the attempt log and where to look. Only the 
 and `<!-- end generated -->` is written here:
 
     result       in each case page: the CalculiX record against our kernel and, when the team built the coupon, the team
-                 summary (`records/<test>-team-summary.toml`, written by docs/models/team.py)
+                 summary (`records/<coupon>-team-summary.toml`, written by docs/models/coupon.py)
     tests        in models/README.md: one row per case page
     benchmarks   in checks/README.md: one row per check record and case, and the engine's validation cases
 
