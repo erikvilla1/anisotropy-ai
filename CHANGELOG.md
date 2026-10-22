@@ -19,6 +19,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
+- Homework sets carry no README per set: the founder found no value in them. A corrected input keeps `-fixed` in its name, the correction is stated in the set's reading note, and the set's document lists each problem with its engine case (workspace-layout skill 0.5.4).
 - A coupon's and a homework set's document is built straight into its `documents/` folder: `<name>.tex` and `<name>.pdf` side by side (with `figures/` for a coupon), one copy, no `latex/` build folder (ADR-0041).
 - One folder per homework set, with one document (ADR-0040, chunk 2).
   - **Folders.** `.local/homework/<set>/{provided, ours, documents}` replaces `assignments/<HW>/` beside `code/<HW>/`.
