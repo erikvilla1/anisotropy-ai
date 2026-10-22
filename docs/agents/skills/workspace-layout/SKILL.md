@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
-description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Each problem has one folder named for it with everything about it inside: an FEA coupon is .local/fea/<coupon name>/ (from-team, our-runs, comparison, documents), the same name as the committed fea/models/<coupon name>/ whose README is the case page; every PDF, its LaTeX and the zips to send sit in that coupon's documents/; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, document, homework file or input file, when a new coupon or a new homework arrives, and before every new attempt at a problem.
-version: 0.5.0
+description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Each problem has one folder named for it with everything about it inside: an FEA coupon is .local/fea/<coupon name>/ (from-team, our-runs, comparison, documents), the same name as the committed fea/models/<coupon name>/ whose README is the case page; the one coupon document, its LaTeX and its zip sit in that coupon's documents/; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, document, homework file or input file, when a new coupon or a new homework arrives, and before every new attempt at a problem.
+version: 0.5.1
 ---
 
 # Workspace layout
@@ -45,8 +45,8 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
     team-in-calculix/                the team's deck converted by convert_to_calculix.py and run (the model is still theirs)
   comparison/                        what we compare with: team-comparison.toml + .md, records against the team's numbers
                                      (+ .md readings), notes/, figures/
-  documents/                         every document of this coupon: the PDFs on top, their LaTeX in latex/<document>/, and the
-                                     dated zips to send: <date>_<coupon>-comparison.zip (team.py), <date>_<coupon>-model.zip (share.py)
+  documents/                         the coupon document <coupon>.pdf (docs/models/coupon.py, ADR-0041), its LaTeX in
+                                     latex/<coupon>/, and one dated zip to send: <date>_<coupon>.zip
 .local/fea/checks/<test>/runs/       our runs of the committed checks (fea/checks/<test>/); fixture plots and smoke runs go in .local/fea/checks/
 
 .local/homework/assignments/<HW>/    what the course provided, as received (PDFs, *_Input.xlsx)
@@ -61,7 +61,7 @@ Committed counterparts: `fea/models/<coupon>/` (specs, `decks/`, `records/`, REA
 2. `from-team/<date>/` is what we compare against, exactly as received. A new version from the team goes in a new dated folder; a comparison names the version it read.
 3. Every try at a problem is an attempt and a row of the case page's attempt log. When it runs something, start its folder with `fea/tools/new_attempt.py <coupon>` and pass the `--out` paths it prints (`our-runs/attempt-NN_<date>/run/<kind>`). Never write into an earlier attempt. The engine's code is not copied. A `.frd` is kept only in the latest run of each kind; the tool deletes the earlier ones and names them. No `prompt.md` or `notes.md`: the founder found no value in them (2026-10-21); the attempt log row is the record.
 4. `comparison/` holds what we compare with: the manifest, the records against the team's numbers, notes and figures. Record paths are relative to the record (`../from-team/<date>/...`).
-5. `documents/` holds every document of the coupon, written by the scripts: `docs/models/build.py` (the CalculiX record and any local record), `docs/models/team.py` (the comparison for the team) and `docs/models/share.py` (the model zip). The PDFs sit on top, their LaTeX in `latex/<document>/`, and the zips are dated. Nothing is unzipped there and no CalculiX results go in a zip. A script replaces only a zip this project wrote. Delete older dated zips by hand once the newer one has been sent.
+5. `documents/` holds the one coupon document and its zip, written by `docs/models/coupon.py <coupon>` (ADR-0041): `<coupon>.pdf`, its LaTeX in `latex/<coupon>/`, and `<date>_<coupon>.zip`. Nothing is unzipped there and no CalculiX results go in the zip. The script replaces only a zip this project wrote. Delete an older dated zip by hand once the newer one has been sent.
 6. Homework: the same folder name on both sides. Provided files stay unchanged in `assignments/`; a corrected copy goes to `code/` with `-fixed` in its name and the correction stated in the README.
 7. Never commit anything under `.local/`. A model moves to `fea/models/<coupon>/` only when its material is a library record that may be cited (ADR-0030 amendment 4). The team's own files never move.
 
@@ -70,7 +70,7 @@ Committed counterparts: `fea/models/<coupon>/` (specs, `decks/`, `records/`, REA
 1. Name the coupon (ADR-0038: `<material>-<test>-<layup>`). Create `.local/fea/<coupon>/from-team/<date>/` and move the files there as received.
 2. Write `from-team/<date>/README.md`: who made the files, when, with which software version, and what each file is. Name the material and whether its rights class is known.
 3. Build our model in `fea/models/<coupon>/` (see `fea/models/README.md`), with its identity card (`[coupon]`, ADR-0038): the team's own model of the same coupon has the same name. Seed the spec as the team seeded theirs (`mesh.y_partitions`, `mesh.y_seeds`) so every node lands on theirs, write the decks with `fea/tools/regenerate_decks.py`, run CalculiX into an attempt's `run/calculix/` and write the record.
-4. Write `comparison/team-comparison.toml` (with `documents = "../documents"`) and its reading `team-comparison.md`, run `docs/models/team.py` on it, and hand over `documents/<date>_<coupon>-comparison.zip`. Commit the `records/<coupon>-team-summary.toml` it writes, add a row to the case page's attempt log (ADR-0039) and run `fea/tools/case_pages.py`. Run `docs/models/share.py <coupon>` for the model zip.
+4. Write `comparison/team-comparison.toml` and its reading `team-comparison.md`, run `docs/models/coupon.py <coupon>`, and hand over `documents/<date>_<coupon>.zip`. Commit the `records/<coupon>-team-summary.toml` it writes, add a row to the case page's attempt log (ADR-0039) and run `fea/tools/case_pages.py`.
 5. Add the test's row to `.local/fea/README.md` and `fea/models/README.md`.
 
 ## Procedure: every attempt (ADR-0039)

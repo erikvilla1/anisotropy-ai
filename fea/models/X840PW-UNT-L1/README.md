@@ -48,8 +48,9 @@ Every try, failed ones included, oldest first; this table is the record of each 
 
 ## Where to look
 
-- The reading of the CalculiX record: [records/X840PW-UNT-L1-calculix.md](records/X840PW-UNT-L1-calculix.md); its document: `uv run --project fea python docs/models/build.py fea/models/X840PW-UNT-L1/records/X840PW-UNT-L1-calculix.toml`.
-- The team comparison in figures: [records/X840PW-UNT-L1-team-summary.toml](records/X840PW-UNT-L1-team-summary.toml). The full comparison, with the team's numbers, is built locally from `.local/fea/X840PW-UNT-L1/comparison/team-comparison.toml` by `docs/models/team.py`.
+- **The coupon document**, written for engineers and investors: `.local/fea/X840PW-UNT-L1/documents/X840PW-UNT-L1.pdf` (the problem, the physics, building the part in our engine and in Abaqus/CAE, our results, verification), built by `uv run --project fea python docs/models/coupon.py X840PW-UNT-L1` from the repository root (ADR-0041). Its zip, `<date>_X840PW-UNT-L1.zip`, sits beside it.
+- The reading of the CalculiX record: [records/X840PW-UNT-L1-calculix.md](records/X840PW-UNT-L1-calculix.md).
+- The team comparison in figures: [records/X840PW-UNT-L1-team-summary.toml](records/X840PW-UNT-L1-team-summary.toml). The full comparison, with the team's numbers, is a chapter of the coupon document, read from `.local/fea/X840PW-UNT-L1/comparison/team-comparison.toml`.
 
 | File | What it is |
 | --- | --- |
@@ -71,4 +72,4 @@ uv run python tools/record_from_dat.py models/X840PW-UNT-L1/X840PW-UNT-L1-nodal.
     --version 2.22 --run-by "..." --machine "..." --notes "..." --tolerance 0.03 --floor 0.02 --element-probes centre --out models/X840PW-UNT-L1/records/X840PW-UNT-L1-calculix.toml
 ```
 
-From the repository root, the record's document: `uv run --project fea python docs/models/build.py fea/models/X840PW-UNT-L1/records/X840PW-UNT-L1-calculix.toml`.
+From the repository root, the coupon document: `uv run --project fea python docs/models/coupon.py X840PW-UNT-L1`.

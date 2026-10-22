@@ -1,22 +1,13 @@
-"""The short comparison handed back to the team, and one zip of files they can open (ADR-0035, ADR-0036).
+"""The team comparison: the team's Abaqus model against ours, item by item and side by side (ADR-0035, ADR-0041).
 
-The document says, in this order: here is the model the team built in Abaqus, here is ours, item by item they are the same
-model; our model takes its material from our library, and this is where the values come from; here are the results side
-by side (stress at named points, agreement over the coupon, maps, reaction, first-ply failure). The zip holds the PDF, the
-team's deck as received, our Abaqus and CalculiX decks, our results in the layout of the team's field reports, an
-element-by-element table and the material record. It holds no CalculiX results: the team runs our decks themselves.
-
-From the repository root:
-
-    uv run --project fea python docs/models/team.py .local/fea/X840PW-UNT-L1/comparison/team-comparison.toml
-
-The manifest (format in `Manifest` below; every key required, paths relative to the manifest) names the team's deck and
-field reports, our spec, the CalculiX record of our twin, the bands and points to compare and the zip. Every number
-is computed while the document is built: the equivalence from both parsed decks (`anisotropy_fea.equivalence`), our results
-from the kernel on our generated deck, the pairing from the team's reports (`anisotropy_fea.side_by_side`), the hand check
-from the engine. The reading beside the manifest (`<manifest stem>.md`) is written by a person; without it the section says so.
-
-The document and the folder go under `.local/`: they carry the team's results, which are theirs to publish (ADR-0035).
+Not a document of its own: its sections are chapters of the coupon document (docs/models/coupon.py) and its files go in the
+coupon's zip. The manifest `.local/fea/<coupon>/comparison/team-comparison.toml` (format in `Manifest` below; every key
+required, paths relative to the manifest) names the team's deck and field reports, our spec, the CalculiX record of our
+twin, and the bands and points to compare. Every number is computed while the document is built: the equivalence from both
+parsed decks (`anisotropy_fea.equivalence`), our results from the kernel on our generated deck, the pairing from the team's
+reports (`anisotropy_fea.side_by_side`), the hand check from the engine. The reading beside the manifest
+(`<manifest stem>.md`) is written by a person; without it the section says so. Everything stays under `.local/`: it carries
+the team's results, which are theirs to publish (ADR-0035).
 """
 
 from __future__ import annotations
@@ -108,14 +99,13 @@ class OurSide(Record):
 
 
 class Manifest(Record):
-    name: str  # file stem of the document and the folder inside the zip, lower case with hyphens; the title is the coupon's name in our spec
+    name: str  # the coupon's name, as its folder; the title comes from the coupon card of our spec
     units: str  # the unit system of the team's deck and reports, and of the document
     node_tolerance: PositiveFloat  # length: a node of ours counts as at the team's position within this
     agreement: PositiveFloat  # fraction of a quantity's largest magnitude in a band within which two values "agree"
     edge_band: PositiveFloat  # length beside each tab line left out of the inner band (the tab-line corners are singular)
     map_layer: int  # the layer the maps show, 1 at the bottom
     locations: dict[str, tuple[float, float]]  # named points (x, y) at which the stress table compares
-    documents: str  # the folder for the PDF, its LaTeX (latex/<name>-comparison/) and the zip <today>_<name>-comparison.zip; normally ../documents (ADR-0040)
     team: TeamSide
     ours: OurSide
 
@@ -209,8 +199,7 @@ class Comparison:
         self.spec_path = resolve(base, m.ours.spec, "our spec")
         self.calculix_record_path = resolve(base, m.ours.calculix_record, "CalculiX record")
         self.reading_path = self.manifest_path.with_suffix(".md")
-        self.documents = (base / m.documents).resolve()
-        self.zip = dated(self.documents / f"{m.name}-comparison.zip")  # dated (ADR-0039), in the coupon's documents/ (ADR-0040)
+        self.zip: Path | None = None  # set by docs/models/coupon.py to the coupon's zip before the files section is written
 
         # the two models
         self.spec = load_spec(self.spec_path)
@@ -596,7 +585,7 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
     stem = c.spec_path.stem
     return [
         ("README.txt", "this list, as plain text"),
-        (f"{c.manifest.name}-comparison.pdf", "this document"),
+        (f"{c.manifest.name}.pdf", "this document"),
         (f"1-team-model/{c.team_deck_path.name}", "the team's deck, as we received it"),
         (f"2-our-model/abaqus/{stem}-abaqus.inp", "our deck of the same coupon, for Abaqus. Abaqus/CAE: File, Import, Model, choose the .inp file "
                                                   "(this click path is not checked by us); or run it as a job from the command line"),
@@ -666,10 +655,6 @@ def write_zip(archive: Path, folder: str, fill) -> Path:
     return archive
 
 
-def write_share(c: Comparison, pdf: Path | None) -> Path:
-    return write_zip(c.zip, c.manifest.name, lambda share: fill_share(c, pdf, share))
-
-
 def fill_share(c: Comparison, pdf: Path | None, share: Path) -> None:
     for sub in ("1-team-model", "2-our-model/abaqus", "2-our-model/calculix", "2-our-model/spec", "3-material", "4-results"):
         (share / sub).mkdir(parents=True, exist_ok=True)
@@ -679,7 +664,7 @@ def fill_share(c: Comparison, pdf: Path | None, share: Path) -> None:
     shutil.copy2(c.calculix_deck_path, share / "2-our-model/calculix" / c.calculix_deck_path.name)
     shutil.copy2(c.spec_path, share / "2-our-model/spec" / c.spec_path.name)
     if pdf is not None and pdf.exists():
-        shutil.copy2(pdf, share / f"{c.manifest.name}-comparison.pdf")
+        shutil.copy2(pdf, share / f"{c.manifest.name}.pdf")
 
     write_material_csv(share / "3-material" / f"{c.library.material_id}.csv", c.library, c.material, c.units)
 
@@ -716,7 +701,7 @@ def fill_share(c: Comparison, pdf: Path | None, share: Path) -> None:
 
     lines = [README_MARK, f"{c.headline}: the team's Abaqus model and ours", "",
              *[f"{label + ':':14} {value}" for label, value in c.card.items()], "",
-             f"Built {date.today().isoformat()} by docs/models/team.py (anisotropy-fea {fea_version}, commit {git_commit()}).",
+             f"Built {date.today().isoformat()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {git_commit()}).",
              "Start with the PDF. Numbers in the files are in " + f"{c.length_unit}, {c.stress_unit} and {c.force_unit}.", ""]
     width = max(len(path) for path, _ in share_contents(c))
     lines += [f"{path.ljust(width)}  {what}" for path, what in share_contents(c)]
@@ -741,7 +726,7 @@ def write_team_summary(c: Comparison) -> Path:
     path = fea_paths.team_summary(c.spec_path.parent)
     judged = [i for i in c.equivalence.items if i.same is not None]
     lines = [
-        "# The team comparison in figures, written by docs/models/team.py (ADR-0039). Derived from the team's deck and field reports,",
+        "# The team comparison in figures, written by docs/models/coupon.py (ADR-0039, ADR-0041). Derived from the team's deck and field reports,",
         "# which stay local; no value of theirs is in this file. The case page's result table is generated from it (fea/tools/case_pages.py).",
         f"coupon = {toml_value(c.card['Coupon'])}",
         f"units = {toml_value(c.units)}",
@@ -773,64 +758,11 @@ def write_team_summary(c: Comparison) -> Path:
     return path
 
 
-# --------------------------------------------------------------------------------------------- build
-
-def build(manifest_path: Path, pdf: bool) -> tuple[Path, Path]:
-    c = Comparison(manifest_path)
-    out_dir = c.documents / "latex" / f"{c.manifest.name}-comparison"
-    figures = out_dir / "figures"
-    figures.mkdir(parents=True, exist_ok=True)
-    stem = f"{c.manifest.name}-comparison"
-    parts = [
-        r"\documentclass[11pt,letterpaper]{article}", PREAMBLE, r"\usepackage{float}",
-        rf"\hypersetup{{pdftitle={{{escape(c.headline)}: the team's model and ours}}}}",
-        r"\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0pt}",
-        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy AI \textperiodcentered{{}} The team's model and ours \textperiodcentered{{}} {escape(c.headline)}}}",
-        r"\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}",
-        r"\fancyfoot[C]{\sffamily\scriptsize\color{muted}Internal. A solver-to-solver comparison is verification, not validation against a coupon test.}",
-        r"\begin{document}",
-        title_block(c),
-        r"\section{The team's model and ours}\label{sec:models}", models_section(c, figures),
-        r"\section{The material, from our library}\label{sec:material}", material_section(c),
-        r"\section{The results, side by side}\label{sec:results}", results_section(c, figures),
-        r"\section{Reading}\label{sec:reading}", reading_section(c),
-        r"\section{What is not compared yet}\label{sec:open}", open_section(c),
-        r"\section{The files}\label{sec:files}", files_section(c),
-        r"\end{document}",
-    ]
-    tex = out_dir / f"{stem}.tex"
-    tex.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
-    if manual.UNMAPPED:
-        print("Characters without a LaTeX mapping (check how they render):", " ".join(sorted(manual.UNMAPPED)))
-    judged = [i for i in c.equivalence.items if i.same is not None]
-    print(f"equivalence: {sum(bool(i.same) for i in judged)} of {len(judged)} items the same; largest node offset "
-          f"{from_si(c.equivalence.largest_node_offset, 'length', c.units):.3g} {c.length_unit}; {len(c.equivalence.element_map)} elements matched")
-    for band in c.bands:
-        print(f"{band}: " + "; ".join(f"{q} {c.agreements[(q, band)].within}/{c.agreements[(q, band)].count} agree, largest difference "
-                                      f"{100 * c.agreements[(q, band)].worst_fraction:.3f} %" for q in c.quantities))
-    print(f"LaTeX written to {tex}")
-    result = None
-    if pdf:
-        compiler = manual.tectonic()
-        if compiler is None:
-            print("Tectonic not found; no PDF.")
-        else:
-            subprocess.run([compiler, "--outdir", str(out_dir), str(tex)], check=True)
-            result = out_dir / f"{stem}.pdf"
-            shutil.copy2(result, c.documents / result.name)  # on top of documents/, where it is looked for (ADR-0040)
-            print("Document written to", c.documents / result.name)
-    archive = write_share(c, result)
-    print(f"Zip written to {archive}")
-    print(f"Figures written to {write_team_summary(c)}")
-    return tex if result is None else result, archive
-
+# --------------------------------------------------------------------------------------------- no document of its own
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("manifest", type=Path, help="a team comparison manifest (TOML)")
-    parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX and the zip only")
-    args = parser.parse_args()
-    build(args.manifest, pdf=not args.no_pdf)
+    raise SystemExit("The team comparison is a set of chapters of the coupon document (ADR-0041): "
+                     "uv run --project fea python docs/models/coupon.py <coupon>")
 
 
 if __name__ == "__main__":

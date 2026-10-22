@@ -46,6 +46,7 @@ class Helpers:
     kv_table: Callable[..., str]
     long_table: Callable[..., str]
     listing_text: Callable[[str], str]
+    tools: tuple[str, ...] = ("Abaqus/CAE", "PrePoMax 2.6")  # the GUIs whose steps are written; the coupon document asks for Abaqus/CAE only
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,8 @@ def keyword_box(h: Helpers, title: str, text: str) -> str:
 
 
 def gui_steps(h: Helpers, tool: str, steps: list[str], tag_name: str) -> str:
+    if tool not in h.tools:
+        return ""
     return (rf"\textbf{{{h.escape(tool)}}} {tag(tag_name)}" + "\n" + r"\begin{enumerate}" + "\n"
             + "\n".join(r"\item " + step for step in steps) + "\n" + r"\end{enumerate}")
 
@@ -120,8 +123,8 @@ def render(ctx: Context, h: Helpers) -> str:
     abaqus_ref = ctx.solver_name == "abaqus"
 
     # ---------------------------------------------------------------- document control and tags
-    out.append("This guide is written so that an engineer can rebuild the model by hand in Abaqus/CAE or in PrePoMax and get the same deck. "
-               "It follows the team's FEA model report template: each step has a settings table, the GUI steps for both tools, and the "
+    out.append("This guide is written so that an engineer can rebuild the model by hand in " + " or in ".join(h.tools) + " and get the same deck. "
+               "It follows the team's FEA model report template: each step has a settings table, the GUI steps, and the "
                "input-file keywords the deck holds. Every value carries an evidence tag; a value that cannot is written "
                + tag("OPEN") + " and listed at the end.")
     out.append(h.heading(1, "Document control"))

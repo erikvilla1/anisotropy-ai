@@ -18,6 +18,11 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
+- One document per coupon, in chapters, to show engineers and investors that the engine works (ADR-0041).
+  - **The builder.** `docs/models/coupon.py <coupon>` writes `.local/fea/<coupon>/documents/<coupon>.pdf` and one dated zip.
+  - **The chapters:** the problem; the physics (laminate theory, the finite element kernel and the failure criteria, each equation with its code); building the part in our engine; building it in Abaqus/CAE, step by step and item by item against the team's model; our results with first-ply failure; verification against CalculiX and the team's Abaqus; and what it shows and does not.
+  - **What it replaces.** It replaces the three PDFs and two zips per coupon. `team.py` supplies the team's sections, `share.py` is removed, and `build.py --all` builds the checks' records only.
+  - **Supporting changes.** `manual.theory` can print chosen sections, and the rebuild guide can print the steps for one GUI.
 - One folder per problem, named for it, with everything about it inside (ADR-0040, chunk 1: the coupons).
   - **Names.** `fea/models/` and `.local/fea/` use the coupon names X840PW-UNT-L1, X840PW-UNC-L1 and X840PW-OHT-L1, for the folders, specs, decks and records alike. A test checks that each folder is named by its coupon.
   - **Local folders.** Each coupon has `from-team/<date>/`, `our-runs/attempt-NN_<date>/`, `comparison/` and `documents/`.

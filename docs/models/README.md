@@ -1,74 +1,76 @@
-# Model comparison documents (LaTeX)
+# Coupon documents (LaTeX)
 
-One typeset document per finite element model comparison, separate from the engine manual ([ADR-0031](../decisions/ADR-0031-one-generated-document-per-model-comparison.md)). Each document is the complete argument for one model: what was modelled, the classical laminate theory hand check, the kernel's equations with the code that computes them, what the reference solver ran and how its element differs, how the numbers were mapped and judged, every compared number with its error, and the reading.
+**One document per coupon** ([ADR-0041](../decisions/ADR-0041-one-document-per-coupon-in-chapters.md)), written for engineers and investors: what was solved, the physics our engine uses, how the part is built in our engine and in Abaqus/CAE, our results, and how they compare with other solvers. It is separate from the engine manual and built by `docs/models/coupon.py`. Every number is computed from the committed spec, decks and record while it is built; nothing is typed in.
 
-## Build one
+## Build it
 
 From the repository root, with [Tectonic](https://tectonic-typesetting.github.io/) installed (the same as for the manual):
 
 ```sh
-uv run --project fea python docs/models/build.py fea/models/X840PW-UNT-L1/records/X840PW-UNT-L1-calculix.toml
-uv run --project fea python docs/models/build.py --all        # every committed record
-uv run --project fea python docs/models/build.py .local/fea/X840PW-UNT-L1/comparison/tension-test-abaqus.toml
+uv run --project fea python docs/models/coupon.py X840PW-UNT-L1        # one coupon
+uv run --project fea python docs/models/coupon.py --all                 # every coupon under fea/models/
 ```
 
-| Record | Document goes to | Committed? |
-| --- | --- | --- |
-| `fea/models/<coupon>/records/<name>.toml` | the coupon's `.local/fea/<coupon>/documents/<name>.pdf`, its LaTeX in `documents/latex/<name>/` (ADR-0040) | No: rebuilt from sources; CI uploads the PDFs as the `model-documents` artifact |
-| `.local/fea/<coupon>/comparison/<name>.toml` | the same coupon's `documents/` | Never: the material may not be public (R-16) |
-| `fea/checks/<test>/records/<name>.toml` | `docs/models/build/<name>/<name>.pdf` | No: rebuilt from sources, like the manual |
+The document goes to the coupon's `.local/fea/<coupon>/documents/<coupon>.pdf`, with its LaTeX in `documents/latex/<coupon>/` (ADR-0040). One dated zip goes beside it, `<date>_<coupon>.zip`. The zip holds the PDF, the Abaqus deck to import, the CalculiX deck, both specs and the material record. When the team built the coupon, it also holds their deck and our results in the layout of their field reports. It holds no CalculiX results, since the team runs our decks. A zip is replaced only when this project wrote it.
 
-Options: `--no-pdf` writes the LaTeX only; `--no-theory` leaves out the kernel theory and code section (about 20 pages, the same in every document); `--full-tables` prints every compared number even for records with more than 400 of them (otherwise each group shows its twenty numbers closest to the limit). Without Tectonic the `.tex` is still written and is self-contained.
+Options:
+- `--no-pdf` writes the LaTeX and the zip only;
+- `--no-theory` leaves out the equations and code of Chapter 2, about 25 pages that are the same in every document;
+- `--full-tables` prints every compared CalculiX number;
+- `--root <folder>` writes somewhere other than `.local/fea/`.
 
-## The short comparison for the team (ADR-0035)
+## The chapters, and where each comes from
 
-When the team built the model in Abaqus, `docs/models/team.py` writes a short document for them and one zip they can open. The document says, in order: here is the team's model and here is ours, the same item by item; our material comes from the library, and this is its source and page; here are the results side by side. The results cover stress at named points, agreement over the coupon, maps, reaction force and first-ply failure. Each coupon needs a manifest at `.local/fea/<coupon>/comparison/team-comparison.toml` (format in `Manifest` in the script) and a reading `team-comparison.md` beside it. The document's title is the coupon's name from the `[coupon]` card of our spec, such as X840PW-UNT-L1, with the card printed under it (ADR-0038); a spec without a card is refused. The script also writes the comparison in figures to `fea/models/<coupon>/records/<coupon>-team-summary.toml`, with no value from the team's files, for the case page's result table (ADR-0039); commit it, then run `fea/tools/case_pages.py`.
-
-```sh
-uv run --project fea python docs/models/team.py .local/fea/X840PW-UNT-L1/comparison/team-comparison.toml
-```
-
-The PDF and the zip go to the folder the manifest's `documents` key names, normally the coupon's `documents/` (ADR-0040): `<coupon>-comparison.pdf` on top, its LaTeX in `latex/<coupon>-comparison/`, and `<date>_<coupon>-comparison.zip` (dated, ADR-0039). No unzipped copy is kept (ADR-0036). It holds the PDF, the team's deck, our Abaqus and CalculiX decks, the spec, the material record, and our S11, S22 and Mises in the layout of the team's own field reports with their element numbers. It also holds an element-by-element table and every ply's stress. It holds no CalculiX results: the team runs our decks. Both stay local because they carry the team's results. The script replaces only a zip this project wrote.
-
-The numbers come from `anisotropy_fea.equivalence` (the two decks matched node by node and item by item) and `anisotropy_fea.side_by_side` (the team's reports paired with our kernel). The hand check and first-ply failure come from the engine.
-
-## Each coupon's model in a zip for the team (ADR-0035 amendment 2, ADR-0040)
-
-`docs/models/share.py` writes one zip per folder under `fea/models/`, into that coupon's `documents/`: `.local/fea/<coupon>/documents/<date>_<coupon>-model.zip`. It finds the spec `<coupon>.toml` and the record `records/<coupon>-calculix.toml` by convention, so a new coupon is zipped by itself. The zip holds the Abaqus deck to import, the CalculiX twin's deck, both specs, the material record, and the document of its CalculiX record, which is also built into the coupon's `documents/`. There are no CalculiX results in the zip. Every deck is regenerated and must equal the committed one. Use it for coupons the team has not built yet; a coupon they did build also gets the team comparison above.
-
-```sh
-uv run --project fea python docs/models/share.py                    # every coupon
-uv run --project fea python docs/models/share.py X840PW-UNT-L1 --root <folder> --no-pdf
-```
-
-## Where the content comes from
-
-| In the document | Comes from |
+| Chapter | Comes from |
 | --- | --- |
-| Title page, verdict, summary table | The record, and the kernel run on the record's deck during the build (`anisotropy_fea.compare`, `anisotropy_fea.report`) |
-| The spec, the model figure, the deck header | the test folder's spec, `anisotropy_fea.femodel`, `fea/examples/plot_model.py` |
-| What the kernel read, the solution figure | `anisotropy_fea.abaqus_reader`, `fea/examples/plot_deck.py` |
-| Classical laminate theory hand check | The engine (`abd_matrices`, `mixed_response`, `ply_surfaces`, `engineering_constants`), from the deck's section and gripped node rows |
-| Equations and code listings | `fea/docs/theory.md` and the `fea` source, through the manual's converters in `docs/manual/build.py` |
-| Reference solver, known differences, conventions | The record's `[solver]` and `[known_differences]` tables; `fea/checks/calculix-conventions.toml` |
-| How numbers were mapped and judged | `compare.py`, `calculix.py` or `abaqus_report.py`, and the record tool, listed with line numbers |
-| Every compared number | The record (reference) and the kernel (computed during the build) |
-| Rebuild guide | `docs/models/rebuild.py` on `report.model_facts`, the team's report template and the PrePoMax 2.6.0 manual |
-| Reading | `<record>.md` beside the record, written by a person: what the numbers show, what explains each difference, what is verified and UNVERIFIED, what would settle it. Without it the section says so; the build never invents one |
-| Appendix | The record file itself (its first 40 lines when it is long) and, when there are at most 400 numbers or `--full-tables` is given, the full comparison table |
+| Title page: the coupon card and the verdict | the spec's `[coupon]` card (ADR-0038); our engine's reaction and first-ply failure; the CalculiX record; the team comparison when there is one |
+| 1 The problem | the card; the material record of our library with the page of every value (the team's values beside them when they built it); the grips and loading of the spec; the model figure (`fea/examples/plot_model.py`) |
+| 2 The physics: how our engine solves it | `engine/docs/theory.md` sections 1 to 3 (ply stiffness, rotation, laminate stiffness) and 5 (failure), and `fea/docs/theory.md` (the finite element kernel), each equation followed by the code that computes it with its real line numbers, through the manual's converters; the laminate-theory hand check for this coupon |
+| 3 Building the part in our engine | the spec as committed; the lines in which the CalculiX twin differs; the generated deck's header and what our deck reader reads back; the commands that rebuild it |
+| 4 Building the part in Abaqus/CAE | what the team built, item by item against our deck (`anisotropy_fea.equivalence`), when they did; the step-by-step guide (`docs/models/rebuild.py`, Abaqus/CAE steps only) |
+| 5 Results from our engine | our kernel on the generated deck: the solution figure, the reaction, the centre element's strains and every ply's stress, first-ply failure by each criterion of the spec |
+| 6 Verification against other solvers | the CalculiX record against our kernel (summary, the solver and its deck, every compared number); the team's Abaqus side by side when they built it (`anisotropy_fea.side_by_side`) |
+| 7 What this shows and what it does not | the readings written by a person (`records/<coupon>-calculix.md`, and `team-comparison.md` beside the team manifest); what is not shown yet |
+| Appendices | how the CalculiX numbers were mapped and judged, with the code; the record; the files in the zip |
 
-## The rebuild guide (Section 4 of every document)
+## The team comparison (ADR-0035)
 
-A step-by-step guide to recreating the model by hand, in Abaqus/CAE and in PrePoMax, generated by `docs/models/rebuild.py` from the deck's facts (`anisotropy_fea.report.model_facts`: extents, partition lines where the node-row spacing changes or a gripped group ends, seeds by number, element bands, sets with their coordinate ranges, reference points, couplings, boundary conditions, loads, step, the ply table as entered and the expanded stack with z positions, ply fractions, edge-length range, output requests). It follows the team's FEA model report template (local copy under `.local/fea/X840PW-UNT-L1/from-team/2026-10-16/template/`, 2026-10-18): document control, evidence tags, a summary card, then one subsection per modelling step with a settings table, the GUI steps for both tools, and the input-file keywords quoted from the decks.
+It is not a document of its own. When `.local/fea/<coupon>/comparison/team-comparison.toml` exists, `docs/models/team.py` supplies four things:
+- the team's sections of Chapters 1, 4, 6 and 7;
+- their files in the zip;
+- the comparison in figures, in `fea/models/<coupon>/records/<coupon>-team-summary.toml`. It holds no value from the team's files and feeds the case page's result table (ADR-0039). Commit it, then run `fea/tools/case_pages.py`.
 
-Every value carries an evidence tag: `[INP]` read from the deck, `[INP-derived]` computed from it, `[SPEC]` from the spec, `[CALC]` computed by the generator, `[CAE-CHECK]` an Abaqus/CAE click path the deck does not store, `[MANUAL p.N]` a PrePoMax click path quoted from page N of the PrePoMax 2.6.0 manual, `[GUI-SEEN]` a PrePoMax step this project has performed on the model, `[ASSUMED]`, `[OPEN]`. A value that cannot carry a tag is written `[OPEN]` and listed at the end of the guide; the generator never fills one from memory.
+The manifest's format is `Manifest` in `team.py`, and a reading `team-comparison.md` sits beside it. Everything stays local, because it carries the team's results (R-16).
 
-PrePoMax 2.6 has no composite layup and no orthotropic material dialog (manual pages 30 and 31), so the guide gives two routes: route A, import the generated CalculiX deck (File > New, File > Import), which is what this project does; route B, build what the GUI offers and add the material and composite section through Model > Edit CalculiX Keywords, pasting the keyword blocks the guide quotes.
+## The rebuild guide (Chapter 4)
 
-## Adding a model
+`docs/models/rebuild.py` generates the guide from the deck's facts (`anisotropy_fea.report.model_facts`):
+- extents, and partition lines where the node-row spacing changes or a gripped group ends;
+- seeds by number and element bands;
+- sets with their coordinate ranges, reference points and couplings;
+- boundary conditions, loads, the step and the output requests;
+- the ply table as entered, the expanded stack with z positions, ply fractions and the edge-length range.
 
-1. Make the record with `fea/tools/record_from_dat.py` (CalculiX) or `fea/tools/record_from_report.py` (Abaqus field reports). `fea/tests/test_records.py` checks that the kernel reproduces every committed record.
-2. Write the reading note `<record>.md` beside it. Quote numbers from the record or an evaluation note; never from memory.
-3. Build the document and read it. Anything the reading claims that the tables do not show is a defect in the reading.
+It follows the team's FEA model report template (local copy under `.local/fea/X840PW-UNT-L1/from-team/2026-10-16/template/`): document control, evidence tags, a summary card, then one subsection per modelling step with a settings table, the GUI steps and the input-file keywords quoted from the decks.
 
-The Markdown subset the reading may use is the manual's: paragraphs, `##` and `###` headings, bullet and numbered lists, pipe tables, inline code, bold, italic, links, and `$`...`$` inline math written as `` $`...`$ ``.
+Every value carries an evidence tag; a value that cannot is written `[OPEN]` and listed at the end, and the generator never fills one from memory. The tags:
+- `[INP]`: read from the deck;
+- `[INP-derived]`: computed from it;
+- `[SPEC]`: from the spec;
+- `[CALC]`: computed by the generator;
+- `[CAE-CHECK]`: an Abaqus/CAE click path the deck does not store;
+- `[ASSUMED]` and `[OPEN]`.
+
+The coupon document asks for the Abaqus/CAE steps only (`Helpers.tools`). The guide can also write the PrePoMax steps, citing the PrePoMax 2.6.0 manual.
+
+## Record documents (checks)
+
+`docs/models/build.py` builds one document per comparison record (ADR-0031). It is used for the checks under `fea/checks/` (the IM7/8552 regression set): `--all` builds those into `docs/models/build/<record>/`, and CI uploads them. A coupon's own CalculiX record is a chapter of its coupon document, so `--all` leaves it out. Given explicitly, a record under `.local/` goes to `report/<record>/` beside it.
+
+## Adding a coupon
+
+1. Make its record with `fea/tools/record_from_dat.py` (CalculiX); `fea/tests/test_records.py` checks that the kernel reproduces every committed record.
+2. Write the reading note `records/<coupon>-calculix.md`. Quote numbers from the record or an evaluation note, never from memory.
+3. Build the coupon document and read it. Anything a reading claims that the tables do not show is a defect in the reading.
+
+The Markdown subset a reading may use is the manual's: paragraphs, `##` and `###` headings, bullet and numbered lists, pipe tables, inline code, bold, italic, links, and inline math written as `` $`...`$ ``.
