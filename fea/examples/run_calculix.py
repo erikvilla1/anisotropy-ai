@@ -1,6 +1,6 @@
 """Write the CalculiX deck for a spec, run the solver, and print what it reported next to our kernel's answer.
 
-    uv run python examples/run_calculix.py models/tension-coupon/tension-coupon-nodal.toml --out ../.local/fea/tension-coupon/runs/calculix
+    uv run python examples/run_calculix.py models/tension-coupon/tension-coupon-nodal.toml --out ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/calculix
 
 Needs CalculiX (ANISOTROPY_CCX or ccx on PATH; docs/installation-fea-tools.md). The CalculiX deck is eight-node (S8R,
 the only composite shell CalculiX has); the kernel solves the order-1 twin on the same corner nodes. Leaves <spec>-ccx.inp,

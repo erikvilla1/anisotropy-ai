@@ -5,7 +5,7 @@
                               the isotropic Kirsch plate)
     fea/checks/cases/         validation cases: a deck, expected numbers, a source, a tolerance
     fea/checks/decks/         the tiny hand-made decks the cases and tests read
-    .local/fea/<test>/        the same test name locally: team/ (as received), runs/ (what our tools write), comparison/
+    .local/fea/<test>/        the same test name locally: team/ (as received), attempts/ (one folder per try, ADR-0039), comparison/
 
 A spec is a TOML file at the root of a test folder; its generated decks are `decks/<spec stem>-abaqus.inp` and
 `decks/<spec stem>-ccx.inp`; its records are `records/*.toml`, each with a reading `records/<record>.md`. A model the team
@@ -75,5 +75,5 @@ def check_deck(name: str) -> Path:
 
 
 def local_test(name: str) -> Path:
-    """The test's folder on the founder's machine (git-ignored): team/, runs/, comparison/."""
+    """The test's folder on the founder's machine (git-ignored): team/, attempts/, comparison/ (anisotropy_fea.attempts)."""
     return LOCAL / name

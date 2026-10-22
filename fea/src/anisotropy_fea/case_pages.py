@@ -217,3 +217,54 @@ def pages() -> dict[Path, str]:
     checks = paths.CHECKS / "README.md"
     out[checks] = fill(checks.read_text(encoding="utf-8"), {"benchmarks": benchmarks_block()}, checks)
     return out
+
+
+# --- the local index (git-ignored) -------------------------------------------------------------------------------------
+
+LOCAL_INDEX = paths.ROOT / ".local" / "INDEX.md"
+HOMEWORK_README = paths.ROOT / ".local" / "homework" / "README.md"
+PROJECTS = paths.ROOT / ".local" / "projects"
+HOMEWORK_ROW = re.compile(r"^\| (?P<hw>HW\d+|PRACTICE) \| [^|]* \| [^|]* \| (?P<status>[^|]*?) \|$", re.M)
+
+
+def local_index() -> str:
+    """`.local/INDEX.md`: one row per case in the four categories, with what only this machine has (the runs kept, homework,
+    projects). Written by `fea/tools/case_pages.py --local`; never committed."""
+    from .attempts import attempt_number, attempts, kinds  # the attempt folders live on this machine only
+
+    tests = []
+    for folder in model_folders():
+        case = read_case(folder)
+        card = dict(coupon_card(load_spec(folder / f"{folder.name}.toml")))
+        _, record, _ = record_rows(calculix_record(folder))
+        held = "; ".join(f"{attempt_number(a):02d}: {', '.join(kinds(a))}" for a in attempts(folder.name) if kinds(a)) or "none on this machine"
+        tests.append([f"**{card['Coupon']}**", card["Test"], f"`fea/models/{folder.name}/`", case.status, f"{case.attempts} (accepted {case.accepted})",
+                      held, f"CalculiX {sum(r.agrees for r in record)} of {len(record)}", card["Test data"].split(":")[0]])
+    homework = []
+    if HOMEWORK_README.is_file():
+        for m in HOMEWORK_ROW.finditer(HOMEWORK_README.read_text(encoding="utf-8")):
+            cases = sorted(ENGINE_CASES.glob(f"se142-{m['hw'].lower()}-*.toml"))
+            code = HOMEWORK_README.parent / "code" / m["hw"]
+            homework.append([m["hw"], m["status"], str(len(cases)), f"`.local/homework/code/{m['hw']}/`" if code.is_dir() else "none"])
+    projects = sorted(d for d in PROJECTS.iterdir() if d.is_dir()) if PROJECTS.is_dir() else []
+    parts = [
+        "# Every case, on this machine",
+        "",
+        "Written by `fea/tools/case_pages.py --local` (ADR-0039); git-ignored, because homework and projects are private. The committed "
+        "indexes are `fea/models/README.md` (team tests) and `fea/checks/README.md` (benchmarks). A case's page is its README.",
+        "",
+        "## Team tests",
+        "",
+        table(["Coupon", "Test", "Case page", "Status", "Attempts in the log", "Runs kept (attempt: kinds)", "Result", "Test data"], tests),
+        "## Benchmarks",
+        "",
+        benchmarks_block(),
+        "## Homework",
+        "",
+        table(["HW", "Status (from homework/README.md)", "Engine cases", "Our code"], homework) if homework else "No homework folder on this machine.\n",
+        "## Projects",
+        "",
+        table(["Project", "Folder"], [[d.name, f"`.local/projects/{d.name}/`"] for d in projects]) if projects
+        else "None yet. A customer or research problem gets `.local/projects/<case>/` with a README written as a case page.\n",
+    ]
+    return "\n".join(parts)

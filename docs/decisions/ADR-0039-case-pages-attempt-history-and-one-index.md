@@ -2,7 +2,7 @@
 
 - Status: Proposed
 - Date: 2026-10-21
-- Decided by: Founder, 2026-10-21 (keep our layout and add the good parts of the proposal; one folder per attempt, no code copies, result files only for the latest attempt; one transcript per session; index team tests, benchmarks, homework and projects) | Drafted by: Claude Code
+- Decided by: Founder, 2026-10-21 (keep our layout and add the good parts of the proposal; one folder per attempt, no code copies, result files only for the latest attempt; index team tests, benchmarks, homework and projects; later the same day: no prompt or notes files, no session transcripts, no OneDrive location, as none adds value) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/case_pages.py`, `fea/tools/case_pages.py`, `fea/tests/test_case_pages.py`, [ADR-0036](ADR-0036-one-folder-per-fea-test.md), [ADR-0037](ADR-0037-every-private-file-under-local-by-purpose.md), [ADR-0038](ADR-0038-coupon-identity-card-and-designation.md), [evaluation](../evaluations/fea/2026-10-21-case-pages.md)
 
 ## Context
@@ -54,14 +54,22 @@ Option 1.
 - **The team summary.** `docs/models/team.py` also writes `records/<test>-team-summary.toml`: the equivalence counts and the agreement per quantity and band. It holds names and a digest of the team's deck but no value from their files. `paths.all_records()` skips it, because it is not a comparison record.
 - **The backfilled logs.** The attempt logs were rebuilt from the evaluation notes and local notes. Tension has 12 attempts, including the 2.8 % CalculiX stiffness found on 2026-10-16 and fixed by plane stress, and the open tab-line corner. Compression and open-hole have 3 each.
 - **Chunk 2, the local side:**
-  - `.local/fea/<test>/attempts/attempt-NN_<date>/{prompt.md, notes.md, run/}` replaces `runs/`;
-  - a tool starts each attempt with the engine commit, and keeps `.frd` files only in the latest attempt;
-  - `.local/sessions/` holds one transcript per session;
+  - `.local/fea/<test>/attempts/attempt-NN_<date>/run/` replaces `runs/` (as planned with `prompt.md` and `notes.md`, which the founder dropped; see below);
+  - a tool starts each attempt's folder and keeps `.frd` files only in the latest run of each kind;
   - `.local/INDEX.md` covers all four categories;
   - the zips are dated;
   - the workspace-layout skill takes on the proposal's procedures.
 
   Chunk 2 amends the local layout of ADR-0036.
+
+## Chunk 2, as built (2026-10-21)
+
+- **The tool.** `fea/tools/new_attempt.py` and `anisotropy_fea.attempts` make `attempt-NN_<date>/run/`, NN being the next row of the case page's attempt log, so a folder and its row always match. The number is never reused, and anything else in `attempts/` is refused.
+- **No prompt or notes files.** The first version also wrote `prompt.md` (the request, word for word) and `notes.md` (engine commit, spec digests, results) into each attempt. On reading them the founder found no value in either (2026-10-21), so they and the 38 files written are removed. The attempt log row on the case page is the record of a try, and a folder exists only for a try that ran something. The team's OneDrive location is not recorded either.
+- **Which `.frd` files are kept.** The founder's rule was "only for the latest attempt". As built, a `.frd` is deleted only when a later attempt has a run of the same kind (kernel, calculix or team-in-calculix). Otherwise a new CalculiX run of our model would delete the only CalculiX run of the team's deck, the one the founder opens in PrePoMax.
+- **The migration.** The current runs moved into the attempts that made them, judged by file times and deck headings: tension 04 (the team's deck in CalculiX), 11, 12 and 13; compression and open-hole 02 and 03. The other attempts' outputs were overwritten before folders were kept, so they have no folder.
+- **The local index.** `.local/INDEX.md`, from `case_pages.py --local`, becomes the second top-level file in `.local/`, which amends the no-loose-files rule of ADR-0037. `.local/projects/` is new. A `.local/sessions/` folder for one exported transcript per session was made and then dropped: the founder found no value in transcripts (2026-10-21).
+- **Dated zips.** `team.py` and `share.py` write `<date>_<name>.zip`.
 
 ## Why (evidence)
 

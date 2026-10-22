@@ -1,6 +1,6 @@
 # Reading: X840PW-OHT-L1, the open-hole coupon built the team's way, CalculiX 2.22 S8R against the kernel
 
-The reading note of the record with the same name. It is printed as the last section of the model's comparison document (`docs/models/build.py`). Numbers quoted here are from the CalculiX run of 2026-10-20 (`.local/fea/open-hole-coupon/runs/calculix/`, 0 warnings; re-run 2026-10-21 after the move to one folder per test, every recorded value unchanged to 6e-8 apart from roundoff-sized lateral displacements, ADR-0036) and from the kernel solve of the coupled twin. The document's own tables are recomputed at every build.
+The reading note of the record with the same name. It is printed as the last section of the model's comparison document (`docs/models/build.py`). Numbers quoted here are from the CalculiX run of 2026-10-20 (0 warnings; re-run 2026-10-21 after the move to one folder per test, every recorded value unchanged to 6e-8 apart from roundoff-sized lateral displacements, ADR-0036; again for the coupon's name, ADR-0038; that latest run is in `.local/fea/open-hole-coupon/attempts/attempt-03_2026-10-21/run/calculix/`, ADR-0039) and from the kernel solve of the coupled twin. The document's own tables are recomputed at every build.
 
 ## What the numbers show
 

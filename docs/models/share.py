@@ -9,7 +9,7 @@ No CalculiX results go in: the team runs our decks themselves.
 
 From the repository root:
 
-    uv run --project fea python docs/models/share.py                       # every model, to .local/fea/share/our-models.zip
+    uv run --project fea python docs/models/share.py                       # every model, to .local/fea/share/<today>_our-models.zip
     uv run --project fea python docs/models/share.py tension-coupon --out <zip> --no-pdf
 
 Every deck is regenerated from its spec and must equal the committed one.
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import re
 import shutil
 import sys
 import tempfile
@@ -130,7 +131,8 @@ def build(out: Path, pdf: bool, names: list[str] | None = None) -> Path:
     if out.suffix != ".zip":
         raise SystemExit(f"--out must name a .zip file, not {out.name}")
     tests = model_tests(names)
-    archive = team.write_zip(out, out.stem, lambda folder: fill(folder, tests, pdf))
+    folder = re.sub(r"^\d{4}-\d{2}-\d{2}_", "", out.stem)  # the folder inside the zip carries no date
+    archive = team.write_zip(out, folder, lambda folder_path: fill(folder_path, tests, pdf))
     print(f"{len(tests)} models zipped to {archive}")
     return archive
 
@@ -138,10 +140,10 @@ def build(out: Path, pdf: bool, names: list[str] | None = None) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("tests", nargs="*", help="model folders to include; default every folder under fea/models/")
-    parser.add_argument("--out", type=Path, default=DEFAULT_ZIP, help="the zip to write (default .local/fea/share/our-models.zip)")
+    parser.add_argument("--out", type=Path, default=None, help="the zip to write (default .local/fea/share/<today>_our-models.zip)")
     parser.add_argument("--no-pdf", action="store_true", help="leave out the comparison documents")
     args = parser.parse_args()
-    build(args.out, pdf=not args.no_pdf, names=args.tests or None)
+    build(args.out or team.dated(DEFAULT_ZIP), pdf=not args.no_pdf, names=args.tests or None)
 
 
 if __name__ == "__main__":

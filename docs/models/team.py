@@ -115,7 +115,7 @@ class Manifest(Record):
     edge_band: PositiveFloat  # length beside each tab line left out of the inner band (the tab-line corners are singular)
     map_layer: int  # the layer the maps show, 1 at the bottom
     locations: dict[str, tuple[float, float]]  # named points (x, y) at which the stress table compares
-    zip: str  # the zip the package is written to, normally .local/fea/share/<name>-comparison.zip
+    zip: str  # the zip the package is written to, normally .local/fea/share/<name>-comparison.zip; written as <today>_<that name>
     team: TeamSide
     ours: OurSide
 
@@ -209,7 +209,7 @@ class Comparison:
         self.spec_path = resolve(base, m.ours.spec, "our spec")
         self.calculix_record_path = resolve(base, m.ours.calculix_record, "CalculiX record")
         self.reading_path = self.manifest_path.with_suffix(".md")
-        self.zip = (base / m.zip).resolve()
+        self.zip = dated((base / m.zip).resolve())  # <today>_<name>.zip beside the name the manifest gives (ADR-0039)
         if self.zip.suffix != ".zip":
             raise SystemExit(f"{manifest_path}: zip must name a .zip file, not {self.zip.name}")
 
@@ -630,6 +630,11 @@ def write_material_csv(path: Path, lib, material, units: str) -> None:
             writer.writerow([v.role, f"{shown:.10g}", unit, f"{v.source_value:.10g}", v.source_unit, v.basis, v.page, v.printed_page or "", v.reference_url])
         for name, value in (("G13", material.G13), ("G23", material.G23)):
             writer.writerow([name, f"{from_si(value, 'stress', units):.10g}", stress_unit, "", "", "stated in our spec", "", "", ""])
+
+
+def dated(archive: Path) -> Path:
+    """The zip under today's date, `<YYYY-MM-DD>_<name>.zip`, so each zip sent out says when it was built (ADR-0039)."""
+    return archive.with_name(f"{date.today().isoformat()}_{archive.name}")
 
 
 def zip_is_ours(archive: Path) -> bool:

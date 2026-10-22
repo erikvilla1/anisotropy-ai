@@ -22,7 +22,7 @@ Differences are ours minus the reference, as a share of the reference; agreement
 
 ## Attempt log
 
-Every try, failed ones included, oldest first. Before 2026-10-21 the runs were overwritten, so these rows are rebuilt from the evaluation notes and the local notes they name; from chunk 2 of ADR-0039 on, each attempt keeps its own folder under `.local/fea/<test>/attempts/`.
+Every try, failed ones included, oldest first; this table is the record of each one (ADR-0039). A try that ran something keeps its runs in `.local/fea/<test>/attempts/attempt-NN_<date>/run/` on the founder's machine, NN being its row here; start that folder with `tools/new_attempt.py`. Before 2026-10-21 the runs were overwritten, so the earlier rows are rebuilt from the evaluation notes and the local notes they name.
 
 | # | Date | What was tried | Result | Outcome | Evidence |
 | --- | --- | --- | --- | --- | --- |
@@ -47,9 +47,10 @@ From `fea/`:
 
 ```sh
 uv run python tools/regenerate_decks.py compression-coupon compression-coupon-nodal
-uv run python examples/build_model.py models/compression-coupon/compression-coupon.toml --out ../.local/fea/compression-coupon/runs/kernel
-uv run python examples/run_calculix.py models/compression-coupon/compression-coupon-nodal.toml --out ../.local/fea/compression-coupon/runs/calculix
-uv run python tools/record_from_dat.py models/compression-coupon/compression-coupon-nodal.toml ../.local/fea/compression-coupon/runs/calculix/compression-coupon-nodal-ccx.dat \
+uv run python tools/new_attempt.py compression-coupon   # prints the folder attempt-NN_<date>
+uv run python examples/build_model.py models/compression-coupon/compression-coupon.toml --out ../.local/fea/compression-coupon/attempts/attempt-NN_<date>/run/kernel
+uv run python examples/run_calculix.py models/compression-coupon/compression-coupon-nodal.toml --out ../.local/fea/compression-coupon/attempts/attempt-NN_<date>/run/calculix
+uv run python tools/record_from_dat.py models/compression-coupon/compression-coupon-nodal.toml ../.local/fea/compression-coupon/attempts/attempt-NN_<date>/run/calculix/compression-coupon-nodal-ccx.dat \
     --version 2.22 --run-by "..." --machine "..." --notes "..." --tolerance 0.03 --floor 0.02 --element-probes centre --out models/compression-coupon/records/compression-coupon-calculix.toml
 ```
 
