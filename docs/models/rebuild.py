@@ -108,6 +108,46 @@ def gui_steps(h: Helpers, tool: str, steps: list[str], tag_name: str) -> str:
             + "\n".join(r"\item " + step for step in steps) + "\n" + r"\end{enumerate}")
 
 
+def partition_steps(h: Helpers, f: ModelFacts, length: Callable[[float], float], L: str) -> list[str]:
+    """The Abaqus/CAE steps that cut the coupon face at the partition lines, with the points to type in the sketcher.
+
+    A sketch on a face measures from the centre of that face, not from the part origin (seen in the founder's Abaqus/CAE
+    session on 2026-10-21: the sketch axis ran through the middle of the coupon), so every point is shifted by the centre.
+    The step tells the reader how to confirm the origin before typing, and gives a datum-plane route that needs no shift.
+    """
+    e = h.escape
+    inner = [length(v) for v in f.partition_lines_y[1:-1]]
+    if not inner:
+        return [e("No partition: the deck has no inner partition line, so the part stays one face.")]
+    x0, x1 = (length(v) for v in f.extent_x)
+    y0, y1 = (length(v) for v in f.extent_y)
+    xc, yc = (x0 + x1) / 2, (y0 + y1) / 2
+    g = lambda v: f"{round(v, 9) + 0.0:g}"  # noqa: E731  (+ 0.0 turns -0.0 into 0)
+    m = lambda v: g(v).replace("-", "−")  # noqa: E731  a minus sign in the prose; the typed points keep the hyphen
+    typed = lambda text: r"\texttt{" + e(text) + "}"  # noqa: E731
+    rows = "\n".join(rf"{g(y)} & {typed(f'{g(x0 - xc)},{g(y - yc)}')} & {typed(f'{g(x1 - xc)},{g(y - yc)}')} \\" for y in inner)
+    table = (r"\par\smallskip{\small\begin{tabular}{lll}\toprule" + "\n"
+             + rf"\textbf{{Part y ({e(L)})}} & \textbf{{Start point}} & \textbf{{End point}} \\ \midrule" + "\n"
+             + rows + "\n" + r"\bottomrule\end{tabular}}")
+    lines_text = ", ".join(g(y) for y in inner)
+    return [
+        e("Tools > Partition > Face > Sketch. If asked, pick the coupon face and click Done."),
+        e(f"At “Select an edge or axis that will appear”, keep “vertical and on the right” and click the right long edge (x = {m(x1)}). "
+          "The coupon then stands upright in the sketcher: sketch x runs along part x, sketch y along part y."),
+        e(f"The sketcher measures from the centre of the face, ({m(xc)}, {m(yc)}), not from the part origin: sketch x = part x − {m(xc)}, "
+          f"sketch y = part y − {m(yc)}. Check it first: hold the pointer on the bottom-left corner of the coupon; the readout at the "
+          f"top left of the viewport shows x {m(x0 - xc)}, y {m(y0 - yc)}. If it shows 0, 0, type the part coordinates instead: "
+          f"({m(x0)}, y) and ({m(x1)}, y)."),
+        e(f"Draw one line across the full width at each partition line (y = {lines_text} {L}) with Create Lines: Connected: type the "
+          "start point, Enter, the end point, Enter, then end the line (middle mouse button or Esc) so that the next line does not "
+          "join it. The points, in sketch coordinates:") + "\n" + table,
+        e(f"Click Done in the prompt area. The part now has {len(inner) + 1} faces, one per row of “Regions by element label” above."),
+        e(f"Alternative without sketch coordinates: Tools > Datum > Plane > Offset From Principal Plane > XZ Plane, one plane at each "
+          f"offset {lines_text} {L}. Then Tools > Partition > Face > Use Datum Plane: pick the face the plane crosses, pick the plane, "
+          "Create Partition; repeat for each plane."),
+    ]
+
+
 def render(ctx: Context, h: Helpers) -> str:
     """The rebuild guide as LaTeX, to be placed as one section of the document (subsections inside)."""
     f, units = ctx.facts, ctx.units
@@ -211,7 +251,7 @@ def render(ctx: Context, h: Helpers) -> str:
     out.append(gui_steps(h, "Abaqus/CAE", [
         e(f"Part module > Create Part. Name {part_name}, 3D, Deformable, Shell, Planar, approximate size {2 * total_length:g}."),
         e(f"Sketch a rectangle with corners ({length(f.extent_x[0]):g}, {length(f.extent_y[0]):g}) and ({length(f.extent_x[1]):g}, {length(f.extent_y[1]):g}); Done."),
-        e(f"Tools > Partition > Face > Sketch: draw horizontal lines at y = {lines_text} {L} so that each grip zone and the free length are separate faces."),
+        *partition_steps(h, f, length, L),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
         e("File > New: model space 3D, unit system mm, ton, s, °C (the mm-MPa system of the deck). ") + tag("MANUAL p.8"),
