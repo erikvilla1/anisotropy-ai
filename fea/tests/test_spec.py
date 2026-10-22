@@ -131,7 +131,7 @@ def test_bending_rules():
         parse_spec(text.replace("[loading]", "[grips]\nkind = \"nodal\"\nregion = \"line\"\n\n[loading]"))
 
 
-TEAM_COUPON = (paths.spec_path("tension-coupon")).read_text(encoding="utf-8")
+TEAM_COUPON = (paths.spec_path("X840PW-UNT-L1")).read_text(encoding="utf-8")
 TEAM_SEEDS = ("y_partitions = [15.0, 35.97, 44.03, 65.0]", "y_seeds = [15, 21, 8, 21, 15]")
 
 

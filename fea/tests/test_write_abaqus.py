@@ -18,7 +18,7 @@ from anisotropy_fea.spec import load_spec, parse_spec, to_si
 from anisotropy_fea.write_abaqus import number, write_abaqus
 
 NODAL = paths.spec_path("unnotched-im7-8552-nodal").read_text(encoding="utf-8")
-TEAM = paths.spec_path("tension-coupon")
+TEAM = paths.spec_path("X840PW-UNT-L1")
 
 
 def test_numbers_are_written_with_a_decimal_point_and_ten_digits():
@@ -136,7 +136,7 @@ def test_every_committed_calculix_deck_is_what_its_spec_writes_today(spec_path):
 
 def test_every_test_folder_has_the_same_shape():
     """A spec at the root, its decks in decks/, records in records/ with a reading beside each (ADR-0036)."""
-    assert len(paths.test_dirs()) >= 7 and {d.name for d in paths.test_dirs() if d.parent == paths.MODELS} >= {"tension-coupon", "compression-coupon", "open-hole-coupon"}
+    assert len(paths.test_dirs()) >= 7 and {d.name for d in paths.test_dirs() if d.parent == paths.MODELS} >= {"X840PW-UNT-L1", "X840PW-UNC-L1", "X840PW-OHT-L1"}
     for folder in paths.test_dirs():
         assert set(p.name for p in folder.iterdir()) <= {"decks", "records", "README.md"} | {p.name for p in folder.glob("*.toml")}, folder
         for record in (folder / "records").glob("*.toml"):

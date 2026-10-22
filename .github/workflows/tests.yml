@@ -105,7 +105,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: model-documents
-          path: docs/models/build/*/*.pdf
+          path: |
+            .local/fea/*/documents/*.pdf
+            docs/models/build/*/*.pdf
       - name: Build one document per solved problem (ADR-0033)
         run: uv run --project fea python docs/problems/build.py --all
       - uses: actions/upload-artifact@v7

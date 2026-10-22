@@ -1,8 +1,8 @@
 """Start the next attempt at a test: a new numbered folder for its runs (ADR-0039).
 
-    uv run python tools/new_attempt.py tension-coupon
+    uv run python tools/new_attempt.py X840PW-UNT-L1
 
-Creates .local/fea/<test>/attempts/attempt-NN_<today>/run/, where NN is the next row of the case page's attempt log (a folder
+Creates .local/fea/<coupon>/our-runs/attempt-NN_<today>/run/, where NN is the next row of the case page's attempt log (a folder
 is never reused), and prints the --out paths for the run tools. Before that it deletes the CalculiX results (.frd) of every
 earlier run that a later attempt has a run of the same kind for, and names each file. Add the attempt's row to the case
 page's attempt log when it is done. The layout is described in `anisotropy_fea.attempts`.
@@ -20,7 +20,7 @@ from anisotropy_fea.attempts import AttemptError, start_attempt
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("test", help="the model folder under fea/models/, e.g. tension-coupon")
+    parser.add_argument("test", help="the model folder under fea/models/, e.g. X840PW-UNT-L1")
     args = parser.parse_args()
     try:
         folder, deleted = start_attempt(args.test)

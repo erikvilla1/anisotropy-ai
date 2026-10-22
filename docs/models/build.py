@@ -3,12 +3,13 @@ solver, every compared number with its error, and the reading (ADR-0031).
 
 From the repository root:
 
-    uv run --project fea python docs/models/build.py fea/models/tension-coupon/records/tension-coupon-calculix.toml
+    uv run --project fea python docs/models/build.py fea/models/X840PW-UNT-L1/records/X840PW-UNT-L1-calculix.toml
     uv run --project fea python docs/models/build.py --all                 # every committed record
-    uv run --project fea python docs/models/build.py .local/fea/tension-coupon/comparison/tension-test-abaqus.toml
+    uv run --project fea python docs/models/build.py .local/fea/X840PW-UNT-L1/comparison/tension-test-abaqus.toml
 
-A committed record's document is written to docs/models/build/<record>/ (git-ignored, rebuilt like the manual); a
-record under .local/ goes to report/<record>/ beside the record (ADR-0032) and stays there, since its material may not be public. The
+A coupon's record, committed or local, has its document written to that coupon's .local/fea/<coupon>/documents/ (the PDF on top,
+the LaTeX in latex/<record>/, ADR-0040); a check's record goes to docs/models/build/<record>/ (git-ignored, rebuilt like the
+manual); any other record under .local/ to report/<record>/ beside it, since its material may not be public. The
 LaTeX file is self-contained; when Tectonic is installed the PDF is compiled next to it. The prose, equations and code
 listings come from the same converters as the engine manual (docs/manual/build.py), so the two cannot disagree. Every
 number in the document is the reference solver's, the kernel's, or the engine's, computed while the document is built.
@@ -20,6 +21,7 @@ import argparse
 import importlib.util
 import math
 import re
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -662,11 +664,27 @@ def appendix_record(record_path: Path) -> str:
 # --------------------------------------------------------------------------------------------- the document
 
 def output_dir(record_path: Path, requested: Path | None) -> Path:
+    """Where a record's document is built. A coupon's record, committed (fea/models/<coupon>/records/) or local
+    (.local/fea/<coupon>/comparison/), goes to that coupon's documents/latex/<record>/ (ADR-0040); any other local record to
+    report/<record>/ beside it; the rest to docs/models/build/<record>/."""
     if requested is not None:
         return requested
-    if ".local" in record_path.resolve().parts:
+    resolved = record_path.resolve()
+    if fea_paths.MODELS in resolved.parents:
+        return fea_paths.documents(resolved.parent.parent.name) / "latex" / record_path.stem
+    if ".local" in resolved.parts and resolved.parent.name == fea_paths.COMPARISON:
+        return resolved.parent.parent / fea_paths.DOCUMENTS / "latex" / record_path.stem
+    if ".local" in resolved.parts:
         return record_path.parent / "report" / record_path.stem
     return HERE / "build" / record_path.stem
+
+
+def publish(pdf: Path) -> Path:
+    """A PDF built in documents/latex/<document>/ is also put on top of documents/, where it is looked for (ADR-0040)."""
+    if pdf.parent.parent.name == "latex":
+        shutil.copy2(pdf, pdf.parent.parent.parent / pdf.name)
+        return pdf.parent.parent.parent / pdf.name
+    return pdf
 
 
 def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, theory: bool) -> Path:
@@ -722,7 +740,7 @@ def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, the
         print("Tectonic not found; no PDF.")
         return tex
     subprocess.run([compiler, "--outdir", str(out_dir), str(tex)], check=True)
-    print("Document written to", out_dir / f"{stem}.pdf")
+    print("Document written to", publish(out_dir / f"{stem}.pdf"))
     return out_dir / f"{stem}.pdf"
 
 
@@ -730,7 +748,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("record", type=Path, nargs="?", help="a comparison record (TOML)")
     parser.add_argument("--all", action="store_true", help="every committed record (fea/models/*/records, fea/checks/*/records)")
-    parser.add_argument("--out", type=Path, default=None, help="output folder (default: docs/models/build/<record>, or <record folder>/report/<record> for a local record)")
+    parser.add_argument("--out", type=Path, default=None, help="output folder (default: the coupon's .local/fea/<coupon>/documents/latex/<record>, or docs/models/build/<record> for a check)")
     parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX only")
     parser.add_argument("--no-theory", action="store_true", help="leave out the kernel theory and code section")
     parser.add_argument("--full-tables", action="store_true", help=f"print every compared number even when there are more than {FULL_TABLE_LIMIT}")

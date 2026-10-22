@@ -1,11 +1,11 @@
 """Attempts: the runs of every try at a test keep their own folder on the founder's machine (ADR-0039).
 
-    .local/fea/<test>/attempts/attempt-NN_<date>/run/
+    .local/fea/<coupon>/our-runs/attempt-NN_<date>/run/
       kernel/              build_model.py
       calculix/            run_calculix.py
       team-in-calculix/    convert_to_calculix.py on the team's deck
 
-The record of each try is its row in the case page's attempt log (`fea/models/<test>/README.md`); NN is that row's number,
+The record of each try is its row in the case page's attempt log (`fea/models/<coupon>/README.md`); NN is that row's number,
 so a folder and its row always match. Only tries that ran something have a folder. A folder is never reused or overwritten.
 CalculiX results (.frd) are large, so they are kept only in the latest run of each kind: when a later attempt has a run of
 the same kind, the earlier .frd files are deleted (`prune_results`).
@@ -35,8 +35,8 @@ def attempt_number(folder: Path) -> int:
 
 
 def attempts(test: str) -> list[Path]:
-    """The test's attempt folders, oldest first; anything else in attempts/ is refused by name."""
-    root = paths.local_test(test) / "attempts"
+    """The coupon's attempt folders in our-runs/, oldest first; anything else there is refused by name."""
+    root = paths.local_test(test) / paths.RUNS
     if not root.is_dir():
         return []
     folders = [d for d in root.iterdir() if d.is_dir()]
@@ -87,6 +87,6 @@ def start_attempt(test: str, day: str | None = None) -> tuple[Path, list[Path]]:
     deleted = prune_results(test)
     previous = attempts(test)
     number = max(attempt_number(previous[-1]) if previous else 0, logged_attempts(test)) + 1
-    folder = paths.local_test(test) / "attempts" / f"attempt-{number:02d}_{day or date.today().isoformat()}"
+    folder = paths.local_test(test) / paths.RUNS / f"attempt-{number:02d}_{day or date.today().isoformat()}"
     (folder / "run").mkdir(parents=True)  # never exists: the number is new
     return folder, deleted

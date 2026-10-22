@@ -8,7 +8,7 @@ element-by-element table and the material record. It holds no CalculiX results: 
 
 From the repository root:
 
-    uv run --project fea python docs/models/team.py .local/fea/tension-coupon/comparison/team-comparison.toml
+    uv run --project fea python docs/models/team.py .local/fea/X840PW-UNT-L1/comparison/team-comparison.toml
 
 The manifest (format in `Manifest` below; every key required, paths relative to the manifest) names the team's deck and
 field reports, our spec, the CalculiX record of our twin, the bands and points to compare and the zip. Every number
@@ -115,7 +115,7 @@ class Manifest(Record):
     edge_band: PositiveFloat  # length beside each tab line left out of the inner band (the tab-line corners are singular)
     map_layer: int  # the layer the maps show, 1 at the bottom
     locations: dict[str, tuple[float, float]]  # named points (x, y) at which the stress table compares
-    zip: str  # the zip the package is written to, normally .local/fea/share/<name>-comparison.zip; written as <today>_<that name>
+    documents: str  # the folder for the PDF, its LaTeX (latex/<name>-comparison/) and the zip <today>_<name>-comparison.zip; normally ../documents (ADR-0040)
     team: TeamSide
     ours: OurSide
 
@@ -209,9 +209,8 @@ class Comparison:
         self.spec_path = resolve(base, m.ours.spec, "our spec")
         self.calculix_record_path = resolve(base, m.ours.calculix_record, "CalculiX record")
         self.reading_path = self.manifest_path.with_suffix(".md")
-        self.zip = dated((base / m.zip).resolve())  # <today>_<name>.zip beside the name the manifest gives (ADR-0039)
-        if self.zip.suffix != ".zip":
-            raise SystemExit(f"{manifest_path}: zip must name a .zip file, not {self.zip.name}")
+        self.documents = (base / m.documents).resolve()
+        self.zip = dated(self.documents / f"{m.name}-comparison.zip")  # dated (ADR-0039), in the coupon's documents/ (ADR-0040)
 
         # the two models
         self.spec = load_spec(self.spec_path)
@@ -591,7 +590,7 @@ def open_section(c: Comparison) -> str:
     ])
 
 
-# --------------------------------------------------------------------------------------------- share folder
+# --------------------------------------------------------------------------------------------- the zip for the team
 
 def share_contents(c: Comparison) -> list[tuple[str, str]]:
     stem = c.spec_path.stem
@@ -778,7 +777,7 @@ def write_team_summary(c: Comparison) -> Path:
 
 def build(manifest_path: Path, pdf: bool) -> tuple[Path, Path]:
     c = Comparison(manifest_path)
-    out_dir = c.manifest_path.parent / "report" / f"{c.manifest.name}-comparison"
+    out_dir = c.documents / "latex" / f"{c.manifest.name}-comparison"
     figures = out_dir / "figures"
     figures.mkdir(parents=True, exist_ok=True)
     stem = f"{c.manifest.name}-comparison"
@@ -818,7 +817,8 @@ def build(manifest_path: Path, pdf: bool) -> tuple[Path, Path]:
         else:
             subprocess.run([compiler, "--outdir", str(out_dir), str(tex)], check=True)
             result = out_dir / f"{stem}.pdf"
-            print("Document written to", result)
+            shutil.copy2(result, c.documents / result.name)  # on top of documents/, where it is looked for (ADR-0040)
+            print("Document written to", c.documents / result.name)
     archive = write_share(c, result)
     print(f"Zip written to {archive}")
     print(f"Figures written to {write_team_summary(c)}")

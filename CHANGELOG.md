@@ -18,6 +18,13 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
+- One folder per problem, named for it, with everything about it inside (ADR-0040, chunk 1: the coupons).
+  - **Names.** `fea/models/` and `.local/fea/` use the coupon names X840PW-UNT-L1, X840PW-UNC-L1 and X840PW-OHT-L1, for the folders, specs, decks and records alike. A test checks that each folder is named by its coupon.
+  - **Local folders.** Each coupon has `from-team/<date>/`, `our-runs/attempt-NN_<date>/`, `comparison/` and `documents/`.
+  - **Documents.** Every document of a coupon is built into its `documents/`: the PDFs on top, the LaTeX in `latex/<document>/`, and the dated zips to send. That covers the CalculiX record, the local Abaqus record, the comparison for the team and the model zip.
+  - **Scripts.** `team.py`'s manifest key `zip` becomes `documents`, and `share.py` writes one `<date>_<coupon>-model.zip` per coupon. `.local/fea/share/` and `our-models.zip` are gone.
+  - **CI** uploads the coupon documents from `.local/fea/*/documents/`.
+  - **Records.** The three CalculiX twins are re-run for the renamed deck headings; their numbers are unchanged to 4.3e-5.
 - Every try at a test keeps its own folder (ADR-0039, chunk 2).
   - **Attempt folders.** `fea/tools/new_attempt.py <test>` makes `.local/fea/<test>/attempts/attempt-NN_<date>/run/`, numbered as the next row of the case page's attempt log and never reused. They hold runs only; the `prompt.md` and `notes.md` of the first version are dropped at the founder's word.
   - **Results kept.** A `.frd` is kept only in the latest run of each kind.
