@@ -85,3 +85,15 @@ From `fea/`:
 - **OneDrive.** The team's OneDrive path, the master copy of their data, is not in `team/2026-10-16/README.md` yet.
 - **Files from the proposal.** `Tension-test-print.inp`, `tension-compare/`, `frd_stress_summary.py` and `benchmark-plan.md` are not on this machine.
 - **The checks' local runs.** `.local/fea/checks/<test>/runs/` keeps its layout, because the checks are benchmarks with no attempt logs yet.
+
+## Follow-up the same day: runs only
+
+The founder read the backfilled `notes.md` files and decided that `prompt.md`, `notes.md` and the OneDrive location are not needed, because they add no value. The changes:
+
+- `start_attempt` creates only `attempt-NN_<date>/run/`, NN being the next row of the case page's attempt log (or the last folder plus one, whichever is larger).
+- `new_attempt.py` takes no `--prompt`.
+- The local index lists the runs kept per attempt instead of counting folders.
+- Locally, the 38 `prompt.md` and `notes.md` files were deleted, and the 11 attempt folders left empty were removed: tension 01 to 03 and 05 to 10, compression 01 and open-hole 01.
+- What remains holds runs only: tension 04, 11, 12 and 13, and compression and open-hole 02 and 03.
+
+The case pages' attempt logs are the record of every try and are unchanged, apart from their introduction.

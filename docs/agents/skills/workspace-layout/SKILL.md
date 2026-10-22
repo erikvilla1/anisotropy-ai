@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
-description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Finite element files sit in one folder per test (team files as received, one folder per attempt with its request, notes and runs, the comparison), with the same test name as the committed fea/models/<test>/ whose README is the case page; the zips for the team sit in one share folder; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, homework file or input file, when a new test or a new homework arrives, before every new attempt at a problem, and at the end of a session.
-version: 0.4.0
+description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Finite element files sit in one folder per test (team files as received, one folder per attempt with its runs, the comparison), with the same test name as the committed fea/models/<test>/ whose README is the case page; the zips for the team sit in one share folder; course homework sits as assignments beside the code that solves it. Load before saving, moving or looking for any FEA deck, result export, comparison record, homework file or input file, when a new test or a new homework arrives, before every new attempt at a problem, and at the end of a session.
+version: 0.4.1
 ---
 
 # Workspace layout
@@ -40,10 +40,8 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
 ```
 .local/fea/<test>/                   one folder per test, the same name as fea/models/<test>/ in the repository
   team/<date>/                       the team's files exactly as received, one dated folder per version they send; never edited
-  attempts/attempt-NN_<date>/        one folder per try, failed ones included; never reused or overwritten (ADR-0039)
-    prompt.md                        the request, word for word
-    notes.md                         engine commit, spec digests, settings, key numbers, error against the reference, what went
-                                     right or wrong, next step, the session transcript
+  attempts/attempt-NN_<date>/        the runs of try NN, the row of that number in the case page's attempt log; never reused
+                                     or overwritten (ADR-0039). Only tries that ran something have a folder; no notes or prompts
     run/kernel/                      build_model.py: our deck copy, pictures, .vtu, summary.txt
     run/calculix/                    run_calculix.py: .inp .dat .frd .sta (open the .frd in PrePoMax)
     run/team-in-calculix/            the team's deck converted by convert_to_calculix.py and run (the model is still theirs)
@@ -61,7 +59,7 @@ Committed counterparts: `fea/models/<test>/` (specs, `decks/`, `records/`, READM
 
 1. One test, one name, in the repository and locally: `fea/models/tension-coupon/` and `.local/fea/tension-coupon/` are the same coupon. Lower-case, hyphens; dates only in `team/<date>/` and in note file names.
 2. `team/<date>/` is what we compare against, exactly as received. A new version from the team goes in a new dated folder; a comparison names the version it read.
-3. Every try at a problem is an attempt: start it with `fea/tools/new_attempt.py <test> --prompt "<the request, word for word>"` and pass the `--out` paths it prints (`attempts/attempt-NN_<date>/run/<kind>`). Never write into an earlier attempt. The engine's code is not copied; the commit in `notes.md` names it. A `.frd` is kept only in the latest run of each kind; the tool deletes the earlier ones and names them.
+3. Every try at a problem is an attempt and a row of the case page's attempt log. When it runs something, start its folder with `fea/tools/new_attempt.py <test>` and pass the `--out` paths it prints (`attempts/attempt-NN_<date>/run/<kind>`). Never write into an earlier attempt. The engine's code is not copied. A `.frd` is kept only in the latest run of each kind; the tool deletes the earlier ones and names them. No `prompt.md` or `notes.md`: the founder found no value in them (2026-10-21); the attempt log row is the record.
 4. `comparison/` holds the records against the team's numbers and everything derived from them. Record paths are relative to the record (`../team/<date>/...`). `docs/models/build.py` writes a local record's document to `comparison/report/<record>/`.
 5. `share/` holds zips only, written by the scripts and named by the date they were built; nothing is unzipped there and no CalculiX results go in. A script replaces only a zip this project wrote. Delete older dated zips by hand once the newer one has been sent.
 6. Homework: the same folder name on both sides. Provided files stay unchanged in `assignments/`; a corrected copy goes to `code/` with `-fixed` in its name and the correction stated in the README.
@@ -77,10 +75,9 @@ Committed counterparts: `fea/models/<test>/` (specs, `decks/`, `records/`, READM
 
 ## Procedure: every attempt (ADR-0039)
 
-1. `uv run python tools/new_attempt.py <test> --prompt "<the founder's request, word for word>"` from `fea/`. It makes the next `attempt-NN_<date>/` with `prompt.md`, `notes.md` (the engine commit and spec digests already in) and `run/`.
-2. Run the tools with the `--out` paths it prints. Code written only for this attempt goes in the attempt folder; engine code goes in the repository through a pull request.
-3. Fill `notes.md`: the material and settings, the key numbers, the error against the reference, what went right or wrong, the next step.
-4. Add the attempt's row to the attempt log of `fea/models/<test>/README.md` (number, date, what was tried, result, outcome, evidence), then run `uv run python tools/case_pages.py --local`.
+1. `uv run python tools/new_attempt.py <test>` from `fea/`. It makes `attempt-NN_<date>/run/`, NN being the next row of the attempt log.
+2. Run the tools with the `--out` paths it prints. Engine code goes in the repository through a pull request.
+3. Add the attempt's row to the attempt log of `fea/models/<test>/README.md` (number, date, what was tried, result, outcome, evidence), then run `uv run python tools/case_pages.py --local`.
 
 ## Procedure: an attempt is accepted
 
@@ -90,7 +87,7 @@ Committed counterparts: `fea/models/<test>/` (specs, `decks/`, `records/`, READM
 
 ## Procedure: the end of a session
 
-Remind the founder to run `/export` and save it as `.local/sessions/<date>-<topic>.md`. Name that file in the `notes.md` of every attempt made in the session.
+Remind the founder to run `/export` and save it as `.local/sessions/<date>-<topic>.md`.
 
 ## Procedure: a new homework arrives
 

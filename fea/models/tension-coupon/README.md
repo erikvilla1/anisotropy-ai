@@ -27,7 +27,7 @@ Differences are ours minus the reference, as a share of the reference; agreement
 
 ## Attempt log
 
-Every try, failed ones included, oldest first. Each row has a folder `.local/fea/<test>/attempts/attempt-NN_<date>/` on the founder's machine with `prompt.md`, `notes.md` and the runs it kept (ADR-0039). Before 2026-10-21 the runs were overwritten, so the earlier rows and their notes are rebuilt from the evaluation notes and the local notes they name. Start a new attempt with `tools/new_attempt.py`.
+Every try, failed ones included, oldest first; this table is the record of each one (ADR-0039). A try that ran something keeps its runs in `.local/fea/<test>/attempts/attempt-NN_<date>/run/` on the founder's machine, NN being its row here; start that folder with `tools/new_attempt.py`. Before 2026-10-21 the runs were overwritten, so the earlier rows are rebuilt from the evaluation notes and the local notes they name.
 
 | # | Date | What was tried | Result | Outcome | Evidence |
 | --- | --- | --- | --- | --- | --- |
@@ -63,7 +63,7 @@ From `fea/`:
 
 ```sh
 uv run python tools/regenerate_decks.py tension-coupon tension-coupon-nodal
-uv run python tools/new_attempt.py tension-coupon --prompt "<the request, word for word>"   # prints the folder attempt-NN_<date>
+uv run python tools/new_attempt.py tension-coupon   # prints the folder attempt-NN_<date>
 uv run python examples/build_model.py models/tension-coupon/tension-coupon.toml --out ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/kernel
 uv run python examples/run_calculix.py models/tension-coupon/tension-coupon-nodal.toml --out ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/calculix
 uv run python tools/record_from_dat.py models/tension-coupon/tension-coupon-nodal.toml ../.local/fea/tension-coupon/attempts/attempt-NN_<date>/run/calculix/tension-coupon-nodal-ccx.dat \

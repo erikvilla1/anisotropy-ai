@@ -19,9 +19,9 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Added
 - Every try at a test keeps its own folder (ADR-0039, chunk 2).
-  - **Attempt folders.** `fea/tools/new_attempt.py <test> --prompt "..."` makes `.local/fea/<test>/attempts/attempt-NN_<date>/`. It holds the request word for word, `notes.md` (prefilled with the engine commit and spec digests) and `run/`. Folders are numbered and never reused.
+  - **Attempt folders.** `fea/tools/new_attempt.py <test>` makes `.local/fea/<test>/attempts/attempt-NN_<date>/run/`, numbered as the next row of the case page's attempt log and never reused. They hold runs only; the `prompt.md` and `notes.md` of the first version are dropped at the founder's word.
   - **Results kept.** A `.frd` is kept only in the latest run of each kind.
-  - **The migration.** The old `runs/` folders moved into the attempts that made them; the other backfilled attempts carry notes only. Tension attempt 13, the first made with the tool, reproduces the record to 2.9e-8.
+  - **The migration.** The old `runs/` folders moved into the attempts that made them. Tension attempt 13, the first made with the tool, reproduces the record to 2.9e-8.
   - **New local folders and files.** `case_pages.py --local` writes `.local/INDEX.md` for tests, benchmarks, homework and projects; `.local/sessions/` holds one transcript per session and `.local/projects/` future cases.
   - **Dated zips.** They are now `<date>_<name>.zip`.
   - **The skill.** The workspace-layout skill (0.4.0) has the procedures for every attempt, an accepted attempt and the end of a session.

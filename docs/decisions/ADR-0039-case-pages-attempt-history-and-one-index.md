@@ -54,8 +54,8 @@ Option 1.
 - **The team summary.** `docs/models/team.py` also writes `records/<test>-team-summary.toml`: the equivalence counts and the agreement per quantity and band. It holds names and a digest of the team's deck but no value from their files. `paths.all_records()` skips it, because it is not a comparison record.
 - **The backfilled logs.** The attempt logs were rebuilt from the evaluation notes and local notes. Tension has 12 attempts, including the 2.8 % CalculiX stiffness found on 2026-10-16 and fixed by plane stress, and the open tab-line corner. Compression and open-hole have 3 each.
 - **Chunk 2, the local side:**
-  - `.local/fea/<test>/attempts/attempt-NN_<date>/{prompt.md, notes.md, run/}` replaces `runs/`;
-  - a tool starts each attempt with the engine commit, and keeps `.frd` files only in the latest attempt;
+  - `.local/fea/<test>/attempts/attempt-NN_<date>/run/` replaces `runs/` (as planned with `prompt.md` and `notes.md`, which the founder dropped; see below);
+  - a tool starts each attempt's folder and keeps `.frd` files only in the latest run of each kind;
   - `.local/sessions/` holds one transcript per session;
   - `.local/INDEX.md` covers all four categories;
   - the zips are dated;
@@ -65,9 +65,10 @@ Option 1.
 
 ## Chunk 2, as built (2026-10-21)
 
-- **The tool.** `fea/tools/new_attempt.py` and `anisotropy_fea.attempts` make `attempt-NN_<date>/` with `prompt.md`, `notes.md` and `run/`. The number is never reused, and anything else in `attempts/` is refused.
+- **The tool.** `fea/tools/new_attempt.py` and `anisotropy_fea.attempts` make `attempt-NN_<date>/run/`, NN being the next row of the case page's attempt log, so a folder and its row always match. The number is never reused, and anything else in `attempts/` is refused.
+- **No prompt or notes files.** The first version also wrote `prompt.md` (the request, word for word) and `notes.md` (engine commit, spec digests, results) into each attempt. On reading them the founder found no value in either (2026-10-21), so they and the 38 files written are removed. The attempt log row on the case page is the record of a try, and a folder exists only for a try that ran something. The team's OneDrive location is not recorded either.
 - **Which `.frd` files are kept.** The founder's rule was "only for the latest attempt". As built, a `.frd` is deleted only when a later attempt has a run of the same kind (kernel, calculix or team-in-calculix). Otherwise a new CalculiX run of our model would delete the only CalculiX run of the team's deck, the one the founder opens in PrePoMax.
-- **The migration.** The current runs moved into the attempts that made them, judged by file times and deck headings. The other backfilled attempts have `notes.md` only, saying their outputs were overwritten. A notes file names a pull request's head commit only as an approximation of the run's own commit, and says so.
+- **The migration.** The current runs moved into the attempts that made them, judged by file times and deck headings: tension 04 (the team's deck in CalculiX), 11, 12 and 13; compression and open-hole 02 and 03. The other attempts' outputs were overwritten before folders were kept, so they have no folder.
 - **The local index.** `.local/INDEX.md`, from `case_pages.py --local`, becomes the second top-level file in `.local/`, which amends the no-loose-files rule of ADR-0037. `.local/sessions/` and `.local/projects/` are new.
 - **Dated zips.** `team.py` and `share.py` write `<date>_<name>.zip`.
 

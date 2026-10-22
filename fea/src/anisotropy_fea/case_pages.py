@@ -228,17 +228,16 @@ HOMEWORK_ROW = re.compile(r"^\| (?P<hw>HW\d+|PRACTICE) \| [^|]* \| [^|]* \| (?P<
 
 
 def local_index() -> str:
-    """`.local/INDEX.md`: one row per case in the four categories, with what only this machine has (attempt folders, homework,
+    """`.local/INDEX.md`: one row per case in the four categories, with what only this machine has (the runs kept, homework,
     projects). Written by `fea/tools/case_pages.py --local`; never committed."""
-    from .attempts import attempts  # the attempt folders live on this machine only
+    from .attempts import attempt_number, attempts, kinds  # the attempt folders live on this machine only
 
     tests = []
     for folder in model_folders():
         case = read_case(folder)
         card = dict(coupon_card(load_spec(folder / f"{folder.name}.toml")))
         _, record, _ = record_rows(calculix_record(folder))
-        folders = attempts(folder.name)
-        held = f"{len(folders)} folders" + ("" if len(folders) == case.attempts else f" (the log has {case.attempts})")
+        held = "; ".join(f"{attempt_number(a):02d}: {', '.join(kinds(a))}" for a in attempts(folder.name) if kinds(a)) or "none on this machine"
         tests.append([f"**{card['Coupon']}**", card["Test"], f"`fea/models/{folder.name}/`", case.status, f"{case.attempts} (accepted {case.accepted})",
                       held, f"CalculiX {sum(r.agrees for r in record)} of {len(record)}", card["Test data"].split(":")[0]])
     homework = []
@@ -256,7 +255,7 @@ def local_index() -> str:
         "",
         "## Team tests",
         "",
-        table(["Coupon", "Test", "Case page", "Status", "Attempts in the log", "Attempt folders", "Result", "Test data"], tests),
+        table(["Coupon", "Test", "Case page", "Status", "Attempts in the log", "Runs kept (attempt: kinds)", "Result", "Test data"], tests),
         "## Benchmarks",
         "",
         benchmarks_block(),
