@@ -7,9 +7,9 @@ From the repository root:
     uv run --project fea python docs/models/build.py --all                 # every committed record
     uv run --project fea python docs/models/build.py .local/fea/X840PW-UNT-L1/comparison/tension-test-abaqus.toml
 
-A coupon's record, committed or local, has its document written to that coupon's .local/fea/<coupon>/documents/ (the PDF on top,
-the LaTeX in latex/<record>/, ADR-0040); a check's record goes to docs/models/build/<record>/ (git-ignored, rebuilt like the
-manual); any other record under .local/ to report/<record>/ beside it, since its material may not be public. The
+A committed record's document is written to docs/models/build/<record>/ (git-ignored, rebuilt like the manual; --all builds the
+checks' records, ADR-0041); a record under .local/ goes to report/<record>/ beside it, since its material may not be public. A
+coupon's own document, the one in its documents/ folder, is docs/models/coupon.py. The
 LaTeX file is self-contained; when Tectonic is installed the PDF is compiled next to it. The prose, equations and code
 listings come from the same converters as the engine manual (docs/manual/build.py), so the two cannot disagree. Every
 number in the document is the reference solver's, the kernel's, or the engine's, computed while the document is built.
@@ -740,7 +740,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("record", type=Path, nargs="?", help="a comparison record (TOML)")
     parser.add_argument("--all", action="store_true", help="every committed record (fea/models/*/records, fea/checks/*/records)")
-    parser.add_argument("--out", type=Path, default=None, help="output folder (default: the coupon's .local/fea/<coupon>/documents/latex/<record>, or docs/models/build/<record> for a check)")
+    parser.add_argument("--out", type=Path, default=None, help="output folder (default: docs/models/build/<record>, or <record folder>/report/<record> for a record under .local/)")
     parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX only")
     parser.add_argument("--no-theory", action="store_true", help="leave out the kernel theory and code section")
     parser.add_argument("--full-tables", action="store_true", help=f"print every compared number even when there are more than {FULL_TABLE_LIMIT}")

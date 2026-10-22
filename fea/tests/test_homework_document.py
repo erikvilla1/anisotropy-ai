@@ -16,7 +16,8 @@ def test_a_set_has_one_chapter_per_problem_and_labels_of_its_own(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     cases = sorted(p.stem for p in (ROOT / "engine/validation/cases").glob("se142-hw3-*.toml"))
     assert f"HW3: {len(cases)} problems" in result.stdout
-    tex = (tmp_path / "HW3" / "documents" / "latex" / "HW3" / "HW3.tex").read_text(encoding="utf-8")
+    tex = (tmp_path / "HW3" / "documents" / "HW3.tex").read_text(encoding="utf-8")
+    assert sorted(p.name for p in (tmp_path / "HW3" / "documents").iterdir()) == ["HW3.tex"]  # one document, no copy
     assert r"\chapter{The physics: how our engine solves these problems}" in tex and r"\chapter{Reading}" in tex
     assert all(rf"\label{{ch:{stem}}}" in tex and rf"\label{{sec:comparison-{stem}}}" in tex for stem in cases)
     labels = re.findall(r"\\label\{([^}]+)\}", tex)

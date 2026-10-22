@@ -41,7 +41,7 @@ The pieces existed but were split, and building the part was one section that in
 
 Option 1.
 
-- **The builder.** `docs/models/coupon.py <coupon>` (or `--all`) writes `.local/fea/<coupon>/documents/<coupon>.pdf`, its LaTeX in `latex/<coupon>/`, and `<date>_<coupon>.zip`. The title page carries the coupon card and a verdict: our engine's reaction and first-ply failure, CalculiX's agreement, the team's when they built the coupon, and "not validated" with the card's test-data line.
+- **The builder.** `docs/models/coupon.py <coupon>` (or `--all`) writes into `.local/fea/<coupon>/documents/`: `<coupon>.tex` and `<coupon>.pdf` side by side with their `figures/`, and `<date>_<coupon>.zip`. The first version built in `latex/<coupon>/` and copied the PDF up; the founder saw two documents, so it is now built in place, with one copy (2026-10-22). The title page carries the coupon card and a verdict: our engine's reaction and first-ply failure, CalculiX's agreement, the team's when they built the coupon, and "not validated" with the card's test-data line.
 - **The chapters reuse the existing code.** Nothing is typed by hand.
   - **Chapter 2** prints `engine/docs/theory.md` sections 1 to 3 and 5 and the whole of `fea/docs/theory.md`, each equation followed by the code that computes it. To do so, `manual.theory` gains an `only` filter for numbered sections.
   - **Chapter 4** has the team's equivalence and the rebuild guide with Abaqus/CAE steps only. `rebuild.Helpers.tools` filters the GUIs.

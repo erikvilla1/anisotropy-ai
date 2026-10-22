@@ -19,6 +19,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
+- A coupon's and a homework set's document is built straight into its `documents/` folder: `<name>.tex` and `<name>.pdf` side by side (with `figures/` for a coupon), one copy, no `latex/` build folder (ADR-0041).
 - One folder per homework set, with one document (ADR-0040, chunk 2).
   - **Folders.** `.local/homework/<set>/{provided, ours, documents}` replaces `assignments/<HW>/` beside `code/<HW>/`.
   - **The document.** `docs/problems/homework.py <set>` writes `<set>/documents/<set>.pdf`: the engine's theory once, then one chapter per problem (does the engine reproduce the key, the problem, every step with its numbers, every compared number), and the set's reading.

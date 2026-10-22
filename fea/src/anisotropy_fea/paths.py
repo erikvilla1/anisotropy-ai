@@ -83,5 +83,5 @@ def local_test(name: str) -> Path:
 
 
 def documents(name: str) -> Path:
-    """Where every document of a coupon goes: its PDFs on top, their LaTeX in latex/<document>/, and the zips to send."""
+    """Where a coupon's document is built: <coupon>.tex and <coupon>.pdf side by side, the figures/ they use, and the zip to send."""
     return LOCAL / name / DOCUMENTS

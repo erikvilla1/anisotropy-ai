@@ -71,10 +71,10 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_zip(tmp_path)
                             capture_output=True, text=True, cwd=ROOT)
     assert result.returncode == 0, result.stdout + result.stderr
     documents = tmp_path / "X840PW-UNC-L1" / "documents"
-    tex = (documents / "latex" / "X840PW-UNC-L1" / "X840PW-UNC-L1.tex").read_text(encoding="utf-8")
+    tex = (documents / "X840PW-UNC-L1.tex").read_text(encoding="utf-8")
     assert all(rf"\chapter{{{title}}}" in tex for title in CHAPTERS)
     assert "The team has not built this coupon yet" in tex and r"\label{sec:results}" not in tex  # no team side by side
-    assert sorted(p.name for p in documents.iterdir()) == [f"{TODAY}_X840PW-UNC-L1.zip", "latex"]  # one zip, no other document
+    assert sorted(p.name for p in documents.iterdir()) == [f"{TODAY}_X840PW-UNC-L1.zip", "X840PW-UNC-L1.tex", "figures"]  # one document, one zip
     with zipfile.ZipFile(documents / f"{TODAY}_X840PW-UNC-L1.zip") as zf:
         names = set(zf.namelist())
         readme = zf.read("X840PW-UNC-L1/README.txt").decode("utf-8").splitlines()
