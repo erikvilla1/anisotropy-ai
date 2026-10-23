@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
-description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Each problem has one folder named for it with everything about it inside: an FEA coupon is .local/fea/<coupon name>/ (from-team, our-runs, comparison, documents), the same name as the committed fea/models/<coupon name>/ whose README is the case page; the one coupon document, its LaTeX and its zip sit in that coupon's documents/; a homework set is .local/homework/<set>/ (provided, ours, documents). Load before saving, moving or looking for any FEA deck, result export, comparison record, document, homework file or input file, when a new coupon or a new homework arrives, and before every new attempt at a problem.
-version: 0.5.4
+description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Each problem has one folder named for it with everything about it inside: an FEA coupon is .local/fea/<coupon name>/ (from-team, our-runs, comparison, documents), the same name as the committed fea/models/<coupon name>/ whose README is the case page; the one coupon document, its LaTeX and its zip sit in that coupon's documents/; a homework set is .local/homework/<set>/ (provided, ours, comparison, documents), its reading in comparison/key-comparison.md. Load before saving, moving or looking for any FEA deck, result export, comparison record, document, homework file or input file, when a new coupon or a new homework arrives, and before every new attempt at a problem.
+version: 0.5.5
 ---
 
 # Workspace layout
@@ -52,6 +52,8 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
 .local/homework/<set>/               one folder per set (HW1 ... HW5, PRACTICE, course-reader), ADR-0040
   provided/                          what the course provided, as received (PDFs, *_Input.xlsx)
   ours/                              what we made to solve it: corrected inputs (-fixed), scripts; only when there is such a file
+  comparison/                        key-comparison.md: the set's reading, written by a person (what agrees with the key, its
+                                     misprints, what the corrected inputs change); ADR-0040 amendment 1
   documents/                         <set>.tex and <set>.pdf, one chapter per problem (docs/problems/homework.py)
 .local/homework/course_audit.py      every problem with an answer key through the engine
 ```
@@ -65,7 +67,7 @@ Committed counterparts: `fea/models/<coupon>/` (specs, `decks/`, `records/`, REA
 3. Every try at a problem is an attempt and a row of the case page's attempt log. When it runs something, start its folder with `fea/tools/new_attempt.py <coupon>` and pass the `--out` paths it prints (`our-runs/attempt-NN_<date>/run/<kind>`). Never write into an earlier attempt. The engine's code is not copied. A `.frd` is kept only in the latest run of each kind; the tool deletes the earlier ones and names them. No `prompt.md` or `notes.md`: the founder found no value in them (2026-10-21); the attempt log row is the record.
 4. `comparison/` holds what we compare with: the manifest, the records against the team's numbers, notes and figures. Record paths are relative to the record (`../from-team/<date>/...`).
 5. `documents/` holds the one coupon document and its zip, written by `docs/models/coupon.py <coupon>` (ADR-0041): `<coupon>.tex` and `<coupon>.pdf` side by side with `figures/`, and `<date>_<coupon>.zip`. There is one copy of the document: it is built where it is read. Nothing is unzipped there and no CalculiX results go in the zip. The script replaces only a zip this project wrote. Delete an older dated zip by hand once the newer one has been sent.
-6. Homework: one folder per set, the same name everywhere. Provided files stay unchanged in `provided/`; a corrected copy goes to `ours/` with `-fixed` in its name, and the correction is stated in the set's reading note (`docs/problems/readings/`); no README per set (the founder found no value in them, 2026-10-22); the document goes to `documents/`.
+6. Homework: one folder per set, the same name everywhere. Provided files stay unchanged in `provided/`; a corrected copy goes to `ours/` with `-fixed` in its name, and the correction is stated in the set's reading, `comparison/key-comparison.md`, which stays local like the course's files (the founder, 2026-10-23); no README per set (the founder found no value in them, 2026-10-22); the document goes to `documents/`.
 7. Never commit anything under `.local/`. A model moves to `fea/models/<coupon>/` only when its material is a library record that may be cited (ADR-0030 amendment 4). The team's own files never move.
 
 ## Procedure: a new FEA coupon arrives
@@ -93,7 +95,8 @@ Committed counterparts: `fea/models/<coupon>/` (specs, `decks/`, `records/`, REA
 1. Put the provided files in `.local/homework/<set>/provided/` unchanged.
 2. Put anything we make to solve it (a corrected input, a script) in `.local/homework/<set>/ours/`; the set's document lists each problem with its engine case.
 3. Turn the answer key into engine cases under `engine/validation/cases/` with numbers and a source reference only; never the problem text.
-4. Build the set's document with `docs/problems/homework.py <set>` and add the set's row to `.local/homework/README.md`.
+4. Write the set's reading in `.local/homework/<set>/comparison/key-comparison.md`: what agrees with the key, what the key misprints, what each corrected input changes.
+5. Build the set's document with `docs/problems/homework.py <set>` (it prints the reading) and add the set's row to `.local/homework/README.md`.
 
 ## Verification
 

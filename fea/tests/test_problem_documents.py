@@ -30,7 +30,6 @@ def test_the_generator_documents_a_thermal_bending_failure_problem(tmp_path):
     assert tex.index("Step 4. Temperature") < tex.index("Step 5. Mid-plane") < tex.index("Step 7. First-ply")
     assert r"\codefrom{thermal\_resultants}" in tex and r"\codefrom{first\_ply\_failure\_combined}" in tex and r"\codefrom{solve\_case}" in tex
     assert "transverse tension" in tex and r"\Delta T" in tex  # the governing mode and the temperature change
-    assert "Reading: SE142/253A Homework 5" in tex  # the set's reading note, matched by prefix
     assert r"\filefrom" in tex and "fpf_ratio_max_stress" in tex  # the case file is in the appendix
 
 
@@ -47,13 +46,30 @@ def test_a_mixed_condition_problem_has_no_thermal_or_failure_step_and_names_the_
     assert r"\bar{\mathbf{S}}" in tex  # a single lamina shows its transformed compliance
 
 
-def test_reading_notes_are_matched_by_the_longest_prefix():
+def load_build():
     spec = importlib.util.spec_from_file_location("problems_build", BUILD)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module.reading_note(CASES / "se142-hw3-p3a-boron-symmetric.toml").name == "se142-hw3.md"
-    assert module.reading_note(CASES / "course-reader-5-9-sglass-curing.toml").name == "course-reader-5-9.md"
-    assert module.reading_note(CASES / "daniel-ishai-problem-7-11.toml") is None
+    return module
+
+
+def test_a_homework_case_prints_the_reading_of_its_set_from_the_local_folder(tmp_path):
+    module = load_build()
+    note = tmp_path / "HW3" / "comparison" / "key-comparison.md"
+    note.parent.mkdir(parents=True)
+    note.write_text("# Reading: a test note\n\nWritten by the test.\n", encoding="utf-8")
+    assert module.reading_note(CASES / "se142-hw3-p3a-boron-symmetric.toml", tmp_path) == note
+    assert module.set_of(CASES / "course-reader-5-9-sglass-curing.toml") == "course-reader"
+    assert module.reading_note(CASES / "daniel-ishai-problem-7-11.toml", tmp_path) is None  # not a homework set
+    text, found = module.reading_section(CASES / "se142-hw3-p3a-boron-symmetric.toml", tmp_path)
+    assert found and "Reading: a test note" in text and "Written by the test." in text
+    text, found = module.reading_section(CASES / "se142-hw5-p1-thermal-bending-laminate.toml", tmp_path)  # HW5 has no note here
+    assert not found and "kept on our machine, not in the repository" in text
+    assert "HW5/comparison/key-comparison.md" in text.replace(r"\allowbreak{}", "")  # the path, with the break hints LaTeX gets removed
+
+
+def test_every_step_has_its_theory_fragment():
+    module = load_build()
     assert set(module.FRAGMENTS) >= {"Ply stiffness", "Rotation", "Laminate stiffness", "Response to loads", "Known forces and prescribed curvature",
                                      "Mixed load and deformation conditions", "Ply surface recovery", "Failure", "Fixed and variable loading",
                                      "Laminate engineering constants", "Temperature change", "Plate buckling"}

@@ -11,6 +11,9 @@ HOMEWORK = ROOT / "docs/problems/homework.py"
 
 
 def test_a_set_has_one_chapter_per_problem_and_labels_of_its_own(tmp_path):
+    reading = tmp_path / "HW3" / "comparison" / "key-comparison.md"
+    reading.parent.mkdir(parents=True)
+    reading.write_text("# Reading: a test note for HW3\n\nWritten by the test.\n", encoding="utf-8")
     result = subprocess.run([sys.executable, str(HOMEWORK), "HW3", "--root", str(tmp_path), "--no-pdf", "--no-theory"],
                             capture_output=True, text=True, cwd=ROOT)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -19,6 +22,7 @@ def test_a_set_has_one_chapter_per_problem_and_labels_of_its_own(tmp_path):
     tex = (tmp_path / "HW3" / "documents" / "HW3.tex").read_text(encoding="utf-8")
     assert sorted(p.name for p in (tmp_path / "HW3" / "documents").iterdir()) == ["HW3.tex"]  # one document, no copy
     assert r"\chapter{The physics: how our engine solves these problems}" in tex and r"\chapter{Reading}" in tex
+    assert "Reading: a test note for HW3" in tex and "Written by the test." in tex  # the set's reading, from its comparison/ under --root
     assert all(rf"\label{{ch:{stem}}}" in tex and rf"\label{{sec:comparison-{stem}}}" in tex for stem in cases)
     labels = re.findall(r"\\label\{([^}]+)\}", tex)
     assert len(labels) == len(set(labels)), "a label appears twice"

@@ -63,3 +63,21 @@ This supersedes the naming rule of ADR-0036 (lower-case test names) and its loca
 ## How we will know it was wrong
 
 Revisit if a problem's files again turn up outside its folder, or if two problems need the same name.
+
+## Amendment 1, 2026-10-23 (a homework set's reading stays local, in its comparison/)
+
+**Context.** The founder found the homework layout hard to follow. A set's reading sat in `docs/problems/readings/`, away from the set. The founder also wanted it off the repository: it discusses the course's answer key and its misprints. The repository is private.
+
+**Options.**
+1. Move the reading into the set as `.local/homework/<set>/comparison/key-comparison.md`, the counterpart of a coupon's `comparison/team-comparison.md`, git-ignored. Chosen by the founder.
+2. Keep it committed under `docs/problems/readings/`, reviewed in pull requests and versioned. Rejected by the founder: it is course material and stays on our machine.
+3. Put it in `documents/`. Rejected for the reason option 2 of this record was: written inputs would mix with generated documents.
+
+**Decision.** Option 1. `docs/problems/build.py` finds a homework case's reading through its set (`set_of`, moved there from `homework.py`); `homework.py` reads it under its `--root`. A document built where the note is absent, as in CI, says where it is kept instead. `docs/problems/readings/` is removed.
+
+**Evidence.**
+- The five notes were copied with identical SHA-256 digests.
+- `fea/tests/test_problem_documents.py` and `fea/tests/test_homework_document.py`: 6 passed. Both read a note from a temporary set folder, so they do not need `.local/`.
+- `homework.py --all`: HW2 to HW5 and course-reader built, 371 of 371 values agree, each document printing its reading from `.local/homework/<set>/comparison/key-comparison.md`.
+
+**Consequences.** The readings lose version history and review; `.local/` is backed up only by hand. The per-problem documents CI uploads no longer print homework readings. Earlier commits keep the notes in the private repository's history.

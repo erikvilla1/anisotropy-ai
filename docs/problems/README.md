@@ -37,7 +37,7 @@ Options: `--no-pdf` writes the LaTeX only; `--no-theory` leaves out the theory t
 | The steps: ply stiffness, rotation, ABD and its inverse, thermal resultants, the response, every ply face, first-ply failure, engineering constants, buckling | The matching section of `engine/docs/theory.md` through the manual's converters, the function listings with line numbers, and the engine's numbers for this problem |
 | Every compared number | The case file (source) and the engine (computed during the build) |
 | How the inputs were read and judged | `anisotropy_engine/cases.py`, listed |
-| Reading | A note under `docs/problems/readings/` whose file name is a prefix of the case's name (one note covers a homework set), or `<case>.md` beside the case; written by a person, quoting numbers from the case. Without one the section says so; the build never invents a reading |
+| Reading | For a homework case, its set's note `.local/homework/<set>/comparison/key-comparison.md`, git-ignored (ADR-0040, amendment 1); otherwise `<case>.md` beside the case. Written by a person, quoting numbers from the case. Without one the section says so, and a homework case's section names where its set's note is kept; the build never invents a reading |
 | Appendix | The case file itself |
 
 ## The index
@@ -47,7 +47,7 @@ Options: `--no-pdf` writes the LaTeX only; `--no-theory` leaves out the theory t
 ## Adding a problem
 
 1. Add the case under `engine/validation/cases/` (see `engine/validation/README.md`): inputs and the source's numbers only, never the problem text.
-2. Write or extend the reading note for its set under `readings/`.
+2. Write or extend the reading of its set, `.local/homework/<set>/comparison/key-comparison.md`, or `<case>.md` beside a case that is not homework.
 3. Build the document and read it. Anything the reading claims that the tables do not show is a defect in the reading.
 
 The Markdown subset a reading may use is the manual's: paragraphs, `##` and `###` headings, bullet and numbered lists, pipe tables, inline code, bold, italic, links, and `$`...`$` inline math written as `` $`...`$ ``.

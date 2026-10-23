@@ -9,9 +9,10 @@ From the repository root:
 
 A set is HW<n>, whose problems are the cases `engine/validation/cases/se142-hw<n>-*.toml`, or course-reader
 (`course-reader-*.toml`). The document goes to <root>/<set>/documents/: <set>.tex and <set>.pdf side by side. The
-cases carry numbers and a source reference only, never the problem text (AGENTS.md); the reading of the set is the note
-under docs/problems/readings/ that the per-problem documents use. Every number of the engine is computed while the document
-is built; the key's numbers come from the case files.
+cases carry numbers and a source reference only, never the problem text (AGENTS.md); the reading of the set is
+<root>/<set>/comparison/key-comparison.md, written by a person and git-ignored, which the per-problem documents print too
+(ADR-0040, amendment 1). Every number of the engine is computed while the document is built; the key's numbers come from
+the case files.
 """
 
 from __future__ import annotations
@@ -43,19 +44,12 @@ escape, code, inline, number = problems.escape, problems.code, problems.inline, 
 
 from anisotropy_engine.cases import compare, load_case, solve_case  # noqa: E402
 
-HW = re.compile(r"^se142-hw(?P<n>\d+)-")
+set_of = problems.set_of
 PER_PROBLEM = ("summary", "problem", "steps", "comparison")  # labels each problem chapter has its own copy of
 CHAPTER_STYLE = "\n".join([
     r"\titleformat{\chapter}[display]{\sffamily\huge\bfseries\color{ink}}{\color{accent}\large\MakeUppercase{\chaptertitlename}\ \thechapter}{0.6ex}{}",
     r"\titlespacing*{\chapter}{0pt}{0pt}{2.5ex}",
 ])
-
-
-def set_of(case_path: Path) -> str | None:
-    match = HW.match(case_path.stem)
-    if match:
-        return f"HW{match['n']}"
-    return "course-reader" if case_path.stem.startswith("course-reader-") else None
 
 
 def all_sets() -> list[str]:
@@ -124,7 +118,7 @@ def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
         body, case, total, agreeing = problem_chapter(case_path)
         rows.append((case_path, case, total, agreeing))
         chapters += [rf"\chapter{{{inline(case['title'])}}}\label{{ch:{case_path.stem}}}", body]
-    reading, _ = problems.reading_section(cases[0])
+    reading, _ = problems.reading_section(cases[0], root)
     parts = [
         r"\documentclass[11pt,letterpaper,oneside]{report}", problems.PREAMBLE, CHAPTER_STYLE,
         rf"\hypersetup{{pdftitle={{{escape(set_name)}: solved by our engine}}}}",
