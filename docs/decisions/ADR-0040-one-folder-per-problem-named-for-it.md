@@ -81,3 +81,20 @@ Revisit if a problem's files again turn up outside its folder, or if two problem
 - `homework.py --all`: HW2 to HW5 and course-reader built, 371 of 371 values agree, each document printing its reading from `.local/homework/<set>/comparison/key-comparison.md`.
 
 **Consequences.** The readings lose version history and review; `.local/` is backed up only by hand. The per-problem documents CI uploads no longer print homework readings. Earlier commits keep the notes in the private repository's history.
+
+## Amendment 2, 2026-10-23 (the engine's output of a homework set is written beside its reading)
+
+**Context.** The founder asked where the engine's output of a homework problem is. Nothing kept it: the calculator printed to the terminal, and `pytest`, `course_audit.py` and `homework.py` computed in memory.
+
+**Options.**
+1. JSON and CSV. One `<case>.json` per problem, with the results, criteria, comparison and problems as `POST /v1/cases/solve` returns them (ADR-0024), plus the case, source, units, engine version, commit and date; and one `key-vs-engine.csv` per set, one row per compared number. Chosen by the founder.
+2. CSV only: the fewest files; the full results stay in the PDF.
+3. JSON only: everything, but nothing that opens in Excel.
+
+**Decision.** Option 1, written by `homework.py` into `<root>/<set>/comparison/` at every build. A JSON that matches no current case is named in the output and left for a person to delete.
+
+**Evidence.**
+- `fea/tests/test_homework_document.py` checks three things: one JSON per HW3 case and the CSV, as many CSV rows as compared values, and the CSV's verdicts and engine values equal to the JSON's.
+- `homework.py --all`: 371 rows over five sets, none failing.
+
+**Consequences.** A homework result can be read without building the PDF or running the engine. The files are rebuilt from the cases and are never edited by hand.

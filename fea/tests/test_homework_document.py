@@ -1,6 +1,8 @@
 """One document per homework set, docs/problems/homework.py (ADR-0040): the physics once, a chapter per problem with labels of its
 own, the reading, built in a temporary folder from the committed cases."""
 
+import csv
+import json
 import re
 import subprocess
 import sys
@@ -27,6 +29,24 @@ def test_a_set_has_one_chapter_per_problem_and_labels_of_its_own(tmp_path):
     labels = re.findall(r"\\label\{([^}]+)\}", tex)
     assert len(labels) == len(set(labels)), "a label appears twice"
     assert set(re.findall(r"\\ref\{([^}]+)\}", tex)) <= set(labels), "a reference points nowhere"
+
+
+def test_the_build_writes_the_engines_output_beside_the_reading(tmp_path):
+    result = subprocess.run([sys.executable, str(HOMEWORK), "HW3", "--root", str(tmp_path), "--no-pdf", "--no-theory"],
+                            capture_output=True, text=True, cwd=ROOT)
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = sorted(p.stem for p in (ROOT / "engine/validation/cases").glob("se142-hw3-*.toml"))
+    comparison = tmp_path / "HW3" / "comparison"
+    assert sorted(p.name for p in comparison.iterdir()) == sorted([f"{stem}.json" for stem in cases] + ["key-vs-engine.csv"])
+    compared = int(re.search(r"HW3: \d+ problems, \d+ of (\d+) values agree", result.stdout)[1])
+    with (comparison / "key-vs-engine.csv").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == compared and {row["problem"] for row in rows} == set(cases)
+    first = json.loads((comparison / f"{cases[0]}.json").read_text(encoding="utf-8"))
+    assert first["case"] == f"engine/validation/cases/{cases[0]}.toml" and first["results"] and first["problems"] == []
+    mine = [row for row in rows if row["problem"] == cases[0]]
+    assert [(c["key"], "yes" if c["agrees"] else "no") for c in first["comparison"]] == [(row["result"], row["agrees"]) for row in mine]
+    assert all(float(row["engine"]) == float(f"{c['engine']:.9g}") for row, c in zip(mine, first["comparison"]))  # the CSV is the JSON's numbers
 
 
 def test_an_unknown_set_is_refused_by_name(tmp_path):

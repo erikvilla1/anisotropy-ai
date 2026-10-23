@@ -19,6 +19,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Corrected the sign in the Tsai-Wu numerical-stability explanation; the equation is unchanged.
 
 ### Added
+- Building a homework set's document now also writes the engine's output into `.local/homework/<set>/comparison/`: `<case>.json` per problem, in the layout of `POST /v1/cases/solve`, and `key-vs-engine.csv`, one row per compared number (ADR-0040, amendment 2).
 - A homework set's reading moves into the set, `.local/homework/<set>/comparison/key-comparison.md`, and out of the repository: `docs/problems/readings/` is removed, the documents read the note from the set, and one built without it says where it is kept (ADR-0040, amendment 1; workspace-layout skill 0.5.5).
 - Homework sets carry no README per set: the founder found no value in them. A corrected input keeps `-fixed` in its name, the correction is stated in the set's reading note, and the set's document lists each problem with its engine case (workspace-layout skill 0.5.4).
 - A coupon's and a homework set's document is built straight into its `documents/` folder: `<name>.tex` and `<name>.pdf` side by side (with `figures/` for a coupon), one copy, no `latex/` build folder (ADR-0041).

@@ -53,7 +53,9 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
   provided/                          what the course provided, as received (PDFs, *_Input.xlsx)
   ours/                              what we made to solve it: corrected inputs (-fixed), scripts; only when there is such a file
   comparison/                        key-comparison.md: the set's reading, written by a person (what agrees with the key, its
-                                     misprints, what the corrected inputs change); ADR-0040 amendment 1
+                                     misprints, what the corrected inputs change); ADR-0040 amendment 1. Written by homework.py
+                                     at every build (amendment 2): <case>.json per problem, the engine's output, and
+                                     key-vs-engine.csv, one row per compared number
   documents/                         <set>.tex and <set>.pdf, one chapter per problem (docs/problems/homework.py)
 .local/homework/course_audit.py      every problem with an answer key through the engine
 ```

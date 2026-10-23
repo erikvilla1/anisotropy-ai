@@ -12,13 +12,18 @@ A set is HW<n>, whose problems are the cases `engine/validation/cases/se142-hw<n
 cases carry numbers and a source reference only, never the problem text (AGENTS.md); the reading of the set is
 <root>/<set>/comparison/key-comparison.md, written by a person and git-ignored, which the per-problem documents print too
 (ADR-0040, amendment 1). Every number of the engine is computed while the document is built; the key's numbers come from
-the case files.
+the case files. The same build writes the engine's output beside the reading (amendment 2): <case>.json per problem,
+every result the case determines with the key's values beside the engine's, and key-vs-engine.csv, one row per compared
+number of the set.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
+import json
+import math
 import re
 import subprocess
 import sys
@@ -42,7 +47,9 @@ problems = load_module("anisotropy_problems_build", HERE / "build.py")
 manual = problems.manual
 escape, code, inline, number = problems.escape, problems.code, problems.inline, problems.number
 
-from anisotropy_engine.cases import compare, load_case, solve_case  # noqa: E402
+import numpy as np  # noqa: E402
+
+from anisotropy_engine.cases import compare, engine_results, load_case, solve_case  # noqa: E402
 
 set_of = problems.set_of
 PER_PROBLEM = ("summary", "problem", "steps", "comparison")  # labels each problem chapter has its own copy of
@@ -60,8 +67,8 @@ def cases_of(set_name: str) -> list[Path]:
     return sorted(path for path in problems.CASES.glob("*.toml") if set_of(path) == set_name)
 
 
-def problem_chapter(case_path: Path) -> tuple[str, dict, int, int]:
-    """The chapter of one problem, its labels made its own, with the number of compared values and how many agree."""
+def problem_chapter(case_path: Path) -> tuple[str, dict, list, list[str]]:
+    """The chapter of one problem, its labels made its own, with its compared values and the problems the comparison found."""
     case = load_case(case_path)
     units = problems.Units(case["units"])
     solution = solve_case(case)
@@ -78,7 +85,58 @@ def problem_chapter(case_path: Path) -> tuple[str, dict, int, int]:
     ])
     key = case_path.stem
     body = re.sub(r"\\(ref|label)\{sec:(" + "|".join(PER_PROBLEM) + r")\}", lambda m: "\\" + m[1] + "{sec:" + m[2] + "-" + key + "}", body)
-    return body, case, len(comparisons), sum(c.agrees for c in comparisons)
+    return body, case, comparisons, issues
+
+
+# --------------------------------------------------------------------------------------------- the engine's output
+
+def json_value(value):
+    """An engine result as JSON, as the API writes it: arrays to lists, non-finite numbers (an unstressed ply's ratio) to null."""
+    if isinstance(value, np.ndarray):
+        return [json_value(v) for v in value.tolist()]
+    if isinstance(value, (list, tuple)):
+        return [json_value(v) for v in value]
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def write_results(case_path: Path, case: dict, comparisons, issues: list[str], path: Path) -> None:
+    """One problem's output: results, criteria, comparison and problems as POST /v1/cases/solve returns them, and where they came from."""
+    results = engine_results(case)
+    record = {
+        "case": problems.rel(case_path), "title": case["title"], "source": case.get("source"), "units": case["units"],
+        "engine_version": problems.engine_version(), "commit": problems.git_commit(), "built": date.today().isoformat(),
+        "results": {key: json_value(value) for key, (value, _scale) in results.items()},
+        "criteria": [key.removeprefix("fpf_ratio_") for key in results if key.startswith("fpf_ratio_")],
+        "comparison": [{"key": c.key, "expected": float(c.expected), "engine": float(c.engine), "allowed": float(c.allowed), "agrees": c.agrees}
+                       for c in comparisons],
+        "problems": issues,
+    }
+    path.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+
+
+def write_key_vs_engine(solved: list[tuple[Path, dict, list, list[str]]], path: Path) -> None:
+    """Every compared number of the set, one row each, in the case's units: the key's value, the engine's, and the verdict."""
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["problem", "result", "unit", "answer key", "engine", "difference", "difference (% of key)", "of allowed", "agrees"])
+        for case_path, case, comparisons, _ in solved:
+            units = problems.Units(case["units"])
+            for c in comparisons:
+                difference = abs(c.engine - c.expected)
+                writer.writerow([case_path.stem, c.key, units.label(manual.unit_kind(c.key.split("[")[0])), f"{c.expected:.9g}", f"{c.engine:.9g}",
+                                 f"{difference:.3g}", f"{100 * difference / abs(c.expected):.3g}" if c.expected else "",
+                                 f"{difference / c.allowed:.3f}" if c.allowed else "", "yes" if c.agrees else "no"])
+
+
+def write_output(solved: list[tuple[Path, dict, list, list[str]]], comparison: Path) -> None:
+    comparison.mkdir(parents=True, exist_ok=True)
+    for case_path, case, comparisons, issues in solved:
+        write_results(case_path, case, comparisons, issues, comparison / f"{case_path.stem}.json")
+    write_key_vs_engine(solved, comparison / "key-vs-engine.csv")
+    stale = sorted(p.name for p in comparison.glob("*.json") if p.stem not in {case_path.stem for case_path, *_ in solved})
+    if stale:
+        print(f"Not a case of this set any more, so not rewritten (delete by hand if superseded): {', '.join(stale)}")
 
 
 def title_page(set_name: str, rows: list[tuple[Path, dict, int, int]]) -> str:
@@ -113,11 +171,14 @@ def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
     documents = root / set_name / "documents"
     out_dir = documents  # built where it is looked for: one .tex and one .pdf (no copy)
     out_dir.mkdir(parents=True, exist_ok=True)
-    chapters, rows = [], []
-    for k, case_path in enumerate(cases, start=1):
-        body, case, total, agreeing = problem_chapter(case_path)
-        rows.append((case_path, case, total, agreeing))
+    chapters, rows, solved = [], [], []
+    for case_path in cases:
+        body, case, comparisons, issues = problem_chapter(case_path)
+        rows.append((case_path, case, len(comparisons), sum(c.agrees for c in comparisons)))
+        solved.append((case_path, case, comparisons, issues))
         chapters += [rf"\chapter{{{inline(case['title'])}}}\label{{ch:{case_path.stem}}}", body]
+    comparison = root / set_name / "comparison"
+    write_output(solved, comparison)
     reading, _ = problems.reading_section(cases[0], root)
     parts = [
         r"\documentclass[11pt,letterpaper,oneside]{report}", problems.PREAMBLE, CHAPTER_STYLE,
@@ -148,6 +209,7 @@ def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
         print("Characters without a LaTeX mapping (check how they render):", " ".join(sorted(manual.UNMAPPED)))
     total, agreeing = sum(r[2] for r in rows), sum(r[3] for r in rows)
     print(f"{set_name}: {len(cases)} problems, {agreeing} of {total} values agree; LaTeX written to {tex}")
+    print(f"{set_name}: engine output written to {comparison} ({len(cases)} .json, key-vs-engine.csv)")
     compiler = manual.tectonic()
     if pdf and compiler is not None:
         subprocess.run([compiler, "--outdir", str(out_dir), str(tex)], check=True)
