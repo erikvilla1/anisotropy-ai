@@ -43,4 +43,4 @@ The full method is in `docs/documentation-guide.md`; the index is `docs/README.m
 
 ## Data and sources
 
-Do not commit course problem statements or solutions, textbook pages, customer data, unapproved lab data, or secrets. Store numbers with a source reference; keep originals in `.local/`.
+Do not commit course problem statements, solutions or answer-key numbers, homework readings, textbook pages, customer data, unapproved lab data, the team's coupon models and the numbers compared with them, or secrets (ADR-0042). Store public numbers with a source reference; keep everything else, and all originals, in `.local/`.

@@ -1,7 +1,7 @@
 ---
 name: project-rules
 description: Rules for any work in the Anisotropy AI repository (composite laminate engine, material library, website, docs). Load before writing code, documents, data or skills here, and whenever deciding whether something belongs in the engine, the material library, the docs, or nowhere in the repository.
-version: 0.1.1
+version: 0.2.0
 ---
 
 # Project rules
@@ -34,6 +34,7 @@ Before any change in this repository, and whenever you must decide where content
 | A value from a licensed reference (Daniel and Ishai, CMH-17, the course appendix) | Individual values with table and page only. Never scans, text, tables or PDFs | ADR-0010, ADR-0018 |
 | User-supplied or customer data | Nothing public; private workspace only | ADR-0018 |
 | Course problem statements or solutions, textbook pages, PDFs, unapproved lab data, secrets | `.local/` only. Never committed, never under `public/` | AGENTS.md |
+| A course answer-key case or a homework reading; a coupon model built to the team's test design, or a number compared with the team's results | `.local/` only, never committed. The ones still committed leave in chunks C2 to C5, the last a history rewrite; until then add none. The X840-Z60 material record stays | ADR-0042 |
 | A choice between alternatives (library, algorithm, format, architecture, units) | A decision record in `docs/decisions/` from `_template.md` | AGENTS.md |
 | Every change | One line in `CHANGELOG.md` under Unreleased | AGENTS.md |
 | A new or changed agent skill | `docs/agents/skills/<name>/SKILL.md`, through a pull request | ADR-0023 |

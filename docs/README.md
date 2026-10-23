@@ -96,6 +96,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0039](decisions/ADR-0039-case-pages-attempt-history-and-one-index.md) | Case pages, attempt history and one index, inside the existing layout; result tables and indexes generated from the records (proposed) |
 | [0040](decisions/ADR-0040-one-folder-per-problem-named-for-it.md) | One folder per problem, named for it, with everything inside: coupons as `fea/models/<coupon>/` and `.local/fea/<coupon>/{from-team, our-runs, comparison, documents}`, no share folder (proposed) |
 | [0041](decisions/ADR-0041-one-document-per-coupon-in-chapters.md) | One document per coupon, in chapters (problem, physics, building the part in our engine and in Abaqus/CAE, results, verification), and one zip; `docs/models/coupon.py` (proposed) |
+| [0042](decisions/ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) | The course's answer keys, the homework readings and our models of the team's coupons leave the repository and its history, in chunks with one rewrite at the end; the X840-Z60 material record stays (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 

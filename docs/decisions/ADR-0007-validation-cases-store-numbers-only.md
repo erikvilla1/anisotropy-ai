@@ -1,6 +1,6 @@
 # ADR-0007: Validation cases store numbers and a source reference only
 
-- Status: Accepted
+- Status: Accepted; cases from the course's answer keys leave the repository and its history by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md)
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: `engine/validation/README.md`, pull request #2
