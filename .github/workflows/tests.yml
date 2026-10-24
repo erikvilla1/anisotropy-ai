@@ -1,0 +1,118 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  fea:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fea
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Install CalculiX (the independent reference solver; tests skip with a reason if absent)
+        # ccx -v prints the version and exits with code 201, so the step needs the fallback
+        run: sudo apt-get update && sudo apt-get install -y calculix-ccx libglu1-mesa && (ccx -v || true)
+      - run: uv sync --locked --extra mesh   # Gmsh (the wheel needs libGLU, installed above)
+      - run: uv run pytest tests ../engine/tests
+
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: anisotropy
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: anisotropy_test
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U anisotropy -d anisotropy_test" --health-interval 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://anisotropy:ci-only@127.0.0.1:5432/anisotropy_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --locked
+      - run: uv run pytest tests ../engine/tests
+
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
+  calculator-browser:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
+      BROWSER_CHANNEL: chromium
+      # The browser test's API has no database; recording is switched off on purpose (ADR-0026).
+      ANISOTROPY_RUN_RECORDS: "off"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: npm ci
+      - run: uv sync --project api --locked
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run test:calculator
+
+  manual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Install Tectonic
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: uv run --project fea python docs/manual/build.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: engine-manual
+          path: docs/manual/build/anisotropy-engine-manual.pdf
+      - name: Build one document per check record (ADR-0031; the open-hole model is meshed by Gmsh). The coupon documents are local (ADR-0042)
+        run: |
+          sudo apt-get update && sudo apt-get install -y libglu1-mesa
+          uv run --project fea --extra mesh python docs/models/build.py --all
+      - uses: actions/upload-artifact@v7
+        with:
+          name: model-documents
+          path: docs/models/build/*/*.pdf
+      - name: Build one document per solved problem (ADR-0033)
+        run: uv run --project fea python docs/problems/build.py --all
+      - uses: actions/upload-artifact@v7
+        with:
+          name: problem-documents
+          path: |
+            docs/problems/build/*/*.pdf
+            docs/problems/build/index.md

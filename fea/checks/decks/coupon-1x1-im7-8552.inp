@@ -1,0 +1,64 @@
+*Heading
+** Fixture: one IM7/8552 [0/30/-30/30/0]s element, 25 mm by 100 mm, 0.8 % axial strain by edge displacement, lateral edges free.
+** Units: mm-MPa. A deck carries no units; the caller states them when reading (ADR-0003).
+** Material values from the public library dataset ncamp-im7-8552-2019-rtd-measured-v1 (record revision 2026-10-10.1,
+** rights: open publisher), converted to MPa: E1 162095.74, E2 8963.18, nu12 0.316, G12 4688.43, ply 0.18288 mm.
+** G13 is set equal to G12 and G23 is a nominal 3000 MPa; Abaqus syntax requires both and anisotropy_fea does not use them.
+** *Fail Stress magnitudes are the same dataset's F1t, F1c, F2t, F2c, F6 in MPa. The sign Abaqus expects for the
+** compressive limits is UNVERIFIED; anisotropy_fea uses magnitudes (docs/abaqus-export-recipe.md). The sixth value, the
+** Tsai-Wu interaction term f*, is 0: Abaqus's documented default, stated here so the Tsai-Wu criterion has an explicit input (ADR-0021).
+*Preprint, echo=NO, model=NO, history=NO, contact=NO
+*Part, name=Coupon
+*Node
+1, 0., 0., 0.
+2, 25., 0., 0.
+3, 25., 100., 0.
+4, 0., 100., 0.
+*Element, type=S4R
+1, 1, 2, 3, 4
+*Nset, nset=Bottom
+1, 2
+*Nset, nset=Top
+3, 4
+*Nset, nset=Corner
+1,
+*Elset, elset=All, generate
+1, 1, 1
+*Orientation, name=Ori-1
+1., 0., 0., 0., 1., 0.
+3, 0.
+*Shell Section, elset=All, composite, orientation=Ori-1, layup=Layup-1, symmetric
+0.18288, 3, IM7-8552, 0., Ply-1
+0.18288, 3, IM7-8552, 30., Ply-2
+0.18288, 3, IM7-8552, -30., Ply-3
+0.18288, 3, IM7-8552, 30., Ply-4
+0.18288, 3, IM7-8552, 0., Ply-5
+*End Part
+*Assembly, name=Assembly
+*Instance, name=Coupon-1, part=Coupon
+*End Instance
+*Nset, nset=Bottom, instance=Coupon-1
+1, 2
+*Nset, nset=Top, instance=Coupon-1
+3, 4
+*Nset, nset=Corner, instance=Coupon-1
+1,
+*End Assembly
+*Material, name=IM7-8552
+*Elastic, type=LAMINA
+162095.74, 8963.18, 0.316, 4688.43, 4688.43, 3000.
+*Fail Stress
+2558.51, -1731.48, 64.05, -285.72, 91.15, 0.
+*Step, name=Step-1, nlgeom=NO
+*Static
+1., 1., 1e-05, 1.
+*Boundary
+Bottom, 2, 2
+*Boundary
+Corner, 1, 1
+*Boundary
+Top, 2, 2, 0.8
+*Restart, write, frequency=0
+*Output, field, variable=PRESELECT
+*Output, history, variable=PRESELECT
+*End Step

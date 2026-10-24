@@ -1,0 +1,70 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.env*
+!.env.example
+.preview/
+*.log
+test-results/
+playwright-report/
+
+# Python engine
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Engine manual build output (rebuilt from sources)
+docs/manual/generated/
+docs/manual/build/
+# Model comparison documents (rebuilt from the records; docs/models/README.md)
+docs/models/build/
+# Solved problem documents (rebuilt from the cases; docs/problems/README.md)
+docs/problems/build/
+
+# Local references and assistant-specific instructions
+.local/
+# Local reference archive (includes user-supplied textbooks)
+References/
+# Textbook page scans must never be committed or served as public assets.
+public/assets/documents/daniel-ishai-2006/
+# Generated review artifacts remain local.
+output/
+# Our models of the team's coupons live in .local/fea/<coupon>/ and are never committed (ADR-0042); this keeps the old folder from coming back.
+/fea/models/
+# Course material (SE143AB Appendix F) stays in .local/sources/course/; it is never a public asset (ADR-0018).
+public/assets/documents/material-properties-2026-v2*.pdf
+# No copied documents may be served from the website; sources are linked or cited (ADR-0018).
+public/**/*.pdf
+public/materials/catalog-status.json
+public/materials/*.tmp
+[Cc][Ll][Aa][Uu][Dd][Ee].[Mm][Dd]
+
+# Website media belongs under public/assets, not in the project root
+/*.pdf
+/*.png
+/*.jpg
+/*.jpeg
+/*.svg
+
+# Obsidian vault (root: docs/). Vault settings and workspace layout are personal.
+docs/.obsidian/
+# Abaqus job and result files: never committed. Input decks (*.inp) with public materials are committed in their test folders, fea/models/<test>/decks/ and fea/checks/ (ADR-0036);
+# the team's decks and exports live in .local/fea/<coupon>/from-team/<date>/ (ADR-0029, ADR-0040).
+*.odb
+*.dat
+*.msg
+*.sta
+*.sim
+*.prt
+*.com
+*.lck
+*.jnl
+*.rpy
+*.ipm
+*.rpt
+*.cae
+
+# The agent skill folder is a local junction to docs/agents/skills (scripts/link-agent-dirs.ps1, ADR-0023).
+/.claude/skills/
