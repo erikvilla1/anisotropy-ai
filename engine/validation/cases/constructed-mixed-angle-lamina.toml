@@ -1,0 +1,30 @@
+title = "Constructed check: a 30-degree lamina held at eps_y = 0 under sigma_x, mixed conditions"
+source = "Constructed analytical check, not a printed problem. Elastic constants: Daniel & Ishai (2006) Table A.4, AS4/3501-6, p. 377. One lamina, so sigma = Q-bar eps (Eqs. 4.47 and 4.62) with no bending; with sigma_x, eps_y and tau_xy known, rows 1 and 3 give eps_x and gamma_xy, and row 2 then gives sigma_y. Expected values: engine/validation/closed_forms.py, which does not use the engine."
+units = "SI"
+
+[material]
+E1 = 147.0
+E2 = 10.3
+G12 = 7.0
+nu12 = 0.27
+
+[laminate]
+layup = [30]
+ply_thickness = 1.0
+
+[applied.mixed]
+sigma_x = 100.0  # MPa
+eps_y = 0.0
+tau_xy = 0.0
+Mx = 0.0
+My = 0.0
+Mxy = 0.0
+
+[expected]
+tolerance = 1e-6
+eps_x = 0.00351104798
+gamma_xy = -0.005001315661
+sigma_y = 10.42017508  # MPa
+Qbar11 = 90.05731732  # GPa
+Qbar16 = 43.2277378
+Qbar66 = 30.34694704
