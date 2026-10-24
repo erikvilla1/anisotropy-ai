@@ -3,11 +3,11 @@
 - Status: Accepted; amended by ADR-0017, which reports failure ratios with a temperature change
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Claude Code
-- Related: `engine/src/anisotropy_engine/thermal.py`, `engine/tests/test_thermal.py`, [evaluation](../evaluations/2026-10-03-thermal-analysis.md), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md)
+- Related: `engine/src/anisotropy_engine/thermal.py`, `engine/tests/test_thermal.py`, local evaluation note `.local/notes/evaluations/2026-10-03-thermal-analysis.md` (ADR-0042), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md)
 
 ## Context
 
-Course Reader Problem 5.9 asks for curing stresses after a temperature change. The engine modeled mechanical loads only. Thermal analysis needs expansion coefficients, a temperature change, thermal resultants and a different ply stress equation. The mechanical functions already have many callers: the API, failure checks, cases, the calculator and the tests.
+A course problem asked for curing stresses after a temperature change. The engine modeled mechanical loads only. Thermal analysis needs expansion coefficients, a temperature change, thermal resultants and a different ply stress equation. The mechanical functions already have many callers: the API, failure checks, cases, the calculator and the tests.
 
 ## Options considered
 
@@ -25,11 +25,11 @@ Prescribed strains and curvatures report mechanical loads as total resultants mi
 
 ## Why (evidence)
 
-- The engine reproduces 46 values from the Course Reader 5.9 answer key for two materials (two validation cases). The key's own printed equations match the engine's. Two printed key values contradict the key's other numbers and are not recorded; see the case files.
+- The engine reproduced that course answer key for two materials, value by value, and the key's own printed equations match the engine's; two printed key values contradicted its other numbers and were not recorded. The cases are local since ADR-0042 and the numbers are in a local note (ADR-0042). In the repository, `constructed-cross-ply-cooling-first-ply-failure` checks the thermal path against closed forms.
 - `test_thermal.py` checks physics that does not depend on the ABD solve: a free single ply expands without stress; equal alpha1 and alpha2 leave any layup stress-free; a balanced cross-ply matches a closed form; an unsymmetric laminate warps but its integrated face stresses carry no net force or moment; thermal and mechanical responses superpose; and SI and US inputs agree.
 - The 228 existing engine tests pass unchanged.
 - The equations are Daniel and Ishai (2006) Chapter 8, checked against the founder's local copy: transformed expansion coefficients Eq. 8.11, ply stress Eq. 8.16, thermal force and moment resultants Eqs. 8.18 and 8.20, total load-deformation relation Eq. 8.25, and laminate expansion coefficients Eq. 8.33 (printed pp. 212-217). The engine omits the moisture terms.
-- Accepted after further course validation (ADR-0015): seven thermal cases agree with their answer keys, covering curing stresses (Course Reader 5.9, two materials), an unsymmetric cure (5.13), laminate expansion coefficients (two layups), a hybrid woven/tape laminate under load and bending, and combined biaxial, bending and thermal loading.
+- Accepted after further course validation (ADR-0015): seven thermal cases agreed with their answer keys, covering curing stresses, an unsymmetric cure, laminate expansion coefficients, a hybrid laminate under load and bending, and combined biaxial, bending and thermal loading. They are local since ADR-0042; `constructed-two-material-laminate-cooling` covers several materials with cooling in the repository.
 
 ## Consequences
 
@@ -37,4 +37,4 @@ Thermal results are available in the engine, the case format and the terminal ca
 
 ## How we will know it was wrong
 
-Revisit if a problem needs a temperature that varies through the thickness, moisture, or a temperature change in a mechanical-only function's callers. The earlier trigger, alpha that differs between plies, occurred in the course's hybrid laminate (Homework 4 Problem 4). Per-material alpha (ADR-0015) handled it without changing this decision.
+Revisit if a problem needs a temperature that varies through the thickness, moisture, or a temperature change in a mechanical-only function's callers. The earlier trigger, alpha that differs between plies, occurred in a course problem's hybrid laminate. Per-material alpha (ADR-0015) handled it without changing this decision.

@@ -4,17 +4,16 @@ every step the engine takes with its numbers, and the key's answers beside the e
 From the repository root:
 
     uv run --project fea python docs/problems/homework.py HW3
-    uv run --project fea python docs/problems/homework.py --all           # every set with a committed case
+    uv run --project fea python docs/problems/homework.py --all           # every set with a case
     options: --root <folder> (the folder holding one folder per set; default .local/homework), --no-pdf, --no-theory
 
-A set is HW<n>, whose problems are the cases `engine/validation/cases/se142-hw<n>-*.toml`, or course-reader
-(`course-reader-*.toml`). The document goes to <root>/<set>/documents/: <set>.tex and <set>.pdf side by side. The
-cases carry numbers and a source reference only, never the problem text (AGENTS.md); the reading of the set is
-<root>/<set>/comparison/key-comparison.md, written by a person and git-ignored, which the per-problem documents print too
-(ADR-0040, amendment 1). Every number of the engine is computed while the document is built; the key's numbers come from
-the case files. The same build writes the engine's output beside the reading (amendment 2): <case>.json per problem,
-every result the case determines with the key's values beside the engine's, and key-vs-engine.csv, one row per compared
-number of the set.
+A set is a folder under <root> (HW1 ... HW5, course-reader); its problems are the case files in <root>/<set>/ours/ that
+carry an answer key, an [expected] table. They are git-ignored with the rest of the set, since the course's answer keys
+stay off the repository (ADR-0042). The document goes to <root>/<set>/documents/: <set>.tex and <set>.pdf side by side.
+The reading of the set is <root>/<set>/comparison/key-comparison.md, written by a person (ADR-0040, amendment 1). Every
+number of the engine is computed while the document is built; the key's numbers come from the case files. The same build
+writes the engine's output beside the reading (amendment 2): <case>.json per problem, every result the case determines
+with the key's values beside the engine's, and key-vs-engine.csv, one row per compared number of the set.
 """
 
 from __future__ import annotations
@@ -27,6 +26,7 @@ import math
 import re
 import subprocess
 import sys
+import tomllib
 from datetime import date
 from pathlib import Path
 
@@ -51,7 +51,6 @@ import numpy as np  # noqa: E402
 
 from anisotropy_engine.cases import compare, engine_results, load_case, solve_case  # noqa: E402
 
-set_of = problems.set_of
 PER_PROBLEM = ("summary", "problem", "steps", "comparison")  # labels each problem chapter has its own copy of
 CHAPTER_STYLE = "\n".join([
     r"\titleformat{\chapter}[display]{\sffamily\huge\bfseries\color{ink}}{\color{accent}\large\MakeUppercase{\chaptertitlename}\ \thechapter}{0.6ex}{}",
@@ -59,12 +58,15 @@ CHAPTER_STYLE = "\n".join([
 ])
 
 
-def all_sets() -> list[str]:
-    return sorted({s for path in problems.CASES.glob("*.toml") if (s := set_of(path))}, key=lambda s: (not s.startswith("HW"), s))
+def cases_of(set_name: str, root: Path) -> list[Path]:
+    """The set's problems: the case files in its ours/ that carry an answer key. An input without one is not a problem of the set."""
+    ours = root / set_name / "ours"
+    return sorted(p for p in ours.glob("*.toml") if "expected" in tomllib.loads(p.read_text(encoding="utf-8"))) if ours.is_dir() else []
 
 
-def cases_of(set_name: str) -> list[Path]:
-    return sorted(path for path in problems.CASES.glob("*.toml") if set_of(path) == set_name)
+def all_sets(root: Path) -> list[str]:
+    sets = [d.name for d in root.iterdir() if d.is_dir() and cases_of(d.name, root)] if root.is_dir() else []
+    return sorted(sets, key=lambda s: (not s.startswith("HW"), s))
 
 
 def problem_chapter(case_path: Path) -> tuple[str, dict, list, list[str]]:
@@ -141,7 +143,7 @@ def write_output(solved: list[tuple[Path, dict, list, list[str]]], comparison: P
 
 def title_page(set_name: str, rows: list[tuple[Path, dict, int, int]]) -> str:
     total, agreeing = sum(r[2] for r in rows), sum(r[3] for r in rows)
-    subtitle = (f"SE142/253A homework set {set_name[2:]}, solved by our engine" if set_name.startswith("HW")
+    subtitle = (f"Homework set {set_name[2:]}, solved by our engine" if set_name.startswith("HW")
                 else "Course reader problems, solved by our engine")
     verdict = (rf"\textbf{{The engine reproduces every number the key states.}} {agreeing} of {total} compared values agree within each case's tolerance."
                if agreeing == total else
@@ -159,15 +161,15 @@ def title_page(set_name: str, rows: list[tuple[Path, dict, int, int]]) -> str:
                             r"r>{\raggedright\arraybackslash}Xrr", r"\small"),
         r"\vfill", rf"\verdict{{{verdict}}}", r"\vspace{0.6cm}",
         rf"{{\small\color{{muted}} Built {date.today().isoformat()} by \texttt{{docs/problems/homework.py}} (anisotropy-engine {escape(problems.engine_version())}, "
-        rf"commit {escape(problems.git_commit())}). The key's numbers come from the committed cases, every other number from running the engine.}}",
+        rf"commit {escape(problems.git_commit())}). The key's numbers come from the case files, every other number from running the engine.}}",
         r"\end{titlepage}",
     ])
 
 
 def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
-    cases = cases_of(set_name)
+    cases = cases_of(set_name, root)
     if not cases:
-        raise SystemExit(f"no committed case for {set_name}; the sets are {all_sets()}")
+        raise SystemExit(f"no case with an answer key in {root / set_name / 'ours'}; the sets are {all_sets(root)}")
     documents = root / set_name / "documents"
     out_dir = documents  # built where it is looked for: one .tex and one .pdf (no copy)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -179,7 +181,7 @@ def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
         chapters += [rf"\chapter{{{inline(case['title'])}}}\label{{ch:{case_path.stem}}}", body]
     comparison = root / set_name / "comparison"
     write_output(solved, comparison)
-    reading, _ = problems.reading_section(cases[0], root)
+    reading, _ = problems.reading_section(cases[0])
     parts = [
         r"\documentclass[11pt,letterpaper,oneside]{report}", problems.PREAMBLE, CHAPTER_STYLE,
         rf"\hypersetup{{pdftitle={{{escape(set_name)}: solved by our engine}}}}",
@@ -223,14 +225,14 @@ def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("sets", nargs="*", help="HW<n> or course-reader")
-    parser.add_argument("--all", action="store_true", help="every set with a committed case")
+    parser.add_argument("--all", action="store_true", help="every set with a case")
     parser.add_argument("--root", type=Path, default=LOCAL, help="the folder holding one folder per set (default .local/homework)")
     parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX only")
     parser.add_argument("--no-theory", action="store_true", help="leave out the physics chapter's equations and code")
     args = parser.parse_args()
     if args.all == bool(args.sets):
-        raise SystemExit(f"name sets or give --all, not both and not neither; the sets are {all_sets()}")
-    for set_name in (all_sets() if args.all else args.sets):
+        raise SystemExit(f"name sets or give --all, not both and not neither; the sets are {all_sets(args.root)}")
+    for set_name in (all_sets(args.root) if args.all else args.sets):
         build(set_name, args.root, pdf=not args.no_pdf, theory=not args.no_theory)
 
 

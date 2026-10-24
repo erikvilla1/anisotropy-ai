@@ -4,7 +4,7 @@ One typeset document per solved problem, separate from the engine manual ([ADR-0
 
 ## Homework: one document per set (ADR-0040)
 
-A homework set has one document, `docs/problems/homework.py <set>`, built straight into `.local/homework/<set>/documents/`: `<set>.tex` and `<set>.pdf` side by side, one copy. The set is HW<n> (the cases `se142-hw<n>-*.toml`) or `course-reader`. It has the engine's theory once, as the physics chapter, then one chapter per problem: does the engine reproduce the key, the problem as the case states it, the solution step by step with its numbers, and every compared number. The set's reading and the case files follow. The same build writes the engine's output to `.local/homework/<set>/comparison/`, beside the reading: `<case>.json` for each problem (every result the case determines, the key's values beside the engine's, the engine version and commit) and `key-vs-engine.csv`, one row per compared number, to open in Excel. `--all` builds every set; `--no-theory` and `--no-pdf` as below.
+A homework set has one document, `docs/problems/homework.py <set>`, built straight into `.local/homework/<set>/documents/`: `<set>.tex` and `<set>.pdf` side by side, one copy. The set is a folder under `.local/homework/` (HW1 to HW5, `course-reader`); its problems are the case files in its `ours/` that carry an `[expected]` table, kept there because the course's answer keys stay off the repository (ADR-0042). It has the engine's theory once, as the physics chapter, then one chapter per problem: does the engine reproduce the key, the problem as the case states it, the solution step by step with its numbers, and every compared number. The set's reading and the case files follow. The same build writes the engine's output to `.local/homework/<set>/comparison/`, beside the reading: `<case>.json` for each problem (every result the case determines, the key's values beside the engine's, the engine version and commit) and `key-vs-engine.csv`, one row per compared number, to open in Excel. `--all` builds every set; `--no-theory` and `--no-pdf` as below.
 
 ```sh
 uv run --project fea python docs/problems/homework.py HW3
@@ -16,7 +16,7 @@ uv run --project fea python docs/problems/homework.py --all
 From the repository root, with [Tectonic](https://tectonic-typesetting.github.io/) installed (the same as for the manual):
 
 ```sh
-uv run --project fea python docs/problems/build.py engine/validation/cases/se142-hw3-p3a-boron-symmetric.toml
+uv run --project fea python docs/problems/build.py engine/validation/cases/constructed-cross-ply-cooling-first-ply-failure.toml
 uv run --project fea python docs/problems/build.py --all        # every committed case, and index.md
 uv run --project fea python docs/problems/build.py .local/homework/course-reader/ours/cr-5-9-as4.toml
 ```

@@ -1,0 +1,51 @@
+title = "Constructed check: a symmetric two-material 0/90 laminate under Nx, Nxy and cooling"
+source = "Constructed analytical check, not a printed problem. Synthetic constants for a carbon tape and a woven fabric, chosen for this check; not measured data or a course problem. The stack is symmetric with plies at 0 and 90 degrees only, so B = 0, A16 = A26 = 0 and eps0 = A^-1 (N + N_T) with A and N_T summed over the plies (Eqs. 4.47, 4.62, 8.16-8.18); ply stresses come from the mechanical strain, the total strain minus the free thermal strain. Expected values: engine/validation/closed_forms.py, which does not use the engine."
+units = "psi"
+
+[materials.tape]
+E1 = 20.0e6
+E2 = 1.40e6
+G12 = 0.80e6
+nu12 = 0.30
+alpha1 = -0.3e-6  # 1/degF
+alpha2 = 15.0e-6
+
+[materials.fabric]
+E1 = 9.0e6
+E2 = 8.5e6
+G12 = 0.70e6
+nu12 = 0.05
+alpha1 = 2.0e-6  # 1/degF
+alpha2 = 2.4e-6
+
+[laminate]
+plies = [
+    {angle = 0, material = "fabric", thickness = 0.010},
+    {angle = 0, material = "tape", thickness = 0.005},
+    {angle = 90, material = "tape", thickness = 0.005},
+    {angle = 90, material = "tape", thickness = 0.005},
+    {angle = 0, material = "tape", thickness = 0.005},
+    {angle = 0, material = "fabric", thickness = 0.010},
+]
+
+[applied]
+loads = [800.0, 0.0, -200.0, 0.0, 0.0, 0.0]  # lb/in
+delta_T = -280.0  # degF
+
+[expected]
+tolerance = 1e-6
+A11 = 395782.7534  # lb/in
+A12 = 16973.37245
+A22 = 385759.0864
+A66 = 30000.0
+N_T = [-166.4271592, -178.9447146, 0.0]  # lb/in
+strain_global = [0.00162376724, -0.0005353225057, -0.006666666667]
+
+[expected.ply_strain_local]  # fiber axes; ply 1 is the bottom fabric
+1 = [0.00162376724, -0.0005353225057, -0.006666666667]
+3 = [-0.0005353225057, 0.00162376724, 0.006666666667]
+
+[expected.ply_stress_local]  # psi, fiber axes
+1 = [19758.64545, 2094.805848, -4666.666667]
+3 = [-10003.48986, 7943.200849, 5333.333333]
+6 = [19758.64545, 2094.805848, -4666.666667]

@@ -38,10 +38,10 @@ def test_an_unknown_result_key_is_reported():
 
 
 def test_vector_results_are_compared_value_by_value():
-    comparisons, problems = compare(load_case(CASE_DIR / "homework-lamina-20deg-plane-stress.toml"))
+    comparisons, problems = compare(load_case(CASE_DIR / "constructed-cross-ply-cooling-first-ply-failure.toml"))
     assert not problems
-    assert [c.key for c in comparisons[:3]] == ["strain_global[0]", "strain_global[1]", "strain_global[2]"]
-    assert len(comparisons) == 9
+    assert [c.key for c in comparisons[:3]] == ["N_T[0]", "N_T[1]", "N_T[2]"]
+    assert len(comparisons) == 14  # N_T 3, strain_global 3, two ratios, two plies of 3
     assert all(c.agrees for c in comparisons)
 
 

@@ -3,8 +3,8 @@ Abaqus/CAE, our results, and how they compare with other solvers (ADR-0041).
 
 From the repository root:
 
-    uv run --project fea python docs/models/coupon.py X840PW-UNT-L1        # one coupon
-    uv run --project fea python docs/models/coupon.py --all                 # every coupon under fea/models/
+    uv run --project fea python docs/models/coupon.py <coupon>             # one coupon
+    uv run --project fea python docs/models/coupon.py --all                 # every coupon model under .local/fea/
     options: --root <folder> (the folder holding one folder per coupon; default .local/fea), --no-pdf, --no-theory
 
 The document is written to <root>/<coupon>/documents/: <coupon>.tex and <coupon>.pdf side by side with the figures/ they use, and one zip
@@ -23,7 +23,7 @@ figures are written to records/<coupon>-team-summary.toml for the case page. Cha
     7 What this shows          the readings, and what is not shown yet
     Appendices                 the mapping rule, the record, the files in the zip
 
-Every number is computed while the document is built, from the committed spec, decks and record; nothing is typed in.
+Every number is computed while the document is built, from the coupon's spec, decks and record (local, ADR-0042); nothing is typed in.
 """
 
 from __future__ import annotations
@@ -202,7 +202,7 @@ def engine_chapter(src: Sources, deck, units: str, committed: Path) -> str:
         r"The model is not drawn by hand. One file, the spec, states the coupon: its name and card, dimensions, mesh seeds, layup, material "
         r"from our library with its out-of-plane constants, grips, loading, probes and output requests. Every key is required and every invalid "
         r"combination is refused by name. The generator builds the model from it and writes the complete deck for each solver (ADR-0030); the "
-        r"committed decks must equal what it writes today, which a test checks.",
+        r"kept decks must equal what it writes today, which a test checks.",
         r"\section{The spec}\label{sec:model}", documents.file_listing(src.spec),
         r"\section{The CalculiX twin}",
         r"CalculiX reports no reaction at a coupled reference point, so the model it runs is a twin: the same spec with the grips as direct "
@@ -369,7 +369,7 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
         r"{\small\begin{tabular}{@{}p{2.8cm}p{\dimexpr\linewidth-3.3cm}@{}}", *[rf"{label} & {value} \\[0.3ex]" for label, value in facts], r"\end{tabular}}\par",
         r"\vfill", r"\verdict{" + " ".join(verdict) + "}", r"\vspace{0.6cm}",
         rf"{{\small\color{{muted}} Built {date.today().isoformat()} by \texttt{{docs/models/coupon.py}} (anisotropy-fea {fea_version}, commit "
-        rf"{escape(documents.git_commit())}). Every number is computed from the committed spec, decks and record while the document is built.}}",
+        rf"{escape(documents.git_commit())}). Every number is computed from the coupon's spec, decks and record while the document is built.}}",
         r"\end{titlepage}",
     ])
 
@@ -499,19 +499,19 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("coupons", nargs="*", help="coupon folders under fea/models/")
-    parser.add_argument("--all", action="store_true", help="every coupon under fea/models/")
+    parser.add_argument("coupons", nargs="*", help="coupon folders under .local/fea/")
+    parser.add_argument("--all", action="store_true", help="every coupon model under .local/fea/")
     parser.add_argument("--root", type=Path, default=paths.LOCAL, help="the folder holding one folder per coupon (default .local/fea)")
     parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX and the zip only")
     parser.add_argument("--no-theory", action="store_true", help="leave out the equations and code of Chapter 2")
     parser.add_argument("--full-tables", action="store_true", help="print every compared CalculiX number")
     args = parser.parse_args()
-    found = sorted(d.name for d in paths.MODELS.iterdir() if d.is_dir() and (d / f"{d.name}.toml").is_file())
+    found = [d.name for d in paths.model_dirs()]  # the models are local (ADR-0042); a machine without them has none
     if args.all == bool(args.coupons):
         raise SystemExit(f"name coupons or give --all, not both and not neither; the coupons are {found}")
     unknown = sorted(set(args.coupons) - set(found))
     if unknown:
-        raise SystemExit(f"no model folder for {unknown}; the coupons are {found}")
+        raise SystemExit(f"no coupon model for {unknown} in .local/fea/; the coupons are {found}")
     for coupon in (found if args.all else args.coupons):
         build_document(sources(coupon, args.root), pdf=not args.no_pdf, theory=not args.no_theory, full_tables=args.full_tables)
 

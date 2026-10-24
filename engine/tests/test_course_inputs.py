@@ -19,17 +19,16 @@ from anisotropy_engine.response import abd_compliance, abd_matrix
 from anisotropy_engine.rotation import transformed_compliance, transformed_reduced_stiffness
 
 ENGINE = Path(__file__).parents[1]
-HYBRID = ENGINE / "validation/cases/se142-hw4-p4ab-hybrid-woven-thermal.toml"
+HYBRID = ENGINE / "validation/cases/constructed-two-material-laminate-cooling.toml"  # synthetic constants, not a course problem
 MATERIAL = Lamina(E1=140e9, E2=10e9, G12=7e9, nu12=0.3)
-TAPE = [1, 27.7e6, 1.44e6, 1.13e6, 0.35, 0.005, -0.5e-6, 12.4e-6, 4.7e5, -2.3e5, 8.9e3, -2.9e4, 1.09e4]
-WOVEN = [2, 11.2e6, 10.9e6, 0.94e6, 0.06, 0.010, 1.9e-6, 2.1e-6]
+# The tape and fabric of HYBRID, in the course template's columns; the tape row adds strengths, the fabric row has none.
+TAPE = [1, 20.0e6, 1.40e6, 0.80e6, 0.30, 0.005, -0.3e-6, 15.0e-6, 2.6e5, -2.0e5, 8.0e3, -3.0e4, 1.2e4]
+WOVEN = [2, 9.0e6, 8.5e6, 0.70e6, 0.05, 0.010, 2.0e-6, 2.4e-6]
 # (ply number, angle, material id, thickness); listed top-down as in the course files.
-HYBRID_PLIES = [(11, 0, 2, 0.01), (10, 0, 1, 0.005), (9, 45, 1, 0.005), (8, 90, 1, 0.005), (7, -45, 1, 0.005),
-                (6, 90, 1, 0.005), (5, -45, 1, 0.005), (4, 90, 1, 0.005), (3, 45, 1, 0.005), (2, 0, 1, 0.005),
-                (1, 0, 2, 0.01)]
+HYBRID_PLIES = [(6, 0, 2, 0.01), (5, 0, 1, 0.005), (4, 90, 1, 0.005), (3, 90, 1, 0.005), (2, 0, 1, 0.005), (1, 0, 2, 0.01)]
 
 
-def course_workbook(path, materials=(TAPE, WOVEN), loads=(860, 0, -250, 0, 0, 0, -300), plies=HYBRID_PLIES,
+def course_workbook(path, materials=(TAPE, WOVEN), loads=(800, 0, -200, 0, 0, 0, -280), plies=HYBRID_PLIES,
                     units="lbf, in, psi, F", stress=None):
     """A workbook laid out like the course input template."""
     book = Workbook()
@@ -91,12 +90,12 @@ def test_course_workbook_becomes_a_bottom_first_multi_material_case(tmp_path):
     case = load_case(course_workbook(tmp_path / "hybrid.xlsx"))
     plies = case["laminate"]["plies"]
     assert case["units"] == "psi"
-    assert [ply["material"] for ply in plies] == ["2"] + ["1"] * 9 + ["2"]
-    assert [ply["angle"] for ply in plies] == [0, 0, 45, 90, -45, 90, -45, 90, 45, 0, 0]
+    assert [ply["material"] for ply in plies] == ["2"] + ["1"] * 4 + ["2"]
+    assert [ply["angle"] for ply in plies] == [0, 0, 90, 90, 0, 0]
     assert plies[0]["thickness"] == 0.01 and plies[1]["thickness"] == 0.005
-    assert case["applied"] == {"loads": [860, 0, -250, 0, 0, 0], "delta_T": -300}
+    assert case["applied"] == {"loads": [800, 0, -200, 0, 0, 0], "delta_T": -280}
     # Compressive strengths are negative in the course file and positive magnitudes in a case.
-    assert case["materials"]["1"]["F1c"] == 2.3e5 and case["materials"]["1"]["F2c"] == 2.9e4
+    assert case["materials"]["1"]["F1c"] == 2.0e5 and case["materials"]["1"]["F2c"] == 3.0e4
     assert "F1t" not in case["materials"]["2"]
 
 
@@ -116,12 +115,12 @@ def test_course_workbook_with_an_applied_stress(tmp_path):
 
 
 @pytest.mark.parametrize("changes, message", [
-    ({"loads": (860, "TBD", 0, 0, 0, 0, None)}, "Load Ny is 'TBD'"),
-    ({"loads": (860, 0, 0, 0, 0, 0, "cold")}, "DT is 'cold'"),
+    ({"loads": (800, "TBD", 0, 0, 0, 0, None)}, "Load Ny is 'TBD'"),
+    ({"loads": (800, 0, 0, 0, 0, 0, "cold")}, "DT is 'cold'"),
     ({"plies": [(2, 0, 1, 0.005), (2, 90, 1, 0.005)]}, "repeated \\[2\\]"),
     ({"plies": [(1, 0, 3, 0.005)]}, "material 3"),
     ({"plies": [(1, 0, 1, 0.007)]}, "differs"),
-    ({"materials": [TAPE[:9] + [2.3e5] + TAPE[10:]]}, "X' must be entered as a negative number"),
+    ({"materials": [TAPE[:9] + [-TAPE[9]] + TAPE[10:]]}, "X' must be entered as a negative number"),
     ({"materials": [TAPE[:9] + [None] * 4]}, "all five strengths"),
     ({"materials": [TAPE[:7]]}, "both alpha1 and alpha2"),
     ({"materials": [["(no material in this file)"]]}, "no numeric E1"),
@@ -150,8 +149,8 @@ def hybrid_case():
     (lambda c: c["laminate"]["plies"][0].pop("thickness"), "missing fields \\['thickness'\\]"),
     (lambda c: c["laminate"]["plies"][0].update(thickness=0), "thickness must be a positive number"),
     (lambda c: c["laminate"].update(plies=[]), "nonempty list"),
-    (lambda c: c["materials"]["AGP370"].pop("alpha1"), "both alpha1 and alpha2"),
-    (lambda c: [c["materials"]["AGP370"].pop(k) for k in ("alpha1", "alpha2")], "needs alpha1 and alpha2 in materials \\['AGP370'\\]"),
+    (lambda c: c["materials"]["fabric"].pop("alpha1"), "both alpha1 and alpha2"),
+    (lambda c: [c["materials"]["fabric"].pop(k) for k in ("alpha1", "alpha2")], "needs alpha1 and alpha2 in materials \\['fabric'\\]"),
     (lambda c: c.update(material={"E1": 1, "E2": 1, "G12": 1, "nu12": 0.1}), "exactly one of \\[material\\]"),
     (lambda c: c.pop("materials"), "exactly one of \\[material\\]"),
     (lambda c: c["expected"].pop("tolerance"), "positive relative tolerance"),
@@ -166,7 +165,7 @@ def test_invalid_multi_material_cases_are_rejected(edit, message):
 def test_q_and_q_bar_results_are_only_given_where_they_are_unambiguous():
     results = engine_results(hybrid_case())
     assert "Q11" not in results and "Qbar11" not in results  # two materials
-    single = load_case(ENGINE / "validation/cases/se142-hw2-p4a-qbar-sbar-20deg.toml")
+    single = load_case(ENGINE / "validation/cases/constructed-mixed-angle-lamina.toml")  # one material, one angle
     assert {"Q11", "S11", "Qbar16", "Sbar16"} <= engine_results(single).keys()
 
 
@@ -176,12 +175,12 @@ def test_answer_keys_can_name_only_some_plies():
     comparisons, problems = compare(hybrid_case())
     assert not problems
     labels = [c.key for c in comparisons]
-    assert "ply_stress_local[ply 9][0]" in labels and "ply_stress_local[ply 2][0]" not in labels
+    assert "ply_stress_local[ply 3][0]" in labels and "ply_stress_local[ply 2][0]" not in labels
     assert all(c.agrees for c in comparisons)
 
 
 @pytest.mark.parametrize("expected, message", [
-    ({"ply_stress_local": {"12": [0, 0, 0]}}, "ply 12 does not exist; plies run from 1 \\(bottom\\) to 11"),
+    ({"ply_stress_local": {"7": [0, 0, 0]}}, "ply 7 does not exist; plies run from 1 \\(bottom\\) to 6"),
     ({"ply_stress_local": {"1": [0, 0]}}, "ply 1 needs exactly 3 values"),
     ({"strain_global": {"1": [0, 0, 0]}}, "only per-ply results can be given by ply number"),
 ])
@@ -203,8 +202,8 @@ def test_calculator_reads_a_course_workbook_and_names_each_material(tmp_path):
     run = calculator(course_workbook(tmp_path / "hybrid.xlsx"))
     assert run.returncode == 0, run.stderr
     assert "Q, fiber axes, material 2" in run.stdout
-    assert "ply 11      0 deg   material 2" in run.stdout
-    assert "Temperature change delta_T = -300 degF" in run.stdout
+    assert "ply  6      0 deg   material 2" in run.stdout
+    assert "Temperature change delta_T = -280 degF" in run.stdout
     assert "Not every material has strengths, so failure checks are skipped." in run.stdout
 
 
@@ -212,10 +211,10 @@ def test_calculator_ends_with_the_answer_key_comparison():
     run = calculator(HYBRID)
     assert run.returncode == 0, run.stderr
     assert "Answer key vs engine" in run.stdout
-    assert run.stdout.rstrip().endswith("52 of 52 values agree with the answer key.")
+    assert run.stdout.rstrip().endswith("25 of 25 values agree with the answer key.")
 
 
 def test_calculator_reports_a_course_workbook_error_without_a_traceback(tmp_path):
-    run = calculator(course_workbook(tmp_path / "bad.xlsx", loads=(860, "TBD", 0, 0, 0, 0, None)))
+    run = calculator(course_workbook(tmp_path / "bad.xlsx", loads=(800, "TBD", 0, 0, 0, 0, None)))
     assert run.returncode != 0
     assert "Load Ny is 'TBD'" in run.stderr and "Traceback" not in run.stderr

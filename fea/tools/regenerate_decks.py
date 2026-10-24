@@ -1,8 +1,8 @@
-"""Rewrite every committed deck from its spec, in its test folder's decks/ (ADR-0036).
+"""Rewrite every deck from its spec, in its test folder's decks/ (ADR-0036): the checks' and, on the founder's machine, the coupon models'.
 
-    uv run python tools/regenerate_decks.py                      # every spec under models/ and checks/
-    uv run python tools/regenerate_decks.py X840PW-UNT-L1-nodal  # one spec, by name
-    uv run python tools/regenerate_decks.py X840PW-OHT-L1 --ccx  # also write a CalculiX deck it does not have yet
+    uv run python tools/regenerate_decks.py                      # every spec under fea/checks/ and .local/fea/
+    uv run python tools/regenerate_decks.py unnotched-im7-8552-nodal  # one spec, by name
+    uv run python tools/regenerate_decks.py <coupon> --ccx       # also write a CalculiX deck it does not have yet
 
 The Abaqus deck `decks/<spec>-abaqus.inp` is always written. The CalculiX deck `decks/<spec>-ccx.inp` (the spec promoted to
 order 2, S8R) is rewritten when it exists, or written with --ccx. Prints each deck and whether its text changed. A deck that

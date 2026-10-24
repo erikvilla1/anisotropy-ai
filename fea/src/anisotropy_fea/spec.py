@@ -170,7 +170,7 @@ DESIGNATION = re.compile(r"^(?P<material>[A-Z][A-Z0-9]*)-(?P<test>[A-Z0-9]+)-(?P
 class Coupon(Record):
     """The coupon's identity card (ADR-0038): its name, and what it is measured against.
 
-    `designation` is <material code>-<test code>-<layup code>, for example X840PW-UNT-L1: the material code names one library
+    `designation` is <material code>-<test code>-<layup code>, for example IM7-UNT-L1: the material code names one library
     record, the test code follows from `kind` (TEST_CODES), and the layup code names one stacking sequence. The spec's title
     starts with the designation and the test's name. Material, layup and size are read from the rest of the spec.
     """
@@ -190,7 +190,7 @@ class OutputRequests(Record):
 
 class CouponSpec(Record):
     title: str
-    coupon: Coupon | None = None  # the identity card; every model under fea/models/ has one (ADR-0038)
+    coupon: Coupon | None = None  # the identity card; every coupon model has one (ADR-0038)
     kind: Kind
     units: str  # the unit system of this file and of every deck written from it
     geometry: Geometry
@@ -365,7 +365,7 @@ def validate_spec(spec: CouponSpec) -> None:
         code, name = TEST_CODES[kind]
         match = DESIGNATION.match(designation)
         need(match is not None, f"coupon.designation = {designation!r}: write <material code>-<test code>-<layup code> in capitals, "
-                                f"for example X840PW-{code}-L1")
+                                f"for example IM7-{code}-L1")
         need(match.group("test") == code, f"coupon.designation = {designation!r}: kind {kind} has the test code {code}, not {match.group('test')}")
         need(spec.title.startswith(f"{designation}, {name}: "), f"title must start with the coupon's name and test: \"{designation}, {name}: ...\"")
 
@@ -526,7 +526,7 @@ def spec_ply_thickness(spec: CouponSpec) -> float:
 
 
 def layup_text(spec: CouponSpec) -> str:
-    """The stacking sequence as written on a coupon, for example [0/45/-45/45/0]s."""
+    """The stacking sequence as written on a coupon, for example [45/0/-45/90]s."""
     return "[" + "/".join(f"{angle:g}" for angle in spec.layup.angles) + "]" + ("s" if spec.layup.symmetric else "")
 
 

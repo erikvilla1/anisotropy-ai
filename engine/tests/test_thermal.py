@@ -1,7 +1,8 @@
 """Uniform temperature change: physical checks that do not depend on the ABD solve.
 
 The elastic constants and expansion coefficients below are constructed test inputs, not
-measured properties. Course Reader Problem 5.9 is checked separately as a validation case.
+measured properties. The committed validation cases constructed-cross-ply-cooling-first-ply-failure and
+constructed-two-material-laminate-cooling check the thermal path against closed forms; the course's are local (ADR-0042).
 """
 
 import math

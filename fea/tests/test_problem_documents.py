@@ -14,15 +14,15 @@ def run(*arguments: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(BUILD), *arguments], capture_output=True, text=True, cwd=ROOT)
 
 
-def test_the_generator_documents_a_thermal_bending_failure_problem(tmp_path):
-    case = CASES / "se142-hw5-p1-thermal-bending-laminate.toml"
+def test_the_generator_documents_a_thermal_failure_problem(tmp_path):
+    case = CASES / "constructed-cross-ply-cooling-first-ply-failure.toml"
     result = run(str(case), "--out", str(tmp_path), "--no-pdf")
     assert result.returncode == 0, result.stdout + result.stderr
-    tex = (tmp_path / "se142-hw5-p1-thermal-bending-laminate.tex").read_text(encoding="utf-8")
+    tex = (tmp_path / f"{case.stem}.tex").read_text(encoding="utf-8")
     assert tex.startswith(r"\documentclass") and tex.rstrip().endswith(r"\end{document}")
     for label in ("sec:summary", "sec:problem", "sec:steps", "sec:comparison", "sec:method", "sec:reading"):
         assert rf"\label{{{label}}}" in tex
-    assert "28 of 28 compared values agree" in tex
+    assert "14 of 14 compared values agree" in tex
     # the steps this problem needs, in order, each with its theory section and the code it names
     for step in ("Step 1. Ply stiffness", "Step 2. Rotation", "Step 3. Laminate stiffness", "Step 4. Temperature change", "Step 5. Mid-plane strains",
                  "Step 6. Strain and stress in every ply", "Step 7. First-ply failure", "Step 8. Laminate engineering constants"):
@@ -34,15 +34,16 @@ def test_the_generator_documents_a_thermal_bending_failure_problem(tmp_path):
 
 
 def test_a_mixed_condition_problem_has_no_thermal_or_failure_step_and_names_the_known_quantities(tmp_path):
-    case = CASES / "se142-hw2-p2-cr-3-8-walls-30deg.toml"
+    case = CASES / "constructed-mixed-angle-lamina.toml"
     result = run(str(case), "--out", str(tmp_path), "--no-pdf", "--no-theory")
     assert result.returncode == 0, result.stdout + result.stderr
-    tex = (tmp_path / "se142-hw2-p2-cr-3-8-walls-30deg.tex").read_text(encoding="utf-8")
-    assert "13 of 13 compared values agree" in tex
-    assert "Step 4. Mid-plane strains" in tex and "Temperature change" not in tex.split(r"\section{The solution")[1].split(r"\section{Every compared")[0]
-    assert "First-ply failure" not in tex.split(r"\section{The solution")[1].split(r"\section{Every compared")[0]
-    assert r"\codefrom" not in tex.split(r"\section{The solution")[1].split(r"\section{Every compared")[0]  # --no-theory
-    assert r"\varepsilon^0_x$, $\varepsilon^0_y$, $\tau_{xy}$" in tex  # the known quantities of the mixed problem
+    tex = (tmp_path / f"{case.stem}.tex").read_text(encoding="utf-8")
+    assert "6 of 6 compared values agree" in tex
+    steps = tex.split(r"\section{The solution")[1].split(r"\section{Every compared")[0]
+    assert "Step 4. Mid-plane strains" in tex and "Temperature change" not in steps
+    assert "First-ply failure" not in steps
+    assert r"\codefrom" not in steps  # --no-theory
+    assert r"Known quantities: $\sigma_x$, $\varepsilon^0_y$, $\tau_{xy}$" in tex  # the known quantities of the mixed problem
     assert r"\bar{\mathbf{S}}" in tex  # a single lamina shows its transformed compliance
 
 
@@ -53,19 +54,18 @@ def load_build():
     return module
 
 
-def test_a_homework_case_prints_the_reading_of_its_set_from_the_local_folder(tmp_path):
+def test_a_homework_case_prints_the_reading_of_its_set(tmp_path):
     module = load_build()
     note = tmp_path / "HW3" / "comparison" / "key-comparison.md"
     note.parent.mkdir(parents=True)
     note.write_text("# Reading: a test note\n\nWritten by the test.\n", encoding="utf-8")
-    assert module.reading_note(CASES / "se142-hw3-p3a-boron-symmetric.toml", tmp_path) == note
-    assert module.set_of(CASES / "course-reader-5-9-sglass-curing.toml") == "course-reader"
-    assert module.reading_note(CASES / "daniel-ishai-problem-7-11.toml", tmp_path) is None  # not a homework set
-    text, found = module.reading_section(CASES / "se142-hw3-p3a-boron-symmetric.toml", tmp_path)
+    case = tmp_path / "HW3" / "ours" / "p1.toml"  # a homework case sits in its set's ours/ (ADR-0042)
+    assert module.reading_note(case) == note
+    assert module.reading_note(CASES / "daniel-ishai-problem-7-11.toml") is None  # not in a set, and nothing beside it
+    text, found = module.reading_section(case)
     assert found and "Reading: a test note" in text and "Written by the test." in text
-    text, found = module.reading_section(CASES / "se142-hw5-p1-thermal-bending-laminate.toml", tmp_path)  # HW5 has no note here
-    assert not found and "kept on our machine, not in the repository" in text
-    assert "HW5/comparison/key-comparison.md" in text.replace(r"\allowbreak{}", "")  # the path, with the break hints LaTeX gets removed
+    text, found = module.reading_section(tmp_path / "HW5" / "ours" / "p1.toml")  # HW5 has no note
+    assert not found and "HW5/comparison/key-comparison.md" in text.replace(r"\allowbreak{}", "")  # names where to write it
 
 
 def test_every_step_has_its_theory_fragment():

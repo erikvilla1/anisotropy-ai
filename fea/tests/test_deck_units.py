@@ -37,7 +37,7 @@ def test_deck_conversion_scales_lengths_stresses_and_prescribed_displacements_on
     deck = parse_deck(DECK.read_text(encoding="utf-8"))
     si = deck_to_si(deck, "mm-MPa")
     part, part_si = deck.parts["Coupon"], si.parts["Coupon"]
-    assert part_si.nodes.xyz[2].tolist() == pytest.approx([0.010, 0.080, 0.0])
+    assert part_si.nodes.xyz[2].tolist() == pytest.approx([0.025, 0.100, 0.0])
     assert part_si.sections[0].layers[0].thickness == pytest.approx(0.18288e-3)
     assert part_si.sections[0].layers[0].integration_points == 3  # counts are not scaled
     assert si.materials["IM7-8552"].elastic.E2 == pytest.approx(8963.18e6)
@@ -46,7 +46,7 @@ def test_deck_conversion_scales_lengths_stresses_and_prescribed_displacements_on
     (pull,) = [b for b in si.steps[0].boundaries if b.target == "Top"]
     assert pull.value == pytest.approx(0.8e-3)
     assert si.units == "mm-MPa" and deck.units is None
-    assert part.nodes.xyz[2].tolist() == [10.0, 80.0, 0.0]  # the unitless deck is untouched
+    assert part.nodes.xyz[2].tolist() == [25.0, 100.0, 0.0]  # the unitless deck is untouched
 
 
 def test_m_pa_is_the_identity():
@@ -54,7 +54,7 @@ def test_m_pa_is_the_identity():
     with pytest.warns(UserWarning, match="outside 1 GPa to 1000 GPa"):
         si = deck_to_si(deck, "m-Pa")  # these moduli are MPa numbers, so m-Pa is the wrong statement and the reader says so
     assert si.materials["IM7-8552"].elastic.E1 == 162095.74
-    assert si.parts["Coupon"].nodes.xyz[2].tolist() == [10.0, 80.0, 0.0]
+    assert si.parts["Coupon"].nodes.xyz[2].tolist() == [25.0, 100.0, 0.0]
 
 
 def test_plausible_moduli_do_not_warn(recwarn):

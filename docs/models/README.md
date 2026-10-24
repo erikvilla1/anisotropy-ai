@@ -7,8 +7,8 @@
 From the repository root, with [Tectonic](https://tectonic-typesetting.github.io/) installed (the same as for the manual):
 
 ```sh
-uv run --project fea python docs/models/coupon.py X840PW-UNT-L1        # one coupon
-uv run --project fea python docs/models/coupon.py --all                 # every coupon under fea/models/
+uv run --project fea python docs/models/coupon.py <coupon>             # one coupon
+uv run --project fea python docs/models/coupon.py --all                 # every coupon model under .local/fea/ (none on CI, ADR-0042)
 ```
 
 The document is built straight into the coupon's `.local/fea/<coupon>/documents/` (ADR-0040): `<coupon>.tex` and `<coupon>.pdf` side by side, with the `figures/` they use. There is one copy of it, no build folder. One dated zip goes beside it, `<date>_<coupon>.zip`. The zip holds the PDF, the Abaqus deck to import, the CalculiX deck, both specs and the material record. When the team built the coupon, it also holds their deck and our results in the layout of their field reports. It holds no CalculiX results, since the team runs our decks. A zip is replaced only when this project wrote it.
@@ -38,7 +38,7 @@ Options:
 It is not a document of its own. When `.local/fea/<coupon>/comparison/team-comparison.toml` exists, `docs/models/team.py` supplies four things:
 - the team's sections of Chapters 1, 4, 6 and 7;
 - their files in the zip;
-- the comparison in figures, in `fea/models/<coupon>/records/<coupon>-team-summary.toml`. It holds no value from the team's files and feeds the case page's result table (ADR-0039). Commit it, then run `fea/tools/case_pages.py`.
+- the comparison in figures, in `.local/fea/<coupon>/records/<coupon>-team-summary.toml`. It holds no value from the team's files and feeds the case page's result table (ADR-0039). It stays local with the model (ADR-0042); then run `fea/tools/case_pages.py`.
 
 The manifest's format is `Manifest` in `team.py`, and a reading `team-comparison.md` sits beside it. Everything stays local, because it carries the team's results (R-16).
 

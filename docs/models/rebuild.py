@@ -1,6 +1,6 @@
 """The rebuild guide of a model comparison document: how to recreate the model, step by step, in Abaqus/CAE and in PrePoMax.
 
-Follows the structure of the team's FEA model report template (local copy under `.local/fea/X840PW-UNT-L1/from-team/2026-10-16/template/`, 2026-10-18):
+Follows the structure of the team's FEA model report template (local copy under `.local/fea/<coupon>/from-team/<date>/template/`, 2026-10-18):
 document control, evidence tags, a summary card, then one section per modelling step with a settings table, the GUI steps
 for both tools, and the input-file keywords. Every value carries an evidence tag; a value that cannot carry one is written
 [OPEN], never filled in from memory (the template's rule for authors). The PrePoMax steps cite the page of the PrePoMax 2.6.0

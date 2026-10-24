@@ -33,7 +33,7 @@ def kernel_reports(deck_path: Path, out: Path, quantities=("S11", "S22", "Mises"
             x, y = solution.mesh.xy[solution.mesh.connectivity[index]].mean(axis=0) * 1e3
             rows += [(label, layer, face, float(x), float(y), float(values[q][index, layer - 1])) for layer, face in layers]
         path = out / f"Test_{q}.csv"
-        write_field_report(path, q, rows, "fixture.odb", "Step-1", "Increment 1", "CFRP-COUPON-1", "CFRP-COUPON-1_COMPOSITELAYUP-1-1", "IM7-8552")
+        write_field_report(path, q, rows, "fixture.odb", "Step-1", "Increment 1", "STRIP-1", "STRIP-1_LAYUP-A-1", "IM7-8552")
         paths.append(path)
     return paths
 
@@ -41,9 +41,9 @@ def kernel_reports(deck_path: Path, out: Path, quantities=("S11", "S22", "Mises"
 def test_a_written_report_reads_back_exactly(tmp_path):
     rows = [(3, 1, "SNEG", 2.5, 7.5, 1234.5), (3, 10, "SPOS", 2.5, 7.5, 1234.5), (8, 4, "SMID", 7.5, 12.5, -0.125)]
     path = tmp_path / "ours-S22.csv"
-    write_field_report(path, "S22", rows, "kernel (no .odb)", "Step-1", "linear static solve", "CFRP-COUPON-1", "COUPON-1_ALL", "X840-Z60-PW")
+    write_field_report(path, "S22", rows, "kernel (no .odb)", "Step-1", "linear static solve", "STRIP-1", "STRIP-1_ALL", "IM7-8552")
     report = read_field_report(path)
-    assert report.quantity == "S22" and report.instance == "CFRP-COUPON-1" and report.blocks == 1 and report.rows == 3
+    assert report.quantity == "S22" and report.instance == "STRIP-1" and report.blocks == 1 and report.rows == 3
     assert report.values == {(3, 1): 1234.5, (3, 10): 1234.5, (8, 4): -0.125}
     assert report.faces == {(3, 1): "SNEG", (3, 10): "SPOS", (8, 4): "SMID"} and report.centroids == {3: (2.5, 7.5), 8: (7.5, 12.5)}
     with pytest.raises(ReportError, match="not one of"):
@@ -62,10 +62,10 @@ def test_reports_of_the_reference_deck_pair_with_our_generated_deck_element_by_e
     assert len(paired) == 3 * 16 * 2
     # the same model gives the same numbers, to the nine significant digits the report keeps
     assert max(abs(p.difference) for p in paired) <= 1e-8 * max(abs(p.reference) for p in paired)
-    assert all(eq.element_map[("CFRP-Coupon-1", p.reference_element)][1] == p.our_element for p in paired)
-    a = agreement(paired, "S22", "free length", (0.0, 80.0), 0.01)
+    assert all(eq.element_map[("Strip-1", p.reference_element)][1] == p.our_element for p in paired)
+    a = agreement(paired, "S22", "free length", (0.0, 100.0), 0.01)
     assert a.count == 32 and a.within == 32 and a.worst_fraction <= 1e-8 and a.largest > 0
-    assert agreement(paired, "S22", "nowhere", (90.0, 95.0), 0.01).count == 0
+    assert agreement(paired, "S22", "nowhere", (110.0, 115.0), 0.01).count == 0
     difference, largest = kernel_difference(solve_membrane(team), solution, eq, UNITS)
     assert difference <= 1e-9 * largest
 

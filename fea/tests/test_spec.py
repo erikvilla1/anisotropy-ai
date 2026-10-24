@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from public_coupon import PUBLIC_COUPON, SEEDS
+
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.spec import (SpecError, admissible_ny, full_angles, load_spec, mesh_counts, parse_spec, row_coordinates, spec_material, spec_plies,
                                  to_si)
@@ -16,7 +18,7 @@ def spec_with(old: str, new: str, base: str = NODAL):
     return parse_spec(base.replace(old, new, 1))
 
 
-def test_the_committed_specs_load_and_convert_to_si():
+def test_every_spec_loads_and_converts_to_si():
     for path in paths.all_specs():
         spec = load_spec(path)
         assert spec.si and spec.source_sha256 and spec.source_path == str(path)
@@ -26,15 +28,14 @@ def test_the_committed_specs_load_and_convert_to_si():
             # the Kirsch plate: nominal isotropic constants written in the spec, no dataset to cite; its title and comments say so
             assert "Kirsch" in spec.title and material.rights == "spec" and material.E1 == material.E2 and material.strengths is None
             continue
-        # A committed spec names a library record whose values may be cited publicly: public-domain, open-publisher, or a licensed
-        # reference cited by table and page (ADR-0018; ADR-0030 amendment 4). User-supplied data and explicit constants stay local (R-16).
-        assert material.rights in ("open-publisher", "public-domain", "licensed-reference"), f"{path.name}: committed specs cite library materials only (R-16)"
+        # A spec names a library record whose values may be cited: public-domain, open-publisher, or a licensed reference cited
+        # by table and page (ADR-0018; ADR-0030 amendment 4). User-supplied data and explicit constants stay out of specs (R-16).
+        assert material.rights in ("open-publisher", "public-domain", "licensed-reference"), f"{path.name}: specs cite library materials only (R-16)"
         assert material.E1 > 1e9 and material.strengths is not None and material.citation_lines
         plies = spec_plies(spec)
+        assert plies and all(p.thickness_m > 0 for p in plies)
         if spec.material.library == "im7-8552":
             assert len(plies) == 8 and plies[0].thickness_m == pytest.approx(0.18288e-3)
-        else:
-            assert spec.material.library == "x840-z60-pw" and len(plies) == 10 and plies[0].thickness_m == pytest.approx(0.1e-3)
 
 
 def test_units_are_converted_once_and_only_dimensioned_numbers_change():
@@ -131,38 +132,34 @@ def test_bending_rules():
         parse_spec(text.replace("[loading]", "[grips]\nkind = \"nodal\"\nregion = \"line\"\n\n[loading]"))
 
 
-TEAM_COUPON = (paths.spec_path("X840PW-UNT-L1")).read_text(encoding="utf-8")
-TEAM_SEEDS = ("y_partitions = [15.0, 35.97, 44.03, 65.0]", "y_seeds = [15, 21, 8, 21, 15]")
-
-
-def test_a_mesh_seeded_by_segment_has_the_teams_node_rows():
-    """The team's CAE mesh: partitions at 15, 35.97, 44.03 and 65 mm, seeded 15, 21, 8, 21, 15 (their report template)."""
-    spec = parse_spec(TEAM_COUPON)
-    assert mesh_counts(spec) == (10, 80)
+def test_a_mesh_seeded_by_segment_puts_a_node_row_on_every_partition():
+    """The public stand-in: partitions at the tab lines (56 and 194 mm) and a gauge band (110 to 140 mm), seeded 28, 27, 10, 27, 28."""
+    spec = parse_spec(PUBLIC_COUPON)
+    assert mesh_counts(spec) == (10, 120)
     rows = row_coordinates(spec)
-    assert len(rows) == 81 and rows[0] == 0.0 and rows[-1] == 80.0
-    assert rows[15] == 15.0 and rows[36] == pytest.approx(35.97, abs=1e-12) and rows[44] == pytest.approx(44.03, abs=1e-12) and rows[65] == 65.0
-    assert rows[16] - rows[15] == pytest.approx(20.97 / 21) and rows[37] - rows[36] == pytest.approx(8.06 / 8)
+    assert len(rows) == 121 and rows[0] == 0.0 and rows[-1] == 250.0
+    assert rows[28] == 56.0 and rows[55] == pytest.approx(110.0, abs=1e-12) and rows[65] == pytest.approx(140.0, abs=1e-12) and rows[92] == 194.0
+    assert rows[29] - rows[28] == pytest.approx(54 / 27) and rows[56] - rows[55] == pytest.approx(30 / 10)
     si = to_si(spec)
-    assert si.mesh.y_partitions == pytest.approx([0.015, 0.03597, 0.04403, 0.065]) and row_coordinates(si)[36] == pytest.approx(0.03597)
+    assert si.mesh.y_partitions == pytest.approx([0.056, 0.110, 0.140, 0.194]) and row_coordinates(si)[55] == pytest.approx(0.110)
     assert row_coordinates(parse_spec(NODAL)) is None  # a uniform mesh keeps np.linspace in the mesher, so older decks do not change
 
 
 SEED_REFUSALS = [
-    (TEAM_SEEDS[1], "", "go together"),  # leaves the comment that followed it
-    (TEAM_SEEDS[0], TEAM_SEEDS[0] + "\nny = 80", "replaces mesh.ny"),
-    (TEAM_SEEDS[1], "y_seeds = [15, 21, 8, 21]", "one count per segment"),
-    (TEAM_SEEDS[1], "y_seeds = [15, 21, 0, 21, 15]", "at least 1"),
-    (TEAM_SEEDS[0], "y_partitions = [15.0, 44.03, 35.97, 65.0]", "increase strictly"),
-    (TEAM_SEEDS[0], "y_partitions = [15.0, 35.97, 44.03, 85.0]", "increase strictly"),
-    (TEAM_SEEDS[0], "y_partitions = [14.0, 35.97, 44.03, 65.0]", "no node row on the line\\(s\\) \\['Tab-Bottom-Line'\\]"),
+    (SEEDS[1], "", "go together"),
+    (SEEDS[0], SEEDS[0] + "\nny = 120", "replaces mesh.ny"),
+    (SEEDS[1], "y_seeds = [28, 27, 10, 27]", "one count per segment"),
+    (SEEDS[1], "y_seeds = [28, 27, 0, 27, 28]", "at least 1"),
+    (SEEDS[0], "y_partitions = [56.0, 140.0, 110.0, 194.0]", "increase strictly"),
+    (SEEDS[0], "y_partitions = [56.0, 110.0, 140.0, 260.0]", "increase strictly"),
+    (SEEDS[0], "y_partitions = [55.0, 110.0, 140.0, 194.0]", "no node row on the line\\(s\\) \\['Tab-Bottom-Line'\\]"),
 ]
 
 
 @pytest.mark.parametrize("old, new, message", SEED_REFUSALS, ids=[r[2][:30] for r in SEED_REFUSALS])
 def test_invalid_seeding_is_refused_by_name(old, new, message):
     with pytest.raises(SpecError, match=message):
-        spec_with(old, new, base=TEAM_COUPON)
+        spec_with(old, new, base=PUBLIC_COUPON)
 
 
 def test_admissible_ny_names_counts_that_hit_every_line():

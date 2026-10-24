@@ -24,7 +24,7 @@ TWO = DECKS / "coupon-2x2-im7-8552.inp"
 def uniform_case():
     deck = read_deck(ONE, "mm-MPa")
     plies = section_plies(deck.parts["Coupon"].sections[0], deck.materials)
-    mixed = mixed_response(plies, {"Nx": 0.0, "eps_y": 0.01, "Nxy": 0.0, "Mx": 0.0, "My": 0.0, "Mxy": 0.0}, None)
+    mixed = mixed_response(plies, {"Nx": 0.0, "eps_y": 0.008, "Nxy": 0.0, "Mx": 0.0, "My": 0.0, "Mxy": 0.0}, None)  # 0.8 mm over 100 mm
     return deck, plies, mixed
 
 
@@ -40,7 +40,7 @@ def test_ply_states_equal_the_engine_ply_surfaces_with_zero_curvature():
         assert field.strain_12[0][k] == pytest.approx(bottom.strain_12, rel=1e-12, abs=1e-16)
         assert field.stress_xy[0][k] == pytest.approx(bottom.stress_xy, rel=1e-12, abs=1e-3)
         assert field.angles_deg[0][k] == bottom.angle_deg
-    # the 45 and -45 plies see the same fiber stress magnitude pattern only if the state were pure axial; here gamma_xy != 0, so they differ
+    # the 30 and -30 plies see the same fiber stress magnitude pattern only if the state were pure axial; here gamma_xy != 0, so they differ
     assert not np.allclose(field.stress_12[0][1], field.stress_12[0][2])
 
 

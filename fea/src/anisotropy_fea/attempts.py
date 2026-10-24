@@ -5,7 +5,7 @@
       calculix/            run_calculix.py
       team-in-calculix/    convert_to_calculix.py on the team's deck
 
-The record of each try is its row in the case page's attempt log (`fea/models/<coupon>/README.md`); NN is that row's number,
+The record of each try is its row in the case page's attempt log (`.local/fea/<coupon>/README.md`); NN is that row's number,
 so a folder and its row always match. Only tries that ran something have a folder. A folder is never reused or overwritten.
 CalculiX results (.frd) are large, so they are kept only in the latest run of each kind: when a later attempt has a run of
 the same kind, the earlier .frd files are deleted (`prune_results`).
@@ -82,8 +82,8 @@ def prune_results(test: str) -> list[Path]:
 def start_attempt(test: str, day: str | None = None) -> tuple[Path, list[Path]]:
     """Create the next attempt folder with run/, numbered after both the last folder and the attempt log; prune earlier
     results first. Returns the folder and the deleted .frd files."""
-    if not (paths.MODELS / test).is_dir():
-        raise AttemptError(f"no model folder fea/models/{test}; the tests are {sorted(d.name for d in paths.MODELS.iterdir() if d.is_dir())}")
+    if paths.MODELS / test not in paths.model_dirs():
+        raise AttemptError(f"no coupon model .local/fea/{test}/{test}.toml; the coupons are {[d.name for d in paths.model_dirs()]}")
     deleted = prune_results(test)
     previous = attempts(test)
     number = max(attempt_number(previous[-1]) if previous else 0, logged_attempts(test)) + 1

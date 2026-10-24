@@ -27,9 +27,9 @@ def flatten(value):
 
 
 @pytest.mark.parametrize("name", [
-    "se142-hw5-p1-thermal-bending-laminate",  # loads, temperature change, fixed and variable failure
-    "se142-hw2-p1-compliance-45deg",  # mixed conditions
-    "se142-hw4-p4ab-hybrid-woven-thermal",  # several materials
+    "constructed-cross-ply-cooling-first-ply-failure",  # loads, temperature change, fixed and variable failure, Tsai-Wu
+    "constructed-mixed-angle-lamina",  # mixed conditions
+    "constructed-two-material-laminate-cooling",  # several materials
     "constructed-cross-ply-plate-buckling",  # plate buckling
     "constructed-max-strain-biaxial-lamina",  # every failure criterion
 ])

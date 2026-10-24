@@ -1,6 +1,6 @@
 # Evaluation: one generated document per solved problem (ADR-0033) | 2026-10-19
 
-- Scope: `docs/problems/build.py` (the generator), `docs/problems/readings/` (reading notes for Homework 2 to 5 and course reader 5.9), `docs/problems/README.md`, the manual's validation chapter reduced to one summary table (`docs/manual/build.py::validation`), the CI step and artifact `problem-documents`, `fea/tests/test_problem_documents.py`. No engine code and no case file changed.
+- Scope: `docs/problems/build.py` (the generator), `docs/problems/readings/` (reading notes for the course's homework sets, since moved to `.local/`, ADR-0040 amendment 1), `docs/problems/README.md`, the manual's validation chapter reduced to one summary table (`docs/manual/build.py::validation`), the CI step and artifact `problem-documents`, `fea/tests/test_problem_documents.py`. No engine code and no case file changed.
 - Environment: Windows 11, uv 0.13, Python 3.12, the `fea` project environment (the generator loads the manual's converters, which import both packages); Tectonic for the PDFs.
 
 ## Commands and captured output
@@ -20,7 +20,7 @@ From the root: `uv run --project fea python docs/problems/build.py --all --no-pd
 Index written to docs/problems/build/index.md: 32 problems, 426 of 426 source values reproduced by the engine
 ```
 
-From the root, with Tectonic: the documents of `se142-hw5-p1-thermal-bending-laminate` (33 pages, 28 of 28 values), `se142-hw2-p2-cr-3-8-walls-30deg` (13 of 13) and `se142-hw4-p4ab-hybrid-woven-thermal` (52 of 52) compiled to PDF; the title page, the problem tables, the step pages with theory and listings, the ply tables, the failure step and the comparison table were read as rendered pages.
+From the root, with Tectonic: the documents of three course problems (a thermal bending failure, a mixed-condition lamina and a two-material laminate; the cases are local since ADR-0042) compiled to PDF; the title page, the problem tables, the step pages with theory and listings, the ply tables, the failure step and the comparison table were read as rendered pages.
 
 The manual's validation chapter, rendered through `docs/manual/build.py::validation()` alone: "426 of 426 values from 32 cases agree", one table row per case.
 

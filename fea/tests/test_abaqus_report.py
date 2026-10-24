@@ -23,14 +23,14 @@ HEADER = SAMPLE.splitlines()[0]
 
 def test_the_sample_report_is_read_with_its_repeated_block_and_faces():
     report = read_field_report(FIXTURES / "field-report-S22.csv")
-    assert report.quantity == "S22" and report.instance == "CFRP-COUPON-1" and report.step == "Step-1"
+    assert report.quantity == "S22" and report.instance == "STRIP-1" and report.step == "Step-1"
     assert report.blocks == 2 and report.rows == 6  # the second block repeats two rows, which must agree
     assert report.values == {(3, 1): 1234.5, (3, 8): 1234.5, (8, 1): -12.25, (8, 4): 56.0}
     assert report.faces == {(3, 1): "SNEG", (3, 8): "SPOS", (8, 1): "SNEG", (8, 4): ""}
     assert report.centroids == {3: (2.5, 7.5), 8: (7.5, 12.5)}
 
 
-def row(element: int, x: float, y: float, point: str, value: str, intpt: int = 1, instance: str = "CFRP-COUPON-1") -> str:
+def row(element: int, x: float, y: float, point: str, value: str, intpt: int = 1, instance: str = "STRIP-1") -> str:
     return (f'H:/example/coupon.odb,Step-1,Increment      1: Step Time =    1.000,"{instance}",{element:14d},{intpt:14d},{x:13g},{y:13g},            0.,'
             f'"ASSEMBLY_COUPON-1_LAYUP-1","IM7-8552","shell < composite > < elset = ASSEMBLY_COUPON-1_LAYUP-1 > : {point}",{value:>13s}')
 

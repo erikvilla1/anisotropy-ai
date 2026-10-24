@@ -3,6 +3,7 @@
 from pathlib import Path
 import subprocess
 import sys
+import tomllib
 
 import pytest
 
@@ -130,18 +131,21 @@ def test_prescribed_curvature_case_converts_us_force_and_curvature_units():
     assert converted["strain_global"][0] == pytest.approx(base["strain_global"][0], rel=1e-10)
 
 
-THERMAL = ENGINE / "validation/cases/course-reader-5-9-as4-curing.toml"
+THERMAL = ENGINE / "validation/cases/constructed-cross-ply-cooling-first-ply-failure.toml"
 
 
 def test_calculator_prints_thermal_resultants_and_residual_stresses():
     run = calculator(THERMAL)
     assert run.returncode == 0, run.stderr
-    assert "Temperature change delta_T = -150 degC" in run.stdout
+    assert "Temperature change delta_T = -120 degC" in run.stdout
+    expected = tomllib.loads(THERMAL.read_text(encoding="utf-8"))["expected"]  # the closed forms (validation/closed_forms.py)
     n_line = next(line for line in run.stdout.splitlines() if line.startswith("Thermal forces N_T"))
-    assert [float(v) for v in n_line.split(":")[1].split()] == pytest.approx([-7477.57, -7477.57, 0], abs=0.01)
+    assert [float(v) for v in n_line.split(":")[1].split()] == pytest.approx(expected["N_T"], abs=0.1)
     stress_rows = [line for line in run.stdout.splitlines() if line.strip().startswith("ply") and "|" in line][-8:]
-    for row in stress_rows:  # every ply face: sigma_1 = -36.346 MPa, sigma_2 = +36.346 MPa
-        assert [float(v) for v in row.split("|")[1].split()] == pytest.approx([-36.346, 36.346, 0], abs=1e-3)
+    mirror = {"1": "1", "2": "2", "3": "2", "4": "1"}  # [0/90]s: plies 3 and 4 mirror 2 and 1
+    for row in stress_rows:  # both faces of every ply, residual and mechanical stress together
+        local = [float(v) for v in row.split("|")[1].split()]
+        assert local == pytest.approx(expected["ply_stress_local"][mirror[row.split()[1]]], rel=1e-4, abs=1e-6)  # printed to 5 figures
 
 
 def test_calculator_states_when_no_temperature_change_is_given():
@@ -151,10 +155,9 @@ def test_calculator_states_when_no_temperature_change_is_given():
 
 
 def test_calculator_holds_thermal_stress_fixed_in_failure_ratios(tmp_path):
-    path = tmp_path / "thermal-with-strengths.toml"
-    strengths = "alpha2 = 26.0e-6\nF1t = 2280.0\nF1c = 1725.0\nF2t = 57.0\nF2c = 228.0\nF6 = 76.0"
-    path.write_text(THERMAL.read_text().replace("alpha2 = 26.0e-6", strengths)
-                    .replace("loads = [0, 0, 0, 0, 0, 0]", "loads = [1000, 0, 0, 0, 0, 0]"))
+    path = tmp_path / "thermal-without-a-failure-table.toml"
+    text = THERMAL.read_text(encoding="utf-8")
+    path.write_text(text[:text.index("[failure]")] + text[text.index("[expected]"):], encoding="utf-8")  # no [failure]: the default split
     run = calculator(path)
     assert run.returncode == 0, run.stderr
     assert "hold the residual thermal stress fixed and scale the mechanical loads" in run.stdout

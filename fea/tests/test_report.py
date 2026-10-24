@@ -126,8 +126,8 @@ def test_model_facts_of_the_coupled_grips_fixture():
     f = model_facts(deck, solve_membrane(deck))
     assert f.grid == (2, 8)
     assert [(c.name, c.reference, c.slaves, c.dofs) for c in f.couplings] == [("Grip-Top", "Assembly.1", 3, (1, 2, 3, 4, 5, 6)), ("Grip-Bottom", "Assembly.2", 3, (1, 2, 3, 4, 5, 6))]
-    assert f.reference_nodes == (("Assembly.1", (pytest.approx(0.005), pytest.approx(0.08))), ("Assembly.2", (pytest.approx(0.005), pytest.approx(0.0))))
-    assert f.partition_lines_y == pytest.approx((0.0, 0.08)) and f.row_counts == (8,)  # the end rows are the grips: no inner partition
+    assert f.reference_nodes == (("Assembly.1", (pytest.approx(0.0125), pytest.approx(0.1))), ("Assembly.2", (pytest.approx(0.0125), pytest.approx(0.0))))
+    assert f.partition_lines_y == pytest.approx((0.0, 0.1)) and f.row_counts == (8,)  # the end rows are the grips: no inner partition
     assert {s[0] for s in f.surfaces} == {"s_Surf-1", "s_Top_CNS_", "s_Bottom_CNS_"}
 
 

@@ -15,7 +15,7 @@ from anisotropy_fea import paths  # where the files live (ADR-0036)
 
 DECKS = paths.CHECK_DECKS
 GRIPS = DECKS / "coupon-2x8-grips-im7-8552.inp"
-LOCAL_DECK = paths.local_test("X840PW-UNT-L1") / paths.TEAM_FILES / "2026-10-16" / "Tension-test.inp"
+LOCAL_DECK = paths.team_deck("X840PW-UNT-L1")  # found by its place; the team's files are local (ADR-0042)
 needs_ccx = pytest.mark.skipif(find_ccx() is None, reason="CalculiX not found: set ANISOTROPY_CCX or put ccx on PATH (docs/installation-fea-tools.md)")
 TRANSVERSE = TransverseChoice(nu23=0.45)
 
@@ -74,7 +74,7 @@ def test_the_converted_fixture_runs_and_agrees_with_the_kernel(tmp_path):
     solution = solve_membrane(deck)
     top = dat.total_force("Coupled-Grip-Top")
     ours = solution.reaction_of([(None, 1)])
-    assert top[1] == pytest.approx(ours[1], rel=0.02)  # 4640.6 against 4705.3 N: S8R against Q4 on a 2 by 8 mesh
+    assert top[1] == pytest.approx(ours[1], rel=0.02)  # 4535.3 against 4574.1 N: S8R against Q4 on a 2 by 8 mesh (2026-10-23)
     assert np.allclose(top, -dat.total_force("Coupled-Grip-Bottom"), atol=1e-6 * abs(top[1]))
     strains = dat.strains("Probe").values[:, [0, 1, 3]].mean(axis=0)
     assert strains[1] == pytest.approx(solution.strain[8][1], rel=0.01)
@@ -82,7 +82,7 @@ def test_the_converted_fixture_runs_and_agrees_with_the_kernel(tmp_path):
 
 
 @needs_ccx
-@pytest.mark.skipif(not LOCAL_DECK.exists(), reason="team deck not present at .local/fea/X840PW-UNT-L1/from-team/2026-10-16/Tension-test.inp")
+@pytest.mark.skipif(LOCAL_DECK is None, reason="the team's deck is not on this machine (.local/fea/X840PW-UNT-L1/from-team/<date>/, ADR-0042)")
 def test_the_team_coupon_converts_runs_and_agrees_with_the_kernel(tmp_path):
     deck = read_deck(LOCAL_DECK, "mm-MPa")
     path = tmp_path / "tension.inp"
@@ -91,7 +91,8 @@ def test_the_team_coupon_converts_runs_and_agrees_with_the_kernel(tmp_path):
     solution = solve_membrane(deck)
     top = dat.total_force("Coupled-Constraint-1")
     assert top[1] == pytest.approx(solution.reaction_of([(None, 1)])[1], rel=0.05)
-    assert dat.displacements("Nall").values[:, 1].max() == pytest.approx(10.0, abs=1e-6)  # the numbers stay in the local note
+    (pull,) = [b for step in deck.steps for b in step.boundaries if b.value != 0]
+    assert dat.displacements("Nall").values[:, 1].max() == pytest.approx(pull.value * 1e3, abs=1e-6)  # the deck's own pull, in mm; the numbers stay in the local note
 
 
 def test_plane_stress_in_the_converter():

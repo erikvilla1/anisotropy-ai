@@ -1,9 +1,9 @@
 """Abaqus/CAE field reports saved as CSV (Report > Field Output), read into the numbers a comparison record needs (ADR-0030, amendment 2).
 
-The file the team produces has one row per element and section point:
+The file Abaqus/CAE writes has one row per element and section point:
 
     ODB Name,Step,Frame,Part Instance Name, Element Label, IntPt,X,Y,Z,Section Name,Material Name,Section Point, S-S22
-    H:/.../Tension-test.odb,Step-1,Increment 1: Step Time = 1.000,"CFRP-COUPON-1", 545, 1, 5.5, 40.5037, 0.,"...","X840-Z60","shell < composite > < elset = ... > : SNEG, (fraction = -1.0), Layer = 1", 15.8233E+03
+    C:/.../model.odb,Step-1,Increment 1: Step Time = 1.000,"PART-1", 3, 1, 2.5, 7.5, 0.,"...","MATERIAL-1","shell < composite > < elset = ... > : SNEG, (fraction = -1.0), Layer = 1", 1234.5
 
 A file may hold several report blocks, each starting with its own header line, and the same (element, section point) may
 appear in more than one block; repeated rows must agree. `IntPt` must be 1 everywhere: a one-point shell (S4R) reports at

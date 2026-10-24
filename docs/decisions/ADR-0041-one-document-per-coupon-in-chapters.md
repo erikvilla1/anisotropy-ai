@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 ("I only need the LaTeX document of the solution using our engine, the physics, everything needed to showcase to engineers or possibly investors that our engine works"; building the part in Abaqus and in our engine as separate chapters; one zip per coupon) | Drafted by: Claude Code
-- Related: `docs/models/coupon.py`, `docs/models/team.py`, `docs/models/rebuild.py`, `docs/models/build.py`, `fea/tests/test_coupon_document.py`, [ADR-0031](ADR-0031-one-generated-document-per-model-comparison.md), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md), [evaluation](../evaluations/fea/2026-10-21-coupon-document.md)
+- Related: `docs/models/coupon.py`, `docs/models/team.py`, `docs/models/rebuild.py`, `docs/models/build.py`, `fea/tests/test_coupon_document.py`, [ADR-0031](ADR-0031-one-generated-document-per-model-comparison.md), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-coupon-document.md` (ADR-0042)
 
 ## Context
 
@@ -53,7 +53,7 @@ Option 1.
 
 ## Why (evidence)
 
-- The tension document has 79 pages with every chapter. It builds in 36 s with Tectonic, and its title page states the first ply fails at 0.0382 of the applied 10 mm pull by maximum stress.
+- The tension document has 79 pages with every chapter. It builds in 36 s with Tectonic, and its title page states the share of the applied pull at which the first ply fails by maximum stress (numbers local, ADR-0042).
 - `fea/tests/test_coupon_document.py` covers:
   - a coupon the team has not built: seven chapters, one zip, no other document;
   - a fixture coupon with a team comparison: the team's sections and files, and the summary;

@@ -72,7 +72,7 @@ No usable Abaqus exists (the founder's `C:\SIMULIA` is an academic teaching lice
 - Abaqus composite layups and per-ply output: [Understanding composite layups and orientations](https://abaqus-docs.mit.edu/2017/English/SIMACAECAERefMap/simacae-c-advlayupsorientations.htm), [Requesting output from a composite layup](https://ceae-server.colorado.edu/v2016/books/usi/pt04ch23s05.html), [*SHELL SECTION keyword](https://abaqus-docs.mit.edu/2017/English/SIMACAEKEYRefMap/simakey-r-shellsection.htm).
 - The engine's `A` matrix, transformations and failure functions are tested (engine suite, 408 tests on 2026-10-11) and documented in `theory.md`; the kernel reuses them rather than re-deriving them.
 - Cost of writing the kernel, accuracy against Abaqus, and the team's Abaqus version and licence terms for sharing exported numbers: no evidence yet. The first comparison note supplies the accuracy evidence.
-- The team's deck `Tension-test.inp` (Abaqus/CAE 2026, read 2026-10-15, kept in `.local/abaqus/`): 893 nodes, 800 S4R elements, composite shell section with `symmetric`, LAMINA elastic, two kinematic couplings, displacement-controlled linear static step, no print requests, so its `.dat` holds no results. This fixes the reader's first keyword subset and shows why the export recipe comes first.
+- A team coupon deck (Abaqus/CAE 2026, read 2026-10-15, kept in `.local/`): S4R elements, a composite shell section with `symmetric`, LAMINA elastic, two kinematic couplings, displacement-controlled linear static step, no print requests, so its `.dat` holds no results. This fixes the reader's first keyword subset and shows why the export recipe comes first.
 
 ## Consequences
 

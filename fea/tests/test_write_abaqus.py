@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from public_coupon import PUBLIC_COUPON
+
 from anisotropy_engine.mixed import mixed_response
 from anisotropy_fea.abaqus_reader import parse_deck, read_deck
 from anisotropy_fea.femodel import build_model
@@ -18,7 +20,6 @@ from anisotropy_fea.spec import load_spec, parse_spec, to_si
 from anisotropy_fea.write_abaqus import number, write_abaqus
 
 NODAL = paths.spec_path("unnotched-im7-8552-nodal").read_text(encoding="utf-8")
-TEAM = paths.spec_path("X840PW-UNT-L1")
 
 
 def test_numbers_are_written_with_a_decimal_point_and_ten_digits():
@@ -98,7 +99,7 @@ def test_force_control_deck_carries_the_consistent_loads_and_balances(tmp_path):
     assert solution.reaction_of(deck.nsets["Grip-Bottom"])[1] == pytest.approx(-5000.0, rel=1e-10)
 
 
-SPECS = paths.all_specs()
+SPECS = paths.all_specs()  # the checks', and the local coupon models' on the founder's machine (ADR-0042)
 GMSH = gmsh_available() is not None
 
 
@@ -108,11 +109,11 @@ def needs_mesher(spec_path):
 
 
 @pytest.mark.parametrize("spec_path", SPECS, ids=[p.stem for p in SPECS])
-def test_every_committed_abaqus_deck_is_what_its_spec_writes_today(spec_path):
+def test_every_abaqus_deck_is_what_its_spec_writes_today(spec_path):
     """Every spec in a test folder has its Abaqus deck in decks/; regenerate with tools/regenerate_decks.py when a spec or the writer changes."""
     needs_mesher(spec_path)
     deck = paths.deck_path(spec_path, "abaqus")
-    assert deck.is_file(), f"{spec_path.name} has no committed deck {deck.name}; run tools/regenerate_decks.py"
+    assert deck.is_file(), f"{spec_path.name} has no deck {deck.name}; run tools/regenerate_decks.py"
     text = write_abaqus(build_model(load_spec(spec_path)))
     assert deck.read_text(encoding="utf-8").replace("\r\n", "\n") == text, f"{deck.name}: regenerate with tools/regenerate_decks.py"
 
@@ -121,7 +122,7 @@ CCX_SPECS = [p for p in SPECS if paths.deck_path(p, "ccx").is_file()]
 
 
 @pytest.mark.parametrize("spec_path", CCX_SPECS, ids=[p.stem for p in CCX_SPECS])
-def test_every_committed_calculix_deck_is_what_its_spec_writes_today(spec_path):
+def test_every_calculix_deck_is_what_its_spec_writes_today(spec_path):
     """A CalculiX deck is the same spec promoted to order 2 (S8R), as examples/run_calculix.py writes it."""
     from anisotropy_fea.write_calculix import write_calculix
 
@@ -135,14 +136,18 @@ def test_every_committed_calculix_deck_is_what_its_spec_writes_today(spec_path):
 
 
 def test_every_test_folder_has_the_same_shape():
-    """A spec at the root, its decks in decks/, records in records/ with a reading beside each (ADR-0036)."""
-    assert len(paths.test_dirs()) >= 7 and {d.name for d in paths.test_dirs() if d.parent == paths.MODELS} >= {"X840PW-UNT-L1", "X840PW-UNC-L1", "X840PW-OHT-L1"}
+    """A spec at the root, its decks in decks/, records in records/ with a reading beside each (ADR-0036). A coupon model's
+    folder is local and also holds the team's files, our runs, the comparison and the documents (ADR-0040, ADR-0042)."""
+    assert len([d for d in paths.test_dirs() if d.parent == paths.CHECKS]) >= 4
+    assert {d for d in paths.test_dirs() if d.parent == paths.MODELS} == set(paths.model_dirs())  # every local test folder is a coupon model
+    local = {paths.TEAM_FILES, paths.RUNS, paths.COMPARISON, paths.DOCUMENTS}
     for folder in paths.test_dirs():
-        assert set(p.name for p in folder.iterdir()) <= {"decks", "records", "README.md"} | {p.name for p in folder.glob("*.toml")}, folder
+        allowed = {"decks", "records", "README.md"} | {p.name for p in folder.glob("*.toml")} | (local if folder.parent == paths.MODELS else set())
+        assert set(p.name for p in folder.iterdir()) <= allowed, folder
         for record in (folder / "records").glob("*.toml"):
             if not record.stem.endswith(paths.TEAM_SUMMARY):  # the team summary's reading is the local team-comparison.md (ADR-0039)
                 assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
-    assert len(paths.all_records()) == 5 and paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
+    assert len([r for r in paths.all_records() if paths.CHECKS in r.parents]) == 2 and paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
 
 
 def test_order_two_decks_are_written_as_s8r_with_nine_entries_per_element():
@@ -153,22 +158,22 @@ def test_order_two_decks_are_written_as_s8r_with_nine_entries_per_element():
     assert first.split(", ")[1:5] == ["1", "2", "5", "4"]
 
 
-def test_a_names_table_gives_the_deck_the_teams_names_and_our_names_otherwise():
+def test_a_names_table_gives_the_deck_its_names_and_our_names_otherwise():
     """[names] reaches every place a name appears in the deck; without it the deck keeps our names (ADR-0035, amendment 1)."""
-    named = write_abaqus(build_model(load_spec(TEAM)))
-    for line in ("*Part, name=CFRP-Coupon", "*Instance, name=CFRP-Coupon-1, part=CFRP-Coupon", "*Material, name=X840-Z60",
-                 "*Elset, elset=CompositeLayup-1-1, generate",
-                 "*Shell Section, elset=CompositeLayup-1-1, composite, orientation=Ori-1, layup=CompositeLayup-1, symmetric",
-                 "0.1, 3, X840-Z60, 0., Ply-1", "*Nset, nset=Grip-Top, instance=CFRP-Coupon-1"):
+    named = write_abaqus(build_model(to_si(parse_spec(PUBLIC_COUPON))))
+    for line in ("*Part, name=Strip", "*Instance, name=Strip-1, part=Strip", "*Material, name=IM7-8552-Lamina",
+                 "*Elset, elset=Layup-A-1, generate",
+                 "*Shell Section, elset=Layup-A-1, composite, orientation=Ori-1, layup=Layup-A, symmetric",
+                 "0.18288, 3, IM7-8552-Lamina, 45., Ply-1", "*Nset, nset=Grip-Top, instance=Strip-1"):
         assert line in named.splitlines(), line
     deck = read_deck_text(named)
-    assert set(deck.parts) == {"CFRP-Coupon"} and set(deck.instances) == {"CFRP-Coupon-1"} and set(deck.materials) == {"X840-Z60"}
+    assert set(deck.parts) == {"Strip"} and set(deck.instances) == {"Strip-1"} and set(deck.materials) == {"IM7-8552-Lamina"}
     plain = write_abaqus(build_model(to_si(parse_spec(NODAL))))
     assert "*Part, name=Coupon" in plain and "*Instance, name=Coupon-1, part=Coupon" in plain and "layup=Layup-1" in plain
     with pytest.raises(ValueError, match="names.material"):
-        parse_spec(TEAM.read_text(encoding="utf-8").replace('material = "X840-Z60"', 'material = "X840 Z60"'))
+        parse_spec(PUBLIC_COUPON.replace('material = "IM7-8552-Lamina"', 'material = "IM7 8552 Lamina"'))
     with pytest.raises(ValueError, match="must differ"):
-        parse_spec(TEAM.read_text(encoding="utf-8").replace('instance = "CFRP-Coupon-1"', 'instance = "CFRP-Coupon"'))
+        parse_spec(PUBLIC_COUPON.replace('instance = "Strip-1"', 'instance = "Strip"'))
 
 
 def read_deck_text(text: str):

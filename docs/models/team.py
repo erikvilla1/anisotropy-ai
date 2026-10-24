@@ -592,7 +592,7 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
         (f"2-our-model/calculix/{c.calculix_deck_path.name}", "our twin for CalculiX, with the grips as direct constraints. PrePoMax: File, Import, then run it"),
         (f"2-our-model/spec/{c.spec_path.name}", "the spec our generator builds the deck from: every dimension, the seeds, the layup, the material record"),
         (f"3-material/{c.library.material_id}.csv", "the material from our library: every value, its unit, basis and source page, and the source"),
-        *[(f"4-results/ours-{q}.csv", f"our {q} in the layout of the team's field report Test_01_{q}.csv: same columns, the team's element numbers, "
+        *[(f"4-results/ours-{q}.csv", f"our {q} in the layout of the team's {q} field report: same columns, the team's element numbers, "
                                       "the same layers and faces. Open the two side by side") for q in c.quantities],
         ("4-results/team-vs-ours.csv", "every compared value: team element, our element, x, y, layer, quantity, team, ours, difference, share of the largest"),
         ("4-results/ours-all-plies.csv", "our S11, S22, S12 and Mises for every ply of every element, with the team's element numbers"),

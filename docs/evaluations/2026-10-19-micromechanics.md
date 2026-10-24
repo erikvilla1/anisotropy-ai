@@ -23,16 +23,12 @@ Validation cases (part of the suite above; the engine's values beside the source
 
 | Case | Source value | Engine | Model |
 | --- | --- | --- | --- |
-| HW5 P2(a), Vf 0.65: E1 | 190 GPa | 189.8 | rule of mixtures |
-| nu12 | 0.25 | 0.2525 | rule of mixtures |
-| E2 | 8.76 GPa | 8.78 | series, constrained matrix modulus |
-| G12 | 3.31 GPa | 3.312 | series |
-| HW5 P2(c), Vf 0.58: E1, nu12, E2, G12 | 170, 0.26, 7.84, 2.87 | 169.75, 0.263, 7.86, 2.874 | the same |
+| A course answer key, two cases (rule of mixtures, series model with the constrained matrix modulus) | local, ADR-0042 | agree within each case's tolerance | the numbers stay in a local note |
 | E-glass/epoxy, Vf 0.55, Halpin-Tsai xi = 1: E1, nu12, E2, G12 | 42.085, 0.284, 12.524, 4.7091 (by hand) | agree to 0.05 % | rule of mixtures, Halpin-Tsai |
 
 The constituent constants are Daniel and Ishai (2006) Table A.2 p. 375 and Table A.3 p. 376. The first hand value of the E-glass G12 (4.7147) was wrong by 0.1 %; recomputing by hand gave 4.7091, which the engine had given, and the case was corrected.
 
-From the root: `uv run --project fea python docs/problems/build.py engine/validation/cases/se142-hw5-p2-micromechanics-im7-977-3-vf-0-65.toml`
+From the root: `uv run --project fea python docs/problems/build.py engine/validation/cases/constructed-micromechanics-eglass-epoxy-halpin-tsai.toml`
 
 ```text
 4 numbers compared, 4 agree; Document written (Step 0 with the theory section, the listings and the numbers; read as rendered pages)

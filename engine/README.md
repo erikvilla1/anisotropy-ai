@@ -55,13 +55,13 @@ For a one-page guide to writing a case and reading the printout, see [docs/engin
 
 Run either example with `uv run python examples/<name>.py`.
 
-The calculator also reads the course Excel input template, including several materials and ply thicknesses: `uv run python examples/laminate_calculator.py path/to/HW4_P4b.Input.xlsx`. When a TOML case has `[expected]` answers, the calculator ends with an "Answer key vs engine" table.
+The calculator also reads the course Excel input template, including several materials and ply thicknesses: `uv run python examples/laminate_calculator.py path/to/course-input.xlsx`. When a TOML case has `[expected]` answers, the calculator ends with an "Answer key vs engine" table.
 
-For another problem: `uv run python examples/laminate_calculator.py validation/cases/as4-zero-degree-axial-check.toml`. Put personal cases and original homework files in the repository's ignored `.local/` directory. See [the case format](validation/README.md).
+For another problem: `uv run python examples/laminate_calculator.py validation/cases/as4-zero-degree-axial-check.toml`. Put personal cases, homework cases and the course's original files in the repository's ignored `.local/` directory (ADR-0042). See [the case format](validation/README.md).
 
 Input scales are explicit: `SI` means GPa, MPa and mm; `US` means Msi, ksi and inches; `psi` means psi and inches. For 140 GPa, enter `E1 = 140` with `units = "SI"`, not `140e9`. Conversion to Pa happens inside the calculator. Moduli outside the example's existing 0.5-1000 GPa plausibility screen now stop the calculator; `--allow-unusual-moduli` explicitly overrides that screen after review. This screen is not a physical validity criterion or an engine restriction.
 
-For a temperature change, give `alpha1` and `alpha2` in `[material]` and `delta_T` in `[applied]`, for example `uv run python examples/laminate_calculator.py validation/cases/course-reader-5-9-as4-curing.toml`. The calculator then prints the thermal resultants and free thermal strains, and ply stresses include the residual thermal stress. Without `delta_T` it states that no temperature change was given.
+For a temperature change, give `alpha1` and `alpha2` in `[material]` and `delta_T` in `[applied]`, for example `uv run python examples/laminate_calculator.py validation/cases/constructed-cross-ply-cooling-first-ply-failure.toml`. The calculator then prints the thermal resultants and free thermal strains, and ply stresses include the residual thermal stress. Without `delta_T` it states that no temperature change was given.
 
 Failure checks always include maximum stress when all five strengths are supplied. A temperature change stays fixed while the mechanical loads scale; a `[failure]` table holds chosen loads fixed as well. Tsai-Wu also requires `f12_star` in the case file; it is skipped when the assumption is absent.
 

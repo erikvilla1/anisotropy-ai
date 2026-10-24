@@ -29,7 +29,7 @@ CASES = [
     ("one", "Top, 2, 2, 0.8", "Top, 6, 6, 0.1", "nonzero prescribed rotation"),
     ("one", "Top, 2, 2, 0.8", "Top, 3, 3, 0.1", "nonzero out-of-plane displacement"),
     ("one", "*Boundary\nTop", "*Boundary, amplitude=Amp-1\nTop", "parameter 'amplitude' is not supported"),
-    ("one", "1, 0., 0., 0.\n2, 10.", "1, 0., 0., 1.\n2, 10.", "z coordinates are not all zero"),
+    ("one", "1, 0., 0., 0.\n2, 25.", "1, 0., 0., 1.\n2, 25.", "z coordinates are not all zero"),
     ("one", "Top, 2, 2, 0.8", "Topp, 2, 2, 0.8", "node set 'Topp' is not defined in the assembly"),
     ("one", "*Elset, elset=All, generate\n1, 1, 1", "*Elset, elset=All, generate\n1, 0, 1", "have no shell section"),
     ("one", "*Restart", "*Cload\nTop, 3, 5.\n*Restart", "dofs 1 and 2 only"),
@@ -44,7 +44,7 @@ CASES = [
     ("grips", "Set-Encastre, ENCASTRE", "Set-Encastre, XASYMM", "boundary type XASYMM is not supported"),
     ("grips", "s_Top, 1.\n", "s_Top, 0.5\n", "weights other than 1"),
     ("grips", "*Coupling, constraint name=Grip-Top", "*Coupling, influence radius=2., constraint name=Grip-Top", "influence radius"),
-    ("grips", "*Nset, nset=s_Top, instance=CFRP-Coupon-1\n 25, 26, 27", "*Nset, nset=s_Top, instance=CFRP-Coupon-1\n 25, 26, 99", "names node CFRP-Coupon-1.99, which does not exist"),
+    ("grips", "*Nset, nset=s_Top, instance=Strip-1\n 25, 26, 27", "*Nset, nset=s_Top, instance=Strip-1\n 25, 26, 99", "names node Strip-1.99, which does not exist"),
 ]
 
 

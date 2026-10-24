@@ -28,7 +28,7 @@ def test_a_wrong_expected_value_is_reported():
     case = load_case(CASE_DIR / "patch-1x1-im7-engine-equality.toml")
     case["expected"]["strain"]["*"][1] = 0.02
     reported = disagreements(case)
-    assert len(reported) == 1 and reported[0].startswith("strain[Coupon-1.1][1]: expected 0.02, kernel gives 0.01")
+    assert len(reported) == 1 and reported[0].startswith("strain[Coupon-1.1][1]: expected 0.02, kernel gives 0.008")
 
 
 def test_a_zero_expected_value_uses_the_group_scale():

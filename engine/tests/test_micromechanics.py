@@ -159,8 +159,8 @@ def test_constituent_case_tables_are_checked_by_name(e2, g12, extra, message):
         case_text(e2, g12, extra)
 
 
-def test_the_homework_case_file_loads_and_states_its_sources():
+def test_the_constructed_case_file_loads_and_states_its_sources():
     from pathlib import Path
 
-    case = load_case(Path(__file__).parents[1] / "validation" / "cases" / "se142-hw5-p2-micromechanics-im7-977-3-vf-0-65.toml")
-    assert "Table A.2" in case["source"] and case["material"]["Vf"] == 0.65
+    case = load_case(Path(__file__).parents[1] / "validation" / "cases" / "constructed-micromechanics-eglass-epoxy-halpin-tsai.toml")
+    assert "Eqs. 3.23-3.24" in case["source"] and case["material"]["Vf"] == 0.55

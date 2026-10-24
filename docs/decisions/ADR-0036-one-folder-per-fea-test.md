@@ -3,7 +3,7 @@
 - Status: Proposed; local `runs/` replaced by `attempts/` and the zips dated by [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md); folder names, the local layout and `share/` replaced by [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md)
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (test first locally, the repository too, superseded local files deleted, no `.frd` in the zips) | Drafted by: Claude Code
-- Related: `fea/src/anisotropy_fea/paths.py`, `fea/tools/regenerate_decks.py`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0032](ADR-0032-local-workspace-layout-by-tool-and-test.md) (its FEA layout superseded; its homework layout stands), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [evaluation](../evaluations/fea/2026-10-21-one-folder-per-test.md)
+- Related: `fea/src/anisotropy_fea/paths.py`, `fea/tools/regenerate_decks.py`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0032](ADR-0032-local-workspace-layout-by-tool-and-test.md) (its FEA layout superseded; its homework layout stands), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-one-folder-per-test.md` (ADR-0042)
 
 ## Context
 
@@ -54,4 +54,4 @@ Revisit if a test needs files that fit neither `decks/` nor `records/`, such as 
 
 **Zips.** `docs/models/team.py` writes `<test>-comparison.zip` (manifest key `zip`). `docs/models/share.py` zips every folder under `fea/models/` by convention, with no manifest, so `docs/models/our-models.toml` is deleted. Both build in a temporary folder, keep no unzipped copy, leave out CalculiX results, and replace only a zip whose README carries the project's mark.
 
-**Evidence.** The before and after inventories account for every file: 60 moved unchanged, including every file the team sent; 8 moved and then rebuilt or path-edited; 8 old readmes replaced; 193 deleted as approved. `.local/fea` went from 849 MB to 218 MB. The zips went from 31 MB to 2.2 MB and from 3.7 MB to 0.4 MB. The local tests found the team's deck and record in their new places. Evaluation note: `docs/evaluations/fea/2026-10-21-local-one-folder.md`.
+**Evidence.** The before and after inventories account for every file: 60 moved unchanged, including every file the team sent; 8 moved and then rebuilt or path-edited; 8 old readmes replaced; 193 deleted as approved. `.local/fea` went from 849 MB to 218 MB. The zips went from 31 MB to 2.2 MB and from 3.7 MB to 0.4 MB. The local tests found the team's deck and record in their new places. Evaluation note: `.local/notes/evaluations/fea/2026-10-21-local-one-folder.md` (local, ADR-0042).

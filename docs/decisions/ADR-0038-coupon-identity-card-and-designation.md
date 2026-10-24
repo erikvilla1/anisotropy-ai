@@ -3,14 +3,14 @@
 - Status: Proposed; the folders carry the name too, by [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md) (option 4 taken after all)
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (the coupon's name, such as X840PW-UNT-L1, is the title, with the type of test; the team's tension coupon has the same name as ours) | Drafted by: Claude Code
-- Related: `fea/src/anisotropy_fea/spec.py` (`Coupon`, `coupon_card`), `fea/tests/test_coupon.py`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0036](ADR-0036-one-folder-per-fea-test.md), [evaluation](../evaluations/fea/2026-10-21-coupon-identity.md)
+- Related: `fea/src/anisotropy_fea/spec.py` (`Coupon`, `coupon_card`), `fea/tests/test_coupon.py`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0036](ADR-0036-one-folder-per-fea-test.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-coupon-identity.md` (ADR-0042)
 
 ## Context
 
 The founder could not tell which coupon was being compared. Folders, specs and documents named only the kind of test: `tension-coupon`, "Tension coupon", "Tensile Coupon". What the files say:
 
-- **The team's files.** The deck says `Job name: Tension-test Model name: Model-1` and the part is `CFRP-Coupon`. The slides say "Tensile Coupon, Static General". The Abaqus/CAE replay (`abaqus.rpy.1`) opens a class tutorial model, `SE253-HW1-Tutorial3-2023-HF2.cae`, and then draws a new 10 mm by 80 mm rectangle. No standard or specimen name appears anywhere.
-- **The material.** The team typed the "Fabric" row of Chen 2015, Table 3.1 (X840-Z60 plain weave, E1 = E2 = 80 GPa). That row is our library record `x840-z60-pw`.
+- **The team's files.** Their deck, slides and Abaqus/CAE replay name a job, a model and a part, but no standard or specimen name appears anywhere (the details are local, ADR-0042).
+- **The material.** The team's material is the "Fabric" row of Chen 2015, Table 3.1 (X840-Z60 plain weave). That row is our library record `x840-z60-pw`.
 - **No test data.** Chen 2015 tested ENF, curved-beam and shear-tie compression coupons, but no flat tension, compression or open-hole coupon. The dissertation says that its lamina values came from the manufacturer (printed p. 79).
 - **How a test report names coupons.** The NCAMP IM7/8552 material property data report (`.local/sources/ncamp/8552-IM7-MPDR.pdf`) names coupons by test and layup: UNT1 is "25/50/25" unnotched tension, OHT1 is open-hole tension in the same layup, and so on.
 
@@ -31,7 +31,7 @@ Option 1.
   - A material code names one library record, and a layup code names one stacking sequence.
   - `fea/tests/test_coupon.py` checks two things across the models: each code means one thing, and each thing has one code.
 - **The title.** The spec's title starts with `<name>, <test>: `, so record titles and deck headings start with the name too.
-- **One coupon, one name.** The team's build and its CalculiX twin share one card. The team's own model of the same coupon has the same name: X840PW-UNT-L1 is the team's Tension-test.
+- **One coupon, one name.** The team's build and its CalculiX twin share one card. The team's own model of the same coupon has the same name: X840PW-UNT-L1 is the team's tension coupon.
 - **Where the name shows:**
   - every generated deck heading (the name, the test and the four entered keys);
   - the team comparison: its title, its card and its zip README;
@@ -41,7 +41,7 @@ Option 1.
 - **The codes today:**
   - X840PW: X840-Z60 plain-weave fabric, `x840-z60-pw`;
   - UNT, UNC and OHT;
-  - L1: [0/45/-45/45/0]s.
+  - L1: the team's layup (the codes table is local, ADR-0042).
 
   This gives X840PW-UNT-L1, X840PW-UNC-L1 and X840PW-OHT-L1.
 
@@ -49,7 +49,7 @@ Option 1.
 
 - The findings above come from the team's deck, replay and slides and from the text of Chen 2015 (local copies). The commands are in the evaluation note.
 - The three CalculiX twins were re-run after their deck headings changed. Every recorded number is unchanged to 1.4e-5 relative; the largest change is 8e-8 MPa on a 0.0057 MPa shear stress.
-- The team comparison still finds 23 of 23 items the same and 0.43 % agreement from y = 25 to 55 mm.
+- The team comparison still finds every item the same and the same agreement in the gauge (numbers in a local note (ADR-0042)).
 - `uv run pytest -q -ra tests ../engine/tests` passed 729 tests with none skipped.
 
 ## Consequences

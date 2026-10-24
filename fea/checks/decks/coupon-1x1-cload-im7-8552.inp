@@ -5,9 +5,9 @@
 *Part, name=Coupon
 *Node
 1, 0., 0., 0.
-2, 10., 0., 0.
-3, 10., 80., 0.
-4, 0., 80., 0.
+2, 25., 0., 0.
+3, 25., 100., 0.
+4, 0., 100., 0.
 *Element, type=S4R
 1, 1, 2, 3, 4
 *Elset, elset=All, generate
@@ -17,9 +17,9 @@
 3, 0.
 *Shell Section, elset=All, composite, orientation=Ori-1, layup=Layup-1, symmetric
 0.18288, 3, IM7-8552, 0., Ply-1
-0.18288, 3, IM7-8552, 45., Ply-2
-0.18288, 3, IM7-8552, -45., Ply-3
-0.18288, 3, IM7-8552, 45., Ply-4
+0.18288, 3, IM7-8552, 30., Ply-2
+0.18288, 3, IM7-8552, -30., Ply-3
+0.18288, 3, IM7-8552, 30., Ply-4
 0.18288, 3, IM7-8552, 0., Ply-5
 *End Part
 *Assembly, name=Assembly

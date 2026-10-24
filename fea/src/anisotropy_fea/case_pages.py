@@ -1,13 +1,13 @@
 """The generated parts of the case pages and the indexes, written from the records and specs (ADR-0039).
 
-A case page is the README of a model folder (`models/<test>/README.md`). Its title is the coupon's name (ADR-0038), then the
+A case page is the README of a coupon's folder (`.local/fea/<coupon>/README.md`, local like the model, ADR-0042). Its title is the coupon's name (ADR-0038), then the
 case line, the problem, the result, the attempt log and where to look. Only the text between `<!-- generated: <name> -->`
 and `<!-- end generated -->` is written here:
 
     result       in each case page: the CalculiX record against our kernel and, when the team built the coupon, the team
                  summary (`records/<coupon>-team-summary.toml`, written by docs/models/coupon.py)
-    tests        in models/README.md: one row per case page
-    benchmarks   in checks/README.md: one row per check record and case, and the engine's validation cases
+    tests        in .local/fea/README.md: one row per case page (local; on CI there is none)
+    benchmarks   in fea/checks/README.md: one row per check record and case, and the engine's validation cases
 
 Every number comes from a record or a team summary; none is typed. The case line and the attempt log are written by hand,
 and the tests index reads them. `fea/tools/case_pages.py` writes the files; `fea/tests/test_case_pages.py` checks they are
@@ -147,7 +147,7 @@ def result_block(folder: Path) -> str:
 
 
 def model_folders() -> list[Path]:
-    return [d for d in sorted(paths.MODELS.iterdir()) if d.is_dir() and (d / f"{d.name}.toml").is_file()]
+    return paths.model_dirs()
 
 
 def tests_block() -> str:
@@ -189,7 +189,7 @@ def benchmarks_block() -> str:
                      else "a closed form, by hand; the source is in the case")
         rows.append([f"`cases/{case_path.stem}`", case["title"], reference, "checked by `tests/test_fe_validation_cases.py`"])
     engine = sorted(p for p in ENGINE_CASES.glob("*.toml") if not p.name.startswith("_"))
-    rows.append(["`engine/validation/cases/`", f"{len(engine)} laminate-theory cases: textbook, course and constructed problems", "each case's source",
+    rows.append(["`engine/validation/cases/`", f"{len(engine)} laminate-theory cases: textbook and constructed problems (the course's stay local, ADR-0042)", "each case's source",
                  "checked by the engine's tests"])
     return table(["Benchmark", "What", "Reference", "Result"], rows)
 
@@ -213,7 +213,8 @@ def pages() -> dict[Path, str]:
         readme = folder / "README.md"
         out[readme] = fill(readme.read_text(encoding="utf-8"), {"result": result_block(folder)}, readme)
     index = paths.MODELS / "README.md"
-    out[index] = fill(index.read_text(encoding="utf-8"), {"tests": tests_block()}, index)
+    if index.is_file():  # the team tests' index is local, like the models (ADR-0042)
+        out[index] = fill(index.read_text(encoding="utf-8"), {"tests": tests_block()}, index)
     checks = paths.CHECKS / "README.md"
     out[checks] = fill(checks.read_text(encoding="utf-8"), {"benchmarks": benchmarks_block()}, checks)
     return out
@@ -227,6 +228,12 @@ PROJECTS = paths.ROOT / ".local" / "projects"
 HOMEWORK_ROW = re.compile(r"^\| (?P<hw>HW\d+|PRACTICE|course-reader) \| [^|]* \| [^|]* \| (?P<status>[^|]*?) \|$", re.M)
 
 
+def homework_cases(folder: Path) -> list[Path]:
+    """A homework set's problems: the case files in its ours/ that carry an answer key (docs/problems/homework.py, ADR-0042)."""
+    ours = folder / "ours"
+    return sorted(p for p in ours.glob("*.toml") if "expected" in tomllib.loads(p.read_text(encoding="utf-8"))) if ours.is_dir() else []
+
+
 def local_index() -> str:
     """`.local/INDEX.md`: one row per case in the four categories, with what only this machine has (the runs kept, homework,
     projects). Written by `fea/tools/case_pages.py --local`; never committed."""
@@ -238,14 +245,13 @@ def local_index() -> str:
         card = dict(coupon_card(load_spec(folder / f"{folder.name}.toml")))
         _, record, _ = record_rows(calculix_record(folder))
         held = "; ".join(f"{attempt_number(a):02d}: {', '.join(kinds(a))}" for a in attempts(folder.name) if kinds(a)) or "none on this machine"
-        tests.append([f"**{card['Coupon']}**", card["Test"], f"`fea/models/{folder.name}/`", case.status, f"{case.attempts} (accepted {case.accepted})",
+        tests.append([f"**{card['Coupon']}**", card["Test"], f"`.local/fea/{folder.name}/`", case.status, f"{case.attempts} (accepted {case.accepted})",
                       held, f"CalculiX {sum(r.agrees for r in record)} of {len(record)}", card["Test data"].split(":")[0]])
     homework = []
     if HOMEWORK_README.is_file():
         for m in HOMEWORK_ROW.finditer(HOMEWORK_README.read_text(encoding="utf-8")):
-            prefix = f"se142-{m['hw'].lower()}-" if m["hw"].startswith("HW") else f"{m['hw']}-"
-            cases = sorted(ENGINE_CASES.glob(f"{prefix}*.toml"))
             folder = HOMEWORK_README.parent / m["hw"]
+            cases = homework_cases(folder)
             document = folder / "documents" / f"{m['hw']}.pdf"
             homework.append([m["hw"], m["status"], str(len(cases)), f"`.local/homework/{m['hw']}/ours/`" if (folder / "ours").is_dir() else "none",
                              f"`.local/homework/{m['hw']}/documents/{m['hw']}.pdf`" if document.is_file() else "not built"])
@@ -253,8 +259,8 @@ def local_index() -> str:
     parts = [
         "# Every case, on this machine",
         "",
-        "Written by `fea/tools/case_pages.py --local` (ADR-0039); git-ignored, because homework and projects are private. The committed "
-        "indexes are `fea/models/README.md` (team tests) and `fea/checks/README.md` (benchmarks). A case's page is its README.",
+        "Written by `fea/tools/case_pages.py --local` (ADR-0039); git-ignored, because the team tests, homework and projects are private "
+        "(ADR-0042). The other indexes are `.local/fea/README.md` (team tests) and `fea/checks/README.md` (benchmarks, committed). A case's page is its README.",
         "",
         "## Team tests",
         "",

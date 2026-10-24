@@ -3,7 +3,7 @@
 - Status: Proposed; `attempts/` renamed `our-runs/` and the zips moved into each coupon's `documents/` by [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md); the committed team summary leaves by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md)
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (keep our layout and add the good parts of the proposal; one folder per attempt, no code copies, result files only for the latest attempt; index team tests, benchmarks, homework and projects; later the same day: no prompt or notes files, no session transcripts, no OneDrive location, as none adds value) | Drafted by: Claude Code
-- Related: `fea/src/anisotropy_fea/case_pages.py`, `fea/tools/case_pages.py`, `fea/tests/test_case_pages.py`, [ADR-0036](ADR-0036-one-folder-per-fea-test.md), [ADR-0037](ADR-0037-every-private-file-under-local-by-purpose.md), [ADR-0038](ADR-0038-coupon-identity-card-and-designation.md), [evaluation](../evaluations/fea/2026-10-21-case-pages.md)
+- Related: `fea/src/anisotropy_fea/case_pages.py`, `fea/tools/case_pages.py`, `fea/tests/test_case_pages.py`, [ADR-0036](ADR-0036-one-folder-per-fea-test.md), [ADR-0037](ADR-0037-every-private-file-under-local-by-purpose.md), [ADR-0038](ADR-0038-coupon-identity-card-and-designation.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-case-pages.md` (ADR-0042)
 
 ## Context
 
@@ -52,7 +52,7 @@ Option 1.
 
   `fea/tools/case_pages.py` writes them. `fea/tests/test_case_pages.py` fails when one is out of date, so no number is typed by hand.
 - **The team summary.** `docs/models/team.py` also writes `records/<test>-team-summary.toml`: the equivalence counts and the agreement per quantity and band. It holds names and a digest of the team's deck but no value from their files. `paths.all_records()` skips it, because it is not a comparison record.
-- **The backfilled logs.** The attempt logs were rebuilt from the evaluation notes and local notes. Tension has 12 attempts, including the 2.8 % CalculiX stiffness found on 2026-10-16 and fixed by plane stress, and the open tab-line corner. Compression and open-hole have 3 each.
+- **The backfilled logs.** The attempt logs were rebuilt from the evaluation notes and local notes. Each coupon's log holds every try, failed ones included, such as the CalculiX stiffness found on 2026-10-16 and fixed by plane stress (the logs are local, ADR-0042).
 - **Chunk 2, the local side:**
   - `.local/fea/<test>/attempts/attempt-NN_<date>/run/` replaces `runs/` (as planned with `prompt.md` and `notes.md`, which the founder dropped; see below);
   - a tool starts each attempt's folder and keeps `.frd` files only in the latest run of each kind;
@@ -73,7 +73,7 @@ Option 1.
 
 ## Why (evidence)
 
-- The generator is idempotent: a second run rewrites 0 files. Its numbers match the records: tension reaction 105884 N against 105993 N, +0.10 %. The team rows match the figures `docs/models/team.py` prints: 23 of 23 items, inner band 0.425 / 0.160 / 0.200 %.
+- The generator is idempotent: a second run rewrites 0 files. Its numbers match the records, and the team rows match the figures `docs/models/team.py` prints (numbers in a local note (ADR-0042)).
 - Every attempt-log row quotes a number found in the note it cites; the evaluation note lists the checks.
 - The tests and their output are in the evaluation note.
 

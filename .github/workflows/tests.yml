@@ -100,17 +100,14 @@ jobs:
         with:
           name: engine-manual
           path: docs/manual/build/anisotropy-engine-manual.pdf
-      - name: Build one document per coupon (ADR-0041) and per check record (ADR-0031; the open-hole model is meshed by Gmsh)
+      - name: Build one document per check record (ADR-0031; the open-hole model is meshed by Gmsh). The coupon documents are local (ADR-0042)
         run: |
           sudo apt-get update && sudo apt-get install -y libglu1-mesa
-          uv run --project fea --extra mesh python docs/models/coupon.py --all
           uv run --project fea --extra mesh python docs/models/build.py --all
       - uses: actions/upload-artifact@v7
         with:
           name: model-documents
-          path: |
-            .local/fea/*/documents/*.pdf
-            docs/models/build/*/*.pdf
+          path: docs/models/build/*/*.pdf
       - name: Build one document per solved problem (ADR-0033)
         run: uv run --project fea python docs/problems/build.py --all
       - uses: actions/upload-artifact@v7

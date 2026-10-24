@@ -5,7 +5,7 @@ From the repository root:
 
     uv run --project fea python docs/models/build.py fea/checks/unnotched-im7-8552/records/unnotched-im7-8552-nodal-calculix.toml
     uv run --project fea python docs/models/build.py --all                 # every committed record
-    uv run --project fea python docs/models/build.py .local/fea/X840PW-UNT-L1/comparison/tension-test-abaqus.toml
+    uv run --project fea python docs/models/build.py .local/fea/<coupon>/comparison/<record>.toml
 
 A committed record's document is written to docs/models/build/<record>/ (git-ignored, rebuilt like the manual; --all builds the
 checks' records, ADR-0041); a record under .local/ goes to report/<record>/ beside it, since its material may not be public. A
@@ -739,7 +739,7 @@ def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, the
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("record", type=Path, nargs="?", help="a comparison record (TOML)")
-    parser.add_argument("--all", action="store_true", help="every committed record (fea/models/*/records, fea/checks/*/records)")
+    parser.add_argument("--all", action="store_true", help="every check record (fea/checks/*/records); a coupon's record is a chapter of its coupon document")
     parser.add_argument("--out", type=Path, default=None, help="output folder (default: docs/models/build/<record>, or <record folder>/report/<record> for a record under .local/)")
     parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX only")
     parser.add_argument("--no-theory", action="store_true", help="leave out the kernel theory and code section")

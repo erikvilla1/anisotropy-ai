@@ -88,12 +88,11 @@ def test_the_written_deck_reads_back_and_the_kernel_solves_it(tmp_path):
 
 def test_the_committed_open_hole_decks_are_what_the_kirsch_case_and_prepomax_read():
     """Without Gmsh the decks still exist and read back: the validation case needs no mesher."""
-    for name, probe, hole in (("open-hole-im7-8552", "Probe-far", 32), ("open-hole-isotropic-kirsch", "Probe-far_side", 60),
-                              ("X840PW-OHT-L1", "Probe-far", 32)):
+    for name, probe, hole in (("open-hole-im7-8552", "Probe-far", 32), ("open-hole-isotropic-kirsch", "Probe-far_side", 60)):
         deck = read_deck(paths.deck_path(paths.spec_path(name), "abaqus"), "mm-MPa")
         assert len(deck.elsets[probe]) == 1 and len(deck.nsets["Hole"]) == hole
         if name != "open-hole-isotropic-kirsch":
-            assert "NSET=Hole" in paths.deck_path(paths.spec_path(name.replace("X840PW-OHT-L1", "X840PW-OHT-L1-nodal")), "ccx").read_text(encoding="utf-8")
+            assert "NSET=Hole" in paths.deck_path(paths.spec_path(name), "ccx").read_text(encoding="utf-8")
 
 
 # --- the Kirsch closed form -------------------------------------------------------------------------

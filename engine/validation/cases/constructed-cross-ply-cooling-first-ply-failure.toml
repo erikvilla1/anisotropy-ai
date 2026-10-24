@@ -1,0 +1,40 @@
+title = "Constructed check: a cooled [0/90]s cross-ply under a fixed Ny and a growing Nx, to first-ply failure"
+source = "Constructed analytical check, not a printed problem. Elastic constants and strengths: Daniel & Ishai (2006) Table A.4, AS4/3501-6, p. 377; alpha1 and alpha2 are chosen for this check, not taken from a source. The laminate is symmetric and loaded in its plane, so eps0 = A^-1 (N + N_T) with A and N_T summed over the plies (Eqs. 4.47, 4.62, 8.16-8.18); for the failure search the temperature change and Ny stay fixed and Nx grows (Section 9.8, Eqs. 9.25-9.27). Expected values: engine/validation/closed_forms.py, which does not use the engine."
+units = "SI"
+f12_star = -0.5
+
+[material]
+E1 = 147.0
+E2 = 10.3
+G12 = 7.0
+nu12 = 0.27
+F1t = 2280.0
+F1c = 1725.0
+F2t = 57.0
+F2c = 228.0
+F6 = 76.0
+alpha1 = -1.0e-6  # 1/degC
+alpha2 = 25.0e-6
+
+[laminate]
+layup = [0, 90, 90, 0]
+ply_thickness = 0.25
+
+[applied]
+loads = [100e3, 40e3, 0, 0, 0, 0]  # N/m: the fixed Ny plus one unit of the variable Nx below
+delta_T = -120.0  # degC
+
+[failure]
+fixed = [0, 40e3, 0, 0, 0, 0]
+variable = [100e3, 0, 0, 0, 0, 0]
+
+[expected]
+tolerance = 1e-6
+N_T = [-10689.2402, -10689.2402, 0.0]  # N/m
+strain_global = [0.001118034254, 0.0003312369787, 0.0]
+fpf_ratio_max_stress = 2.060737127  # 90-degree plies, transverse tension
+fpf_ratio_tsai_wu = 2.11390616
+
+[expected.ply_stress_local]  # MPa, fiber axes; plies 4 and 3 mirror 1 and 2
+1 = [156.7760108, 37.27768704, 0.0]
+2 = [42.72231296, 43.22398922, 0.0]

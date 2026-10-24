@@ -147,8 +147,8 @@ def test_named_results_follow_the_case_units():
 
 def test_calculator_prints_the_given_quantities():
     run = subprocess.run([sys.executable, str(ENGINE / "examples/laminate_calculator.py"),
-                          str(ENGINE / "validation/cases/se142-hw4-p2-cr-5-13-unsymmetric-cure.toml")],
+                          str(ENGINE / "validation/cases/constructed-mixed-angle-lamina.toml")],
                          cwd=ENGINE, capture_output=True, text=True)
     assert run.returncode == 0, run.stderr
-    assert "Mixed conditions, in the case's units: given Nx = 0, Ny = 0, Nxy = 0, Mx = 0, kappa_y = 0, kappa_xy = 0." in run.stdout
+    assert "Mixed conditions, in the case's units: given sigma_x = 100, eps_y = 0, tau_xy = 0, Mx = 0, My = 0, Mxy = 0." in run.stdout
     assert run.stdout.rstrip().endswith("values agree with the answer key.")

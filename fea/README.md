@@ -15,7 +15,7 @@ uv run python examples/plot_deck.py checks/decks/coupon-2x8-grips-im7-8552.inp -
 
 `export_vtk.py` writes the solved model as a `.vtu` file for ParaView (points: displacement, reaction; cells: strains, section forces, failure indices with the worst ply, every ply's material-axis stresses), so the result can be rotated, probed and coloured like in any finite element tool. `plot_deck.py` draws the mesh and deformed shape, the three strain fields, the axial section force and the first-ply-failure map as one PNG (matplotlib, a development dependency). Write the pictures of a team deck to `.local/`, never into the repository.
 
-The team's own decks go in `.local/fea/<coupon>/from-team/<date>/` (git-ignored; their materials may be proprietary; layout in ADR-0036 and the `workspace-layout` skill). `tests/test_local_tension_deck.py` runs against `.local/fea/X840PW-UNT-L1/from-team/2026-10-16/Tension-test.inp` when it is there and is skipped, with the reason shown, when it is not.
+The team's own decks go in `.local/fea/<coupon>/from-team/<date>/` (git-ignored; their materials may be proprietary; layout in ADR-0036 and the `workspace-layout` skill). `tests/test_local_tension_deck.py` runs against the team's deck in `.local/fea/X840PW-UNT-L1/from-team/<date>/` (found by `paths.team_deck`) when it is there and is skipped, with the reason shown, when it is not.
 
 ## Units
 
@@ -50,10 +50,10 @@ Four-node isoparametric plane-stress elements whose stiffness is the laminate me
 
 ## Models from a spec
 
-A coupon model is generated from one TOML file in its test folder, `models/<test>/` or `checks/<test>/` (ADR-0030, ADR-0036): kind (`unnotched_tension`, `open_hole_tension`, `compression`, `shear_pm45`, `three_point_bending`, `four_point_bending`), dimensions, mesh controls, layup, material from the engine's cited library or explicit constants with stated out-of-plane constants, grips (`nodal` or `coupling`, on the end rows or the whole tabs), loading by displacement or force, probe points and output requests. Every key is required and every invalid combination is refused by name; the format is documented at the top of `src/anisotropy_fea/spec.py`.
+A coupon model is generated from one TOML file in its test folder, `checks/<test>/` or, for our models of the team's coupons, the local `../.local/fea/<coupon>/`, never committed (ADR-0030, ADR-0036, ADR-0042): kind (`unnotched_tension`, `open_hole_tension`, `compression`, `shear_pm45`, `three_point_bending`, `four_point_bending`), dimensions, mesh controls, layup, material from the engine's cited library or explicit constants with stated out-of-plane constants, grips (`nodal` or `coupling`, on the end rows or the whole tabs), loading by displacement or force, probe points and output requests. Every key is required and every invalid combination is refused by name; the format is documented at the top of `src/anisotropy_fea/spec.py`.
 
 ```powershell
-uv run python examples/build_model.py models/X840PW-UNT-L1/X840PW-UNT-L1.toml --out ../.local/fea/X840PW-UNT-L1/our-runs/attempt-NN_<date>/run/kernel
+uv run python examples/build_model.py checks/unnotched-im7-8552/unnotched-im7-8552-coupling.toml --out ../.local/fea/checks/unnotched-im7-8552/runs/kernel
 ```
 
 writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite section, material with citations in the header, reference nodes and couplings when asked, step, boundaries, loads, output requests), a model preview (`<spec>-model.png`), then reads the deck back with our own reader, solves it with the kernel, and writes the result figure, the `.vtu` and `summary.txt`. Built today: unnotched tension and compression coupons on the structured mesher, and open-hole coupons on a Gmsh transfinite O-grid (`mesher.gmsh_open_hole_plate`, optional extra `mesh`: `uv sync --extra mesh`; ADR-0030, amendment 3). Shear and bending follow chunk by chunk. Each spec's generated decks live in its test folder's `decks/` (rewrite them with `tools/regenerate_decks.py`); the tools are described in [docs/installation-fea-tools.md](../docs/installation-fea-tools.md).
@@ -61,7 +61,7 @@ writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite s
 ## CalculiX, the independent solver
 
 ```powershell
-uv run python examples/run_calculix.py models/X840PW-UNT-L1/X840PW-UNT-L1-nodal.toml --out ../.local/fea/X840PW-UNT-L1/our-runs/attempt-NN_<date>/run/calculix
+uv run python examples/run_calculix.py checks/unnotched-im7-8552/unnotched-im7-8552-nodal.toml --out ../.local/fea/checks/unnotched-im7-8552/runs/calculix
 ```
 
 writes the CalculiX deck (`write_calculix`: S8R composite shells, four-field layer lines, one `*ORIENTATION` per ply angle, ENGINEERING CONSTANTS with the spec's out-of-plane constants, numeric boundaries, `*NODE PRINT` totals and `*EL PRINT, GLOBAL=YES` with COORD), runs the solver found through `ANISOTROPY_CCX` or on PATH (`calculix.run_calculix`), parses the `.dat` (`calculix.parse_dat`) and prints the reactions, probe displacements and strains next to the kernel's on the order-1 twin mesh. The `.frd` opens in PrePoMax (File, Open results). CalculiX refuses what its manual says it cannot do: order-1 composite shells, a reaction at a coupled reference node, force control on nodal grips. `plane_stress = true` in `[material.transverse]` writes nu13 = nu23 = 0: CalculiX expands a composite S8R into a single brick, and nonzero through-thickness Poisson ratios then couple the plies' thickness contraction and raise the in-plane stresses, which neither Abaqus LAMINA nor our kernel does (ADR-0030, amendment 1). Use it whenever the reference is plane stress.

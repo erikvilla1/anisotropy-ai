@@ -1,5 +1,6 @@
-"""The coupon document and its one zip, docs/models/coupon.py (ADR-0041), built in a temporary folder: a committed coupon the
-team has not built, and a fixture coupon with a team comparison."""
+"""The coupon document and its one zip, docs/models/coupon.py (ADR-0041), built in a temporary folder: the public stand-in as a
+coupon the team has not built, and a fixture coupon with a team comparison. The coupon models themselves are local (ADR-0042):
+the command line is run on one when this machine has it."""
 
 import importlib.util
 import subprocess
@@ -10,10 +11,15 @@ from pathlib import Path
 
 import pytest
 
+from public_coupon import DESIGNATION, PUBLIC_COUPON
 from test_equivalence import FIXTURE_SPEC, GRIPS_FIXTURE
 from test_side_by_side import kernel_reports
 
+from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.compare import load_record
+from anisotropy_fea.femodel import build_model
+from anisotropy_fea.spec import load_spec
+from anisotropy_fea.write_abaqus import write_abaqus
 
 ROOT = Path(__file__).parents[2]
 COUPON = ROOT / "docs/models/coupon.py"
@@ -57,7 +63,7 @@ def team_sources(coupon, tmp: Path, spec_text: str = NAMED_SPEC):
     manifest = tmp / "team-comparison.toml"
     manifest.write_text("\n".join([
         'name = "grips"', 'units = "mm-MPa"', "node_tolerance = 1e-5", "agreement = 0.01", "edge_band = 10.0", "map_layer = 10",
-        "[locations]", '"centre" = [2.5, 45.0]',
+        "[locations]", '"centre" = [6.25, 56.25]',  # an element centroid of the 25 by 100 mm fixture
         "[team]", f'deck = "team/{deck.name}"', 'solver = "a fixture"', 'run_by = "the test"', 'run_date = "2026-10-20"',
         "reports = [" + ", ".join(f'"team/{p.name}"' for p in reports) + "]",
         "[ours]", 'spec = "ours/grips-coupon.toml"', f'calculix_record = "{RECORD.as_posix()}"',
@@ -66,23 +72,47 @@ def team_sources(coupon, tmp: Path, spec_text: str = NAMED_SPEC):
     return coupon.Sources(coupon="grips", spec=spec, twin=twin, record=RECORD, manifest=manifest, documents=tmp / "documents")
 
 
-def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_zip(tmp_path):
-    result = subprocess.run([sys.executable, str(COUPON), "X840PW-UNC-L1", "--root", str(tmp_path), "--no-pdf", "--no-theory"],
-                            capture_output=True, text=True, cwd=ROOT)
-    assert result.returncode == 0, result.stdout + result.stderr
-    documents = tmp_path / "X840PW-UNC-L1" / "documents"
-    tex = (documents / "X840PW-UNC-L1.tex").read_text(encoding="utf-8")
+def public_sources(coupon, tmp: Path):
+    """The public stand-in as a coupon the team has not built: its spec with its deck in decks/, as in a coupon's folder, and the
+    IM7/8552 check's CalculiX record for its twin."""
+    spec = tmp / f"{DESIGNATION}.toml"
+    spec.write_text(PUBLIC_COUPON, encoding="utf-8")
+    paths.deck_path(spec, "abaqus").parent.mkdir()
+    paths.deck_path(spec, "abaqus").write_text(write_abaqus(build_model(load_spec(spec))), encoding="utf-8", newline="\n")
+    twin = (RECORD.parent / load_record(RECORD)["spec"]).resolve()
+    return coupon.Sources(coupon=DESIGNATION, spec=spec, twin=twin, record=RECORD, manifest=None, documents=tmp / DESIGNATION / "documents")
+
+
+def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_zip(coupon, tmp_path):
+    tex_path, archive = coupon.build_document(public_sources(coupon, tmp_path), pdf=False, theory=False)
+    documents = tmp_path / DESIGNATION / "documents"
+    tex = tex_path.read_text(encoding="utf-8")
     assert all(rf"\chapter{{{title}}}" in tex for title in CHAPTERS)
     assert "The team has not built this coupon yet" in tex and r"\label{sec:results}" not in tex  # no team side by side
-    assert sorted(p.name for p in documents.iterdir()) == [f"{TODAY}_X840PW-UNC-L1.zip", "X840PW-UNC-L1.tex", "figures"]  # one document, one zip
-    with zipfile.ZipFile(documents / f"{TODAY}_X840PW-UNC-L1.zip") as zf:
+    assert sorted(p.name for p in documents.iterdir()) == [f"{TODAY}_{DESIGNATION}.zip", f"{DESIGNATION}.tex", "figures"]  # one document, one zip
+    assert archive == documents / f"{TODAY}_{DESIGNATION}.zip"
+    with zipfile.ZipFile(archive) as zf:
         names = set(zf.namelist())
-        readme = zf.read("X840PW-UNC-L1/README.txt").decode("utf-8").splitlines()
-    for name in ("README.txt", "abaqus/X840PW-UNC-L1-abaqus.inp", "calculix/X840PW-UNC-L1-nodal-ccx.inp", "spec/X840PW-UNC-L1.toml",
-                 "spec/X840PW-UNC-L1-nodal.toml", "material/x840-z60-pw.csv"):
-        assert f"X840PW-UNC-L1/{name}" in names, name
+        readme = zf.read(f"{DESIGNATION}/README.txt").decode("utf-8").splitlines()
+    for name in ("README.txt", f"abaqus/{DESIGNATION}-abaqus.inp", "calculix/unnotched-im7-8552-nodal-ccx.inp", f"spec/{DESIGNATION}.toml",
+                 "spec/unnotched-im7-8552-nodal.toml", "material/im7-8552.csv"):
+        assert f"{DESIGNATION}/{name}" in names, name
     assert not any(name.endswith(".frd") for name in names)
-    assert readme[0] == "Anisotropy AI share folder" and readme[1].startswith("X840PW-UNC-L1, unnotched compression")
+    assert readme[0] == "Anisotropy AI share folder" and readme[1].startswith(f"{DESIGNATION}, unnotched tension")
+
+
+LOCAL_COUPONS = [d.name for d in paths.model_dirs() if load_spec(d / f"{d.name}.toml").mesh.mesher == "structured"]
+
+
+@pytest.mark.skipif(not LOCAL_COUPONS, reason="no coupon model on this machine: the team's coupons are local (.local/fea/<coupon>/, ADR-0042)")
+def test_a_local_coupon_builds_from_the_command_line(tmp_path):
+    name = LOCAL_COUPONS[0]
+    result = subprocess.run([sys.executable, str(COUPON), name, "--root", str(tmp_path), "--no-pdf", "--no-theory"],
+                            capture_output=True, text=True, cwd=ROOT)
+    assert result.returncode == 0, result.stdout + result.stderr
+    documents = tmp_path / name / "documents"
+    assert sorted(p.name for p in documents.iterdir()) == [f"{TODAY}_{name}.zip", f"{name}.tex", "figures"]
+    assert all(rf"\chapter{{{title}}}" in (documents / f"{name}.tex").read_text(encoding="utf-8") for title in CHAPTERS)
 
 
 def test_the_team_comparison_joins_the_document_and_the_zip(coupon, tmp_path):

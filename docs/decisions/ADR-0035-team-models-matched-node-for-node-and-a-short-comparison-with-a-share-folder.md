@@ -3,11 +3,11 @@
 - Status: Proposed; our models of the team's coupons and the committed team summary leave the repository and its history by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md)
 - Date: 2026-10-20
 - Decided by: Founder, 2026-10-20 (direction); the options below await review | Drafted by: Claude Code
-- Related: `fea/src/anisotropy_fea/equivalence.py`, `fea/src/anisotropy_fea/side_by_side.py`, `docs/models/team.py`, spec keys `mesh.y_partitions` and `mesh.y_seeds`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0031](ADR-0031-one-generated-document-per-model-comparison.md), [ADR-0032](ADR-0032-local-workspace-layout-by-tool-and-test.md), [evaluation](../evaluations/fea/2026-10-20-team-comparison.md)
+- Related: `fea/src/anisotropy_fea/equivalence.py`, `fea/src/anisotropy_fea/side_by_side.py`, `docs/models/team.py`, spec keys `mesh.y_partitions` and `mesh.y_seeds`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0031](ADR-0031-one-generated-document-per-model-comparison.md), [ADR-0032](ADR-0032-local-workspace-layout-by-tool-and-test.md), local evaluation note `.local/notes/evaluations/fea/2026-10-20-team-comparison.md` (ADR-0042)
 
 ## Context
 
-On 2026-10-20 the founder asked that our finite element models match what the team builds, and for a simple comparison: the team's Abaqus model, ours, our material from the library with its source, and the results side by side, with files the team can pull easily. Our generated tension coupon used evenly spaced 1 mm rows. The team's Abaqus/CAE mesh is seeded by partition (lines at 15, 35.97, 44.03 and 65 mm; 15, 21, 8, 21 and 15 rows, from their FEA report template), so the nodes differed by up to 0.03 mm and no element-by-element comparison was exact. The existing comparison document (ADR-0031) runs to dozens of pages of theory and code, which the team does not need to read.
+On 2026-10-20 the founder asked that our finite element models match what the team builds, and for a simple comparison: the team's Abaqus model, ours, our material from the library with its source, and the results side by side, with files the team can pull easily. Our generated tension coupon used evenly spaced 1 mm rows. The team's Abaqus/CAE mesh is seeded by partition (lines and row counts from their FEA report template; local, ADR-0042), so the nodes differed by up to 0.03 mm and no element-by-element comparison was exact. The existing comparison document (ADR-0031) runs to dozens of pages of theory and code, which the team does not need to read.
 
 ## Options considered
 
@@ -38,10 +38,10 @@ Option 1 in each group. The tension coupon specs `tension-coupon-x840-{coupling,
 
 ## Why (evidence)
 
-- With the new seeding, all 891 nodes sit within 1.87e-6 mm of the team's, the single-precision rounding of CAE coordinates. All 800 elements match one to one and 20 of 20 physical items agree. Our kernel run on both decks gives stresses that differ by 0.005 MPa against a largest stress of 17535 MPa.
-- In the band from 25 to 55 mm, the team's Abaqus S11, S22 and Mises and ours agree within 0.43 %, 0.16 % and 0.20 % of each quantity's largest value.
+- With the new seeding, every node sits within the single-precision rounding of CAE coordinates of the team's, every element matches one to one and every physical item agrees; our kernel run on both decks gives the same stresses to roundoff (numbers in a local note (ADR-0042)).
+- Away from the grips, the team's Abaqus S11, S22 and Mises and ours agree within half a percent of each quantity's largest value (numbers in a local note (ADR-0042)).
 - Our CSV in the team's layout reads back with the same element numbers, centroids, faces and instance name as the team's own report.
-- Output is in `docs/evaluations/fea/2026-10-20-team-comparison.md`.
+- Output is in `.local/notes/evaluations/fea/2026-10-20-team-comparison.md` (local, ADR-0042).
 
 ## Consequences
 
@@ -57,18 +57,18 @@ Revisit if the team builds a model our spec cannot seed node for node, such as a
 
 **Options.** (1) An optional `[names]` table in the spec (part, instance, material, layup, section set), with our names as the stated defaults, threaded through the model builder, both writers and the CalculiX record tool. (2) Rename the decks after writing them. Rejected: the deck digest and the record keys would no longer follow from the spec. (3) Copy the team's numbering of nodes and elements as well. Rejected: CAE numbers by its own partition order, which a spec cannot state without listing every label. The share folder maps the team's numbers to ours instead.
 
-**Decision.** Option 1. Names must start with a letter and hold only letters, digits, - and _, at most 80, and the part and instance must differ. The tension coupon specs name the model as `Tension-test.inp` does: CFRP-Coupon, CFRP-Coupon-1, X840-Z60, CompositeLayup-1, CompositeLayup-1-1. The equivalence check now reads names as "same" when they match, and only lists a name that differs. A deck header now names a source's authors when the library record has them.
+**Decision.** Option 1. Names must start with a letter and hold only letters, digits, - and _, at most 80, and the part and instance must differ. Our models of the team's coupons name the model as the team's deck does (the names are local, ADR-0042). The equivalence check now reads names as "same" when they match, and only lists a name that differs. A deck header now names a source's authors when the library record has them.
 
-**Evidence.** The committed IM7/8552 decks are byte-identical under the defaults (`test_the_committed_generated_decks_match_their_specs`). The coupling twin against `Tension-test.inp` gives 23 of 23 items the same, names included. Our `ours-S22.csv` matches the team's `Test_01_S22.csv` row for row through its first block, with the same instance, section and material names. Evaluation note: `docs/evaluations/fea/2026-10-20-deck-names.md`.
+**Evidence.** The committed IM7/8552 decks are byte-identical under the defaults (`test_the_committed_generated_decks_match_their_specs`). The coupling twin against the team's deck gives every item the same, names included, and our field report matches the team's row for row (numbers in a local note (ADR-0042)). Evaluation note: `.local/notes/evaluations/fea/2026-10-20-deck-names.md` (local, ADR-0042).
 
 ## Amendment 2, 2026-10-20 (the compression and open-hole models converted to the team's build; a share folder of our models)
 
 **Context.** The founder asked to continue with the conversion. The compression and open-hole models still used IM7/8552 with the [45/0/-45/90]s layup and nodal grips, and the local workspace showed them as our models. The team has built only the tension coupon, so these two have no team deck to match node for node, and `docs/models/team.py` has nothing to compare them with.
 
-**Options.** (1) New specs in the team's build: X840-Z60 from the library, [0/45/-45/45/0]s of 0.1 mm plies, the whole tabs coupled to reference points, the team's names. Each keeps its test's ASTM proportions (D6641 style for compression, D5766 for the open hole) and has a nodal twin with a CalculiX record. The IM7/8552 specs stay committed as a public regression set. (2) Delete the IM7/8552 specs and records. Rejected: the tests, the manual's validation chapter and CI use them, and NCAMP data may be published. (3) Shrink the open hole onto the team's 10 mm by 80 mm coupon. Rejected: nothing says the team will test an open hole at that width, and D5766 fixes w/d = 6.
+**Options.** (1) New specs in the team's build: X840-Z60 from the library, the team's layup, the whole tabs coupled to reference points, the team's names. Each keeps its test's ASTM proportions (D6641 style for compression, D5766 for the open hole) and has a nodal twin with a CalculiX record. The IM7/8552 specs stay committed as a public regression set. (2) Delete the IM7/8552 specs and records. Rejected: the tests, the manual's validation chapter and CI use them, and NCAMP data may be published. (3) Shrink the open hole onto the team's tension coupon size. Rejected: nothing says the team will test an open hole at that width, and D5766 fixes w/d = 6.
 
 For handing over coupons the team has not built: (a) a share folder of our models, built from a committed manifest by `docs/models/share.py`. Each coupon gets the Abaqus deck to import, the CalculiX twin with its results, both specs and the comparison document of its CalculiX record, and the material record is written once. (b) Point the team at the repository only. Rejected: the `.frd` results and the PDFs are build outputs that are not committed.
 
 **Decision.** Option 1 and (a). The specs are `compression-coupon-x840-{coupling,nodal}` and `open-hole-coupon-x840-{coupling,nodal}`, with decks and records `compression-coupon-x840-nodal-calculix` and `open-hole-coupon-x840-nodal-calculix`. The local IM7/8552 folders move under `<tool>/public-im7-8552/`. The manifest is `docs/models/our-models.toml`, and its share folder is `.local/fea/share/our-models/` with `our-models.zip`. When the team builds one of these coupons, our spec is re-seeded to their mesh and it gets a team comparison.
 
-**Evidence.** CalculiX 2.22 against our kernel: 69 of 69 values agree on each new record within 3 %. The reactions differ by 0.19 % for compression and 0.06 % for the open hole. Every committed deck equals its spec, and the share script checks that again before it writes. Evaluation note: `docs/evaluations/fea/2026-10-20-x840-conversion.md`.
+**Evidence.** CalculiX 2.22 against our kernel: 69 of 69 values agree on each new record within 3 %. The reactions differ by 0.19 % for compression and 0.06 % for the open hole. Every committed deck equals its spec, and the share script checks that again before it writes. Evaluation note: `.local/notes/evaluations/fea/2026-10-20-x840-conversion.md` (local, ADR-0042).

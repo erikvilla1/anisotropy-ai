@@ -54,24 +54,24 @@ Next to the grip (element 286, the first gauge row past the tab) the two element
 
 **Agreement targets for later records**: 3 % relative with a 2 % floor at probes away from constraint corners (met here with margin); gradient-region probes are reported in the note, not in the record, until the kernel has the eight-node element.
 
-## Converting a read deck (the team's coupon) to CalculiX, 2026-10-16
+## Converting a read deck to CalculiX, 2026-10-16
 
 `convert_deck.calculix_from_deck` takes a deck our reader has read and writes it in CalculiX's dialect: the four-node mesh is promoted to eight-node (one midside node per unique edge, edge sets extended to the midside nodes), each kinematic coupling becomes direct constraints on its coupled nodes with the reference node's own prescribed values (CalculiX cannot print a reference node's reaction), the LAMINA material becomes engineering constants with the caller's stated nu23 and a stated transverse-isotropy rule, the composite section is written out in full with one orientation per ply angle, and every rewrite is listed in the deck header. `examples/convert_to_calculix.py` converts, runs and compares.
 
-From `fea/`: `uv run python examples/convert_to_calculix.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --nu23 0.45 --out ../.local/calculix/grips-fixture`
+From `fea/`: `uv run python examples/convert_to_calculix.py checks/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa --nu23 0.45 --out ../.local/fea/checks/grips-fixture`. Re-run on 2026-10-23, after the fixture became the generic 25 by 100 mm [0/30/-30/30/0]s coupon (ADR-0042):
 
 ```text
-CalculiX 2.22: 0.3 s, 0 warnings
-Grip-Top (Assembly.1, 3 coupled nodes): CalculiX total force [18.4979, 4640.62] N; kernel [42.2353, 4705.32] N
-centre element 9: CalculiX mean strain [-0.002485, 0.01001, gamma -0.002127]; kernel centroid [-0.002493, 0.0101, -0.00208]
+CalculiX 2.22: 0.2 s, 0 warnings; results next to the deck (.dat, .frd)
+Grip-Top (Assembly.1, 3 coupled nodes): CalculiX total force [31.9437, 4535.26] N; kernel [54.8781, 4574.14] N
+centre element 10: CalculiX mean strain [-0.001225, 0.00813, gamma -0.0007264]; kernel centroid [-0.001232, 0.008192, -0.0007088]
 largest axial displacement in CalculiX 0.8; in the kernel 0.8
 ```
 
-The team's coupon (`.local/abaqus/Tension-test.inp`, 800 four-node shells promoted to 800 S8R with 1600 midside nodes, two couplings of 176 nodes each) converted and ran in 2.0 s with no warnings; the axial reaction differs from the kernel's by 2.8 % and the centre axial strain by 0.1 %. Its numbers are in a local note, since its material may be proprietary; the converted deck opens laminated in PrePoMax. The x reaction of the unbalanced layup differs more between the two (the kernel drives a coupled region as one rigid translation; the converted deck holds each tab node in all six dofs), a difference in how the grip idiom is represented, stated in the deck header.
+A team coupon deck converted and ran the same way; its numbers stay in a local note (ADR-0042). The x reaction of an unbalanced layup differs more between the two (the kernel drives a coupled region as one rigid translation; the converted deck holds each tab node in all six dofs), a difference in how the grip idiom is represented, stated in the deck header.
 
 ## What the tests cover (14 new in `test_write_calculix.py`, `test_calculix.py`, `test_records.py`; 5 more in `test_convert_deck.py`)
 
-Converter: mesh promotion (one midside node per unique edge at the edge midpoint, edge sets extended), the rewritten deck line by line (S8R, coupled node sets, engineering constants, ten four-field layers, the reference node's values on the coupled sets, print requests, no reference nodes carried over, the stated out-of-plane choice in the header), explicit refusals for a missing or contradictory out-of-plane choice; with CalculiX present, the converted gripped fixture runs without warnings with its reaction within 2 % of the kernel's and the centre axial strain within 1 %; the team's deck, when present locally, within 5 % on the reaction.
+Converter: mesh promotion (one midside node per unique edge at the edge midpoint, edge sets extended), the rewritten deck line by line (S8R, coupled node sets, engineering constants, ten four-field layers, the reference node's values on the coupled sets, print requests, no reference nodes carried over, the stated out-of-plane choice in the header), explicit refusals for a missing or contradictory out-of-plane choice; with CalculiX present, the converted gripped fixture runs without warnings with its reaction within 2 % of the kernel's and the centre axial strain within 1 %; a team deck, when present locally, within 5 % on the reaction.
 
 
 Writer: orientation names, the deck's syntax line by line (S8R connectivity, engineering constants, orientations, the eight four-field layer lines, numeric boundaries, print requests with COORD), refusals (order 1, coupled grips, force control with nodal grips), the committed CalculiX deck regenerated from its spec. Runner and parser: `find_ccx` precedence, every block of a real `.dat` fixture (`tests/fixtures/small-coupon-ccx.dat.txt`, 69 nodes, 16 S8R elements) with nodal forces summing to the printed total, malformed rows refused and tagged rows accepted, the conventions file complete, layer grouping by z. With CalculiX present: the small coupon runs in equilibrium, its reaction within 2 % of the kernel's, two integration levels per layer, points numbered by level, every ply's printed stress equal to the engine's ply stress from CalculiX's own strain (so layer order and orientation hold), and the one-element shear deck prints tensor shear. Records: the kernel reproduces the committed record, it covers reactions, displacements, strain and all eight plies, the floor rule, a changed deck digest refused, incomplete or wrong records refused, the TOML writer round-trips.

@@ -23,18 +23,18 @@ From `engine/`: `uv run pytest -q`
 411 passed in 9.59s
 ```
 
-From `fea/`: `uv run python examples/solve_deck.py validation/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa` (last lines)
+From `fea/`: `uv run python examples/solve_deck.py checks/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa` (last lines; re-run on 2026-10-23, after the fixture became the generic 25 by 100 mm [0/30/-30/30/0]s coupon, ADR-0042)
 
 ```text
-first-ply failure, max_stress: factor 0.726059 on the applied loading, element CFRP-Coupon-1.3, ply 1 (bottom = 1), mode transverse tension
-first-ply failure, tsai_hill: factor 0.709915 on the applied loading, element CFRP-Coupon-1.3, ply 1 (bottom = 1), mode interactive
-first-ply failure, tsai_wu: factor 0.678606 on the applied loading, element CFRP-Coupon-1.3, ply 1 (bottom = 1), mode interactive
-first-ply failure, max_strain: not available (section 'CFRP-Coupon-1.CompositeLayup-1-1': Plies [0, ..., 9] have no strain limits; give them or state strain_limits = "from-strengths")
+first-ply failure, max_stress: factor 0.87931 on the applied loading, element Strip-1.3, ply 1 (bottom = 1), mode transverse tension
+first-ply failure, tsai_hill: factor 0.872851 on the applied loading, element Strip-1.3, ply 1 (bottom = 1), mode interactive
+first-ply failure, tsai_wu: factor 0.851693 on the applied loading, element Strip-1.3, ply 1 (bottom = 1), mode interactive
+first-ply failure, max_strain: not available (section 'Strip-1.Layup-A-1': Plies [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] have no strain limits; give them or state strain_limits = "from-strengths")
 ```
 
-Reading: the gripped IM7/8552 [0/45/-45/45/0]s coupon at 0.8 mm of pull (1 % nominal) reaches first-ply failure at 0.73 of that, in a 0 degree ply by transverse tension, in the second element row from the bottom grip. The uniform one-element coupon at the same nominal strain gives 0.7706 (maximum stress), 0.7553 (Tsai-Hill) and 0.7239 (Tsai-Wu), the engine's own `first_ply_failure` values for the same state; transverse tension of a 0 degree ply at about 0.77 % axial strain is consistent with F2t / E2 for this dataset.
+Reading (re-run on 2026-10-23): the gripped IM7/8552 [0/30/-30/30/0]s coupon at 0.8 mm of pull (0.8 % nominal) reaches first-ply failure at 0.879 of that, in a 0 degree ply by transverse tension, in the second element row from the bottom grip. The uniform one-element coupon at the same nominal strain gives 0.9326 (maximum stress), 0.9264 (Tsai-Hill) and 0.9050 (Tsai-Wu), the engine's own `first_ply_failure` values for the same state (`checks/cases/patch-1x1-im7-engine-equality.toml`).
 
-The team's deck has no `*Fail Stress`, so every criterion is refused by name ("Plies [...] have no strengths"; Tsai-Wu additionally needs f*). Nothing is assumed.
+A deck without `*Fail Stress` has every criterion refused by name ("Plies [...] have no strengths"; Tsai-Wu additionally needs f*). Nothing is assumed.
 
 ## What the tests cover (10 new in fea, 3 in the engine)
 

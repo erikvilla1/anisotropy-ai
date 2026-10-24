@@ -3,11 +3,11 @@
 - Status: Accepted
 - Date: 2026-10-03
 - Decided by: Founder, 2026-10-10 | Drafted by: Claude Code
-- Related: `engine/src/anisotropy_engine/failure.py`, `engine/tests/test_failure_combined.py`, [evaluation](../evaluations/2026-10-03-validation-ply-failure-fixed-loads.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0014](ADR-0014-explicit-temperature-change.md) (amended)
+- Related: `engine/src/anisotropy_engine/failure.py`, `engine/tests/test_failure_combined.py`, local evaluation note `.local/notes/evaluations/2026-10-03-validation-ply-failure-fixed-loads.md` (ADR-0042), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0014](ADR-0014-explicit-temperature-change.md) (amended)
 
 ## Context
 
-ADR-0014 reported no failure ratio with a temperature change, because `first_ply_failure` scales every stress with the load and residual thermal stress does not scale. Course Homework 5 Problem 1 part D asks for the Nx at first-ply failure with Ny = 0.5 Nx, while Mx = -4 lb*in/in and a cooling of 275 degF stay fixed. Daniel and Ishai Section 9.8 (Eqs. 9.25-9.28) define the safety factor with hygrothermal stresses as the factor on the mechanical stresses, with the hygrothermal stresses added unscaled.
+ADR-0014 reported no failure ratio with a temperature change, because `first_ply_failure` scales every stress with the load and residual thermal stress does not scale. A course problem asks for the Nx at first-ply failure with Ny growing in proportion to Nx, while a moment and a cooling stay fixed. Daniel and Ishai Section 9.8 (Eqs. 9.25-9.28) define the safety factor with hygrothermal stresses as the factor on the mechanical stresses, with the hygrothermal stresses added unscaled.
 
 ## Options considered
 
@@ -23,7 +23,7 @@ A case may give a `[failure]` table with `fixed` and `variable` resultants, and 
 
 ## Why (evidence)
 
-- Homework 5 part D: the engine gives Nx_fail = 568.256 lb/in, ply 3, bottom face at z = -0.015 in, transverse (matrix) tension. The key gives 568.25 lb/in, ply 3, bottom, z = -0.015 in, matrix tension.
+- That course problem: the engine gives the key's Nx at failure, ply, face and mode; the case is local since ADR-0042 and the numbers are in a local note (ADR-0042). In the repository, `constructed-cross-ply-cooling-first-ply-failure` checks maximum stress and Tsai-Wu with a fixed load and a cooling against closed forms.
 - `test_failure_combined.py` checks the following:
   - With nothing fixed, the combined functions equal the mechanical-only ones.
   - Each R lands exactly on the failure envelope.

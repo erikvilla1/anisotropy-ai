@@ -26,13 +26,13 @@
 | Ritz series vs closed form, specially orthotropic | agree to 1e-10 on 4 geometries and load ratios | 1e-8 | Yes |
 | Tsai-Hill fixed-plus-variable root vs independent bisection | 4/4 paths to 1e-9, including two with a sign change | 1e-6 | Yes |
 | Library conversions vs exact inch and pound-force | 23.51 Msi → 162.0957 GPa, 0.0072 in → 0.18288 mm, exact to 1e-12 | 1e-9 | Yes |
-| Course answer key, Homework 5 Problem 1 (maximum stress) | 25/25 values within 0.2% | 25/25 | Yes |
+| A course answer key (maximum stress); its numbers are local (ADR-0042) | every value within 0.2% | all | Yes |
 
 ## Founder sessions with the calculator (11 October)
 
 Three problems were put through the calculator from a blank template by the founder, with the engineer assisting. They are evidence of usability as much as of correctness:
 
-1. A [45/−45/90/02]s laminate under loads and cooling, first-ply failure: the course key's 25 values agreed, including Nx at failure 568.25 lb/in, ply 3, bottom face, matrix tension. Two input mistakes surfaced and were fixed in the file (unit suffixes on numbers; the "s" layup shorthand); the key's A matrix had to be entered in millions of lb/in.
+1. A course laminate under loads and cooling, first-ply failure: every value of the course key agreed, including Nx at failure, its ply, face and mode (the numbers are local, ADR-0042). Two input mistakes surfaced and were fixed in the file (unit suffixes on numbers; the "s" layup shorthand); the key's A matrix had to be entered in millions of lb/in.
 2. A [0/±45/90]s quasi-isotropic laminate: A11 = A22 and A66 = (A11 − A12)/2 as theory requires; B was pure roundoff and now prints as zeros.
 3. The same laminate against another tool's strains: the engine reproduced that tool's numbers exactly once the loads were read as N/mm rather than N/m. No engine fault; a units reading, now in the cheat sheet.
 

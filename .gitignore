@@ -31,6 +31,8 @@ References/
 public/assets/documents/daniel-ishai-2006/
 # Generated review artifacts remain local.
 output/
+# Our models of the team's coupons live in .local/fea/<coupon>/ and are never committed (ADR-0042); this keeps the old folder from coming back.
+/fea/models/
 # Course material (SE143AB Appendix F) stays in .local/sources/course/; it is never a public asset (ADR-0018).
 public/assets/documents/material-properties-2026-v2*.pdf
 # No copied documents may be served from the website; sources are linked or cited (ADR-0018).

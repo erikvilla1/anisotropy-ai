@@ -4,7 +4,7 @@ and the reading (ADR-0033).
 
 From the repository root:
 
-    uv run --project fea python docs/problems/build.py engine/validation/cases/se142-hw3-p3a-boron-symmetric.toml
+    uv run --project fea python docs/problems/build.py engine/validation/cases/constructed-cross-ply-cooling-first-ply-failure.toml
     uv run --project fea python docs/problems/build.py --all                 # every committed case, plus an index
     uv run --project fea python docs/problems/build.py .local/homework/course-reader/ours/cr-5-9-as4.toml
 
@@ -33,8 +33,6 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 CASES = ROOT / "engine/validation/cases"
-HOMEWORK = ROOT / ".local" / "homework"  # git-ignored: one folder per set, its reading in comparison/ (ADR-0040, amendment 1)
-HW = re.compile(r"^se142-hw(?P<n>\d+)-")
 PREAMBLE = (ROOT / "docs/models/preamble.tex").read_text(encoding="utf-8")
 THEORY = ROOT / "engine/docs/theory.md"
 
@@ -284,7 +282,7 @@ def about_section(reading_exists: bool) -> str:
         (r"\ref{sec:steps}", "How did the engine solve it, step by step?", r"\texttt{engine/docs/theory.md}, the \texttt{engine} source, and the numbers computed on the way"),
         (r"\ref{sec:comparison}", "Every compared number", "the case file (source) and the engine"),
         (r"\ref{sec:method}", "How were the inputs read and the numbers judged?", r"\texttt{anisotropy\_engine/cases.py}, listed"),
-        (r"\ref{sec:reading}", "What do we make of it, and what remains open?", "a reading note written by a person" if reading_exists else "none was found where this document was built"),
+        (r"\ref{sec:reading}", "What do we make of it, and what remains open?", "a reading note written by a person" if reading_exists else "no reading has been written yet"),
     ]
     body = "\n".join(rf"{a} & {b} & {c} \\" for a, b, c in rows)
     return "\n".join([
@@ -602,38 +600,26 @@ def method_section() -> str:
         manual.listing("engine_results", "anisotropy_engine"), manual.listing("compare", "anisotropy_engine")])
 
 
-def set_of(case_path: Path) -> str | None:
-    """The homework set of a case: HW<n> for `se142-hw<n>-*`, course-reader for `course-reader-*`, else None."""
-    match = HW.match(case_path.stem)
-    if match:
-        return f"HW{match['n']}"
-    return "course-reader" if case_path.stem.startswith("course-reader-") else None
+def set_reading(case_path: Path) -> Path | None:
+    """The reading of the homework set a case belongs to, `<set>/comparison/key-comparison.md`, when the case sits in a set's
+    `ours/` folder (`.local/homework/<set>/ours/`, ADR-0040 amendment 1, ADR-0042); None for any other case."""
+    return case_path.parent.parent / "comparison" / "key-comparison.md" if case_path.parent.name == "ours" else None
 
 
-def set_reading(set_name: str, root: Path = HOMEWORK) -> Path:
-    """Where a homework set's reading is written: beside the set's other files, git-ignored like the course's own."""
-    return root / set_name / "comparison" / "key-comparison.md"
-
-
-def reading_note(case_path: Path, root: Path = HOMEWORK) -> Path | None:
-    """`<case>.md` beside the case, else the reading of the case's homework set under `root`, when it is there."""
+def reading_note(case_path: Path) -> Path | None:
+    """`<case>.md` beside the case, else the reading of its homework set, when either is there."""
     beside = case_path.with_suffix(".md")
     if beside.is_file():
         return beside
-    set_name = set_of(case_path)
-    note = set_reading(set_name, root) if set_name else None
+    note = set_reading(case_path)
     return note if note is not None and note.is_file() else None
 
 
-def reading_section(case_path: Path, root: Path = HOMEWORK) -> tuple[str, bool]:
-    note = reading_note(case_path, root)
+def reading_section(case_path: Path) -> tuple[str, bool]:
+    note = reading_note(case_path)
     if note is None:
-        set_name = set_of(case_path)
-        if set_name:
-            return (rf"The reading of {escape(set_name)} is kept on our machine, not in the repository: {code(rel(set_reading(set_name, root)))}, "
-                    r"git-ignored like the course's own files. It was not there where this document was built, so this section is empty.", False)
-        return (rf"No reading has been written for this problem yet. To add one, write {code(rel(case_path.with_suffix('.md')))} beside the case. "
-                r"This section then prints it.", False)
+        target = set_reading(case_path) or case_path.with_suffix(".md")
+        return (rf"No reading has been written for this problem yet. To add one, write {code(rel(target))}. This section then prints it.", False)
     text = note.read_text(encoding="utf-8")
     title = re.search(r"^# (.+)$", text, re.M)
     body = text.split("\n", 1)[1] if title else text

@@ -2,7 +2,8 @@
 functions, the failure criteria themselves and an independent bisection.
 
 Strengths are Daniel & Ishai Table A.4 (AS4/3501-6); expansion coefficients and loads are
-constructed test inputs. The course problem (Homework 5) is a validation case.
+constructed test inputs. The course problem is a local validation case (ADR-0042); the committed one is
+constructed-cross-ply-cooling-first-ply-failure.
 """
 
 import math
@@ -162,8 +163,8 @@ def test_failure_table_results_report_loads_ply_and_location():
 
 def test_calculator_lists_fixed_and_variable_loads():
     run = subprocess.run([sys.executable, str(ENGINE / "examples/laminate_calculator.py"),
-                          str(ENGINE / "validation/cases/se142-hw5-p1-thermal-bending-laminate.toml")],
+                          str(ENGINE / "validation/cases/constructed-cross-ply-cooling-first-ply-failure.toml")],
                          cwd=ENGINE, capture_output=True, text=True)
     assert run.returncode == 0, run.stderr
     assert "First-ply failure search from [failure]" in run.stdout
-    assert "R = 568.256, ply 3 (90 deg), transverse tension, bottom face at z = -0.015 in" in run.stdout
+    assert "R = 2.06074, ply 2 (90 deg), transverse tension, bottom face at z = -0.25 mm" in run.stdout  # the closed form gives 2.060737

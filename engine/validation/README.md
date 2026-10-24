@@ -6,7 +6,7 @@ Together these cases are the evidence that the engine gives the right numbers, a
 
 ## Add a case
 
-1. Copy `cases/_template.toml` (one material) or `cases/_template-several-materials.toml` to a new file named after the problem, for example `homework-3-problem-2.toml`. Files starting with `_` are ignored.
+1. Copy `cases/_template.toml` (one material) or `cases/_template-several-materials.toml` to a new file named after the problem, for example `daniel-ishai-problem-7-11.toml`. Files starting with `_` are ignored. Cases from the course's answer keys do not go here: they stay in `.local/homework/<set>/ours/` (ADR-0042). A constructed case states its closed form in `source` and adds the same closed form to `closed_forms.py`, which imports nothing from the engine; `tests/test_constructed_references.py` checks every expected number against it.
 2. Fill in `title`, `source` and `units`, then the material(s), plies and one `[applied]` entry.
 3. Under `[expected]`, give only the values the source states, in the case's units. Set `tolerance` to suit how the source rounds: 0.001 (0.1%) for four significant figures, 0.005 for three.
 4. Check it with the calculator, which ends with an "Answer key vs engine" table: `uv run python examples/laminate_calculator.py validation/cases/<file>.toml`.
@@ -18,10 +18,10 @@ The calculator also reads the course's Excel input template directly: `uv run py
 
 ## One material or several
 
-- **From fiber and matrix (micromechanics, ADR-0034):** instead of E1, E2, G12 and nu12, a `[material]` or `[materials.<name>]` table may give `fiber = {E1, E2, G12, nu12}` (transversely isotropic; an isotropic fiber has E1 = E2 and G12 = E / (2 (1 + nu))), `matrix = {E, nu}`, `Vf` (a fraction), `E2_model` (`series`, `series_constrained`, `halpin_tsai`, `combination_square`) and `G12_model` (`series`, `halpin_tsai`, `combination_square`), with `xi_E2` and `xi_G12` required for `halpin_tsai` and refused otherwise. E1 and nu12 always use the rule of mixtures. Strengths and expansion coefficients may be added as measured values. See `se142-hw5-p2-micromechanics-im7-977-3-vf-0-65.toml`.
+- **From fiber and matrix (micromechanics, ADR-0034):** instead of E1, E2, G12 and nu12, a `[material]` or `[materials.<name>]` table may give `fiber = {E1, E2, G12, nu12}` (transversely isotropic; an isotropic fiber has E1 = E2 and G12 = E / (2 (1 + nu))), `matrix = {E, nu}`, `Vf` (a fraction), `E2_model` (`series`, `series_constrained`, `halpin_tsai`, `combination_square`) and `G12_model` (`series`, `halpin_tsai`, `combination_square`), with `xi_E2` and `xi_G12` required for `halpin_tsai` and refused otherwise. E1 and nu12 always use the rule of mixtures. Strengths and expansion coefficients may be added as measured values. See `constructed-micromechanics-eglass-epoxy-halpin-tsai.toml`.
 
 - **One material:** `[material]` with the elastic constants, and `[laminate]` with `layup` (angles, bottom first) and one `ply_thickness`.
-- **Several materials or thicknesses:** a `[materials.<name>]` table for each material, and `[laminate]` with `plies`, a list of `{angle = ..., material = "<name>", thickness = ...}`, bottom ply first. See `se142-hw4-p4ab-hybrid-woven-thermal.toml`.
+- **Several materials or thicknesses:** a `[materials.<name>]` table for each material, and `[laminate]` with `plies`, a list of `{angle = ..., material = "<name>", thickness = ...}`, bottom ply first. See `constructed-two-material-laminate-cooling.toml`.
 
 ## Inputs and results
 
@@ -73,9 +73,9 @@ Case inputs reject unknown fields, partial strength sets and incomplete vectors.
 
 `forces_curvature` converts the first three components as force/width and the last three as curvature; the moments are outputs, never zero-filled inputs. Its forward check must pass before results are returned. The two `constructed-*.toml` cases use independently evaluated scalar formulas with synthetic inputs. They check implementation, not experimental validity. The generic engineering constants still describe free bending (ADR-0005). Any failure ratio scales all solved force/moment resultants proportionally; it does not maintain a fixed nonzero curvature while increasing only the forces.
 
-Mixed conditions: for example, a lamina between frictionless rigid walls is `eps_x = -0.01`, `eps_y = 0.0`, `tau_xy = 0.0`, `Mx = 0.0`, `My = 0.0`, `Mxy = 0.0`, and `sigma_x` is solved. Give every pair, including explicit zeros; see `se142-hw2-p2-cr-3-8-walls-30deg.toml` and `se142-hw4-p2-cr-5-13-unsymmetric-cure.toml`. Known loads are mechanical; `delta_T` adds the thermal resultants. Every solution must pass the forward check.
+Mixed conditions: for example, a lamina held at `eps_y = 0.0` between rigid walls under a known stress is `sigma_x = 100.0`, `eps_y = 0.0`, `tau_xy = 0.0`, `Mx = 0.0`, `My = 0.0`, `Mxy = 0.0`, and `eps_x`, `sigma_y` and `gamma_xy` are solved. Give every pair, including explicit zeros; see `constructed-mixed-angle-lamina.toml`. Known loads are mechanical; `delta_T` adds the thermal resultants. Every solution must pass the forward check.
 
-First-ply failure: by default every mechanical load scales with R, and a temperature change stays fixed (Daniel and Ishai Section 9.8). To hold some loads fixed, add a `[failure]` table with `fixed` and `variable`, six resultants each in the case's units; failure occurs at fixed + R * variable, and `delta_T` stays fixed. For example, Nx growing with Ny = 0.5 Nx while Mx = -4 stays fixed is `fixed = [0, 0, 0, -4, 0, 0]` and `variable = [1, 0.5, 0, 0, 0, 0]`, so R is Nx at failure. See `se142-hw5-p1-thermal-bending-laminate.toml`.
+First-ply failure: by default every mechanical load scales with R, and a temperature change stays fixed (Daniel and Ishai Section 9.8). To hold some loads fixed, add a `[failure]` table with `fixed` and `variable`, six resultants each in the case's units; failure occurs at fixed + R * variable, and `delta_T` stays fixed. For example, Nx growing in steps of 100 N/mm while Ny = 40 N/mm stays fixed is `fixed = [0, 40e3, 0, 0, 0, 0]` and `variable = [100e3, 0, 0, 0, 0, 0]` in SI, so Nx at failure is R times 100 N/mm. See `constructed-cross-ply-cooling-first-ply-failure.toml`.
 
 Thermal inputs: `alpha1` and `alpha2` are in 1/degC (`SI`) or 1/degF (`US`, `psi`), and `delta_T` is a change in degC or degF. Stresses then come from each ply's mechanical strain, total strain minus its free thermal strain. The comparison cannot judge an expected zero when every value in that result is rounding noise, such as `M_T` of a symmetric laminate; leave such values out.
 
@@ -87,7 +87,7 @@ New result keys are added when a problem needs them.
 
 The failure message lists each value that disagrees. Check, in this order:
 
-1. **Input typo or units.** For example, 2.13 entered where the source means 2.13e7 psi, or the course Excel files' Boron/Epoxy G12 = 7,800,000 psi where the course table gives 780,000.
+1. **Input typo or units.** For example, 2.13 entered where the source means 2.13e7 psi, or a shear modulus typed ten times too large in an input file.
 2. **Convention.** Ply order, tensor versus engineering shear, or angle direction.
 3. **Source error.** Answer keys and textbooks contain mistakes; confirm with a second method.
 4. **Engine bug.** Fix the code; the case then guards against the bug permanently.
