@@ -10,7 +10,7 @@
 The founder still found the folders hard to follow. They asked why a share folder remained, why the folders did not carry the coupon names, and where the LaTeX documents were. One problem was spread over several parents:
 
 - **The tension coupon** sat in six places: `fea/models/tension-coupon/`, then locally `team/`, `attempts/` and `comparison/` under `.local/fea/tension-coupon/`, then `docs/models/build/` and `.local/fea/share/`.
-- **HW3** sat in five places: `.local/homework/assignments/HW3/`, `.local/homework/code/HW3/`, `engine/validation/cases/se142-hw3-*`, `docs/problems/readings/` and `docs/problems/build/`.
+- **HW3** sat in five places: `.local/homework/assignments/HW3/`, `.local/homework/code/HW3/`, the set's cases in `engine/validation/cases/`, `docs/problems/readings/` and `docs/problems/build/`.
 - **The documents were built in five places:** `docs/models/build/`, `docs/problems/build/`, `docs/manual/build/`, `.local/fea/<test>/comparison/report/` and a copy in `.local/manual/`.
 
 ADR-0038 had put the coupon's name in every title but kept the folder names, and rejected renaming the folders because ADR-0036 had set them a day earlier. The founder meant the name for the folders too.

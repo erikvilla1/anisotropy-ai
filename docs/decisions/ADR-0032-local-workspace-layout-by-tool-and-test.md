@@ -21,7 +21,7 @@ For homework: (a) `assignments/<HW>/` and `code/<HW>/` with the same names, or (
 
 ## Decision
 
-Option 1 and (a). `team/` holds what we compare against, including a team deck we converted to another solver; `ours/` what our generator wrote; `comparison/` the record, its reading note, notes, figures and the generated document in `report/<record>/`. Regenerable output of committed fixtures goes to `.local/fea/scratch/`. `docs/models/build.py` writes a local record's document beside the record instead of to `.local/model-reports/`. The committed side is unchanged: `fea/validation/{specs,decks,records}` for public materials, `engine/validation/cases/se142-*` for homework numbers. The `workspace-layout` skill states the rules and the filing procedure for agents.
+Option 1 and (a). `team/` holds what we compare against, including a team deck we converted to another solver; `ours/` what our generator wrote; `comparison/` the record, its reading note, notes, figures and the generated document in `report/<record>/`. Regenerable output of committed fixtures goes to `.local/fea/scratch/`. `docs/models/build.py` writes a local record's document beside the record instead of to `.local/model-reports/`. The committed side is unchanged: `fea/validation/{specs,decks,records}` for public materials, `engine/validation/cases/` for homework numbers. The `workspace-layout` skill states the rules and the filing procedure for agents.
 
 ## Why (evidence)
 
