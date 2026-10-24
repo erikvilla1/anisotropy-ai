@@ -57,7 +57,7 @@ Report > Field Output saved as CSV, one file per quantity: one row per element a
 
 ## What we do with them
 
-A comparison record (numbers only, with the provenance above) under `.local/fea/<coupon>/comparison/`, where it stays private with the coupon's model (ADR-0032, ADR-0042). The first comparison note sets the agreement targets and states what did and did not match.
+A comparison record (numbers only, with the provenance above) under `.local/fea/<coupon>/ours/verification/`, where it stays private with the coupon's model (ADR-0032, ADR-0042). The first comparison note sets the agreement targets and states what did and did not match.
 
 ## A note on the imposed displacement
 

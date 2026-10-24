@@ -1,6 +1,6 @@
 """Draw a generated model before any solve: mesh, element sets, node sets, reference points and boundary conditions.
 
-    uv run python examples/plot_model.py ../.local/fea/<coupon>/<coupon>.toml --out ../.local/fea/<coupon>/our-runs/attempt-NN_<date>/run/kernel
+    uv run python examples/plot_model.py ../.local/fea/<coupon>/ours/<coupon>.toml --out ../.local/fea/<coupon>/ours/runs/attempt-NN_<date>/run/kernel
 
 One PNG named after the spec. Element sets are filled in distinct muted colours, node sets drawn as markers,
 fixed grips as filled triangles, the moving grip or load as an arrow, midside nodes as small dots at order 2.

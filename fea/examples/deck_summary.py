@@ -1,7 +1,7 @@
 """Print what anisotropy_fea read from an Abaqus deck: counts, layup, materials, constraints, and what it skipped.
 
     uv run python examples/deck_summary.py checks/decks/coupon-2x8-grips-im7-8552.inp --units mm-MPa
-    uv run python examples/deck_summary.py ../.local/fea/<coupon>/from-team/<date>/<team deck>.inp --units mm-MPa --no-materials
+    uv run python examples/deck_summary.py ../.local/fea/<coupon>/team/<date>/<team deck>.inp --units mm-MPa --no-materials
 
 Pass --no-materials for a deck whose material values may be proprietary, so nothing numeric about the material is printed.
 """

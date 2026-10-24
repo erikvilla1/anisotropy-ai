@@ -1,7 +1,7 @@
 """The team comparison: the team's Abaqus model against ours, item by item and side by side (ADR-0035, ADR-0041).
 
 Not a document of its own: its sections are chapters of the coupon document (docs/models/coupon.py) and its files go in the
-coupon's zip. The manifest `.local/fea/<coupon>/comparison/team-comparison.toml` (format in `Manifest` below; every key
+coupon's package folder. The manifest `.local/fea/<coupon>/ours/verification/team-comparison.toml` (format in `Manifest` below; every key
 required, paths relative to the manifest) names the team's deck and field reports, our spec, the CalculiX record of our
 twin, and the bands and points to compare. Every number is computed while the document is built: the equivalence from both
 parsed decks (`anisotropy_fea.equivalence`), our results from the kernel on our generated deck, the pairing from the team's
@@ -21,8 +21,6 @@ import shutil
 import subprocess
 import sys
 import tomllib
-import tempfile
-import zipfile
 from datetime import date
 from pathlib import Path
 
@@ -32,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, PositiveFloat, ValidationError
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 PREAMBLE = (HERE / "preamble.tex").read_text(encoding="utf-8")
-README_MARK = "Anisotropy AI share folder"  # first line of every README.txt in our zips; only such a zip is ever replaced
+README_MARK = "Anisotropy AI share folder"  # first line of every README.txt in our packages; only such a package is ever replaced
 
 
 def load_module(name: str, path: Path):
@@ -186,7 +184,7 @@ def style(ax) -> None:
 # --------------------------------------------------------------------------------------------- the computation
 
 class Comparison:
-    """Everything the document and the zip print, computed once."""
+    """Everything the document and the package print, computed once."""
 
     def __init__(self, manifest_path: Path):
         self.manifest_path = manifest_path.resolve()
@@ -199,7 +197,7 @@ class Comparison:
         self.spec_path = resolve(base, m.ours.spec, "our spec")
         self.calculix_record_path = resolve(base, m.ours.calculix_record, "CalculiX record")
         self.reading_path = self.manifest_path.with_suffix(".md")
-        self.zip: Path | None = None  # set by docs/models/coupon.py to the coupon's zip before the files section is written
+        self.package: Path | None = None  # set by docs/models/coupon.py to the package folder before the files section is written
 
         # the two models
         self.spec = load_spec(self.spec_path)
@@ -560,7 +558,7 @@ def reading_section(c: Comparison) -> str:
 def files_section(c: Comparison) -> str:
     rows = [[code(path), escape(what)] for path, what in share_contents(c)]
     return "\n\n".join([
-        rf"Everything is in {code(c.zip.name)}; unzipped, it is one folder, {code(c.manifest.name)}. It holds no CalculiX results: run our "
+        rf"Everything is in the package folder {code(c.package.name)}, which goes to the team as it is. It holds no CalculiX results: run our "
         rf"decks to get them. Numbers in the files are in {c.length_unit}, {c.stress_unit} and {c.force_unit}.",
         table(["File", "What it is and how to open it"], rows, r">{\raggedright\arraybackslash}p{6.4cm}Y", r"\footnotesize"),
     ])
@@ -579,13 +577,14 @@ def open_section(c: Comparison) -> str:
     ])
 
 
-# --------------------------------------------------------------------------------------------- the zip for the team
+# --------------------------------------------------------------------------------------------- the package for the team
 
 def share_contents(c: Comparison) -> list[tuple[str, str]]:
     stem = c.spec_path.stem
     return [
         ("README.txt", "this list, as plain text"),
         (f"{c.manifest.name}.pdf", "this document"),
+        (f"{c.package.name}-audit.xlsx", "the audit form: our tools' results locked, the auditor's rows, verdict and findings to fill in (ADR-0043)"),
         (f"1-team-model/{c.team_deck_path.name}", "the team's deck, as we received it"),
         (f"2-our-model/abaqus/{stem}-abaqus.inp", "our deck of the same coupon, for Abaqus. Abaqus/CAE: File, Import, Model, choose the .inp file "
                                                   "(this click path is not checked by us); or run it as a job from the command line"),
@@ -620,42 +619,33 @@ def write_material_csv(path: Path, lib, material, units: str) -> None:
             writer.writerow([name, f"{from_si(value, 'stress', units):.10g}", stress_unit, "", "", "stated in our spec", "", "", ""])
 
 
-def dated(archive: Path) -> Path:
-    """The zip under today's date, `<YYYY-MM-DD>_<name>.zip`, so each zip sent out says when it was built (ADR-0039)."""
-    return archive.with_name(f"{date.today().isoformat()}_{archive.name}")
+def package_folder(documents: Path, name: str) -> Path:
+    """The package under today's date, `documents/<YYYY-MM-DD>_<name>/`, so each package sent out says when it was built (ADR-0043)."""
+    return documents / f"{date.today().isoformat()}_{name}"
 
 
-def zip_is_ours(archive: Path) -> bool:
-    """True when the zip's top-level README.txt starts with README_MARK: a zip this project wrote, safe to replace."""
+def package_is_ours(folder: Path) -> bool:
+    """True when the folder's README.txt starts with README_MARK: a package this project wrote, safe to replace."""
     try:
-        with zipfile.ZipFile(archive) as zf:
-            readmes = [n for n in zf.namelist() if n.endswith("/README.txt") and n.count("/") == 1]
-            return bool(readmes) and zf.read(readmes[0]).decode("utf-8").startswith(README_MARK)
-    except (zipfile.BadZipFile, OSError):
+        return (folder / "README.txt").read_text(encoding="utf-8").startswith(README_MARK)
+    except OSError:
         return False
 
 
-def write_zip(archive: Path, folder: str, fill) -> Path:
-    """Fill a temporary folder named `folder` with `fill(path)` and zip it to `archive` (one top-level folder inside).
-
-    No unzipped copy is kept. An existing zip is replaced only when this project wrote it (`zip_is_ours`)."""
-    if archive.exists() and not zip_is_ours(archive):
-        raise SystemExit(f"{archive} exists and was not written by this project; choose another name")
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp) / folder
-        root.mkdir()
-        fill(root)
-        archive.parent.mkdir(parents=True, exist_ok=True)
-        partial = archive.with_name(archive.name + ".part")
-        with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-            for path in sorted(root.rglob("*")):
-                if path.is_file():
-                    zf.write(path, Path(folder) / path.relative_to(root))
-        partial.replace(archive)
-    return archive
+def write_package(folder: Path, fill) -> Path:
+    """An empty package folder filled by `fill(folder)`. One that exists is replaced only when this project wrote it
+    (`package_is_ours`); earlier packages, under other dates, are kept, because a returned audit form names its package."""
+    if folder.exists():
+        if not package_is_ours(folder):
+            raise SystemExit(f"{folder} exists and was not written by this project; choose another name")
+        shutil.rmtree(folder)
+    folder.mkdir(parents=True)
+    fill(folder)
+    return folder
 
 
-def fill_share(c: Comparison, pdf: Path | None, share: Path) -> None:
+def fill_share(c: Comparison, share: Path) -> None:
+    """Every file of the package except the PDF, which is compiled into the folder afterwards, and the audit form."""
     for sub in ("1-team-model", "2-our-model/abaqus", "2-our-model/calculix", "2-our-model/spec", "3-material", "4-results"):
         (share / sub).mkdir(parents=True, exist_ok=True)
     stem = c.spec_path.stem
@@ -663,8 +653,6 @@ def fill_share(c: Comparison, pdf: Path | None, share: Path) -> None:
     (share / "2-our-model/abaqus" / f"{stem}-abaqus.inp").write_text(c.our_text, encoding="utf-8", newline="\n")
     shutil.copy2(c.calculix_deck_path, share / "2-our-model/calculix" / c.calculix_deck_path.name)
     shutil.copy2(c.spec_path, share / "2-our-model/spec" / c.spec_path.name)
-    if pdf is not None and pdf.exists():
-        shutil.copy2(pdf, share / f"{c.manifest.name}.pdf")
 
     write_material_csv(share / "3-material" / f"{c.library.material_id}.csv", c.library, c.material, c.units)
 

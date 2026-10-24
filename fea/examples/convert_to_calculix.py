@@ -1,6 +1,6 @@
 """Convert a deck our reader accepts (the team's Abaqus coupon decks) to CalculiX, run it, and compare with our kernel.
 
-    uv run python examples/convert_to_calculix.py ../.local/fea/<coupon>/from-team/<date>/<team deck>.inp --units mm-MPa --nu23 0.45 --out ../.local/fea/<coupon>/our-runs/attempt-NN_<date>/run/team-in-calculix
+    uv run python examples/convert_to_calculix.py ../.local/fea/<coupon>/team/<date>/<team deck>.inp --units mm-MPa --nu23 0.45 --out ../.local/fea/<coupon>/ours/runs/attempt-NN_<date>/run/team-in-calculix
 
 The Abaqus LAMINA material has no E3, nu13, nu23; CalculiX's three-dimensional law needs them, so you state nu23 and
 either transverse isotropy (E3 = E2, nu13 = nu12, the default) or --E3 and --nu13 in the deck's stress unit. The

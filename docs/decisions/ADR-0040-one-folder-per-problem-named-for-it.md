@@ -1,6 +1,6 @@
 # ADR-0040: One folder per problem, named for it, with everything about it inside
 
-- Status: Proposed; `fea/models/<coupon>/` is gone by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md): each coupon's model moves into its `.local/fea/<coupon>/`, which still holds everything about it
+- Status: Proposed; `fea/models/<coupon>/` is gone by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md): each coupon's model moves into its `.local/fea/<coupon>/`, which still holds everything about it; that folder is in three parts, team / ours / documents, since amendment 3
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (coupon names for the folders, in the repository and locally; four plain-named folders inside; no share folder; benchmark documents under `.local/benchmarks/<name>/`) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/paths.py`, `docs/models/build.py`, `docs/models/team.py`, `docs/models/share.py`, [ADR-0036](ADR-0036-one-folder-per-fea-test.md), [ADR-0038](ADR-0038-coupon-identity-card-and-designation.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-coupon-folders.md` (ADR-0042)
@@ -98,3 +98,48 @@ Revisit if a problem's files again turn up outside its folder, or if two problem
 - `homework.py --all`: 371 rows over five sets, none failing.
 
 **Consequences.** A homework result can be read without building the PDF or running the engine. The files are rebuilt from the cases and are never edited by hand.
+
+## Amendment 3, 2026-10-24 (a coupon's folder in three parts: team, ours, documents)
+
+**Context.** The founder looked at a coupon's folder and found it hard to follow. It held nine entries side by side: specs at the top, `decks/`, `records/`, `comparison/`, `from-team/`, `our-runs/` and `documents/`. Their words: "need the teams in one folder, ours in one folder, and documents in the other". They also asked what `records/` was for. It and `comparison/` both answer one question, whether our model gives another solver's answer, against CalculiX and against the team's Abaqus.
+
+**Options.**
+1. Three parts beside the case page, with `records/` and `comparison/` merged into `ours/verification/`. Chosen by the founder:
+   - `team/`, which was `from-team/`;
+   - `ours/`, holding the specs, `decks/`, `verification/`, `runs/` (was `our-runs/`) and `latex/` (the `.tex` and figures);
+   - `documents/`, holding only the dated packages of ADR-0043.
+2. The same three parts, keeping `records/` and `comparison/` as two folders inside `ours/`. Offered; not chosen.
+3. Put the audit form directly in `documents/`. Not chosen: the form travels inside the package it audits.
+
+**Decision.** Option 1.
+- `anisotropy_fea.paths` names the parts. A coupon's test folder is now its `ours/`.
+- `records_dir` gives `verification/` for a coupon and `records/` for a check, so the committed checks keep their layout.
+- The manifest and the team summary sit in `verification/` but are not records.
+- `team_deck` takes the newest team delivery that brought a deck, so a folder that brought only a returned audit form is passed over.
+
+`fea/tools/migrate_coupon_layout.py` moves a coupon folder once:
+- Without `--apply` it lists every move and every rewritten path, and changes nothing.
+- It rewrites each `../` path in a moved TOML file so that the path reaches the same file from its new place.
+- It refuses a move onto an existing path, or an entry it does not know.
+- It deletes nothing: the PDF and zip from before ADR-0043 stay in `documents/` for the founder to delete by hand.
+
+The founder had the local files moved at once, 2026-10-24 ("need everything standardized now"), before this change reached `main`. Until it does, the tools on `main` find no coupon and their local tests skip.
+
+**Evidence.**
+- `fea/tests/test_coupon_layout.py` checks the paths module and the move. The test coupon is in the old layout, with a manifest saved with Windows line endings. After the move, every path in the manifest reaches its file, and the line endings are kept.
+- A dry run on the founder's `.local/fea/` listed the moves of the three coupons and changed no file. The SHA-256 of every file was the same before and after.
+- A rehearsal on a copy of `.local/fea/` applied the move, then:
+  - regenerated the case pages: only their "generated from" note changed, every number the same;
+  - ran `cd fea && uv run pytest` with the local coupons present: 342 passed; the 21 skips need Gmsh;
+  - built the tension coupon's package in the new layout.
+
+  The copy was then deleted.
+- The move itself, 2026-10-24, on the founder's `.local/fea/`:
+  - the same 32 moves;
+  - the case pages regenerated, and their hand-written parts and the local READMEs rewritten for the new folders;
+  - a package built for each of the three coupons;
+  - `cd fea && uv run pytest` against it: 363 passed, none skipped.
+
+  The PDF and zip from before ADR-0043 went to `.local/backup/superseded-documents-2026-10-24/`, where nothing is deleted without the founder.
+
+**Consequences.** A coupon's folder has four entries: `README.md`, `team/`, `ours/` and `documents/`. The case pages' hand-written "Where to look" sections name the old folders and are updated by hand after the move.
