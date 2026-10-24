@@ -65,7 +65,7 @@ from anisotropy_engine.library import library_material  # noqa: E402
 from anisotropy_fea import __version__ as fea_version  # noqa: E402
 from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
-from anisotropy_fea.audit import load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
+from anisotropy_fea.audit import form_tables, load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
 from anisotropy_fea.case_pages import CasePageError, read_case  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
@@ -393,37 +393,44 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
 # --------------------------------------------------------------------------------------------- the package
 
 def package_contents(src: Sources, lib, package: Path) -> list[tuple[str, str]]:
+    """The package of a coupon the team has not built, in the same numbered folders as one with a team model (ADR-0043 amendment 2),
+    without 1-team-model/."""
     c = src.coupon
     out = [("README.txt", "this list, as plain text"), (f"{c}.pdf", "the coupon document"),
            (f"{package.name}-audit.xlsx", "the audit form: our tools' results locked, the auditor's rows, verdict and findings to fill in (ADR-0043)"),
-           (f"abaqus/{c}-abaqus.inp", "our deck, for Abaqus: File, Import, Model (this click path is not checked by us), or run it as a job"),
-           (f"calculix/{paths.deck_path(src.twin, 'ccx').name}", "the CalculiX twin, with the grips as direct constraints. PrePoMax: File, Import, then run it"),
-           (f"spec/{src.spec.name}", "the spec our generator builds the Abaqus deck from"), (f"spec/{src.twin.name}", "the spec of the CalculiX twin")]
+           (f"2-our-model/abaqus/{c}-abaqus.inp", "our deck, for Abaqus: File, Import, Model (this click path is not checked by us), or run it as a job"),
+           (f"2-our-model/calculix/{paths.deck_path(src.twin, 'ccx').name}", "the CalculiX twin, with the grips as direct constraints. PrePoMax: File, "
+                                                                            "Import, then run it"),
+           (f"2-our-model/spec/{src.spec.name}", "the spec our generator builds the Abaqus deck from"),
+           (f"2-our-model/spec/{src.twin.name}", "the spec of the CalculiX twin")]
     if lib is not None:
-        out.append((f"material/{lib.material_id}.csv", "the material from our library: every value, its unit, basis and source page, and the source"))
+        out.append((f"3-material/{lib.material_id}.csv", "the material from our library: every value, its unit, basis and source page, and the source"))
+    out.append(("4-results/ours-all-plies.csv", "our S11, S22, S12 and Mises for every ply of every element"))
     return out
 
 
-def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c) -> None:
+def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, deck, solution) -> None:
     """Every file of the package except the PDF, compiled into it afterwards, and the audit form."""
     if c is not None:
         team.fill_share(c, folder)  # the team's deck, our model, the material, the side-by-side files and the README
         return
     lib = library_material(spec.material.library, spec.material.dataset) if spec.material.library else None
-    for sub in ("abaqus", "calculix", "spec", "material"):
+    for sub in ("2-our-model/abaqus", "2-our-model/calculix", "2-our-model/spec", "3-material", "4-results"):
         (folder / sub).mkdir(parents=True)
-    (folder / "abaqus" / f"{src.coupon}-abaqus.inp").write_text(text, encoding="utf-8", newline="\n")
-    shutil.copy2(paths.deck_path(src.twin, "ccx"), folder / "calculix")
-    shutil.copy2(src.spec, folder / "spec")
-    shutil.copy2(src.twin, folder / "spec")
+    (folder / "2-our-model/abaqus" / f"{src.coupon}-abaqus.inp").write_text(text, encoding="utf-8", newline="\n")
+    shutil.copy2(paths.deck_path(src.twin, "ccx"), folder / "2-our-model/calculix")
+    shutil.copy2(src.spec, folder / "2-our-model/spec")
+    shutil.copy2(src.twin, folder / "2-our-model/spec")
     if lib is not None:
-        team.write_material_csv(folder / "material" / f"{lib.material_id}.csv", lib, spec_material(spec), spec.units)
+        team.write_material_csv(folder / "3-material" / f"{lib.material_id}.csv", lib, spec_material(spec), spec.units)
+    team.write_all_plies(folder / "4-results" / "ours-all-plies.csv", solution, deck, spec.units)
     contents = package_contents(src, lib, folder)
     width = max(len(path) for path, _ in contents)
     lines = [team.README_MARK, f"{card['Coupon']}, {card['Test']}: our model and its document", "",
              *[f"{label + ':':14} {value}" for label, value in card.items()], "",
              f"Built {date.today().isoformat()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {documents.git_commit()}).",
-             "Start with the PDF. Numbers in the files are in mm, MPa and N.", "",
+             "Start with the PDF. Numbers in the files are in mm, MPa and N.",
+             "There is no 1-team-model folder: the team has not built this coupon yet.", "",
              *[f"{path.ljust(width)}  {what}" for path, what in contents]]
     (folder / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
@@ -518,8 +525,8 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     print(f"{src.coupon}: LaTeX written to {tex}")
 
     def fill_package(folder: Path) -> None:
-        fill(folder, src, spec, text, card, c)
-        write_form(folder / form, rubric, scored, facts, units)
+        fill(folder, src, spec, text, card, c, deck, solution)
+        write_form(folder / form, rubric, scored, facts, units, tables=form_tables(rubric, evidence, scored))
 
     team.write_package(package, fill_package)
     result = None

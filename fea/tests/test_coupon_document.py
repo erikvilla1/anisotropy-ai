@@ -100,13 +100,16 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     assert sorted(p.name for p in documents.iterdir()) == [package.name]  # the packages only: no zip, no loose PDF
     assert sorted(p.name for p in (tmp_path / DESIGNATION / paths.OURS / paths.LATEX).iterdir()) == [f"{DESIGNATION}.tex", "figures"]  # the source is ours
     names = files_in(package)
-    for name in ("README.txt", f"{package.name}-audit.xlsx", f"abaqus/{DESIGNATION}-abaqus.inp", "calculix/unnotched-im7-8552-nodal-ccx.inp",
-                 f"spec/{DESIGNATION}.toml", "spec/unnotched-im7-8552-nodal.toml", "material/im7-8552.csv"):
+    for name in ("README.txt", f"{package.name}-audit.xlsx", f"2-our-model/abaqus/{DESIGNATION}-abaqus.inp", "2-our-model/calculix/unnotched-im7-8552-nodal-ccx.inp",
+                 f"2-our-model/spec/{DESIGNATION}.toml", "2-our-model/spec/unnotched-im7-8552-nodal.toml", "3-material/im7-8552.csv",
+                 "4-results/ours-all-plies.csv"):
         assert name in names, name
-    assert not any(name.endswith(".frd") for name in names)
+    assert not any(name.endswith(".frd") for name in names) and not any(name.startswith("1-team-model") for name in names)  # one layout, no team deck
     readme = (package / "README.txt").read_text(encoding="utf-8").splitlines()
     assert readme[0] == "Anisotropy AI share folder" and readme[1].startswith(f"{DESIGNATION}, unnotched tension")
-    assert any(line.startswith(f"{package.name}-audit.xlsx ") for line in readme)
+    assert any(line.startswith(f"{package.name}-audit.xlsx ") for line in readme) and "There is no 1-team-model folder" in "\n".join(readme)
+    plies = (package / "4-results/ours-all-plies.csv").read_text(encoding="utf-8").splitlines()
+    assert plies[0].startswith("team element,our element,x (mm),y (mm),ply (1 = bottom),angle (deg),S11 (MPa)") and plies[1].startswith(",")  # no team numbers
 
 
 LOCAL_COUPONS = [d.name for d in paths.model_dirs() if load_spec(d / paths.OURS / f"{d.name}.toml").mesh.mesher == "structured"]
@@ -154,7 +157,7 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     assert result("B1") == "Pass" and result("C2") == "Pass" and result("B6") is None  # the same mesh and stresses; the auditor judges B6
     # the fixture deck types the constants to two decimals in MPa, our library carries more digits: a real difference, sized for the auditor
     assert result("B5") == "Fail" and "Largest relative difference" in form["Rubric"].cell(rows["B5"], 9).value
-    assert r"Audit} (rubric 0.1" in tex
+    assert r"Audit} (rubric 0.2" in tex
     assert coupon.build_document(src, pdf=False, theory=False)[1] == package  # a second build replaces the package it wrote
 
 

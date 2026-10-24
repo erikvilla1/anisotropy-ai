@@ -11,9 +11,11 @@ from openpyxl import load_workbook
 from anisotropy_fea import case_pages, paths  # where the files live (ADR-0036)
 from anisotropy_fea.abaqus_reader import parse_deck, read_deck
 from anisotropy_fea.abaqus_report import read_field_report
-from anisotropy_fea.audit import (AUTO, AUDITOR_FIELDS, COVER, EQUIVALENCE_GROUPS, FINDING_ROWS, FINDINGS, LISTED_ONLY, NOT_BUILT_BY_TEAM, RUBRIC_COLUMNS,
-                                  RUBRIC_SHEET, AuditError, Evidence, Finding, Row, RubricError, items_for, load_rubric, parse_rubric, read_form, score,
+from anisotropy_fea.audit import (AUTO, AUDITOR_FIELDS, BY_SECTION, COVER, EQUIVALENCE_GROUPS, FINDING_ROWS, FINDINGS, FONT, GLANCE, LISTED_ONLY,
+                                  NOT_BUILT_BY_TEAM, RESULTS_SHEET, RUBRIC_COLUMNS, RUBRIC_SHEET, RULE_FIELD, TO_SEND, VALUES_SHEET, AuditError, Evidence,
+                                  Finding, Row, RubricError, _Facts, _laminate, form_tables, items_for, load_rubric, parse_rubric, read_form, score,
                                   verdict_of, write_form)
+from anisotropy_fea.report import laminate_check
 from anisotropy_fea.equivalence import RELATIVE, deck_equivalence
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.model import to_si
@@ -63,7 +65,9 @@ def test_the_committed_rubric_reads():
     rubric = load_rubric(paths.RUBRIC)
     assert [s.id for s in rubric.sections] == ["A", "B", "C", "D", "E"]
     assert len({item.id for item in rubric.items}) == len(rubric.items)
-    assert rubric.status == "draft", "the rubric stays a draft until the cofounder confirms it (ADR-0043)"
+    assert rubric.version == "0.2" and rubric.status == "confirmed", "confirmed by the founder on 2026-10-24 (ADR-0043 amendment 1)"
+    d1 = next(item for item in rubric.items if item.id == "D1")
+    assert d1.tolerance.relative == 0.01 and d1.condition.min_free_length_widths == 3  # the same tolerance as C2; N/A for a short gauge
 
 
 def test_model_match_uses_the_equivalence_tolerance():
@@ -187,6 +191,20 @@ def test_a_build_from_uncommitted_changes_or_without_an_attempt_cannot_be_traced
     assert results(dataclasses.replace(grips, card=CARD[:-1] + (("Size", " "),)))["A1"] == "Fail"
 
 
+def test_the_hand_check_names_the_end_effect_and_is_not_applicable_to_a_short_gauge(grips):
+    """D1 compares the gauge centre with free-edge laminate theory. The grips hold the width, so the evidence states the free length in
+    widths and N_x/N_y at the centre, and a coupon whose free length is under the rubric's minimum gets N/A, not Fail."""
+    item = next(item for item in load_rubric().items if item.id == "D1")
+    check = laminate_check(grips.our_deck, grips.solution)
+    facts = _Facts(check, "", (0.0,), "mm", "MPa")
+    result, evidence = _laminate(item, grips, facts)
+    assert result == "Fail" and "the free length is 4 widths, N_x at the centre is" in evidence and "above free-edge theory" in evidence  # 2 by 8 mesh: 3 %
+    short = _Facts(dataclasses.replace(check, free_length_m=check.width_m * 1.1), "", (0.0,), "mm", "MPa")
+    result, evidence = _laminate(item, grips, short)
+    assert result == "N/A" and evidence.startswith("the free length is 1.1 widths, under the 3 the hand check needs") and "For the record" in evidence
+    assert _laminate(item.model_copy(update={"condition": None}), grips, short)[0] == "Fail"  # without the condition the number alone decides
+
+
 def test_every_item_our_tools_judge_has_a_scorer_and_every_equivalence_item_has_a_place(grips):
     assert {item.id for item in load_rubric().items if item.method == "auto"} == set(AUTO)
     for item in grips.equivalence.items:
@@ -201,10 +219,10 @@ def test_the_form_locks_our_results_and_opens_the_auditors_cells(grips, tmp_path
     scored = score(rubric, grips)
     path = write_form(tmp_path / "audit.xlsx", rubric, scored, [("Coupon", "IM7-UNT-L9"), ("Attempt", "3")], UNITS)
     book = load_workbook(path)
-    assert book.sheetnames == [COVER, RUBRIC_SHEET, FINDINGS]
+    assert book.sheetnames == [COVER, RUBRIC_SHEET, FINDINGS]  # no tables given: no Results or Compared values sheet
     cover = book[COVER]
     labels = {cover.cell(r, 1).value: r for r in range(1, cover.max_row + 1)}
-    assert cover.cell(labels["Attempt"], 2).value == "3" and cover.cell(labels["Rubric"], 2).value == "version 0.1 (draft)"
+    assert cover.cell(labels["Attempt"], 2).value == "3" and cover.cell(labels["Rubric"], 2).value == "version 0.2 (confirmed)"
     assert all(not cover.cell(labels[field], 2).protection.locked for field in AUDITOR_FIELDS) and cover.protection.sheet
     sheet = book[RUBRIC_SHEET]
     assert [c.value for c in sheet[1]] == list(RUBRIC_COLUMNS)
@@ -224,14 +242,59 @@ def test_the_form_locks_our_results_and_opens_the_auditors_cells(grips, tmp_path
     assert '"Blocker,Major,Minor,Observation"' in {v.formula1 for v in findings.data_validations.dataValidation}
 
 
+def test_the_form_computes_the_rule_counts_the_rows_and_shows_the_numbers_behind_them(grips, tmp_path):
+    """Form v0.2 (ADR-0044): the cover's rule verdict and section counts are formulas over the auditor's entries; the numbers our tools
+    computed are values on the Results and Compared values sheets; the rows are coloured and the sheets print."""
+    rubric = load_rubric()
+    scored = score(rubric, grips)
+    tables = form_tables(rubric, grips, scored)
+    path = write_form(tmp_path / "audit.xlsx", rubric, scored, [("Coupon", "IM7-UNT-L9"), ("Package", "2026-10-24_IM7-UNT-L9"), ("Attempt", "3")], UNITS,
+                      tables=tables)
+    book = load_workbook(path)
+    assert book.sheetnames == [COVER, RUBRIC_SHEET, FINDINGS, RESULTS_SHEET, VALUES_SHEET] and book.properties.title == "Coupon audit: 2026-10-24_IM7-UNT-L9"
+    cover = book[COVER]
+    labels = {cover.cell(r, 1).value: r for r in range(1, cover.max_row + 1)}
+    rule = cover.cell(labels[RULE_FIELD], 2).value
+    assert rule.startswith('=IF(COUNTIFS(Rubric!$F$2:$F$200,"yes",Rubric!$H$2:$H$200,"Not checked")') and rule.endswith('"Pass with observations","Pass")))')
+    assert 'COUNTIFS(Findings!$E$2:$E$31,"<>",Findings!$G$2:$G$31,"Open",Findings!$C$2:$C$31,"Blocker")' in rule and cover.cell(labels[RULE_FIELD], 2).protection.locked
+    assert labels[GLANCE] < labels["S11 in the graded band"] < labels[BY_SECTION] < labels["A. Identity and traceability"] < labels["Findings"]
+    assert cover.cell(labels["A. Identity and traceability"], 2).value.startswith('=COUNTIFS(Rubric!$A$2:$A$200,"A*",Rubric!$H$2:$H$200,"Pass")&" pass, "&')
+    assert cover.cell(labels["Findings"], 2).value == '=COUNTIFS(Findings!$E$2:$E$31,"<>",Findings!$G$2:$G$31,"Open")&" open, "&COUNTIFS(Findings!$E$2:$E$31,"<>",Findings!$G$2:$G$31,"Closed")&" closed"'
+    glance = dict(tables.glance)
+    assert glance["S11 in the graded band"].startswith("24 of 24 within 1 % of ") and "; worst " in glance["S11 in the graded band"]
+    assert cover.cell(labels["Reaction at the loaded grip"], 2).value.startswith("ours ") and "not in the team's export" in glance["Reaction at the loaded grip"]
+    assert "the free length is 4 widths" in glance["Hand check at the gauge centre"]
+    sent = [cover.cell(r, 1).value for r in range(labels[TO_SEND] + 1, cover.max_row + 1) if cover.cell(r, 1).value]
+    assert sent[0].startswith("C1 (Total reaction force): the reaction force") and [line[:2] for line in sent] == ["C1", "C4", "C7", "E2"]
+    assert any("Example finding" in (cover.cell(r, 1).value or "") for r in range(1, cover.max_row + 1))
+    sheet = book[RUBRIC_SHEET]
+    result = RUBRIC_COLUMNS.index("Result") + 1
+    coloured = {str(r.sqref) for r in sheet.conditional_formatting}
+    assert f"H2:H{len(scored) + 1}" in coloured and result == 8 and sheet.print_title_rows == "$1:$1" and sheet.page_setup.orientation == "landscape"
+    assert sheet.row_dimensions[2].height is not None and all(c.font.name == FONT for c in sheet[2] if c.value is not None)
+    results = book[RESULTS_SHEET]
+    titles = [results.cell(r, 1).value for r in range(1, results.max_row + 1) if results.cell(r, 1).font.b and results.cell(r, 1).font.sz == 11]
+    assert [t.split(",")[0].split(":")[0] for t in titles] == ["Stresses in the graded band", "Gauge centre", "Ply stresses at the gauge centre in material axes (MPa)",
+                                                               "Reaction at the loaded grip (N)"]
+    band = tables.tables[0]
+    assert band.columns[:4] == ("Quantity", "Layer (1 = bottom)", "Values compared", "Within tolerance")
+    assert [(row[0], row[1], row[2], row[3]) for row in band.rows if row[1] == "all"] == [("S11", "all", 24, 24), ("S22", "all", 24, 24), ("Mises", "all", 24, 24)]
+    assert results.protection.sheet and results.cell(5, 1).value == "Quantity"  # the header row of the first table, locked like the rest
+    values = book[VALUES_SHEET]
+    assert values.max_row == len(grips.paired) + 1 and values.auto_filter.ref == f"A1:K{len(grips.paired) + 1}" and not values.protection.sheet
+    assert [c.value for c in values[1]][:6] == ["Team element", "Our element", "x (mm)", "y (mm)", "Layer (1 = bottom)", "Quantity"]
+    assert read_form  # a form with these sheets reads back: test_a_form_with_the_numbers_behind_it_reads_back
+
+
 # --------------------------------------------------------------------------------------------- a returned form
 
-def filled(folder, evidence, results=None, verdict="Pass", findings=(), refs=None, changed=None, when="2026-10-24", auditor="A. Engineer"):
+def filled(folder, evidence, results=None, verdict="Pass", findings=(), refs=None, changed=None, when="2026-10-24", auditor="A. Engineer", tables=False):
     """The form of the grips package as an auditor returns it. D1 is set to Pass so that a clean form can pass: on this coarse
-    2 by 8 mesh the centre element is about 3 % from laminate theory, which the 0.5 % proposal fails."""
+    2 by 8 mesh the centre element is about 3 % from laminate theory, beyond the rubric's 1 %."""
     rubric = load_rubric()
     scored = tuple(dataclasses.replace(s, result="Pass") if s.item.id == "D1" else s for s in score(rubric, evidence))
-    path = write_form(folder / "audit.xlsx", rubric, scored, [("Coupon", "IM7-UNT-L9"), ("Attempt", "3")], UNITS)
+    path = write_form(folder / "audit.xlsx", rubric, scored, [("Coupon", "IM7-UNT-L9"), ("Attempt", "3")], UNITS,
+                      tables=form_tables(rubric, evidence, scored) if tables else None)
     book = load_workbook(path)
     sheet = book[RUBRIC_SHEET]
     rows = {sheet.cell(r, 1).value: r for r in range(2, sheet.max_row + 1)}
@@ -258,6 +321,13 @@ def test_a_clean_form_reads_back(grips, tmp_path):
     form = read_form(filled(tmp_path, grips, when=datetime(2026, 10, 24, 9, 30)))
     assert form.verdict == "Pass" and form.auditor == "A. Engineer" and form.date == "2026-10-24" and form.counts() == "none open"
     assert form.cover["Attempt"] == "3" and {r.id: r.result for r in form.rows}["B6"] == "Pass"
+
+
+def test_a_form_with_the_numbers_behind_it_reads_back(grips, tmp_path):
+    """The Results and Compared values sheets, and the cover's formulas, do not get in the way of reading a returned form."""
+    form = read_form(filled(tmp_path, grips, tables=True))
+    assert form.verdict == "Pass" and form.cover[RULE_FIELD] == ""  # a formula has no cached value until Excel saves the file; it is not read
+    assert load_workbook(form.path).sheetnames == [COVER, RUBRIC_SHEET, FINDINGS, RESULTS_SHEET, VALUES_SHEET]
 
 
 def test_the_verdict_follows_the_rule(grips, tmp_path):
