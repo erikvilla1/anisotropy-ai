@@ -5,13 +5,15 @@ From the repository root:
 
     uv run --project fea python docs/models/coupon.py <coupon>             # one coupon
     uv run --project fea python docs/models/coupon.py --all                 # every coupon model under .local/fea/
+    uv run --project fea python docs/models/coupon.py --all --check         # before merging an engine change (ADR-0043)
     options: --root <folder> (the folder holding one folder per coupon; default .local/fea), --no-pdf, --no-theory
 
-The document is written to <root>/<coupon>/documents/: <coupon>.tex and <coupon>.pdf side by side with the figures/ they use, and one zip
-beside it, <today>_<coupon>.zip, holds the PDF, the Abaqus deck to import, the CalculiX deck, the specs and the material
-record. When <root>/<coupon>/comparison/team-comparison.toml exists, the team's Abaqus model is compared item by item and
-side by side (docs/models/team.py): those sections join the document, their files join the zip, and the comparison's
-figures are written to records/<coupon>-team-summary.toml for the case page. Chapters:
+The LaTeX is written to <root>/<coupon>/ours/latex/: <coupon>.tex beside the figures/ it uses. What goes to the team is the
+package, one folder per delivery, <root>/<coupon>/documents/<today>_<coupon>/ (ADR-0043): the PDF, compiled straight into it,
+the audit form, the Abaqus deck to import, the CalculiX deck, the specs and the material record. When
+<root>/<coupon>/ours/verification/team-comparison.toml exists, the team's Abaqus model is compared item by item and side by
+side (docs/models/team.py): those sections join the document, their files join the package, and the comparison's figures
+are written to ours/verification/<coupon>-team-summary.toml for the case page. Chapters:
 
     1 The problem              the coupon card, the material from our library with its pages, supports and loading
     2 The physics              laminate theory, the finite element kernel and the failure criteria, each equation with the
@@ -21,7 +23,8 @@ figures are written to records/<coupon>-team-summary.toml for the case page. Cha
     5 Results, our engine      the solution, the reaction, strains and ply stresses, first-ply failure
     6 Verification             CalculiX against our engine, and the team's Abaqus side by side
     7 What this shows          the readings, and what is not shown yet
-    Appendices                 the mapping rule, the record, the files in the zip
+    8 The audit                the rubric's rows, scored where our tools judge (docs/models/audit.py)
+    Appendices                 the mapping rule, the record, the files in the package
 
 Every number is computed while the document is built, from the coupon's spec, decks and record (local, ADR-0042); nothing is typed in.
 """
@@ -29,11 +32,13 @@ Every number is computed while the document is built, from the coupon's spec, de
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import difflib
 import importlib.util
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -52,6 +57,7 @@ def load_module(name: str, path: Path):
 
 documents = load_module("anisotropy_models_build", HERE / "build.py")
 team = load_module("anisotropy_models_team", HERE / "team.py")
+audit = load_module("anisotropy_models_audit", HERE / "audit.py")
 manual, rebuild = documents.manual, documents.rebuild
 escape, code, inline, number, heading = documents.escape, documents.code, documents.inline, documents.number, documents.heading
 
@@ -59,6 +65,8 @@ from anisotropy_engine.library import library_material  # noqa: E402
 from anisotropy_fea import __version__ as fea_version  # noqa: E402
 from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
+from anisotropy_fea.audit import load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
+from anisotropy_fea.case_pages import CasePageError, read_case  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.membrane import solve_membrane  # noqa: E402
@@ -66,7 +74,7 @@ from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import to_si  # noqa: E402
 from anisotropy_fea.recovery import deck_f12_star, strength_ratios  # noqa: E402
 from anisotropy_fea.report import comparison_rows, element_centroids, laminate_check, model_facts, solve_record, summarize  # noqa: E402
-from anisotropy_fea.spec import coupon_card, full_angles, load_spec, spec_material  # noqa: E402
+from anisotropy_fea.spec import TEST_CODES, coupon_card, full_angles, load_spec, spec_material  # noqa: E402
 from anisotropy_fea.units import from_si  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
@@ -85,18 +93,21 @@ class Sources:
     twin: Path  # the CalculiX twin, the spec the record names
     record: Path  # the CalculiX record of the twin
     manifest: Path | None  # the team comparison's manifest, when the team built the coupon
-    documents: Path  # where the PDF, its LaTeX and the zip go
+    documents: Path  # where the package folders go, one per delivery
+    team_files: Path  # what the team sent: decks, reports, returned audit forms, decks rebuilt from our guide
+    latex: Path  # where the LaTeX and its figures go
 
 
 def sources(coupon: str, root: Path) -> Sources:
-    folder = paths.MODELS / coupon
-    spec, record = folder / f"{coupon}.toml", folder / "records" / f"{coupon}-calculix.toml"
+    folder = paths.MODELS / coupon / paths.OURS
+    spec, record = folder / f"{coupon}.toml", paths.records_dir(folder) / f"{coupon}-calculix.toml"
     for path in (spec, record):
         if not path.is_file():
             raise SystemExit(f"{coupon}: no {path.relative_to(ROOT).as_posix()}")
     twin = (record.parent / load_record(record)["spec"]).resolve()
-    manifest = root / coupon / paths.COMPARISON / "team-comparison.toml"
-    return Sources(coupon, spec, twin, record, manifest if manifest.is_file() else None, root / coupon / paths.DOCUMENTS)
+    manifest = root / coupon / paths.OURS / paths.VERIFICATION / paths.MANIFEST
+    return Sources(coupon, spec, twin, record, manifest if manifest.is_file() else None, root / coupon / paths.DOCUMENTS,
+                   root / coupon / paths.TEAM_FILES, root / coupon / paths.OURS / paths.LATEX)
 
 
 # --------------------------------------------------------------------------------------------- chapter 1, the problem
@@ -194,8 +205,8 @@ def engine_chapter(src: Sources, deck, units: str, committed: Path) -> str:
     commands = "\n".join([
         f"uv run python tools/regenerate_decks.py {c} {c}-nodal          # the decks, from the specs",
         f"uv run python tools/new_attempt.py {c}                          # a folder for this try's runs",
-        f"uv run python examples/run_calculix.py models/{c}/{c}-nodal.toml --out <attempt>/run/calculix",
-        f"uv run python tools/record_from_dat.py models/{c}/{c}-nodal.toml <attempt>/run/calculix/{c}-nodal-ccx.dat ...",
+        f"uv run python examples/run_calculix.py ../.local/fea/{c}/ours/{c}-nodal.toml --out <attempt>/run/calculix",
+        f"uv run python tools/record_from_dat.py ../.local/fea/{c}/ours/{c}-nodal.toml <attempt>/run/calculix/{c}-nodal-ccx.dat ...",
         f"uv run --project fea python docs/models/coupon.py {c}          # this document, from the repository root",
     ])
     return "\n\n".join([
@@ -303,7 +314,7 @@ def verification_chapter(src: Sources, record: dict, rows, problems, summaries, 
            rf"CalculiX {escape(str(solver['version']))} is an open-source finite element program with its own element ({escape(solver['element_type'])}). "
            r"It ran the CalculiX twin of Section~\ref{sec:model}; our kernel ran the same model, and every number of its record was compared:",
            documents.summary_section(record, rows, problems, summaries, units),
-           r"To see it yourself in PrePoMax 2.6: File, Import the CalculiX deck from the zip (\texttt{calculix/}), run it, then File, Open results (.frd).",
+           r"To see it yourself in PrePoMax 2.6: File, Import the CalculiX deck from the package (\texttt{calculix/}), run it, then File, Open results (.frd).",
            r"\section{CalculiX: the solver and its deck}\label{sec:reference}", documents.reference_section(record, src.record),
            r"\section{CalculiX: every compared number}\label{sec:comparison}", documents.comparison_section(rows, summaries, units, map_drawn, full_tables)]
     if c is not None:
@@ -327,19 +338,19 @@ def reading_chapter(src: Sources, card: dict[str, str], c) -> str:
     return "\n\n".join(out)
 
 
-def files_appendix(src: Sources, spec, c, archive: Path) -> str:
+def files_appendix(src: Sources, spec, c, package: Path) -> str:
     if c is not None:
         return team.files_section(c)
     lib = library_material(spec.material.library, spec.material.dataset) if spec.material.library else None
-    rows = [[code(path), escape(what)] for path, what in zip_contents(src, lib)]
-    return "\n\n".join([rf"Everything is in {code(archive.name)}; unzipped, it is one folder, {code(src.coupon)}. It holds no CalculiX results: run our "
-                        r"decks to get them.",
+    rows = [[code(path), escape(what)] for path, what in package_contents(src, lib, package)]
+    return "\n\n".join([rf"Everything is in the package folder {code(package.name)}, which goes to the team as it is. It holds no CalculiX results: "
+                        r"run our decks to get them.",
                         team.table(["File", "What it is and how to open it"], rows, r">{\raggedright\arraybackslash}p{6.4cm}Y", r"\footnotesize")])
 
 
 # --------------------------------------------------------------------------------------------- the title page
 
-def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units: str) -> str:
+def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units: str, scored, rubric_version: str) -> str:
     solver = record["solver"]
     reaction = next((r for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
     labels = documents.UNIT_LABEL[units]
@@ -357,6 +368,11 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
                    + (rf"; the reaction differs by {number(100 * (reaction.kernel - reaction.reference) / abs(reaction.reference), 2)}\%" if reaction else "") + ".")
     if c is not None:
         verdict.append(team.verdict(c))
+    judged = [s for s in scored if s.result is not None]
+    failed = [s.item.id for s in judged if s.result == "Fail"]
+    verdict.append(rf"\textbf{{Audit}} (rubric {escape(rubric_version)}, Chapter~\ref{{ch:audit}}): our tools pass {sum(s.result == 'Pass' for s in judged)} "
+                   rf"of {len(judged)} rows" + (f" ({escape(', '.join(failed))} fail)" if failed else "")
+                   + rf"; the auditor judges {len(scored) - len(judged)} and gives the verdict.")
     verdict.append(r"\textbf{Not validated.} " + escape(f"{card['Test data']}."))
     facts = [(escape(label), escape(value)) for label, value in card.items() if label not in ("Coupon", "Test")]
     return "\n".join([
@@ -374,11 +390,12 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
     ])
 
 
-# --------------------------------------------------------------------------------------------- the zip
+# --------------------------------------------------------------------------------------------- the package
 
-def zip_contents(src: Sources, lib) -> list[tuple[str, str]]:
+def package_contents(src: Sources, lib, package: Path) -> list[tuple[str, str]]:
     c = src.coupon
     out = [("README.txt", "this list, as plain text"), (f"{c}.pdf", "the coupon document"),
+           (f"{package.name}-audit.xlsx", "the audit form: our tools' results locked, the auditor's rows, verdict and findings to fill in (ADR-0043)"),
            (f"abaqus/{c}-abaqus.inp", "our deck, for Abaqus: File, Import, Model (this click path is not checked by us), or run it as a job"),
            (f"calculix/{paths.deck_path(src.twin, 'ccx').name}", "the CalculiX twin, with the grips as direct constraints. PrePoMax: File, Import, then run it"),
            (f"spec/{src.spec.name}", "the spec our generator builds the Abaqus deck from"), (f"spec/{src.twin.name}", "the spec of the CalculiX twin")]
@@ -387,9 +404,10 @@ def zip_contents(src: Sources, lib) -> list[tuple[str, str]]:
     return out
 
 
-def fill(folder: Path, src: Sources, spec, text: str, pdf: Path | None, card: dict[str, str], c) -> None:
+def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c) -> None:
+    """Every file of the package except the PDF, compiled into it afterwards, and the audit form."""
     if c is not None:
-        team.fill_share(c, pdf, folder)  # the team's deck, our model, the material, the side-by-side files and the README
+        team.fill_share(c, folder)  # the team's deck, our model, the material, the side-by-side files and the README
         return
     lib = library_material(spec.material.library, spec.material.dataset) if spec.material.library else None
     for sub in ("abaqus", "calculix", "spec", "material"):
@@ -400,9 +418,7 @@ def fill(folder: Path, src: Sources, spec, text: str, pdf: Path | None, card: di
     shutil.copy2(src.twin, folder / "spec")
     if lib is not None:
         team.write_material_csv(folder / "material" / f"{lib.material_id}.csv", lib, spec_material(spec), spec.units)
-    if pdf is not None and pdf.exists():
-        shutil.copy2(pdf, folder / f"{src.coupon}.pdf")
-    contents = zip_contents(src, lib)
+    contents = package_contents(src, lib, folder)
     width = max(len(path) for path, _ in contents)
     lines = [team.README_MARK, f"{card['Coupon']}, {card['Test']}: our model and its document", "",
              *[f"{label + ':':14} {value}" for label, value in card.items()], "",
@@ -414,8 +430,9 @@ def fill(folder: Path, src: Sources, spec, text: str, pdf: Path | None, card: di
 
 # --------------------------------------------------------------------------------------------- the document
 
-def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = False) -> tuple[Path, Path]:
-    """The coupon document (its PDF when Tectonic is installed and `pdf` is set, else the LaTeX) and the coupon's zip."""
+def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = False, write_summary: bool = True) -> tuple[Path, Path]:
+    """The coupon document (its PDF when Tectonic is installed and `pdf` is set, else the LaTeX) and the package folder; with
+    `write_summary`, the team comparison's figures for the case page too (beside the model, so off for a scratch build)."""
     spec = load_spec(src.spec)
     card = dict(coupon_card(spec))
     if not card:
@@ -425,7 +442,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     committed = paths.deck_path(src.spec, "abaqus")
     if committed.is_file() and committed.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
         raise SystemExit(f"{documents.rel(committed)} is not what the generator writes from {src.spec.name} today; run fea/tools/regenerate_decks.py first")
-    deck_file = committed if committed.is_file() else src.documents / f"{src.spec.stem}-abaqus.inp"
+    deck_file = committed if committed.is_file() else src.latex / f"{src.spec.stem}-abaqus.inp"
     deck = to_si(parse_deck(text, source_path=deck_file.name), units)
     solution = solve_membrane(deck)
     record = load_record(src.record)
@@ -436,18 +453,35 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     if c is not None and c.spec_path != src.spec.resolve():
         raise SystemExit(f"{documents.rel(src.manifest)}: ours.spec must be the coupon's spec {documents.rel(src.spec)}")
 
-    out_dir = src.documents  # the document is built where it is looked for: one .tex, one .pdf, figures/ (no copy)
+    out_dir = src.latex  # the LaTeX and its figures; what goes to the team is the package folder in documents/ (ADR-0043)
     figures = out_dir / "figures"
     figures.mkdir(parents=True, exist_ok=True)
     if not committed.is_file():
         deck_file.write_text(text, encoding="utf-8", newline="\n")  # a spec without a committed deck (a fixture): the guide reads this copy
         committed = deck_file
-    archive = team.dated(src.documents / f"{src.coupon}.zip")
+    package = team.package_folder(src.documents, src.coupon)
     if c is not None:
-        c.zip = archive
+        c.package = package
     documents.difference_figure(rows, figures / "differences.png")
     map_drawn = documents.element_map(rows, summaries, element_centroids(rec_solution, units), rec_solution, units, figures / "element-map.png")
     results, summary = results_chapter(spec, deck, solution, units, figures)
+    abaqus = abaqus_chapter(src, spec, deck, solution, units, committed, c, figures)
+
+    # the audit (ADR-0043): our tools score the rubric; the chapter and the form show the same rows
+    rubric = load_rubric()
+    attempt = accepted_attempt(src)
+    b1 = next(item for item in rubric.items if item.id == "B1").tolerance.length_m  # the rebuilt deck is held to the model match's tolerance
+    rebuilt = audit.compare_rebuilt(audit.rebuilt_deck(src.team_files), deck, units, b1)
+    commit = documents.git_commit()
+    lib = f"{spec.material.library}, dataset {spec.material.dataset}" if spec.material.library else None
+    fpf = summary["fpf"][:3] if "fpf" in summary else None
+    evidence = audit.gather(test_code=TEST_CODES[spec.kind][0], units=units, card=coupon_card(spec), deck=deck, solution=solution, material=lib,
+                            commit=commit, attempt=attempt, guide=audit.guide_counts(abaqus, rebuild.tag), c=c, fpf=fpf, rebuilt=rebuilt)
+    scored = score(rubric, evidence)
+    facts = audit.cover(card=card, package=package.name, attempt=attempt, commit=commit, run_by=operator(), built=date.today().isoformat(),
+                        team_deck=c.team_deck_path.name if c is not None else None, team_sha256=evidence.team_deck_sha256)
+    form = f"{package.name}-audit.xlsx"
+
     headline = f"{card['Coupon']}, {card['Test']}"
     parts = [
         r"\documentclass[11pt,letterpaper,oneside]{report}", documents.PREAMBLE, r"\usepackage{float}", CHAPTER_STYLE,
@@ -458,20 +492,21 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\fancyfoot[C]{\sffamily\scriptsize\color{muted}Verified against other solvers; not validated against a coupon test.}",
         r"\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\sffamily\scriptsize\color{muted}\thepage}\renewcommand{\headrulewidth}{0pt}}",
         r"\begin{document}",
-        title_page(card, record, rows, summary, c, units),
+        title_page(card, record, rows, summary, c, units, scored, rubric.version),
         r"\tableofcontents",
         r"\chapter{The problem}\label{ch:problem}", problem_chapter(spec, card, c, units, figures),
         r"\chapter{The physics: how our engine solves it}\label{ch:physics}", physics_chapter(theory, rec_deck, rec_solution, record, rows, units),
         r"\chapter{Building the part in our engine}\label{ch:engine}", engine_chapter(src, deck, units, committed),
-        r"\chapter{Building the part in Abaqus/CAE}\label{ch:abaqus}", abaqus_chapter(src, spec, deck, solution, units, committed, c, figures),
+        r"\chapter{Building the part in Abaqus/CAE}\label{ch:abaqus}", abaqus,
         r"\chapter{Results from our engine}\label{ch:results}", results,
         r"\chapter{Verification against other solvers}\label{ch:verification}",
         verification_chapter(src, record, rows, problems, summaries, units, map_drawn, full_tables, c, figures),
         r"\chapter{What this shows and what it does not}\label{ch:reading}", reading_chapter(src, card, c),
+        r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, facts, form, units, escape, code, team.table, documents.kv_table),
         r"\appendix",
         r"\chapter{How the CalculiX numbers were mapped and judged}\label{sec:method}", documents.method_section(record),
         r"\chapter{The CalculiX record}", documents.appendix_record(src.record),
-        r"\chapter{The files in the zip}\label{sec:files}", files_appendix(src, spec, c, archive),
+        r"\chapter{The files in the package}\label{sec:files}", files_appendix(src, spec, c, package),
     ]
     if len(rows) > 60 and (full_tables or len(rows) <= documents.FULL_TABLE_LIMIT):
         parts += [r"\chapter{The full CalculiX comparison table}", documents.comparison_table(rows, units)]
@@ -481,30 +516,76 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     if manual.UNMAPPED:
         print("Characters without a LaTeX mapping (check how they render):", " ".join(sorted(manual.UNMAPPED)))
     print(f"{src.coupon}: LaTeX written to {tex}")
+
+    def fill_package(folder: Path) -> None:
+        fill(folder, src, spec, text, card, c)
+        write_form(folder / form, rubric, scored, facts, units)
+
+    team.write_package(package, fill_package)
     result = None
     if pdf:
         compiler = manual.tectonic()
         if compiler is None:
             print("Tectonic not found; no PDF.")
         else:
-            subprocess.run([compiler, "--outdir", str(out_dir), str(tex)], check=True)
-            result = out_dir / f"{src.coupon}.pdf"
+            subprocess.run([compiler, "--outdir", str(package), str(tex)], check=True)  # the one PDF, straight into the package
+            result = package / f"{src.coupon}.pdf"
             print(f"{src.coupon}: document written to {result}")
-    archive = team.write_zip(archive, src.coupon, lambda folder: fill(folder, src, spec, text, result, card, c))
-    print(f"{src.coupon}: zip written to {archive}")
-    if c is not None:
+    print(f"{src.coupon}: package written to {package}")
+    if c is not None and write_summary:
         print(f"{src.coupon}: team comparison figures written to {team.write_team_summary(c)}")
-    return (tex if result is None else result), archive
+    return (tex if result is None else result), package
 
+
+def check(src: Sources) -> list[str]:
+    """The regression check: build the coupon again in a scratch folder and compare what our tools find now with the newest audit
+    form that came back. Returns the items our tools passed then and do not pass now (A2, how the package was built, not counted)."""
+    forms = sorted(src.team_files.glob("*/*-audit.xlsx")) if src.team_files.is_dir() else []
+    if not forms:
+        print(f"{src.coupon}: no audit form has come back, so there is nothing to compare with")
+        return []
+    baseline = read_form(forms[-1])
+    before = {row.id: row.result for row in baseline.rows if row.judged_by == "our tools"}
+    with tempfile.TemporaryDirectory() as scratch:
+        scratch = Path(scratch)
+        _, package = build_document(dataclasses.replace(src, documents=scratch / paths.DOCUMENTS, latex=scratch / paths.LATEX), pdf=False,
+                                    theory=False, write_summary=False)
+        now = our_results(package / f"{package.name}-audit.xlsx")
+    lost = regressions(before, now)
+    passed = [item for item, result in before.items() if result == "Pass"]
+    if lost:
+        print(f"{src.coupon}: REGRESSION against the audit of {baseline.date} ({forms[-1].parent.name}): "
+              + "; ".join(f"{item} passed, now {now[item]}" for item in lost))
+    else:
+        print(f"{src.coupon}: the {len(passed)} rows our tools passed in the audit of {baseline.date} still pass")
+    return lost
+
+
+def accepted_attempt(src: Sources) -> str | None:
+    """The attempt the package delivers: the case page's accepted attempt, or None when the model folder has no case page."""
+    try:
+        return read_case(paths.MODELS / src.coupon).accepted
+    except (OSError, ValueError):  # no README.md; CasePageError is a ValueError
+        return None
+
+
+def operator() -> str:
+    """Who built the package: the git user of this checkout, or "not stated"."""
+    try:
+        return manual.run("git", "config", "user.name") or "not stated"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "not stated"
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("coupons", nargs="*", help="coupon folders under .local/fea/")
     parser.add_argument("--all", action="store_true", help="every coupon model under .local/fea/")
     parser.add_argument("--root", type=Path, default=paths.LOCAL, help="the folder holding one folder per coupon (default .local/fea)")
-    parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX and the zip only")
+    parser.add_argument("--no-pdf", action="store_true", help="write the LaTeX and the package without its PDF")
     parser.add_argument("--no-theory", action="store_true", help="leave out the equations and code of Chapter 2")
     parser.add_argument("--full-tables", action="store_true", help="print every compared CalculiX number")
+    parser.add_argument("--check", action="store_true", help="build nothing: compare our tools' results now with each coupon's newest returned "
+                        "audit, and fail when a row they passed no longer passes (run before merging an engine change)")
     args = parser.parse_args()
     found = [d.name for d in paths.model_dirs()]  # the models are local (ADR-0042); a machine without them has none
     if args.all == bool(args.coupons):
@@ -512,7 +593,13 @@ def main() -> None:
     unknown = sorted(set(args.coupons) - set(found))
     if unknown:
         raise SystemExit(f"no coupon model for {unknown} in .local/fea/; the coupons are {found}")
-    for coupon in (found if args.all else args.coupons):
+    chosen = found if args.all else args.coupons
+    if args.check:
+        lost = [coupon for coupon in chosen if check(sources(coupon, args.root))]
+        if lost:
+            raise SystemExit(f"regression in {', '.join(lost)}: a row our tools passed in the last audit no longer passes")
+        return
+    for coupon in chosen:
         build_document(sources(coupon, args.root), pdf=not args.no_pdf, theory=not args.no_theory, full_tables=args.full_tables)
 
 

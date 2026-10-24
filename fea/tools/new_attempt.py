@@ -2,7 +2,7 @@
 
     uv run python tools/new_attempt.py <coupon>
 
-Creates .local/fea/<coupon>/our-runs/attempt-NN_<today>/run/, where NN is the next row of the case page's attempt log (a folder
+Creates .local/fea/<coupon>/ours/runs/attempt-NN_<today>/run/, where NN is the next row of the case page's attempt log (a folder
 is never reused), and prints the --out paths for the run tools. Before that it deletes the CalculiX results (.frd) of every
 earlier run that a later attempt has a run of the same kind for, and names each file. Add the attempt's row to the case
 page's attempt log when it is done. The layout is described in `anisotropy_fea.attempts`.

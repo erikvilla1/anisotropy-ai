@@ -11,7 +11,7 @@ from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.case_pages import CasePageError, local_index, model_folders, pages, read_case
 
 CHECKS_INDEX = paths.CHECKS / "README.md"
-SUMMARIES = [paths.team_summary(d) for d in paths.model_dirs() if paths.team_summary(d).is_file()]
+SUMMARIES = [paths.team_summary(d / paths.OURS) for d in paths.model_dirs() if paths.team_summary(d / paths.OURS).is_file()]
 
 
 @pytest.fixture(scope="module")
@@ -61,7 +61,7 @@ def test_the_team_summary_holds_figures_only_and_is_not_a_record():
         assert set(data) == {"coupon", "units", "built", "commit", "team", "equivalence", "agreement"}
         assert set(data["team"]) == {"deck", "deck_sha256", "solver", "run_date", "reports"}  # names and a digest, no values
         assert all(set(a) == {"band", "y", "quantity", "values", "agree", "within", "largest_difference"} for a in data["agreement"])
-        assert data["coupon"] == summary.parent.parent.name and data["equivalence"]["same"] == data["equivalence"]["items"]
+        assert data["coupon"] == paths.test_name(summary.parent.parent) and data["equivalence"]["same"] == data["equivalence"]["items"]
         assert summary not in paths.all_records()
 
 

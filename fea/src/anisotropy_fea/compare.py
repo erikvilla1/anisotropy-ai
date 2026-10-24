@@ -1,7 +1,7 @@
 """Comparison records: the numbers an independent solver produced for one of our models, with provenance, checked
 against our kernel (ADR-0030, ADR-0007).
 
-A record is a TOML file in a test folder's `records/` (`fea/checks/<test>/records/`, or a coupon's local `.local/fea/<coupon>/records/`, ADR-0036, ADR-0042):
+A record is a TOML file among a test folder's records (`fea/checks/<test>/records/`, or a coupon's local `.local/fea/<coupon>/ours/verification/`, ADR-0036, ADR-0042, ADR-0040 amendment 3):
 
     title = "..."
     units = "mm-MPa"

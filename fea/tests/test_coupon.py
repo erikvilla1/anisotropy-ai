@@ -17,7 +17,7 @@ TITLE_START = f'title = "{DESIGNATION}, unnotched tension: '
 
 def model_specs() -> dict[str, list]:
     """Every spec of every coupon model on this machine, by folder."""
-    return {d.name: sorted(d.glob("*.toml")) for d in paths.model_dirs()}
+    return {d.name: sorted((d / paths.OURS).glob("*.toml")) for d in paths.model_dirs()}
 
 
 def test_every_model_names_its_coupon_once():

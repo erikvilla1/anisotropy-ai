@@ -9,15 +9,23 @@ From the repository root, with [Tectonic](https://tectonic-typesetting.github.io
 ```sh
 uv run --project fea python docs/models/coupon.py <coupon>             # one coupon
 uv run --project fea python docs/models/coupon.py --all                 # every coupon model under .local/fea/ (none on CI, ADR-0042)
+uv run --project fea python docs/models/coupon.py --all --check         # before merging an engine change (ADR-0043)
 ```
 
-The document is built straight into the coupon's `.local/fea/<coupon>/documents/` (ADR-0040): `<coupon>.tex` and `<coupon>.pdf` side by side, with the `figures/` they use. There is one copy of it, no build folder. One dated zip goes beside it, `<date>_<coupon>.zip`. The zip holds the PDF, the Abaqus deck to import, the CalculiX deck, both specs and the material record. When the team built the coupon, it also holds their deck and our results in the layout of their field reports. It holds no CalculiX results, since the team runs our decks. A zip is replaced only when this project wrote it.
+The LaTeX is written to the coupon's `.local/fea/<coupon>/ours/latex/` (ADR-0040 amendment 3): `<coupon>.tex` with the `figures/` it uses. What goes to the team is the package, one folder per delivery, `.local/fea/<coupon>/documents/<date>_<coupon>/` (ADR-0043), copied to them as it is. It holds:
+- the PDF, compiled straight into it, so there is one copy;
+- the audit form, `<date>_<coupon>-audit.xlsx`;
+- the Abaqus deck to import, the CalculiX deck, both specs and the material record;
+- when the team built the coupon, their deck and our results in the layout of their field reports.
+
+It holds no CalculiX results, since the team runs our decks. A package folder is replaced only when this project wrote it; earlier packages stay, because a returned audit form names its package. What comes back, a filled-in form or a deck rebuilt from the guide, goes in `team/<date>/`.
 
 Options:
-- `--no-pdf` writes the LaTeX and the zip only;
+- `--no-pdf` writes the LaTeX and the package without its PDF;
 - `--no-theory` leaves out the equations and code of Chapter 2, about 25 pages that are the same in every document;
 - `--full-tables` prints every compared CalculiX number;
-- `--root <folder>` writes somewhere other than `.local/fea/`.
+- `--root <folder>` writes somewhere other than `.local/fea/`;
+- `--check` builds nothing to keep: it scores each coupon again in a scratch folder and fails when a row our tools passed in the newest returned audit no longer passes.
 
 ## The chapters, and where each comes from
 
@@ -30,15 +38,16 @@ Options:
 | 4 Building the part in Abaqus/CAE | what the team built, item by item against our deck (`anisotropy_fea.equivalence`), when they did; the step-by-step guide (`docs/models/rebuild.py`, Abaqus/CAE steps only) |
 | 5 Results from our engine | our kernel on the generated deck: the solution figure, the reaction, the centre element's strains and every ply's stress, first-ply failure by each criterion of the spec |
 | 6 Verification against other solvers | the CalculiX record against our kernel (summary, the solver and its deck, every compared number); the team's Abaqus side by side when they built it (`anisotropy_fea.side_by_side`) |
-| 7 What this shows and what it does not | the readings written by a person (`records/<coupon>-calculix.md`, and `team-comparison.md` beside the team manifest); what is not shown yet |
-| Appendices | how the CalculiX numbers were mapped and judged, with the code; the record; the files in the zip |
+| 7 What this shows and what it does not | the readings written by a person (`ours/verification/<coupon>-calculix.md`, and `team-comparison.md` beside the team manifest); what is not shown yet |
+| 8 The audit | the rubric `docs/audit/rubric.toml`, scored by `anisotropy_fea.audit.score` from the same computations; the rows the auditor judges, with what our tools can show them (`docs/models/audit.py`) |
+| Appendices | how the CalculiX numbers were mapped and judged, with the code; the record; the files in the package |
 
 ## The team comparison (ADR-0035)
 
-It is not a document of its own. When `.local/fea/<coupon>/comparison/team-comparison.toml` exists, `docs/models/team.py` supplies four things:
+It is not a document of its own. When `.local/fea/<coupon>/ours/verification/team-comparison.toml` exists, `docs/models/team.py` supplies four things:
 - the team's sections of Chapters 1, 4, 6 and 7;
-- their files in the zip;
-- the comparison in figures, in `.local/fea/<coupon>/records/<coupon>-team-summary.toml`. It holds no value from the team's files and feeds the case page's result table (ADR-0039). It stays local with the model (ADR-0042); then run `fea/tools/case_pages.py`.
+- their files in the package;
+- the comparison in figures, in `.local/fea/<coupon>/ours/verification/<coupon>-team-summary.toml`. It holds no value from the team's files and feeds the case page's result table (ADR-0039). It stays local with the model (ADR-0042); then run `fea/tools/case_pages.py`.
 
 The manifest's format is `Manifest` in `team.py`, and a reading `team-comparison.md` sits beside it. Everything stays local, because it carries the team's results (R-16).
 
@@ -51,7 +60,7 @@ The manifest's format is `Manifest` in `team.py`, and a reading `team-comparison
 - boundary conditions, loads, the step and the output requests;
 - the ply table as entered, the expanded stack with z positions, ply fractions and the edge-length range.
 
-It follows the team's FEA model report template (local copy under `.local/fea/X840PW-UNT-L1/from-team/2026-10-16/template/`): document control, evidence tags, a summary card, then one subsection per modelling step with a settings table, the GUI steps and the input-file keywords quoted from the decks.
+It follows the team's FEA model report template (local copy in the tension coupon's `team/<date>/template/`): document control, evidence tags, a summary card, then one subsection per modelling step with a settings table, the GUI steps and the input-file keywords quoted from the decks.
 
 Every value carries an evidence tag; a value that cannot is written `[OPEN]` and listed at the end, and the generator never fills one from memory. The tags:
 - `[INP]`: read from the deck;
@@ -63,6 +72,16 @@ Every value carries an evidence tag; a value that cannot is written `[OPEN]` and
 
 The coupon document asks for the Abaqus/CAE steps only (`Helpers.tools`). The guide can also write the PrePoMax steps, citing the PrePoMax 2.6.0 manual.
 
+## The audit (ADR-0043)
+
+Every package is audited against one rubric, `docs/audit/rubric.toml`. Our tools score the rows they can judge; Chapter 8 and the form show the same rows. The auditor fills in the form's open cells (their rows, the findings, name, date and verdict) and sends it back. Then:
+
+```sh
+cd fea && uv run python tools/read_audit.py <coupon> <returned form>.xlsx
+```
+
+The tool refuses a form that is incomplete, inconsistent or not this package's, and names every reason. A form it accepts goes to `team/<date>/`, and the case page's audit block lists it. The case line is written by hand; the tool says what it suggests. A deck an auditor rebuilt from the guide goes in `team/<date>/rebuilt/`, and the next package scores it as row E2.
+
 ## Record documents (checks)
 
 `docs/models/build.py` builds one document per comparison record (ADR-0031). It is used for the checks under `fea/checks/` (the IM7/8552 regression set): `--all` builds those into `docs/models/build/<record>/`, and CI uploads them. A coupon's own CalculiX record is a chapter of its coupon document, so `--all` leaves it out. Given explicitly, a record under `.local/` goes to `report/<record>/` beside it.
@@ -70,7 +89,7 @@ The coupon document asks for the Abaqus/CAE steps only (`Helpers.tools`). The gu
 ## Adding a coupon
 
 1. Make its record with `fea/tools/record_from_dat.py` (CalculiX); `fea/tests/test_records.py` checks that the kernel reproduces every committed record.
-2. Write the reading note `records/<coupon>-calculix.md`. Quote numbers from the record or an evaluation note, never from memory.
+2. Write the reading note `ours/verification/<coupon>-calculix.md`. Quote numbers from the record or an evaluation note, never from memory.
 3. Build the coupon document and read it. Anything a reading claims that the tables do not show is a defect in the reading.
 
 The Markdown subset a reading may use is the manual's: paragraphs, `##` and `###` headings, bullet and numbered lists, pipe tables, inline code, bold, italic, links, and inline math written as `` $`...`$ ``.

@@ -1,5 +1,5 @@
 """The team's own deck of the tension coupon, when it is present locally, against our local model of the same coupon (ADR-0035).
-Both stay on the founder's machine (ADR-0042): the deck is found by its place, `.local/fea/<coupon>/from-team/<date>/`, and every
+Both stay on the founder's machine (ADR-0042): the deck is found by its place, `.local/fea/<coupon>/team/<date>/`, and every
 expected count is read from our model rather than written here, so this file names none of the team's numbers and prints no
 material values (ADR-0029, AGENTS.md)."""
 
@@ -13,7 +13,7 @@ from anisotropy_fea.spec import load_spec
 
 COUPON = "X840PW-UNT-L1"
 LOCAL_DECK = paths.team_deck(COUPON)
-OURS = paths.local_test(COUPON) / f"{COUPON}.toml"
+OURS = paths.ours(COUPON) / f"{COUPON}.toml"
 
 pytestmark = pytest.mark.skipif(LOCAL_DECK is None or not OURS.is_file(),
                                 reason=f"the team's deck and our model of {COUPON} are not on this machine (.local/fea/{COUPON}/, ADR-0042)")
@@ -55,10 +55,10 @@ def test_the_team_coupon_deck_solves_in_equilibrium():
     assert solution.strain[:, 1].max() > 0.0  # the numbers themselves stay in the local note, not here
 
 
-LOCAL_RECORD = paths.local_test(COUPON) / paths.COMPARISON / "tension-test-abaqus.toml"
+LOCAL_RECORD = paths.verification(COUPON) / "tension-test-abaqus.toml"
 
 
-@pytest.mark.skipif(not LOCAL_RECORD.exists(), reason=f"the local record of the team's Abaqus field reports is not on this machine (.local/fea/{COUPON}/comparison/)")
+@pytest.mark.skipif(not LOCAL_RECORD.exists(), reason=f"the local record of the team's Abaqus field reports is not on this machine (.local/fea/{COUPON}/ours/verification/)")
 def test_the_kernel_reproduces_the_teams_abaqus_field_reports():
     """The team's Abaqus/CAE field reports (S11, S22, Mises at the outer plies) at gauge elements, within the record's tolerance;
     the numbers stay in the local record and note (ADR-0030, amendment 2)."""

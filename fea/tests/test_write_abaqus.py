@@ -136,16 +136,20 @@ def test_every_calculix_deck_is_what_its_spec_writes_today(spec_path):
 
 
 def test_every_test_folder_has_the_same_shape():
-    """A spec at the root, its decks in decks/, records in records/ with a reading beside each (ADR-0036). A coupon model's
-    folder is local and also holds the team's files, our runs, the comparison and the documents (ADR-0040, ADR-0042)."""
+    """A spec at the root, its decks in decks/, records with a reading beside each (ADR-0036): in records/ for a check, in
+    verification/ for a coupon's ours/. A coupon's folder is local and holds three parts beside its case page: team/, ours/ and
+    documents/ (ADR-0040 amendment 3, ADR-0042); ours/ also holds our runs and the document's LaTeX."""
     assert len([d for d in paths.test_dirs() if d.parent == paths.CHECKS]) >= 4
-    assert {d for d in paths.test_dirs() if d.parent == paths.MODELS} == set(paths.model_dirs())  # every local test folder is a coupon model
-    local = {paths.TEAM_FILES, paths.RUNS, paths.COMPARISON, paths.DOCUMENTS}
+    coupons = [d for d in paths.test_dirs() if d.parent != paths.CHECKS]
+    assert {d.parent for d in coupons} == set(paths.model_dirs()) and all(d.name == paths.OURS for d in coupons)  # every local test folder is a coupon's ours/
+    for folder in paths.model_dirs():
+        assert {p.name for p in folder.iterdir()} <= {"README.md", paths.TEAM_FILES, paths.OURS, paths.DOCUMENTS}, folder
     for folder in paths.test_dirs():
-        allowed = {"decks", "records", "README.md"} | {p.name for p in folder.glob("*.toml")} | (local if folder.parent == paths.MODELS else set())
+        parts = {paths.VERIFICATION, paths.RUNS, paths.LATEX} if folder.name == paths.OURS else {"records", "README.md"}
+        allowed = {"decks"} | parts | {p.name for p in folder.glob("*.toml")}
         assert set(p.name for p in folder.iterdir()) <= allowed, folder
-        for record in (folder / "records").glob("*.toml"):
-            if not record.stem.endswith(paths.TEAM_SUMMARY):  # the team summary's reading is the local team-comparison.md (ADR-0039)
+        for record in paths.records_dir(folder).glob("*.toml"):
+            if record in paths.all_records():  # the team summary's reading is the team comparison's (ADR-0039); the manifest is not a record
                 assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
     assert len([r for r in paths.all_records() if paths.CHECKS in r.parents]) == 2 and paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
 
