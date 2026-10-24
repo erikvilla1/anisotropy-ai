@@ -30,7 +30,8 @@ Option 3. `write_form` writes version 0.2 of the form:
 ## Why (evidence)
 
 - `fea/tests/test_audit.py` (`test_the_form_computes_the_rule_counts_the_rows_and_shows_the_numbers_behind_them`, `test_a_form_with_the_numbers_behind_it_reads_back`): the rule formula's text against the rule, the section formulas, the glance lines, the list to send, the sheets and their protection, the colours, the fonts and the print setup; a form with the new sheets reads back.
-- The formulas on the tension coupon's rebuilt form, recalculated in Excel: see the pull request's walkthrough for the output. UNVERIFIED until it is recorded there.
+- The tension coupon's form, rebuilt at commit ee58797 and recalculated in Excel 16 through COM, with the auditor's entries scripted: 7 formulas, 0 errors in every scenario. As built, the rule said "no verdict yet: 7 required row(s) have no result other than Not checked"; with every auditor row Pass, "Pass"; plus one open Minor finding, "Pass with observations"; the finding made Major, "Fail"; the finding closed, "Pass"; E1 (required) set to Fail, "Fail"; D5 cleared, "no verdict yet: 1 required row(s)". Each is what `verdict_of` gives (its tests in `fea/tests/test_audit.py`).
+- The return path, dry-run on a scratch copy of the tension coupon's folder with the rebuilt form filled in as an auditor would: `read_form` accepted it, `case_pages.file_audit` kept it under `team/<date>/` and wrote the case page's audit block, `coupon.py --check` found "the 15 rows our tools passed in the audit of 2026-10-24 still pass", and a form with one of our results changed was refused by the digest.
 
 ## Consequences
 
