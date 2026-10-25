@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
 description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Each problem has one folder named for it with everything about it inside. An FEA coupon is .local/fea/<coupon>/ in three parts, team (what they sent), ours (specs, decks, verification, runs, latex) and documents (the packages), and its README is the case page. A homework set is .local/homework/<set>/ (provided, ours, comparison, documents), with its engine cases in ours/ and its reading in comparison/. Load before saving, moving or looking for any FEA deck, result export, comparison record, document, homework file or input file, when a new coupon or homework arrives, and before every new attempt at a problem.
-version: 0.7.0
+version: 0.7.1
 ---
 
 # Workspace layout
@@ -53,8 +53,9 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
       calculix/                      run_calculix.py: .inp .dat .frd .sta (open the .frd in PrePoMax)
       team-in-calculix/              the team's deck converted by convert_to_calculix.py and run (the model is still theirs)
     latex/                           <coupon>.tex and figures/, the coupon document's source (docs/models/coupon.py, ADR-0041)
-  documents/<date>_<coupon>/         the package that goes out, one per delivery (ADR-0043): the PDF, the audit form, the decks,
-                                     the material
+  documents/<date>_<coupon>/         the package that goes out, one per delivery (ADR-0043): the PDF, the audit form (its Results and
+                                     Compared values sheets hold the numbers, ADR-0044), 1-team-model/ (absent without a team model),
+                                     2-our-model/, 3-material/, 4-results/ (ADR-0043 amendment 2)
 .local/fea/checks/<test>/runs/       our runs of the committed checks (fea/checks/<test>/); fixture plots and smoke runs go in .local/fea/checks/
 
 .local/homework/<set>/               one folder per set (HW1 ... HW5, PRACTICE, course-reader), ADR-0040

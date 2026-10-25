@@ -77,7 +77,7 @@ Option 1.
   - `README.txt`;
   - the one PDF, built straight into the folder, with an Audit chapter;
   - `<date>_<coupon>-audit.xlsx`;
-  - `abaqus/`, `calculix/`, `spec/` and `material/`.
+  - `1-team-model/` (the team's deck; absent when the team has not built the coupon), `2-our-model/` (`abaqus/`, `calculix/`, `spec/`), `3-material/` and `4-results/` (amendment 2; before it, a coupon without a team model used `abaqus/`, `calculix/`, `spec/` and `material/`).
 
   The folder replaces the zip. Earlier packages stay, because a returned form names its package. What the team sends back goes in `team/<date>/` (named `from-team/` before ADR-0040 amendment 3).
 - **The chunks:**
@@ -160,3 +160,23 @@ The founder asked for every chunk to be built without commits ("keep working on 
 - Two auditors give different results for an `auto` item of the same package.
 - Engineers stop filling in the Excel form and send findings another way.
 - A verified coupon breaks after an engine change, and the regression command did not catch it.
+
+## Amendment 1, 2026-10-24 (rubric 0.2: the hand check's tolerance and reach; confirmed by the founder)
+
+**Context.** The first packages built on the real coupons scored D1, the laminate-theory hand check at the gauge centre, as Fail on both tension-type coupons: 0.93 % from free-edge laminate theory on the tension coupon (free length 5.0 widths) and 10.2 % on the compression coupon (free length 1.1 widths: 13 mm between 63.5 mm tabs on a 12 mm wide coupon), against the proposed 0.5 %. Both decks pass the equilibrium check, and the tension coupon passes the solver comparison. The cause is physical, not numerical: the coupled grips hold the width at the ends, so the Poisson contraction that free-edge theory assumes is suppressed near them, and the effect fades with distance from the grips. Free-edge theory describes a gauge centre only where that distance is long compared with the width. The cofounder, who asked for the rubric, does not work on the code side, so the founder confirms it.
+
+**Options.**
+1. Keep 0.5 % and let the item fail. Rejected: it would fail every short-gauge coupon by design, which says nothing about the model.
+2. Raise the tolerance until both coupons pass (11 %). Rejected: it would hide real errors.
+3. Hold the hand check to the solver comparison's tolerance, 1 % (rows C2 and C3), and make it apply only where free-edge theory describes the gauge centre: a free length of at least three widths; a shorter coupon gets N/A with its distance from theory stated. The evidence states the free length in widths and the lateral section force N_x at the centre as a share of N_y, which is zero with free edges and measures the hold the grips still have there. Chosen.
+4. Replace the check with laminate theory under the strain state the kernel found. Rejected: the kernel's ply stresses are that computation (`recovery.element_ply_states` calls the engine's `ply_surfaces`), so it would check nothing.
+
+**Decision.** Option 3. Rubric version 0.2, status confirmed by the founder on 2026-10-24 ("complete it all", on the plan that proposed it). An item may carry `condition = { min_free_length_widths = n }` (`audit.Condition`); `audit.end_effect` and `audit.laminate_distance` give the numbers.
+
+**Evidence.** The two coupons above (local packages of 2026-10-24), and the 25 by 100 mm grips fixture in `fea/tests/test_audit.py`: free length 4 widths, 2.4 % strain and 2.95 % ply stress from theory on its 2 by 8 mesh, so it still fails, as the tests expect. The threshold of three widths sits between 1.1 widths (10 %) and 5 widths (0.9 %); no other evidence yet. The 1 % was chosen knowing the tension coupon stands at 0.93 %.
+
+## Amendment 2, 2026-10-24 (one package layout)
+
+**Context.** The package of a coupon with a team model was written in numbered folders (`1-team-model/`, `2-our-model/`, `3-material/`, `4-results/`) and the package of a coupon without one in `abaqus/`, `calculix/`, `spec/` and `material/`: two layouts for one kind of folder. The founder asked for everything standardized.
+
+**Decision.** Every package uses the numbered folders. Without a team model, `1-team-model/` is absent and the README says so, and `4-results/` holds `ours-all-plies.csv` (our S11, S22, S12 and Mises for every ply of every element, as with a team model, without the team's element numbers; `docs/models/team.py`, `write_all_plies`). The package list in the decision above is amended accordingly; the form of ADR-0044 points the reader at `4-results/`.

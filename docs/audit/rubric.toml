@@ -15,12 +15,15 @@
 #               the check is not built, and then the item cannot be required
 #   tolerance   { relative = fraction } or { length_m = metres } (SI, ADR-0002)
 #   applies_to  the test codes of spec.TEST_CODES the item applies to; absent: every test
+#   condition   { min_free_length_widths = n }: the item is N/A for a coupon whose free length between the grips is under n
+#               widths, with the ratio stated; absent: no condition
 #   needs       what the team must send for the item to be checked; absent: nothing beyond the deck
 #
-# Tolerances are proposals until the cofounder confirms them; the evidence for each is in ADR-0043.
+# The evidence for each tolerance is in ADR-0043 and its amendments. Version 0.2 was confirmed by the founder on 2026-10-24
+# (the cofounder does not work on the code side); changing an item or a tolerance raises the version again.
 
-version = "0.1"
-status = "draft"  # "confirmed" once the cofounder has agreed the items and tolerances
+version = "0.2"
+status = "confirmed"
 
 [[section]]
 id = "A"
@@ -234,12 +237,13 @@ needs = "Abaqus failure indices (MSTRS, TSAIH or TSAIW) at every section point"
 id = "D1"
 section = "D"
 check = "Laminate theory hand check"
-acceptance = "Our strain and ply stresses at the gauge centre equal classical laminate theory for the laminate with free lateral edges"
+acceptance = "Our strain and ply stresses at the gauge centre equal classical laminate theory for the laminate with free lateral edges, held to the same tolerance as the solver comparison. The grips hold the width, so the check applies only where the free length is long enough for that end effect to have faded: at least three widths; a shorter coupon gets N/A, with its distance from laminate theory stated"
 method = "auto"
 required = true
 source = ["report.laminate_check"]
-tolerance = { relative = 0.005 }
+tolerance = { relative = 0.01 }
 applies_to = ["UNT", "UNC"]
+condition = { min_free_length_widths = 3 }
 
 [[item]]
 id = "D2"

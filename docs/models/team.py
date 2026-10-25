@@ -619,6 +619,24 @@ def write_material_csv(path: Path, lib, material, units: str) -> None:
             writer.writerow([name, f"{from_si(value, 'stress', units):.10g}", stress_unit, "", "", "stated in our spec", "", "", ""])
 
 
+def write_all_plies(path: Path, solution, deck, units: str, inverse: dict | None = None) -> None:
+    """Our S11, S22, S12 and Mises for every ply of every element, with the team's element numbers where a comparison maps them
+    (`inverse`: our element key -> (instance, team label)); blank otherwise."""
+    length_unit, stress_unit, _ = UNITS[units]
+    values = ply_values(solution, units)
+    mesh = solution.mesh
+    angles = [layer.angle_deg for layer in expanded_layers(next(iter(deck.parts.values())).sections[0])]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(["team element", "our element", f"x ({length_unit})", f"y ({length_unit})", "ply (1 = bottom)", "angle (deg)",
+                         f"S11 ({stress_unit})", f"S22 ({stress_unit})", f"S12 ({stress_unit})", f"Mises ({stress_unit})"])
+        for index, key in enumerate(mesh.element_keys):
+            x, y = from_si(mesh.xy[mesh.connectivity[index, :4]].mean(axis=0), "length", units)
+            team = (inverse or {}).get(key, (None, ""))[1]
+            for k, angle in enumerate(angles):
+                writer.writerow([team, key[1], f"{x:.9g}", f"{y:.9g}", k + 1, f"{angle:g}"] + [f"{values[q][index, k]:.9g}" for q in ("S11", "S22", "S12", "Mises")])
+
+
 def package_folder(documents: Path, name: str) -> Path:
     """The package under today's date, `documents/<YYYY-MM-DD>_<name>/`, so each package sent out says when it was built (ADR-0043)."""
     return documents / f"{date.today().isoformat()}_{name}"
@@ -674,18 +692,7 @@ def fill_share(c: Comparison, share: Path) -> None:
             scale = c.agreements[(p.quantity, "free length")].largest
             writer.writerow([p.reference_element, p.our_element, f"{p.x:.9g}", f"{p.y:.9g}", p.layer, p.quantity, f"{p.reference:.9g}", f"{p.ours:.9g}",
                              f"{p.difference:.6g}", f"{abs(p.difference) / scale:.6g}" if scale else ""])
-    values = ply_values(c.ours, c.units)
-    mesh = c.ours.mesh
-    angles = [layer.angle_deg for layer in expanded_layers(next(iter(c.our_deck.parts.values())).sections[0])]
-    with (share / "4-results" / "ours-all-plies.csv").open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(["team element", "our element", f"x ({c.length_unit})", f"y ({c.length_unit})", "ply (1 = bottom)", "angle (deg)",
-                         f"S11 ({c.stress_unit})", f"S22 ({c.stress_unit})", f"S12 ({c.stress_unit})", f"Mises ({c.stress_unit})"])
-        for index, key in enumerate(mesh.element_keys):
-            x, y = from_si(mesh.xy[mesh.connectivity[index, :4]].mean(axis=0), "length", c.units)
-            team = c.inverse.get(key, (None, ""))[1]
-            for k, angle in enumerate(angles):
-                writer.writerow([team, key[1], f"{x:.9g}", f"{y:.9g}", k + 1, f"{angle:g}"] + [f"{values[q][index, k]:.9g}" for q in ("S11", "S22", "S12", "Mises")])
+    write_all_plies(share / "4-results" / "ours-all-plies.csv", c.ours, c.our_deck, c.units, c.inverse)
 
     lines = [README_MARK, f"{c.headline}: the team's Abaqus model and ours", "",
              *[f"{label + ':':14} {value}" for label, value in c.card.items()], "",
