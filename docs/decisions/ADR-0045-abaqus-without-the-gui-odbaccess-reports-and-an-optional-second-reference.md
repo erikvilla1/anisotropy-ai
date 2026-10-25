@@ -57,3 +57,16 @@ Also considered: Abaqus as the reference solver instead of CalculiX. Rejected: a
 - A later Abaqus release spells the section point or frame text differently, so the parser's regex stops matching: the first run on that release shows it.
 - The licence server stops serving this machine, or its terms are read as excluding this use: Abaqus drops out of the loop and CalculiX stays, with nothing else to change.
 - The S12 disagreements spread beyond the band's edge rows on a finer mesh or another coupon: then the element-formulation reading above is wrong.
+
+## Amendment 1, 2026-10-25 (the rule for S12: judged where it carries load; a stated floor on the 0 degree faces until then)
+
+**Context.** The record of attempt 15 (evidence above) compared S12 on the two outer 0 degree plies, where it is a residual of the grip constraint: at most 15.4 MPa against about 15800 MPa axial. Under the record rule, 1 % of each value with a floor of 2 % of the group's largest magnitude (an allowance of about 3.2 MPa), 64 of 600 S12 values at 32 elements in the band's edge rows were outside, by at most 5.6 MPa, while S11, S22 and Mises agreed 600 of 600 on the same elements: the difference is the formulation noise between S4R and the bilinear membrane element, not a model error. The rubric's stress row (`docs/audit/rubric.toml` 0.3, "Ply stresses S11, S22, S12 in material axes") judges each quantity against its largest team value in the band, which for S12 on the 0 degree faces would allow 0.15 MPa, and it already asks for field reports at every section point.
+
+**Options.**
+1. Keep S12 judged like S11 and S22 with the 2 % floor. Rejected: on the 0 degree faces S12 is noise-level, so the rule fails on formulation noise and says nothing about the model.
+2. Judge S12 in a narrower band, y 30 to 50 mm. Not taken as the rule: it hides where the noise sits without saying why; it may serve as a reading.
+3. Judge S12 where it carries load, the +-45 plies, where 1 % is a real test; that needs the interior section points in the export. Until then, a stated floor of 4 % of the group scale on the 0 degree faces, so differences below 0.04 % of the axial stress do not count, the measured noise being 0.035 %.
+
+**Decision.** Option 3, accepted by the founder on 2026-10-25 ("i accept the rule for S12", on this recommendation). The attempt-15 record was re-read with floor 0.04: 2404 of 2404 within the rule; its notes say so and why. The rubric row keeps its text for now; at the rubric's next version the row states this rule, which raises the rubric version (ADR-0043). The export of every section point is part of the next chunk (consequences, path C).
+
+**Evidence.** The attempt-15 record in `.local/fea/X840PW-UNT-L1/ours/runs/attempt-15_2026-10-24/run/abaqus/` and its row on the case page. The breakdown of 2026-10-24: all 64 outside values are S12, largest |S12| 15.36 MPa, largest difference 5.64 MPa, at 32 elements in the rows nearest y 25 and y 55 mm; with floor 0.04, `compare_record` gives 2404 compared and 0 outside (2026-10-25). S12 in a +-45 ply is a hand estimate only, G12 times the ply shear strain, about 6480 MPa times 0.13 for the 10 mm pull over 80 mm, roughly 850 MPa; no solver value yet.
