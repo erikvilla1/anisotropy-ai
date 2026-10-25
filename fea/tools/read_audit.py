@@ -2,8 +2,8 @@
 
     uv run python tools/read_audit.py X840PW-UNT-L1 <path to the returned .xlsx> [--date YYYY-MM-DD]
 
-The form is refused, with every reason named, when it is incomplete or inconsistent (a row without a result, a finding
-without a severity, a verdict the rule does not give, a result of our tools that was changed) or not this coupon's (another
+The form is refused, with every reason named, when it is incomplete or inconsistent (a row without a result, a failed
+row without a cause, a verdict the rule does not give, a result of our tools that was changed) or not this coupon's (another
 coupon, an attempt the case page does not log, a team deck other than the one the comparison reads now). A form that passes
 is kept in .local/fea/<coupon>/team/<date>/ (today, or --date: the day it came back), unless it is already in a
 team folder, and the case page's audit block lists it. The case line is written by hand: the tool says what it suggests.
@@ -31,10 +31,10 @@ def main() -> None:
         form, kept, case = file_audit(args.coupon, args.form, args.date)
     except ValueError as exc:  # audit.AuditError, case_pages.CasePageError, a date that is not one
         sys.exit(str(exc))
-    print(f"{args.coupon}: {form.verdict} by {form.auditor} on {form.date}, attempt {form.cover['Attempt']}; findings: {form.counts()}")
+    print(f"{args.coupon}: {form.verdict} by {form.auditor} on {form.date}, attempt {form.cover['Attempt']}; failed rows and observations: {form.counts()}")
     print(f"kept at {kept.relative_to(paths.ROOT).as_posix() if paths.ROOT in kept.resolve().parents else kept}; the case page's audit block lists it")
     if form.verdict == "Fail":
-        print("The package fails. Each open finding names its cause; start the next attempt with tools/new_attempt.py.")
+        print("The package fails. Each failed row names its cause; start the next attempt with tools/new_attempt.py.")
     elif case.status == "in progress":
         print(f"Suggested case line, to write by hand if you agree: Status: verified | Accepted attempt: {form.cover['Attempt']}")
 

@@ -2,8 +2,10 @@
 
 Not a document of its own. docs/models/coupon.py gathers what our tools found (`gather`), scores it against the rubric
 (`anisotropy_fea.audit.score`), prints the result as the document's audit chapter (`chapter`) and writes the same rows to the
-audit form, `<package>-audit.xlsx` in the package folder (`anisotropy_fea.audit.write_form`). The auditor fills in the form;
-a returned form goes in the coupon's `team/<date>/`.
+audit form, `<package>-audit.xlsx` in the package folder (`anisotropy_fea.audit.write_form`). The form's cover and the chapter's
+first table say the same things: what is audited (`audited`) and which files are compared (`files_compared`); how the package was
+built goes to the form's Record sheet (`build_record`). The auditor fills in the form; a returned form goes in the coupon's
+`team/<date>/`.
 """
 
 from __future__ import annotations
@@ -50,49 +52,81 @@ def compare_rebuilt(path: Path | None, ours, units: str, tolerance_m: float) -> 
         return f"{path.name}: {exc}"
 
 
-def gather(*, test_code: str, units: str, card: list[tuple[str, str]], deck, solution, material: str | None, commit: str, attempt: str | None,
-           guide: tuple[int, int], c, fpf: tuple[str, float, int] | None, rebuilt: DeckEquivalence | str | None = None) -> Evidence:
+def gather(*, test_code: str, units: str, card: list[tuple[str, str]], deck, solution, material: str | None, guide: tuple[int, int], c,
+           fpf: tuple[str, float, int, float] | None, rebuilt: DeckEquivalence | str | None = None) -> Evidence:
     """What our tools found for the package; `c` is the team comparison (docs/models/team.py), None when the team has not built
     the coupon."""
-    common = dict(test_code=test_code, units=units, card=tuple(card), engine_commit=commit, attempt=attempt, our_deck=deck, solution=solution,
-                  material=material, fpf=fpf, guide=guide, rebuilt=rebuilt)
+    common = dict(test_code=test_code, units=units, card=tuple(card), our_deck=deck, solution=solution, material=material, fpf=fpf, guide=guide,
+                  rebuilt=rebuilt)
     if c is None:
         return Evidence(**common)
     lo, hi = c.bands["inner"]
     free = c.bands["free length"]
-    excluded = (f"the graded band is y {lo:g} to {hi:g} {c.length_unit}: it leaves out {c.manifest.edge_band:g} {c.length_unit} beside each tab line "
-                f"(edge_band in the comparison manifest, {c.manifest_path.name}); the free length, y {free[0]:g} to {free[1]:g} {c.length_unit}, is "
-                "shown in the verification chapter but not graded")
+    excluded = (f"Graded band y {lo:g} to {hi:g} {c.length_unit}: it leaves out {c.manifest.edge_band:g} {c.length_unit} beside each tab line "
+                f"(edge_band in the comparison manifest, {c.manifest_path.name})\n"
+                f"Free length y {free[0]:g} to {free[1]:g} {c.length_unit}: shown in the verification chapter, not graded")
     return Evidence(**common, team_deck=c.team_deck, team_deck_sha256=sha256_of(c.team_deck_path), equivalence=c.equivalence, paired=tuple(c.paired),
-                    inner_band=(lo, hi), free_band=free, excluded=excluded)
+                    inner_band=(lo, hi), free_band=free, excluded=excluded, team_reports=tuple(p.name for p in c.report_paths))
 
 
-def cover(*, card: dict[str, str], package: str, attempt: str | None, commit: str, run_by: str, built: str, team_deck: str | None,
-          team_sha256: str | None) -> list[tuple[str, str]]:
-    """The package's identity, as the form's cover and the chapter's first table state it."""
-    return [("Coupon", card["Coupon"]), ("Test", card["Test"]), ("Package", package), ("Attempt", attempt or "none named"),
-            ("Engine commit", commit), ("Team deck", team_deck or "none: the team has not built this coupon"),
-            ("Team deck SHA-256", team_sha256 or "--"), ("Run by", run_by), ("Built", built)]
+def audited(*, card: dict[str, str], package: str, attempt: str | None) -> list[tuple[str, str]]:
+    """What is audited, as the form's cover and the chapter's first table state it."""
+    return [("Coupon", card["Coupon"]), ("Test", card["Test"]), ("Attempt", attempt or "none named"), ("Package", package)]
+
+
+SUB = "  "  # a label that starts with it is a row under the one above: the team's file, then ours, file names only
+
+
+def files_compared(*, c, our_deck: str, spec: str) -> list[tuple[str, str]]:
+    """What the audit compares, one row per thing compared and under it one row for the team's file and one for ours, by file name
+    (no folder paths, at the founder's request): the cover's block and the chapter's table. `our_deck` and `spec` are package paths;
+    only their names are shown."""
+    our_deck, spec = Path(our_deck).name, Path(spec).name
+    physics = ("Physics", "our engine against laminate theory at the gauge centre, and equilibrium; no Abaqus involved (section D)")
+    if c is None:
+        return [("The model", "the team has not built this coupon, so our model stands alone and sections B and C cannot be checked"),
+                (SUB + "Our deck", f"{our_deck}, written from the spec {spec}"),
+                ("Other values", "the reaction force, the displacements and strains, the first ply to fail: our engine's values are given, for the team to "
+                                 "compare with its own model (section C)"),
+                (SUB + "Our values", "on the Rubric sheet; every ply of every element in ours-all-plies.csv"),
+                physics]
+    m = c.manifest.team
+    return [("The model", "nodes, elements, layup, section, material, grips, boundary conditions and loads, step (section B)"),
+            (SUB + "Team's deck", f"{c.team_deck_path.name} ({m.solver}, run {m.run_date})"),
+            (SUB + "Our deck", f"{our_deck}, written from the spec {spec}"),
+            ("The stresses", f"{', '.join(c.quantities)} at the same elements and plies, in the graded band (section C)"),
+            (SUB + "Team's reports", ", ".join(p.name for p in c.report_paths)),
+            (SUB + "Our values", ", ".join(f"ours-{q}.csv" for q in c.quantities)),
+            ("Other values", "the reaction force, the displacements and strains, the first ply to fail (section C)"),
+            (SUB + "Team's values", "left blank, for the team to fill in"),
+            (SUB + "Our values", "on the Rubric sheet"),
+            physics]
+
+
+def build_record(*, team_deck: str | None, team_sha256: str | None, fea_version: str, commit: str, run_by: str, built: str) -> list[tuple[str, str]]:
+    """How the package was built: the form's Record sheet. The team deck's digest and the engine's commit live here, not on the cover."""
+    return [("Team deck", team_deck or "none: the team has not built this coupon"), ("Team deck SHA-256", team_sha256 or "--"),
+            ("Engine", f"anisotropy-fea {fea_version}, commit {commit}"), ("Run by", run_by), ("Built", built)]
 
 
 def chapter(rubric: Rubric, scored: tuple[Scored, ...], facts: list[tuple[str, str]], form: str, units: str, escape: Callable[[str], str],
             code: Callable[[str], str], table: Callable[..., str], kv_table: Callable[..., str]) -> str:
-    """The audit chapter: what the audit is, the package's identity, and one table per rubric section."""
+    """The audit chapter: what the audit is, the package's identity and the files compared, and one table per rubric section."""
     tools = [s for s in scored if s.result is not None]
     counts = {r: sum(s.result == r for s in tools) for r in ("Pass", "Fail", "N/A", "Not checked")}
     auditor = [s for s in scored if s.result is None]
     out = [
-        rf"Every package is audited against one rubric, version {escape(rubric.version)} ({escape(rubric.status)}; ADR-0043). Each row states what is "
+        rf"Every package is audited against one rubric, version {escape(rubric.version)} ({escape(rubric.status)}). Each row states what is "
         r"checked and what passes. Our tools judged the rows marked with a result, from the same computations as the chapters before; the rows "
         rf"marked \textcolor{{muted}}{{\textit{{the auditor}}}} are judged by the engineer who audits the package, on the form {code(form)} in this "
-        r"package, where problems are also recorded as findings. Rows a Pass verdict does not need are marked ``no'' under Req.; a check the team's "
-        r"export cannot support yet stays Not checked.",
+        r"package, where the team's values, ours and the difference stand side by side. A row that fails is a finding: the auditor names its cause "
+        r"on the row (engine, our input, their model, documentation or tolerance), which decides who fixes it. Rows a Pass verdict does not need are "
+        r"marked ``no'' under Req.; a row whose team value is not in the export yet is the auditor's, with our value stated.",
         rf"Our tools: {counts['Pass']} pass, {counts['Fail']} fail, {counts['N/A']} not applicable and {counts['Not checked']} not checked, of "
-        rf"{len(tools)}; {len(auditor)} rows are the auditor's. The verdict is the auditor's: Fail if a required row fails or a Blocker or Major "
-        r"finding is open; Pass with observations if anything else failed or any finding is open; Pass otherwise. It needs every required row to have "
-        r"a result other than Not checked.",
+        rf"{len(tools)}; {len(auditor)} rows are the auditor's. To pass, every required row must be Pass or N/A; a required row that fails fails the "
+        r"audit; a failed row a Pass does not need, or an observation, makes it Pass with observations.",
         r"\section{The package audited}",
-        kv_table([(escape(label), escape(value)) for label, value in facts]),
+        kv_table([((r"\quad " + escape(label.strip())) if label.startswith(SUB) else escape(label), escape(value)) for label, value in facts]),
     ]
     for section in rubric.sections:
         rows = [s for s in scored if s.item.section == section.id]
@@ -103,9 +137,12 @@ def chapter(rubric: Rubric, scored: tuple[Scored, ...], facts: list[tuple[str, s
             tol = tolerance_text(s.item, units)
             check = (rf"\textbf{{{escape(s.item.check)}}}. {escape(s.item.acceptance)}" + (f" (tolerance {escape(tol)})" if tol else "")
                      + (rf" \textcolor{{muted}}{{Needs: {escape(s.item.needs)}.}}" if s.item.needs else ""))
-            body.append([escape(s.item.id), check, "yes" if s.item.required else "no", MARK[s.result], escape(s.evidence) or "--"])
+            parts = [(label, lines) for label, lines in (("Team", s.found.team), ("Ours", s.found.ours), ("Difference", s.found.difference)) if lines]
+            found = (r" \newline ".join(rf"\textbf{{{label}:}} " + r" \newline ".join(escape(line) for line in lines) for label, lines in parts)
+                     if parts else "--")
+            body.append([escape(s.item.id), check, "yes" if s.item.required else "no", MARK[s.result], found])
         out += [rf"\section{{{escape(section.id)}. {escape(section.title)}}}",
-                table(["", "Check and what passes", "Req.", "Result", "What our tools found"], body,
+                table(["", "Check and what passes", "Req.", "Result", "What our tools found: the team's values, ours, the difference"], body,
                       r">{\raggedright\arraybackslash}p{0.6cm}>{\raggedright\arraybackslash}p{5.4cm}>{\raggedright\arraybackslash}p{0.7cm}"
                       r">{\raggedright\arraybackslash}p{1.6cm}Y", r"\footnotesize")]
     return "\n\n".join(out)

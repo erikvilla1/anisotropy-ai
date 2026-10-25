@@ -17,6 +17,7 @@ from test_side_by_side import kernel_reports
 
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.audit import COVER, DIGEST, RUBRIC_COLUMNS, RUBRIC_SHEET, Row, results_digest, verdict_of
+from anisotropy_fea.audit import RECORD as RECORD_SHEET  # the form's Record sheet; RECORD below is the CalculiX record
 from anisotropy_fea.compare import load_record
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.spec import load_spec
@@ -151,13 +152,17 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     assert 'coupon = "IM7-UNT-L9"' in summary and "[equivalence]" in summary
     form = load_workbook(package / f"{package.name}-audit.xlsx")
     cover = {form["Cover"].cell(r, 1).value: form["Cover"].cell(r, 2).value for r in range(1, form["Cover"].max_row + 1)}
-    assert cover["Package"] == package.name and cover["Team deck"] == "coupon-2x8-grips-im7-8552.inp"
+    record = {form[RECORD_SHEET].cell(r, 1).value: form[RECORD_SHEET].cell(r, 2).value for r in range(1, form[RECORD_SHEET].max_row + 1)}
+    assert cover["Package"] == package.name and record["Team deck"] == "coupon-2x8-grips-im7-8552.inp"  # the digest and the build: Record sheet
+    assert cover["Team's deck"].startswith("coupon-2x8-grips-im7-8552.inp (") and cover["Our deck"].startswith("grips-coupon-abaqus.inp, written from the spec ")
+    assert "/" not in cover["Team's deck"] and "/" not in cover["Our deck"]  # file names only, as the founder asked
     rows = {form["Rubric"].cell(r, 1).value: r for r in range(2, form["Rubric"].max_row + 1)}
-    result = lambda item: form["Rubric"].cell(rows[item], 8).value  # noqa: E731
-    assert result("B1") == "Pass" and result("C2") == "Pass" and result("B6") is None  # the same mesh and stresses; the auditor judges B6
+    result = lambda item: form["Rubric"].cell(rows[item], RUBRIC_COLUMNS.index("Result") + 1).value  # noqa: E731
+    assert result("B1") == "Pass" and result("C3") == "Pass" and result("B6") is None  # the same mesh and stresses; the auditor judges B6
+    assert result("C2") is None  # the fixture reports no S12: the row waits for the team, as rows C1, C4 and C7 do
     # the fixture deck types the constants to two decimals in MPa, our library carries more digits: a real difference, sized for the auditor
-    assert result("B5") == "Fail" and "Largest relative difference" in form["Rubric"].cell(rows["B5"], 9).value
-    assert r"Audit} (rubric 0.2" in tex
+    assert result("B5") == "Fail" and "Largest relative difference" in form["Rubric"].cell(rows["B5"], RUBRIC_COLUMNS.index("Difference") + 1).value
+    assert r"Audit} (rubric 0.3" in tex
     assert coupon.build_document(src, pdf=False, theory=False)[1] == package  # a second build replaces the package it wrote
 
 
@@ -196,32 +201,34 @@ def returned_form(package: Path, folder: Path, changes: dict[str, str] | None = 
     rows = []
     for r in range(2, sheet.max_row + 1):
         item, ours = sheet.cell(r, 1).value, sheet.cell(r, column["Judged by"]).value == "our tools"
+        if not item:
+            continue  # a section's banner row
         cell = sheet.cell(r, column["Result"])
         cell.value = (changes or {}).get(item, cell.value) if ours else "Pass"
-        rows.append(Row(item, sheet.cell(r, column["Judged by"]).value, sheet.cell(r, column["Required"]).value == "yes", cell.value, "", ()))
+        if cell.value == "Fail":
+            sheet.cell(r, column["Cause"]).value = "engine"  # a failed row names its cause
+        rows.append(Row(item, sheet.cell(r, column["Judged by"]).value, sheet.cell(r, column["Required"]).value == "yes", cell.value, "", ""))
     cover = book[COVER]
     labels = {cover.cell(r, 1).value: r for r in range(1, cover.max_row + 1)}
-    for label, value in (("Auditor", "A. Engineer"), ("Audit date", "2026-10-24"), ("Verdict", verdict_of(tuple(rows), ())),
-                         (DIGEST, results_digest([(row.id, row.result) for row in rows if row.judged_by == "our tools"]))):
+    for label, value in (("Auditor", "A. Engineer"), ("Audit date", "2026-10-24"), ("Verdict", verdict_of(tuple(rows)))):
         cover.cell(labels[label], 2).value = value
+    record = book[RECORD_SHEET]
+    digest_row = next(r for r in range(1, record.max_row + 1) if record.cell(r, 1).value == DIGEST)
+    record.cell(digest_row, 2).value = results_digest([(row.id, row.result) for row in rows if row.judged_by == "our tools"])
     folder.mkdir(parents=True, exist_ok=True)
     book.save(folder / f"{package.name}-audit.xlsx")
     return folder / f"{package.name}-audit.xlsx"
 
 
-def test_a_deck_rebuilt_from_the_guide_is_held_to_the_model_match(coupon, tmp_path):
+def test_a_rebuilt_deck_folder_is_read_while_section_e_is_off_the_rubric(coupon, tmp_path):
+    """Rubric 0.3 defers section E (the rebuild check, E2), so a rebuilt deck adds no row; the folder is still read, so two decks there are refused."""
     src = team_sources(coupon, tmp_path)
     rebuilt = tmp_path / paths.TEAM_FILES / "2026-10-24" / "rebuilt"
     rebuilt.mkdir(parents=True)
     (rebuilt / "Job-1.inp").write_text(write_abaqus(build_model(load_spec(src.spec))), encoding="utf-8")  # rebuilt exactly as our deck
     _, package = coupon.build_document(src, pdf=False, theory=False)
-    assert form_rows(package / f"{package.name}-audit.xlsx")["E2"] == "Pass"
-    newer = tmp_path / paths.TEAM_FILES / "2026-10-25" / "rebuilt"
-    newer.mkdir(parents=True)
-    (newer / "Job-2.inp").write_bytes(GRIPS_FIXTURE.read_bytes())  # the newest rebuild types the material to two decimals
-    _, package = coupon.build_document(src, pdf=False, theory=False)
-    assert form_rows(package / f"{package.name}-audit.xlsx")["E2"] == "Fail"
-    (newer / "Job-3.inp").write_bytes(GRIPS_FIXTURE.read_bytes())
+    assert not any(item.startswith("E") for item in form_rows(package / f"{package.name}-audit.xlsx") if item)
+    (rebuilt / "Job-3.inp").write_bytes(GRIPS_FIXTURE.read_bytes())
     with pytest.raises(SystemExit, match="holds 2 .inp files"):
         coupon.build_document(src, pdf=False, theory=False)
 
@@ -235,6 +242,6 @@ def test_the_regression_check_compares_with_the_newest_returned_audit(coupon, tm
     summary.unlink()  # the check builds in a scratch folder and writes nothing beside the model
     assert coupon.check(src) == [] and "still pass" in capsys.readouterr().out
     assert not summary.exists()
-    returned_form(package, tmp_path / paths.TEAM_FILES / "2026-10-25", changes={"B5": "Pass", "A2": "Pass"})  # an earlier engine passed B5
-    assert coupon.check(src) == ["B5"]  # A2 is how a package was built, not what the engine computes
+    returned_form(package, tmp_path / paths.TEAM_FILES / "2026-10-25", changes={"B5": "Pass"})  # an earlier engine passed B5
+    assert coupon.check(src) == ["B5"]
     assert "REGRESSION" in capsys.readouterr().out

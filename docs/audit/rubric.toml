@@ -5,7 +5,7 @@
 # change here changes every later audit: raise `version` with it.
 #
 # Each item:
-#   id          section letter and number, numbered from 1 in each section; a finding names the item it is about
+#   id          section letter and number, numbered from 1 in each section; a failed row or an observation is referred to by it
 #   check       what is checked
 #   acceptance  what counts as Pass
 #   method      "auto": our tools give the result, from the functions in `source`; the auditor may add an observation
@@ -20,30 +20,34 @@
 #   needs       what the team must send for the item to be checked; absent: nothing beyond the deck
 #
 # The evidence for each tolerance is in ADR-0043 and its amendments. Version 0.2 was confirmed by the founder on 2026-10-24
-# (the cofounder does not work on the code side); changing an item or a tolerance raises the version again.
+# (the cofounder does not work on the code side). Version 0.3, the same day, by the founder: the row that named the files by
+# digest and commit is gone (the form's Record sheet and the case page carry that), and an "auto" item whose team value is
+# not in the export (C1, C4, C7; C2 and C3 when a quantity is missing) states our value and is judged by the auditor; the
+# documentation section E is off the rubric for now ("might not be important right now"). The rubric's words go to the team
+# unchanged, so no item names a decision record. Changing an item or a tolerance raises the version again.
 
-version = "0.2"
+version = "0.3"
 status = "confirmed"
 
 [[section]]
 id = "A"
 title = "Identity and traceability"
+meaning = "the coupon card and the unit system"
 
 [[section]]
 id = "B"
 title = "Model match: our model is the team's model"
+meaning = "our model is the team's model, item by item: nodes, elements, layup, section, material, grips, boundary conditions and loads, step"
 
 [[section]]
 id = "C"
 title = "Results match: verification against the team's solver"
+meaning = "our engine's values against the team's Abaqus: the stresses in the graded band, and the values the team fills in"
 
 [[section]]
 id = "D"
 title = "Physics, independent of both solvers"
-
-[[section]]
-id = "E"
-title = "Documentation"
+meaning = "our engine against laminate theory at the gauge centre, and equilibrium; checks that need no Abaqus"
 
 # ------------------------------------------------------------------------------------------------- A. Identity and traceability
 
@@ -59,17 +63,8 @@ source = ["spec.coupon_card"]
 [[item]]
 id = "A2"
 section = "A"
-check = "The audited files are identified"
-acceptance = "The package names the team's deck by its SHA-256 digest, the engine by its commit and our run by its attempt number"
-method = "auto"
-required = true
-source = ["compare.sha256_of", "attempts.latest_attempt"]
-
-[[item]]
-id = "A3"
-section = "A"
 check = "One unit system"
-acceptance = "Both decks are read in the unit system the coupon's manifest states, and every number in the audit is in it"
+acceptance = "Both decks and every number of the audit are in the one unit system the coupon's manifest states"
 method = "auto"
 required = true
 source = ["abaqus_reader.read_deck"]
@@ -99,7 +94,7 @@ source = ["equivalence.deck_equivalence"]
 id = "B3"
 section = "B"
 check = "Layup"
-acceptance = "The same ply angles in the same order, bottom ply first (ADR-0004), and the same ply count; whether the layup is balanced and symmetric is stated"
+acceptance = "The same ply angles in the same order, bottom ply first, and the same ply count; whether the layup is balanced and symmetric is stated"
 method = "auto"
 required = true
 source = ["equivalence.deck_equivalence"]
@@ -168,7 +163,8 @@ section = "C"
 check = "Total reaction force"
 acceptance = "Our reaction at the loaded grip is within the tolerance of the team's"
 method = "auto"
-required = false  # the cofounder decides whether it is required; the team does not export it today
+required = false  # the cofounder decides whether it is required; the team does not export it today, so the auditor judges it against our value
+source = ["report.gripped_groups"]
 tolerance = { relative = 0.01 }
 needs = "the reaction force at the loaded grip's reference point"
 
@@ -200,7 +196,8 @@ section = "C"
 check = "Displacement and strain at the gauge centre"
 acceptance = "Each component is within the tolerance of the team's largest value of that quantity"
 method = "auto"
-required = false  # the team does not export U or E today
+required = false  # the team does not export U or E today, so the auditor judges it against our values
+source = ["results.MembraneSolution.displacement_of"]
 tolerance = { relative = 0.01 }
 needs = "field reports of U and E"
 
@@ -227,7 +224,8 @@ section = "C"
 check = "First-ply failure"
 acceptance = "The loading at first-ply failure is within the tolerance of the team's, in the same ply and mode"
 method = "auto"
-required = false  # the cofounder decides whether it is required; the team does not export failure indices today
+required = false  # the cofounder decides whether it is required; the team does not export failure indices today, so the auditor judges it against ours
+source = ["recovery.strength_ratios"]
 tolerance = { relative = 0.01 }
 needs = "Abaqus failure indices (MSTRS, TSAIH or TSAIW) at every section point"
 
@@ -280,41 +278,5 @@ id = "D5"
 section = "D"
 check = "The results make physical sense"
 acceptance = "Signs, symmetry and coupling agree with the layup and the loading: an unbalanced layup shows in-plane shear coupling, a symmetric one no bending"
-method = "auditor"
-required = true
-
-# ------------------------------------------------------------------------------------------------- E. Documentation
-
-[[item]]
-id = "E1"
-section = "E"
-check = "The document is complete"
-acceptance = "Every chapter, table and figure is present and readable"
-method = "auditor"
-required = true
-
-[[item]]
-id = "E2"
-section = "E"
-check = "The Abaqus/CAE rebuild guide works"
-acceptance = "A deck the auditor builds in Abaqus/CAE by following the guide passes B1 to B9 against ours"
-method = "auto"
-required = false  # the cofounder decides whether every audit includes a rebuild
-source = ["equivalence.deck_equivalence"]
-needs = "the deck the auditor built from the guide"
-
-[[item]]
-id = "E3"
-section = "E"
-check = "Open and assumed steps"
-acceptance = "Every OPEN or ASSUMED step of the rebuild guide has a reason the auditor accepts"
-method = "auditor"
-required = true
-
-[[item]]
-id = "E4"
-section = "E"
-check = "Claims"
-acceptance = "The document says verified for agreement with another solver, and validated only for agreement with test data"
 method = "auditor"
 required = true

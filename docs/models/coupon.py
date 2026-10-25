@@ -372,7 +372,7 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
     failed = [s.item.id for s in judged if s.result == "Fail"]
     verdict.append(rf"\textbf{{Audit}} (rubric {escape(rubric_version)}, Chapter~\ref{{ch:audit}}): our tools pass {sum(s.result == 'Pass' for s in judged)} "
                    rf"of {len(judged)} rows" + (f" ({escape(', '.join(failed))} fail)" if failed else "")
-                   + rf"; the auditor judges {len(scored) - len(judged)} and gives the verdict.")
+                   + rf"; the auditor judges {len(scored) - len(judged)}.")
     verdict.append(r"\textbf{Not validated.} " + escape(f"{card['Test data']}."))
     facts = [(escape(label), escape(value)) for label, value in card.items() if label not in ("Coupon", "Test")]
     return "\n".join([
@@ -397,7 +397,7 @@ def package_contents(src: Sources, lib, package: Path) -> list[tuple[str, str]]:
     without 1-team-model/."""
     c = src.coupon
     out = [("README.txt", "this list, as plain text"), (f"{c}.pdf", "the coupon document"),
-           (f"{package.name}-audit.xlsx", "the audit form: our tools' results locked, the auditor's rows, verdict and findings to fill in (ADR-0043)"),
+           (f"{package.name}-audit.xlsx", "the audit form: our tools' results locked; the auditor's results, observations and verdict to fill in (ADR-0043)"),
            (f"2-our-model/abaqus/{c}-abaqus.inp", "our deck, for Abaqus: File, Import, Model (this click path is not checked by us), or run it as a job"),
            (f"2-our-model/calculix/{paths.deck_path(src.twin, 'ccx').name}", "the CalculiX twin, with the grips as direct constraints. PrePoMax: File, "
                                                                             "Import, then run it"),
@@ -481,12 +481,15 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     rebuilt = audit.compare_rebuilt(audit.rebuilt_deck(src.team_files), deck, units, b1)
     commit = documents.git_commit()
     lib = f"{spec.material.library}, dataset {spec.material.dataset}" if spec.material.library else None
-    fpf = summary["fpf"][:3] if "fpf" in summary else None
+    fpf = summary.get("fpf")  # criterion, factor of the applied loading, ply, angle
     evidence = audit.gather(test_code=TEST_CODES[spec.kind][0], units=units, card=coupon_card(spec), deck=deck, solution=solution, material=lib,
-                            commit=commit, attempt=attempt, guide=audit.guide_counts(abaqus, rebuild.tag), c=c, fpf=fpf, rebuilt=rebuilt)
+                            guide=audit.guide_counts(abaqus, rebuild.tag), c=c, fpf=fpf, rebuilt=rebuilt)
     scored = score(rubric, evidence)
-    facts = audit.cover(card=card, package=package.name, attempt=attempt, commit=commit, run_by=operator(), built=date.today().isoformat(),
-                        team_deck=c.team_deck_path.name if c is not None else None, team_sha256=evidence.team_deck_sha256)
+    audited = audit.audited(card=card, package=package.name, attempt=attempt)
+    compared = audit.files_compared(c=c, our_deck=f"2-our-model/abaqus/{c.spec_path.stem if c is not None else src.coupon}-abaqus.inp",
+                                    spec=f"2-our-model/spec/{src.spec.name}")
+    build_record = audit.build_record(team_deck=c.team_deck_path.name if c is not None else None, team_sha256=evidence.team_deck_sha256,
+                                      fea_version=fea_version, commit=commit, run_by=operator(), built=date.today().isoformat())
     form = f"{package.name}-audit.xlsx"
 
     headline = f"{card['Coupon']}, {card['Test']}"
@@ -509,7 +512,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\chapter{Verification against other solvers}\label{ch:verification}",
         verification_chapter(src, record, rows, problems, summaries, units, map_drawn, full_tables, c, figures),
         r"\chapter{What this shows and what it does not}\label{ch:reading}", reading_chapter(src, card, c),
-        r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, facts, form, units, escape, code, team.table, documents.kv_table),
+        r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, audited + compared, form, units, escape, code, team.table, documents.kv_table),
         r"\appendix",
         r"\chapter{How the CalculiX numbers were mapped and judged}\label{sec:method}", documents.method_section(record),
         r"\chapter{The CalculiX record}", documents.appendix_record(src.record),
@@ -526,7 +529,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
 
     def fill_package(folder: Path) -> None:
         fill(folder, src, spec, text, card, c, deck, solution)
-        write_form(folder / form, rubric, scored, facts, units, tables=form_tables(rubric, evidence, scored))
+        write_form(folder / form, rubric, scored, audited, units, tables=form_tables(rubric, evidence, scored), files=compared, record=build_record)
 
     team.write_package(package, fill_package)
     result = None
@@ -546,7 +549,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
 
 def check(src: Sources) -> list[str]:
     """The regression check: build the coupon again in a scratch folder and compare what our tools find now with the newest audit
-    form that came back. Returns the items our tools passed then and do not pass now (A2, how the package was built, not counted)."""
+    form that came back. Returns the items our tools passed then and do not pass now."""
     forms = sorted(src.team_files.glob("*/*-audit.xlsx")) if src.team_files.is_dir() else []
     if not forms:
         print(f"{src.coupon}: no audit form has come back, so there is nothing to compare with")
