@@ -4,6 +4,7 @@
       kernel/              build_model.py
       calculix/            run_calculix.py
       team-in-calculix/    convert_to_calculix.py on the team's deck
+      abaqus/              run_abaqus.py: the deck in Abaqus/Standard, its exported fields and the record (ADR-0045)
 
 The record of each try is its row in the case page's attempt log (`.local/fea/<coupon>/README.md`); NN is that row's number,
 so a folder and its row always match. Only tries that ran something have a folder. A folder is never reused or overwritten.
@@ -20,7 +21,7 @@ from pathlib import Path
 from . import paths
 
 ATTEMPT = re.compile(r"^attempt-(?P<number>\d{2})_(?P<date>\d{4}-\d{2}-\d{2})$")
-RUN_KINDS = ("kernel", "calculix", "team-in-calculix")
+RUN_KINDS = ("kernel", "calculix", "team-in-calculix", "abaqus")
 
 
 class AttemptError(ValueError):

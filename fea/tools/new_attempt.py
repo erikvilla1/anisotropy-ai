@@ -33,6 +33,7 @@ def main() -> None:
     print(f"  build_model.py         --out {(where / 'run' / 'kernel').as_posix()}")
     print(f"  run_calculix.py        --out {(where / 'run' / 'calculix').as_posix()}")
     print(f"  convert_to_calculix.py --out {(where / 'run' / 'team-in-calculix').as_posix()}")
+    print(f"  run_abaqus.py          --out {(where / 'run' / 'abaqus').as_posix()}")
     print(f"When done, add row {folder.name[8:10]} to the attempt log of .local/fea/{args.test}/README.md and run tools/case_pages.py.")
 
 

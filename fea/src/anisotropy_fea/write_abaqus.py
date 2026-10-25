@@ -24,7 +24,11 @@ def _rows(labels: list[int]) -> list[str]:
     return [", ".join(str(label) for label in labels[i:i + PER_LINE]) for i in range(0, len(labels), PER_LINE)]
 
 
-def write_abaqus(model: FEModel, units: str | None = None) -> str:
+def write_abaqus(model: FEModel, units: str | None = None, split_print_tables: bool = False) -> str:
+    """The deck text. `split_print_tables=True` writes one variable per `*El Print` table (SF, SE, S, E), which is what Abaqus/Standard
+    accepts: it allows nine variables per table, and on 2026-10-24 it refused the combined tables `SF, SE` and `S, E` of a composite
+    shell ("THERE ARE MORE THAN 9 OUTPUT REQUESTS IN A SINGLE TABLE"). The default keeps the committed decks' text and digests until
+    the writer's default is flipped and the decks and records regenerated together (ADR-0045, consequences)."""
     units = units or model.spec.units
     length = lambda v: from_si(v, "length", units)  # noqa: E731
     stress = lambda v: from_si(v, "stress", units)  # noqa: E731
@@ -114,10 +118,10 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
             out.append(f"*Node Print, nset=Probe-{name}")
             out.append("U")
     if requests.el_print:
+        tables = (("SF",), ("SE",), ("S",), ("E",)) if split_print_tables else (("SF", "SE"), ("S", "E"))
         for name in model.probe_elements:
-            out.append(f"*El Print, elset=Probe-{name}, position=CENTROIDAL")
-            out.append("SF, SE")
-            out.append(f"*El Print, elset=Probe-{name}, position=CENTROIDAL")
-            out.append("S, E")
+            for variables in tables:
+                out.append(f"*El Print, elset=Probe-{name}, position=CENTROIDAL")
+                out.append(", ".join(variables))
     out.append("*End Step")
     return "\n".join(out) + "\n"
