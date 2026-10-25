@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
 description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Each problem has one folder named for it with everything about it inside. An FEA coupon is .local/fea/<coupon>/ in three parts, team (what they sent), ours (specs, decks, verification, runs, latex) and documents (the packages), and its README is the case page. A homework set is .local/homework/<set>/ (provided, ours, comparison, documents), with its engine cases in ours/ and its reading in comparison/. Load before saving, moving or looking for any FEA deck, result export, comparison record, document, homework file or input file, when a new coupon or homework arrives, and before every new attempt at a problem.
-version: 0.7.1
+version: 0.7.2
 ---
 
 # Workspace layout
@@ -52,6 +52,8 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
       kernel/                        build_model.py: our deck copy, pictures, .vtu, summary.txt
       calculix/                      run_calculix.py: .inp .dat .frd .sta (open the .frd in PrePoMax)
       team-in-calculix/              the team's deck converted by convert_to_calculix.py and run (the model is still theirs)
+      abaqus/                        run_abaqus.py: our deck solved by Abaqus/Standard without the GUI, its .odb .dat .sta .msg, the CSV field
+                                     reports and reactions from abaqus_extract_fields.py, and the record against the kernel (ADR-0045)
     latex/                           <coupon>.tex and figures/, the coupon document's source (docs/models/coupon.py, ADR-0041)
   documents/<date>_<coupon>/         the package that goes out, one per delivery (ADR-0043): the PDF, the audit form (its Results and
                                      Compared values sheets hold the numbers, ADR-0044), 1-team-model/ (absent without a team model),
