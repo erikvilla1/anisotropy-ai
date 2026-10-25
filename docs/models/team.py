@@ -584,7 +584,7 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
     return [
         ("README.txt", "this list, as plain text"),
         (f"{c.manifest.name}.pdf", "this document"),
-        (f"{c.package.name}-audit.xlsx", "the audit form: our tools' results locked, the auditor's rows, verdict and findings to fill in (ADR-0043)"),
+        (f"{c.package.name}-audit.xlsx", "the audit form: our tools' results locked; the auditor's results, observations and verdict to fill in (ADR-0043)"),
         (f"1-team-model/{c.team_deck_path.name}", "the team's deck, as we received it"),
         (f"2-our-model/abaqus/{stem}-abaqus.inp", "our deck of the same coupon, for Abaqus. Abaqus/CAE: File, Import, Model, choose the .inp file "
                                                   "(this click path is not checked by us); or run it as a job from the command line"),
