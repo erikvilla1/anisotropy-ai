@@ -58,6 +58,8 @@ uv run python examples/build_model.py checks/unnotched-im7-8552/unnotched-im7-85
 
 writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite section, material with citations in the header, reference nodes and couplings when asked, step, boundaries, loads, output requests), a model preview (`<spec>-model.png`), then reads the deck back with our own reader, solves it with the kernel, and writes the result figure, the `.vtu` and `summary.txt`. Built today: unnotched tension and compression coupons on the structured mesher, and open-hole coupons on a Gmsh transfinite O-grid (`mesher.gmsh_open_hole_plate`, optional extra `mesh`: `uv sync --extra mesh`; ADR-0030, amendment 3). Shear and bending follow chunk by chunk. Each spec's generated decks live in its test folder's `decks/` (rewrite them with `tools/regenerate_decks.py`); the tools are described in [docs/installation-fea-tools.md](../docs/installation-fea-tools.md).
 
+The team states a coupon on the coupon input form instead (ADR-0046): `uv run python tools/coupon_form.py` writes the blank Excel form, and `uv run python tools/coupon_from_form.py <filled form>.xlsx` checks it, names every problem by its row, and writes the coupon's two specs, its `team/<date>/` folder and its case page under `../.local/fea/<coupon>/`.
+
 ## CalculiX, the independent solver
 
 ```powershell

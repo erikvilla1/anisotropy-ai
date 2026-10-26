@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
 description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Each problem has one folder named for it with everything about it inside. An FEA coupon is .local/fea/<coupon>/ in three parts, team (what they sent), ours (specs, decks, verification, runs, latex) and documents (the packages), and its README is the case page. A homework set is .local/homework/<set>/ (provided, ours, comparison, documents), with its engine cases in ours/ and its reading in comparison/. Load before saving, moving or looking for any FEA deck, result export, comparison record, document, homework file or input file, when a new coupon or homework arrives, and before every new attempt at a problem.
-version: 0.7.2
+version: 0.7.3
 ---
 
 # Workspace layout
@@ -59,6 +59,10 @@ Both live under `.local/`, which git ignores. `.local/fea/README.md` and `.local
                                      Compared values sheets hold the numbers, ADR-0044), 1-team-model/ (absent without a team model),
                                      2-our-model/, 3-material/, 4-results/ (ADR-0043 amendment 2)
 .local/fea/checks/<test>/runs/       our runs of the committed checks (fea/checks/<test>/); fixture plots and smoke runs go in .local/fea/checks/
+.local/fea/forms/                   blank coupon input forms written by fea/tools/coupon_form.py (ADR-0046); a filled one goes to its
+                                     coupon's team/<date>/ when it is read
+  example/                           for the team: a filled form (the public IM7/8552 stand-in) and the package it gave, with a README;
+                                     not a coupon, so no case page and no row in the index
 
 .local/homework/<set>/               one folder per set (HW1 ... HW5, PRACTICE, course-reader), ADR-0040
   provided/                          what the course provided, as received (PDFs, *_Input.xlsx)
@@ -84,7 +88,18 @@ Committed counterpart: `fea/checks/` only, the public proofs in the same shape (
 6. Homework: one folder per set, the same name everywhere. Provided files stay unchanged in `provided/`; a corrected copy goes to `ours/` with `-fixed` in its name, and the correction is stated in the set's reading, `comparison/key-comparison.md`, which stays local like the course's files (the founder, 2026-10-23); no README per set (the founder found no value in them, 2026-10-22); the document goes to `documents/`.
 7. Never commit anything under `.local/`. Our models of the team's coupons stay there too, whatever their material (ADR-0042, replacing ADR-0030 amendment 4); a public model of our own design goes to `fea/checks/<test>/`. The team's own files never move.
 
+## Procedure: a filled coupon input form arrives (ADR-0046)
+
+1. From `fea/`: `uv run python tools/coupon_from_form.py <form>.xlsx --dry-run`. It names every problem by its row; send them back to the engineer. A form it accepts prints the coupon's name and its two specs.
+2. Run it without `--dry-run`. It writes `ours/<coupon>.toml` and `ours/<coupon>-nodal.toml`, files the form in `team/<date>/` with a README, and writes the case page when there is none (status in progress, attempt 01 is the intake).
+3. Run the commands it prints: the decks, a new attempt, our engine, the CalculiX twin, the record. Add the run's attempt row, run `tools/case_pages.py --local`, then `docs/models/coupon.py <coupon>` for the package.
+4. A form with the team's own constants: they are user-supplied and stay in the coupon's folder; never move them to `lib/`. A form that corrects an earlier one is read with `--replace`, which rewrites the two specs only.
+
+Write a fresh blank form for each request with `uv run python tools/coupon_form.py`; it goes to `.local/fea/forms/`.
+
 ## Procedure: a new FEA coupon arrives
+
+When the team sends a filled coupon input form, follow the procedure above instead of steps 1 to 3.
 
 1. Name the coupon (ADR-0038: `<material>-<test>-<layup>`). Create `.local/fea/<coupon>/team/<date>/` and move the files there as received.
 2. Write `team/<date>/README.md`: who made the files, when, with which software version, and what each file is. Name the material and whether its rights class is known.

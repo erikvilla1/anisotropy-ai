@@ -66,7 +66,7 @@ from anisotropy_fea import __version__ as fea_version  # noqa: E402
 from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
 from anisotropy_fea.audit import form_tables, load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
-from anisotropy_fea.case_pages import CasePageError, read_case  # noqa: E402
+from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.membrane import solve_membrane  # noqa: E402
@@ -130,11 +130,56 @@ def statement(spec, card: dict[str, str]) -> str:
                   f"every ply, and at what share of the loading the first ply fails.")
 
 
+OWN_CONSTANTS = ("Rights class {rights}: these values are the team's. They are used in this package only and never enter our material "
+                 "library, which holds published records only.")
+
+
+def material_heading(spec) -> str:
+    """The material section's heading: where the constants come from."""
+    if spec.material.library is not None:
+        return "The material, from our library"
+    return "The material, as given by the team" if spec.material.source is not None else "The material"
+
+
+def material_file(spec) -> tuple[str, str] | None:
+    """The package's material file and what it holds: the library record, the team's own constants, or none (explicit constants of a check)."""
+    if spec.material.library is not None:
+        return f"3-material/{spec.material.library}.csv", "the material from our library: every value, its unit, basis and source page, and the source"
+    if spec.material.source is not None:
+        return (f"3-material/{spec_material(spec).name}.csv", "the team's own constants as given on the coupon input form: every value with its unit, "
+                "and the source as the team states it")
+    return None
+
+
+def own_material_rows(material, units: str) -> list[tuple[str, float, str]]:
+    """The team's own constants, in the stated units, as (property, value, unit) rows: E1, E2, G12, nu12, the strengths when given, G13, G23."""
+    stress_unit = documents.UNIT_LABEL[units]["stress"]
+    stress = lambda v: from_si(v, "stress", units)  # noqa: E731
+    rows = [("E1", stress(material.E1), stress_unit), ("E2", stress(material.E2), stress_unit), ("G12", stress(material.G12), stress_unit),
+            ("nu12", material.nu12, "")]
+    if material.strengths is not None:
+        rows += [(role, stress(getattr(material.strengths, role)), stress_unit) for role in ("F1t", "F1c", "F2t", "F2c", "F6")]
+    return rows + [("G13", stress(material.G13), stress_unit), ("G23", stress(material.G23), stress_unit)]
+
+
 def material_section(spec, units: str) -> str:
-    """The material from our library with the page of every value; the team comparison's version adds the team's column."""
+    """The material from our library with the page of every value, or the team's own constants with their source; the team
+    comparison's version adds the team's column."""
     mat = spec.material
-    if mat.library is None:
+    if mat.library is None and mat.source is None:
         return "The material is given by explicit constants in the spec (listed in Section~\\ref{sec:model}); it is not a library record."
+    if mat.library is None:
+        material = spec_material(spec)
+        rows = [[escape(name), f"{number(value, 6)} {escape(unit)}", "as given by the team"] for name, value, unit in own_material_rows(material, units)]
+        return "\n\n".join([
+            rf"The team gave this material's constants on the coupon input form, under the name {code(material.name)}; it is not a record of "
+            r"our material library. The source, as the team states it:",
+            rf"\begin{{quote}}{escape(mat.source)}.\end{{quote}}",
+            escape(OWN_CONSTANTS.format(rights=material.rights)),
+            team.table(["Property", "Value", "Origin"], rows, r">{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{3.6cm}Y"),
+            "No strengths were given, so the engine predicts no first-ply failure." if material.strengths is None else
+            "With the strengths given, the engine predicts first-ply failure (Chapter~\\ref{ch:results}).",
+        ])
     lib = library_material(mat.library, mat.dataset)
     stress_unit = documents.UNIT_LABEL[units]["stress"]
     rows = []
@@ -164,7 +209,7 @@ def problem_chapter(spec, card: dict[str, str], c, units: str, figures: Path) ->
         statement(spec, card),
         r"\section{The coupon}\label{sec:coupon}",
         documents.kv_table([(escape(label), escape(value)) for label, value in card.items()]),
-        r"\section{The material, from our library}\label{sec:material}",
+        rf"\section{{{material_heading(spec)}}}\label{{sec:material}}",
         team.material_section(c) if c is not None else material_section(spec, units),
         r"\section{Supports and loading}",
         escape(f"Grips: {grips.kind} on the {'whole tab regions' if grips.region == 'tabs' else 'end node rows'}. "
@@ -211,7 +256,8 @@ def engine_chapter(src: Sources, deck, units: str, committed: Path) -> str:
     ])
     return "\n\n".join([
         r"The model is not drawn by hand. One file, the spec, states the coupon: its name and card, dimensions, mesh seeds, layup, material "
-        r"from our library with its out-of-plane constants, grips, loading, probes and output requests. Every key is required and every invalid "
+        r"(a record of our library, or the team's own constants) with its out-of-plane constants, grips, loading, probes and output requests. "
+        r"Every key is required and every invalid "
         r"combination is refused by name. The generator builds the model from it and writes the complete deck for each solver (ADR-0030); the "
         r"kept decks must equal what it writes today, which a test checks.",
         r"\section{The spec}\label{sec:model}", documents.file_listing(src.spec),
@@ -297,7 +343,8 @@ def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[st
             rows.append(rf"{escape(criterion.replace('_', ' '))} & {number(field.factor, 4)} & {number(field.factor * applied, 4)} {escape(unit)} & "
                         rf"{field.ply} ({angles[field.ply - 1]:g}°) & {escape(str(field.element[1]))} & {escape(field.governing_mode)} \\")
         out += [r"\section{First-ply failure}",
-                r"With the strengths from our library the engine finds the first ply to fail. The analysis is linear, so the factor scales the applied "
+                rf"With the strengths {'from our library' if spec.material.library else 'the team gave'} the engine finds the first ply to fail. "
+                r"The analysis is linear, so the factor scales the applied "
                 r"loading: below 1, the first ply fails before the loading of the model is reached, and the stresses above are those of a linear model "
                 r"past that point.",
                 documents.long_table(["Criterion", "Factor", "Loading at failure", "Ply (angle)", "Element", "Mode"], rows, r"Yrrrrr")]
@@ -341,8 +388,7 @@ def reading_chapter(src: Sources, card: dict[str, str], c) -> str:
 def files_appendix(src: Sources, spec, c, package: Path) -> str:
     if c is not None:
         return team.files_section(c)
-    lib = library_material(spec.material.library, spec.material.dataset) if spec.material.library else None
-    rows = [[code(path), escape(what)] for path, what in package_contents(src, lib, package)]
+    rows = [[code(path), escape(what)] for path, what in package_contents(src, spec, package)]
     return "\n\n".join([rf"Everything is in the package folder {code(package.name)}, which goes to the team as it is. It holds no CalculiX results: "
                         r"run our decks to get them.",
                         team.table(["File", "What it is and how to open it"], rows, r">{\raggedright\arraybackslash}p{6.4cm}Y", r"\footnotesize")])
@@ -392,7 +438,7 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
 
 # --------------------------------------------------------------------------------------------- the package
 
-def package_contents(src: Sources, lib, package: Path) -> list[tuple[str, str]]:
+def package_contents(src: Sources, spec, package: Path) -> list[tuple[str, str]]:
     """The package of a coupon the team has not built, in the same numbered folders as one with a team model (ADR-0043 amendment 2),
     without 1-team-model/."""
     c = src.coupon
@@ -403,8 +449,8 @@ def package_contents(src: Sources, lib, package: Path) -> list[tuple[str, str]]:
                                                                             "Import, then run it"),
            (f"2-our-model/spec/{src.spec.name}", "the spec our generator builds the Abaqus deck from"),
            (f"2-our-model/spec/{src.twin.name}", "the spec of the CalculiX twin")]
-    if lib is not None:
-        out.append((f"3-material/{lib.material_id}.csv", "the material from our library: every value, its unit, basis and source page, and the source"))
+    if material_file(spec) is not None:
+        out.append(material_file(spec))
     out.append(("4-results/ours-all-plies.csv", "our S11, S22, S12 and Mises for every ply of every element"))
     return out
 
@@ -421,10 +467,10 @@ def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, d
     shutil.copy2(paths.deck_path(src.twin, "ccx"), folder / "2-our-model/calculix")
     shutil.copy2(src.spec, folder / "2-our-model/spec")
     shutil.copy2(src.twin, folder / "2-our-model/spec")
-    if lib is not None:
-        team.write_material_csv(folder / "3-material" / f"{lib.material_id}.csv", lib, spec_material(spec), spec.units)
+    if material_file(spec) is not None:
+        team.write_material_csv(folder / material_file(spec)[0], lib, spec_material(spec), spec.units)
     team.write_all_plies(folder / "4-results" / "ours-all-plies.csv", solution, deck, spec.units)
-    contents = package_contents(src, lib, folder)
+    contents = package_contents(src, spec, folder)
     width = max(len(path) for path, _ in contents)
     lines = [team.README_MARK, f"{card['Coupon']}, {card['Test']}: our model and its document", "",
              *[f"{label + ':':14} {value}" for label, value in card.items()], "",
@@ -480,7 +526,8 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     b1 = next(item for item in rubric.items if item.id == "B1").tolerance.length_m  # the rebuilt deck is held to the model match's tolerance
     rebuilt = audit.compare_rebuilt(audit.rebuilt_deck(src.team_files), deck, units, b1)
     commit = documents.git_commit()
-    lib = f"{spec.material.library}, dataset {spec.material.dataset}" if spec.material.library else None
+    lib = (f"{spec.material.library}, dataset {spec.material.dataset}" if spec.material.library
+           else spec_material(spec).source if spec.material.source else None)  # the audit's B6 row states it
     fpf = summary.get("fpf")  # criterion, factor of the applied loading, ply, angle
     evidence = audit.gather(test_code=TEST_CODES[spec.kind][0], units=units, card=coupon_card(spec), deck=deck, solution=solution, material=lib,
                             guide=audit.guide_counts(abaqus, rebuild.tag), c=c, fpf=fpf, rebuilt=rebuilt)
@@ -610,6 +657,9 @@ def main() -> None:
             raise SystemExit(f"regression in {', '.join(lost)}: a row our tools passed in the last audit no longer passes")
         return
     for coupon in chosen:
+        if args.all and not calculix_record(paths.MODELS / coupon).is_file():
+            print(f"{coupon}: no CalculiX record yet, so no document; run the twin and tools/record_from_dat.py first (its case page says how)")
+            continue
         build_document(sources(coupon, args.root), pdf=not args.no_pdf, theory=not args.no_theory, full_tables=args.full_tables)
 
 

@@ -105,6 +105,20 @@ def calculix_record(folder: Path) -> Path:
     return paths.records_dir(folder / paths.OURS) / f"{folder.name}-calculix.toml"
 
 
+NO_RECORD_YET = ("No CalculiX record yet: run the twin in CalculiX and write `ours/verification/<coupon>-calculix.toml` with "
+                 "`fea/tools/record_from_dat.py` (the Rebuild section says how).")  # a coupon just started from its input form
+
+
+def record_summary(folder: Path) -> tuple[list[ComparisonRow] | None, str]:
+    """A coupon's CalculiX rows and their one-line summary, or None and "no record yet" while the record is not written."""
+    record_path = calculix_record(folder)
+    if not record_path.is_file():
+        return None, "no record yet"
+    _, record, _ = record_rows(record_path)
+    reaction = [r for r in record if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
+    return record, f"{sum(r.agrees for r in record)} of {len(record)}" + (f"; reaction {signed(reaction[0].reference, reaction[0].kernel)}" if reaction else "")
+
+
 def record_rows(record_path: Path) -> tuple[list[list[str]], list[ComparisonRow], dict]:
     """The rows a CalculiX record gives the result table, its comparison rows and the record."""
     record = load_record(record_path)
@@ -144,6 +158,8 @@ def team_rows(summary_path: Path) -> list[list[str]]:
 
 
 def result_block(folder: Path) -> str:
+    if not calculix_record(folder).is_file():
+        return NO_RECORD_YET + "\n"
     rows, _, _ = record_rows(calculix_record(folder))
     summary = paths.team_summary(folder / paths.OURS)
     if summary.is_file():
@@ -226,9 +242,7 @@ def tests_block() -> str:
     for folder in model_folders():
         case = read_case(folder)
         card = dict(coupon_card(load_spec(folder / paths.OURS / f"{folder.name}.toml")))
-        _, record, _ = record_rows(calculix_record(folder))
-        reaction = [r for r in record if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
-        calculix = f"{sum(r.agrees for r in record)} of {len(record)}" + (f"; reaction {signed(reaction[0].reference, reaction[0].kernel)}" if reaction else "")
+        _, calculix = record_summary(folder)
         summary = paths.team_summary(folder / paths.OURS)
         if summary.is_file():
             s = tomllib.loads(summary.read_text(encoding="utf-8"))
@@ -323,10 +337,10 @@ def local_index() -> str:
     for folder in model_folders():
         case = read_case(folder)
         card = dict(coupon_card(load_spec(folder / paths.OURS / f"{folder.name}.toml")))
-        _, record, _ = record_rows(calculix_record(folder))
+        record, calculix = record_summary(folder)
         held = "; ".join(f"{attempt_number(a):02d}: {', '.join(kinds(a))}" for a in attempts(folder.name) if kinds(a)) or "none on this machine"
         tests.append([f"**{card['Coupon']}**", card["Test"], f"`.local/fea/{folder.name}/`", case.status, f"{case.attempts} (accepted {case.accepted})",
-                      held, f"CalculiX {sum(r.agrees for r in record)} of {len(record)}", card["Test data"].split(":")[0]])
+                      held, f"CalculiX {calculix.split(';')[0]}" if record is not None else calculix, card["Test data"].split(":")[0]])
     homework = []
     if HOMEWORK_README.is_file():
         for m in HOMEWORK_ROW.finditer(HOMEWORK_README.read_text(encoding="utf-8")):

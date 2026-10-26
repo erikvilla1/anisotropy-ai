@@ -62,6 +62,7 @@ def main() -> None:
     expected = reference_quantities(model, dat, conventions, element_probes=args.element_probes, node_probes=args.node_probes)
     expected = {"tolerance": args.tolerance, "floor": args.floor, **expected}
     out_dir = args.out.parent
+    out_dir.mkdir(parents=True, exist_ok=True)  # a coupon started from its input form has no verification/ yet
     record = {
         "title": f"{spec.title}: CalculiX {args.version} S8R against the kernel",
         "units": spec.units,
