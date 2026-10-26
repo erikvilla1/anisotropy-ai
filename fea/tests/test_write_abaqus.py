@@ -17,7 +17,7 @@ from anisotropy_fea.model import section_plies, validate_deck
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.mesher import gmsh_available
 from anisotropy_fea.spec import load_spec, parse_spec, to_si
-from anisotropy_fea.write_abaqus import number, write_abaqus
+from anisotropy_fea.write_abaqus import MAX_LINE, _comment, line_bytes, number, write_abaqus
 
 NODAL = paths.spec_path("unnotched-im7-8552-nodal").read_text(encoding="utf-8")
 
@@ -116,6 +116,32 @@ def test_every_abaqus_deck_is_what_its_spec_writes_today(spec_path):
     assert deck.is_file(), f"{spec_path.name} has no deck {deck.name}; run tools/regenerate_decks.py"
     text = write_abaqus(build_model(load_spec(spec_path)))
     assert deck.read_text(encoding="utf-8").replace("\r\n", "\n") == text, f"{deck.name}: regenerate with tools/regenerate_decks.py"
+
+
+@pytest.mark.parametrize("spec_path", SPECS, ids=[p.stem for p in SPECS])
+def test_every_abaqus_deck_keeps_the_input_rules_abaqus_standard_enforces(spec_path):
+    """At most 256 bytes per line and one variable per *El Print table, so Abaqus/Standard runs the deck as written (ADR-0045
+    amendment 2): it truncated longer lines with a warning and refused the combined tables `SF, SE` and `S, E`."""
+    needs_mesher(spec_path)
+    lines = write_abaqus(build_model(load_spec(spec_path))).splitlines()
+    assert max(line_bytes(line) for line in lines) <= MAX_LINE
+    tables = [lines[i + 1] for i, line in enumerate(lines) if line.lower().startswith("*el print")]
+    assert tables and all("," not in variables for variables in tables)
+
+
+def test_a_long_heading_comment_is_wrapped_at_spaces_by_bytes_and_nothing_else_changes():
+    short = "material IM7-8552: a short line"
+    assert _comment(short) == [f"** {short}"]
+    long = "  " + " ".join(f"word{i:03d}" for i in range(60))  # 2 + 60 * 8 - 1 = 481 characters, indented like a citation line
+    wrapped = _comment(long)
+    assert len(wrapped) == 2 and all(line_bytes(line) <= MAX_LINE for line in wrapped)
+    assert wrapped[0].startswith("**   word000") and wrapped[1].startswith("**     word")
+    assert " ".join(line[3:].strip() for line in wrapped) == long.strip()
+    dotted = " · ".join(["abcdefgh"] * 23)  # 250 characters, 272 bytes: "·" is two bytes in UTF-8, as in the NCAMP citation
+    assert len(f"** {dotted}") <= MAX_LINE < line_bytes(f"** {dotted}")
+    assert len(_comment(dotted)) == 2 and all(line_bytes(line) <= MAX_LINE for line in _comment(dotted))
+    with pytest.raises(ValueError, match="cannot fit"):
+        _comment("see https://example.org/" + "a" * 300)
 
 
 CCX_SPECS = [p for p in SPECS if paths.deck_path(p, "ccx").is_file()]

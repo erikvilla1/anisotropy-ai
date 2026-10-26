@@ -14468,19 +14468,35 @@ U
 *Node Print, nset=Probe-hole_top
 U
 *El Print, elset=Probe-hole_side, position=CENTROIDAL
-SF, SE
+SF
 *El Print, elset=Probe-hole_side, position=CENTROIDAL
-S, E
+SE
+*El Print, elset=Probe-hole_side, position=CENTROIDAL
+S
+*El Print, elset=Probe-hole_side, position=CENTROIDAL
+E
 *El Print, elset=Probe-hole_top, position=CENTROIDAL
-SF, SE
+SF
 *El Print, elset=Probe-hole_top, position=CENTROIDAL
-S, E
+SE
+*El Print, elset=Probe-hole_top, position=CENTROIDAL
+S
+*El Print, elset=Probe-hole_top, position=CENTROIDAL
+E
 *El Print, elset=Probe-ring_side, position=CENTROIDAL
-SF, SE
+SF
 *El Print, elset=Probe-ring_side, position=CENTROIDAL
-S, E
+SE
+*El Print, elset=Probe-ring_side, position=CENTROIDAL
+S
+*El Print, elset=Probe-ring_side, position=CENTROIDAL
+E
 *El Print, elset=Probe-far_side, position=CENTROIDAL
-SF, SE
+SF
 *El Print, elset=Probe-far_side, position=CENTROIDAL
-S, E
+SE
+*El Print, elset=Probe-far_side, position=CENTROIDAL
+S
+*El Print, elset=Probe-far_side, position=CENTROIDAL
+E
 *End Step

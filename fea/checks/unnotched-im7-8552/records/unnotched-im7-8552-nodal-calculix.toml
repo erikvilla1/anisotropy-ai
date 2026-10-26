@@ -3,7 +3,7 @@ units = "mm-MPa"
 spec = "../unnotched-im7-8552-nodal.toml"
 deck_kernel = "../decks/unnotched-im7-8552-nodal-abaqus.inp"
 deck_reference = "../decks/unnotched-im7-8552-nodal-ccx.inp"
-deck_kernel_sha256 = "e3082666d89e030408a3b468649f57afe7e98770834c8259eeed8c9c9ea01d15"
+deck_kernel_sha256 = "6e78a4429346d642efff71234a271735fe3c71d0f91feace466da862e29ac4d3"
 deck_reference_sha256 = "21c841c1d06fd3d15a781048c5fe15ca41566f0c1c5947ef489b610c43d8da43"
 
 [solver]

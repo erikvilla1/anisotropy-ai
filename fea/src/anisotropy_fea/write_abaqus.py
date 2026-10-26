@@ -5,6 +5,12 @@ shell section; one instance; assembly-level node and element sets, reference nod
 kinematic couplings when the grips are couplings; the material; one linear static step with numeric boundary
 conditions, concentrated loads and output requests. Numbers are written in the deck's unit system from the
 model's SI values. The text is deterministic, so its SHA-256 identifies the model.
+
+The deck is valid Abaqus/Standard input as written (ADR-0045 amendment 2): every line is at most 256 bytes, the longest
+Abaqus reads, so a longer heading comment is wrapped. Abaqus counts bytes of the UTF-8 file, not characters: it truncated a
+389-character comment on 2026-10-24, and on 2026-10-25 a 253-character line holding five two-byte "·" (258 bytes). Every
+`*El Print` table holds one variable, because Abaqus/Standard refused the combined tables `SF, SE` and `S, E` of a composite
+shell ("THERE ARE MORE THAN 9 OUTPUT REQUESTS IN A SINGLE TABLE").
 """
 
 from __future__ import annotations
@@ -13,6 +19,7 @@ from .femodel import FEModel
 from .units import from_si
 
 PER_LINE = 16
+MAX_LINE = 256  # bytes in one line of an Abaqus input file, in the UTF-8 the deck is written in
 
 
 def number(value: float) -> str:
@@ -24,18 +31,38 @@ def _rows(labels: list[int]) -> list[str]:
     return [", ".join(str(label) for label in labels[i:i + PER_LINE]) for i in range(0, len(labels), PER_LINE)]
 
 
-def write_abaqus(model: FEModel, units: str | None = None, split_print_tables: bool = False) -> str:
-    """The deck text. `split_print_tables=True` writes one variable per `*El Print` table (SF, SE, S, E), which is what Abaqus/Standard
-    accepts: it allows nine variables per table, and on 2026-10-24 it refused the combined tables `SF, SE` and `S, E` of a composite
-    shell ("THERE ARE MORE THAN 9 OUTPUT REQUESTS IN A SINGLE TABLE"). The default keeps the committed decks' text and digests until
-    the writer's default is flipped and the decks and records regenerated together (ADR-0045, consequences)."""
+def line_bytes(line: str) -> int:
+    return len(line.encode("utf-8"))
+
+
+def _comment(line: str) -> list[str]:
+    """`** line`, wrapped at spaces into lines of at most MAX_LINE bytes when longer; a continuation is indented two spaces more
+    than the line it continues. A single word that cannot fit a line is refused rather than cut (a URL would break)."""
+    whole = f"** {line}"
+    if line_bytes(whole) <= MAX_LINE:
+        return [whole]
+    indent = line[:len(line) - len(line.lstrip())]
+    pieces, prefix, words = [], f"** {indent}", []
+    for word in line.split():
+        if words and line_bytes(prefix + " ".join([*words, word])) > MAX_LINE:
+            pieces.append(prefix + " ".join(words))
+            prefix, words = f"** {indent}  ", []
+        if line_bytes(prefix + word) > MAX_LINE:
+            raise ValueError(f"a heading word of {line_bytes(word)} bytes cannot fit an Abaqus line of {MAX_LINE} bytes: {word[:60]}...")
+        words.append(word)
+    pieces.append(prefix + " ".join(words))
+    return pieces
+
+
+def write_abaqus(model: FEModel, units: str | None = None) -> str:
+    """The deck text."""
     units = units or model.spec.units
     length = lambda v: from_si(v, "length", units)  # noqa: E731
     stress = lambda v: from_si(v, "stress", units)  # noqa: E731
     force = lambda v: from_si(v, "force", units)  # noqa: E731
     mesh, spec, material = model.mesh, model.spec, model.material
     out: list[str] = ["*Heading"]
-    out += [f"** {line}" for line in model.heading]
+    out += [piece for line in model.heading for piece in _comment(line)]
     out.append("*Preprint, echo=NO, model=NO, history=NO, contact=NO")
 
     out.append(f"*Part, name={model.part}")
@@ -75,7 +102,7 @@ def write_abaqus(model: FEModel, units: str | None = None, split_print_tables: b
         out.append(f"*Surface, type=NODE, name={coupling.node_set}_CNS_, internal")
         out.append(f"{coupling.node_set}, 1.")
     for coupling in model.couplings:
-        out.append(f"** Constraint: {coupling.name}")
+        out += _comment(f"Constraint: {coupling.name}")
         out.append(f"*Coupling, constraint name={coupling.name}, ref node={coupling.reference_set}, surface={coupling.node_set}_CNS_")
         out.append("*Kinematic")
     out.append("*End Assembly")
@@ -118,10 +145,9 @@ def write_abaqus(model: FEModel, units: str | None = None, split_print_tables: b
             out.append(f"*Node Print, nset=Probe-{name}")
             out.append("U")
     if requests.el_print:
-        tables = (("SF",), ("SE",), ("S",), ("E",)) if split_print_tables else (("SF", "SE"), ("S", "E"))
         for name in model.probe_elements:
-            for variables in tables:
+            for variable in ("SF", "SE", "S", "E"):
                 out.append(f"*El Print, elset=Probe-{name}, position=CENTROIDAL")
-                out.append(", ".join(variables))
+                out.append(variable)
     out.append("*End Step")
     return "\n".join(out) + "\n"
