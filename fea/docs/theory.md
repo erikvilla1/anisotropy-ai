@@ -4,7 +4,7 @@ Every equation the finite element layer uses, and the function that computes it 
 
 ## Conventions
 
-- The laminate x axis is the deck's global x axis: the only orientation the reader accepts is the global one, so ply angles are measured from global x, counterclockwise, as in ADR-0004.
+- The laminate x axis is the deck's global x axis: the only orientation our deck reader accepts is the global one, so ply angles are measured from global x, counterclockwise, as in ADR-0004.
 - Each node has two degrees of freedom, $`u`$ along x and $`v`$ along y. Abaqus dofs 1 and 2. There are no out-of-plane or rotational degrees of freedom.
 - Strain is the membrane (midplane) strain $`\boldsymbol{\varepsilon} = [\varepsilon_x, \varepsilon_y, \gamma_{xy}]^T`$ with engineering shear.
 - Section forces are resultants per unit width, $`\mathbf{N} = [N_x, N_y, N_{xy}]^T`$ in N/m, what Abaqus reports as SF.
@@ -30,7 +30,7 @@ The reference solver is not a membrane. CalculiX expands a composite S8R shell i
 
 ## 2. The bilinear quadrilateral (`membrane.py`)
 
-In natural coordinates $`(\xi, \eta) \in [-1, 1]^2`$ the four nodes sit at $`(\xi_i, \eta_i) = (\mp 1, \mp 1)`$ counterclockwise. The shape functions (Bathe Eq. 5.18 for the two-dimensional case), computed by `shape_functions`:
+In natural coordinates $`(\xi, \eta) \in [-1, 1]^2`$ the four nodes sit at $`(\xi_i, \eta_i) = (-1, -1), (1, -1), (1, 1), (-1, 1)`$, counterclockwise. The shape functions (Bathe Eq. 5.18 for the two-dimensional case), computed by `shape_functions`:
 
 ```math
 N_i(\xi, \eta) = \tfrac14 (1 + \xi_i \xi)(1 + \eta_i \eta), \qquad i = 1, \dots, 4 .
@@ -162,14 +162,16 @@ computed by `strength_ratios`, which also returns every ratio and governing mode
 
 ## Checks
 
-- Shape functions sum to one and take the value one at their own node; their derivatives sum to zero; $`\mathbf{B}`$ on the unit square matches hand values.
-- A uniform strain field is recovered exactly from nodal displacements at every Gauss point of a skewed element.
-- $`\mathbf{k}`$ is symmetric with three zero eigenvalues; rigid translations and rotation give zero force; clockwise and bow-tie elements are refused.
-- Engine equality (validation cases `patch-1x1-im7-engine-equality`, `patch-2x2-im7-engine-equality`, `patch-1x1-cload-im7-engine-equality`): one element and a 2 by 2 mesh of a 25 by 100 mm IM7/8552 [0/30/-30/30/0]s coupon under prescribed edge displacement and under edge load reproduce the engine's midplane strain, section force and reaction; a generated 4 by 8 mesh agrees to 1e-12.
-- Isotropic closed forms (`isotropic-uniaxial-plane-stress`, `isotropic-simple-shear`): $`\varepsilon_x = -\nu\varepsilon_y`$, $`N_y = E h \varepsilon_y`$; $`N_{xy} = G h \gamma_{xy}`$.
-- A coupled edge driven by a reference node gives the same displacements as the same edge prescribed node by node, and the reference node's reaction equals the summed edge reactions.
-- The gripped 2 by 8 coupon: reactions in equilibrium, top and bottom reference reactions equal and opposite, the finer 4 by 16 mesh no stiffer than the coarse one.
-- Ply stresses in material axes equal the engine's `ply_surfaces` on the uniform cases for all ten plies; the first-ply-failure factor, governing ply and mode equal the engine's `first_ply_failure` for maximum stress, Tsai-Hill and Tsai-Wu; the factor halves when the imposed displacement doubles; the gripped coupon fails first in an end row next to a grip; missing strengths, strain limits or $`f_{12}^*`$ are refused by name.
+Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
+
+- Shape functions sum to one and take the value one at their own node; their derivatives sum to zero; $`\mathbf{B}`$ on the unit square matches hand values (`test_membrane_element.py`).
+- A uniform strain field is recovered exactly from nodal displacements at every Gauss point of a skewed element (`test_membrane_element.py`).
+- $`\mathbf{k}`$ is symmetric with three zero eigenvalues; rigid translations and rotation give zero force; clockwise and bow-tie elements are refused (`test_membrane_element.py`).
+- Engine equality (validation cases `patch-1x1-im7-engine-equality`, `patch-2x2-im7-engine-equality`, `patch-1x1-cload-im7-engine-equality`): one element of a 25 by 100 mm IM7/8552 [0/30/-30/30/0]s coupon under prescribed edge displacement reproduces the engine's midplane strain, section force and reaction to a relative 1e-12, and generated 2 by 2, 4 by 8 and 3 by 5 meshes carry the same uniform state to a relative 1e-11; under edge load the coupon reproduces the engine's forward solve (`test_membrane_solve.py`).
+- Isotropic closed forms (`isotropic-uniaxial-plane-stress`, `isotropic-simple-shear`): $`\varepsilon_x = -\nu\varepsilon_y`$, $`N_y = E h \varepsilon_y`$; $`N_{xy} = G h \gamma_{xy}`$ (`test_membrane_solve.py`).
+- A coupled edge driven by a reference node gives the same displacements as the same edge prescribed node by node, and the reference node's reaction equals the summed edge reactions (`test_membrane_solve.py`).
+- The gripped test coupon of 2 by 8 elements: reactions in equilibrium, top and bottom reference reactions equal and opposite; refined to 4 by 16 and 8 by 32 elements, its reaction does not grow and converges (`test_membrane_solve.py`).
+- Ply stresses in material axes equal the engine's `ply_surfaces` on the uniform cases for all ten plies; the first-ply-failure factor, governing ply and mode equal the engine's `first_ply_failure` for maximum stress, Tsai-Hill and Tsai-Wu; the factor halves when the imposed displacement doubles; in the gripped 2 by 8 test coupon the first ply to fail sits within two element rows of a grip, a property of that test deck and not of every coupon; missing strengths, strain limits or $`f_{12}^*`$ are refused by name (`test_recovery.py`).
 
 ## Not modeled yet
 
@@ -177,5 +179,5 @@ computed by `strength_ratios`, which also returns every ratio and governing mode
 - Rotated laminate axes (an `*Orientation` other than the global axes)
 - Triangles, higher-order shells, solids, membranes (M3D4)
 - Distributed loads and pressure; thermal strain
-- Abaqus-style failure indices (MSTRS, TSAIH, TSAIW) as numbers to compare against (comparison chunk); progressive failure
-- Finite element buckling; holes meshed by us (Gmsh chunk)
+- Abaqus-style failure indices (MSTRS, TSAIH, TSAIW) as numbers to compare against; progressive failure
+- Finite element buckling

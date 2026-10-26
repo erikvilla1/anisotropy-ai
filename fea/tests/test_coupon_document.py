@@ -145,15 +145,35 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     assert sorted(p.name for p in (tmp_path / DESIGNATION / paths.OURS / paths.LATEX).iterdir()) == [f"{DESIGNATION}.tex", "figures"]  # the source is ours
     names = files_in(package)
     for name in ("README.txt", f"{package.name}-audit.xlsx", f"2-our-model/abaqus/{DESIGNATION}-abaqus.inp", "2-our-model/calculix/unnotched-im7-8552-nodal-ccx.inp",
+                 "2-our-model/calculix/unnotched-im7-8552-nodal-abaqus.inp",  # the twin our engine compared with CalculiX
                  f"2-our-model/spec/{DESIGNATION}.toml", "2-our-model/spec/unnotched-im7-8552-nodal.toml", "3-material/im7-8552.csv",
                  "4-results/ours-all-plies.csv"):
         assert name in names, name
+    # what the team reads: numbered figures the text refers to, no decision-record numbers, the hand check where the record compares
+    prose = coupon.VERBATIM.sub("", tex)
+    assert "ADR-" not in prose and "engine theory, Section" not in prose and "the engine manual, Sections 3 and 4" in prose
+    for label in ("fig:model", "fig:solution", "fig:differences"):
+        assert rf"\label{{{label}}}" in tex, label
+    assert r"Figure~\ref{fig:solution}" in tex and r"Figure~\ref{fig:differences}" in tex
+    assert "The kernel's values are read at element" in tex and "the centre probe" in tex
+    assert r"\evidence{MANUAL" not in tex  # the guide for the team is Abaqus/CAE only: no PrePoMax tags, not even in the legend
+    assert "The full CalculiX comparison table" not in tex  # every group of 69 values is printed in Chapter 6 already
+    assert r"of the larger of its CalculiX value and 2\% of its group's largest value" in tex  # the floor rule, said as the record applies it
+    assert "Attempt:" in (package / "README.txt").read_text(encoding="utf-8")
     assert not any(name.endswith(".frd") for name in names) and not any(name.startswith("1-team-model") for name in names)  # one layout, no team deck
     readme = (package / "README.txt").read_text(encoding="utf-8").splitlines()
     assert readme[0] == "Anisotropy AI share folder" and readme[1].startswith(f"{DESIGNATION}, unnotched tension")
     assert any(line.startswith(f"{package.name}-audit.xlsx ") for line in readme) and "There is no 1-team-model folder" in "\n".join(readme)
     plies = (package / "4-results/ours-all-plies.csv").read_text(encoding="utf-8").splitlines()
     assert plies[0].startswith("team element,our element,x (mm),y (mm),ply (1 = bottom),angle (deg),S11 (MPa)") and plies[1].startswith(",")  # no team numbers
+
+
+def test_the_coupon_document_compiles_where_tectonic_is_installed(coupon, tmp_path):
+    """The other tests write the LaTeX only; a brace too many in the cover reached the PDF build. Skipped where Tectonic is absent (CI)."""
+    if coupon.manual.tectonic() is None:
+        pytest.skip("Tectonic is not installed")
+    pdf, package = coupon.build_document(public_sources(coupon, tmp_path), pdf=True, theory=False)
+    assert pdf == package / f"{DESIGNATION}.pdf" and pdf.is_file()
 
 
 LOCAL_COUPONS = [d.name for d in paths.model_dirs() if (d / paths.OURS / paths.VERIFICATION / f"{d.name}-calculix.toml").is_file()

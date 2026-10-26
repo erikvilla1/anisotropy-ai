@@ -17,6 +17,7 @@ import csv
 import hashlib
 import importlib.util
 import math
+import re
 import shutil
 import subprocess
 import sys
@@ -55,6 +56,7 @@ from anisotropy_fea import paths as fea_paths  # noqa: E402  where the files liv
 from anisotropy_fea import __version__ as fea_version  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck, read_deck  # noqa: E402
 from anisotropy_fea.abaqus_report import FieldReport, read_field_report, write_field_report  # noqa: E402
+from anisotropy_fea.audit import CRITERION  # noqa: E402
 from anisotropy_fea.equivalence import DeckEquivalence, deck_equivalence  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.membrane import solve_membrane  # noqa: E402
@@ -162,14 +164,14 @@ def pct(fraction: float, digits: int = 2) -> str:
 
 def table(header: list[str], rows: list[list[str]], spec: str, size: str = r"\small") -> str:
     head = " & ".join(r"\textbf{" + h + "}" for h in header) + r" \\"
-    body = [" & ".join(cells) + r" \\" for cells in rows]
+    body = [" & ".join(cells) + (r" \\*" if k == len(rows) - 1 else r" \\") for k, cells in enumerate(rows)]  # the last row stays with the rule
     return "\n".join(["{" + size, rf"\begin{{xltabular}}{{\linewidth}}{{{spec}}}", r"\toprule", head, r"\midrule", r"\endhead",
-                      *body, r"\bottomrule", r"\end{xltabular}", "}"])
+                      r"\bottomrule", r"\endlastfoot", *body, r"\end{xltabular}", "}"])  # the bottom rule stays with the last row
 
 
-def figure(path: Path, caption: str, width: str = r"\linewidth") -> str:
+def figure(path: Path, caption: str, width: str = r"\linewidth", label: str | None = None) -> str:
     return "\n".join([r"\begin{figure}[H]", r"\centering", rf"\includegraphics[width={width}]{{figures/{path.name}}}",
-                      rf"\caption{{{caption}}}", r"\end{figure}"])
+                      rf"\caption{{{caption}}}" + (rf"\label{{{label}}}" if label else ""), r"\end{figure}"])
 
 
 def style(ax) -> None:
@@ -248,6 +250,8 @@ class Comparison:
             raise SystemExit(f"{rel(self.calculix_record_path)}: expected one top-grip reaction, found {list(rf)}")
         self.calculix_reaction = float(rf[top[0]][1])
         self.calculix_deck_path = (self.calculix_record_path.parent / self.calculix["deck_reference"]).resolve()
+        self.twin_abaqus_path = (self.calculix_record_path.parent / self.calculix["deck_kernel"]).resolve()  # what our engine compared with CalculiX
+        self.twin_spec_path = (self.calculix_record_path.parent / self.calculix["spec"]).resolve()
 
         # first-ply failure, ours only: the team's deck states no strengths
         f12 = deck_f12_star(self.our_deck)
@@ -361,14 +365,15 @@ def verdict(c: Comparison) -> str:
     worst_inner = max(inner, key=lambda a: a.worst_fraction)
     worst_free = max(free, key=lambda a: a.worst_fraction)
     lo, hi = c.bands["inner"]
-    model = (rf"\textbf{{Same model.}} {same} of {len(judged)} physical items agree; every node of ours sits at the team's position "
+    model = (rf"\textbf{{Same model.}} {same} of {len(judged)} items judged agree; every node of ours sits at the team's position "
              rf"(largest offset {number(from_si(c.equivalence.largest_node_offset, 'length', c.units), 2)} {c.length_unit}) and all "
              rf"{len(c.equivalence.element_map)} elements match one to one." if c.equivalence.same_model else
-             rf"\textbf{{Not the same model.}} {len(judged) - same} of {len(judged)} physical items differ (Section~\ref{{sec:models}}).")
+             rf"\textbf{{Not the same model.}} {len(judged) - same} of {len(judged)} items judged differ (Section~\ref{{sec:models}}).")
     stress = (rf" \textbf{{Stress.}} Away from the tab lines (y {lo:g} to {hi:g} {c.length_unit}) every compared value agrees within "
               rf"{pct(worst_inner.worst_fraction)} of its quantity's largest value (" + ", ".join(f"{a.quantity} {pct(a.worst_fraction)}" for a in inner) + "). "
-              rf"Over the whole free length the largest difference is {pct(worst_free.worst_fraction)} ({worst_free.quantity}, team element "
-              rf"{worst_free.worst.reference_element} beside a tab line), where the corner is singular (Section~\ref{{sec:reading}}).")
+              rf"Over the whole free length " + ", ".join(f"{a.within} of {a.count} {a.quantity}" for a in free) + rf" values agree within "
+              rf"{pct(c.manifest.agreement, 0)}; the others sit beside the tab lines, the largest difference {pct(worst_free.worst_fraction)} "
+              rf"({worst_free.quantity}, team element {worst_free.worst.reference_element}; Section~\ref{{sec:reading}}).")
     return model + stress
 
 
@@ -410,23 +415,45 @@ def models_section(c: Comparison, figures: Path) -> str:
         rf"The team built the coupon in Abaqus/CAE ({code(c.team_deck_path.name)}). We built it from a spec ({code(c.spec_path.name)}) with our model "
         r"generator, which writes an Abaqus deck from it. Both decks were read by the same reader and compared item by item below. Nodes and "
         r"elements are numbered differently in the two decks, so nodes are matched by position and elements by their corner nodes. "
-        r"Names read ``same'' when they match; a name that differs is only ``listed'', because names do not change the solution. "
-        r"Strengths are always listed: a linear solve does not read them.",
+        r"Names read ``same'' when they match and are only ``listed'' when they differ, because names do not change the solution. A coupling "
+        r"is judged on its coupled nodes and settings, so it reads ``same'' when those agree, whatever each deck names it. Strengths are always "
+        r"listed, because a linear solve does not read them. The cover counts every row marked same or differs as an item judged. "
+        r"Figure~\ref{fig:meshes} shows the two meshes.",
         table(["Item", "Team", "Ours", ""], rows, r">{\raggedright\arraybackslash}p{3.2cm}YY>{\raggedright\arraybackslash}p{1.1cm}", r"\footnotesize"),
         rf"Our kernel solved both decks. Over all {len(c.equivalence.element_map)} elements and every ply, the stress from the team's deck and from ours "
-        rf"differs by at most {number(difference, 3)} {c.stress_unit}, against a largest stress of {number(largest, 5)} {c.stress_unit}: the node "
+        rf"differs by at most {number(difference, 3)} {c.stress_unit}, against a largest ply stress component of {number(largest, 5)} {c.stress_unit}: the node "
         rf"offsets of at most {number(from_si(c.equivalence.largest_node_offset, 'length', c.units), 2)} {c.length_unit} are the only difference.",
-        figure(figures / "meshes.png", r"The two meshes. Shaded: the gripped tabs, coupled to the reference points (circles). The rows change "
-               r"spacing at the team's partition lines, which our spec reproduces.", r"0.5\linewidth"),
+        figure(figures / "meshes.png", r"The two meshes. Shaded: the gripped tabs, coupled to the reference points (circles). Our spec "
+               r"places its node rows on the team's partition lines, so the two meshes share their nodes.", r"0.5\linewidth", "fig:meshes"),
     ])
 
 
-def team_cell(team: float | None, ours: float, shown) -> str:
-    """The team's deck value of a constant, marked the same or different from ours (relative 1e-9)."""
+SYMBOLS = ("E1 and E2 are the moduli along and across material axis 1 (the fibres of a tape, one yarn direction of a woven fabric), G12 "
+           "the in-plane shear modulus, nu12 the major Poisson's ratio, G13 and G23 the transverse shear moduli; F1t and F1c are the tensile and "
+           "compressive strengths along axis 1, F2t and F2c across it, and F6 the in-plane shear strength. Strengths are given as magnitudes.")
+
+
+def spec_note(spec_path: Path, key: str) -> str | None:
+    """The comment on a key's line in the spec file, as its author wrote it (the TOML reader drops comments)."""
+    for line in spec_path.read_text(encoding="utf-8").splitlines():
+        match = re.match(rf"^\s*{re.escape(key)}\s*=[^#]*#\s*(.+?)\s*$", line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def stated_in_spec(spec_path: Path, key: str) -> str:
+    """Where a value our spec states comes from: the spec, and the note its line carries."""
+    note = spec_note(spec_path, key)
+    return "stated in our spec" + (f", whose note says: {note}" if note else "")
+
+
+def team_cell(team: float | None, ours: float, shown, unit: str = "") -> str:
+    """The team's deck value of a constant with its unit, marked the same or different from ours (relative 1e-9)."""
     if team is None:
         return r"\textcolor{muted}{not in the deck}"
     same = abs(team - ours) <= 1e-9 * max(abs(ours), 1e-300)
-    return f"{number(shown(team), 6)} " + (r"\textcolor{passgreen}{same}" if same else r"\textcolor{accent}{\textbf{differs}}")
+    return f"{number(shown(team), 6)} {unit} " + (r"\textcolor{passgreen}{same}" if same else r"\textcolor{accent}{\textbf{differs}}")
 
 
 def own_material_section(c: Comparison, team_material) -> str:
@@ -445,8 +472,8 @@ def own_material_section(c: Comparison, team_material) -> str:
     rows = []
     for name, value in ours.items():
         shown = (lambda v: v) if name == "nu12" else stress
-        rows.append([escape(name), f"{number(shown(value), 6)} {'' if name == 'nu12' else c.stress_unit}", "as given by the team",
-                     team_cell(deck.get(name), value, shown)])
+        unit = "" if name == "nu12" else c.stress_unit
+        rows.append([escape(name), f"{number(shown(value), 6)} {unit}", "as given by the team", team_cell(deck.get(name), value, shown, unit)])
     source = mat.source.removeprefix("the team's own constants: ")
     return "\n\n".join([
         rf"The team gave this material's constants on the coupon input form, under the name {code(mat.name)}; it is not a record of our "
@@ -456,6 +483,7 @@ def own_material_section(c: Comparison, team_material) -> str:
                "which holds published records only. The table sets each value beside the one the team typed into their deck: the two should be one set."),
         table(["Property", "Value", "Origin", "Team's deck"], rows,
               r">{\raggedright\arraybackslash}p{2cm}>{\raggedright\arraybackslash}p{2.8cm}Y>{\raggedright\arraybackslash}p{3.6cm}"),
+        escape(SYMBOLS),
         rf"The deck states the ply thickness itself ({number(from_si(c.clt.thickness_m / len(c.clt.plies), 'length', c.units), 3)} {c.length_unit}).",
     ])
 
@@ -476,15 +504,15 @@ def material_section(c: Comparison) -> str:
             team = team_values[v.role]
             team_shown = from_si(team, "stress", c.units) if v.unit == "Pa" else team
             same = abs(team - v.value) <= 1e-9 * max(abs(v.value), 1e-300)
-            team_cell = f"{number(team_shown, 6)} " + (r"\textcolor{passgreen}{same}" if same else r"\textcolor{accent}{\textbf{differs}}")
+            team_cell = f"{number(team_shown, 6)} {unit} " + (r"\textcolor{passgreen}{same}" if same else r"\textcolor{accent}{\textbf{differs}}")
         else:
             team_cell = r"\textcolor{muted}{not in the deck}"
         page = f"{v.page}" + (f" (printed {v.printed_page})" if v.printed_page else "")
         rows.append([escape(v.role), f"{number(shown, 6)} {unit}", escape(page), team_cell])
     for name, value, team in (("G13", mat.G13, team_material.elastic.G13), ("G23", mat.G23, team_material.elastic.G23)):
         same = team is not None and abs(team - value) <= 1e-9 * value
-        rows.append([name, f"{number(from_si(value, 'stress', c.units), 6)} {c.stress_unit}", r"stated in our spec",
-                     f"{number(from_si(team, 'stress', c.units), 6)} " + (r"\textcolor{passgreen}{same}" if same else r"\textcolor{accent}{\textbf{differs}}")
+        rows.append([name, f"{number(from_si(value, 'stress', c.units), 6)} {c.stress_unit}", escape(stated_in_spec(c.spec_path, name)),
+                     f"{number(from_si(team, 'stress', c.units), 6)} {c.stress_unit} " + (r"\textcolor{passgreen}{same}" if same else r"\textcolor{accent}{\textbf{differs}}")
                      if team is not None else "--"])
     not_given = "; ".join(lib.not_provided) or "nothing listed"
     return "\n\n".join([
@@ -495,6 +523,7 @@ def material_section(c: Comparison) -> str:
         rf"Rights class {code(lib.rights)}: the values are cited by table and page and the source itself is not reproduced. The table lists "
         r"every value the model uses, the page it comes from, and the value the team typed into their deck.",
         table(["Property", "Our library", "Source page", "Team's deck"], rows, r">{\raggedright\arraybackslash}p{2cm}>{\raggedright\arraybackslash}p{2.8cm}Y>{\raggedright\arraybackslash}p{3.6cm}"),
+        escape(SYMBOLS),
         rf"The strengths are what let our engine predict first-ply failure (Section~\ref{{sec:fpf}}); the team's deck has none. "
         rf"What the record does not give: {escape(not_given)}. The deck states the ply thickness itself "
         rf"({number(from_si(c.clt.thickness_m / len(c.clt.plies), 'length', c.units), 3)} {c.length_unit}).",
@@ -506,8 +535,10 @@ def results_section(c: Comparison, figures: Path) -> str:
     layer = m.map_layer
     parts = [
         rf"The team exported {', '.join(c.quantities)} from Abaqus at every element centroid for layers {', '.join(map(str, c.layers()))} "
-        r"(the outer plies; Abaqus numbers layers from the bottom). S11 and S22 are in each ply's material axes; for these 0-degree plies "
-        r"direction 1 is the global x axis, across the width, and direction 2 the loading axis y. Our kernel gives the same quantities at "
+        r"(the outer plies; Abaqus numbers layers from the bottom). For these 0-degree plies a ply's material axes are the global axes, "
+        r"direction 1 along x, across the width, and direction 2 along the loading axis y, so the comparison holds whether Abaqus reports S11 "
+        r"and S22 in the ply's axes or in the layup's; which of the two it uses shows only in the 45-degree plies, not exported (UNVERIFIED, "
+        r"Section~\ref{sec:open}). Our kernel gives the same quantities at "
         rf"the same centroids. Differences are ours minus the team's. Layers 1 and 10 carry the same values in both, so tables show layer {layer}.",
         r"\subsection{Stress at named points}",
     ]
@@ -533,13 +564,13 @@ def results_section(c: Comparison, figures: Path) -> str:
                          number(our_peak.ours, 6), number(our_peak.difference, 3), pct(abs(our_peak.difference) / c.agreements[(q, "free length")].largest)])
     parts.append(rf"Element numbers are the team's, then ours. The last column is the difference as a share of the quantity's largest team value "
                  rf"over the free length. Points (x, y) in {c.length_unit}: " + "; ".join(f"{escape(n)} ({x:g}, {y:g})" for n, (x, y) in m.locations.items()) + ".")
-    parts.append(table(["Where", "Elements", "", f"Team ({u})", f"Ours ({u})", f"Difference ({u})", "Share"], rows,
-                       r">{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{1.5cm}>{\raggedright\arraybackslash}p{1cm}YYYY", r"\footnotesize"))
+    parts.append(table(["Where", "Elements (team / ours)", "Quantity", f"Team ({u})", f"Ours ({u})", f"Difference ({u})", "Share"], rows,
+                       r">{\raggedright\arraybackslash}p{3cm}>{\raggedright\arraybackslash}p{1.6cm}>{\raggedright\arraybackslash}p{1.3cm}YYYY", r"\footnotesize"))
 
     parts.append(r"\subsection{Over the coupon}")
     rows = []
     for band, (lo, hi) in c.bands.items():
-        label = "Free length" if band == "free length" else f"Away from the tab lines (more than {m.edge_band:g} {c.length_unit})"
+        label = "Free length" if band == "free length" else f"Inner band (the graded band), more than {m.edge_band:g} {c.length_unit} from the tab lines"
         for q in c.quantities:
             a = c.agreements[(q, band)]
             if a.count == 0:
@@ -548,17 +579,19 @@ def results_section(c: Comparison, figures: Path) -> str:
                          pct(a.worst_fraction), escape(f"{a.worst.reference_element} at ({a.worst.x:g}, {a.worst.y:g})")])
     parts.append(rf"Every compared value in a band, both layers. ``Agree'' means a difference of at most {pct(m.agreement, 0)} of the quantity's largest "
                  r"team value in that band.")
-    parts.append(table(["Band", "", "Values", f"Largest ({u})", "Agree", "Largest difference", "At team element (x, y)"], rows,
-                       r">{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{1cm}>{\raggedright\arraybackslash}p{1cm}YY>{\raggedright\arraybackslash}p{1.6cm}Y", r"\footnotesize"))
+    parts.append(table(["Band", "Quantity", "Values", f"Largest ({u})", "Agree", "Largest difference", "At team element (x, y)"], rows,
+                       r">{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{1.3cm}>{\raggedright\arraybackslash}p{1cm}YY>{\raggedright\arraybackslash}p{1.6cm}Y", r"\footnotesize"))
 
     parts.append(r"\subsection{Maps}")
+    parts.append("The figures below draw " + ", ".join(rf"{escape(q)} (Figure~\ref{{fig:map-{q}}})" for q in c.quantities)
+                 + ": the team's values, ours on the same elements, and the difference.")
     for q in c.quantities:
         path = figures / f"map-{q}.png"
         cap, largest = map_figure(c, q, path)
         note = (rf" The difference colours are capped at the largest difference away from the tab lines, {number(cap, 3)} {u}; the cells beside the "
                 rf"tab lines reach {number(largest, 3)} {u}." if largest > cap else "")
         parts.append(figure(path, rf"{escape(QUANTITY_TITLE.get(q, q))} at layer {layer}: the team's Abaqus values, ours on the same elements, and the "
-                                  rf"difference.{note}"))
+                                  rf"difference.{note}", label=f"fig:map-{q}"))
 
     parts.append(r"\subsection{Reaction force and displacement}")
     reaction = c.clt.kernel_reaction_N
@@ -574,7 +607,7 @@ def results_section(c: Comparison, figures: Path) -> str:
     parts.append(rf"CalculiX is an independent solver run on our twin of the coupon with the grips written as direct constraints on the tab nodes "
                  rf"({escape(solver['element_type'])} elements; record {code(c.calculix_record_path.name)}). The laminate theory column is the engine's "
                  rf"classical laminate theory for a uniaxial test over the {number(from_si(c.clt.free_length_m, 'length', c.units), 4)} {c.length_unit} "
-                 r"free length with free lateral edges; the coupled tabs stop the width from contracting at the ends, which is why the models carry a little more "
+                 r"free length with free lateral edges; the gripped tabs stop the width from contracting at the ends, which is why the models carry a little more "
                  r"force. The team's export has no reaction force, so that cell stays open (Section~\ref{sec:open}).")
 
     parts.append(r"\subsection{First-ply failure, ours}\label{sec:fpf}")
@@ -583,11 +616,12 @@ def results_section(c: Comparison, figures: Path) -> str:
     for criterion, field in c.fpf.items():
         team_element = c.inverse.get(field.element, (None, "--"))[1]
         pull = field.factor * applied
-        rows.append([escape(criterion.replace("_", " ")), number(field.factor, 4), f"{number(pull, 4)} {c.length_unit}",
+        name = CRITERION.get(criterion, criterion)
+        rows.append([escape(name[:1].upper() + name[1:]), number(field.factor, 4), f"{number(pull, 4)} {c.length_unit}",
                      pct(pull / free_length), f"{team_element} / {field.element[1]}", f"{field.ply}", escape(field.governing_mode)])
     parts.append(r"With the strengths from our library the engine finds the first ply to fail. The analysis is linear, so the factor scales the "
                  r"applied pull: the first ply fails at that share of it. The team's deck carries no strengths, so Abaqus reports no failure index to set beside this.")
-    parts.append(table(["Criterion", "Factor", "Pull at failure", "Nominal strain", "Elements", "Ply", "Mode"], rows,
+    parts.append(table(["Criterion", "Factor", "Pull at failure", "Nominal strain", "Elements (team / ours)", "Ply", "Mode"], rows,
                        r">{\raggedright\arraybackslash}p{2cm}YYYY>{\raggedright\arraybackslash}p{0.8cm}Y", r"\footnotesize"))
     return "\n\n".join(parts)
 
@@ -627,18 +661,22 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
     return [
         ("README.txt", "this list, as plain text"),
         (f"{c.manifest.name}.pdf", "this document"),
-        (f"{c.package.name}-audit.xlsx", "the audit form: our tools' results locked; the auditor's results, observations and verdict to fill in (ADR-0043)"),
+        (f"{c.package.name}-audit.xlsx", "the audit form: our tools' results locked; the auditor's results, observations and verdict to fill in"),
         (f"1-team-model/{c.team_deck_path.name}", "the team's deck, as we received it"),
         (f"2-our-model/abaqus/{stem}-abaqus.inp", "our deck of the same coupon, for Abaqus. Abaqus/CAE: File, Import, Model, choose the .inp file "
                                                   "(this click path is not checked by us); or run it as a job from the command line"),
         (f"2-our-model/calculix/{c.calculix_deck_path.name}", "our twin for CalculiX, with the grips as direct constraints. PrePoMax: File, Import, then run it"),
+        (f"2-our-model/calculix/{c.twin_abaqus_path.name}", "the same twin in Abaqus format: what our engine solved for the comparison with "
+                                                           "CalculiX; not the deck to build from"),
         (f"2-our-model/spec/{c.spec_path.name}", "the spec our generator builds the deck from: every dimension, the seeds, the layup, the material record"),
+        (f"2-our-model/spec/{c.twin_spec_path.name}", "the spec of the CalculiX twin"),
         (f"3-material/{material_name(c)}.csv", "the material from our library: every value, its unit, basis and source page, and the source"
          if c.library is not None else "the team's own constants as given on the coupon input form: every value with its unit, and the source"),
         *[(f"4-results/ours-{q}.csv", f"our {q} in the layout of the team's {q} field report: same columns, the team's element numbers, "
                                       "the same layers and faces. Open the two side by side") for q in c.quantities],
         ("4-results/team-vs-ours.csv", "every compared value: team element, our element, x, y, layer, quantity, team, ours, difference, share of the largest"),
-        ("4-results/ours-all-plies.csv", "our S11, S22, S12 and Mises for every ply of every element, with the team's element numbers"),
+        ("4-results/ours-all-plies.csv", "our S11, S22 and S12 in each ply's material axes, and Mises, for every ply of every element, with the "
+                                         "team's element numbers"),
     ]
 
 
@@ -738,7 +776,9 @@ def fill_share(c: Comparison, share: Path) -> None:
     shutil.copy2(c.team_deck_path, share / "1-team-model" / c.team_deck_path.name)
     (share / "2-our-model/abaqus" / f"{stem}-abaqus.inp").write_text(c.our_text, encoding="utf-8", newline="\n")
     shutil.copy2(c.calculix_deck_path, share / "2-our-model/calculix" / c.calculix_deck_path.name)
+    shutil.copy2(c.twin_abaqus_path, share / "2-our-model/calculix" / c.twin_abaqus_path.name)
     shutil.copy2(c.spec_path, share / "2-our-model/spec" / c.spec_path.name)
+    shutil.copy2(c.twin_spec_path, share / "2-our-model/spec" / c.twin_spec_path.name)
 
     write_material_csv(share / "3-material" / f"{material_name(c)}.csv", c.library, c.material, c.units)
 
@@ -755,7 +795,7 @@ def fill_share(c: Comparison, share: Path) -> None:
     with (share / "4-results" / "team-vs-ours.csv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(["team element", "our element", f"x ({c.length_unit})", f"y ({c.length_unit})", "layer", "quantity", f"team ({c.stress_unit})",
-                         f"ours ({c.stress_unit})", f"ours - team ({c.stress_unit})", "share of the largest team value in the free length"])
+                         f"ours ({c.stress_unit})", f"ours - team ({c.stress_unit})", "share of the largest team value in the free length (fraction)"])
         for p in c.paired:
             scale = c.agreements[(p.quantity, "free length")].largest
             writer.writerow([p.reference_element, p.our_element, f"{p.x:.9g}", f"{p.y:.9g}", p.layer, p.quantity, f"{p.reference:.9g}", f"{p.ours:.9g}",
@@ -764,6 +804,7 @@ def fill_share(c: Comparison, share: Path) -> None:
 
     lines = [README_MARK, f"{c.headline}: the team's Abaqus model and ours", "",
              *[f"{label + ':':14} {value}" for label, value in c.card.items()], "",
+             f"{'Attempt:':14} {getattr(c, 'attempt', None) or 'none named'} (our attempt this package delivers)",
              f"Built {date.today().isoformat()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {git_commit()}).",
              "Start with the PDF. Numbers in the files are in " + f"{c.length_unit}, {c.stress_unit} and {c.force_unit}.", ""]
     width = max(len(path) for path, _ in share_contents(c))

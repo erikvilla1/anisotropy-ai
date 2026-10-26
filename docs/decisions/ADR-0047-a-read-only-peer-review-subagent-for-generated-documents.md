@@ -49,3 +49,15 @@ Option 1.
 - In two reviews running, the founder judges fewer than half of the findings real.
 - The team reports a problem in a document that the reviewer read and did not flag.
 - The founder stops asking for a review before sending a package.
+
+## Amendment 1, 2026-10-25 (the first trial: four rounds on the three X840 packages; the reviewer reads the whole PDF in one call)
+
+**Context.** The founder asked for the trial on 2026-10-25 ("launch the agents to review the document"), then for every finding to be fixed ("fix it all ... no need for walkthroughs ... no mistakes"). Claude Code ran the reviewer on the three X840 coupon packages, fixed the findings in the generators and the local readings, rebuilt the packages and ran it again, four rounds in all, twelve reviews. The coupons' numbers and text stay out of this record (ADR-0042); the findings are counted here by severity.
+
+**Evidence.**
+- Findings per round, the three packages together, Must fix / Should fix / Minor: round 1, 14 / 44 / 38; round 2, 6 / 39 / 41; round 3, 4 / 23 / 39; round 4, 0 / 20 / 33. Readiness was Not ready for all three packages in rounds 1 to 3 and Send after fixes for all three in round 4.
+- Real or not: Claude Code checked the nine most serious round-1 findings against the code and the figures, and all nine were real; every Must fix of the later rounds was examined while fixing it, and all were real. Two of them were Claude Code's own: an explanation in a reading it had carried over, and a cover that led with a value without the caveat the chapter gave it. One round-1 finding was partly not real (a sheet named as missing exists). The founder's own count of real findings: no evidence yet.
+- Left as they are, for the founder to decide: tables are not numbered or captioned; the physics chapter and Appendix A print code, as ADR-0041 decided; files and code printed as they are keep their decision-record numbers, now explained in one sentence; the library's citation links are search links; the source of two out-of-plane constants, which the library record does not hold, is marked UNVERIFIED; the comparison settings a rubric row names stay with us. A package built from uncommitted code says so on its cover; the packages are to be rebuilt from main after the merge.
+- The figures: in all twelve reviews the reviewer saw the figures in the page images that a Read of the whole PDF returns; it also read the PNGs at full size. A Read with a page range failed every time ("pdftoppm is not installed"). Each review took 6.5 to 11.5 minutes and 290 to 370 thousand tokens.
+
+**Decision.** The reviewer reads the whole PDF in one call and uses page ranges only if that fails (`docs/agents/subagents/document-reviewer.md`, procedure step 2). The status stays Proposed until the founder has judged a review's findings.

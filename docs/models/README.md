@@ -33,14 +33,16 @@ Options:
 | --- | --- |
 | Title page: the coupon card and the verdict | the spec's `[coupon]` card (ADR-0038); our engine's reaction and first-ply failure; the CalculiX record; the team comparison when there is one |
 | 1 The problem | the card; the material record of our library with the page of every value (the team's values beside them when they built it); the grips and loading of the spec; the model figure (`fea/examples/plot_model.py`) |
-| 2 The physics: how our engine solves it | `engine/docs/theory.md` sections 1 to 3 (ply stiffness, rotation, laminate stiffness) and 5 (failure), and `fea/docs/theory.md` (the finite element kernel), each equation followed by the code that computes it with its real line numbers, through the manual's converters; the laminate-theory hand check for this coupon |
-| 3 Building the part in our engine | the spec as committed; the lines in which the CalculiX twin differs; the generated deck's header and what our deck reader reads back; the commands that rebuild it |
+| 2 The physics: how our engine solves it | `engine/docs/theory.md` sections 1 to 4 (ply stiffness, rotation, laminate stiffness, response to loads) and 5 (failure), each labelled so the text refers to it, and `fea/docs/theory.md` (the finite element kernel), each equation followed by the code that computes it with its real line numbers, through the manual's converters; the laminate-theory hand check for this coupon |
+| 3 Building the part in our engine | the spec as committed; the lines in which the CalculiX twin differs; the generated deck's header and what our deck reader reads back |
 | 4 Building the part in Abaqus/CAE | what the team built, item by item against our deck (`anisotropy_fea.equivalence`), when they did; the step-by-step guide (`docs/models/rebuild.py`, Abaqus/CAE steps only) |
-| 5 Results from our engine | our kernel on the generated deck: the solution figure, the reaction, the centre element's strains and every ply's stress, first-ply failure by each criterion of the spec |
+| 5 Results from our engine | our kernel on the generated deck: the solution figure, the reaction, the strains and every ply's stress at the gauge element (`report.gauge_element`: the centre probe, or the far-field probe of an open-hole coupon; ADR-0043 amendment 5), first-ply failure by each criterion of the spec, the earliest first |
 | 6 Verification against other solvers | the CalculiX record against our kernel (summary, the solver and its deck, every compared number); the team's Abaqus side by side when they built it (`anisotropy_fea.side_by_side`) |
 | 7 What this shows and what it does not | the readings written by a person (`ours/verification/<coupon>-calculix.md`, and `team-comparison.md` beside the team manifest); what is not shown yet |
 | 8 The audit | the rubric `docs/audit/rubric.toml`, scored by `anisotropy_fea.audit.score` from the same computations; the rows the auditor judges, with what our tools can show them (`docs/models/audit.py`) |
-| Appendices | how the CalculiX numbers were mapped and judged, with the code; the record; the files in the package |
+| Appendices | how the CalculiX numbers were mapped and judged, with the code; the record; the files in the package; the commands that make them again; the full comparison table only when Chapter 6 shortened a group |
+
+The prose the team reads names files by their place in the package and carries no decision-record numbers; `coupon.for_the_team` removes them outside the listings, which print files and code as they are.
 
 ## The team comparison (ADR-0035)
 
