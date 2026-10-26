@@ -132,10 +132,10 @@ def test_the_older_endpoints_need_the_actor_too(recording, empty_runs):
 
 
 def three_runs(client) -> list[str]:
-    """A solved case by test, a solved forward request by calculator, a rejected case by hermes; ids in that order."""
+    """A solved case by test, a solved forward request by calculator, a rejected case by founder-agent; ids in that order."""
     first = client.post(ENDPOINT, headers=HEADERS, json=EXAMPLE).json()["run_id"]
     second = client.post("/v1/laminates/response", headers={"X-Anisotropy-Actor": "calculator"}, json=FORWARD).json()["run_id"]
-    third = client.post(ENDPOINT, headers={"X-Anisotropy-Actor": "hermes"}, json={"case": {}}).headers[RUN_ID_HEADER]
+    third = client.post(ENDPOINT, headers={"X-Anisotropy-Actor": "founder-agent"}, json={"case": {}}).headers[RUN_ID_HEADER]
     return [first, second, third]
 
 

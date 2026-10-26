@@ -38,3 +38,11 @@ GET /v1/runs?limit=0                        HTTP 422
 ## Limits
 
 No paging beyond `limit`; a caller wanting more than 500 narrows the time window. No filter on the inputs digest or on the material dataset yet. The CI run for this branch is UNVERIFIED until the pull request's checks finish.
+
+## Re-run, 2026-10-26, after merging main
+
+Main had renamed the actor `hermes` to `founder-agent` (ADR-0028, migration `0003_rename_hermes_actor.py`), so the refusal above lists the actors as they were on 2026-10-15. The listing tests' rejected run now comes from `founder-agent`. From `api/`, with the dev database running in Docker: `uv run pytest -q -ra tests ../engine/tests`
+
+```text
+562 passed in 71.35s (0:01:11)
+```
