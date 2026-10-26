@@ -16,7 +16,7 @@ These rules apply to AI coding assistants and to people. `next dev` rewrites onl
 
 - Deliver work in small, reviewable chunks. After each chunk, explain what was implemented, what its functions and libraries do, how data flows between components, how it was checked, and what remains. Stop for the founder's walkthrough before starting the next chunk.
 - Work on a branch and open a pull request. Do not commit to `main` directly.
-- Before opening a pull request, run the tests that cover the change: `cd engine && uv run pytest` for the engine; `npm test` and `npm run typecheck` for the website.
+- Before opening a pull request, run the tests that cover the change: `cd engine && uv run pytest` for the engine; `cd fea && uv run pytest -q -ra tests ../engine/tests` for the finite element code; `npm test` and `npm run typecheck` for the website.
 
 ## Documentation
 
@@ -33,6 +33,7 @@ The full method is in `docs/documentation-guide.md`; the index is `docs/README.m
 ## Agent skills
 
 - Skills for AI agents live in `docs/agents/skills/` (ADR-0023). Read `project-rules` first. Change a skill only through a pull request.
+- Subagents live in `docs/agents/subagents/` (ADR-0047). Change one only through a pull request.
 
 ## Engine rules
 

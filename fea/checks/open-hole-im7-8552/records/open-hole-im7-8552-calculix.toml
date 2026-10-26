@@ -3,7 +3,7 @@ units = "mm-MPa"
 spec = "../open-hole-im7-8552.toml"
 deck_kernel = "../decks/open-hole-im7-8552-abaqus.inp"
 deck_reference = "../decks/open-hole-im7-8552-ccx.inp"
-deck_kernel_sha256 = "0171f31d16d0f228a26bda492d36b640edff5312c1b7b5f7de621a0669b69b94"
+deck_kernel_sha256 = "8c222726eee8282f0a4c993b076bf31631ba1ff7bc2d81c976f4ffffeef6dbbd"
 deck_reference_sha256 = "55119c3e2dcff6098f978cafae10c1aebe26cba41248589a9f9ad56c77483f57"
 
 [solver]

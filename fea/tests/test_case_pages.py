@@ -8,10 +8,11 @@ import tomllib
 import pytest
 
 from anisotropy_fea import paths  # where the files live (ADR-0036)
-from anisotropy_fea.case_pages import CasePageError, local_index, model_folders, pages, read_case
+from anisotropy_fea import case_pages
+from anisotropy_fea.case_pages import NO_RECORD_YET, CasePageError, local_index, model_folders, pages, read_case
 
 CHECKS_INDEX = paths.CHECKS / "README.md"
-SUMMARIES = [paths.team_summary(d) for d in paths.model_dirs() if paths.team_summary(d).is_file()]
+SUMMARIES = [paths.team_summary(d / paths.OURS) for d in paths.model_dirs() if paths.team_summary(d / paths.OURS).is_file()]
 
 
 @pytest.fixture(scope="module")
@@ -54,6 +55,21 @@ def test_an_incomplete_case_page_is_refused_by_name(tmp_path, monkeypatch, page,
         read_case(tmp_path)
 
 
+def test_a_coupon_just_started_from_its_form_has_a_page_and_index_rows_without_a_record(tmp_path, monkeypatch):
+    """Right after a filled-in input form is read, the coupon has specs and a case page but no CalculiX record yet (ADR-0046)."""
+    from anisotropy_fea.intake import convert, fill_form, write_blank_form
+    from test_intake import PUBLIC_FILL
+
+    root = tmp_path / "fea"
+    form = fill_form(write_blank_form(tmp_path / "blank.xlsx"), PUBLIC_FILL, tmp_path / "filled.xlsx")
+    convert(form, root=root, day="2026-10-25")
+    monkeypatch.setattr(paths, "MODELS", root)
+    monkeypatch.setattr(paths, "LOCAL", root)
+    page = pages()[root / "IM7-UNT-L1" / "README.md"]
+    assert NO_RECORD_YET in page and page.count("<!-- generated: result -->") == 1
+    assert "| no record yet |" in case_pages.tests_block() and "| no record yet |" in local_index()
+
+
 @pytest.mark.skipif(not SUMMARIES, reason="no team summary on this machine: the team's coupons are local (ADR-0042)")
 def test_the_team_summary_holds_figures_only_and_is_not_a_record():
     for summary in SUMMARIES:
@@ -61,7 +77,7 @@ def test_the_team_summary_holds_figures_only_and_is_not_a_record():
         assert set(data) == {"coupon", "units", "built", "commit", "team", "equivalence", "agreement"}
         assert set(data["team"]) == {"deck", "deck_sha256", "solver", "run_date", "reports"}  # names and a digest, no values
         assert all(set(a) == {"band", "y", "quantity", "values", "agree", "within", "largest_difference"} for a in data["agreement"])
-        assert data["coupon"] == summary.parent.parent.name and data["equivalence"]["same"] == data["equivalence"]["items"]
+        assert data["coupon"] == paths.test_name(summary.parent.parent) and data["equivalence"]["same"] == data["equivalence"]["items"]
         assert summary not in paths.all_records()
 
 

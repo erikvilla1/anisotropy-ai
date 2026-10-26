@@ -1,9 +1,10 @@
 """Attempts: the runs of every try at a test keep their own folder on the founder's machine (ADR-0039).
 
-    .local/fea/<coupon>/our-runs/attempt-NN_<date>/run/
+    .local/fea/<coupon>/ours/runs/attempt-NN_<date>/run/
       kernel/              build_model.py
       calculix/            run_calculix.py
       team-in-calculix/    convert_to_calculix.py on the team's deck
+      abaqus/              run_abaqus.py: the deck in Abaqus/Standard, its exported fields and the record (ADR-0045)
 
 The record of each try is its row in the case page's attempt log (`.local/fea/<coupon>/README.md`); NN is that row's number,
 so a folder and its row always match. Only tries that ran something have a folder. A folder is never reused or overwritten.
@@ -20,7 +21,7 @@ from pathlib import Path
 from . import paths
 
 ATTEMPT = re.compile(r"^attempt-(?P<number>\d{2})_(?P<date>\d{4}-\d{2}-\d{2})$")
-RUN_KINDS = ("kernel", "calculix", "team-in-calculix")
+RUN_KINDS = ("kernel", "calculix", "team-in-calculix", "abaqus")
 
 
 class AttemptError(ValueError):
@@ -35,8 +36,8 @@ def attempt_number(folder: Path) -> int:
 
 
 def attempts(test: str) -> list[Path]:
-    """The coupon's attempt folders in our-runs/, oldest first; anything else there is refused by name."""
-    root = paths.local_test(test) / paths.RUNS
+    """The coupon's attempt folders in ours/runs/, oldest first; anything else there is refused by name."""
+    root = paths.runs(test)
     if not root.is_dir():
         return []
     folders = [d for d in root.iterdir() if d.is_dir()]
@@ -83,10 +84,10 @@ def start_attempt(test: str, day: str | None = None) -> tuple[Path, list[Path]]:
     """Create the next attempt folder with run/, numbered after both the last folder and the attempt log; prune earlier
     results first. Returns the folder and the deleted .frd files."""
     if paths.MODELS / test not in paths.model_dirs():
-        raise AttemptError(f"no coupon model .local/fea/{test}/{test}.toml; the coupons are {[d.name for d in paths.model_dirs()]}")
+        raise AttemptError(f"no coupon model .local/fea/{test}/ours/{test}.toml; the coupons are {[d.name for d in paths.model_dirs()]}")
     deleted = prune_results(test)
     previous = attempts(test)
     number = max(attempt_number(previous[-1]) if previous else 0, logged_attempts(test)) + 1
-    folder = paths.local_test(test) / paths.RUNS / f"attempt-{number:02d}_{day or date.today().isoformat()}"
+    folder = paths.runs(test) / f"attempt-{number:02d}_{day or date.today().isoformat()}"
     (folder / "run").mkdir(parents=True)  # never exists: the number is new
     return folder, deleted

@@ -24,6 +24,11 @@ def test_every_spec_loads_and_converts_to_si():
         assert spec.si and spec.source_sha256 and spec.source_path == str(path)
         assert spec.geometry.length < 1.0  # metres now
         material = spec_material(spec)
+        if spec.material.library is None and material.rights == "user-supplied":
+            # the team's own constants from their coupon input form (ADR-0046): private, so only ever in a coupon's local folder
+            assert path.resolve().is_relative_to(paths.LOCAL.resolve()), f"{path.name}: the team's own constants stay in .local/ (R-16)"
+            assert material.source.startswith("the team's own constants: ")
+            continue
         if spec.material.library is None:
             # the Kirsch plate: nominal isotropic constants written in the spec, no dataset to cite; its title and comments say so
             assert "Kirsch" in spec.title and material.rights == "spec" and material.E1 == material.E2 and material.strengths is None
@@ -36,6 +41,28 @@ def test_every_spec_loads_and_converts_to_si():
         assert plies and all(p.thickness_m > 0 for p in plies)
         if spec.material.library == "im7-8552":
             assert len(plies) == 8 and plies[0].thickness_m == pytest.approx(0.18288e-3)
+
+
+OWN = 'E1 = 162000.0\nE2 = 9000.0\nG12 = 4700.0\nnu12 = 0.32\nsource = "a datasheet the team holds"\n'
+
+
+def test_the_teams_own_constants_carry_their_source_and_the_user_supplied_class():
+    """A spec with explicit constants and a source is the team's own material (ADR-0046): rights class user-supplied, never a library record."""
+    own = spec_with('library = "im7-8552"\ndataset = "ncamp-im7-8552-2019-rtd-measured-v1"\n', OWN)
+    material = spec_material(to_si(own.model_copy(update={"layup": own.layup.model_copy(update={"ply_thickness": 0.18})})))
+    assert material.rights == "user-supplied" and material.source == "the team's own constants: a datasheet the team holds"
+    assert material.E1 == pytest.approx(162e9) and material.citation_lines == () and material.name == "EXPLICIT"
+    with pytest.raises(SpecError, match="material.source states where explicit constants come from"):
+        spec_with('dataset = "ncamp-im7-8552-2019-rtd-measured-v1"\n', 'dataset = "ncamp-im7-8552-2019-rtd-measured-v1"\nsource = "a datasheet"\n')
+    with pytest.raises(SpecError, match="material.source"):
+        spec_with('library = "im7-8552"\ndataset = "ncamp-im7-8552-2019-rtd-measured-v1"\n', OWN.replace('"a datasheet the team holds"', '""'))
+
+
+def test_a_file_cannot_set_the_loader_fields_or_an_unknown_unit_system():
+    with pytest.raises(SpecError, match="si is set by the loader, not written in a file"):
+        spec_with('units = "mm-MPa"', 'units = "mm-MPa"\nsi = true')
+    with pytest.raises(SpecError, match="units must be stated as one of"):
+        spec_with('units = "mm-MPa"', 'units = "in-psi"')
 
 
 def test_units_are_converted_once_and_only_dimensioned_numbers_change():

@@ -17,7 +17,7 @@ from anisotropy_fea.model import section_plies, validate_deck
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.mesher import gmsh_available
 from anisotropy_fea.spec import load_spec, parse_spec, to_si
-from anisotropy_fea.write_abaqus import number, write_abaqus
+from anisotropy_fea.write_abaqus import MAX_LINE, _comment, line_bytes, number, write_abaqus
 
 NODAL = paths.spec_path("unnotched-im7-8552-nodal").read_text(encoding="utf-8")
 
@@ -118,6 +118,32 @@ def test_every_abaqus_deck_is_what_its_spec_writes_today(spec_path):
     assert deck.read_text(encoding="utf-8").replace("\r\n", "\n") == text, f"{deck.name}: regenerate with tools/regenerate_decks.py"
 
 
+@pytest.mark.parametrize("spec_path", SPECS, ids=[p.stem for p in SPECS])
+def test_every_abaqus_deck_keeps_the_input_rules_abaqus_standard_enforces(spec_path):
+    """At most 256 bytes per line and one variable per *El Print table, so Abaqus/Standard runs the deck as written (ADR-0045
+    amendment 2): it truncated longer lines with a warning and refused the combined tables `SF, SE` and `S, E`."""
+    needs_mesher(spec_path)
+    lines = write_abaqus(build_model(load_spec(spec_path))).splitlines()
+    assert max(line_bytes(line) for line in lines) <= MAX_LINE
+    tables = [lines[i + 1] for i, line in enumerate(lines) if line.lower().startswith("*el print")]
+    assert tables and all("," not in variables for variables in tables)
+
+
+def test_a_long_heading_comment_is_wrapped_at_spaces_by_bytes_and_nothing_else_changes():
+    short = "material IM7-8552: a short line"
+    assert _comment(short) == [f"** {short}"]
+    long = "  " + " ".join(f"word{i:03d}" for i in range(60))  # 2 + 60 * 8 - 1 = 481 characters, indented like a citation line
+    wrapped = _comment(long)
+    assert len(wrapped) == 2 and all(line_bytes(line) <= MAX_LINE for line in wrapped)
+    assert wrapped[0].startswith("**   word000") and wrapped[1].startswith("**     word")
+    assert " ".join(line[3:].strip() for line in wrapped) == long.strip()
+    dotted = " · ".join(["abcdefgh"] * 23)  # 250 characters, 272 bytes: "·" is two bytes in UTF-8, as in the NCAMP citation
+    assert len(f"** {dotted}") <= MAX_LINE < line_bytes(f"** {dotted}")
+    assert len(_comment(dotted)) == 2 and all(line_bytes(line) <= MAX_LINE for line in _comment(dotted))
+    with pytest.raises(ValueError, match="cannot fit"):
+        _comment("see https://example.org/" + "a" * 300)
+
+
 CCX_SPECS = [p for p in SPECS if paths.deck_path(p, "ccx").is_file()]
 
 
@@ -136,16 +162,20 @@ def test_every_calculix_deck_is_what_its_spec_writes_today(spec_path):
 
 
 def test_every_test_folder_has_the_same_shape():
-    """A spec at the root, its decks in decks/, records in records/ with a reading beside each (ADR-0036). A coupon model's
-    folder is local and also holds the team's files, our runs, the comparison and the documents (ADR-0040, ADR-0042)."""
+    """A spec at the root, its decks in decks/, records with a reading beside each (ADR-0036): in records/ for a check, in
+    verification/ for a coupon's ours/. A coupon's folder is local and holds three parts beside its case page: team/, ours/ and
+    documents/ (ADR-0040 amendment 3, ADR-0042); ours/ also holds our runs and the document's LaTeX."""
     assert len([d for d in paths.test_dirs() if d.parent == paths.CHECKS]) >= 4
-    assert {d for d in paths.test_dirs() if d.parent == paths.MODELS} == set(paths.model_dirs())  # every local test folder is a coupon model
-    local = {paths.TEAM_FILES, paths.RUNS, paths.COMPARISON, paths.DOCUMENTS}
+    coupons = [d for d in paths.test_dirs() if d.parent != paths.CHECKS]
+    assert {d.parent for d in coupons} == set(paths.model_dirs()) and all(d.name == paths.OURS for d in coupons)  # every local test folder is a coupon's ours/
+    for folder in paths.model_dirs():
+        assert {p.name for p in folder.iterdir()} <= {"README.md", paths.TEAM_FILES, paths.OURS, paths.DOCUMENTS}, folder
     for folder in paths.test_dirs():
-        allowed = {"decks", "records", "README.md"} | {p.name for p in folder.glob("*.toml")} | (local if folder.parent == paths.MODELS else set())
+        parts = {paths.VERIFICATION, paths.RUNS, paths.LATEX} if folder.name == paths.OURS else {"records", "README.md"}
+        allowed = {"decks"} | parts | {p.name for p in folder.glob("*.toml")}
         assert set(p.name for p in folder.iterdir()) <= allowed, folder
-        for record in (folder / "records").glob("*.toml"):
-            if not record.stem.endswith(paths.TEAM_SUMMARY):  # the team summary's reading is the local team-comparison.md (ADR-0039)
+        for record in paths.records_dir(folder).glob("*.toml"):
+            if record in paths.all_records():  # the team summary's reading is the team comparison's (ADR-0039); the manifest is not a record
                 assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
     assert len([r for r in paths.all_records() if paths.CHECKS in r.parents]) == 2 and paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
 

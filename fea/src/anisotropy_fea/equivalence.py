@@ -136,7 +136,8 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
     largest = max(offset_instance, offset_assembly)
     add("Nodes", f"{len(ref_part.nodes.labels)} on the part, {len(reference.assembly_nodes.labels)} reference points",
         f"{len(our_part.nodes.labels)} on the part, {len(ours.assembly_nodes.labels)} reference points", True)
-    add("Node positions", "as written", f"every node at a reference node's position; largest offset {from_si(largest, 'length', units):.3g} {length_unit}", largest <= tolerance)
+    add("Node positions", "the positions in this deck", f"every node within {from_si(largest, 'length', units):.3g} {length_unit} of a node of the other deck",
+        largest <= tolerance)
 
     # elements by their matched corner nodes
     our_by_nodes = {frozenset(row.tolist()): int(label) for label, row in zip(our_part.elements.labels, our_part.elements.connectivity)}
@@ -226,7 +227,7 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
     disagree = [key for key in set(ref_held) | set(our_held)
                 if set(ref_held.get(key, {})) != set(our_held.get(key, {}))
                 or any(abs(ref_held[key][d] - our_held[key][d]) > RELATIVE * scale for d in ref_held.get(key, {}) if d in our_held.get(key, {}))]
-    value_text = lambda d, v: f"{from_si(v, 'length', units):g}" if d <= 3 else f"{v:g}"  # noqa: E731  dofs 1 to 3 are lengths, rotations are zero
+    value_text = lambda d, v: f"{from_si(v, 'length', units):g} {length_unit}" if d <= 3 else f"{v:g}"  # noqa: E731  dofs 1 to 3 are lengths, rotations are zero
     describe = lambda held: "; ".join(sorted({f"{len([k for k in held if held[k] == dofs])} node(s): " + ", ".join(  # noqa: E731
         f"{d}={value_text(d, v)}" for d, v in sorted(dofs.items())) for dofs in held.values()}))
     add("Boundary conditions, node by node", describe(ref_held), describe(our_held) + ("" if not disagree else f"; {len(disagree)} nodes differ"), not disagree)

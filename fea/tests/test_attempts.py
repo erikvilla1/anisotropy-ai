@@ -28,8 +28,8 @@ def local(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "LOCAL", tmp_path)
     monkeypatch.setattr(paths, "MODELS", tmp_path)
     folder = tmp_path / DESIGNATION
-    folder.mkdir()
-    (folder / f"{DESIGNATION}.toml").write_text(PUBLIC_COUPON, encoding="utf-8")
+    (folder / paths.OURS).mkdir(parents=True)
+    (folder / paths.OURS / f"{DESIGNATION}.toml").write_text(PUBLIC_COUPON, encoding="utf-8")
     (folder / "README.md").write_text(CASE_PAGE, encoding="utf-8")
     return tmp_path
 
@@ -65,6 +65,6 @@ def test_results_are_kept_only_in_the_latest_run_of_each_kind(local):
 def test_what_is_not_an_attempt_is_refused_by_name(local):
     with pytest.raises(AttemptError, match="no coupon model .local/fea/no-such-coupon"):
         start_attempt("no-such-coupon")
-    (local / DESIGNATION / paths.RUNS / "scratch").mkdir(parents=True)
+    (paths.runs(DESIGNATION) / "scratch").mkdir(parents=True)
     with pytest.raises(AttemptError, match="scratch is not an attempt folder"):
         attempts(DESIGNATION)

@@ -1,8 +1,8 @@
-"""Turn a CalculiX run of one of our specs into a committed comparison record: numbers plus provenance (ADR-0030, ADR-0007).
+"""Turn a CalculiX run of one of our specs into a comparison record: numbers plus provenance (ADR-0030, ADR-0007), committed for a public check, kept with the coupon for a team's coupon (ADR-0042).
 
-    uv run python tools/record_from_dat.py ../.local/fea/<coupon>/<coupon>-nodal.toml ../.local/fea/<coupon>/our-runs/attempt-NN_<date>/run/calculix/<coupon>-nodal-ccx.dat \
+    uv run python tools/record_from_dat.py ../.local/fea/<coupon>/ours/<coupon>-nodal.toml ../.local/fea/<coupon>/ours/runs/attempt-NN_<date>/run/calculix/<coupon>-nodal-ccx.dat \
         --version 2.22 --run-by "Erik Villa" --machine "founder Windows 11, PrePoMax v2.6.0 bundle" \
-        --tolerance 0.03 --floor 0.02 --element-probes centre --out ../.local/fea/<coupon>/records/<coupon>-calculix.toml
+        --tolerance 0.03 --floor 0.02 --element-probes centre --out ../.local/fea/<coupon>/ours/verification/<coupon>-calculix.toml
 
 The reference deck is the one CalculiX ran (order 2, S8R); the kernel deck is the order-1 twin on the same corner nodes. Both
 default to the spec's committed decks, `decks/<spec>-ccx.inp` and `decks/<spec>-abaqus.inp` (ADR-0036).
@@ -62,6 +62,7 @@ def main() -> None:
     expected = reference_quantities(model, dat, conventions, element_probes=args.element_probes, node_probes=args.node_probes)
     expected = {"tolerance": args.tolerance, "floor": args.floor, **expected}
     out_dir = args.out.parent
+    out_dir.mkdir(parents=True, exist_ok=True)  # a coupon started from its input form has no verification/ yet
     record = {
         "title": f"{spec.title}: CalculiX {args.version} S8R against the kernel",
         "units": spec.units,

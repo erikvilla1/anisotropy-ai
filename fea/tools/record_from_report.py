@@ -1,8 +1,8 @@
 """Turn Abaqus/CAE field reports (CSV) of a deck into a comparison record: numbers plus provenance (ADR-0030, amendment 2).
 
-    uv run python tools/record_from_report.py ../.local/fea/<coupon>/from-team/<date>/<team deck>.inp --units mm-MPa \
-        --reports ../.local/fea/<coupon>/from-team/<date>/results/<report S11>.csv ../.local/fea/<coupon>/from-team/<date>/results/<report S22>.csv \
-                  ../.local/fea/<coupon>/from-team/<date>/results/<report Mises>.csv \
+    uv run python tools/record_from_report.py ../.local/fea/<coupon>/team/<date>/<team deck>.inp --units mm-MPa \
+        --reports ../.local/fea/<coupon>/team/<date>/results/<report S11>.csv ../.local/fea/<coupon>/team/<date>/results/<report S22>.csv \
+                  ../.local/fea/<coupon>/team/<date>/results/<report Mises>.csv \
         --elements 545 546 --version 2026 --run-by "the team" --machine "UCSD lab, Abaqus/CAE 2026" \
         --tolerance 0.01 --floor 0.02 --title "..." --out ../.local/fea/<coupon>/comparison/<record>.toml
 

@@ -26,6 +26,26 @@ def write(path, text: str) -> str:
     return "new" if old is None else ("unchanged" if old == text else "CHANGED")
 
 
+def regenerate(spec_path, ccx: bool, writer=write) -> list[str]:
+    """One spec's decks, written through `writer(path, text)`: a line per deck saying whether it is new, unchanged or changed, or
+    why the CalculiX deck was skipped (a spec with couplings has none; its -nodal twin carries it)."""
+    spec = load_spec(spec_path)
+    abaqus = paths.deck_path(spec_path, "abaqus")
+    lines = [f"{writer(abaqus, write_abaqus(build_model(spec))):9}  {abaqus.relative_to(paths.ROOT).as_posix()}"]
+    target = paths.deck_path(spec_path, "ccx")
+    if target.exists() or ccx:
+        from anisotropy_fea.write_calculix import CalculixWriterError, write_calculix
+
+        order2 = spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})
+        try:
+            text = write_calculix(build_model(order2))
+        except CalculixWriterError as exc:
+            lines.append(f"{'skipped':9}  {target.relative_to(paths.ROOT).as_posix()}: {exc}")
+        else:
+            lines.append(f"{writer(target, text):9}  {target.relative_to(paths.ROOT).as_posix()}")
+    return lines
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("names", nargs="*", help="spec names (file stems); default every committed spec")
@@ -33,15 +53,8 @@ def main() -> None:
     args = parser.parse_args()
     specs = [paths.spec_path(name) for name in args.names] if args.names else paths.all_specs()
     for spec_path in specs:
-        spec = load_spec(spec_path)
-        abaqus = paths.deck_path(spec_path, "abaqus")
-        print(f"{write(abaqus, write_abaqus(build_model(spec))):9}  {abaqus.relative_to(paths.ROOT).as_posix()}")
-        ccx = paths.deck_path(spec_path, "ccx")
-        if ccx.exists() or args.ccx:
-            from anisotropy_fea.write_calculix import write_calculix
-
-            order2 = spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})
-            print(f"{write(ccx, write_calculix(build_model(order2))):9}  {ccx.relative_to(paths.ROOT).as_posix()}")
+        for line in regenerate(spec_path, args.ccx):
+            print(line)
 
 
 if __name__ == "__main__":

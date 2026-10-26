@@ -1,0 +1,282 @@
+# The coupon audit rubric (ADR-0043): what every audit of a coupon package checks, and what passes.
+#
+# Read by anisotropy_fea.audit (load_rubric), which refuses a rubric with a missing field, a duplicate or out-of-order item, an
+# unknown section, test code or function. The audit chapter of the coupon document and the audit form are built from it, so a
+# change here changes every later audit: raise `version` with it.
+#
+# Each item:
+#   id          section letter and number, numbered from 1 in each section; a failed row or an observation is referred to by it
+#   check       what is checked
+#   acceptance  what counts as Pass
+#   method      "auto": our tools give the result, from the functions in `source`; the auditor may add an observation
+#               "auditor": the auditor gives the result; our tools may show evidence
+#   required    true: a Pass verdict needs this item to be Pass or N/A; false: a Fail here is an observation, not a Fail verdict
+#   source      the anisotropy_fea functions the result comes from ("module.function" or "module.Class.method"); empty while
+#               the check is not built, and then the item cannot be required
+#   tolerance   { relative = fraction } or { length_m = metres } (SI, ADR-0002)
+#   applies_to  the test codes of spec.TEST_CODES the item applies to; absent: every test
+#   condition   { min_free_length_widths = n }: the item is N/A for a coupon whose free length between the grips is under n
+#               widths, with the ratio stated; absent: no condition
+#   needs       what the team must send for the item to be checked; absent: nothing beyond the deck
+#
+# The evidence for each tolerance is in ADR-0043 and its amendments. Version 0.2 was confirmed by the founder on 2026-10-24
+# (the cofounder does not work on the code side). Version 0.3, the same day, by the founder: the row that named the files by
+# digest and commit is gone (the form's Record sheet and the case page carry that), and an "auto" item whose team value is
+# not in the export (C1, C4, C7; C2 and C3 when a quantity is missing) states our value and is judged by the auditor; the
+# documentation section E is off the rubric for now ("might not be important right now"). The rubric's words go to the team
+# unchanged, so no item names a decision record. Changing an item or a tolerance raises the version again.
+
+version = "0.3"
+status = "confirmed"
+
+[[section]]
+id = "A"
+title = "Identity and traceability"
+meaning = "the coupon card and the unit system"
+
+[[section]]
+id = "B"
+title = "Model match: our model is the team's model"
+meaning = "our model is the team's model, item by item: nodes, elements, layup, section, material, grips, boundary conditions and loads, step"
+
+[[section]]
+id = "C"
+title = "Results match: verification against the team's solver"
+meaning = "our engine's values against the team's Abaqus: the stresses in the graded band, and the values the team fills in"
+
+[[section]]
+id = "D"
+title = "Physics, independent of both solvers"
+meaning = "our engine against laminate theory at the gauge centre, and equilibrium; checks that need no Abaqus"
+
+# ------------------------------------------------------------------------------------------------- A. Identity and traceability
+
+[[item]]
+id = "A1"
+section = "A"
+check = "The coupon card is complete"
+acceptance = "The card names the coupon, its test, the standard, where the size comes from, the team's model, the test data, the material, the layup and the size; none is blank"
+method = "auto"
+required = true
+source = ["spec.coupon_card"]
+
+[[item]]
+id = "A2"
+section = "A"
+check = "One unit system"
+acceptance = "Both decks and every number of the audit are in the one unit system the coupon's manifest states"
+method = "auto"
+required = true
+source = ["abaqus_reader.read_deck"]
+
+# ------------------------------------------------------------------------------------------------- B. Model match
+
+[[item]]
+id = "B1"
+section = "B"
+check = "Geometry: every node of ours at a node of the team's deck"
+acceptance = "The nodes match one to one, each within the tolerance"
+method = "auto"
+required = true
+source = ["equivalence.deck_equivalence"]
+tolerance = { length_m = 1e-8 }  # 1e-5 mm: Abaqus/CAE writes coordinates in single precision
+
+[[item]]
+id = "B2"
+section = "B"
+check = "Mesh: element type, count and connectivity"
+acceptance = "The same element type and count, every element on the same corner nodes"
+method = "auto"
+required = true
+source = ["equivalence.deck_equivalence"]
+
+[[item]]
+id = "B3"
+section = "B"
+check = "Layup"
+acceptance = "The same ply angles in the same order, bottom ply first, and the same ply count; whether the layup is balanced and symmetric is stated"
+method = "auto"
+required = true
+source = ["equivalence.deck_equivalence"]
+
+[[item]]
+id = "B4"
+section = "B"
+check = "Section: ply thickness, integration points, shell orientation"
+acceptance = "The same thickness and number of integration points in every ply, and the same shell orientation"
+method = "auto"
+required = true
+source = ["equivalence.deck_equivalence"]
+tolerance = { relative = 1e-9 }  # equivalence.RELATIVE
+
+[[item]]
+id = "B5"
+section = "B"
+check = "Elastic constants"
+acceptance = "E1, E2, nu12, G12, G13 and G23 are equal in every ply"
+method = "auto"
+required = true
+source = ["equivalence.deck_equivalence"]
+tolerance = { relative = 1e-9 }  # equivalence.RELATIVE
+
+[[item]]
+id = "B6"
+section = "B"
+check = "Material source"
+acceptance = "Every elastic constant and strength in our model carries its source and page in the material library, and the auditor agrees it is the material the team meant"
+method = "auditor"
+required = true
+
+[[item]]
+id = "B7"
+section = "B"
+check = "Grips"
+acceptance = "Each coupling has the same reference point, drives the same nodes and constrains the same degrees of freedom"
+method = "auto"
+required = true
+source = ["equivalence.deck_equivalence"]
+
+[[item]]
+id = "B8"
+section = "B"
+check = "Boundary conditions and loads"
+acceptance = "Every prescribed degree of freedom is equal, node by node, and the concentrated loads are the same"
+method = "auto"
+required = true
+source = ["equivalence.deck_equivalence"]
+tolerance = { relative = 1e-9 }  # equivalence.RELATIVE
+
+[[item]]
+id = "B9"
+section = "B"
+check = "Analysis step"
+acceptance = "The same number of steps, each linear static"
+method = "auto"
+required = true
+source = ["equivalence.deck_equivalence"]
+
+# ------------------------------------------------------------------------------------------------- C. Results match
+
+[[item]]
+id = "C1"
+section = "C"
+check = "Total reaction force"
+acceptance = "Our reaction at the loaded grip is within the tolerance of the team's"
+method = "auto"
+required = false  # the cofounder decides whether it is required; the team does not export it today, so the auditor judges it against our value
+source = ["report.gripped_groups"]
+tolerance = { relative = 0.01 }
+needs = "the reaction force at the loaded grip's reference point"
+
+[[item]]
+id = "C2"
+section = "C"
+check = "Ply stresses S11, S22, S12 in material axes"
+acceptance = "In the inner band, for every reported element and ply, the difference is within the tolerance of the quantity's largest team value in the band"
+method = "auto"
+required = true
+source = ["side_by_side.pair_reports", "side_by_side.agreement"]
+tolerance = { relative = 0.01 }
+needs = "field reports of S11, S22 and S12 at every section point"
+
+[[item]]
+id = "C3"
+section = "C"
+check = "Von Mises stress per ply"
+acceptance = "As C2, for the von Mises value of each ply's plane stress"
+method = "auto"
+required = true
+source = ["side_by_side.pair_reports", "side_by_side.agreement"]
+tolerance = { relative = 0.01 }
+needs = "a field report of Mises at every section point"
+
+[[item]]
+id = "C4"
+section = "C"
+check = "Displacement and strain at the gauge centre"
+acceptance = "Each component is within the tolerance of the team's largest value of that quantity"
+method = "auto"
+required = false  # the team does not export U or E today, so the auditor judges it against our values
+source = ["results.MembraneSolution.displacement_of"]
+tolerance = { relative = 0.01 }
+needs = "field reports of U and E"
+
+[[item]]
+id = "C5"
+section = "C"
+check = "Regions left out of the comparison"
+acceptance = "Every region left out of C2 to C4 was named in the coupon's manifest before the run, with a reason the auditor accepts (a singular corner, a grip end effect)"
+method = "auditor"
+required = true
+
+[[item]]
+id = "C6"
+section = "C"
+check = "Where the stresses peak"
+acceptance = "Both models put each quantity's largest magnitude in the same place, the excluded regions included"
+method = "auditor"
+required = true
+source = ["side_by_side.pair_reports"]
+
+[[item]]
+id = "C7"
+section = "C"
+check = "First-ply failure"
+acceptance = "The loading at first-ply failure is within the tolerance of the team's, in the same ply and mode"
+method = "auto"
+required = false  # the cofounder decides whether it is required; the team does not export failure indices today, so the auditor judges it against ours
+source = ["recovery.strength_ratios"]
+tolerance = { relative = 0.01 }
+needs = "Abaqus failure indices (MSTRS, TSAIH or TSAIW) at every section point"
+
+# ------------------------------------------------------------------------------------------------- D. Physics
+
+[[item]]
+id = "D1"
+section = "D"
+check = "Laminate theory hand check"
+acceptance = "Our strain and ply stresses at the gauge centre equal classical laminate theory for the laminate with free lateral edges, held to the same tolerance as the solver comparison. The grips hold the width, so the check applies only where the free length is long enough for that end effect to have faded: at least three widths; a shorter coupon gets N/A, with its distance from laminate theory stated"
+method = "auto"
+required = true
+source = ["report.laminate_check"]
+tolerance = { relative = 0.01 }
+applies_to = ["UNT", "UNC"]
+condition = { min_free_length_widths = 3 }
+
+[[item]]
+id = "D2"
+section = "D"
+check = "Equilibrium"
+acceptance = "All reactions sum to minus the applied loads (to zero when the grips are displaced), within the tolerance of the reaction at the loaded grip"
+method = "auto"
+required = true
+source = ["results.MembraneSolution.total_reaction"]
+tolerance = { relative = 1e-6 }
+
+[[item]]
+id = "D3"
+section = "D"
+check = "Stress at the hole against a closed form"
+acceptance = "The stress concentration at the hole edge agrees with the closed form for the laminate"
+method = "auto"
+required = false  # no closed form for an orthotropic hole is built yet; the isotropic Kirsch check is (fea/checks/open-hole-isotropic-kirsch)
+tolerance = { relative = 0.02 }
+applies_to = ["OHT"]
+
+[[item]]
+id = "D4"
+section = "D"
+check = "Mesh convergence where the stress peaks"
+acceptance = "The peak stress changes by less than the tolerance between the two finest meshes"
+method = "auto"
+required = false  # not built yet
+tolerance = { relative = 0.02 }
+applies_to = ["OHT"]
+
+[[item]]
+id = "D5"
+section = "D"
+check = "The results make physical sense"
+acceptance = "Signs, symmetry and coupling agree with the layup and the loading: an unbalanced layup shows in-plane shear coupling, a symmetric one no bending"
+method = "auditor"
+required = true
