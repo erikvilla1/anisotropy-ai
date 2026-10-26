@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from anisotropy_fea import paths  # where the files live (ADR-0036)
-from anisotropy_fea.abaqus import ENV_VARIABLE, EXTRACT_SCRIPT, AbaqusError, analysis_problems, extract_fields, find_abaqus, read_provenance, read_reactions, run_abaqus
+from anisotropy_fea.abaqus import (ENV_VARIABLE, EXTRACT_SCRIPT, AbaqusError, analysis_problems, extract_fields, find_abaqus, reactions_by_set,
+                                   read_provenance, read_reactions, run_abaqus)
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.abaqus_report import read_field_report, report_quantities
 from anisotropy_fea.compare import format_record, load_record, record_disagreements, sha256_of
@@ -47,6 +48,18 @@ def test_a_failed_run_is_read_from_what_abaqus_wrote():
     assert analysis_problems("", "", "", "") == ["the .sta does not say the analysis completed"]
 
 
+def test_reactions_are_summed_per_grip_set_whatever_the_case_of_the_instance_name():
+    """The ODB spells the deck's instance Coupon-1 as COUPON-1; a reference point is an assembly node, with no instance."""
+    nodal = read_deck(paths.deck_path(paths.spec_path("unnotched-im7-8552-nodal"), "abaqus"), "mm-MPa")
+    top = nodal.nsets["Grip-Top"]
+    assert {instance for instance, _ in top} == {"Coupon-1"}
+    reactions = {(instance.upper(), label): (0.0, 2.0, 0.0) for instance, label in top}
+    assert reactions_by_set(nodal, reactions) == {"Grip-Top": [0.0, 2.0 * len(top)]}
+    coupled = read_deck(PUBLIC_DECK, "mm-MPa")
+    (instance, label), = coupled.nsets["RF-Top"]
+    assert reactions_by_set(coupled, {((instance or ""), label): (0.5, 7.0, 0.0)}) == {"RF-Top": [0.5, 7.0]}
+
+
 def test_the_environment_variable_and_the_script_are_in_place():
     assert ENV_VARIABLE == "ANISOTROPY_ABAQUS" and ENV_VARIABLE in (Path(__file__).parents[2] / "docs" / "installation-fea-tools.md").read_text(encoding="utf-8")
     assert os.environ.get(ENV_VARIABLE) is None or find_abaqus() is not None
@@ -59,10 +72,11 @@ def test_abaqus_solves_the_public_check_deck_and_the_kernel_reproduces_the_expor
     kernel's reaction and centre-element ply stresses against them."""
     spec = load_spec(paths.spec_path("unnotched-im7-8552-coupling"))
     units = spec.units
-    deck_path = tmp_path / PUBLIC_DECK.name  # the committed deck's combined *El Print tables are refused by Abaqus/Standard (ADR-0045)
-    deck_path.write_text(write_abaqus(build_model(spec), split_print_tables=True), encoding="utf-8", newline="\n")
-    result = run_abaqus(deck_path, workdir=tmp_path)
+    assert PUBLIC_DECK.read_text(encoding="utf-8").replace("\r\n", "\n") == write_abaqus(build_model(spec))
+    result = run_abaqus(PUBLIC_DECK, workdir=tmp_path)  # the committed deck as written: valid Abaqus/Standard input (ADR-0045 amendment 2)
+    deck_path = tmp_path / PUBLIC_DECK.name
     assert result.errors == () and result.returncode == 0 and result.odb_path.is_file() and result.version
+    assert not [w for w in result.warnings if "truncated" in w.lower()]  # every line within Abaqus's 256 bytes
     assert "THE ANALYSIS HAS COMPLETED SUCCESSFULLY" in result.sta_text
     with pytest.raises(AbaqusError, match="exists"):
         (tmp_path / f"{deck_path.stem}.lck").write_text("")

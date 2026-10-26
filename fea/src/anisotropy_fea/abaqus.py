@@ -187,3 +187,22 @@ def read_reactions(path: Path | str) -> dict[tuple[str, int], tuple[float, float
         row = dict(zip(header, cells))
         reactions[(row["Part Instance Name"], int(row["Node Label"]))] = (float(row["RF1"]), float(row["RF2"]), float(row["RF3"]))
     return reactions
+
+
+def reactions_by_set(deck, reactions: dict[tuple[str, int], tuple[float, float, float]]) -> dict[str, list[float]]:
+    """[RF1, RF2] summed over the nodes of every RF-* or Grip-* node set of the deck that carries a reaction. Abaqus names are not
+    case-sensitive and the ODB spells an instance in capitals (`COUPON-1` for the deck's `Coupon-1`, read 2026-10-25), so the
+    instance is matched without regard to case; before that, a grip on instance nodes found no reaction."""
+    by_key = {(instance.upper(), label): rf for (instance, label), rf in reactions.items()}
+    totals: dict[str, list[float]] = {}
+    for name, keys in deck.nsets.items():
+        if not name.startswith(("RF-", "Grip-")):
+            continue
+        total = [0.0, 0.0, 0.0]
+        for instance, label in keys:
+            rf = by_key.get(((instance or "").upper(), label))
+            if rf is not None:
+                total = [a + b for a, b in zip(total, rf)]
+        if any(total):
+            totals[name] = total[:2]
+    return totals

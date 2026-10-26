@@ -19,7 +19,7 @@ import argparse
 import datetime as dt
 from pathlib import Path
 
-from anisotropy_fea.abaqus import QUANTITIES, AbaqusError, extract_fields, read_provenance, read_reactions, run_abaqus
+from anisotropy_fea.abaqus import QUANTITIES, AbaqusError, extract_fields, reactions_by_set, read_provenance, read_reactions, run_abaqus
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.abaqus_report import read_field_report, report_quantities
 from anisotropy_fea.compare import compare_record, format_record, load_record, record_disagreements, sha256_of, validate_record
@@ -33,22 +33,6 @@ KNOWN_DIFFERENCES = {
     "reference": "Abaqus S4R: one reduced-integration point with hourglass control, drilling stiffness, transverse shear; values at the centroid, "
                  "section points at the layer faces (SNEG bottom, SPOS top); S11, S22 in the ply's material axes",
 }
-
-
-def reactions_by_set(deck, reactions: dict) -> dict[str, list[float]]:
-    """[RF1, RF2] summed over the nodes of every RF-* or Grip-* node set of the deck that carries a reaction."""
-    totals: dict[str, list[float]] = {}
-    for name, keys in deck.nsets.items():
-        if not name.startswith(("RF-", "Grip-")):
-            continue
-        total = [0.0, 0.0, 0.0]
-        for instance, label in keys:
-            rf = reactions.get((instance or "", label))
-            if rf is not None:
-                total = [a + b for a, b in zip(total, rf)]
-        if any(total):
-            totals[name] = total[:2]
-    return totals
 
 
 def main() -> None:
@@ -81,10 +65,9 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.spec.stem
     deck_path = args.out / f"{stem}-abaqus.inp"
-    # one variable per *El Print table: Abaqus/Standard refuses the committed decks' combined tables (write_abaqus docstring); the
-    # solution is the same, so the kernel reads this deck too and the record's two digests are this file's
-    deck_path.write_text(write_abaqus(model, split_print_tables=True), encoding="utf-8", newline="\n")
-    print("written", deck_path, f"({model.mesh.node_count} nodes, {model.mesh.element_count} S4R elements; one variable per *El Print table)")
+    # the same text as the spec's deck in decks/ (ADR-0045 amendment 2): the kernel reads this file too, so the record's two digests are its own
+    deck_path.write_text(write_abaqus(model), encoding="utf-8", newline="\n")
+    print("written", deck_path, f"({model.mesh.node_count} nodes, {model.mesh.element_count} S4R elements)")
     try:
         result = run_abaqus(deck_path, workdir=args.out, cpus=args.cpus)
         print(f"Abaqus {result.version}: {result.elapsed_s:.1f} s, {len(result.warnings)} warnings; results in {args.out} (.odb, .dat, .sta, .msg)")
