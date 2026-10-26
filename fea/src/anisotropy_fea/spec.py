@@ -106,6 +106,8 @@ class MaterialSpec(Record):
     F2c: PositiveFloat | None = None
     F6: PositiveFloat | None = None
     f12_star: float | None = None  # Tsai-Wu interaction term; required when tsai_wu is requested; written as the sixth *Fail Stress value
+    source: str | None = Field(default=None, min_length=1)  # where the team's own constants come from, as the team states it (a datasheet,
+    # a test report); makes them rights class "user-supplied": private, kept with the coupon, never in the library (ADR-0018, ADR-0046)
     transverse: Transverse
 
 
@@ -216,6 +218,9 @@ def parse_spec(text: str, source_path: str | None = None) -> CouponSpec:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise SpecError(f"spec is not valid TOML: {exc}") from None
+    loader_keys = [key for key in ("si", "source_sha256", "source_path") if key in data]
+    if loader_keys:
+        raise SpecError(f"spec: {', '.join(loader_keys)} {'is' if len(loader_keys) == 1 else 'are'} set by the loader, not written in a file")
     data["source_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
     data["source_path"] = source_path
     try:
@@ -235,7 +240,10 @@ def load_spec(path: Path | str) -> CouponSpec:
 
 def validate_spec(spec: CouponSpec) -> None:
     """Cross-field rules. Works on the spec in its own units or in SI."""
-    unit_factors(spec.units)
+    try:
+        unit_factors(spec.units)
+    except ValueError as exc:
+        raise SpecError(str(exc)) from None
     g, m, kind = spec.geometry, spec.mesh, spec.kind
     bending = kind in BENDING_KINDS
 
@@ -317,6 +325,7 @@ def validate_spec(spec: CouponSpec) -> None:
     explicit = [mat.E1, mat.E2, mat.G12, mat.nu12]
     if mat.library is not None:
         need(all(v is None for v in explicit + [mat.F1t, mat.F1c, mat.F2t, mat.F2c, mat.F6]), "material.library excludes explicit constants and strengths")
+        need(mat.source is None, "material.source states where explicit constants come from; a library record carries its own citation")
     else:
         need(all(v is not None for v in explicit), "material needs library or all of E1, E2, G12, nu12")
         need(mat.dataset is None, "material.dataset goes with material.library")
@@ -473,8 +482,8 @@ class MaterialDefinition:
     plane_stress: bool  # nu13 and nu23 above are 0 because the spec asked for plane stress
     strengths: Strengths | None
     f12_star: float | None
-    source: str  # "library im7-8552 / <dataset>" or "explicit constants in the spec"
-    rights: str  # the library's rights class, or "spec" for explicit constants
+    source: str  # "library im7-8552 / <dataset>", "the team's own constants: <their source>", or "explicit constants in the spec"
+    rights: str  # the library's rights class; "user-supplied" for the team's own constants (with a source); "spec" for explicit constants
     citation_lines: tuple[str, ...]  # one line per value, for the deck header
 
     @property
@@ -503,7 +512,10 @@ def spec_material(spec: CouponSpec) -> MaterialDefinition:
     else:
         E1, E2, G12, nu12 = mat.E1, mat.E2, mat.G12, mat.nu12
         strengths = Strengths(F1t=mat.F1t, F1c=mat.F1c, F2t=mat.F2t, F2c=mat.F2c, F6=mat.F6) if mat.F1t is not None else None
-        citations, source, rights, name = (), "explicit constants in the spec", "spec", "EXPLICIT"
+        if mat.source is not None:  # the team's own constants, as stated on their coupon input form
+            citations, source, rights, name = (), f"the team's own constants: {mat.source}", "user-supplied", "EXPLICIT"
+        else:
+            citations, source, rights, name = (), "explicit constants in the spec", "spec", "EXPLICIT"
     if spec.names is not None:
         name = spec.names.material
     E3 = E2 if t.transverse_isotropy else t.E3
@@ -542,8 +554,12 @@ def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
     plies = len(full_angles(spec))
     thickness = spec_ply_thickness(spec) / (metres if spec.layup.ply_thickness == "library" else factor)  # a library thickness is always SI
     mat = spec.material
-    material = (f"{library_material(mat.library, mat.dataset).name} (library record {mat.library}, dataset {mat.dataset})"
-                if mat.library is not None else "explicit constants in the spec")
+    if mat.library is not None:
+        material = f"{library_material(mat.library, mat.dataset).name} (library record {mat.library}, dataset {mat.dataset})"
+    elif mat.source is not None:
+        material = f"{spec.names.material if spec.names else 'own material'} (the team's own constants; source: {mat.source})"
+    else:
+        material = "explicit constants in the spec"
     size = f"{length(g.length)} long, {length(g.width)} wide"
     if g.tab_length:
         size += f", {length(g.tab_length)} tabs at each end"

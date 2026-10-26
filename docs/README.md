@@ -9,6 +9,7 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | What have we built? | [System overview](00_system_overview.md) |
 | Why was it built this way? | [Decision records](decisions/) |
 | How do we read the team's Abaqus decks, solve them, and what do we refuse? | [Finite element card](components/fea.md), [finite element theory](../fea/docs/theory.md), [what the team exports](abaqus-export-recipe.md) |
+| How does the team hand us a coupon to model? | [ADR-0046](decisions/ADR-0046-coupon-intake-by-an-excel-input-form.md): the coupon input form, written by `fea/tools/coupon_form.py` and read by `fea/tools/coupon_from_form.py` |
 | How do we build our own coupon models, and which tools do they need? | [ADR-0030](decisions/ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), one folder per test under `fea/checks/` and, for our models of the team's coupons, `.local/fea/<coupon>/` (ADR-0036, ADR-0042), [installing the tools](installation-fea-tools.md) |
 | Does it work, and how do we know? | [Evaluation reports](evaluations/) and [validation cases](../engine/validation/) |
 | What problems has the engine solved, and how, step by step? | [Solved problem documents](problems/), one per validation case, with `index.md` as the list |
@@ -100,6 +101,8 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0043](decisions/ADR-0043-coupon-audit-scored-by-a-fixed-rubric-delivered-as-one-package-folder.md) | Every coupon delivery is audited against one fixed rubric (`docs/audit/rubric.toml`): a chapter in the PDF and an Excel form, sent as one package folder per delivery, which replaces the zip of 0041 (proposed; rubric 0.2 confirmed by the founder, amendment 1; one package layout, amendment 2; no findings sheet, a failed row names its cause, amendment 3; rubric 0.3, evidence as the claim to verify and our values where the team's are missing, amendment 4) |
 | [0044](decisions/ADR-0044-audit-form-summary-rule-verdict-formula-and-numbers-as-values.md) | The audit form carries its own summary, the rule's verdict as a formula that follows the auditor's entries, and the numbers behind our rows as values on a Results sheet and a Compared values sheet; formulas only for what the auditor changes (proposed; form v0.3, the cover says what is audited and which files are compared, the build record on its own sheet, amendment 1) |
 | [0045](decisions/ADR-0045-abaqus-without-the-gui-odbaccess-reports-and-an-optional-second-reference.md) | Abaqus results come from a script under `abaqus python` that writes CAE's field-report CSV, and a headless runner solves our decks; Abaqus is an optional second reference under the UCSD teaching licence, for the course and the team comparison only, CalculiX stays the reference (proposed; the rule for S12, amendment 1) |
+
+| [0046](decisions/ADR-0046-coupon-intake-by-an-excel-input-form.md) | A coupon enters as an Excel input form the team fills in, read into the spec by a tool that names every problem by its row; the team's own constants are user-supplied and stay local (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 

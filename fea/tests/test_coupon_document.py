@@ -79,16 +79,59 @@ def files_in(folder: Path) -> set[str]:
     return {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()}
 
 
-def public_sources(coupon, tmp: Path):
+def public_sources(coupon, tmp: Path, spec_text: str = PUBLIC_COUPON):
     """The public stand-in as a coupon the team has not built: its spec with its deck in decks/, as in a coupon's folder, and the
     IM7/8552 check's CalculiX record for its twin."""
     spec = tmp / f"{DESIGNATION}.toml"
-    spec.write_text(PUBLIC_COUPON, encoding="utf-8")
+    spec.write_text(spec_text, encoding="utf-8")
     paths.deck_path(spec, "abaqus").parent.mkdir()
     paths.deck_path(spec, "abaqus").write_text(write_abaqus(build_model(load_spec(spec))), encoding="utf-8", newline="\n")
     twin = (RECORD.parent / load_record(RECORD)["spec"]).resolve()
     return coupon.Sources(coupon=DESIGNATION, spec=spec, twin=twin, record=RECORD, manifest=None, documents=tmp / DESIGNATION / paths.DOCUMENTS,
                           team_files=tmp / DESIGNATION / paths.TEAM_FILES, latex=tmp / DESIGNATION / paths.OURS / paths.LATEX)
+
+
+OWN_PUBLIC = (PUBLIC_COUPON.replace('library = "im7-8552"\ndataset = "ncamp-im7-8552-2019-rtd-measured-v1"\n',
+                                     'E1 = 162095.74\nE2 = 8963.18\nG12 = 4688.43\nnu12 = 0.316\nF1t = 2558.51\nF1c = 1731.48\nF2t = 64.05\n'
+                                     'F2c = 285.72\nF6 = 91.15\nsource = "the NCAMP report, typed in by the team"\n')
+              .replace('ply_thickness = "library"', "ply_thickness = 0.18288"))
+OWN_FIXTURE = NAMED_SPEC.replace('library = "im7-8552"\ndataset = "ncamp-im7-8552-2019-rtd-measured-v1"\n',
+                                 "E1 = 162095.74\nE2 = 8963.18\nG12 = 4688.43\nnu12 = 0.316\nF1t = 2558.51\nF1c = 1731.48\nF2t = 64.05\nF2c = 285.72\n"
+                                 'F6 = 91.15\nsource = "the fixture\'s own constants"\n')
+
+
+def test_the_teams_own_constants_make_a_document_and_a_package_without_a_library_record(coupon, tmp_path):
+    """A coupon from an input form with the team's own constants (ADR-0046): the material section, the deck heading, the package's
+    material file and the audit's material row all say where the values come from; no library citation anywhere."""
+    assert "library" not in OWN_PUBLIC.split("[material]")[1].split("[material.transverse]")[0]
+    tex_path, package = coupon.build_document(public_sources(coupon, tmp_path, OWN_PUBLIC), pdf=False, theory=False)
+    tex = tex_path.read_text(encoding="utf-8")
+    assert r"\section{The material, as given by the team}\label{sec:material}" in tex and "the NCAMP report, typed in by the team" in tex
+    assert "Rights class user-supplied" in tex and "under the name" in tex and "With the strengths the team gave the engine finds the first ply to fail" in tex
+    material = (package / "3-material" / "IM7-8552-Lamina.csv").read_text(encoding="utf-8-sig").splitlines()
+    assert material[:3] == ["material,IM7-8552-Lamina,the team's own constants", "source,\"the NCAMP report, typed in by the team\"",
+                            "rights class,user-supplied,the team's values: kept with this coupon and never published"]
+    assert "E1,162095.74,MPa,as given by the team" in material and "F6,91.15,MPa,as given by the team" in material and "G23,3000,MPa,as given by the team" in material
+    assert not (package / "3-material" / "im7-8552.csv").exists()
+    deck = (package / "2-our-model" / "abaqus" / f"{DESIGNATION}-abaqus.inp").read_text(encoding="utf-8")
+    assert "the team's own constants: the NCAMP report, typed in by the team; rights class user-supplied" in deck
+    form = load_workbook(package / f"{package.name}-audit.xlsx")["Rubric"]
+    rows = {form.cell(r, 1).value: r for r in range(2, form.max_row + 1) if form.cell(r, 1).value}
+    assert form.cell(rows["B6"], RUBRIC_COLUMNS.index("Ours") + 1).value.startswith("Material: the team's own constants: the NCAMP report")
+    readme = (package / "README.txt").read_text(encoding="utf-8")
+    assert "3-material/IM7-8552-Lamina.csv" in readme and "the team's own constants as given on the coupon input form" in readme
+
+
+def test_the_teams_own_constants_are_set_beside_their_deck_in_the_team_comparison(coupon, tmp_path):
+    src = team_sources(coupon, tmp_path, OWN_FIXTURE)
+    tex_path, package = coupon.build_document(src, pdf=False, theory=False, write_summary=False)
+    tex = tex_path.read_text(encoding="utf-8")
+    assert "The team gave this material's constants on the coupon input form" in tex and "the fixture's own constants" in tex
+    material = tex.split(r"\label{sec:material}")[1].split(r"\section")[0]
+    assert material.count(r"\textcolor{passgreen}{same}") >= 4 and r"\textbf{differs}" not in material  # the deck types the same constants
+    assert (package / "3-material" / "EXPLICIT.csv").is_file()  # the fixture names no material, so the deck's name is ours
+    block = coupon.team.title_block(coupon.team.Comparison(src.manifest))  # the team comparison's own title block names the source too
+    assert "Material source & the team" in block and "own constants: the fixture" in block
 
 
 def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupon, tmp_path):
@@ -113,7 +156,8 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     assert plies[0].startswith("team element,our element,x (mm),y (mm),ply (1 = bottom),angle (deg),S11 (MPa)") and plies[1].startswith(",")  # no team numbers
 
 
-LOCAL_COUPONS = [d.name for d in paths.model_dirs() if load_spec(d / paths.OURS / f"{d.name}.toml").mesh.mesher == "structured"]
+LOCAL_COUPONS = [d.name for d in paths.model_dirs() if (d / paths.OURS / paths.VERIFICATION / f"{d.name}-calculix.toml").is_file()
+                 and load_spec(d / paths.OURS / f"{d.name}.toml").mesh.mesher == "structured"]  # a coupon just started from its form has no record yet
 
 
 @pytest.mark.skipif(not LOCAL_COUPONS, reason="no coupon model on this machine: the team's coupons are local (.local/fea/<coupon>/, ADR-0042)")

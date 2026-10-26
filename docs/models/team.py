@@ -233,9 +233,10 @@ class Comparison:
 
         # the material, from our library
         material = self.spec.material
-        if material.library is None:
-            raise SystemExit("the comparison document cites a library material; this spec gives explicit constants")
-        self.library = library_material(material.library, material.dataset)
+        if material.library is None and material.source is None:
+            raise SystemExit("the comparison document cites a library material or the team's own constants with their source "
+                             "(material.source); this spec gives explicit constants without one")
+        self.library = library_material(material.library, material.dataset) if material.library is not None else None  # None: the team's own
         self.material = spec_material(self.spec)
 
         # reaction: kernel, CalculiX twin, laminate theory
@@ -378,7 +379,8 @@ def title_block(c: Comparison) -> str:
         ("Team's deck", escape(f"{c.team_deck_path.name} (sha256 {sha256(c.team_deck_path)[:16]}), {m.team.solver}, run by {m.team.run_by} on {m.team.run_date}")),
         ("Our model", escape(f"{c.spec_path.name} built by anisotropy-fea {fea_version} (deck sha256 {sha256(c.our_text)[:16]}), solved by our engine's "
                              "finite element kernel (four-node membrane element on the engine's laminate stiffness)")),
-        ("Material source", escape(f"our library record {lib.material_id}, dataset {lib.dataset_id}: {source_text(lib)}")),
+        ("Material source", escape(f"our library record {lib.material_id}, dataset {lib.dataset_id}: {source_text(lib)}" if lib is not None
+                                   else c.material.source)),
         ("Compared", escape(f"{len(c.paired)} values ({', '.join(c.quantities)} at layers {', '.join(map(str, c.layers()))}) from the team's field reports")),
         ("Built", escape(f"{date.today().isoformat()}, commit {git_commit()}, by docs/models/team.py")),
     ]
@@ -419,9 +421,50 @@ def models_section(c: Comparison, figures: Path) -> str:
     ])
 
 
+def team_cell(team: float | None, ours: float, shown) -> str:
+    """The team's deck value of a constant, marked the same or different from ours (relative 1e-9)."""
+    if team is None:
+        return r"\textcolor{muted}{not in the deck}"
+    same = abs(team - ours) <= 1e-9 * max(abs(ours), 1e-300)
+    return f"{number(shown(team), 6)} " + (r"\textcolor{passgreen}{same}" if same else r"\textcolor{accent}{\textbf{differs}}")
+
+
+def own_material_section(c: Comparison, team_material) -> str:
+    """The team's own constants against the team's deck: the constants they typed on the input form and in Abaqus should be one set."""
+    mat = c.material
+    stress = lambda v: from_si(v, "stress", c.units)  # noqa: E731
+    deck = {"E1": team_material.elastic.E1, "E2": team_material.elastic.E2, "G12": team_material.elastic.G12, "nu12": team_material.elastic.nu12,
+            "G13": team_material.elastic.G13, "G23": team_material.elastic.G23}
+    fs = team_material.fail_stress
+    if fs is not None:
+        deck.update(F1t=fs.Xt, F1c=abs(fs.Xc), F2t=fs.Yt, F2c=abs(fs.Yc), F6=fs.S)
+    ours = {"E1": mat.E1, "E2": mat.E2, "G12": mat.G12, "nu12": mat.nu12}
+    if mat.strengths is not None:
+        ours.update({role: getattr(mat.strengths, role) for role in ("F1t", "F1c", "F2t", "F2c", "F6")})
+    ours.update(G13=mat.G13, G23=mat.G23)
+    rows = []
+    for name, value in ours.items():
+        shown = (lambda v: v) if name == "nu12" else stress
+        rows.append([escape(name), f"{number(shown(value), 6)} {'' if name == 'nu12' else c.stress_unit}", "as given by the team",
+                     team_cell(deck.get(name), value, shown)])
+    source = mat.source.removeprefix("the team's own constants: ")
+    return "\n\n".join([
+        rf"The team gave this material's constants on the coupon input form, under the name {code(mat.name)}; it is not a record of our "
+        r"material library. The source, as the team states it:",
+        rf"\begin{{quote}}{escape(source)}.\end{{quote}}",
+        escape(f"Rights class {mat.rights}: these values are the team's. They are used in this package only and never enter our material library, "
+               "which holds published records only. The table sets each value beside the one the team typed into their deck: the two should be one set."),
+        table(["Property", "Value", "Origin", "Team's deck"], rows,
+              r">{\raggedright\arraybackslash}p{2cm}>{\raggedright\arraybackslash}p{2.8cm}Y>{\raggedright\arraybackslash}p{3.6cm}"),
+        rf"The deck states the ply thickness itself ({number(from_si(c.clt.thickness_m / len(c.clt.plies), 'length', c.units), 3)} {c.length_unit}).",
+    ])
+
+
 def material_section(c: Comparison) -> str:
     lib, mat = c.library, c.material
     team_material = c.team_deck.materials[expanded_layers(next(iter(c.team_deck.parts.values())).sections[0])[0].material]
+    if lib is None:
+        return own_material_section(c, team_material)
     team_values = {"E1": team_material.elastic.E1, "E2": team_material.elastic.E2, "G12": team_material.elastic.G12, "nu12": team_material.elastic.nu12}
     rows = []
     for v in lib.values:
@@ -590,7 +633,8 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
                                                   "(this click path is not checked by us); or run it as a job from the command line"),
         (f"2-our-model/calculix/{c.calculix_deck_path.name}", "our twin for CalculiX, with the grips as direct constraints. PrePoMax: File, Import, then run it"),
         (f"2-our-model/spec/{c.spec_path.name}", "the spec our generator builds the deck from: every dimension, the seeds, the layup, the material record"),
-        (f"3-material/{c.library.material_id}.csv", "the material from our library: every value, its unit, basis and source page, and the source"),
+        (f"3-material/{material_name(c)}.csv", "the material from our library: every value, its unit, basis and source page, and the source"
+         if c.library is not None else "the team's own constants as given on the coupon input form: every value with its unit, and the source"),
         *[(f"4-results/ours-{q}.csv", f"our {q} in the layout of the team's {q} field report: same columns, the team's element numbers, "
                                       "the same layers and faces. Open the two side by side") for q in c.quantities],
         ("4-results/team-vs-ours.csv", "every compared value: team element, our element, x, y, layer, quantity, team, ours, difference, share of the largest"),
@@ -598,9 +642,33 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
     ]
 
 
+def material_name(c: Comparison) -> str:
+    """The name of the package's material file: the library record's id, or the name the team gave its own material."""
+    return c.library.material_id if c.library is not None else c.material.name
+
+
 def write_material_csv(path: Path, lib, material, units: str) -> None:
-    """The library record a model uses: every value with its unit, basis and source page, the source and its rights class."""
+    """The library record a model uses: every value with its unit, basis and source page, the source and its rights class. With no
+    library record (`lib` None), the team's own constants: every value with its unit, the source as the team states it, and the rights
+    class user-supplied."""
     length_unit, stress_unit, _ = UNITS[units]
+    if lib is None:
+        stress = lambda v: f"{from_si(v, 'stress', units):.10g}"  # noqa: E731
+        rows = [("E1", stress(material.E1), stress_unit), ("E2", stress(material.E2), stress_unit), ("G12", stress(material.G12), stress_unit),
+                ("nu12", f"{material.nu12:.10g}", "")]
+        if material.strengths is not None:
+            rows += [(role, stress(getattr(material.strengths, role)), stress_unit) for role in ("F1t", "F1c", "F2t", "F2c", "F6")]
+        rows += [("G13", stress(material.G13), stress_unit), ("G23", stress(material.G23), stress_unit)]
+        with path.open("w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerow(["material", material.name, "the team's own constants"])
+            writer.writerow(["source", material.source.removeprefix("the team's own constants: ")])
+            writer.writerow(["rights class", material.rights, "the team's values: kept with this coupon and never published"])
+            writer.writerow([])
+            writer.writerow(["property", f"value ({units})", "unit", "basis"])
+            for name, value, unit in rows:
+                writer.writerow([name, value, unit, "as given by the team"])
+        return
     # utf-8-sig: the citation holds characters beyond ASCII (a section sign, middle dots); the byte-order mark makes Excel read them
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle, lineterminator="\n")
@@ -672,7 +740,7 @@ def fill_share(c: Comparison, share: Path) -> None:
     shutil.copy2(c.calculix_deck_path, share / "2-our-model/calculix" / c.calculix_deck_path.name)
     shutil.copy2(c.spec_path, share / "2-our-model/spec" / c.spec_path.name)
 
-    write_material_csv(share / "3-material" / f"{c.library.material_id}.csv", c.library, c.material, c.units)
+    write_material_csv(share / "3-material" / f"{material_name(c)}.csv", c.library, c.material, c.units)
 
     odb, step, frame = f"anisotropy-fea {fea_version} kernel on {stem}-abaqus.inp (no .odb)", "Step-1", "linear static solve"
     our_instance = next(iter(c.our_deck.instances))

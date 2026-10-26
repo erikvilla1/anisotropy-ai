@@ -25,7 +25,7 @@ import importlib
 import re
 import tomllib
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Callable, Literal
 
@@ -40,6 +40,7 @@ from .cases import element_name
 from .report import LaminateCheck, gripped_groups, laminate_check
 from .results import MembraneSolution
 from .side_by_side import PairedValue, agreement, ply_values
+from .forms import FONT, fit_rows, labelled as _labelled, lines_of, listing, one_font, printable, protect, text_of as _text  # noqa: F401  the house style of the forms
 from .spec import TEST_CODES
 from .units import from_si
 
@@ -677,7 +678,6 @@ RUBRIC_COLUMNS = ("ID", "Check", "What passes", "Judged by", "Required", "Tolera
 FOUND_COLUMNS = ("Team", "Ours", "Difference")  # what our tools found: the team's values, ours, and the difference between them
 AUDITOR_COLUMNS = ("Observation", "Cause")  # open on every row; Result is open on the rows the auditor judges
 RUBRIC_ROWS = 200  # how far down the rubric sheet the cover's formula looks: more rows than any rubric has
-FONT = "Arial"
 COMPARED = "What is compared"  # the cover's block: the values the audit sets side by side, and the files each side comes from
 AUDITOR_BLOCK = "Filled in by the auditor"
 SECTIONS = "The sections"  # the cover's list: each section and what it means
@@ -875,9 +875,6 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
     from openpyxl.formatting.rule import CellIsRule
     from openpyxl.styles import Alignment, Font, PatternFill, Protection
     from openpyxl.utils import get_column_letter
-    from openpyxl.worksheet.datavalidation import DataValidation
-    from openpyxl.worksheet.page import PageMargins
-    from openpyxl.worksheet.properties import PageSetupProperties
 
     path = Path(path)
     bold, title = Font(name=FONT, bold=True, size=10), Font(name=FONT, bold=True, size=14)
@@ -893,49 +890,12 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
     letter = {name: get_column_letter(i + 1) for i, name in enumerate(RUBRIC_COLUMNS)}
     cover_widths = {1: 26, 2: 104}
 
-    def listing(sheet, words, cells: list[str]) -> None:
-        validation = DataValidation(type="list", formula1='"' + ",".join(words) + '"', allow_blank=True)
-        sheet.add_data_validation(validation)
-        for cell in cells:
-            validation.add(cell)
-
-    def protect(sheet) -> None:
-        sheet.protection.sheet = True
-        sheet.protection.formatColumns = False  # widths and heights may still be changed
-        sheet.protection.formatRows = False
-
     def shade(sheet, cells: str, words) -> None:
         """A result or a verdict shows its colour wherever it is written, by the auditor too."""
         for word in words:
             fill, ink = shades[word]
             sheet.conditional_formatting.add(cells, CellIsRule(operator="equal", formula=[f'"{word}"'], fill=PatternFill("solid", fgColor=fill),
                                                                font=Font(name=FONT, color=ink)))
-
-    def printable(sheet, landscape: bool, title_rows: str | None = None) -> None:
-        sheet.page_setup.orientation = "landscape" if landscape else "portrait"
-        sheet.page_setup.paperSize = sheet.PAPERSIZE_LETTER
-        sheet.page_setup.fitToWidth, sheet.page_setup.fitToHeight = 1, 0  # one page wide, as many pages long as it takes
-        sheet.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
-        sheet.page_margins = PageMargins(left=0.4, right=0.4, top=0.6, bottom=0.6)
-        sheet.oddFooter.center.text = "&A, page &P of &N"
-        if title_rows:
-            sheet.print_title_rows = title_rows
-
-    def lines_of(text: str, width: float) -> int:
-        """How many lines a text wraps to in a column of this width, by the character count Excel does not fit for us."""
-        per_line = max(1, int(width * 1.15))
-        return sum(max(1, -(-len(part) // per_line)) for part in text.split("\n"))
-
-    def fit_rows(sheet, widths: dict[int, float], first: int, last: int) -> None:
-        """Row heights from the longest wrapped text in each row: Excel does not fit them itself for a file it did not write."""
-        for r in range(first, last + 1):
-            lines = 1
-            for col, width in widths.items():
-                text = sheet.cell(r, col).value
-                if isinstance(text, str) and text and not text.startswith("="):
-                    lines = max(lines, lines_of(text, width))
-            if lines > 1:
-                sheet.row_dimensions[r].height = min(409, 13.0 * lines + 4)
 
     def rubric_range(name: str) -> str:
         return f"{RUBRIC_SHEET}!${letter[name]}$2:${letter[name]}${RUBRIC_ROWS}"
@@ -1173,12 +1133,7 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
     printable(sheet, landscape=False)
     sheet.sheet_state = "hidden"
 
-    for sheet in book.worksheets:
-        for cells in sheet.iter_rows():
-            for cell in cells:
-                if cell.value is not None:
-                    font = cell.font
-                    cell.font = Font(name=FONT, size=font.sz or 10, bold=font.b, italic=font.i, color=font.color)
+    one_font(book)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     book.save(path)
@@ -1236,21 +1191,6 @@ def verdict_of(rows: tuple[Row, ...]) -> str:
     if any(r.result == "Fail" or r.observation for r in rows):
         return "Pass with observations"
     return "Pass"
-
-
-def _text(value) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, datetime):
-        return value.date().isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    return str(value).strip()
-
-
-def _labelled(sheet) -> dict[str, str]:
-    """A sheet of labels in the first column and values in the second, as a dict."""
-    return {_text(sheet.cell(r, 1).value): _text(sheet.cell(r, 2).value) for r in range(1, sheet.max_row + 1) if sheet.cell(r, 1).value}
 
 
 def read_form(path: Path | str) -> ReturnedForm:
