@@ -10,6 +10,7 @@ The `docs/` folder is also the Obsidian vault, so these files can be read and ed
 | --- | --- |
 | `skills/project-rules/` | The repository's rules and where each kind of content goes. Every agent loads it first. |
 | `skills/workspace-layout/` | Where the team's and our finite element files go, test by test under each tool, and where course homework and the code that solves it go (ADR-0032). |
+| `skills/decision-records/` | How to write and amend a decision record: new record or amendment, numbering, the header lines, the amendment heading, evidence, the index row and the changelog line. |
 | `skills/<name>/` | One folder per workflow skill. |
 
 ## How the agent finds the skills
