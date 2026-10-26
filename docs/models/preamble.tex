@@ -6,8 +6,11 @@
 \usepackage[margin=1in,headheight=14pt]{geometry}
 \usepackage{xcolor}
 \usepackage{graphicx}
+\usepackage{float}  % [H]: a figure stays where the text refers to it
 \usepackage{microtype}
-\usepackage{titlesec}
+\usepackage[nobottomtitles*]{titlesec}
+\renewcommand{\bottomtitlespace}{0.12\textheight}  % a heading this close to the foot of a page moves to the next one
+\usepackage{needspace}
 \usepackage{enumitem}
 \usepackage{booktabs,array,xltabular}
 \usepackage{listings}
@@ -50,7 +53,7 @@
 \lstnewenvironment{plainfile}[1][]{\lstset{style=plain,#1}}{}
 
 % \codefrom{function}{file}{lines}: caption above a code listing.
-\newcommand{\codefrom}[3]{\par\smallskip\noindent{\sffamily\footnotesize\color{muted}%
+\newcommand{\codefrom}[3]{\par\needspace{6\baselineskip}\smallskip\noindent{\sffamily\footnotesize\color{muted}%
   Code: \textcolor{ink}{\textbf{#1}} in #2, lines #3}\par\nopagebreak}
 % \filefrom{file}: caption above a listed file.
 \newcommand{\filefrom}[1]{\par\smallskip\noindent{\sffamily\footnotesize\color{muted}File: \textcolor{ink}{#1}}\par\nopagebreak}

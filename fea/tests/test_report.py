@@ -11,7 +11,8 @@ from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.compare import compare_record, load_record
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
-from anisotropy_fea.report import COMPONENTS, comparison_rows, element_centroids, laminate_check, not_reported, parse_key, solve_record, summarize
+from anisotropy_fea.report import (COMPONENTS, comparison_rows, element_centroids, gauge_element, laminate_check, not_reported, parse_key, solve_record,
+                                   summarize)
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 
 FEA = Path(__file__).parents[1]
@@ -78,10 +79,30 @@ def test_laminate_check_on_the_committed_record_sits_near_both_solvers():
     record = load_record(RECORD)
     deck, solution = solve_record(record)
     check = laminate_check(deck, solution)
-    assert check.centre_element == "Coupon-1.626"
+    assert check.gauge.name == "Coupon-1.626" and check.gauge.basis == "the centre probe" and not check.gauge.centre_in_hole
     assert check.free_length_m == pytest.approx(0.138) and check.width_m == pytest.approx(0.025)
     assert abs(check.reaction_N - check.kernel_reaction_N) / check.kernel_reaction_N < 0.01  # the whole-tab grips stiffen the coupon slightly
     assert abs(check.strain[1] - check.kernel_strain[1]) / check.kernel_strain[1] < 0.01
+
+
+def test_the_gauge_element_of_an_open_hole_coupon_is_its_far_field_probe():
+    """The centre of an open-hole coupon is in the hole: the hand check, the results and the audit read the far-field probe there,
+    which the record compares, and the far field sits near free-edge laminate theory."""
+    record = load_record(paths.CHECKS / "open-hole-im7-8552" / "records" / "open-hole-im7-8552-calculix.toml")
+    deck, solution = solve_record(record)
+    gauge = gauge_element(deck, solution)
+    assert gauge.centre_in_hole and gauge.basis == "the far-field probe"
+    assert gauge.name in record["expected"]["strain"]
+    assert gauge.xy[1] == pytest.approx(0.100, abs=0.002)  # the probe at y = 100 mm, between the tab line and the hole
+    check = laminate_check(deck, solution)
+    assert check.gauge == gauge
+    assert abs(check.kernel_strain[1] - check.strain[1]) / check.strain[1] < 0.01
+
+
+def test_without_probes_the_gauge_element_is_the_one_nearest_the_centre():
+    deck = read_deck(DECKS / "coupon-1x1-im7-8552.inp", "mm-MPa")
+    gauge = gauge_element(deck, solve_membrane(deck))
+    assert gauge.basis == "nearest the centre" and gauge.index == 0 and not gauge.centre_in_hole
 
 
 def test_laminate_check_refuses_a_deck_with_no_gripped_rows():
@@ -139,6 +160,7 @@ def test_the_generator_writes_a_document_for_the_committed_record(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     tex = (tmp_path / "unnotched-im7-8552-nodal-calculix.tex").read_text(encoding="utf-8")
     assert tex.startswith(r"\documentclass") and tex.rstrip().endswith(r"\end{document}")
+    assert r"\begin{figure}[H]" in tex and r"\usepackage{float}" in tex  # a numbered figure kept in place needs the float package
     for label in ("sec:summary", "sec:model", "sec:rebuild", "sec:clt", "sec:theory", "sec:reference", "sec:method", "sec:comparison", "sec:reading"):
         assert rf"\label{{{label}}}" in tex
     assert tex.count(r"\evidence{INP}") > 20 and r"\evidence{MANUAL p.8}" in tex and r"\evidence{OPEN}" in tex  # the rebuild guide tags every value

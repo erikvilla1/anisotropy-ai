@@ -22,8 +22,8 @@ from anisotropy_fea.units import from_si
 # Evidence tags, in the template's words.
 TAGS = [
     ("INP", "Read directly from the input deck the kernel solved. Highest confidence."),
-    ("INP-derived", "Computed from the deck's data (node coordinates, set membership) by `anisotropy\\_fea.report.model\\_facts`. Reproducible by script."),
-    ("SPEC", "Stated in the spec the decks were generated from (ADR-0030); the generator wrote it into the deck."),
+    ("INP-derived", "Computed from the deck's data (node coordinates, set membership) by our tools. Reproducible by script."),
+    ("SPEC", "Stated in the spec the decks were generated from; the generator wrote it into the deck."),
     ("CALC", "Calculated by the generator outside the solver (a hash, a nominal strain, a ply fraction). The method is shown."),
     ("CAE-CHECK", "An Abaqus/CAE click path or setting that the deck does not store. Confirm it in Abaqus/CAE before release."),
     ("MANUAL p.N", "A PrePoMax click path quoted from page N of the PrePoMax 2.6.0 manual. Not stored in any file of this model."),
@@ -65,6 +65,34 @@ class Context:
     spec_transverse: str | None  # the spec's out-of-plane statement, or None
     record_title: str
     report_date: str
+    hole: tuple[float, float, float] | None = None  # centre x, centre y, diameter (m) of an open hole, from the spec
+    compared_deck: Path | None = None  # the deck our engine compared with the reference solver, when it is not the kernel deck
+    compared_sha256: str | None = None
+
+
+LEGEND = "%%EVIDENCE-TAGS%%"  # where the tag legend goes once the guide knows which tags it used
+
+
+def plural(count: int, word: str) -> str:
+    return f"{count} {word}" + ("" if count == 1 else "s")
+
+
+def coupling_blocks(path: Path) -> list[str]:
+    """Each *Coupling with the *Kinematic or *Distributing line that belongs to it, in the deck's order; comments skipped."""
+    lines = [line.rstrip() for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if not line.strip().startswith("**")]
+    blocks, i = [], 0
+    while i < len(lines):
+        if re.match(r"^\*coupling\b", lines[i].strip(), re.I):
+            block = [lines[i]]
+            i += 1
+            while i < len(lines) and (not lines[i].strip().startswith("*") or re.match(r"^\*(kinematic|distributing)\b", lines[i].strip(), re.I)):
+                if lines[i].strip():
+                    block.append(lines[i])
+                i += 1
+            blocks.append("\n".join(block))
+        else:
+            i += 1
+    return blocks
 
 
 def tag(name: str) -> str:
@@ -97,18 +125,18 @@ def keyword_blocks(path: Path, keyword: str, data_lines: int | None = 12, first_
 
 
 def keyword_box(h: Helpers, title: str, text: str) -> str:
-    return (rf"\par\smallskip\noindent{{\sffamily\footnotesize\color{{muted}}Input-file keywords: \textcolor{{ink}}{{{h.escape(title)}}}}}\par\nopagebreak"
+    return (r"\needspace{5\baselineskip}" + rf"\par\smallskip\noindent{{\sffamily\footnotesize\color{{muted}}Input-file keywords: \textcolor{{ink}}{{{h.escape(title)}}}}}\par\nopagebreak"
             + "\n" + r"\begin{plainfile}" + "\n" + h.listing_text(text) + "\n" + r"\end{plainfile}")
 
 
 def gui_steps(h: Helpers, tool: str, steps: list[str], tag_name: str) -> str:
     if tool not in h.tools:
         return ""
-    return (rf"\textbf{{{h.escape(tool)}}} {tag(tag_name)}" + "\n" + r"\begin{enumerate}" + "\n"
+    return (r"\needspace{6\baselineskip}" + rf"\textbf{{{h.escape(tool)}}} {tag(tag_name)}" + "\n" + r"\begin{enumerate}" + "\n"
             + "\n".join(r"\item " + step for step in steps) + "\n" + r"\end{enumerate}")
 
 
-def partition_steps(h: Helpers, f: ModelFacts, length: Callable[[float], float], L: str) -> list[str]:
+def partition_steps(h: Helpers, f: ModelFacts, length: Callable[[float], float], L: str, lines: tuple[float, ...]) -> list[str]:
     """The Abaqus/CAE steps that cut the coupon face at the partition lines, with the points to type in the sketcher.
 
     A sketch on a face measures from the centre of that face, not from the part origin (seen in the founder's Abaqus/CAE
@@ -116,7 +144,7 @@ def partition_steps(h: Helpers, f: ModelFacts, length: Callable[[float], float],
     The step tells the reader how to confirm the origin before typing, and gives a datum-plane route that needs no shift.
     """
     e = h.escape
-    inner = [length(v) for v in f.partition_lines_y[1:-1]]
+    inner = [length(v) for v in lines[1:-1]]
     if not inner:
         return [e("No partition: the deck has no inner partition line, so the part stays one face.")]
     x0, x1 = (length(v) for v in f.extent_x)
@@ -125,10 +153,8 @@ def partition_steps(h: Helpers, f: ModelFacts, length: Callable[[float], float],
     g = lambda v: f"{round(v, 9) + 0.0:g}"  # noqa: E731  (+ 0.0 turns -0.0 into 0)
     m = lambda v: g(v).replace("-", "−")  # noqa: E731  a minus sign in the prose; the typed points keep the hyphen
     typed = lambda text: r"\texttt{" + e(text) + "}"  # noqa: E731
-    rows = "\n".join(rf"{g(y)} & {typed(f'{g(x0 - xc)},{g(y - yc)}')} & {typed(f'{g(x1 - xc)},{g(y - yc)}')} \\" for y in inner)
-    table = (r"\par\smallskip{\small\begin{tabular}{lll}\toprule" + "\n"
-             + rf"\textbf{{Part y ({e(L)})}} & \textbf{{Start point}} & \textbf{{End point}} \\ \midrule" + "\n"
-             + rows + "\n" + r"\bottomrule\end{tabular}}")
+    rows = [rf"{g(y)} & {typed(f'{g(x0 - xc)},{g(y - yc)}')} & {typed(f'{g(x1 - xc)},{g(y - yc)}')} \\" for y in inner]
+    table = "\n" + h.long_table([f"Part y ({e(L)})", f"Start point ({e(L)})", f"End point ({e(L)})"], rows, r"lYY", r"\small")  # breaks across pages
     lines_text = ", ".join(g(y) for y in inner)
     return [
         e("Tools > Partition > Face > Sketch. If asked, pick the coupon face and click Done."),
@@ -141,7 +167,8 @@ def partition_steps(h: Helpers, f: ModelFacts, length: Callable[[float], float],
         e(f"Draw one line across the full width at each partition line (y = {lines_text} {L}) with Create Lines: Connected: type the "
           "start point, Enter, the end point, Enter, then end the line (middle mouse button or Esc) so that the next line does not "
           "join it. The points, in sketch coordinates:") + "\n" + table,
-        e(f"Click Done in the prompt area. The part now has {len(inner) + 1} faces, one per row of “Regions by element label” above."),
+        e(f"Click Done in the prompt area. The part now has {len(inner) + 1} faces, "
+          + ("one per row of “Regions by element label” above." if f.grid else "one per region between the lines above.")),
         e(f"Alternative without sketch coordinates: Tools > Datum > Plane > Offset From Principal Plane > XZ Plane, one plane at each "
           f"offset {lines_text} {L}. Then Tools > Partition > Face > Use Datum Plane: pick the face the plane crosses, pick the plane, "
           "Create Partition; repeat for each plane."),
@@ -163,8 +190,12 @@ def render(ctx: Context, h: Helpers) -> str:
     abaqus_ref = ctx.solver_name == "abaqus"
 
     # ---------------------------------------------------------------- document control and tags
-    out.append("This guide is written so that an engineer can rebuild the model by hand in " + " or in ".join(h.tools) + " and get the same deck. "
-               "It follows the team's FEA model report template: each step has a settings table, the GUI steps, and the "
+    out.append("This guide is written so that an engineer can rebuild the model by hand in " + " or in ".join(h.tools)
+               + (" and get the same model as our deck (Abaqus/CAE writes its own set and constraint names). " if f.grid else
+                  ". Its mesh is not a structured grid and cannot be made again by seeding: to work on our mesh, import our deck, which brings "
+                  "every step below with it (Mesh, below). The steps then say what the import must show, and they build the part by hand for "
+                  "anyone who meshes it in Abaqus/CAE; that mesh differs from ours, which the audit's model match reports. ")
+               + "It follows the team's FEA model report template: each step has a settings table, the GUI steps, and the "
                "input-file keywords the deck holds. Every value carries an evidence tag; a value that cannot is written "
                + tag("OPEN") + " and listed at the end.")
     out.append(h.heading(1, "Document control"))
@@ -186,8 +217,13 @@ def render(ctx: Context, h: Helpers) -> str:
         ("Model / job", job),
         ("Generated by", (e("anisotropy_fea from the spec " + ctx.spec_path.name) + " " + tag("SPEC")) if generated
          else ((e(cae_tool) + " " + tag("INP") + " (heading comment)") if cae_tool else (e("not stated") + " " + tag("OPEN")))),
-        ("Kernel deck", h.code(ctx.kernel_deck.name) + ", SHA-256 " + h.code(ctx.kernel_sha256) + " " + tag("CALC")),
-        ("Reference deck", (h.code(ctx.reference_deck.name) + ", SHA-256 " + h.code(ctx.reference_sha256) + " " + tag("CALC"))
+        ("Deck this guide builds", h.code(ctx.kernel_deck.name) + ", SHA-256 " + h.code(ctx.kernel_sha256) + " " + tag("CALC")),
+        *([("Deck our engine compared with " + ("CalculiX" if ctx.solver_name == "calculix" else "the reference solver"),
+            h.code(ctx.compared_deck.name) + ", SHA-256 " + h.code(ctx.compared_sha256 or "") + ": " + e("the twin in Abaqus format, the same "
+            "mesh as the reference solver's deck on its corner nodes, with the grips as direct constraints") + " " + tag("CALC"))]
+          if ctx.compared_deck is not None else []),
+        (("CalculiX deck" if ctx.solver_name == "calculix" else "Reference deck"),
+         (h.code(ctx.reference_deck.name) + ", SHA-256 " + h.code(ctx.reference_sha256) + " " + tag("CALC"))
          if ctx.reference_deck != ctx.kernel_deck else "the same deck " + tag("INP")),
         ("Source CAE file", ("none: the deck is generated, not drawn " + tag("SPEC")) if generated else ("not supplied; the GUI steps below are therefore " + tag("CAE-CHECK"))),
         ("Unit system", (e(f"{units}: stated in the spec and written in the deck header") + " " + tag("SPEC")) if generated
@@ -201,7 +237,7 @@ def render(ctx: Context, h: Helpers) -> str:
     open_items.append("Author and reviewer names.")
     out.append(h.kv_table(control))
     out.append(h.heading(1, "Evidence tags"))
-    out.append(h.long_table(["Tag", "Meaning"], [rf"{tag(name)} & {h.inline(meaning)} \\" for name, meaning in TAGS], r"lY", r"\small"))
+    out.append(LEGEND)
     out.append("Rule for authors: a value is never written unless it can carry one of these tags. If it cannot, write " + tag("OPEN") + ".")
 
     # ---------------------------------------------------------------- summary card
@@ -210,7 +246,9 @@ def render(ctx: Context, h: Helpers) -> str:
     section = f.sections[0] if f.sections else None
     width = length(f.extent_x[1] - f.extent_x[0])
     total_length = length(f.extent_y[1] - f.extent_y[0])
-    free = (length(f.partition_lines_y[-2] - f.partition_lines_y[1]) if len(f.partition_lines_y) >= 3 else None)
+    grips_y = f.grip_lines_y
+    free = (length(grips_y[-2] - grips_y[1]) if len(grips_y) >= 4 else None)
+    hole = tuple(length(v) for v in ctx.hole) if ctx.hole is not None else None  # centre x, centre y, diameter
     pull = next((length(b.value) for b in f.boundaries if b.dof_first <= 2 <= b.dof_last and b.value), None)
     load_total = sum(l.value for l in f.loads if l.dof == 2)
     grips = ("two reference points, each kinematically coupled to a grip node set" if f.couplings
@@ -220,7 +258,9 @@ def render(ctx: Context, h: Helpers) -> str:
              + f", {len(section.expanded)} plies x {length(section.expanded[0].thickness_m):g} = {length(section.total_thickness_m):g} {L}"
              + f", {section.expanded[0].integration_points} integration points per ply") if section else "no shell section"
     card = [
-        ("Purpose", e(f"Linear-elastic response of a {width:g} {L} by {total_length:g} {L} composite coupon with gripped end zones") + " " + tag("INP-derived")),
+        ("Purpose", e(f"Linear-elastic response of a {width:g} {L} by {total_length:g} {L} composite coupon"
+                      + (f" with a {hole[2]:g} {L} hole at ({hole[0]:g}, {hole[1]:g}) {L}" if hole else "") + " and gripped end zones") + " "
+         + tag("INP-derived" if hole is None else "SPEC")),
         ("Analysis", e(f"Static, general, one step ({f.step[0]}), geometric nonlinearity {'ON' if f.step[1] else 'OFF'}") + " " + tag("INP")),
         ("Unit system", e(units) + " " + tag("SPEC" if generated else "ASSUMED")),
         ("Geometry", e(f"Planar deformable shell, x = {length(f.extent_x[0]):g} to {length(f.extent_x[1]):g}, y = {length(f.extent_y[0]):g} to {length(f.extent_y[1]):g}, z = 0") + " " + tag("INP")),
@@ -228,7 +268,7 @@ def render(ctx: Context, h: Helpers) -> str:
         ("Layup", e(layup) + " " + tag("INP")),
         ("Element / mesh", e(f"{element_type}, {n_elements} elements, {n_nodes} nodes, edge lengths {length(f.edge_length_range[0]):.4g} to {length(f.edge_length_range[1]):.4g} {L}") + " " + tag("INP-derived")),
         ("Grips", e(grips) + " " + tag("INP")),
-        ("Free length", (e(f"{free:g} {L} (y = {length(f.partition_lines_y[1]):g} to {length(f.partition_lines_y[-2]):g})") + " " + tag("INP-derived")) if free is not None else tag("OPEN")),
+        ("Free length", (e(f"{free:g} {L} (y = {length(grips_y[1]):g} to {length(grips_y[-2]):g})") + " " + tag("INP-derived")) if free is not None else tag("OPEN")),
         ("Loading", (e(f"prescribed displacement {pull:g} {L} along y at the top grip") + " " + tag("INP")) if pull is not None
          else (e(f"concentrated loads along y summing to {load_total:g} N") + " " + tag("INP")) if load_total else tag("OPEN")),
         ("Damage / failure model", e("none in the deck; first-ply failure is computed afterwards by the kernel from *Fail Stress" if any(m.fail_stress for m in ctx.deck.materials.values()) else "none") + " " + tag("INP")),
@@ -237,21 +277,28 @@ def render(ctx: Context, h: Helpers) -> str:
 
     # ---------------------------------------------------------------- part geometry
     out.append(h.heading(1, "Part geometry"))
-    out.append(r"\textbf{Purpose.} Define the coupon outline and the partition lines that separate the gripped zones from the free length.")
-    lines_text = ", ".join(f"{length(v):g}" for v in f.partition_lines_y[1:-1]) or "none"
+    out.append(r"\textbf{Purpose.} Define the coupon outline" + (" with its hole" if hole else "")
+               + " and the partition lines that separate the gripped zones from the free length.")
+    partition = f.partition_lines_y if f.grid else grips_y  # a structured grid keeps every line where the row spacing changes; any other mesh, the grips' edges
+    lines_text = ", ".join(f"{length(v):g}" for v in partition[1:-1]) or "none"
     bands = "; ".join(f"{a}--{b}: y {length(y0):g} to {length(y1):g} {L} ({count} elements)" for y0, y1, count, a, b in f.element_bands)
     out.append(h.kv_table([
         ("Part name", e(part_name) + " " + tag("INP")),
         ("Type", e("3D, deformable, planar shell (every node has z = 0)") + " " + tag("INP") + "; the modelling-space choice in the GUI " + tag("CAE-CHECK")),
         ("Extent", e(f"width (x) {width:g} {L}, length (y) {total_length:g} {L}") + " " + tag("INP")),
+        *([("Hole", e(f"diameter {hole[2]:g} {L}, centre ({hole[0]:g}, {hole[1]:g}) {L}") + " " + tag("SPEC"))] if hole else []),
         ("Load axis", e("global y (dof 2 is prescribed or loaded)") + " " + tag("INP")),
-        ("Partition lines (y)", e(f"{lines_text} {L}: the inner edges of the gripped node groups and every y where the node-row spacing changes") + " " + tag("INP-derived")),
-        ("Regions by element label", e(bands) + " " + tag("INP-derived")),
+        ("Partition lines (y)", e(f"{lines_text} {L}: " + ("the inner edges of the gripped node groups and every y where the node-row spacing changes"
+                                                          if f.grid else "the inner edges of the gripped node groups")) + " " + tag("INP-derived")),
+        *([("Regions by element label", e(bands) + " " + tag("INP-derived"))] if f.grid else []),
     ]))
     out.append(gui_steps(h, "Abaqus/CAE", [
-        e(f"Part module > Create Part. Name {part_name}, 3D, Deformable, Shell, Planar, approximate size {2 * total_length:g}."),
-        e(f"Sketch a rectangle with corners ({length(f.extent_x[0]):g}, {length(f.extent_y[0]):g}) and ({length(f.extent_x[1]):g}, {length(f.extent_y[1]):g}); Done."),
-        *partition_steps(h, f, length, L),
+        e(f"Part module > Create Part. Name {part_name}, 3D, Deformable, Shell, Planar, approximate size {2 * total_length:g} {L}."),
+        e(f"Sketch a rectangle with corners ({length(f.extent_x[0]):g}, {length(f.extent_y[0]):g}) and ({length(f.extent_x[1]):g}, {length(f.extent_y[1]):g})"
+          + ("; Done." if not hole else
+             f". In the same sketch, Create Circle: Center and Perimeter: type the centre {hole[0]:g},{hole[1]:g}, Enter, then a point on the circle "
+             f"{hole[0] + hole[2] / 2:g},{hole[1]:g}, Enter. Done: the circle inside the rectangle leaves the hole in the shell.")),
+        *partition_steps(h, f, length, L, partition),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
         e("File > New: model space 3D, unit system mm, ton, s, °C (the mm-MPa system of the deck). ") + tag("MANUAL p.8"),
@@ -285,7 +332,7 @@ def render(ctx: Context, h: Helpers) -> str:
                 text, _, url = line.partition(": http")
                 url = "http" + url if url else ""
                 safe = url.replace("%", r"\%").replace("#", r"\#")  # neither % nor # may appear raw inside a tabularx body
-                cite = h.inline(text) + (rf": \href{{{safe}}}{{{h.code(url)}}}" if url else "")  # a breakable, clickable URL
+                cite = h.inline(text) + (rf" (\href{{{safe}}}{{link}})" if url else "")  # the page is in the text; the long URL behind a short link
                 rows.append(rf"\quad citation & {cite} & {tag('SPEC')} \\")
         else:
             rows.append(rf"Origin of values (datasheet, test, supplier) & not stated in the deck & {tag('OPEN')} \\")
@@ -294,10 +341,17 @@ def render(ctx: Context, h: Helpers) -> str:
             rows.append(rf"Out-of-plane constants for CalculiX & {e(ctx.spec_transverse)} & {tag('SPEC')} \\")
         out.append(h.long_table(["Constant", "Value", "Source"], rows, r"lYl", r"\small"))
         if el.kind == "LAMINA" and abs(el.E1 - el.E2) < 1e-9 * el.E1:
-            out.append(r"\textbf{Note.} $E_1 = E_2$: this lamina behaves like a balanced fabric, not like a unidirectional tape. State the material form in the final report. " + tag("CALC"))
+            out.append(r"\textbf{Note.} The deck gives $E_1 = E_2$ " + tag("INP") + ": a lamina as stiff across its axis 1 as along it is a "
+                       "balanced fabric rather than a unidirectional tape " + tag("ASSUMED") + ".")
+        if material.fail_stress:
+            out.append("The deck writes the compressive strengths Xc and Yc as negative numbers; as magnitudes they are the strengths F1c and F2c. "
+                       + tag("INP"))
     out.append(gui_steps(h, "Abaqus/CAE", [
         e("Property module > Create Material, enter the name > Mechanical > Elasticity > Elastic, Type Lamina, one row: E1, E2, Nu12, G12, G13, G23 in the order of the table."),
-        e("Mechanical > Damage for Fiber-Reinforced Composites is NOT used; the strengths go to Fail Stress: Mechanical > Elasticity > Elastic > Suboptions > Fail Stress, one row Xt, Xc, Yt, Yc, S, and the sixth value f* (write 0 explicitly; ADR-0021 never assumes it).")
+        e("Mechanical > Damage for Fiber-Reinforced Composites is NOT used; the strengths go to Fail Stress: Mechanical > Elasticity > Elastic > "
+          "Suboptions > Fail Stress, one row with the five values of the deck: Xt, Xc, Yt, Yc, S, with Xc and Yc negative as in the table. Leave "
+          "the columns after them (the cross-product term coefficient and the stress limit) empty, as the deck does: our tools read a stated sixth "
+          "value as the Tsai-Wu interaction term.")
         if any(m.fail_stress for m in ctx.deck.materials.values()) else e("No strengths are in the deck."),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
@@ -308,6 +362,9 @@ def render(ctx: Context, h: Helpers) -> str:
     out.append(keyword_box(h, ctx.kernel_deck.name, "\n".join(keyword_blocks(ctx.kernel_deck, "Material") + keyword_blocks(ctx.kernel_deck, "Elastic") + keyword_blocks(ctx.kernel_deck, "Fail Stress"))))
     if ctx.reference_deck != ctx.kernel_deck:
         out.append(keyword_box(h, ctx.reference_deck.name + " (CalculiX)", "\n".join(keyword_blocks(ctx.reference_deck, "Material") + keyword_blocks(ctx.reference_deck, "Elastic"))))
+        if ctx.solver_name == "calculix":
+            out.append("The CalculiX *Elastic data end with the temperature the constants are stated at, 293 K, which a linear model does not use. "
+                       + tag("INP"))
 
     # ---------------------------------------------------------------- layup
     if section is not None:
@@ -320,7 +377,7 @@ def render(ctx: Context, h: Helpers) -> str:
             ("Element type", e("conventional shell (*Shell Section, composite); continuum shell is NOT used") + " " + tag("INP")),
             ("Symmetric flag", (e("yes: the listed plies are the lower half, mirrored above the midplane") if section.symmetric else e("no: every ply is listed")) + " " + tag("INP")),
             ("Region", e(f"element set {section.elset}, {section.elements} elements") + " " + tag("INP")),
-            ("Orientation", e(f"{section.orientation or 'none'}: {axes}. Local direction 1 is global x, ACROSS the width; a 0-degree ply has its fibres across the load") + " " + tag("INP")),
+            ("Orientation", e(f"{section.orientation or 'none'}: {axes}. Local direction 1 is global x, ACROSS the width; a 0-degree ply has its material axis 1 across the load") + " " + tag("INP")),
             ("Integration points per ply", e(str(section.expanded[0].integration_points)) + " " + tag("INP")),
             ("Section integration", e(section.section_integration or "default (Simpson)") + " " + (tag("INP") if section.section_integration else tag("ASSUMED"))),
         ]))
@@ -330,8 +387,10 @@ def render(ctx: Context, h: Helpers) -> str:
                                 r"lYrrr", r"\small"))
         out.append("All values " + tag("INP") + ".")
         out.append(h.heading(2, f"Expanded stack ({len(section.expanded)} plies, bottom to top)"))
+        z = lambda v: 0.0 if abs(v) <= 1e-9 * section.total_thickness_m else v  # noqa: E731  the midplane, not roundoff
         out.append(h.long_table(["Ply", "Angle (deg)", f"t ({L})", f"z bottom ({L})", f"z top ({L})"],
-                                [rf"{p.index} & {p.angle_deg:g} & {n(length(p.thickness_m))} & {n(length(p.z_bottom_m), 5)} & {n(length(p.z_top_m), 5)} \\" for p in section.expanded],
+                                [rf"{p.index} & {p.angle_deg:g} & {n(length(p.thickness_m))} & {n(length(z(p.z_bottom_m)), 5)} & {n(length(z(p.z_top_m)), 5)} \\"
+                                 for p in section.expanded],
                                 r"lrrrr", r"\small"))
         fractions = ", ".join(f"{angle:g} degrees {100 * count / len(section.expanded):.0f}% ({count} plies)" for angle, count in section.angle_fractions)
         mid = section.expanded[len(section.expanded) // 2 - 1], section.expanded[len(section.expanded) // 2]
@@ -359,14 +418,16 @@ def render(ctx: Context, h: Helpers) -> str:
     out.append(r"\textbf{Purpose.} Place the part, name the node and element groups the constraints and loads act on, and create the reference points that carry the grip motion.")
     rows = [rf"Instance & {e(f'{name} of part {part} at the origin, no rotation (dependent: the mesh lives in the part)')} & {tag('INP')} \\" for name, part in f.instances]
     for name, (x, y) in f.reference_nodes:
-        rows.append(rf"Reference point & {e(f'{name} at ({length(x):g}, {length(y):g}, 0)')} & {tag('INP')} \\")
+        rows.append(rf"Reference point & {e(f'{name} at ({length(x):g}, {length(y):g}, 0) {L}')} & {tag('INP')} \\")
     used_sets = {b.target for b in f.boundaries} | {l.target for l in f.loads} | {s[2] for s in f.surfaces if s[1] == 'node'}
     for s in f.node_sets:
         where = (f"y = {length(s.y_range[0]):g}" if abs(s.y_range[1] - s.y_range[0]) < 1e-12 else f"y = {length(s.y_range[0]):g} to {length(s.y_range[1]):g}")
         use = "" if s.name in used_sets else "; not referenced by a boundary, load or coupling"
-        rows.append(rf"Node set {e(s.name)} & {e(f'{s.count} nodes, {where} {L}{use}')} & {tag('INP-derived')} \\")
+        nodes = plural(s.count, "node")
+        rows.append(rf"Node set {e(s.name)} & {e(f'{nodes}, {where} {L}{use}')} & {tag('INP-derived')} \\")
     for name, count, scope in f.element_sets:
-        rows.append(rf"Element set {e(name)} & {e(f'{count} elements ({scope})')} & {tag('INP')} \\")
+        elements = plural(count, "element")
+        rows.append(rf"Element set {e(name)} & {e(f'{elements} ({scope})')} & {tag('INP')} \\")
     for name, kind, names in f.surfaces:
         rows.append(rf"Surface {e(name)} & {e(f'{kind}-based, from {names}')} & {tag('INP')} \\")
     out.append(h.long_table(["Item", "Value", "Source"], rows, r"lYl", r"\small"))
@@ -387,14 +448,22 @@ def render(ctx: Context, h: Helpers) -> str:
     out.append(h.heading(1, "Step"))
     static = keyword_blocks(ctx.kernel_deck, "Static", 1, first_only=True)
     static_line = static[0].splitlines()[1] if static and len(static[0].splitlines()) > 1 else None
+    # the *Static data line, in Abaqus's order: initial time increment, time period, minimum increment, maximum increment
+    increments = dict(zip(("initial increment", "time period", "minimum increment", "maximum increment"),
+                          (v.strip() for v in static_line.split(",") if v.strip()))) if static_line else {}
     out.append(h.kv_table([
         ("Step name / procedure", e(f"{f.step[0]}, Static, General") + " " + tag("INP")),
         ("Nlgeom", e("ON" if f.step[1] else "OFF") + " " + tag("INP")),
-        ("Time period / increments", (e(f"{static_line} (period, initial, minimum, maximum)") + " " + tag("INP")) if static_line else (e("defaults (no data line)") + " " + tag("INP"))),
+        ("Time and increments", (e(", ".join(f"{name} {value}" for name, value in increments.items())) + " " + tag("INP")) if increments
+         else (e("defaults (no data line)") + " " + tag("INP"))),
         ("Other settings", e("defaults; the deck writes no override") + " " + tag("INP-derived")),
     ]))
     out.append(gui_steps(h, "Abaqus/CAE", [
-        e(f"Step module > Create Step > Static, General, name {f.step[0]}. Basic tab: Nlgeom {'On' if f.step[1] else 'Off'}. Incrementation tab: " + (f"enter {static_line}." if static_line else "defaults.")),
+        e(f"Step module > Create Step > Static, General, name {f.step[0]}. Basic tab: "
+          + (f"Time period {increments['time period']}, " if "time period" in increments else "")
+          + f"Nlgeom {'On' if f.step[1] else 'Off'}. Incrementation tab: "
+          + ("; ".join(f"{name.split()[0].capitalize()} {value.rstrip('.') if value.endswith('.') else value}" for name, value in increments.items()
+                       if name != "time period") + "." if increments else "defaults.")),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
         e(f"Step > Step > Create > Static step: Solver Default, Nlgeom {'On' if f.step[1] else 'Off'}, Incrementation Default. ") + tag("MANUAL p.41"),
@@ -405,11 +474,14 @@ def render(ctx: Context, h: Helpers) -> str:
     out.append(h.heading(1, "Interactions and constraints"))
     if f.couplings:
         out.append(r"\textbf{Purpose.} Make each grip zone move rigidly with its reference point.")
-        rows = [rf"{e(c.name)} & {e(c.reference)} at ({length(c.reference_xy[0]):g}, {length(c.reference_xy[1]):g}) & {e(f'{c.slaves} nodes, y = {length(c.y_range[0]):g} to {length(c.y_range[1]):g} {L}')} & "
+        coupled = {c.name: plural(c.slaves, "node") for c in f.couplings}
+        rows = [rf"{e(c.name)} & {e(c.reference)} at ({length(c.reference_xy[0]):g}, {length(c.reference_xy[1]):g}) {e(L)} & {e(f'{coupled[c.name]}, y = {length(c.y_range[0]):g} to {length(c.y_range[1]):g} {L}')} & "
                 rf"{e('kinematic, dofs ' + ', '.join(map(str, c.dofs)))} \\" for c in f.couplings]
         out.append(h.long_table(["Name", "Control point", "Coupled nodes", "Type"], rows, r"lYYY", r"\small"))
-        out.append("Names and dofs " + tag("INP") + "; node counts and y ranges " + tag("INP-derived") + ". Consequence: a kinematic coupling of the whole grip zone prevents width contraction and rotation there, stiffer than a real gripped specimen; "
-                   "the kernel represents it as one rigid translation of the coupled nodes with the reference node's rotations fixed (theory, Section 3). " + tag("CALC"))
+        out.append("Names and dofs " + tag("INP") + "; node counts and y ranges " + tag("INP-derived") + ". Consequence: a kinematic coupling of "
+                   "the whole grip zone holds the width and the rotations there " + tag("INP-derived") + ", which is likely stiffer than a real "
+                   "gripped specimen " + tag("ASSUMED") + ". Our engine represents it as one rigid translation of the coupled nodes with the "
+                   "reference node's rotations fixed (the kernel's theory, Constraints and assembly, in Chapter 2).")
         out.append(gui_steps(h, "Abaqus/CAE", [
             e("Interaction module > Create Constraint > Coupling. Control point: the reference point (Set). Surface: the grip node set (Node Region). Coupling type Kinematic, Influence radius To outermost point on the region, all six dofs ticked."),
         ], "CAE-CHECK"))
@@ -417,7 +489,7 @@ def render(ctx: Context, h: Helpers) -> str:
             e("Interaction > Constraint > Create > Kinematic Coupling: Reference point, Region (a node-based surface; the manual says shells need node-based surfaces), DOF U1-U3 Coupled. ") + tag("MANUAL p.33") + " " + tag("MANUAL p.34"),
             e("CalculiX cannot print the reference node's reaction of a coupling (*NODE PRINT does not report it), so the CalculiX deck of this model uses direct constraints on the grip node sets instead (ADR-0030); the reaction is then the printed total over the set. ") + tag("INP"),
         ], "MANUAL"))
-        out.append(keyword_box(h, ctx.kernel_deck.name, "\n".join(keyword_blocks(ctx.kernel_deck, "Coupling", 0) + keyword_blocks(ctx.kernel_deck, "Kinematic", 1))))
+        out.append(keyword_box(h, ctx.kernel_deck.name, "\n".join(coupling_blocks(ctx.kernel_deck))))
     else:
         out.append("No couplings, contact or ties: the grips are direct constraints on the grip node sets (next section). " + tag("INP")
                    + " Consequence: every gripped node is held in all its dofs, which prevents width contraction in the tabs exactly as a kinematic coupling with fixed reference rotations does. " + tag("CALC"))
@@ -453,11 +525,14 @@ def render(ctx: Context, h: Helpers) -> str:
 
     # ---------------------------------------------------------------- mesh
     out.append(h.heading(1, "Mesh"))
-    seeds = (e(f"{f.grid[0]} across the width; along the length from the bottom: {', '.join(map(str, f.row_counts))} (total {f.grid[1]})") + " " + tag("INP-derived")) if f.grid else (e("not a rectangular grid") + " " + tag("INP-derived"))
+    seeds = ((e(f"{f.grid[0]} across the width; along the length from the bottom: {', '.join(map(str, f.row_counts))} (total {f.grid[1]})") + " " + tag("INP-derived"))
+             if f.grid else (e("none: the mesh is not a rectangular grid" + (", it is meshed around the hole" if hole else "")
+                               + ", so no seeding in Abaqus/CAE makes the same mesh") + " " + tag("INP-derived")))
     out.append(h.kv_table([
-        ("Element type", e(f"{element_type} ({'4-node reduced-integration conventional shell' if element_type == 'S4R' else '4-node conventional shell'}); the kernel solves it as a bilinear membrane") + " " + tag("INP")),
+        ("Element type", e(f"{element_type} ({'4-node reduced-integration conventional shell' if element_type == 'S4R' else '4-node conventional shell'})") + " " + tag("INP")
+         + e("; our engine solves it as a bilinear membrane")),
         ("Counts", e(f"{n_elements} elements, {n_nodes} nodes") + " " + tag("INP-derived")),
-        ("Size", e(f"edge lengths {length(f.edge_length_range[0]):.5g} to {length(f.edge_length_range[1]):.5g} {L}") + " " + tag("INP-derived")),
+        ("Size", e(f"edge lengths {length(f.edge_length_range[0]):.4g} to {length(f.edge_length_range[1]):.4g} {L}") + " " + tag("INP-derived")),
         ("Seeds by number", seeds),
         ("Stack direction", e("not applicable to a conventional shell section") + " " + tag("CAE-CHECK")),
         ("Element controls", e("defaults (none written)") + " " + tag("INP-derived")),
@@ -466,6 +541,13 @@ def render(ctx: Context, h: Helpers) -> str:
         e("Mesh module (Object: Part) > Seed > Edges, By number: the counts above on the width edges and on each length segment between partition lines (Seed Part by size gives the same mesh only when the partitions divide evenly)."),
         e(f"Mesh > Element Type: Standard, Linear, Shell, {element_type}" + (", reduced integration, hourglass control default." if element_type == "S4R" else ".")),
         e("Mesh > Mesh Part. Check the counts above in the Mesh module's query tool."),
+    ] if f.grid else [
+        e(f"This mesh cannot be made again in Abaqus/CAE. For the same mesh, import our deck {ctx.kernel_deck.name} (File > Import > Model) "
+          "instead of building the part: it brings the mesh with every other step of this guide. A part meshed in Abaqus/CAE has other nodes, "
+          "which the audit's model match (section B) then reports as a different mesh."),
+        e(f"If you mesh it yourself anyway: Mesh > Element Type: Standard, Linear, Shell, {element_type}"
+          + (", reduced integration, hourglass control default; " if element_type == "S4R" else "; ")
+          + f"aim for about {n_elements} elements, with the edge lengths of the table, finest at the hole."),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
         e("Route A: the mesh is the imported deck's; nothing to mesh. ") + tag("GUI-SEEN"),
@@ -475,17 +557,23 @@ def render(ctx: Context, h: Helpers) -> str:
 
     # ---------------------------------------------------------------- job and outputs
     out.append(h.heading(1, "Job and outputs"))
-    outputs = "\n".join(keyword_blocks(ctx.kernel_deck, "Restart", 0) + keyword_blocks(ctx.kernel_deck, "Output", 0)
+    outputs = "\n".join(keyword_blocks(ctx.kernel_deck, "Preprint", 0) + keyword_blocks(ctx.kernel_deck, "Restart", 0) + keyword_blocks(ctx.kernel_deck, "Output", 0)
                         + keyword_blocks(ctx.kernel_deck, "Node Print", 2) + keyword_blocks(ctx.kernel_deck, "El Print", 2))
     out.append(h.kv_table([
         ("Job", job),
         ("Output requests in the deck", e(", ".join(f.ignored_keywords) + ": skipped by the kernel, since they cannot change the solution; quoted below") + " " + tag("INP")),
-        ("What the comparison needs", e("reactions summed over each grip set, displacements at the probe nodes, stresses and strains at the probe elements per ply (the export recipe)") + " " + tag("SPEC" if generated else "INP")),
+        ("What the comparison needs", e("reactions summed over each grip set, displacements at the probe nodes, stresses and strains at the probe elements per ply") + " " + tag("SPEC" if generated else "INP")),
     ]))
     out.append(gui_steps(h, "Abaqus/CAE", [
-        e("Step module > Field Output Requests: Preselected defaults (the deck writes variable=PRESELECT); add S, E, SF at all section points for the comparison."),
+        e("Step module > Field Output Requests: Preselected defaults (the deck writes variable=PRESELECT); add S, E, SF at all section points for the comparison"
+          + (", and CFAILURE (the failure indices; it needs the strengths of Fail Stress)" if any(m.fail_stress for m in ctx.deck.materials.values())
+             else "") + "."),
         e("Step module > History Output Requests: add RF and U at the reference points or grip sets."),
-        e("Job module > Create Job, name as above > Submit > Monitor. Check the .msg and .sta files for warnings. Export per docs/abaqus-export-recipe.md."),
+        e("Job module > Create Job, name as above > Submit > Monitor. Check the .msg and .sta files for warnings."),
+        e("To send results back: Visualization module, Report > Field Output, written as CSV, one file per quantity: S (S11, S22, S12, in the "
+          "axes Abaqus reports for each ply, which we take as its material axes) and E at the element centroids for all section points of every ply, and U and RF at the nodes, the reference "
+          "points included. With the strengths in Fail Stress, add the failure indices CFAILURE (MSTRS, TSAIH) at all section points. The audit "
+          "form's How to check lines say which values each check needs."),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
         e("Step > History Output > Create > Node output: RF, Totals Yes, region the grip node set (one per grip); Node output U at the probe nodes; Element output S, E at the probe elements, Global Yes. ") + tag("MANUAL p.47"),
@@ -498,7 +586,12 @@ def render(ctx: Context, h: Helpers) -> str:
                                                                                      + keyword_blocks(ctx.reference_deck, "El Print", 2) + keyword_blocks(ctx.reference_deck, "Node File", 2) + keyword_blocks(ctx.reference_deck, "El File", 2))))
 
     # ---------------------------------------------------------------- open items
-    out.append(h.heading(1, "Open items of this guide"))
-    out.append("Every click path tagged " + tag("CAE-CHECK") + " or " + tag("MANUAL") + " is a procedure, not a stored setting, and must be confirmed in the tool before release. Values that could not be tagged:")
-    out.append(r"\begin{itemize}" + "\n" + "\n".join(r"\item " + e(item) for item in open_items) + "\n" + r"\end{itemize}")
-    return "\n\n".join(out)
+    out.append(r"\needspace{8\baselineskip}" + h.heading(1, "Open items of this guide"))
+    body = "\n\n".join(out)
+    used = {name for name, _ in TAGS if (r"\evidence{" + name) in body}
+    procedures = [tag(name) for name in ("CAE-CHECK", "MANUAL") if name in used]
+    closing = (("Every click path tagged " + " or ".join(procedures) + " is a procedure, not a stored setting, and must be confirmed in the tool "
+                "before release. ") if procedures else "") + "Values that could not be tagged:"
+    legend = h.long_table(["Tag", "Meaning"], [rf"{tag(name)} & {h.inline(meaning)} \\" for name, meaning in TAGS if name in used | {"OPEN"}], r"lY", r"\small")
+    return (body.replace(LEGEND, legend) + "\n\n" + closing + "\n\n"
+            + r"\begin{itemize}" + "\n" + "\n".join(r"\item " + e(item) for item in open_items) + "\n" + r"\end{itemize}")

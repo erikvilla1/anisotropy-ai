@@ -22,7 +22,7 @@ You review a generated document before it goes to its reader, as a peer reviewer
 ## Procedure
 
 1. Read `README.txt` and list the package folder.
-2. Read the whole PDF, at most 20 pages per Read call, until no pages are left. Note the ranges read.
+2. Read the whole PDF in one Read call, without a page range: it returns every page's text and an image of each page (seen on 76- to 91-page packages, ADR-0047 amendment 1). Only if that fails, read it in ranges of at most 20 pages; a page range needs pdftoppm, which a machine may not have. Note the pages read.
 3. Look at every figure. If a PDF page does not show its figure, read the PNG in `ours/latex/figures/`.
 4. Work through the checklist and note the page and section of each finding.
 5. For each finding, find where the fix goes: grep `ours/latex/<coupon>.tex` for the sentence or caption, then `docs/models/*.py` for the code that writes it. Name the file, and the function when the grep shows it. If you cannot find it, write "generator not found".

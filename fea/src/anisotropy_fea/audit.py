@@ -36,8 +36,7 @@ from . import paths
 from .equivalence import DeckEquivalence, EquivalenceItem
 from .mesh import KernelError
 from .model import Deck, NodeKey, all_boundaries, expanded_layers, resolve_nodes
-from .cases import element_name
-from .report import LaminateCheck, gripped_groups, laminate_check
+from .report import GaugeElement, LaminateCheck, gauge_element, gripped_groups, laminate_check
 from .results import MembraneSolution
 from .side_by_side import PairedValue, agreement, ply_values
 from .forms import FONT, fit_rows, labelled as _labelled, lines_of, listing, one_font, printable, protect, text_of as _text  # noqa: F401  the house style of the forms
@@ -194,6 +193,8 @@ class Evidence:
     excluded: str | None = None  # how the regions left out of the grading were set, in words
     team_reaction: float | None = None  # N, at the loaded grip
     fpf: tuple[str, float, int, float] | None = None  # our first-ply failure: criterion, factor of the applied loading, ply (1 = bottom), its angle
+    fpf_others: tuple[tuple[str, float, int, float], ...] = ()  # the other criteria the spec names, the same four values each
+    fpf_notes: tuple[str, ...] = ()  # where the first-ply-failure elements sit and which plies tie, in words for row C7
     rebuilt: DeckEquivalence | str | None = None  # a deck the auditor built from our guide against ours, or why the two could not be compared
     guide: tuple[int, int] | None = None  # the rebuild guide's open items and ASSUMED tags
     team_reports: tuple[str, ...] = ()  # the file names of the team's field reports, for the "How to check" lines
@@ -231,7 +232,8 @@ class _Facts:
     length_unit: str
     stress_unit: str
     reaction_N: float | None = None  # our reaction along the coupon at the top (loaded) grip
-    centre: tuple[int, str] | None = None  # the element nearest the coupon's centre: mesh index and name
+    gauge: GaugeElement | None = None  # where the gauge state is read (report.gauge_element)
+    units: str = "mm-MPa"
 
 
 # Which of deck_equivalence's items (by the whole of their name) answer each B item.
@@ -333,7 +335,7 @@ def _boundary_lines(deck: Deck, units: str, length_unit: str) -> list[str]:
 
 def _short(item: str) -> str:
     """The item's name as the Difference column refers to it: 'Material E1 (MPa)' is 'E1'."""
-    name = item.split(" (")[0]
+    name = re.sub(r" \((?:MPa|GPa|Pa|mm|m|N|N/mm|N/m)\)$", "", item)
     return name[9:] if name.startswith("Material ") else name
 
 
@@ -394,7 +396,8 @@ def _card(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
 def _units(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
     words = lambda units: UNIT_WORDS.get(units, (str(units), str(units)))  # noqa: E731
     team = (words(ev.team_deck.units)[0],) if ev.team_deck is not None else ()
-    ours = (words(ev.our_deck.units)[0], f"This audit: {words(ev.units)[1]}")
+    ours = (words(ev.our_deck.units)[0], f"This audit: {words(ev.units)[1]}",
+            *(() if ev.team_deck is not None else ("No team deck yet: only our deck is checked, against the unit system of this audit",)))
     decks = [d for d in (ev.team_deck, ev.our_deck) if d is not None]
     ok = all(d.units == ev.units for d in decks)
     return ("Pass" if ok else "Fail"), Found(team, ours, ("The same",) if ok else ("Differ",))
@@ -416,7 +419,7 @@ def _our_largest_in_band(quantity: str, ev: Evidence, facts: _Facts) -> str | No
         return None
     e, k = np.unravel_index(np.argmax(np.abs(values[inside])), values[inside].shape)
     e = int(inside[e])
-    return (f"{quantity}: largest {abs(values[e, k]):.6g} {facts.stress_unit} in the band, at our element {mesh.element_keys[e][1]} "
+    return (f"{quantity}: largest {abs(values[e, k]):.6g} {facts.stress_unit} in the band over all plies, at our element {mesh.element_keys[e][1]} "
             f"({centres[e, 0]:g}, {centres[e, 1]:g}), ply {int(k) + 1}")
 
 
@@ -462,7 +465,8 @@ def _stresses(quantities: tuple[str, ...]) -> Callable[[Item, Evidence, _Facts],
 
 
 def _reaction(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
-    ours = (f"{abs(facts.reaction_N):.6g} N along the coupon at the top grip",) if facts.reaction_N is not None else ("Not computed: no gripped group found",)
+    ours = ((f"{abs(facts.reaction_N):.6g} N along the coupon at the top grip, in {'tension' if facts.reaction_N > 0 else 'compression'}",)
+            if facts.reaction_N is not None else ("Not computed: no gripped group found",))
     if ev.team_reaction is None:
         return None, Found(team=(TEAM_BLANK,), ours=ours)
     team = (f"{abs(ev.team_reaction):.6g} N",)
@@ -475,28 +479,64 @@ def _reaction(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Foun
 
 def _node_text(mesh, index: int) -> str:
     instance, label = mesh.node_keys[index]
-    return f"node {label}" if instance is not None else f"reference node {label}"
+    return f"our node {label}" if instance is not None else f"our reference node {label}"
 
 
 def _displacement(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
     """C4: our displacements and the strain at the gauge centre, for the team to set its own beside."""
     mesh, u = ev.solution.mesh, from_si(ev.solution.displacement, "length", ev.units)
-    i1, i2 = int(np.argmax(np.abs(u[:, 0]))), int(np.argmax(np.abs(u[:, 1])))
-    lines = [f"Largest displacement: U1 {u[i1, 0]:.4g} {facts.length_unit} at {_node_text(mesh, i1)}; U2 {u[i2, 1]:.4g} {facts.length_unit} "
-             f"at {_node_text(mesh, i2)}"]
-    if facts.centre is not None:
-        e, name = facts.centre
-        eps = ev.solution.strain[e]
-        lines.append(f"Strain at the gauge centre (element {name}): eps_x {eps[0]:.4g}, eps_y {eps[1]:.4g}, gamma_xy {eps[2]:.4g}")
+    probe = _gauge_node(ev, facts)
+    if probe is not None:
+        k, name = probe
+        x, y = (from_si(float(v), "length", ev.units) for v in mesh.xy[k])
+        scale = float(np.max(np.abs(u))) or 1.0
+        shown = lambda v: f"{(0.0 if abs(v) <= 1e-9 * scale else v):.4g} {facts.length_unit}"  # noqa: E731  roundoff as 0
+        lines = [f"Displacement at {_node_text(mesh, k)}, the {name} probe at ({x:.4g}, {y:.4g}) {facts.length_unit}, on the deck the team "
+                 f"builds (Chapter 5): U1 {shown(u[k, 0])}, U2 {shown(u[k, 1])}"]
+    else:
+        i1, i2 = int(np.argmax(np.abs(u[:, 0]))), int(np.argmax(np.abs(u[:, 1])))
+        lines = [f"Largest displacement: U1 {u[i1, 0]:.4g} {facts.length_unit} at {_node_text(mesh, i1)}; U2 {u[i2, 1]:.4g} {facts.length_unit} "
+                 f"at {_node_text(mesh, i2)}"]
+    if facts.gauge is not None:
+        eps = ev.solution.strain[facts.gauge.index]
+        lines.append(f"Strain at element {facts.gauge.name}, {gauge_text(facts.gauge, facts.units)}: eps_x {eps[0]:.4g}, eps_y {eps[1]:.4g}, "
+                     f"gamma_xy {eps[2]:.4g}")
     return None, Found(team=(TEAM_BLANK,), ours=tuple(lines))
+
+
+def _gauge_node(ev: Evidence, facts: _Facts) -> tuple[int, str] | None:
+    """The probe node nearest the gauge element: its mesh index and the probe's name, or None when the deck names no probe node."""
+    if facts.gauge is None:
+        return None
+    mesh = ev.solution.mesh
+    found = [(mesh.node(keys[0]), name[len("Probe-"):]) for name, keys in ev.our_deck.nsets.items() if name.startswith("Probe-") and len(keys) == 1]
+    if not found:
+        return None
+    centroid = np.array(facts.gauge.xy)
+    return min(found, key=lambda item: float(np.linalg.norm(mesh.xy[item[0]] - centroid)))
+
+
+def gauge_text(gauge: GaugeElement, units: str) -> str:
+    """Where the gauge element is and why it was chosen, in words for the reader."""
+    unit = {"mm-MPa": "mm", "m-Pa": "m"}[units]
+    at = f"centroid at ({from_si(gauge.xy[0], 'length', units):.4g}, {from_si(gauge.xy[1], 'length', units):.4g}) {unit}"
+    if gauge.basis == "the far-field probe":
+        return f"the far-field probe {at}, away from the hole and the grips (the coupon's centre is in the hole)"
+    if gauge.basis == "the centre probe":
+        return f"the centre probe {at}"
+    return f"the element nearest the coupon's centre, {at}" + (", at the edge of the hole" if gauge.centre_in_hole else "")
+
+
+CRITERION = {"max_stress": "maximum stress", "max_strain": "maximum strain", "tsai_hill": "Tsai-Hill", "tsai_wu": "Tsai-Wu"}  # names for the reader
 
 
 def _fpf(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
     if ev.fpf is None:
         return None, Found(team=(TEAM_BLANK,), ours=("Not computed: the spec names no failure criterion",))
     criterion, factor, ply, angle = ev.fpf
-    return None, Found(team=(TEAM_BLANK,), ours=(f"The first ply to fail is ply {ply} ({angle:g} deg) by {criterion.replace('_', ' ')}, at {factor:.3g} of "
-                                                "the applied loading",))
+    others = tuple(f"By {CRITERION.get(c, c)}: ply {p} ({a:g} deg), at {f:.3g} of the applied loading" for c, f, p, a in ev.fpf_others)
+    return None, Found(team=(TEAM_BLANK,), ours=(f"The first ply to fail is ply {ply} ({angle:g} deg) by {CRITERION.get(criterion, criterion)}, at {factor:.3g} of "
+                                                "the applied loading" + (", the earliest of the criteria" if others else ""), *others, *ev.fpf_notes))
 
 
 def laminate_distance(check: LaminateCheck) -> tuple[float, float]:
@@ -525,11 +565,13 @@ def _laminate(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Foun
     strain, stress = laminate_distance(check)
     widths, restraint, excess = end_effect(check)
     eps = check.kernel_strain
-    ours = (f"Centre element {check.centre_element}: eps_x {eps[0]:.4g}, eps_y {eps[1]:.4g}, gamma_xy {eps[2]:.4g}",
+    ours = (f"Element {check.gauge.name}, {gauge_text(check.gauge, ev.units)}: eps_x {eps[0]:.4g}, eps_y {eps[1]:.4g}, gamma_xy {eps[2]:.4g}",
             "Ply stresses in material axes: on the Results sheet")
-    lines = [f"Strain: within {_pct(strain)} of classical laminate theory with free lateral edges",
-             f"Ply stresses: within {_pct(stress)} of laminate theory",
-             f"Free length {widths:.2g} widths; N_x at the centre {_pct(restraint)} of N_y (zero with free edges: the hold the grips keep on the width)",
+    lines = [f"Strain: the largest difference from classical laminate theory with free lateral edges is {_pct(strain)} of the largest "
+             "laminate-theory strain",
+             f"Ply stresses: the largest difference is {_pct(stress)} of the largest laminate-theory ply stress",
+             f"Free length {widths:.2g} widths; N_x at this element is {_pct(restraint)} of N_y, where free edges would make it zero: it measures "
+             "the hold the grips keep on the width",
              f"Reaction {_pct(abs(excess))} {'above' if excess >= 0 else 'below'} free-edge theory: the held ends stiffen the coupon"]
     if item.condition is not None and widths < item.condition.min_free_length_widths:
         return "N/A", Found(ours=ours, difference=(f"The free length is {widths:.2g} widths, under the {item.condition.min_free_length_widths:g} the hand "
@@ -608,18 +650,38 @@ def _auditor_evidence(item: Item, ev: Evidence, facts: _Facts) -> Found:
             ours.append(f"{q}: largest at element {o.reference_element} ({o.x:g}, {o.y:g})")
         return Found(tuple(team), tuple(ours), (f"Element numbers are the team's; (x, y) in {facts.length_unit}",))
     if item.id == "D5":
-        centre = ()
-        if facts.centre is not None:
-            e, name = facts.centre
-            eps = ev.solution.strain[e]
-            centre = (f"At the centre element {name}: gamma_xy = {eps[2]:.4g}, eps_y = {eps[1]:.4g}",)
-        return Found(ours=(f"Layup {_layup_text(facts.angles, full=True)}", *centre, "Our engine's model is a membrane, so it shows no bending"))
+        coupling = ()
+        if facts.laminate is not None:
+            A = from_si(facts.laminate.A, "force_per_length", ev.units)
+            unit = {"mm-MPa": "N/mm", "m-Pa": "N/m"}[ev.units]
+            share = max(abs(A[0, 2]), abs(A[1, 2])) / abs(A[0, 0])
+            square = all(abs(p.material.E1 - p.material.E2) <= 1e-9 * p.material.E1 for p in facts.laminate.plies)
+            unbalanced = _layup_text(facts.angles).startswith("unbalanced")
+            coupling = (f"In-plane shear coupling of the laminate, from our engine's stiffness: A16 = {_clean(A[0, 2], A[0, 0]):.4g} and "
+                        f"A26 = {_clean(A[1, 2], A[0, 0]):.4g} {unit}, against A11 = {A[0, 0]:.6g} {unit}: "
+                        + ("none, so a load along the coupon makes no shear strain by itself" if share <= 1e-9 else f"present, {share:.3g} of A11"),)
+            if share <= 1e-9 and unbalanced and square:
+                coupling += ("Why an unbalanced layup has none here: its plies are as stiff across their fibres as along them (E1 = E2), and a "
+                             "45-degree ply of such a material couples no shear",)
+            if share <= 1e-9:
+                coupling += ("Shear strain the model does show comes from the grips' hold on the width, largest at the tab corners"
+                             + (", and from the hole, around which the stress turns" if facts.gauge is not None and facts.gauge.centre_in_hole else ""),)
+        gauge = ()
+        if facts.gauge is not None:
+            eps = ev.solution.strain[facts.gauge.index]
+            gauge = (f"At element {facts.gauge.name}, {gauge_text(facts.gauge, ev.units)}: gamma_xy = {eps[2]:.4g}, eps_y = {eps[1]:.4g}",)
+        return Found(ours=(f"Layup {_layup_text(facts.angles, full=True)}", *coupling, *gauge, "Our engine's model is a membrane, so it shows no bending"))
     if item.id == "E3":
         return Found() if ev.guide is None else Found(ours=(f"The guide lists {ev.guide[0]} open item(s) at its end and tags {ev.guide[1]} value(s) ASSUMED",))
     if item.id == "E4":
         card = dict(ev.card)
         return Found(ours=(f"Test data on the coupon card: {card.get('Test data', 'not stated')}",))
     return Found()
+
+
+def _clean(value: float, scale: float) -> float:
+    """A value that is roundoff against its scale (below 1e-9 of it) as zero."""
+    return 0.0 if abs(value) <= 1e-9 * abs(scale) else float(value)
 
 
 def _facts(evidence: Evidence) -> _Facts:
@@ -633,13 +695,8 @@ def _facts(evidence: Evidence) -> _Facts:
         reaction: float | None = float(solution.reaction[list(top)].sum(axis=0)[1])
     except KernelError:
         reaction = None
-    mesh = solution.mesh
-    instance_rows = [k for k in range(mesh.node_count) if mesh.node_keys[k][0] is not None]
-    middle = 0.5 * (mesh.xy[instance_rows].min(axis=0) + mesh.xy[instance_rows].max(axis=0))
-    centres = mesh.xy[mesh.connectivity[:, :4]].mean(axis=1)
-    e = int(np.argmin(np.linalg.norm(centres - middle, axis=1)))
     length_unit, stress_unit = {"mm-MPa": ("mm", "MPa"), "m-Pa": ("m", "Pa")}[evidence.units]
-    return _Facts(check, reason, _deck_angles(deck), length_unit, stress_unit, reaction, (e, element_name(mesh.element_keys[e])))
+    return _Facts(check, reason, _deck_angles(deck), length_unit, stress_unit, reaction, gauge_element(deck, solution), evidence.units)
 
 
 def score(rubric: Rubric, evidence: Evidence) -> tuple[Scored, ...]:
@@ -800,7 +857,8 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
         else:
             applies_note = f" Rubric row D1 applies from {condition.min_free_length_widths:g} widths, so for this coupon it is N/A."
             applies_short = f"; row D1 is N/A under {condition.min_free_length_widths:g} widths"
-        label = check.centre_element.rsplit(".", 1)[-1]  # the element's label in the deck, as Abaqus/CAE asks for it
+        label = check.gauge.name.rsplit(".", 1)[-1]  # the element's label in the deck, as Abaqus/CAE asks for it
+        at = gauge_text(check.gauge, ev.units)
         width = from_si(check.width_m, "length", ev.units)
         if check.control == "displacement":
             applied = (f"eps_y = {check.applied / check.free_length_m:.4g} (the {from_si(check.applied, 'length', ev.units):.4g} {length_unit} pull over "
@@ -811,7 +869,7 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
         where = (f"section point of {ply0} (0 deg), whose axes are the coupon's" if ply0
                  else "any ply, remembering that Abaqus reports them in the ply's own axes")
         team_element = next((p.reference_element for p in ev.paired if str(p.our_element) == label), None)
-        tables.append(Table(f"Strains at the gauge centre, element {check.centre_element}: laminate theory with free lateral edges against our engine",
+        tables.append(Table(f"Strains at element {check.gauge.name}, {at}: laminate theory with free lateral edges against our engine",
                             ("Strain", "Laminate theory", "Our engine", "Difference (% of the largest theory strain)"),
                             tuple((name, float(theory), float(ours), 100 * abs(float(ours) - float(theory)) / strain_scale)
                                   for name, theory, ours in zip(("eps_x", "eps_y", "gamma_xy"), check.strain, check.kernel_strain)),
@@ -820,12 +878,12 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
                             f"How to check: laminate theory with any laminate calculator, for the layup and material on the coupon card, at {applied} and "
                             f"N_x = N_xy = 0. Our engine, in Abaqus on our deck {deck_name}: XY Data from ODB field output, LE11, LE22 and LE12 at the "
                             f"integration point of element {label}, {where}; LE12 is the engineering shear strain."))
-        tables.append(Table(f"Section forces at the gauge centre, element {check.centre_element} (N/{length_unit}): laminate theory against our engine",
+        tables.append(Table(f"Section forces at element {check.gauge.name} (N/{length_unit}): laminate theory against our engine",
                             ("Section force", "Laminate theory", "Our engine", "Difference (% of the largest theory force)"),
                             tuple((name, float(theory) * per_length, float(ours) * per_length, 100 * abs(float(ours) - float(theory)) / force_scale)
                                   for name, theory, ours in zip(("N_x", "N_y", "N_xy"), check.section_force, check.kernel_section_force)),
                             f"Section forces are per unit width. The free length between the grips is {from_si(check.free_length_m, 'length', ev.units):.4g} "
-                            f"{length_unit}, {widths:.2g} widths. N_x at the centre is {_pct(restraint)} of N_y: the hold the grips keep on the width there, "
+                            f"{length_unit}, {widths:.2g} widths. N_x at this element is {_pct(restraint)} of N_y: the hold the grips keep on the width there, "
                             f"zero with free edges. The reaction is {_pct(abs(excess))} {'above' if excess >= 0 else 'below'} free-edge theory: the held ends "
                             "stiffen the coupon, and under displacement control the free length then carries a little more strain than the pull over the "
                             "free length.", (None, length, length, percent),
@@ -836,7 +894,7 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
             theory = [float(v) for v in from_si(check.ply_stress_12[k], "stress", ev.units)]
             ours = [float(v) for v in from_si(check.kernel_ply_stress_12[k], "stress", ev.units)]
             ply_rows.append((k + 1, ply.angle_deg, theory[0], ours[0], theory[1], ours[1], theory[2], ours[2]))
-        tables.append(Table(f"Ply stresses at the gauge centre in material axes ({stress_unit}): laminate theory against our engine",
+        tables.append(Table(f"Ply stresses at element {check.gauge.name} in material axes ({stress_unit}): laminate theory against our engine",
                             ("Ply (1 = bottom)", "Angle (deg)", "S11 theory", "S11 ours", "S22 theory", "S22 ours", "S12 theory", "S12 ours"), tuple(ply_rows),
                             f"The largest difference is {_pct(stress_distance)} of the largest theory value (rubric row D1).",
                             (None, "0", stress, stress, stress, stress, stress, stress),
@@ -852,8 +910,9 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
                             "Laminate theory is the free-edge laminate under the same pull or load (rubric rows C1 and D2).", ("0.0", "0.0", "0.0"),
                             reaction_check + f"; laminate theory is N_y times the width ({width:g} {length_unit})."))
         glance.append(("Reaction at the loaded grip", f"ours {check.kernel_reaction_N:.6g} N; {team}"))
-        glance.append(("Hand check at the gauge centre", f"strain within {_pct(strain)} and ply stresses within {_pct(stress_distance)} of laminate theory "
-                       f"with free edges; the free length is {widths:.2g} widths{applies_short}"))
+        glance.append((f"Hand check at element {check.gauge.name}", f"strain within {_pct(strain)} of the largest laminate-theory strain and ply "
+                       f"stresses within {_pct(stress_distance)} of the largest laminate-theory ply stress, with free edges; the free length is "
+                       f"{widths:.2g} widths{applies_short}"))
 
     to_send = tuple(f"{s.item.id} ({s.item.check}): {s.item.needs}" for s in scored if s.result in (None, "Not checked") and s.item.needs)
     return FormTables(tuple(glance), tuple(tables), values, to_send)

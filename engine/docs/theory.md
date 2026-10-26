@@ -140,7 +140,7 @@ Units: A in N/m, B in N, D in N·m. The code counts plies from 0, so ply `k` spa
 
 ## 4. Response to loads (`response.py`)
 
-Loads are per unit width. For a tension coupon of width $`w`$ carrying load $`P`$, $`N_x = P/w`$.
+Loads are per unit width. For a coupon of width $`w`$ carrying a load $`P`$ along $`x`$, $`N_x = P/w`$.
 
 Mid-plane strain and curvature, computed by `abd_matrix` and `midplane_response`. The system is solved directly, without forming the inverse:
 
@@ -152,7 +152,7 @@ Mid-plane strain and curvature, computed by `abd_matrix` and `midplane_response`
 
 <!-- code: abd_matrix, midplane_response -->
 
-The inverted ABD matrix gives deformation directly from loads. Its blocks are computed by `abd_compliance` (Eqs. 7.27-7.28, where the lower-left block $`\mathbf{c} = \mathbf{b}^{T}`$); the course reader writes them as $`\boldsymbol{\alpha}`$, $`\boldsymbol{\beta}`$ and $`\boldsymbol{\delta}`$:
+The inverted ABD matrix gives deformation directly from loads. Its blocks are computed by `abd_compliance` (Eqs. 7.27-7.28, where the lower-left block $`\mathbf{c} = \mathbf{b}^{T}`$); some texts write them as $`\boldsymbol{\alpha}`$, $`\boldsymbol{\beta}`$ and $`\boldsymbol{\delta}`$:
 
 ```math
 \begin{bmatrix}\boldsymbol{\varepsilon}^0\\ \boldsymbol{\kappa}\end{bmatrix}
@@ -302,7 +302,7 @@ Y = \begin{cases} F_{2t} & \sigma_2 \ge 0 \\ F_{2c} & \sigma_2 < 0 \end{cases},
 \qquad R = \frac{1}{\sqrt{\mathrm{FI}}}
 ```
 
-The index is a homogeneous quadratic, so scaling every load by $`R`$ scales it by $`R^2`$ and the sign selection does not change: $`R = 1/\sqrt{\mathrm{FI}}`$. This is the textbook's convention for the mixed-sign case; other implementations choose differently, and the physics library card says so.
+The index is a homogeneous quadratic, so scaling every load by $`R`$ scales it by $`R^2`$ and the sign selection does not change: $`R = 1/\sqrt{\mathrm{FI}}`$. This is the textbook's convention for the mixed-sign case; other implementations choose differently, as the Tsai-Hill card of our website's physics library also notes.
 
 <!-- code: tsai_hill_index, tsai_hill_ratio -->
 

@@ -169,10 +169,13 @@ def test_the_scores_say_why(grips):
     c2 = found["C2"]
     assert c2.team[1].startswith("S11: 24 values; largest ") and c2.ours[1].startswith("S11: 24 values; largest ") and "within 1 %" in c2.difference[1]
     assert c2.team[-1] == "S12: not in the reports, left blank, for the team to fill in" and c2.ours[-1].startswith("S12: largest ")
-    assert " in the band, at our element " in c2.ours[-1] and c2.difference[-1].startswith("S12: not compared; the Result waits until the team has verified S12")
+    assert " in the band over all plies, at our element " in c2.ours[-1] and c2.difference[-1].startswith("S12: not compared; the Result waits until the team has verified S12")
     assert "unbalanced (2 plies at +30, 1 at -30)" not in found["B3"].text  # the full laminate counts both halves
     assert found["B3"].ours[1] == "Balance: unbalanced (4 plies at +30, 2 at -30), symmetric" and found["B3"].difference == ("Layup, bottom first: the same", "Balance: the same")
-    assert found["C7"].team == ("left blank, for the team to fill in",) and "ply 1 (0 deg) by max stress, at 0.5 of the applied loading" in found["C7"].ours[0]
+    assert found["C7"].team == ("left blank, for the team to fill in",) and "ply 1 (0 deg) by maximum stress, at 0.5 of the applied loading" in found["C7"].ours[0]
+    # D5 states the laminate's shear coupling from its stiffness: this IM7 layup, 4 plies at +30 and 2 at -30, has it
+    coupling = next(line for line in found["D5"].ours if line.startswith("In-plane shear coupling of the laminate, from our engine's stiffness: A16 = "))
+    assert ": present, " in coupling and "of A11" in coupling
     # the columns are the claim the auditor verifies: the team's value beside ours, no node offsets and no "as written"
     b1 = found["B1"]
     assert b1.team[0].startswith("Nodes: ") and " on the part, " in b1.team[0] and b1.team == b1.ours and len(b1.team) == 1
@@ -182,9 +185,9 @@ def test_the_scores_say_why(grips):
     b8 = found["B8"]  # boundary conditions and loads: the team's side in full beside ours
     assert b8.team[0].startswith("Reference point at (") and b8.ours[0].startswith("Reference point at (") and "U2 = " in b8.team[0] and "UR3 = 0" in b8.team[0]
     assert "Concentrated loads: none" in b8.team and "Concentrated loads: none" in b8.ours
-    assert found["C1"].team == ("left blank, for the team to fill in",) and found["C1"].ours[0].endswith(" N along the coupon at the top grip") and found["C1"].difference == ()
-    assert found["C4"].ours[0].startswith("Largest displacement: U1 ") and found["C4"].ours[1].startswith("Strain at the gauge centre (element ")
-    assert found["D1"].team == () and found["D1"].ours[0].startswith("Centre element ") and found["D1"].difference[-1] == "Tolerance 1 %"
+    assert found["C1"].team == ("left blank, for the team to fill in",) and found["C1"].ours[0].endswith(" N along the coupon at the top grip, in tension") and found["C1"].difference == ()
+    assert found["C4"].ours[0].startswith("Largest displacement: U1 ") and found["C4"].ours[1].startswith("Strain at element ")
+    assert found["D1"].team == () and found["D1"].ours[0].startswith("Element ") and found["D1"].difference[-1] == "Tolerance 1 %"
 
 
 def test_a_stress_beyond_the_tolerance_fails(grips):
@@ -214,7 +217,7 @@ def test_the_hand_check_names_the_end_effect_and_is_not_applicable_to_a_short_ga
     facts = _Facts(check, "", (0.0,), "mm", "MPa")
     result, found = _laminate(item, grips, facts)
     evidence = "\n".join(found.difference)
-    assert result == "Fail" and "Free length 4 widths; N_x at the centre" in evidence and "above free-edge theory" in evidence  # 2 by 8 mesh: 3 %
+    assert result == "Fail" and "Free length 4 widths; N_x at this element" in evidence and "above free-edge theory" in evidence  # 2 by 8 mesh: 3 %
     short = _Facts(dataclasses.replace(check, free_length_m=check.width_m * 1.1), "", (0.0,), "mm", "MPa")
     result, found = _laminate(item, grips, short)
     assert result == "N/A" and found.difference[0].startswith("The free length is 1.1 widths, under the 3 the hand check needs") and "For the record:" in found.difference
@@ -309,14 +312,15 @@ def test_the_form_computes_the_rule_counts_the_rows_and_shows_the_numbers_behind
     results = book[RESULTS_SHEET]
     first = {results.cell(r, 1).value: r for r in range(1, results.max_row + 1) if results.cell(r, 1).value}
     glance = dict(tables.glance)
-    assert first[GLANCE] < first["S11 in the graded band"] < first["Hand check at the gauge centre"]
+    hand = next(label for label in glance if label.startswith("Hand check at element "))
+    assert first[GLANCE] < first["S11 in the graded band"] < first[hand]
     assert glance["S11 in the graded band"].startswith("24 of 24 within 1 % of ") and "; worst " in glance["S11 in the graded band"]
     assert results.cell(first["Reaction at the loaded grip"], 2).value.startswith("ours ") and "not in the team's export" in glance["Reaction at the loaded grip"]
-    assert "the free length is 4 widths" in glance["Hand check at the gauge centre"]
+    assert "the free length is 4 widths" in glance[hand]
     titles = [results.cell(r, 1).value for r in range(1, results.max_row + 1) if results.cell(r, 1).font.b and results.cell(r, 1).font.sz == 11]
-    assert [t.split(",")[0].split(":")[0] for t in titles] == [GLANCE, "Stresses in the graded band", "Strains at the gauge centre",
-                                                               "Section forces at the gauge centre", "Ply stresses at the gauge centre in material axes (MPa)",
-                                                               "Reaction at the loaded grip (N)"]
+    assert [re.sub(r"element [^ ,:]+", "element", t.split(",")[0].split(":")[0]) for t in titles] == [
+        GLANCE, "Stresses in the graded band", "Strains at element", "Section forces at element (N/mm)", "Ply stresses at element in material axes (MPa)",
+        "Reaction at the loaded grip (N)"]
     checks = [t.check for t in tables.tables]  # every table says how to redo its numbers from the package's files or in Abaqus
     assert all(c.startswith("How to check: ") for c in checks) and len(checks) == 5
     assert "4-results/team-vs-ours.csv" in checks[0] and "LE11, LE22 and LE12 at the integration point of element" in checks[1] and "Ply-1 (0 deg)" in checks[1]

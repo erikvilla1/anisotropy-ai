@@ -163,6 +163,46 @@ def element_centroids(solution: MembraneSolution, units: str) -> dict[str, tuple
 
 
 @dataclass(frozen=True)
+class GaugeElement:
+    """The element a coupon's gauge state is read at, by one rule for every reader (the hand check, the results chapter and the
+    audit's rows C4, D1 and D5): the spec's centre probe; when the coupon's centre lies in no element (an open hole), its far-field
+    probe; failing both, the element whose centroid is nearest the centre."""
+
+    index: int  # mesh element index
+    name: str  # instance.label
+    xy: tuple[float, float]  # centroid, m
+    basis: str  # why this element: "the centre probe", "the far-field probe" or "nearest the centre"
+    centre_in_hole: bool  # the coupon's centre lies in no element
+
+
+def _probe_element(deck: Deck, solution: MembraneSolution, name: str) -> int | None:
+    """The mesh index of a probe element set holding one element, or None."""
+    keys = deck.elsets.get(name)
+    if keys is None or len(keys) != 1:
+        return None
+    return solution.mesh.element_keys.index(tuple(keys[0]))
+
+
+def gauge_element(deck: Deck, solution: MembraneSolution) -> GaugeElement:
+    mesh = solution.mesh
+    instance_rows = [k for k in range(mesh.node_count) if mesh.node_keys[k][0] is not None]
+    middle = 0.5 * (mesh.xy[instance_rows].min(axis=0) + mesh.xy[instance_rows].max(axis=0))
+    corners = mesh.xy[mesh.connectivity[:, :4]]
+    centres = corners.mean(axis=1)
+    edges = np.roll(corners, -1, axis=1) - corners
+    cross = edges[..., 0] * (middle[1] - corners[..., 1]) - edges[..., 1] * (middle[0] - corners[..., 0])
+    tolerance = 1e-9 * float(np.max(np.abs(edges))) ** 2
+    inside = np.all(cross >= -tolerance, axis=1) | np.all(cross <= tolerance, axis=1)  # convex corners in either winding
+    in_hole = not bool(inside.any())
+    for probe, basis in (("Probe-centre", "the centre probe"), *((("Probe-far", "the far-field probe"),) if in_hole else ())):
+        e = _probe_element(deck, solution, probe)
+        if e is not None:
+            return GaugeElement(e, element_name(mesh.element_keys[e]), (float(centres[e, 0]), float(centres[e, 1])), basis, in_hole)
+    e = int(np.argmin(np.linalg.norm(centres - middle, axis=1)))
+    return GaugeElement(e, element_name(mesh.element_keys[e]), (float(centres[e, 0]), float(centres[e, 1])), "nearest the centre", in_hole)
+
+
+@dataclass(frozen=True)
 class LaminateCheck:
     """Classical laminate theory for the coupon as a uniaxial test with free lateral edges, computed by the engine.
 
@@ -185,7 +225,7 @@ class LaminateCheck:
     section_force: np.ndarray  # [N_x, N_y, N_xy] N/m
     ply_stress_12: np.ndarray  # (plies, 3) Pa, material axes, bottom ply first
     ply_strain_12: np.ndarray  # (plies, 3)
-    centre_element: str  # the element whose centroid is nearest the coupon's centre
+    gauge: GaugeElement  # where the kernel's values beside the theory are read
     kernel_strain: np.ndarray
     kernel_section_force: np.ndarray
     kernel_ply_stress_12: np.ndarray
@@ -260,14 +300,13 @@ def laminate_check(deck: Deck, solution: MembraneSolution) -> LaminateCheck:
     ply_stress = np.array([surfaces[2 * k].stress_12 for k in range(len(plies))])
     ply_strain = np.array([surfaces[2 * k].strain_12 for k in range(len(plies))])
 
-    centres = mesh.xy[mesh.connectivity[:, :4]].mean(axis=1)
-    middle = 0.5 * (mesh.xy[instance_rows].min(axis=0) + mesh.xy[instance_rows].max(axis=0))
-    e = int(np.argmin(np.linalg.norm(centres - middle, axis=1)))
+    gauge = gauge_element(deck, solution)
+    e = gauge.index
     field = element_ply_states(solution)
     reaction = float(solution.reaction[list(top)].sum(axis=0)[1])
     return LaminateCheck(plies=plies, A=A, thickness_m=thickness, constants=engineering_constants(plies), width_m=width,
                          free_length_m=free_length, control=control, applied=applied, strain=strain, section_force=section_force,
-                         ply_stress_12=ply_stress, ply_strain_12=ply_strain, centre_element=element_name(mesh.element_keys[e]),
+                         ply_stress_12=ply_stress, ply_strain_12=ply_strain, gauge=gauge,
                          kernel_strain=solution.strain[e], kernel_section_force=solution.section_force[e],
                          kernel_ply_stress_12=field.stress_12[e], kernel_reaction_N=reaction)
 
@@ -351,6 +390,7 @@ class ModelFacts:
     grid: tuple[int, int] | None  # elements across x and along y when the coupon mesh is a rectangular grid
     node_rows_y: tuple[float, ...]  # distinct y of the coupon nodes
     partition_lines_y: tuple[float, ...]  # the coupon ends and the inner edges of the gripped groups
+    grip_lines_y: tuple[float, ...]  # the coupon ends and the inner edges of the gripped groups only, without the mesh's spacing changes
     row_counts: tuple[int, ...]  # element rows between consecutive partition lines
     element_bands: tuple[tuple[float, float, int, int, int], ...]  # y0, y1, elements, first label, last label
     edge_length_range: tuple[float, float]  # m
@@ -454,6 +494,7 @@ def model_facts(deck: Deck, solution: MembraneSolution) -> ModelFacts:
                     for p in deck.parts.values()),
         instances=tuple((name, inst.part) for name, inst in deck.instances.items()),
         extent_x=extent_x, extent_y=extent_y, grid=grid, node_rows_y=tuple(float(v) for v in rows_y), partition_lines_y=tuple(lines),
+        grip_lines_y=tuple(sorted({round(v, 12) for v in (extent_y[0], extent_y[1], *inner)})),
         row_counts=row_counts, element_bands=tuple(bands), edge_length_range=_range(edges),
         node_sets=tuple(node_sets), element_sets=tuple(element_sets), surfaces=tuple(surfaces), reference_nodes=tuple(reference_nodes),
         couplings=tuple(couplings), boundaries=tuple(boundaries), loads=tuple(loads), step=(step.name, step.nlgeom), sections=tuple(sections),

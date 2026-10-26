@@ -1,4 +1,4 @@
-"""Turn a CalculiX run of one of our specs into a committed comparison record: numbers plus provenance (ADR-0030, ADR-0007).
+"""Turn a CalculiX run of one of our specs into a comparison record: numbers plus provenance (ADR-0030, ADR-0007), committed for a public check, kept with the coupon for a team's coupon (ADR-0042).
 
     uv run python tools/record_from_dat.py ../.local/fea/<coupon>/ours/<coupon>-nodal.toml ../.local/fea/<coupon>/ours/runs/attempt-NN_<date>/run/calculix/<coupon>-nodal-ccx.dat \
         --version 2.22 --run-by "Erik Villa" --machine "founder Windows 11, PrePoMax v2.6.0 bundle" \

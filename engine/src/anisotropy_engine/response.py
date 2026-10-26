@@ -40,7 +40,7 @@ def abd_matrix(plies: list[Ply]) -> np.ndarray:
 def abd_compliance(plies: list[Ply]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Blocks a (m/N), b (1/N) and d (1/(N*m)) of the inverted ABD matrix.
 
-    [eps0; kappa] = [[a, b], [b.T, d]] [N; M]. The course reader writes them as alpha,
+    [eps0; kappa] = [[a, b], [b.T, d]] [N; M]. Some texts write them as alpha,
     beta and delta. Here the inverse is the result itself, so it is formed explicitly.
     """
     inverse = np.linalg.inv(abd_matrix(plies))
