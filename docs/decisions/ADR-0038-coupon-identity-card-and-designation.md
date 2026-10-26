@@ -1,8 +1,8 @@
 # ADR-0038: Every coupon model carries an identity card and a name of the form material-test-layup
 
-- Status: Proposed; the folders carry the name too, by [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md) (option 4 taken after all)
+- Status: Accepted; the folders carry the name too, by [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md) (option 4 taken after all)
 - Date: 2026-10-21
-- Decided by: Founder, 2026-10-21 (the coupon's name, such as X840PW-UNT-L1, is the title, with the type of test; the team's tension coupon has the same name as ours) | Drafted by: Claude Code
+- Decided by: Founder, 2026-10-21 (the coupon's name, such as X840PW-UNT-L1, is the title, with the type of test; the team's tension coupon has the same name as ours); accepted 2026-10-26 ("FEA method (7)", choosing which groups of the proposed records to accept) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/spec.py` (`Coupon`, `coupon_card`), `fea/tests/test_coupon.py`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0036](ADR-0036-one-folder-per-fea-test.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-coupon-identity.md` (ADR-0042)
 
 ## Context

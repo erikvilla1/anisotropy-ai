@@ -1,8 +1,8 @@
 # ADR-0035: Our models reproduce the team's node for node, and each team test gets a short comparison with a share folder
 
-- Status: Proposed; our models of the team's coupons and the committed team summary leave the repository and its history by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md)
+- Status: Accepted; our models of the team's coupons and the committed team summary leave the repository and its history by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md)
 - Date: 2026-10-20
-- Decided by: Founder, 2026-10-20 (direction); the options below await review | Drafted by: Claude Code
+- Decided by: Founder, 2026-10-20 (direction); accepted 2026-10-26 ("FEA method (7)", choosing which groups of the proposed records to accept) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/equivalence.py`, `fea/src/anisotropy_fea/side_by_side.py`, `docs/models/team.py`, spec keys `mesh.y_partitions` and `mesh.y_seeds`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0031](ADR-0031-one-generated-document-per-model-comparison.md), [ADR-0032](ADR-0032-local-workspace-layout-by-tool-and-test.md), local evaluation note `.local/notes/evaluations/fea/2026-10-20-team-comparison.md` (ADR-0042)
 
 ## Context
