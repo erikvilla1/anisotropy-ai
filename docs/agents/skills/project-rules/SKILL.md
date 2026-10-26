@@ -1,7 +1,7 @@
 ---
 name: project-rules
 description: Rules for any work in the Anisotropy AI repository (composite laminate engine, material library, website, docs). Load before writing code, documents, data or skills here, and whenever deciding whether something belongs in the engine, the material library, the docs, or nowhere in the repository.
-version: 0.2.4
+version: 0.2.5
 ---
 
 # Project rules
@@ -38,6 +38,7 @@ Before any change in this repository, and whenever you must decide where content
 | A choice between alternatives (library, algorithm, format, architecture, units) | A decision record in `docs/decisions/` from `_template.md`, or an amendment to an existing one (the `decision-records` skill) | AGENTS.md |
 | Every change | One line in `CHANGELOG.md` under Unreleased | AGENTS.md |
 | A new or changed agent skill | `docs/agents/skills/<name>/SKILL.md`, through a pull request | ADR-0023 |
+| A new or changed subagent | `docs/agents/subagents/<name>.md`, through a pull request | ADR-0047 |
 
 ## Pitfalls
 
