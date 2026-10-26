@@ -1,7 +1,7 @@
 ---
 name: project-rules
 description: Rules for any work in the Anisotropy AI repository (composite laminate engine, material library, website, docs). Load before writing code, documents, data or skills here, and whenever deciding whether something belongs in the engine, the material library, the docs, or nowhere in the repository.
-version: 0.2.3
+version: 0.2.4
 ---
 
 # Project rules
@@ -13,7 +13,7 @@ Before any change in this repository, and whenever you must decide where content
 ## Procedure
 
 1. Read `AGENTS.md` at the repository root and follow it. It is the authority. If this skill and `AGENTS.md` disagree, `AGENTS.md` wins; report the disagreement.
-2. Read `docs/documentation-guide.md` before writing a decision record, a report or a changelog entry.
+2. Read `docs/documentation-guide.md` before writing a report or a changelog entry. Load the `decision-records` skill before writing or amending a decision record.
 3. Decide where the content goes with the table below. If nothing in the table fits, stop and ask the founder.
 4. Work on a branch and open a pull request. Never commit to `main`.
 
@@ -35,7 +35,7 @@ Before any change in this repository, and whenever you must decide where content
 | User-supplied or customer data | Nothing public; private workspace only | ADR-0018 |
 | Course problem statements or solutions, textbook pages, PDFs, unapproved lab data, secrets | `.local/` only. Never committed, never under `public/` | AGENTS.md |
 | A course answer-key case or a homework reading; a coupon model built to the team's test design, or a number compared with the team's results | `.local/` only, never committed. Homework cases go to `.local/homework/<set>/ours/`, coupon models to `.local/fea/<coupon>/`. What is still committed leaves in chunks C4 and C5, the last a history rewrite; until then add none. The X840-Z60 material record stays | ADR-0042 |
-| A choice between alternatives (library, algorithm, format, architecture, units) | A decision record in `docs/decisions/` from `_template.md` | AGENTS.md |
+| A choice between alternatives (library, algorithm, format, architecture, units) | A decision record in `docs/decisions/` from `_template.md`, or an amendment to an existing one (the `decision-records` skill) | AGENTS.md |
 | Every change | One line in `CHANGELOG.md` under Unreleased | AGENTS.md |
 | A new or changed agent skill | `docs/agents/skills/<name>/SKILL.md`, through a pull request | ADR-0023 |
 
@@ -49,4 +49,4 @@ Before any change in this repository, and whenever you must decide where content
 ## Verification
 
 - `git status` shows no file under `.local/` (which since 2026-10-21 also holds the former `References/` and `output/`, ADR-0037) and no `*.pdf`.
-- The tests that cover the change pass, with their output shown: `cd engine && uv run pytest`, `npm test`, `npm run typecheck`.
+- The tests that cover the change pass, with their output shown: `cd engine && uv run pytest`, `cd fea && uv run pytest -q -ra tests ../engine/tests`, `npm test`, `npm run typecheck`.
