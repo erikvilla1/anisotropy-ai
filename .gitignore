@@ -66,5 +66,7 @@ docs/.obsidian/
 *.rpt
 *.cae
 
-# The agent skill folder is a local junction to docs/agents/skills (scripts/link-agent-dirs.ps1, ADR-0023).
+# The agent skill and subagent folders are local junctions to docs/agents/skills and docs/agents/subagents
+# (scripts/link-agent-dirs.ps1, ADR-0023, ADR-0047).
 /.claude/skills/
+/.claude/agents/

@@ -33,6 +33,7 @@ The full method is in `docs/documentation-guide.md`; the index is `docs/README.m
 ## Agent skills
 
 - Skills for AI agents live in `docs/agents/skills/` (ADR-0023). Read `project-rules` first. Change a skill only through a pull request.
+- Subagents live in `docs/agents/subagents/` (ADR-0047). Change one only through a pull request.
 
 ## Engine rules
 
