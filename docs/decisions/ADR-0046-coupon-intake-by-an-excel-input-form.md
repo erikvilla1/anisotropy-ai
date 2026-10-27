@@ -96,3 +96,16 @@ Option 3.
 - A coupon needs more than two form round trips before it reads.
 - The team asks for inputs the form does not offer: bending, m-Pa units, second-order elements, Tsai-Wu, fabrication or test-plan fields.
 - The team sends coupons by other means than the form.
+
+## Amendment 1, 2026-10-26 (every row says what it means, and a Definitions sheet; form version 0.2; asked for by the founder)
+
+**Context.** Trying the tools on 2026-10-26, the founder asked what the test kind is, what the mesh counts mean, why the material must be typed, what G13 and G23 are and why they are needed, what the probes are, and which way a 0 degree ply points. The founder then asked for the answers on the form ("I would like definitions to be on the excel sheet as to what it means ... everything that has to be put into the excel sheet ... so that the team doesn't ask questions as well and it is easy to understand what it is that they are inputting"). The form's help beside each row was a few words, often none.
+
+**Options.**
+1. Longer help beside each row only. Rejected alone: a row cannot hold an example and the reason behind it without becoming a paragraph.
+2. Excel pop-ups on each cell (input messages or comments). Rejected: hidden until a cell is selected, not printed, and an input message holds at most 255 characters.
+3. A plain explanation beside every row, and a Definitions sheet with each term, what it means and an example (chosen).
+
+**Decision.** Option 3. `intake.write_blank_form` writes a short explanation beside every row of the sheet Coupon (all but the 14 later ply rows), and a sheet Definitions after the instructions, from `intake.GLOSSARY`: the coupon and its directions, the tests, the layup, the material, loading and grips, the mesh, and what we send back. The sheet states the direction convention our models and the team's Abaqus models share: the coupon lies with its length along y, ply angles are measured from x, so 0 = fibres across the coupon and 90 = fibres along the pull. For G13 and G23 without a measured value it gives the usual estimate for a tape, G13 = G12 and G23 = E2 / 3 (MIL-HDBK-17-3F, section 10.2.4.1, with nu23 = 0.5), and says a woven fabric has no reliable estimate; the form still requires both values. The row Library material shows that instruction until a material is picked. Labels align with the first line of their explanation. Form version 0.2; the reader accepts 0.1 forms unchanged, because the labels are unchanged.
+
+**Evidence.** `cd fea && uv run pytest -q tests/test_intake.py`: 35 passed, among them `test_every_row_says_what_it_means`, `test_the_definitions_answer_the_first_questions` and `test_a_form_of_version_0_1_still_reads`. The blank form was exported to PDF by Excel and read page by page (Coupon two pages, Definitions three). The team's experience with it: no evidence yet.
