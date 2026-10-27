@@ -17,6 +17,16 @@ uv run python examples/plot_deck.py checks/decks/coupon-2x8-grips-im7-8552.inp -
 
 The team's own decks go in `.local/fea/<coupon>/from-team/<date>/` (git-ignored; their materials may be proprietary; layout in ADR-0036 and the `workspace-layout` skill). `tests/test_local_tension_deck.py` runs against the team's deck in `.local/fea/X840PW-UNT-L1/from-team/<date>/` (found by `paths.team_deck`) when it is there and is skipped, with the reason shown, when it is not.
 
+## A coupon in one command
+
+`tools/run_coupon.py` takes a coupon from its filled-in input form to its package (ADR-0049). It runs the steps of the case page's Rebuild section: the specs, the decks, the next attempt, our kernel, the CalculiX twin, the record (gauge probes only) and the package. Then it adds the attempt's row to the case page and lists the files to open in Abaqus/CAE, PrePoMax and ParaView. It needs CalculiX and refuses before writing anything without it.
+
+```powershell
+uv run python tools/run_coupon.py <filled form>.xlsx --run-by "Erik Villa"            # a new coupon
+uv run python tools/run_coupon.py <filled form>.xlsx --run-by "Erik Villa" --replace  # after changing the form
+uv run python tools/run_coupon.py <coupon> --run-by "Erik Villa"                      # again, on the specs as they are
+```
+
 ## Units
 
 An Abaqus deck carries no units. `read_deck(path, units)` requires `units` to be `"mm-MPa"` or `"m-Pa"` and converts coordinates, thicknesses, moduli, strengths, prescribed displacements and loads to SI base units on entry (ADR-0002). A missing or unknown statement is refused (ADR-0003). When a converted modulus falls outside 1 GPa to 1000 GPa the reader warns that the statement is probably wrong.

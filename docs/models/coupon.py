@@ -856,6 +856,7 @@ def operator() -> str:
         return "not stated"
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")  # it prints characters from the library's text, which cp1252 pipes cannot encode
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("coupons", nargs="*", help="coupon folders under .local/fea/")
     parser.add_argument("--all", action="store_true", help="every coupon model under .local/fea/")
