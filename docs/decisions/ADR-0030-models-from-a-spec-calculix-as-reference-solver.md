@@ -1,8 +1,8 @@
 # ADR-0030: Coupon models are generated from a parametric spec, and CalculiX is the independent reference solver
 
-- Status: Proposed; the coupon specs amendment 4 committed, built to the team's test design, leave the repository and its history by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md); the X840-Z60 material record stays
+- Status: Accepted; the coupon specs amendment 4 committed, built to the team's test design, leave the repository and its history by [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md); the X840-Z60 material record stays
 - Date: 2026-10-15
-- Decided by: Founder (pending review) | Drafted by: Claude Code
+- Decided by: Founder, accepted 2026-10-26 ("FEA method (7)", choosing which groups of the proposed records to accept) | Drafted by: Claude Code
 - Related: ADR-0029 (finite element phase; amendment 3 below), ADR-0001, ADR-0003, ADR-0007, ADR-0018, ADR-0021, `fea/src/anisotropy_fea/{spec,mesher,femodel,write_abaqus}.py`, `fea/validation/specs/`, [installation of the tools](../installation-fea-tools.md), risks R-15 to R-18
 
 ## Context

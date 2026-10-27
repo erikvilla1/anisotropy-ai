@@ -1,8 +1,8 @@
 # ADR-0045: Abaqus results come from a script under `abaqus python` that writes CAE's field-report CSV, and Abaqus is an optional second reference solver
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-24
-- Decided by: Founder, 2026-10-24 ("do both chunks now", on the plan "Abaqus headless: extraction script and runner, both chunks now") and 2026-10-25 after the walkthrough (ran the two test files, 14 passed; ran the script by hand on the attempt-15 ODB and compared its CSV with the team's; read this record: "looks like everything looks good"; the S12 record stays as it is; the writer's default flips in a separate change; the worktree is folded into the main folder) | Drafted by: Claude Code
+- Decided by: Founder, 2026-10-24 ("do both chunks now", on the plan "Abaqus headless: extraction script and runner, both chunks now") and 2026-10-25 after the walkthrough (ran the two test files, 14 passed; ran the script by hand on the attempt-15 ODB and compared its CSV with the team's; read this record: "looks like everything looks good"; the S12 record stays as it is; the writer's default flips in a separate change; the worktree is folded into the main folder); accepted 2026-10-26 ("FEA method (7)", choosing which groups of the proposed records to accept) | Drafted by: Claude Code
 - Related: [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) (CalculiX is the reference; its context is corrected here), [ADR-0029](ADR-0029-finite-elements-own-membrane-kernel-validated-against-abaqus.md), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0039](ADR-0039-every-attempt-keeps-its-folder-and-its-row.md), `fea/tools/abaqus_extract_fields.py`, `fea/src/anisotropy_fea/abaqus.py`, `fea/tools/run_abaqus.py`, `fea/tests/test_abaqus_extract.py`, `fea/tests/test_abaqus.py`, [installing the tools](../installation-fea-tools.md)
 
 ## Context

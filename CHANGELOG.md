@@ -5,6 +5,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 ## [Unreleased]
 
 ### Changed
+- Seven decision records on the finite element method are Accepted by the founder (2026-10-26): ADR-0029 (our membrane solver, Gmsh, the Abaqus writer), ADR-0030 (models from a spec, CalculiX as the reference), ADR-0031 (a document per model comparison), ADR-0034 (micromechanics), ADR-0035 (our models match the team's node for node), ADR-0038 (coupon names) and ADR-0045 (Abaqus without the GUI). Their texts and amendments are unchanged.
 - The document reviewer reads a package's whole PDF in one call; a page range needs pdftoppm, which a machine may not have (ADR-0047 amendment 1, from its first trial on the three X840 packages).
 - The generated Abaqus decks run in Abaqus/Standard as written (ADR-0045 amendment 2): one variable per `*El Print` table, heading comments wrapped to Abaqus's 256 bytes, the `split_print_tables` option removed; reactions on nodal grips are now recorded (the ODB capitalises instance names). The committed decks and two record digests are regenerated.
 - The rule for S12, accepted by the founder (ADR-0045 amendment 1): S12 is judged in the plies where it carries load once every section point is exported; until then the 0 degree faces take a floor of 4 % of the group scale, so differences below 0.04 % of the axial stress (the S4R against bilinear-membrane noise) do not count. The attempt-15 record of X840PW-UNT-L1 re-read with it passes 2404 of 2404. The rubric row keeps its text until its next version.
