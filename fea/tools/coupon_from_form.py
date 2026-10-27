@@ -43,6 +43,7 @@ def main() -> None:
     print("Next, from fea/:")
     for command in intake.commands:
         print(f"  {command}")
+    print(f'Or all of it in one go: uv run python tools/run_coupon.py {intake.designation.name} --run-by "<your name>"')
 
 
 if __name__ == "__main__":

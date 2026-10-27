@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 
 from anisotropy_fea import paths
+from anisotropy_fea.case_pages import rel
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.spec import load_spec
 from anisotropy_fea.write_abaqus import write_abaqus
@@ -31,7 +32,7 @@ def regenerate(spec_path, ccx: bool, writer=write) -> list[str]:
     why the CalculiX deck was skipped (a spec with couplings has none; its -nodal twin carries it)."""
     spec = load_spec(spec_path)
     abaqus = paths.deck_path(spec_path, "abaqus")
-    lines = [f"{writer(abaqus, write_abaqus(build_model(spec))):9}  {abaqus.relative_to(paths.ROOT).as_posix()}"]
+    lines = [f"{writer(abaqus, write_abaqus(build_model(spec))):9}  {rel(abaqus)}"]
     target = paths.deck_path(spec_path, "ccx")
     if target.exists() or ccx:
         from anisotropy_fea.write_calculix import CalculixWriterError, write_calculix
@@ -40,9 +41,9 @@ def regenerate(spec_path, ccx: bool, writer=write) -> list[str]:
         try:
             text = write_calculix(build_model(order2))
         except CalculixWriterError as exc:
-            lines.append(f"{'skipped':9}  {target.relative_to(paths.ROOT).as_posix()}: {exc}")
+            lines.append(f"{'skipped':9}  {rel(target)}: {exc}")
         else:
-            lines.append(f"{writer(target, text):9}  {target.relative_to(paths.ROOT).as_posix()}")
+            lines.append(f"{writer(target, text):9}  {rel(target)}")
     return lines
 
 

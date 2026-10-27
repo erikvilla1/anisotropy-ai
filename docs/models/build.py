@@ -860,6 +860,7 @@ def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, the
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")  # it prints characters from the library's text, which cp1252 pipes cannot encode
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("record", type=Path, nargs="?", help="a comparison record (TOML)")
     parser.add_argument("--all", action="store_true", help="every check record (fea/checks/*/records); a coupon's record is a chapter of its coupon document")

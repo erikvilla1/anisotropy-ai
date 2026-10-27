@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import sys
 from pathlib import Path
 
 from anisotropy_fea.abaqus_reader import read_deck
@@ -47,6 +48,8 @@ def summary(model, deck_text: str, units: str) -> str:
 
 
 def main() -> None:
+    # the report quotes the library's units (10⁻⁶/°C), which cp1252, Windows's encoding for piped or redirected output, cannot encode
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("spec", type=Path)
     parser.add_argument("--out", type=Path, required=True)

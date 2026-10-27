@@ -860,6 +860,12 @@ def probes_data(values: Values) -> dict:
     return {"nodes": {"centre": [x, y]}, "elements": {"centre": [x, y], "near_grip": [x, near]}}
 
 
+def gauge_probes(kind: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The node and element probes a CalculiX record keeps: those in the gauge. Beside a tab line or a hole the bilinear kernel element
+    and S8R differ in the small components, so those probes are left out of the record, as the coupons' records were made (ADR-0049)."""
+    return (("gauge",), ("far",)) if kind == "open_hole_tension" else (("centre",), ("centre",))
+
+
 def material_data(values: Values) -> tuple[dict, dict[str, str], str, bool]:
     """The [material] table, its comments, the material's name for the title, and whether it has strengths."""
     comments = {"material.transverse.plane_stress": "nu13 = nu23 = 0 for CalculiX, the plane stress Abaqus LAMINA and our engine assume",
@@ -1018,8 +1024,9 @@ class Intake:
     commands: tuple[str, ...]
 
 
-def next_commands(folder: Path, name: str) -> tuple[str, ...]:
-    """What to run from fea/ once the specs exist, with the coupon's paths filled in; the attempt folder is the one new_attempt.py prints."""
+def next_commands(folder: Path, name: str, kind: str) -> tuple[str, ...]:
+    """What to run from fea/ once the specs exist, with the coupon's paths filled in; the attempt folder is the one new_attempt.py prints.
+    `tools/run_coupon.py` runs the same steps in one go."""
     import os
 
     rel = Path(os.path.relpath(folder, paths.FEA)).as_posix()
@@ -1027,13 +1034,15 @@ def next_commands(folder: Path, name: str) -> tuple[str, ...]:
         rel = Path(folder).resolve().as_posix()
     ours = f"{rel}/{paths.OURS}"
     run = f"{ours}/{paths.RUNS}/attempt-NN_<date>/run"
+    nodes, elements = gauge_probes(kind)
     return (
         f"uv run python tools/regenerate_decks.py {name} {name}-nodal --ccx",
         f"uv run python tools/new_attempt.py {name}   # prints the folder attempt-NN_<date>",
         f"uv run python examples/build_model.py {ours}/{name}.toml --out {run}/kernel",
         f"uv run python examples/run_calculix.py {ours}/{name}-nodal.toml --out {run}/calculix",
         f'uv run python tools/record_from_dat.py {ours}/{name}-nodal.toml {run}/calculix/{name}-nodal-ccx.dat --version 2.22 --run-by "..." '
-        f'--machine "..." --tolerance 0.03 --floor 0.02 --notes "..." --out {ours}/{paths.VERIFICATION}/{name}-calculix.toml',
+        f'--machine "..." --tolerance 0.03 --floor 0.02 --node-probes {" ".join(nodes)} --element-probes {" ".join(elements)} --notes "..." '
+        f'--out {ours}/{paths.VERIFICATION}/{name}-calculix.toml',
         f"uv run --project fea python docs/models/coupon.py {name}   # from the repository root",
     )
 
@@ -1158,7 +1167,7 @@ def convert(form_path: Path | str, *, root: Path | str | None = None, day: str |
     existing = [p.name for p in specs if p.exists()]
     if existing and not replace:
         raise IntakeError(f"{name}: {', '.join(existing)} already exist under {folder}; read the form again with --replace to rewrite the two specs")
-    commands = next_commands(folder, name)
+    commands = next_commands(folder, name, values.kind)
     if dry_run:
         return Intake(designation, folder, main, twin, (), commands)
     written = []
