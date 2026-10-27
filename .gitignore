@@ -10,6 +10,9 @@ next-env.d.ts
 test-results/
 playwright-report/
 
+# Operating-system files
+.DS_Store
+
 # Python engine
 .venv/
 __pycache__/
@@ -66,7 +69,9 @@ docs/.obsidian/
 *.rpt
 *.cae
 
-# The agent skill and subagent folders are local junctions to docs/agents/skills and docs/agents/subagents
-# (scripts/link-agent-dirs.ps1, ADR-0023, ADR-0047).
-/.claude/skills/
-/.claude/agents/
+# The agent skill and subagent folders are local links to docs/agents/skills and docs/agents/subagents:
+# junctions on Windows (scripts/link-agent-dirs.ps1), symlinks on macOS and Linux
+# (scripts/link-agent-dirs.sh). ADR-0023, ADR-0047.
+# No trailing slash: a trailing slash matches a directory only, and git reads a symlink as a file.
+/.claude/skills
+/.claude/agents
