@@ -39,6 +39,8 @@ GET  /v1/coupon-jobs/{job_id}          state (running, done, stopped, refused), 
 GET  /v1/coupon-jobs/{job_id}/package  the package as a zip, once done
 ```
 
+`uv run python examples/coupon_job.py <filled form>.xlsx --run-by "Erik Villa" --actor founder-terminal` does all three from a terminal: it prints each step as the job reaches it and saves the package zip (`--api` for another address, `--out` for another folder).
+
 Every request needs the `X-Anisotropy-Actor` header. A second job while one runs gets 409. A job's status is kept in memory until the API stops. When a job ends, its receipt is a run record with endpoint `/v1/coupon-jobs`, solved or rejected; the record keeps the form's name and SHA-256, and the tool files the form itself in the coupon's `team/<date>/` folder.
 
 ## Database (run records, ADR-0025)
