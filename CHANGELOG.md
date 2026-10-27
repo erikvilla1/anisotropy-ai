@@ -5,6 +5,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 ## [Unreleased]
 
 ### Changed
+- The coupon input form explains itself (ADR-0046 amendment 1, form 0.2): every row says what it means, with an example, and a new sheet Definitions answers the first questions an engineer asks: the tests, which way 0 degrees points (across the coupon; 90 is along the pull), what an element size and a finer mesh do, library or own material, what G13 and G23 are and the usual estimate when none is measured, the grips, and where results are read.
 - Seven decision records on the finite element method are Accepted by the founder (2026-10-26): ADR-0029 (our membrane solver, Gmsh, the Abaqus writer), ADR-0030 (models from a spec, CalculiX as the reference), ADR-0031 (a document per model comparison), ADR-0034 (micromechanics), ADR-0035 (our models match the team's node for node), ADR-0038 (coupon names) and ADR-0045 (Abaqus without the GUI). Their texts and amendments are unchanged.
 - The document reviewer reads a package's whole PDF in one call; a page range needs pdftoppm, which a machine may not have (ADR-0047 amendment 1, from its first trial on the three X840 packages).
 - The generated Abaqus decks run in Abaqus/Standard as written (ADR-0045 amendment 2): one variable per `*El Print` table, heading comments wrapped to Abaqus's 256 bytes, the `split_print_tables` option removed; reactions on nodal grips are now recorded (the ODB capitalises instance names). The committed decks and two record digests are regenerated.
