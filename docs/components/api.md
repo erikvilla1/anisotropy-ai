@@ -1,4 +1,4 @@
-# Component card: local laminate API | version 0.1 | updated 2026-10-11
+# Component card: local laminate API | version 0.2 | updated 2026-10-27
 
 ## Purpose and intended use
 
@@ -15,6 +15,8 @@ Expose the existing engine's stiffness and deformation calculations to local HTT
 All three analysis endpoints require the `X-Anisotropy-Actor` header (which client sent the request) and record every request that reaches the engine, solved or rejected; the record's id comes back as `run_id` and in the `X-Anisotropy-Run-Id` header. `GET /v1/runs/{run_id}` returns the record as stored: the request as received, which endpoint answered, engine and API versions, git commit, the response or the error. `GET /v1/runs` lists summaries newest first, filtered by `actor`, `endpoint`, `status`, `since`, `until` (offset required) and `limit` (ADR-0026).
 
 `GET /v1/materials` and `GET /v1/materials/{material_id}?dataset=`: the library datasets and the SI values the engine would use, each with its page. Both analysis endpoints also accept `material: {"library_id": "...", "dataset_id": null}` in place of explicit constants and then return `material_provenance` (ADR-0020).
+
+`POST /v1/coupon-jobs`, `GET /v1/coupon-jobs/{job_id}`, `GET /v1/coupon-jobs/{job_id}/package`: a coupon job runs `fea/tools/run_coupon.py` in the background on a filled-in input form (base64) or a coupon's name, one at a time (409 while one runs), and gives its state, the end of its console, its files and the package as a zip. An ended job has one run record with endpoint `/v1/coupon-jobs` (ADR-0050). Needs uv, the fea environment and CalculiX on the machine.
 
 ## Dependencies and connections
 

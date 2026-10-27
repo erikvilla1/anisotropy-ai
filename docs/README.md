@@ -105,6 +105,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0047](decisions/ADR-0047-a-read-only-peer-review-subagent-for-generated-documents.md) | A read-only subagent, `document-reviewer`, peer-reviews each generated document before it is sent, today the coupon package PDF; defined in `docs/agents/subagents/` and linked into `.claude/agents/` like the skills (proposed; the first trial, four rounds on three packages, and the whole PDF read in one call, amendment 1) |
 | [0048](decisions/ADR-0048-the-assistant-drives-tested-jobs-built-after-one-command-per-job-and-an-api-job.md) | The assistant drives tested jobs and never computes; first one command per job with an end-to-end test, then the job through the API, then the assistant, then machine learning (proposed) |
 | [0049](decisions/ADR-0049-one-command-takes-a-coupon-from-its-input-form-to-its-package.md) | `fea/tools/run_coupon.py` takes a coupon from its input form to its package in one command and writes the attempt's row; the CalculiX record keeps the gauge probes (proposed) |
+| [0050](decisions/ADR-0050-coupon-jobs-through-the-api-run-the-tool-in-the-background-one-at-a-time.md) | Coupon jobs through the API: `POST /v1/coupon-jobs` runs the coupon tool in the background, one job at a time, its status in memory and a run record when it ends; the package comes back as a zip (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 

@@ -3,7 +3,9 @@ refreshes the case page; a failed step gets its row too; it refuses, before writ
 log behind its folders; its record is made as the case page says. Everything runs under a temporary root, never .local/."""
 
 import importlib.util
+import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,7 @@ def tool(monkeypatch, tmp_path):
     monkeypatch.syspath_prepend(str(TOOLS))  # it imports regenerate_decks from its own folder
     spec = importlib.util.spec_from_file_location("run_coupon", TOOLS / "run_coupon.py")
     module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)  # its dataclass looks the module up there
     spec.loader.exec_module(module)
     return module
 
@@ -38,9 +41,12 @@ def public_form(tmp_path: Path) -> Path:
 
 @needs_ccx
 def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
-    attempt = tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False, theory=False)
-    folder = paths.LOCAL / DESIGNATION
+    outcome = tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False, theory=False)
+    folder, attempt = paths.LOCAL / DESIGNATION, outcome.attempt
     out = attempt / "run"
+    assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "prepomax_deck", "prepomax_results",
+                                                                      "kernel_summary", "kernel_vtu", "record"}  # no document without the PDF
+    assert all(path.exists() for path in outcome.outputs.values())
     assert attempt.parent == paths.runs(DESIGNATION) and attempt.name.startswith("attempt-02_")  # row 01 is the form's reading
     decks = paths.ours(DESIGNATION) / "decks"
     assert (decks / f"{DESIGNATION}-abaqus.inp").is_file() and (decks / f"{DESIGNATION}-nodal-ccx.inp").is_file()
@@ -64,6 +70,18 @@ def test_without_calculix_nothing_is_written(tool, tmp_path, monkeypatch):
     with pytest.raises(tool.Refused, match="CalculiX not found"):
         tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False)
     assert not paths.LOCAL.exists()
+
+
+def test_the_outcome_file_says_why_a_run_was_refused(tool, tmp_path, monkeypatch):
+    """What the API's coupon jobs read (ADR-0050): the status and the message, written even when the run stops before it starts."""
+    monkeypatch.setattr(tool, "find_ccx", lambda: None)
+    result = tmp_path / "outcome.json"
+    monkeypatch.setattr("sys.argv", ["run_coupon.py", str(public_form(tmp_path)), "--run-by", "A. Engineer", "--result", str(result)])
+    with pytest.raises(SystemExit, match="CalculiX not found"):
+        tool.main()
+    outcome = json.loads(result.read_text(encoding="utf-8"))
+    assert outcome["status"] == "refused" and "CalculiX not found" in outcome["message"] and outcome["outputs"] == {}
+    assert outcome["coupon"] is None and outcome["fea_version"]
 
 
 def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):

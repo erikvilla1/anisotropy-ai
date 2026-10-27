@@ -18,14 +18,16 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import os
 import platform
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from anisotropy_fea import paths
+from anisotropy_fea import __version__, paths
 from anisotropy_fea.attempts import AttemptError, attempt_number, attempts, start_attempt
 from anisotropy_fea.calculix import CalculixError, ccx_version, find_ccx
 from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, record_summary, rel, signed
@@ -48,6 +50,19 @@ class Refused(ValueError):
 
 class StepFailed(RuntimeError):
     """A step stopped the run; the attempt's row says which."""
+
+    coupon: str | None = None
+    attempt: Path | None = None
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """What a finished run made: the attempt, the record's summary and every file to open, by key."""
+
+    coupon: str
+    attempt: Path
+    result: str
+    outputs: dict[str, Path]
 
 
 def calculix() -> str:
@@ -119,8 +134,8 @@ def refresh_page(folder: Path) -> None:
     readme.write_text(fill(text, page_blocks(folder, text), readme), encoding="utf-8", newline="\n")
 
 
-def run(source: str, run_by: str, machine: str | None = None, replace: bool = False, pdf: bool = True, theory: bool = True) -> Path:
-    """Every step for one coupon, from a filled-in form (.xlsx) or the name of a coupon that has its specs; returns the attempt folder."""
+def run(source: str, run_by: str, machine: str | None = None, replace: bool = False, pdf: bool = True, theory: bool = True) -> Outcome:
+    """Every step for one coupon, from a filled-in form (.xlsx) or the name of a coupon that has its specs."""
     day = date.today().isoformat()
     version = calculix()
     machine = machine or f"{platform.system()} {platform.release()}, CalculiX {version}"
@@ -161,20 +176,22 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         for step, args in steps:
             script(step, args, paths.FEA)
         delivered = package(name, pdf, theory)
-        opens = [("the package for the team", delivered)] + ([("its document", delivered / f"{name}.pdf")] if pdf else []) + [
-            ("open in Abaqus/CAE", delivered / "2-our-model" / "abaqus" / f"{name}-abaqus.inp"),
-            ("open in PrePoMax (File, Import)", out / "calculix" / f"{name}-nodal-ccx.inp"),
-            ("its results in PrePoMax (File, Open results)", out / "calculix" / f"{name}-nodal-ccx.frd"),
-            ("our engine: the summary, first-ply failure included", out / "kernel" / "summary.txt"),
-            ("our engine: every ply's stresses, for ParaView", out / "kernel" / f"{name}.vtu"),
-            ("the CalculiX record", record),
+        opens = [("package", "the package for the team", delivered)] + (
+            [("document", "its document", delivered / f"{name}.pdf")] if pdf else []) + [
+            ("abaqus_deck", "open in Abaqus/CAE", delivered / "2-our-model" / "abaqus" / f"{name}-abaqus.inp"),
+            ("prepomax_deck", "open in PrePoMax (File, Import)", out / "calculix" / f"{name}-nodal-ccx.inp"),
+            ("prepomax_results", "its results in PrePoMax (File, Open results)", out / "calculix" / f"{name}-nodal-ccx.frd"),
+            ("kernel_summary", "our engine: the summary, first-ply failure included", out / "kernel" / "summary.txt"),
+            ("kernel_vtu", "our engine: every ply's stresses, for ParaView", out / "kernel" / f"{name}.vtu"),
+            ("record", "the CalculiX record", record),
         ]
-        missing = [path for _, path in opens if not path.exists()]
+        missing = [path for _, _, path in opens if not path.exists()]
         if missing:
             hint = " (no Tectonic? run again with --no-pdf)" if delivered / f"{name}.pdf" in missing else ""
             raise StepFailed(f"the outputs: {', '.join(rel(path) for path in missing)} not written{hint}")
     except StepFailed as exc:
         add_row(folder, [f"{number:02d}", day, what, "--", f"stopped at {exc}", f"`ours/runs/{attempt.name}/run/`"])
+        exc.coupon, exc.attempt = name, attempt
         raise
     rows, _ = record_summary(folder)
     reaction = [signed(r.reference, r.kernel) for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
@@ -184,12 +201,22 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     add_row(folder, [f"{number:02d}", day, what, result, "package written" if pdf else "package written without its PDF", evidence])
     refresh_page(folder)
     print(f"\nDone: attempt {number:02d} of {name}; its row is in {rel(folder / 'README.md')}. {result}.")
-    for label, path in opens:
+    for _, label, path in opens:
         print(f"  {label:52} {rel(path)}")
     if not record.with_suffix(".md").is_file():
         print(f"Next, by hand: the record's reading, {rel(record.with_suffix('.md'))}: what the numbers show (ADR-0031); the local tests "
               "name a record without one")
-    return attempt
+    return Outcome(name, attempt, result, {key: path for key, _, path in opens})
+
+
+def write_result(path: Path | None, status: str, message: str, coupon: str | None = None, attempt: Path | None = None,
+                 outputs: dict[str, Path] | None = None) -> None:
+    """The run's outcome as JSON, for the API's coupon jobs (ADR-0050): done, stopped or refused, and the files by key."""
+    if path is None:
+        return
+    data = {"status": status, "message": message, "coupon": coupon, "attempt": None if attempt is None else rel(attempt),
+            "outputs": {key: rel(p) for key, p in (outputs or {}).items()}, "fea_version": __version__}
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def main() -> None:
@@ -201,13 +228,17 @@ def main() -> None:
     parser.add_argument("--replace", action="store_true", help="with a form: rewrite the two specs of a coupon that already has them")
     parser.add_argument("--no-pdf", action="store_true", help="write the package's LaTeX but not its PDF (Tectonic missing)")
     parser.add_argument("--no-theory", action="store_true", help="leave the equations and code of Chapter 2 out of the document")
+    parser.add_argument("--result", type=Path, default=None, help="also write the outcome to this JSON file (the API's coupon jobs read it)")
     args = parser.parse_args()
     try:
-        run(args.source, args.run_by, args.machine, args.replace, pdf=not args.no_pdf, theory=not args.no_theory)
+        done = run(args.source, args.run_by, args.machine, args.replace, pdf=not args.no_pdf, theory=not args.no_theory)
     except StepFailed as exc:
+        write_result(args.result, "stopped", f"stopped at {exc}", exc.coupon, exc.attempt)
         sys.exit(f"run_coupon: stopped at {exc}; the step's own message is above")
     except (Refused, IntakeError, AttemptError, CasePageError, CalculixError) as exc:
+        write_result(args.result, "refused", str(exc))
         sys.exit(f"run_coupon: {exc}")
+    write_result(args.result, "done", done.result, done.coupon, done.attempt, done.outputs)
 
 
 if __name__ == "__main__":

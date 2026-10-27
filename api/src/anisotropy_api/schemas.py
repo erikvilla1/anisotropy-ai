@@ -1,5 +1,8 @@
-"""Explicit JSON contracts for forward and prescribed-curvature laminate analysis."""
+"""Explicit JSON contracts for forward and prescribed-curvature laminate analysis, and for coupon jobs."""
 
+import base64
+import binascii
+import hashlib
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, FiniteFloat, PositiveFloat, Tag, model_validator
@@ -320,3 +323,82 @@ class PrescribedCurvatureResponse(Contract):
     midplane_strain: Vector3
     moments_N_m_per_m: Vector3 = Field(description="Required [Mx, My, Mxy] applied to the laminate, N*m/m")
     verification: VerificationResponse
+
+
+FORM_LIMIT_BYTES = 5_000_000  # a filled-in form is tens of kilobytes
+
+
+class CouponJobRequest(Contract):
+    """Start a coupon job (ADR-0050): a filled-in input form, or the name of a coupon that has its specs, and who runs it.
+
+    The form travels as base64 with its file name. The run record keeps the form's name and SHA-256; the tool files the form
+    itself in the coupon's team/<date>/ folder. The options are those of fea/tools/run_coupon.py.
+    """
+
+    form_name: Annotated[str, Field(pattern=r"^[^/\\:*?\"<>|\s-][^/\\:*?\"<>|]*\.xlsx$", max_length=120)] | None = None
+    form_base64: str | None = None
+    coupon: Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$", max_length=80)] | None = None
+    run_by: Annotated[str, Field(pattern=r"^[^\s-][^\r\n]*$", max_length=120)]
+    replace: bool = False
+    pdf: bool = True
+    theory: bool = True
+
+    @model_validator(mode="after")
+    def one_source(self) -> Self:
+        given = self.form_name is not None or self.form_base64 is not None
+        if given == (self.coupon is not None):
+            raise ValueError("give a form (form_name and form_base64) or a coupon, not both and not neither")
+        if given and (self.form_name is None or self.form_base64 is None):
+            raise ValueError("a form needs both form_name and form_base64")
+        if self.coupon is not None and self.replace:
+            raise ValueError("replace rewrites a coupon's specs from its form, so it needs a form")
+        if given:
+            self.form_bytes()
+        return self
+
+    def form_bytes(self) -> bytes:
+        try:
+            content = base64.b64decode(self.form_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(f"form_base64 is not base64: {exc}") from None
+        if len(content) > FORM_LIMIT_BYTES:
+            raise ValueError(f"the form is {len(content)} bytes; a filled-in form is far below {FORM_LIMIT_BYTES}")
+        if not content.startswith(b"PK"):
+            raise ValueError("form_base64 is not an .xlsx file (an .xlsx file starts with PK)")
+        return content
+
+    def recorded_inputs(self) -> dict[str, Any]:
+        """What the run record keeps of the request."""
+        source = {"coupon": self.coupon} if self.coupon is not None else {
+            "form": {"name": self.form_name, "sha256": hashlib.sha256(self.form_bytes()).hexdigest()}}
+        return {**source, "run_by": self.run_by, "replace": self.replace, "pdf": self.pdf, "theory": self.theory}
+
+    def options(self) -> list[str]:
+        """The tool's options for this request."""
+        return ["--run-by", self.run_by, *(["--replace"] if self.replace else []), *([] if self.pdf else ["--no-pdf"]),
+                *([] if self.theory else ["--no-theory"])]
+
+
+class CouponJobOutput(Contract):
+    """A coupon job as it stands (ADR-0050). `outputs` are paths from the repository root, by key; `run_id` names the job's
+    receipt once it has ended (null while it runs, or when recording is switched off)."""
+
+    job_id: str
+    state: Literal["running", "done", "stopped", "refused"]
+    actor: str
+    started_at: str
+    finished_at: str | None
+    coupon: str | None
+    attempt: str | None
+    message: str | None
+    outputs: dict[str, str]
+    run_id: str | None
+    log_tail: list[str]
+
+    @classmethod
+    def of(cls, job) -> "CouponJobOutput":
+        outcome = job.outcome or {}
+        return cls(job_id=str(job.id), state=job.state, actor=job.actor, started_at=job.started_at.isoformat(),
+                   finished_at=None if job.finished_at is None else job.finished_at.isoformat(), coupon=outcome.get("coupon"),
+                   attempt=outcome.get("attempt"), message=outcome.get("message"), outputs=outcome.get("outputs", {}),
+                   run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail())

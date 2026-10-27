@@ -1,4 +1,4 @@
-"""A synchronous local API. It adapts HTTP to the engine; it contains no laminate math."""
+"""A synchronous local API. It adapts HTTP to the engine and to our coupon tool; it contains no laminate math."""
 
 import datetime as dt
 import math
@@ -13,7 +13,7 @@ import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -22,15 +22,34 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
+from .coupon_jobs import CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, runner_command
 from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run
 from .settings import load_settings
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, LibraryMaterialInput,
-    MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, RunSummary,
+    AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponJobOutput, CouponJobRequest,
+    LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, RunSummary,
     VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
+COUPON_JOBS = "/v1/coupon-jobs"
+
+
+def job_recorder(app: FastAPI):
+    """The receipt of an ended coupon job, written as every run is (ADR-0026): solved with the tool's outcome, or rejected with
+    its message."""
+    def record(job: Job, state: str, outcome: dict) -> uuid.UUID | None:
+        engine = getattr(app.state, "records", None)
+        if engine is None:
+            return None
+        try:
+            return record_run(engine, actor=job.actor, endpoint=COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
+                              api_version=version("anisotropy-api"), git_commit=getattr(app.state, "git_commit", None),
+                              response={**outcome, "job_id": str(job.id)} if state == "done" else None,
+                              error=None if state == "done" else outcome["message"])
+        except SQLAlchemyError as exc:
+            raise RecordingFailed(str(exc).splitlines()[0]) from exc
+    return record
 
 
 @asynccontextmanager
@@ -42,6 +61,7 @@ async def lifespan(app: FastAPI):
     app.state.records = connect(settings.database_url) if settings.run_records else None
     if app.state.records is not None:
         check_ready(app.state.records)
+    app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app))
     yield
     if app.state.records is not None:
         app.state.records.dispose()
@@ -65,7 +85,7 @@ app.add_middleware(
     ],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor"],
-    expose_headers=[RUN_ID_HEADER],
+    expose_headers=[RUN_ID_HEADER, "Location"],
     allow_credentials=False,
 )
 
@@ -246,6 +266,66 @@ def run_detail(run_id: uuid.UUID, request: Request) -> RunOutput:
     if run is None:
         raise HTTPException(status_code=404, detail=f"No run {run_id}")
     return RunOutput.of(run)
+
+
+def _coupon_jobs(request: Request) -> CouponJobs:
+    jobs = getattr(request.app.state, "coupon_jobs", None)
+    if jobs is None:
+        raise HTTPException(status_code=503, detail="Coupon jobs are not set up: the API was started without its startup step")
+    return jobs
+
+
+def _known_job(jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=(
+            f"No coupon job {job_id} in this API process; jobs are kept in memory until it stops, and every job that ended has "
+            f"its receipt in GET /v1/runs?endpoint={COUPON_JOBS}"))
+    return job
+
+
+@app.post(COUPON_JOBS, status_code=202, response_model=CouponJobOutput)
+def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Request, response: Response) -> CouponJobOutput:
+    """Start a coupon job (ADR-0050): fea/tools/run_coupon.py takes a filled-in input form, or a coupon that has its specs, to the
+    coupon's package, in the background. One job runs at a time; another is refused with 409 while it runs. Poll the job at the
+    Location header until its state is no longer running; its receipt is a run record written when it ends (ADR-0026).
+    """
+    jobs = _coupon_jobs(request)
+    form = None if job_request.coupon is not None else (job_request.form_name, job_request.form_bytes())
+    try:
+        job = jobs.start(actor, job_request.recorded_inputs(), job_request.options(), form=form, coupon=job_request.coupon)
+    except JobBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except JobRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    response.headers["Location"] = f"{COUPON_JOBS}/{job.id}"
+    with jobs.lock:
+        return CouponJobOutput.of(job)
+
+
+@app.get(COUPON_JOBS + "/{job_id}", response_model=CouponJobOutput)
+def coupon_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
+    """A coupon job as it stands: its state, the end of its console, and once it is done the files it made (ADR-0050)."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(jobs, job_id)
+    with jobs.lock:
+        return CouponJobOutput.of(job)
+
+
+@app.get(COUPON_JOBS + "/{job_id}/package")
+def coupon_job_package(job_id: uuid.UUID, request: Request) -> FileResponse:
+    """The package of a job that is done, as a zip: the document, the decks, the material, the results and the audit form."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(jobs, job_id)
+    with jobs.lock:
+        state, outcome = job.state, job.outcome
+    if state != "done":
+        raise HTTPException(status_code=409, detail=f"coupon job {job_id} is {state}" + ("" if outcome is None else f": {outcome['message']}"))
+    try:
+        archive = jobs.package_archive(job)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(archive, media_type="application/zip", filename=archive.name)
 
 
 @app.get("/v1/materials")
