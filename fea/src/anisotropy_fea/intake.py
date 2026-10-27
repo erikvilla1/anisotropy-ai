@@ -2,8 +2,8 @@
 the two spec files our tools build from.
 
 `write_blank_form` writes the template: one input sheet with a labelled row per input (the team's cells yellow, the fixed words
-as lists, the units and a line of help beside each), a "How to fill it in" sheet, a read-only sheet of the library materials the
-team may pick, and a hidden Record sheet for our tools. The library list and the versions are read at write time, so the form is
+as lists, the units and what the row means beside each), a "How to fill it in" sheet, a Definitions sheet that explains every term
+with an example, a read-only sheet of the library materials the team may pick, and a hidden Record sheet for our tools. The library list and the versions are read at write time, so the form is
 generated, never kept as a file in the repository.
 
 `read_form` reads a filled-in form back by its labels; `check_form` turns the cells into typed values and names every problem
@@ -29,8 +29,8 @@ from anisotropy_engine.library import LibraryMaterial, library_material, list_da
 from . import __version__, forms, paths
 from .spec import ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, SpecError, full_angles, load_spec, parse_spec
 
-FORM_VERSION = "0.1"
-INPUT, HOWTO, LIBRARY, RECORD = "Coupon", "How to fill it in", "Library materials", "Record"
+FORM_VERSION = "0.2"
+INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD = "Coupon", "How to fill it in", "Definitions", "Library materials", "Record"
 UNITS = "mm-MPa"
 TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45")  # the in-plane kinds, as the form lists them
 assert set(TEST_ORDER) == set(IN_PLANE_KINDS)
@@ -45,6 +45,9 @@ ELEMENT_SIZE_DEFAULT = 2.0  # mm, the public checks' row spacing
 FPF_CRITERIA = ("max_stress", "tsai_hill")  # when the material has strengths
 MATERIAL_CODE = re.compile(r"^[A-Z][A-Z0-9]*$")
 LAYUP_CODE = re.compile(r"^L[1-9][0-9]*$")
+LIBRARY_HELP = ("pick a material by its id; the sheet Library materials lists each one with its constants and source, and once you pick one "
+                "this cell shows its constants")  # shown until a material is picked; an Excel text in a formula holds at most 255 characters
+assert len(LIBRARY_HELP) <= 255 and '"' not in LIBRARY_HELP
 
 
 class IntakeError(ValueError):
@@ -68,73 +71,103 @@ class Field:
 
 BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
     ("Who fills this in", (
-        Field("filled_by", "Filled in by", "text", "your name", required=True),
-        Field("date", "Date", "date", "the day you filled it in, YYYY-MM-DD", required=True),
-        Field("notes", "Notes to us", "text", "anything we should know about this coupon"),
+        Field("filled_by", "Filled in by", "text", "your name, so we know whom to ask", required=True),
+        Field("date", "Date", "date", "the day you filled it in, as YYYY-MM-DD, e.g. 2026-10-26", required=True),
+        Field("notes", "Notes to us", "text", "anything we should know: where a value comes from, which values are estimates, what you want to learn from this coupon"),
     )),
     ("The coupon", (
-        Field("test", "Test", "list", "pick one", required=True, words=tuple(TESTS)),
-        Field("material_code", "Material code", "text", "capital letters and digits, e.g. IM7; leave blank to reuse the code we already have for this material"),
-        Field("layup_code", "Layup code", "text", "L1, L2, ...; leave blank and we give the next free one, or the code of this same stacking sequence"),
-        Field("standard", "Standard", "text", "the test standard the specimen follows, or none", default="none"),
-        Field("size_from", "Where the size comes from", "text", "e.g. ASTM D3039, or your own design", required=True),
-        Field("team_model", "Your Abaqus model of this coupon", "text", "its name, or not built yet", default="not built yet"),
-        Field("test_data", "Test data", "text", "measured results to compare with, or none", default="none"),
+        Field("test", "Test", "list", "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), "
+              "open-hole tension (a strip with a hole at its centre, pulled) or in-plane shear (a strip of +45 and -45 plies only, pulled); "
+              "see Definitions, Tests", required=True, words=tuple(TESTS)),
+        Field("material_code", "Material code", "text", "a short code for the material in the coupon's name, capital letters and digits: X840PW in "
+              "X840PW-UNT-L1; leave blank to reuse the code we already use for this material"),
+        Field("layup_code", "Layup code", "text", "a short code for the stacking sequence: L1, L2 and so on; leave blank and we reuse the code of this "
+              "same stacking sequence or give the next free one"),
+        Field("standard", "Standard", "text", "the test standard the specimen follows, e.g. ASTM D3039, or none", default="none"),
+        Field("size_from", "Where the size comes from", "text", "where the length, width and tabs come from: a standard, a drawing, or your own design",
+              required=True),
+        Field("team_model", "Your Abaqus model of this coupon", "text", "the name of your Abaqus model or job for this coupon, or not built yet",
+              default="not built yet"),
+        Field("test_data", "Test data", "text", "measured results we can compare with (a test report or a file name), or none", default="none"),
     )),
-    ("Geometry (mm)", (
-        Field("length", "Length (mm)", "number", "total length along the pull, tabs included", required=True, above=0),
-        Field("width", "Width (mm)", "number", "", required=True, above=0),
-        Field("tab_length", "Tab length (mm)", "number", "gripped length at each end; 0 for no tabs", required=True, at_least=0),
+    ("Geometry (mm): the coupon lies with its length along y, the direction it is pulled or pushed", (
+        Field("length", "Length (mm)", "number", "the whole coupon from end to end along the pull, tabs included, e.g. 250", required=True, above=0),
+        Field("width", "Width (mm)", "number", "across the coupon, e.g. 25", required=True, above=0),
+        Field("tab_length", "Tab length (mm)", "number", "how much of each end the grip holds, e.g. 56; 0 for no tabs, and then set Grip region to line",
+              required=True, at_least=0),
     )),
     ("Open hole (open-hole tension only; ignored for the other tests)", (
-        Field("hole_diameter", "Hole diameter (mm)", "number", "a central hole", above=0),
-        Field("hole_circumferential", "Nodes around the hole", "whole", "a multiple of 4", default=HOLE_DEFAULTS["circumferential"], at_least=8),
-        Field("hole_radial", "Element rings around the hole", "whole", "", default=HOLE_DEFAULTS["radial_layers"], at_least=1),
-        Field("hole_ring", "Ring ratio", "number", "the square around the hole, in hole radii", default=HOLE_DEFAULTS["ring_ratio"], above=1),
-        Field("hole_growth", "Ring growth", "number", "how much each ring grows outward", default=HOLE_DEFAULTS["growth"], at_least=1),
+        Field("hole_diameter", "Hole diameter (mm)", "number", "the diameter of the hole at the centre of the coupon, e.g. 6", above=0),
+        Field("hole_circumferential", "Nodes around the hole", "whole", "how many mesh points sit on the edge of the hole; a multiple of 4, at least 8. "
+              "More points give a rounder hole and a sharper peak stress", default=HOLE_DEFAULTS["circumferential"], at_least=8),
+        Field("hole_radial", "Element rings around the hole", "whole", "how many rings of elements surround the hole before the regular mesh starts; "
+              "more rings give more detail near the hole", default=HOLE_DEFAULTS["radial_layers"], at_least=1),
+        Field("hole_ring", "Ring ratio", "number", "how far the ringed region reaches from the hole's centre, in hole radii: 2 means a square reaching "
+              "2 radii out on each side; it must stay inside the width", default=HOLE_DEFAULTS["ring_ratio"], above=1),
+        Field("hole_growth", "Ring growth", "number", "how much thicker each ring is than the one inside it: 1.2 means 20% thicker, so the smallest "
+              "elements sit at the edge of the hole, where stress changes fastest; 1 keeps every ring the same", default=HOLE_DEFAULTS["growth"], at_least=1),
     )),
     ("Layup, bottom ply first", tuple(
-        Field(f"ply_{i}", f"Ply {i}" + (" (bottom)" if i == 1 else ""), "angle", "angle in degrees; leave the rest blank" if i == 1 else "")
+        Field(f"ply_{i}", f"Ply {i}" + (" (bottom)" if i == 1 else ""), "angle",
+              "the fibre angle of the bottom ply in degrees, measured from x, which runs across the width: 0 = fibres across the coupon, "
+              "90 = fibres along the pull, 45 and -45 diagonal. Then one ply per row upward; leave the rest blank" if i == 1
+              else "the next ply up" if i == 2 else "")
         for i in range(1, PLIES + 1)) + (
-        Field("symmetric", "Symmetric", "list", "yes: the plies above are the lower half and are mirrored", required=True, words=YES_NO),
-        Field("ply_thickness", "Ply thickness (mm)", "number", "leave blank only when the library material gives it", above=0),
+        Field("symmetric", "Symmetric", "list", "yes: the plies listed are the lower half and are mirrored, so 0, 45, -45, 90 becomes 8 plies; "
+              "no: the plies listed are the whole stack", required=True, words=YES_NO),
+        Field("ply_thickness", "Ply thickness (mm)", "number", "the cured thickness of one ply, e.g. 0.127; leave blank only when the library "
+              "material gives one (its Ply thickness column on the sheet Library materials)", above=0),
     )),
     ("Material: pick one from our library, or give your own constants", (
-        Field("library", "Library material", "list", "pick by id; the sheet Library materials shows each one"),
-        Field("own_name", "Own material: name", "text", "as named in your Abaqus model, no spaces"),
-        Field("own_E1", "Own material: E1 (MPa)", "number", "", above=0),
-        Field("own_E2", "Own material: E2 (MPa)", "number", "", above=0),
-        Field("own_G12", "Own material: G12 (MPa)", "number", "", above=0),
-        Field("own_nu12", "Own material: nu12", "number", ""),
-        Field("own_F1t", "Own material: F1t (MPa)", "number", "strengths: give all five or none", above=0),
-        Field("own_F1c", "Own material: F1c (MPa)", "number", "as a positive value", above=0),
-        Field("own_F2t", "Own material: F2t (MPa)", "number", "", above=0),
-        Field("own_F2c", "Own material: F2c (MPa)", "number", "as a positive value", above=0),
-        Field("own_F6", "Own material: F6 (MPa)", "number", "", above=0),
-        Field("own_source", "Own material: source", "text", "where the constants come from: a datasheet, a test report"),
-        Field("G13", "G13 (MPa)", "number", "as in your Abaqus material (Lamina); if you have none, use G12 and say so in the notes", required=True, above=0),
-        Field("G23", "G23 (MPa)", "number", "as in your Abaqus material (Lamina)", required=True, above=0),
+        Field("library", "Library material", "list", LIBRARY_HELP),
+        Field("own_name", "Own material: name", "text", "the material's name as in your Abaqus model, no spaces, e.g. X840-Z60"),
+        Field("own_E1", "Own material: E1 (MPa)", "number", "stiffness along the fibres (Young's modulus in direction 1)", above=0),
+        Field("own_E2", "Own material: E2 (MPa)", "number", "stiffness across the fibres, in the plane of the ply (direction 2)", above=0),
+        Field("own_G12", "Own material: G12 (MPa)", "number", "in-plane shear stiffness (shear modulus in the 1-2 plane)", above=0),
+        Field("own_nu12", "Own material: nu12", "number", "Poisson's ratio: how much the ply narrows across the fibres when stretched along them, "
+              "e.g. 0.3; no unit"),
+        Field("own_F1t", "Own material: F1t (MPa)", "number", "strength along the fibres in tension. Give all five strengths, or none: without them "
+              "we predict no failure", above=0),
+        Field("own_F1c", "Own material: F1c (MPa)", "number", "strength along the fibres in compression, as a positive number", above=0),
+        Field("own_F2t", "Own material: F2t (MPa)", "number", "strength across the fibres in tension", above=0),
+        Field("own_F2c", "Own material: F2c (MPa)", "number", "strength across the fibres in compression, as a positive number", above=0),
+        Field("own_F6", "Own material: F6 (MPa)", "number", "in-plane shear strength", above=0),
+        Field("own_source", "Own material: source", "text", "where these numbers come from: the supplier's datasheet and its date, or a test report. "
+              "They stay with this coupon and never go into our library"),
+        Field("G13", "G13 (MPa)", "number", "out-of-plane shear stiffness in the plane of the fibres and the thickness, as in your Abaqus material "
+              "(Lamina). No measured value? For a tape use G13 = G12 and say so in the notes; see Definitions, Material", required=True, above=0),
+        Field("G23", "G23 (MPa)", "number", "out-of-plane shear stiffness across the fibres and the thickness, as in your Abaqus material (Lamina). "
+              "No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material", required=True, above=0),
     )),
-    ("Loading", (
-        Field("control", "Loading type", "list", "displacement: the moving grip is pulled or pushed; force: a total force", required=True, words=CONTROLS),
-        Field("value", "Value (mm or N)", "number", "as an amount; compression is pushed, the other tests pulled", required=True, above=0),
+    ("Loading: the bottom grip is held, the top grip moves", (
+        Field("control", "Loading type", "list", "displacement: the top grip moves by the value, in mm; force: a total force, in N, pulls or pushes "
+              "the top grip", required=True, words=CONTROLS),
+        Field("value", "Value (mm or N)", "number", "the amount as a positive number, e.g. 1 mm or 10000 N; for compression we push, for the other "
+              "tests we pull", required=True, above=0),
     )),
     ("Mesh: an element size, or your Abaqus mesh", (
-        Field("element_size", "Element size (mm)", "number", "we seed the mesh from it, with a node row on each tab line", default=ELEMENT_SIZE_DEFAULT, above=0),
-        Field("mesh_nx", "Your Abaqus mesh: elements across the width", "whole", "give these three instead of an element size", at_least=1),
-        Field("mesh_partitions", "Your Abaqus mesh: partition lines (mm)", "text", "from the bottom, comma-separated, e.g. 56, 110, 140, 194"),
-        Field("mesh_seeds", "Your Abaqus mesh: rows per segment", "text", "one count per segment, one more than the lines, e.g. 28, 27, 10, 27, 28"),
+        Field("element_size", "Element size (mm)", "number", "the size of the small pieces (elements) the coupon is divided into for the calculation, "
+              "e.g. 2. Smaller is finer: more detail near the grips and a hole, but slower. We put a row of nodes exactly on each tab line",
+              default=ELEMENT_SIZE_DEFAULT, above=0),
+        Field("mesh_nx", "Your Abaqus mesh: elements across the width", "whole", "only if you already meshed this coupon in Abaqus: the number of "
+              "elements across the width. Give this and the next two instead of an element size, and our mesh matches yours node for node", at_least=1),
+        Field("mesh_partitions", "Your Abaqus mesh: partition lines (mm)", "text", "where your partition lines cross the length, measured from the "
+              "bottom end, comma-separated, e.g. 56, 110, 140, 194"),
+        Field("mesh_seeds", "Your Abaqus mesh: rows per segment", "text", "how many rows of elements lie in each segment between those lines, from the "
+              "bottom, so one more number than there are lines, e.g. 28, 27, 10, 27, 28"),
     )),
     ("Grips", (
-        Field("grips", "Grip kind", "list", "coupling: a reference point at each end drives the grip, as in your models", default="coupling", words=GRIPS),
-        Field("region", "Grip region", "list", "tabs: the whole tab is gripped; line: the end row of nodes only", default="tabs", words=REGIONS),
+        Field("grips", "Grip kind", "list", "coupling: the gripped nodes at each end are tied to one reference point, held at the bottom and moved at "
+              "the top, as in your Abaqus models; nodal: the gripped nodes themselves are held or moved", default="coupling", words=GRIPS),
+        Field("region", "Grip region", "list", "tabs: every node on the tab is held; line: only the row of nodes at each end (use it when Tab length "
+              "is 0)", default="tabs", words=REGIONS),
     )),
-    ("Names in your Abaqus model (optional: we use them in our deck)", (
-        Field("name_part", "Abaqus name: part", "text", ""),
-        Field("name_instance", "Abaqus name: instance", "text", ""),
-        Field("name_material", "Abaqus name: material", "text", ""),
-        Field("name_layup", "Abaqus name: layup", "text", ""),
-        Field("name_section", "Abaqus name: section set", "text", ""),
+    ("Names in your Abaqus model (optional: give them and our Abaqus file uses them)", (
+        Field("name_part", "Abaqus name: part", "text", "the part's name; leave all five blank and we use ours"),
+        Field("name_instance", "Abaqus name: instance", "text", "the instance's name in the assembly, e.g. Coupon-1"),
+        Field("name_material", "Abaqus name: material", "text", "the material's name under Property, Material"),
+        Field("name_layup", "Abaqus name: layup", "text", "the composite layup's name"),
+        Field("name_section", "Abaqus name: section set", "text", "the set the layup is assigned to"),
     )),
 )
 FIELDS: dict[str, Field] = {f.key: f for _, fields in BLOCKS for f in fields}
@@ -158,16 +191,111 @@ ROWS_OF_KEY = {
 HOW_TO = (
     "What this form is for. You describe one coupon test; from it we build the model in our engine, solve it, and send back a package: "
     "the document, our Abaqus deck of the same coupon, and the audit form on which you compare your Abaqus results with ours.",
-    "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. Units are mm, MPa and N.",
-    "Layup: one ply per row, bottom ply first, angles in degrees as in your composite layup. With Symmetric = yes, the plies you list are the "
-    "lower half and are mirrored.",
+    "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. Units are mm, MPa and N. "
+    "Every row says what it means beside it; the sheet Definitions explains each term with an example.",
+    "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured "
+    "from x, as in your Abaqus models: 0 = fibres across the coupon, 90 = fibres along the pull.",
+    "Layup: one ply per row, bottom ply first, angles in degrees. With Symmetric = yes, the plies you list are the lower half and are mirrored.",
     "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed "
-    "for the shell section in both cases; take them from your Abaqus material.",
-    "Mesh: give an element size and we seed the coupon so that a node row sits on each tab line; or, when you already have an Abaqus model, "
+    "in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions "
+    "says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has "
+    "no ply thickness, give one.",
+    "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, "
     "give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
     "Open hole: the hole rows are read only for open-hole tension. Loading: give the amount; for compression we apply it as a push.",
+    "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway "
+    "to the tab. You do not enter these points: we place them from the geometry.",
     "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
     "Send the file back as it is. If something is missing or inconsistent, we send it back with every problem named.",
+)
+
+# The sheet Definitions: per group, (term, what it means, an example or a tip). Plain words; the questions an engineer asks first.
+GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
+    ("The coupon and its directions", (
+        ("Coupon", "A test specimen: a flat strip of the laminate, held at both ends by grips and pulled or pushed along its length.",
+         "A 250 x 25 mm strip with 56 mm tabs."),
+        ("x and y", "Lay the coupon flat with its length running up the page. x runs across the width from the left edge (x = 0); y runs along "
+         "the length from the bottom end (y = 0). The coupon is pulled or pushed along y.",
+         "The centre of a 250 x 25 mm coupon is at x = 12.5, y = 125."),
+        ("Tab, tab line", "A tab is the end region a grip holds. The tab line is where the tab ends and the free part of the coupon begins.",
+         "With 56 mm tabs on a 250 mm coupon the tab lines are at y = 56 and y = 194."),
+        ("Gauge section", "The free part between the tabs, where the coupon should fail and where results are read.", ""),
+    )),
+    ("Tests", (
+        ("Unnotched tension", "A plain strip pulled along its length. It gives the laminate's tensile stiffness and strength.", "ASTM D3039."),
+        ("Unnotched compression", "A plain strip pushed along its length. It gives the compressive stiffness and strength. Our model is flat and "
+         "in-plane, so it does not buckle.", "ASTM D6641."),
+        ("Open-hole tension", "A strip with a hole drilled through its centre, pulled. The hole concentrates the stress at its edge.",
+         "ASTM D5766: 36 mm wide with a 6 mm hole."),
+        ("In-plane shear", "A strip made of +45 and -45 plies only, pulled. The plies are loaded in shear, which gives the shear stiffness and "
+         "strength.", "ASTM D3518. Every ply +45 or -45, as many of each."),
+        ("Bending", "Three- and four-point bending are not on this form yet.", ""),
+    )),
+    ("Layup and plies", (
+        ("Ply", "One layer of the laminate: fibres in resin, all at one angle.", ""),
+        ("Ply angle", "The direction of a ply's fibres, in degrees, measured from x (across the width), positive counterclockwise when you look "
+         "down on the coupon. 0 = fibres across the coupon, 90 = fibres along the pull, 45 and -45 diagonal. This is how your Abaqus models are "
+         "set up: the coupon drawn along y, the layup in the global axes.",
+         "If you think of 0 as the direction of the pull, add 90 to every angle: 0, 45, -45, 90 becomes 90, -45, 45, 0."),
+        ("Bottom ply first", "List the plies from the bottom face up, in the order you would lay them on the tool.", ""),
+        ("Symmetric", "The stack is mirrored about its middle. With Symmetric = yes, list only the lower half.",
+         "0, 45, -45, 90 with yes is 8 plies: 0, 45, -45, 90, 90, -45, 45, 0."),
+        ("Ply thickness", "The cured thickness of one ply.", "0.127 mm (0.005 in)."),
+    )),
+    ("Material", (
+        ("Library material", "A material whose constants we hold with their source and page. Pick its id; the sheet Library materials lists each "
+         "one with its constants, and the row on the form shows the one you picked.", "im7-8552: IM7/8552 carbon/epoxy tape, NCAMP."),
+        ("Empty cell on the sheet Library materials", "The source does not give that value. With no strength we cannot predict when a ply fails, "
+         "so we leave failure out; with no ply thickness, give one on the form.", ""),
+        ("Own material", "Your own constants, with where they come from. They stay with this coupon and never go into our library.", ""),
+        ("Directions 1, 2, 3", "The ply's own directions: 1 along the fibres, 2 across the fibres in the plane of the ply, 3 through the thickness.",
+         ""),
+        ("E1, E2", "Stiffness (Young's modulus) along the fibres (E1) and across them (E2).", "IM7/8552 in our library: E1 = 162,096 MPa, "
+         "E2 = 8,963 MPa."),
+        ("G12", "In-plane shear stiffness: how the ply resists shear in its own plane.", "IM7/8552: G12 = 4,688 MPa."),
+        ("nu12", "Poisson's ratio: how much the ply narrows across the fibres when it is stretched along them. No unit.", "IM7/8552: 0.316."),
+        ("Strengths F1t, F1c, F2t, F2c, F6", "The stress at which a ply fails: along the fibres in tension (F1t) and compression (F1c), across the "
+         "fibres in tension (F2t) and compression (F2c), and in in-plane shear (F6). Compression as a positive number. Give all five or none.", ""),
+        ("G13, G23", "Out-of-plane shear stiffness: G13 in the plane that holds the fibres and the thickness, G23 across the fibres and the "
+         "thickness. Abaqus needs them for the shell section (its Lamina material asks for them). Our own solver does not use them, so they do "
+         "not change our results for a thin coupon pulled or pushed.",
+         "No measured value: for a tape the usual estimate is G13 = G12 and G23 = E2 / 3 (the ply taken as the same in every direction across "
+         "the fibres, with nu23 = 0.5; MIL-HDBK-17-3F, section 10.2.4.1). For a woven fabric there is no reliable estimate: ask the supplier. "
+         "Either way, write in the notes which values are estimates."),
+        ("Source", "Where your own constants come from.", "The supplier's datasheet and its date, or a test report and its number."),
+    )),
+    ("Loading and grips", (
+        ("Displacement", "The top grip moves by a set distance; the bottom grip is held. We report the force it takes.", "1 mm."),
+        ("Force", "A set total force pulls or pushes the top grip; the bottom grip is held. We report how far it moves.", "10000 N."),
+        ("Coupling grip", "The gripped nodes at each end are tied to one reference point, which moves like a rigid grip: held at the bottom, moved "
+         "at the top. This is how your Abaqus models grip the coupon.", ""),
+        ("Nodal grip", "The gripped nodes are held or moved directly, without a reference point.", ""),
+        ("Grip region", "tabs: every node on the tab is held. line: only the row of nodes at each end.", "Use line when Tab length is 0."),
+    )),
+    ("Mesh", (
+        ("Mesh, element, node", "For the calculation the coupon is divided into small four-sided pieces called elements; their corners are the "
+         "nodes. The stress is worked out in every element. The whole set of elements is the mesh.",
+         "A 250 x 20 mm coupon with 2 mm elements has 10 across and 125 along: 1,250 elements."),
+        ("Element size", "About how long an element's side is. We divide the width, and each part of the length, into whole numbers of elements "
+         "of about this size, with a row of nodes exactly on each tab line.", "2 mm, our default; 1 mm for a finer check."),
+        ("Finer mesh", "Smaller elements. They show more detail where the stress changes quickly (at the end of a tab, around a hole) and take "
+         "longer to solve. In the middle of a plain coupon the stress is the same everywhere, so a finer mesh changes nothing there.", ""),
+        ("Your Abaqus mesh", "If you have meshed this coupon in Abaqus, give its seeds instead of an element size: elements across the width, the "
+         "partition lines from the bottom, and the rows in each segment. Our mesh is then the same as yours node for node, and the results can "
+         "be compared element by element.", "10 across; lines at 56, 110, 140, 194; rows 28, 27, 10, 27, 28."),
+        ("Mesh around a hole", "Nodes around the hole: points on the hole's edge. Element rings: rings of elements around the hole. Ring ratio: how "
+         "far the ringed region reaches, in hole radii. Ring growth: how much thicker each ring is than the one inside it.",
+         "Our defaults: 32 nodes, 6 rings, ratio 2, growth 1.2."),
+    )),
+    ("What we send back", (
+        ("Reaction force", "The force the grip needs to make the movement you gave.", ""),
+        ("First-ply failure", "The load at which the first ply anywhere in the coupon reaches its strength, by the maximum stress and the Tsai-Hill "
+         "criteria; given as a fraction of your load, with the place and the ply.", "0.93: the first ply fails at 93% of a 1 mm pull."),
+        ("Where we read results", "At the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and "
+         "halfway to the tab. We place these points from the geometry; you do not enter them.", ""),
+        ("Coupon name", "Material code, test code and layup code. Test codes: UNT unnotched tension, UNC unnotched compression, OHT open-hole "
+         "tension, IPS in-plane shear.", "X840PW-UNT-L1: X840 plain weave, unnotched tension, layup 1."),
+    )),
 )
 
 
@@ -225,6 +353,7 @@ def write_blank_form(path: Path | str) -> Path:
         row += 1
         for f in fields:
             sheet.cell(row, 1, f.label).font = forms.font(bold=f.required)
+            sheet.cell(row, 1).alignment = forms.wrap()  # the label beside the first line of its explanation
             cell = sheet.cell(row, 2, f.default)
             cell.alignment = forms.wrap()
             forms.open_cell(cell)
@@ -249,10 +378,11 @@ def write_blank_form(path: Path | str) -> Path:
         column = lambda letter: f"'{LIBRARY}'!${letter}$2:${letter}${n}"  # noqa: E731
         pick = lambda letter: f"INDEX({column(letter)},MATCH({library_cell.coordinate},{ids},0))"  # noqa: E731
         shown = (f'=IFERROR({pick("B")}&": E1 "&{pick("D")}&", E2 "&{pick("E")}&", G12 "&{pick("F")}&" MPa, nu12 "&{pick("G")}'
-                 f'&IF({pick("M")}="","",", ply "&{pick("M")}&" mm"),"")')
+                 f'&IF({pick("M")}="","",", ply "&{pick("M")}&" mm"),"{LIBRARY_HELP}")')
         shown_cell = sheet.cell(library_cell.row, 3, shown)
         shown_cell.font = forms.font(muted=True)
         shown_cell.alignment = forms.wrap()
+        sheet.row_dimensions[library_cell.row].height = 13.0 * forms.lines_of(LIBRARY_HELP, widths[3]) + 4  # fit_rows skips formulas
     for col, width in widths.items():
         sheet.column_dimensions[get_column_letter(col)].width = width
     forms.fit_rows(sheet, {3: widths[3]}, 4, last)
@@ -271,6 +401,8 @@ def write_blank_form(path: Path | str) -> Path:
     sheet.column_dimensions["B"].width = 80
     forms.protect(sheet)
     forms.printable(sheet, landscape=False)
+
+    write_definitions(book.create_sheet(DEFINITIONS))
 
     sheet = book.create_sheet(LIBRARY)
     sheet.append(list(LIBRARY_COLUMNS))
@@ -306,6 +438,40 @@ def write_blank_form(path: Path | str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     book.save(path)
     return path
+
+
+def write_definitions(sheet) -> None:
+    """The sheet Definitions: a banner per group of GLOSSARY, then one row per term with what it means and an example."""
+    from openpyxl.utils import get_column_letter
+
+    widths = {1: 30, 2: 74, 3: 56}
+    sheet["A1"] = DEFINITIONS
+    sheet["A1"].font = forms.font(14, bold=True)
+    sheet.cell(2, 1, "What each term on the form means, with an example. The row on the sheet Coupon says the same in short.").font = forms.font(11, muted=True)
+    for col, heading in enumerate(("Term", "What it means", "Example or tip"), start=1):
+        cell = sheet.cell(4, col, heading)
+        cell.font = forms.font(bold=True)
+        forms.fill(cell, forms.HEADER_FILL)
+    row = 5
+    for title, terms in GLOSSARY:
+        for col in (1, 2, 3):
+            forms.fill(sheet.cell(row, col), forms.BANNER_FILL)
+        sheet.cell(row, 1, title).font = forms.font(11, bold=True)
+        sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+        row += 1
+        for term, meaning, example in terms:
+            sheet.cell(row, 1, term).font = forms.font(bold=True)
+            sheet.cell(row, 2, meaning)
+            sheet.cell(row, 3, example or None).font = forms.font(muted=True)
+            for col in (1, 2, 3):
+                sheet.cell(row, col).alignment = forms.wrap()
+            row += 1
+    for col, width in widths.items():
+        sheet.column_dimensions[get_column_letter(col)].width = width
+    forms.fit_rows(sheet, widths, 5, row - 1)
+    sheet.freeze_panes = "A5"
+    forms.protect(sheet)
+    forms.printable(sheet, landscape=True, title_rows="4:4")
 
 
 def fill_form(blank: Path | str, values: dict[str, Any], out: Path | str) -> Path:

@@ -11,8 +11,9 @@ from openpyxl import load_workbook
 from anisotropy_fea import paths
 from anisotropy_fea.forms import labelled
 from anisotropy_fea.case_pages import read_case
-from anisotropy_fea.intake import (FIELDS, FORM_VERSION, HOWTO, INPUT, LIBRARY, RECORD, IntakeError, build_specs, check_form, convert,
-                                   designation_for, fill_form, library_records, read_form, render_toml, spec_data, write_blank_form)
+from anisotropy_fea.intake import (DEFINITIONS, FIELDS, FORM_VERSION, GLOSSARY, HOWTO, INPUT, LIBRARY, LIBRARY_HELP, RECORD, IntakeError, build_specs,
+                                   check_form, convert, designation_for, fill_form, library_records, read_form, render_toml, spec_data,
+                                   write_blank_form)
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.spec import CouponSpec, coupon_card, load_spec, node_lines, parse_spec, row_coordinates, spec_material, to_si
 from anisotropy_fea.write_abaqus import write_abaqus
@@ -61,7 +62,7 @@ def specs_of(blank: Path, folder: Path, values: dict, root: Path | None = None, 
 
 def test_the_blank_form_has_its_sheets_rows_lists_and_record(blank):
     book = load_workbook(blank)
-    assert book.sheetnames == [INPUT, HOWTO, LIBRARY, RECORD] and book[RECORD].sheet_state == "hidden"
+    assert book.sheetnames == [INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD] and book[RECORD].sheet_state == "hidden"
     assert labelled(book[RECORD])["Form version"] == FORM_VERSION and labelled(book[RECORD])["Library materials listed"] == str(len(library_records()))
     sheet = book[INPUT]
     labels = [sheet.cell(r, 1).value for r in range(1, sheet.max_row + 1) if sheet.cell(r, 1).value in {f.label for f in FIELDS.values()}]
@@ -75,14 +76,52 @@ def test_the_blank_form_has_its_sheets_rows_lists_and_record(blank):
     assert lists[f"B{rows['Library material']}"] == f"'{LIBRARY}'!$A$2:$A${len(library_records()) + 1}"
     assert lists[f"B{rows['Test']}"] == '"unnotched tension,unnotched compression,open-hole tension,in-plane shear"'
     assert str(sheet.cell(rows["Library material"], 3).value).startswith("=IFERROR(INDEX(")
+    assert str(sheet.cell(rows["Library material"], 3).value).endswith(f',"{LIBRARY_HELP}")')  # the instruction until a material is picked
     library = book[LIBRARY]
     assert [library.cell(r, 1).value for r in range(2, library.max_row + 1)] == [m.material_id for m in library_records()]
     assert library.cell(1, 1).value == "Id" and library.auto_filter.ref and library.protection.sheet
-    for name in (INPUT, HOWTO, LIBRARY):
+    for name in (INPUT, HOWTO, DEFINITIONS, LIBRARY):
         for cells in book[name].iter_rows():
             for cell in cells:
                 if isinstance(cell.value, str):
                     assert "kernel" not in cell.value.lower() and "ADR" not in cell.value, (name, cell.coordinate)
+
+
+def test_every_row_says_what_it_means(blank):
+    sheet = load_workbook(blank)[INPUT]
+    rows = {sheet.cell(r, 1).value: r for r in range(1, sheet.max_row + 1)}
+    later_plies = {f"Ply {i}" for i in range(3, 17)}  # one ply per row: the first two rows say how, the rest stay quiet
+    for f in FIELDS.values():
+        if f.label not in later_plies:
+            assert sheet.cell(rows[f.label], 3).value, f"the row {f.label!r} has no explanation beside it"
+    ply = sheet.cell(rows["Ply 1 (bottom)"], 3).value
+    assert "measured from x" in ply and "90 = fibres along the pull" in ply  # the direction an engineer asks about first
+
+
+def test_the_definitions_answer_the_first_questions(blank):
+    sheet = load_workbook(blank)[DEFINITIONS]
+    terms = {sheet.cell(r, 1).value: (sheet.cell(r, 2).value, sheet.cell(r, 3).value) for r in range(5, sheet.max_row + 1)}
+    for group, entries in GLOSSARY:
+        assert group in terms, group
+        for term, meaning, _ in entries:
+            assert terms[term][0] == meaning and meaning, term
+    for asked in ("Unnotched tension", "Open-hole tension", "In-plane shear", "Ply angle", "Symmetric", "Element size", "Finer mesh",
+                  "Your Abaqus mesh", "G13, G23", "Library material", "Empty cell on the sheet Library materials", "Coupling grip",
+                  "Where we read results", "First-ply failure"):
+        assert asked in terms, asked
+    assert "G23 = E2 / 3" in terms["G13, G23"][1] and "MIL-HDBK-17-3F" in terms["G13, G23"][1]
+    assert sheet.protection.sheet and sheet.freeze_panes == "A5"
+
+
+def test_a_form_of_version_0_1_still_reads(blank, tmp_path):
+    path = filled(blank, tmp_path, PUBLIC_FILL)
+    book = load_workbook(path)
+    record = book[RECORD]
+    row = next(r for r in range(1, record.max_row + 1) if record.cell(r, 1).value == "Form version")
+    record.cell(row, 2, "0.1")  # the form the team may still hold: same labels, older explanations
+    book.save(path)
+    form = read_form(path)
+    assert form.version == "0.1" and check_form(form).library == "im7-8552"
 
 
 # --------------------------------------------------------------------------------------------- the public stand-in, round trip
