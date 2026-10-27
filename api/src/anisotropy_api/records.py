@@ -15,7 +15,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from sqlalchemy import CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, inspect, text
+from sqlalchemy import CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, inspect, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
@@ -127,3 +127,21 @@ def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engin
 def fetch_run(engine: Engine, run_id: uuid.UUID) -> Run | None:
     with Session(engine) as session:
         return session.get(Run, run_id)
+
+
+def list_runs(engine: Engine, *, actor: str | None = None, endpoint: str | None = None, status: str | None = None,
+              since: dt.datetime | None = None, until: dt.datetime | None = None, limit: int = 50) -> list[Run]:
+    """The newest runs first, narrowed by the given filters; `since` is inclusive, `until` exclusive."""
+    statement = select(Run).order_by(Run.created_at.desc(), Run.id).limit(limit)
+    if actor is not None:
+        statement = statement.where(Run.actor == actor)
+    if endpoint is not None:
+        statement = statement.where(Run.endpoint == endpoint)
+    if status is not None:
+        statement = statement.where(Run.status == status)
+    if since is not None:
+        statement = statement.where(Run.created_at >= since)
+    if until is not None:
+        statement = statement.where(Run.created_at < until)
+    with Session(engine) as session:
+        return list(session.scalars(statement))
