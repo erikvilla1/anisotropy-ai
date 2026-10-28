@@ -177,6 +177,25 @@ export async function fetchExplanation(apiBase: string, jobId: string, signal?: 
   return readExplanation(await call(fileUrl(apiBase, jobId, "explanation"), { method: "GET", signal }, "the explanation"));
 }
 
+export type ExplainAnswer = { run_id: string | null; job_id: string; kind: "setup" | "result"; writer: string; model: string | null; prose: string[];
+  withheld: boolean; reason: string | null; facts: Record<string, unknown> };
+
+export function readExplainAnswer(payload: unknown): ExplainAnswer {
+  if (!isObject(payload) || typeof payload.writer !== "string" || !Array.isArray(payload.prose) || !payload.prose.every((s) => typeof s === "string")
+    || typeof payload.withheld !== "boolean") {
+    throw new StudioError("The explanation answered with an unexpected shape.");
+  }
+  return payload as unknown as ExplainAnswer;
+}
+
+/** The explanation of a job's result or setup through the API (ADR-0052): the template's sentences, or a model's rephrasing kept only
+ * when every number in it is a fact; the answer says who wrote it. */
+export async function explainJob(apiBase: string, jobId: string, kind: "setup" | "result", signal?: AbortSignal): Promise<ExplainAnswer> {
+  const payload = await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/explain`,
+    { method: "POST", headers, body: JSON.stringify({ kind }), signal }, "the explanation");
+  return readExplainAnswer(payload);
+}
+
 /** The downloadable files of a job, in the order the page lists them, with the words of fea/tools/run_coupon.py. */
 export const DOWNLOADS: [string, string][] = [
   ["package", "The package for the team (zip)"], ["document", "The document (PDF)"], ["abaqus_deck", "Our Abaqus deck (.inp)"],

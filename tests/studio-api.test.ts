@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { checkSetup, DOWNLOADS, fileUrl, readChecklist, readExplanation, readFields, readJob, readPreview, startSolve, StudioError } from "../lib/studio-api";
+import { checkSetup, DOWNLOADS, explainJob, fileUrl, readChecklist, readExplainAnswer, readExplanation, readFields, readJob, readPreview, startSolve, StudioError } from "../lib/studio-api";
 
 const fixture = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio/${name}.json`, "utf8"));
 
@@ -69,4 +69,21 @@ test("file addresses and the download list", () => {
   assert.equal(fileUrl("http://api.test/", "abc", "fields"), "http://api.test/v1/coupon-jobs/abc/files/fields");
   assert.equal(DOWNLOADS[0][0], "package");
   assert.ok(DOWNLOADS.some(([key]) => key === "prepomax_results"));
+});
+
+test("the explain answer carries its writer and reads only a known shape", async () => {
+  const answer = { run_id: null, job_id: "j", kind: "result", writer: "anthropic", model: "claude-opus-5-5", prose: ["The top grip carries 16211 N."], withheld: false, reason: null, facts: {} };
+  assert.equal(readExplainAnswer(answer).model, "claude-opus-5-5");
+  assert.throws(() => readExplainAnswer({ writer: "template", prose: "text" }), StudioError);
+  const original = globalThis.fetch;
+  const calls: { url: string; init: RequestInit }[] = [];
+  globalThis.fetch = (async (url: string, init: RequestInit) => { calls.push({ url, init }); return new Response(JSON.stringify(answer), { status: 200 }); }) as typeof fetch;
+  try {
+    const got = await explainJob("http://api.test", "j", "result");
+    assert.equal(got.writer, "anthropic");
+    assert.equal(calls[0].url, "http://api.test/v1/coupon-jobs/j/explain");
+    assert.deepEqual(JSON.parse(calls[0].init.body as string), { kind: "result" });
+  } finally {
+    globalThis.fetch = original;
+  }
 });

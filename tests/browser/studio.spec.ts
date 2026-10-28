@@ -34,6 +34,11 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
       polls += 1;
       return json(route, polls < 2 ? fixture("job-running") : polls < 4 ? fixture("job-engine-done") : fixture("job-done"));
     }
+    if (path.endsWith("/explain") && request.method() === "POST") {
+      const explanation = fixture("explanation");
+      return json(route, { run_id: "run-2", job_id: path.split("/")[3], kind: (request.postDataJSON() as { kind: string }).kind, writer: "template", model: null,
+        prose: explanation.sentences, withheld: false, reason: null, facts: explanation.facts });
+    }
     if (path.endsWith("/files/fields")) return json(route, fixture("fields"));
     if (path.endsWith("/files/explanation")) return json(route, fixture("explanation"));
     if (path.endsWith("/files/package")) return route.fulfill({ status: 200, contentType: "application/zip", body: "PK" });
@@ -72,6 +77,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("summary-reaction")).toContainText("N (tension)");
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
+  await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "template", { timeout: 15_000 }); // the API answered the explain call
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
   await expect(page.getByTestId("job-message")).toContainText("57 of 57 recorded values agree");
   await expect(page.getByTestId("job-progress").locator("li[data-state=done]")).toHaveCount(9); // every stage of a finished job, the last included

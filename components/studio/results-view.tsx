@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DOWNLOADS, fileUrl, type Explanation, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
+import { DOWNLOADS, explainJob, fileUrl, StudioError, type ExplainAnswer, type Explanation, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
 import { colorsOf, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
@@ -58,13 +58,17 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
   );
 }
 
-export function ExplanationPanel({ explanation }: { explanation: Explanation | null }) {
-  if (!explanation) return null;
+export function ExplanationPanel({ explanation, answer }: { explanation: Explanation | null; answer?: ExplainAnswer | null }) {
+  if (!explanation && !answer) return null;
+  const prose = answer?.prose ?? explanation?.sentences ?? [];
+  const writer = answer?.writer ?? explanation?.writer ?? "template";
+  const badge = writer === "template" ? "written by the template from the engine's numbers" : `written by ${writer}${answer?.model ? ` (${answer.model})` : ""}, every number checked against the engine's`;
   return (
-    <div className="studio-panel" data-testid="explanation">
-      <h3>What this shows <span className="studio-badge studio-badge-writer">{explanation.writer === "template" ? "written by the template from the engine's numbers" : `writer: ${explanation.writer}`}</span></h3>
-      {explanation.sentences.map((sentence, i) => <p key={i}>{sentence}</p>)}
-      {explanation.setup_sentences.length ? <details><summary>The setup, as checked</summary>{explanation.setup_sentences.map((s, i) => <p key={i}>{s}</p>)}</details> : null}
+    <div className="studio-panel" data-testid="explanation" data-writer={writer}>
+      <h3>What this shows <span className="studio-badge studio-badge-writer">{badge}</span></h3>
+      {answer?.reason ? <p className="studio-muted" data-testid="explanation-reason">{answer.withheld ? "The model's draft was withheld: " : "The template's words stand: "}{answer.reason}.</p> : null}
+      {prose.map((sentence, i) => <p key={i}>{sentence}</p>)}
+      {explanation?.setup_sentences.length ? <details><summary>The setup, as checked</summary>{explanation.setup_sentences.map((s, i) => <p key={i}>{s}</p>)}</details> : null}
     </div>
   );
 }
@@ -92,6 +96,15 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
   const [wireframe, setWireframe] = useState(true);
   const [picked, setPicked] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<number | null>(() => (fields.summary.earliest ? fields.summary.fpf[fields.summary.earliest].element : null));
+  const [answer, setAnswer] = useState<ExplainAnswer | null>(null);
+  useEffect(() => {
+    // once our engine has written the explanation, the API's writer (the template, or a model behind a setting) rephrases it (ADR-0052)
+    if (!job || !apiBase || !("explanation" in job.outputs)) return;
+    let cancelled = false;
+    explainJob(apiBase, job.job_id, "result").then((a) => { if (!cancelled) setAnswer(a); })
+      .catch((error) => { if (!cancelled && !(error instanceof StudioError && error.status === 409)) setAnswer(null); });
+    return () => { cancelled = true; };
+  }, [job?.job_id, job?.state, "explanation" in (job?.outputs ?? {}), apiBase]);
   useEffect(() => { setChoice(DEFAULT_CHOICE(fields)); setScale(suggestedScale(fields.mesh.nodes, fields.nodal.magnitude)); }, [fields]);
   const options = useMemo(() => fieldOptions(fields), [fields]);
   const option = options.find((o) => o.id === choice.id) ?? options[0];
@@ -157,7 +170,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
         </div>
       ) : <p className="studio-muted studio-pick-hint">Click an element on the plate to read its values. The critical element is framed in red.</p>}
       <SummaryPanel fields={fields} onShow={show} />
-      <ExplanationPanel explanation={explanation} />
+      <ExplanationPanel explanation={explanation} answer={answer} />
       {job ? <Downloads apiBase={apiBase} job={job} /> : null}
     </div>
   );
