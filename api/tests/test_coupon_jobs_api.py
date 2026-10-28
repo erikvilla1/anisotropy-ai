@@ -6,6 +6,7 @@ tool itself."""
 import base64
 import hashlib
 import io
+import json
 import sys
 import time
 import zipfile
@@ -23,16 +24,24 @@ from conftest import TEST_URL, needs_test_database
 FORM = b"PK\x03\x04" + bytes(200)  # starts as an .xlsx file does; only the stand-in reads it
 STAND_IN = r'''
 """A stand-in for fea/tools/run_coupon.py: the source argument chooses what it does."""
-import argparse, json, pathlib, sys, time
+import argparse, json, pathlib, sys, tempfile, time
 parser = argparse.ArgumentParser()
 parser.add_argument("source")
 parser.add_argument("--run-by", required=True)
 parser.add_argument("--result", required=True)
+parser.add_argument("--progress", required=True)
 for flag in ("--replace", "--no-pdf", "--no-theory"):
     parser.add_argument(flag, action="store_true")
 args = parser.parse_args()
 result = pathlib.Path(args.result)
 print("== the input form", flush=True)
+fields = result.parent / "fields.json"
+fields.write_text('{"summary": {"reaction": {"value": 1.0}}}', encoding="utf-8")
+outside = pathlib.Path(tempfile.gettempdir()) / "anisotropy-outside.txt"
+outside.write_text("not for the API", encoding="utf-8")
+progress = {"stage": "our engine", "done": ["the setup check", "the input", "the decks", "the attempt"], "stages": ["the setup check", "the input"],
+            "outputs": {"fields": str(fields), "outside": str(outside)}, "coupon": "IM7-UNT-L1", "attempt": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-27"}
+pathlib.Path(args.progress).write_text(json.dumps(progress), encoding="utf-8")
 if args.source == "STOPS":
     result.write_text(json.dumps({"status": "stopped", "message": "stopped at CalculiX: run_calculix.py exited with code 1",
                                   "coupon": "STOPS", "attempt": ".local/fea/STOPS/ours/runs/attempt-02_2026-10-27", "outputs": {}}))
@@ -49,7 +58,7 @@ package.mkdir()
 source = pathlib.Path(args.source)
 size = source.stat().st_size if source.is_file() else 0
 result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-27",
-                              "message": f"form {size} bytes; run by {args.run_by}; no-pdf {args.no_pdf}", "outputs": {"package": str(package)},
+                              "message": f"form {size} bytes; run by {args.run_by}; no-pdf {args.no_pdf}", "outputs": {"package": str(package), "fields": str(fields), "outside": str(outside)},
                               "fea_version": "stand-in"}), encoding="utf-8")
 '''
 
@@ -120,8 +129,8 @@ def test_a_tool_that_writes_no_outcome_is_stopped_with_its_console(jobs):
 
 
 @pytest.mark.parametrize("body, reason", [
-    (form_request(coupon="IM7-UNT-L1"), "not both"),
-    ({"run_by": "A. Engineer"}, "not neither"),
+    (form_request(coupon="IM7-UNT-L1"), "one of the three"),
+    ({"run_by": "A. Engineer"}, "one of the three"),
     (form_request(form_base64=None), "needs both"),
     (form_request(form_base64="not base64!"), "not base64"),
     (form_request(form_base64=base64.b64encode(b"hello").decode()), "not an .xlsx"),
@@ -200,3 +209,72 @@ def test_an_ended_job_has_its_receipt(recording):
     stopped = ended(recording.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"], recording)
     run = recording.get(f"/v1/runs/{stopped['run_id']}").json()
     assert run["status"] == "rejected" and run["error"] == "stopped at CalculiX: run_calculix.py exited with code 1" and run["response"] is None
+
+
+# --------------------------------------------------------------------------------------------- the studio's way in (ADR-0051)
+
+VALUES = {"form_version": "0.3", "filled_by": "A. Engineer", "test": "unnotched tension", "length": 250.0, "angles": [45, 0, -45, 90]}
+
+
+def test_the_values_run_as_a_file_the_tool_reads(jobs):
+    started = client.post("/v1/coupon-jobs", json={"values": VALUES, "run_by": "A. Engineer", "pdf": False})
+    assert started.status_code == 202
+    job_id = started.json()["job_id"]
+    body = ended(job_id)
+    [written] = [p for p in (jobs.root / job_id).iterdir() if p.name.startswith("values-") and p.suffix == ".json"]
+    assert written.name == f"values-{job_id.replace('-', '')[:8]}.json" and json.loads(written.read_text(encoding="utf-8")) == VALUES
+    assert list(json.loads(written.read_text(encoding="utf-8"))) == sorted(VALUES)  # written with sorted keys: one digest for one object
+    assert body["state"] == "done" and body["message"].startswith(f"form {written.stat().st_size} bytes")
+
+
+def test_the_status_shows_the_stage_and_the_files_so_far(jobs):
+    job_id = client.post("/v1/coupon-jobs", json={"coupon": "WAITS", "run_by": "A. Engineer"}).json()["job_id"]
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and client.get(f"/v1/coupon-jobs/{job_id}").json()["stage"] is None:
+        time.sleep(0.05)
+    running = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert running["state"] == "running" and running["stage"] == "our engine" and running["stages_done"] == ["the setup check", "the input", "the decks", "the attempt"]
+    assert running["stages"] == ["the setup check", "the input"] and set(running["outputs"]) == {"fields", "outside"} and running["coupon"] == "IM7-UNT-L1"
+    fields = client.get(f"/v1/coupon-jobs/{job_id}/files/fields")
+    assert fields.status_code == 200 and fields.headers["content-type"].startswith("application/json") and fields.json()["summary"]["reaction"]["value"] == 1.0
+    no_package = client.get(f"/v1/coupon-jobs/{job_id}/files/package")
+    assert no_package.status_code == 404 and "it has: fields, outside" in no_package.json()["detail"]
+    outside = client.get(f"/v1/coupon-jobs/{job_id}/files/outside")
+    assert outside.status_code == 404 and "lies outside the repository and the job's folder" in outside.json()["detail"]
+    (jobs.root / "release").touch()
+    done = ended(job_id)
+    assert done["stage"] == "our engine" and set(done["outputs"]) == {"package", "fields", "outside"}  # the outcome's files once done
+    package = client.get(f"/v1/coupon-jobs/{job_id}/files/package")
+    assert package.status_code == 200 and package.headers["content-type"] == "application/zip"
+    assert client.get(f"/v1/coupon-jobs/{job_id}/files/fields").status_code == 200
+
+
+def test_jobs_are_listed_newest_first(jobs):
+    assert client.get("/v1/coupon-jobs").json() == []
+    first = ended(client.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer"}).json()["job_id"])
+    second = ended(client.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"])
+    listed = client.get("/v1/coupon-jobs").json()
+    assert [job["job_id"] for job in listed] == [second["job_id"], first["job_id"]] and [job["state"] for job in listed] == ["stopped", "done"]
+
+
+@pytest.mark.parametrize("body, reason", [
+    ({"values": VALUES, "coupon": "IM7-UNT-L1", "run_by": "A. Engineer"}, "one of the three"),
+    ({"values": {}, "run_by": "A. Engineer"}, "the object is empty"),
+    ({"values": "length = 250", "run_by": "A. Engineer"}, "dictionary"),
+    ({"values": {"big": "x" * 300_000}, "run_by": "A. Engineer"}, "far below"),
+])
+def test_values_outside_the_contract_start_nothing(jobs, body, reason):
+    refused = client.post("/v1/coupon-jobs", json=body)
+    assert refused.status_code == 422 and reason in str(refused.json()["detail"])
+    assert jobs.jobs == {}
+
+
+@needs_test_database
+def test_a_values_job_and_a_studio_request_have_their_receipts(recording):
+    done = ended(recording.post("/v1/coupon-jobs", json={"values": VALUES, "run_by": "A. Engineer"}).json()["job_id"], recording)
+    run = recording.get(f"/v1/runs/{done['run_id']}").json()
+    digest = hashlib.sha256(json.dumps(VALUES, sort_keys=True, ensure_ascii=False, indent=1).encode("utf-8")).hexdigest()
+    assert run["inputs"] == {"values": {"sha256": digest, "form_version": "0.3"}, "run_by": "A. Engineer", "replace": False, "pdf": True, "theory": True}
+    studio = ended(recording.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer"},
+                                  headers={"X-Anisotropy-Actor": "studio"}).json()["job_id"], recording)
+    assert recording.get(f"/v1/runs/{studio['run_id']}").json()["actor"] == "studio"  # the constraint admits the new actor (migration 0004)

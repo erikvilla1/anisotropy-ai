@@ -1,4 +1,4 @@
-# Component card: local laminate API | version 0.2 | updated 2026-10-27
+# Component card: local laminate API | version 0.3 | updated 2026-10-28
 
 ## Purpose and intended use
 
@@ -16,7 +16,9 @@ All three analysis endpoints require the `X-Anisotropy-Actor` header (which clie
 
 `GET /v1/materials` and `GET /v1/materials/{material_id}?dataset=`: the library datasets and the SI values the engine would use, each with its page. Both analysis endpoints also accept `material: {"library_id": "...", "dataset_id": null}` in place of explicit constants and then return `material_provenance` (ADR-0020).
 
-`POST /v1/coupon-jobs`, `GET /v1/coupon-jobs/{job_id}`, `GET /v1/coupon-jobs/{job_id}/package`: a coupon job runs `fea/tools/run_coupon.py` in the background on a filled-in input form (base64) or a coupon's name, one at a time (409 while one runs), and gives its state, the end of its console, its files and the package as a zip. An ended job has one run record with endpoint `/v1/coupon-jobs` (ADR-0050). Needs uv, the fea environment and CalculiX on the machine.
+`POST /v1/coupon-jobs`, `GET /v1/coupon-jobs/{job_id}`, `GET /v1/coupon-jobs/{job_id}/package`: a coupon job runs `fea/tools/run_coupon.py` in the background on a filled-in input form (base64), the form's rows as one JSON object (`values`, what the studio sends) or a coupon's name, one at a time (409 while one runs), and gives its state, its stage and the files made so far, the end of its console, its files and the package as a zip. An ended job has one run record with endpoint `/v1/coupon-jobs` (ADR-0050). Needs uv, the fea environment and CalculiX on the machine.
+
+For the coupon studio (ADR-0051, ADR-0050 amendment 1): `POST /v1/coupon-jobs/check` runs `fea/tools/studio_tool.py check` on the values and answers with the setup checklist and the preview without a run (504 when the tool does not answer within two minutes; recorded by the values' digest); `GET /v1/coupon-jobs` lists this process's jobs; `GET /v1/coupon-jobs/{job_id}/files/{key}` serves one file of a job by key, from the repository or the job's folder only (`fields`, `explanation`, `checklist` and `preview` while it runs, every key once done, `package` as the zip); `GET /v1/coupons` and `GET /v1/coupons/{name}/values` list the coupons on the machine and read one back as the values object. The studio is the actor `studio` (migration 0004).
 
 ## Dependencies and connections
 
@@ -34,7 +36,7 @@ The website's `/calculator` now calls this endpoint. CORS allows credential-free
 
 ## Out of scope and limits
 
-Local development only. No authentication, curated material loader, persistent records or language model. One material per laminate. No hole geometry, ply stress/failure endpoint, thermal/moisture effects or design approval. A caller's citation is not verified evidence; units are declared, not inferred. Extreme finite inputs can still be poorly conditioned; a finite result alone is not a numerical accuracy guarantee.
+Local development only. No authentication and no language model yet (the library loader and the run records exist since ADR-0020 and ADR-0026). A job's status is lost when the process stops (ADR-0050). One material per laminate. No hole geometry, ply stress/failure endpoint, thermal/moisture effects or design approval. A caller's citation is not verified evidence; units are declared, not inferred. Extreme finite inputs can still be poorly conditioned; a finite result alone is not a numerical accuracy guarantee.
 
 ## Owner
 

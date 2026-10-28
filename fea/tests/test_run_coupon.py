@@ -39,14 +39,28 @@ def public_form(tmp_path: Path) -> Path:
     return fill_form(write_blank_form(tmp_path / "blank.xlsx"), PUBLIC_FILL, tmp_path / "filled.xlsx")
 
 
+def public_values(tmp_path: Path, **changes) -> Path:
+    from anisotropy_fea.intake import FORM_VERSION
+
+    path = tmp_path / "values.json"
+    path.write_text(json.dumps({"form_version": FORM_VERSION, **PUBLIC_FILL, **changes}), encoding="utf-8")
+    return path
+
+
 @needs_ccx
 def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
-    outcome = tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False, theory=False)
+    progress_path = tmp_path / "progress.json"
+    outcome = tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False, theory=False, progress=tool.Progress(progress_path))
     folder, attempt = paths.LOCAL / DESIGNATION, outcome.attempt
     out = attempt / "run"
-    assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "prepomax_deck", "prepomax_results",
-                                                                      "kernel_summary", "kernel_vtu", "record"}  # no document without the PDF
+    assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "prepomax_deck", "prepomax_results", "kernel_summary",
+                                                                      "kernel_vtu", "fields", "explanation", "record", "checklist", "preview"}  # no document without the PDF
     assert all(path.exists() for path in outcome.outputs.values())
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert progress["stage"] == "the outputs" and progress["done"] == list(tool.STAGES[:-1]) and progress["coupon"] == DESIGNATION
+    assert set(progress["outputs"]) == set(outcome.outputs) and progress["attempt"].endswith(attempt.name)
+    fields = json.loads((out / "kernel" / f"{DESIGNATION}-fields.json").read_text(encoding="utf-8"))
+    assert fields["summary"]["reaction"]["value"] > 0 and json.loads((out / "studio" / "checklist.json").read_text(encoding="utf-8"))["state"] == "ready"
     assert attempt.parent == paths.runs(DESIGNATION) and attempt.name.startswith("attempt-02_")  # row 01 is the form's reading
     decks = paths.ours(DESIGNATION) / "decks"
     assert (decks / f"{DESIGNATION}-abaqus.inp").is_file() and (decks / f"{DESIGNATION}-nodal-ccx.inp").is_file()
@@ -84,21 +98,42 @@ def test_the_outcome_file_says_why_a_run_was_refused(tool, tmp_path, monkeypatch
     assert outcome["coupon"] is None and outcome["fea_version"]
 
 
-def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):
+def pretend_calculix(tool, monkeypatch) -> None:
     monkeypatch.setattr(tool, "find_ccx", lambda: Path("ccx"))
     monkeypatch.setattr(tool, "ccx_version", lambda ccx: "2.22")
+    monkeypatch.setattr("anisotropy_fea.checks.ccx_version", lambda ccx: "2.22")
+    monkeypatch.setattr("anisotropy_fea.checks.find_ccx", lambda: Path("ccx"))
+
+
+def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):
+    pretend_calculix(tool, monkeypatch)
 
     def script(step, args, cwd):  # our engine passes, CalculiX stops the run
         if step == "CalculiX":
             raise tool.StepFailed(f"{step}: run_calculix.py exited with code 1")
 
     monkeypatch.setattr(tool, "script", script)
+    progress_path = tmp_path / "progress.json"
     with pytest.raises(tool.StepFailed):
-        tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False)
+        tool.run(str(public_values(tmp_path)), "A. Engineer", pdf=False, progress=tool.Progress(progress_path))
     folder = paths.LOCAL / DESIGNATION
     assert read_case(folder).attempts == 2 and [p.name[:10] for p in paths.runs(DESIGNATION).iterdir()] == ["attempt-02"]
     row = next(line for line in (folder / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 02 |"))
     assert "stopped at CalculiX: run_calculix.py exited with code 1" in row
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert progress["stage"] == "CalculiX" and progress["done"] == ["the setup check", "the input", "the decks", "the attempt", "our engine"]
+    assert set(progress["outputs"]) == {"checklist", "preview"}  # the stand-in engine step wrote nothing; the studio files are there
+    assert (folder / "team" / progress["attempt"].rsplit("_", 1)[-1] / "values.json").is_file()  # the values file is filed with the coupon
+
+
+def test_a_blocked_setup_is_refused_before_anything_is_written(tool, tmp_path, monkeypatch):
+    pretend_calculix(tool, monkeypatch)
+    with pytest.raises(tool.Refused, match="the setup check blocks the run: Geometry defined: Length \\(mm\\): required"):
+        tool.run(str(public_values(tmp_path, length=None)), "A. Engineer", pdf=False)
+    assert not paths.LOCAL.exists()
+    with pytest.raises(tool.Refused, match="Laminate assigned: 4 plies: the layup is not symmetric"):
+        tool.run(str(public_values(tmp_path, symmetric="no")), "A. Engineer", pdf=False)
+    assert not paths.LOCAL.exists()
 
 
 def test_an_attempt_log_behind_its_folders_is_refused(tool, tmp_path, monkeypatch):

@@ -315,9 +315,10 @@ def test_a_filled_form_is_filed_and_its_coupon_started(blank, tmp_path):
     with pytest.raises(IntakeError, match="already exist"):
         convert(form, root=root, day="2026-10-26")
     (folder / "README.md").write_text(page + "\nHand-written.\n", encoding="utf-8")
-    again = convert(form, root=root, day="2026-10-26", replace=True)
-    assert {p.name for p in again.written} == {f"{DESIGNATION}.toml", f"{DESIGNATION}-nodal.toml"}
-    assert "Hand-written." in (folder / "README.md").read_text(encoding="utf-8") and not (folder / "team/2026-10-26").exists()
+    again = convert(form, root=root, day="2026-10-26", replace=True)  # the two specs and the input they came from; no README, no page
+    assert sorted(p.relative_to(folder).as_posix() for p in again.written) == [f"ours/{DESIGNATION}-nodal.toml", f"ours/{DESIGNATION}.toml",
+                                                                                "team/2026-10-26/filled.xlsx"]
+    assert "Hand-written." in (folder / "README.md").read_text(encoding="utf-8") and not (folder / "team/2026-10-26/README.md").exists()
     # a dry run writes nothing
     dry = convert(form, root=tmp_path / "dry", day="2026-10-25", dry_run=True)
     assert dry.written == () and not (tmp_path / "dry").exists() and dry.main == intake.main and dry.twin == intake.twin

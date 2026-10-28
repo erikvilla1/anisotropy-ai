@@ -19,12 +19,13 @@ The team's own decks go in `.local/fea/<coupon>/from-team/<date>/` (git-ignored;
 
 ## A coupon in one command
 
-`tools/run_coupon.py` takes a coupon from its filled-in input form to its package (ADR-0049). It runs the steps of the case page's Rebuild section: the specs, the decks, the next attempt, our kernel, the CalculiX twin, the record (gauge probes only) and the package. Then it adds the attempt's row to the case page and lists the files to open in Abaqus/CAE, PrePoMax and ParaView. It needs CalculiX and refuses before writing anything without it.
+`tools/run_coupon.py` takes a coupon from its filled-in input form to its package (ADR-0049). It runs the steps of the case page's Rebuild section: the specs, the decks, the next attempt, our kernel, the CalculiX twin, the record (gauge probes only) and the package. Then it adds the attempt's row to the case page and lists the files to open in Abaqus/CAE, PrePoMax and ParaView. It needs CalculiX and refuses before writing anything without it. It also takes a values file, the form's rows as one JSON object as the studio sends them (ADR-0046 amendment 3), runs the setup check of `anisotropy_fea.checks` first and refuses a blocked one, rewrites a progress file after every step (`--progress`), and keeps the checklist and the preview in the attempt's `run/studio/` (ADR-0051).
 
 ```powershell
 uv run python tools/run_coupon.py <filled form>.xlsx --run-by "Erik Villa"            # a new coupon
 uv run python tools/run_coupon.py <filled form>.xlsx --run-by "Erik Villa" --replace  # after changing the form
 uv run python tools/run_coupon.py <coupon> --run-by "Erik Villa"                      # again, on the specs as they are
+uv run python tools/run_coupon.py <values>.json --run-by "Erik Villa"                # the same rows as the studio sends them
 ```
 
 ## Units
@@ -67,6 +68,8 @@ uv run python examples/build_model.py checks/unnotched-im7-8552/unnotched-im7-85
 ```
 
 writes the complete deck (`<spec>-abaqus.inp`: part, elements, sets, composite section, material with citations in the header, reference nodes and couplings when asked, step, boundaries, loads, output requests), a model preview (`<spec>-model.png`), then reads the deck back with our own reader, solves it with the kernel, and writes the result figure, the `.vtu` and `summary.txt`. Built today: unnotched tension and compression coupons on the structured mesher, and open-hole coupons on a Gmsh transfinite O-grid (`mesher.gmsh_open_hole_plate`, optional extra `mesh`: `uv sync --extra mesh`; ADR-0030, amendment 3). Shear and bending follow chunk by chunk. Each spec's generated decks live in its test folder's `decks/` (rewrite them with `tools/regenerate_decks.py`); the tools are described in [docs/installation-fea-tools.md](../docs/installation-fea-tools.md).
+
+The studio's questions to the package run as one command each (ADR-0051): `uv run python tools/studio_tool.py check <values>.json --out <dir>` writes the setup checklist and the preview; `coupons` lists every coupon on the machine; `values <coupon>` reads a coupon's spec back into its rows; `fixtures <values>.json --out <dir>` adds a kernel solve's fields and explanation for the browser tests. `uv run python tools/export_form_definition.py` writes the form's rows as `lib/coupon-form-definition.json` for the website (`--check` reports drift; a test does too).
 
 The team states a coupon on the coupon input form instead (ADR-0046): `uv run python tools/coupon_form.py` writes the blank Excel form, and `uv run python tools/coupon_from_form.py <filled form>.xlsx` checks it, names every problem by its row, and writes the coupon's two specs, its `team/<date>/` folder and its case page under `../.local/fea/<coupon>/`.
 

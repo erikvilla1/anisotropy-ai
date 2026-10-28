@@ -28,9 +28,9 @@ from .compare import compare_record, record_as_case
 from .membrane import solve_membrane
 from .mesh import KernelError, mesh_from_deck
 from .model import Deck, all_boundaries, coupled_nodes, expanded_layers, node_name, reference_node, resolve_nodes
-from .recovery import element_ply_states
+from .recovery import FailureField, element_ply_states
 from .results import MembraneSolution
-from .units import from_si
+from .units import UNIT_LABEL, from_si
 
 # Component names per result group, in the order the record lists them.
 COMPONENTS: dict[str, tuple[str, ...]] = {
@@ -261,6 +261,31 @@ def gripped_groups(deck: Deck, solution: MembraneSolution) -> tuple[dict[int, fl
     if not any(mesh.node_keys[i][0] is not None for i in bottom) or not any(mesh.node_keys[i][0] is not None for i in top):
         raise KernelError("the gripped nodes are all on one side of the coupon")
     return bottom, top
+
+
+def fpf_place(deck: Deck, solution: MembraneSolution, field: FailureField, units: str) -> tuple[str, bool, list[int]]:
+    """Where the first ply to fail sits, in words: at the edge of a gripped tab, beside the hole, or its distance from the nearer tab line;
+    whether it touches a gripped tab; and the plies of that element that tie with the one named (the bottom-most is named). The coupon
+    document's cover and the studio's summary say it with these words."""
+    mesh = solution.mesh
+    e = mesh.element_keys.index(field.element)
+    ratios = np.asarray(field.ratio[e])
+    tied = [k + 1 for k, r in enumerate(ratios) if r <= ratios.min() * (1 + 1e-9)]
+    try:
+        bottom, top = gripped_groups(deck, solution)
+    except KernelError:
+        return "in the coupon", False, tied
+    gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
+    if gripped & set(mesh.connectivity[e, :4].tolist()):
+        return "at the edge of a gripped tab", True, tied
+    unit = UNIT_LABEL[units]["length"]
+    y = float(mesh.xy[mesh.connectivity[e, :4]].mean(axis=0)[1])
+    lo = max(float(mesh.xy[i, 1]) for i in bottom if mesh.node_keys[i][0] is not None)
+    hi = min(float(mesh.xy[i, 1]) for i in top if mesh.node_keys[i][0] is not None)
+    gauge = gauge_element(deck, solution)
+    if gauge.centre_in_hole and abs(y - 0.5 * (lo + hi)) < 0.1 * (hi - lo):
+        return "beside the hole", False, tied
+    return f"{from_si(min(y - lo, hi - y), 'length', units):.2g} {unit} from the nearer tab line", False, tied
 
 
 def laminate_check(deck: Deck, solution: MembraneSolution) -> LaminateCheck:

@@ -76,8 +76,8 @@ from anisotropy_fea.membrane import solve_membrane  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import to_si  # noqa: E402
 from anisotropy_fea.recovery import deck_f12_star, strength_ratios  # noqa: E402
-from anisotropy_fea.report import (comparison_rows, element_centroids, gauge_element, gripped_groups, laminate_check, model_facts,  # noqa: E402
-                                   solve_record, summarize)
+from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place, gauge_element, gripped_groups, laminate_check,  # noqa: E402
+                                   model_facts, solve_record, summarize)
 from anisotropy_fea.spec import TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
 from anisotropy_fea.units import from_si  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
@@ -523,30 +523,6 @@ def files_appendix(src: Sources, spec, c, package: Path) -> str:
 
 
 # --------------------------------------------------------------------------------------------- the title page
-
-def fpf_place(deck, solution, field, units: str) -> tuple[str, bool, list[int]]:
-    """Where the first ply to fail sits, in words: at the edge of a gripped tab, beside the hole, or its distance from the nearer tab line;
-    whether it touches a gripped tab; and the plies of that element that tie with the one named (the bottom-most is named)."""
-    mesh = solution.mesh
-    e = mesh.element_keys.index(field.element)
-    ratios = np.asarray(field.ratio[e])
-    tied = [k + 1 for k, r in enumerate(ratios) if r <= ratios.min() * (1 + 1e-9)]
-    try:
-        bottom, top = gripped_groups(deck, solution)
-    except KernelError:
-        return "in the coupon", False, tied
-    gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
-    if gripped & set(mesh.connectivity[e, :4].tolist()):
-        return "at the edge of a gripped tab", True, tied
-    unit = documents.UNIT_LABEL[units]["length"]
-    y = float(mesh.xy[mesh.connectivity[e, :4]].mean(axis=0)[1])
-    lo = max(float(mesh.xy[i, 1]) for i in bottom if mesh.node_keys[i][0] is not None)
-    hi = min(float(mesh.xy[i, 1]) for i in top if mesh.node_keys[i][0] is not None)
-    gauge = gauge_element(deck, solution)
-    if gauge.centre_in_hole and abs(y - 0.5 * (lo + hi)) < 0.1 * (hi - lo):
-        return "beside the hole", False, tied
-    return f"{from_si(min(y - lo, hi - y), 'length', units):.2g} {unit} from the nearer tab line", False, tied
-
 
 def record_points(rows, probes: dict[str, str] | None = None) -> str:
     """Where the CalculiX record has values, in words: the grips, then each node and element by our number and its probe's name."""

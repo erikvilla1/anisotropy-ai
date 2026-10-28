@@ -1,7 +1,7 @@
 ---
 name: workspace-layout
 description: Where files go in the local workspace of the Anisotropy AI repository. Every private file lives under .local in a folder named for its purpose (sources, research, website, manual, services, notes, backup, questions). Each problem has one folder named for it with everything about it inside. An FEA coupon is .local/fea/<coupon>/ in three parts, team (what they sent), ours (specs, decks, verification, runs, latex) and documents (the packages), and its README is the case page. A homework set is .local/homework/<set>/ (provided, ours, comparison, documents), with its engine cases in ours/ and its reading in comparison/. Load before saving, moving or looking for any FEA deck, result export, comparison record, document, homework file or input file, when a new coupon or homework arrives, and before every new attempt at a problem.
-version: 0.7.3
+version: 0.7.4
 ---
 
 # Workspace layout
@@ -93,7 +93,8 @@ Committed counterpart: `fea/checks/` only, the public proofs in the same shape (
 1. From `fea/`: `uv run python tools/coupon_from_form.py <form>.xlsx --dry-run`. It names every problem by its row; send them back to the engineer. A form it accepts prints the coupon's name and its two specs.
 2. Run it without `--dry-run`. It writes `ours/<coupon>.toml` and `ours/<coupon>-nodal.toml`, files the form in `team/<date>/` with a README, and writes the case page when there is none (status in progress, attempt 01 is the intake).
 3. Run the commands it prints: the decks, a new attempt, our engine, the CalculiX twin, the record. Add the run's attempt row, run `tools/case_pages.py --local`, then `docs/models/coupon.py <coupon>` for the package.
-4. A form with the team's own constants: they are user-supplied and stay in the coupon's folder; never move them to `lib/`. A form that corrects an earlier one is read with `--replace`, which rewrites the two specs only.
+4. A form with the team's own constants: they are user-supplied and stay in the coupon's folder; never move them to `lib/`. A form that corrects an earlier one is read with `--replace`, which rewrites the two specs and files the corrected input in `team/<date>/`.
+5. A values file, `values-<job>.json`, is the same rows sent from the studio (ADR-0046 amendment 3, ADR-0051); the API's coupon job runs `tools/run_coupon.py` on it, which files it in `team/<date>/` and keeps the setup checklist and the preview it was run from in the attempt's `run/studio/`. Treat it as the form: the team's own constants in it stay in the coupon's folder.
 
 Write a fresh blank form for each request with `uv run python tools/coupon_form.py`; it goes to `.local/fea/forms/`.
 
