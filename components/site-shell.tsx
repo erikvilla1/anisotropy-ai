@@ -57,6 +57,7 @@ export function SiteHeader() {
           ["Services", "/services"],
           ["Materials library", "/library"],
           ["Calculator", "/calculator"],
+          ["Studio", "/studio"],
         ].map(([label, href]) => (
           <Link
             href={href}
