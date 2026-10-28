@@ -29,6 +29,11 @@ Option 2, in this order:
 
 ADR-0027's later items, customer datasets with authentication and then containers, keep their place after the assistant.
 
+## As built (2026-10-27)
+
+- Step 1 for coupons: `fea/tools/run_coupon.py` (ADR-0049). Step 2 for coupons: `POST /v1/coupon-jobs` (ADR-0050).
+- Steps 3 and 4: not started.
+
 ## Why (evidence)
 
 - The founder's run of 2026-10-26: `.local/questions/my-coupon.toml` through `fea/examples/build_model.py` alone; PrePoMax refused the Abaqus deck; the pipe crash and the guide are fixed in the same pull request as this record.

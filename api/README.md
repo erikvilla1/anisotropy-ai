@@ -28,6 +28,21 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8000/v1/runs?actor=calculator&since=202
 
 `GET /v1/materials` lists every dataset of the cited material library; `GET /v1/materials/im7-8552` (optionally `?dataset=...`) returns the SI values the engine would use with the page of each. Either analysis endpoint accepts `"material": {"library_id": "im7-8552", "dataset_id": null}` in place of explicit constants, and the response then carries `material_provenance`. See [the loader note](../docs/material-loader-2026-10-10.md) and ADR-0020.
 
+## Coupon jobs (ADR-0050)
+
+A coupon job takes a filled-in coupon input form, or a coupon that already has its specs, to its package in the background. It runs `fea/tools/run_coupon.py` (ADR-0049) through `uv run --project fea`, the same command as in a terminal, so the machine needs uv, the fea environment and CalculiX. One job runs at a time.
+
+```text
+POST /v1/coupon-jobs                   {"form_name": "x.xlsx", "form_base64": "...", "run_by": "Erik Villa"}  -> 202, Location
+                                       or {"coupon": "AS4-UNT-L2", "run_by": "Erik Villa"}; options replace, pdf, theory
+GET  /v1/coupon-jobs/{job_id}          state (running, done, stopped, refused), the end of the console, the files once done
+GET  /v1/coupon-jobs/{job_id}/package  the package as a zip, once done
+```
+
+`uv run python examples/coupon_job.py <filled form>.xlsx --run-by "Erik Villa" --actor founder-terminal` does all three from a terminal: it prints each step as the job reaches it and saves the package zip (`--api` for another address, `--out` for another folder).
+
+Every request needs the `X-Anisotropy-Actor` header. A second job while one runs gets 409. A job's status is kept in memory until the API stops. When a job ends, its receipt is a run record with endpoint `/v1/coupon-jobs`, solved or rejected; the record keeps the form's name and SHA-256, and the tool files the form itself in the coupon's `team/<date>/` folder.
+
 ## Database (run records, ADR-0025)
 
 Run records will be stored in a local PostgreSQL 17 that Docker runs from `docker-compose.yml` at the repository root. Docker Desktop must be running. Copy `.env.example` to `.env`, set `POSTGRES_PASSWORD` (Compose refuses to start without it) and then, from the repository root:
