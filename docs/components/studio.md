@@ -1,8 +1,8 @@
-# Component card: the coupon studio | version 0.1 | updated 2026-10-28
+# Component card: the coupon studio | version 0.3 | updated 2026-10-28
 
 ## Purpose and intended use
 
-A page of the website, `/studio`, where an engineer states a coupon test, checks its setup, solves it and reads the result in a 3D view, without installing anything (ADR-0051). It replaces the terminal for the four in-plane coupon tests (unnotched tension and compression, open-hole tension, in-plane shear). The viewer opens in a second window by the job's link, `/studio/view?job=<id>`.
+A page of the website, `/studio`, where an engineer states a coupon test, checks its setup, solves it and reads the result in a 3D view, without installing anything (ADR-0051). It replaces the terminal for the four in-plane coupon tests (unnotched tension and compression, open-hole tension, in-plane shear) and, since ADR-0053, the two bending tests (three- and four-point bending), whose form rows are the span, the overhang and the loading span, and whose viewer shows the deflection along z, the rotations, the moments, the transverse shear forces and both faces of every ply; and, since ADR-0054, the `plate` test, whose supports and loads the engineer states over named regions in a panel or by clicking an element of the model, pressures included. The viewer opens in a second window by the job's link, `/studio/view?job=<id>`.
 
 ## What it does and does not compute
 

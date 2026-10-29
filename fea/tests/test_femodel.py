@@ -66,12 +66,28 @@ def test_consistent_loads_for_eight_node_edges():
     assert midside == pytest.approx(100.0) and corner_end == pytest.approx(25.0) and middle_corner == pytest.approx(50.0)
 
 
-def test_unbuilt_kinds_are_refused_with_the_planned_chunk():
-    bending = NODAL.replace('kind = "unnotched_tension"', 'kind = "three_point_bending"').replace("tab_length = 56.0", "span = 230.0\noverhang = 10.0")
-    bending = bending.replace("[grips]\nkind = \"nodal\"\nregion = \"tabs\"     # the whole tab is gripped, as in the team's decks\n", "")
-    bending = bending.replace("ny = 125", "ny = 250")  # 1 mm rows: the midspan line at 125 mm needs a node row
-    with pytest.raises(SpecError, match="bending chunk"):
-        mesh_for_spec(spec_from(bending))
+def test_a_bending_coupon_rests_on_its_supports_pinned_in_its_plane_and_is_pushed_by_the_nose():
+    """ADR-0053: w held along both support rows, the centre node of each row pins the in-plane motion, the nose row moves along z."""
+    model = build_model(load_spec(paths.spec_path("three-point-im7-8552")))
+    assert model.bending and model.support_sets == ("Support-Left", "Support-Right", "Nose") and model.nose_sets == ("Nose",)
+    sets = model.node_sets
+    assert sets["Support-Left"].size == sets["Support-Right"].size == sets["Nose"].size == 7  # nx = 6: seven nodes across
+    assert np.allclose(model.mesh.xy[sets["Support-Left"]][:, 1], 0.006) and np.allclose(model.mesh.xy[sets["Nose"]][:, 1], 0.030)
+    assert sets["Pin-Left"].size == 1 and model.mesh.xy[sets["Pin-Left"][0]].tolist() == pytest.approx([0.0065, 0.006])
+    assert sets["Pin-Right"].size == 1 and model.mesh.xy[sets["Pin-Right"][0]].tolist() == pytest.approx([0.0065, 0.054])
+    held = {(b.target, b.dof_first, b.dof_last, b.value) for b in model.boundaries}
+    assert held == {("Support-Left", 3, 3, 0.0), ("Support-Right", 3, 3, 0.0), ("Pin-Left", 1, 2, 0.0), ("Pin-Right", 1, 1, 0.0), ("Nose", 3, 3, -1e-3)}
+    assert not model.loads and not model.couplings and not model.reference_points
+    assert any("supports at y = 0.006 and 0.054 m" in line and "moved -0.001 m along z" in line for line in model.heading)
+    four = NODAL.replace('kind = "unnotched_tension"', 'kind = "four_point_bending"').replace("tab_length = 56.0", "span = 230.0\noverhang = 10.0\nload_span = 110.0")
+    four = four.replace("[grips]\nkind = \"nodal\"\nregion = \"tabs\"     # the whole tab is gripped, as in the team's decks\n", "")
+    four = four.replace("ny = 125", "ny = 250").replace("IM7-UNT-L1, unnotched tension", "IM7-4PB-L1, four-point bending").replace('designation = "IM7-UNT-L1"', 'designation = "IM7-4PB-L1"')
+    model = build_model(spec_from(four))
+    assert model.nose_sets == ("Nose-1", "Nose-2") and model.support_sets == ("Support-Left", "Support-Right", "Nose-1", "Nose-2")
+    assert np.allclose(model.mesh.xy[model.node_sets["Nose-1"]][:, 1], 0.070) and np.allclose(model.mesh.xy[model.node_sets["Nose-2"]][:, 1], 0.180)
+
+
+def test_unbuildable_specs_are_refused():
     gmsh = NODAL.replace('mesher = "structured"', 'mesher = "gmsh"')
     with pytest.raises(SpecError, match="goes with open_hole_tension"):
         mesh_for_spec(spec_from(gmsh))

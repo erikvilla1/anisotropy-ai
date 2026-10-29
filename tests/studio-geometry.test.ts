@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  boundaryEdges, boundaryOwners, bounds, centroid, deformedPositions, elementEdges, elementLoop, elementOfTriangle, nodeMeans, plateMesh, quadsToTriangles,
-  setBox, suggestedScale, vertexColors,
+  boundaryEdges, boundaryOwners, bounds, centroid, deformedHeights, deformedPositions, elementEdges, elementLoop, elementOfTriangle, nodeMeans, plateMesh, quadsToTriangles,
+  meanHeight, setBox, suggestedScale, vertexColors,
 } from "../lib/studio-geometry";
 
 const preview = JSON.parse(readFileSync("tests/fixtures/studio/preview.json", "utf8"));
@@ -88,4 +88,19 @@ test("node means agree with the package's display averages", () => {
     if (ours[i] === null) assert.equal(theirs[i], null);
     else assert.ok(Math.abs(ours[i]! - theirs[i]!) <= 1e-9 * Math.max(1, Math.abs(ours[i]!)), `node ${i}`);
   }
+});
+
+
+test("a deflection lifts the plate, its edges and its frames (ADR-0053)", () => {
+  assert.equal(deformedHeights([[0.1, 0.2], [0.3, 0.4]], 2), null); // a membrane solve has no third component
+  const heights = deformedHeights([[0, 0, -1], [0, 0, -0.5], [0, 0, 0], [0, 0, 0.25], [0, 0, 0], [0, 0, 0]], 2)!;
+  assert.deepEqual(heights, [-2, -1, 0, 0.5, 0, 0]);
+  const flat = plateMesh(square.nodes, square.quads, 1);
+  const lifted = plateMesh(square.nodes, square.quads, 1, undefined, heights);
+  assert.equal(lifted.positions.length, flat.positions.length);
+  assert.equal(lifted.positions[2], flat.positions[2] - 2); // the first vertex stands on node 0, lifted by -2
+  assert.equal(elementLoop(square.nodes, square.quads[0], 0.5, heights)[3][2], 0.5 + 0.5); // node 3
+  assert.equal(elementEdges(square.nodes, square.quads, 0.5, heights)[0][0][2], 0.5 - 2);
+  assert.equal(meanHeight(heights, [0, 1]), -1.5);
+  assert.equal(meanHeight(null, [0, 1]), 0);
 });

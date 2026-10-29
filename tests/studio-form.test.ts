@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  blankForm, buildValues, EXAMPLE, exampleForm, fieldByKey, fields, FORM_VERSION, formDefinition, formFromValues, HOLE_KEYS, libraryOptions,
+  blankForm, buildValues, EXAMPLE, exampleForm, fieldByKey, fields, FORM_VERSION, formDefinition, formFromValues, BENDING_KEYS, HOLE_KEYS, libraryOptions,
   PLY_KEYS, rowErrorsFrom, sectionsFor, shortHelp, type Checklist,
 } from "../lib/studio-form";
 
@@ -36,7 +36,18 @@ test("the hole rows show only for open-hole tension", () => {
   assert.ok(!sections.some((s) => s.fields.some((f) => HOLE_KEYS.includes(f.key))));
   const withHole = sectionsFor({ ...blankForm(), test: "open-hole tension" });
   assert.ok(withHole.some((s) => s.fields.some((f) => f.key === "hole_diameter")));
-  assert.equal(withHole.length, formDefinition.sections.length);
+  assert.equal(withHole.length, formDefinition.sections.length - 1); // every section but the bending one
+  assert.ok(!sections.some((s) => s.fields.some((f) => BENDING_KEYS.includes(f.key))));
+});
+
+test("the bending rows replace the grips and tabs for the bending tests", () => {
+  const three = sectionsFor({ ...blankForm(), test: "three-point bending" });
+  const keys = three.flatMap((s) => s.fields.map((f) => f.key));
+  assert.ok(keys.includes("span") && keys.includes("overhang") && !keys.includes("load_span"));
+  assert.ok(!keys.includes("tab_length") && !keys.includes("grips") && !keys.includes("region") && !keys.includes("hole_diameter"));
+  const four = sectionsFor({ ...blankForm(), test: "four-point bending" });
+  assert.ok(four.flatMap((s) => s.fields.map((f) => f.key)).includes("load_span"));
+  assert.ok(sectionsFor({ ...blankForm(), test: "unnotched tension" }).flatMap((s) => s.fields.map((f) => f.key)).includes("tab_length"));
 });
 
 test("the values object parses numbers and leaves blanks out, without judging", () => {

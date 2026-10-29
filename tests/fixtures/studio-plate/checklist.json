@@ -1,0 +1,95 @@
+{
+ "items": [
+  {
+   "id": "identity",
+   "label": "Who and which coupon",
+   "state": "pass",
+   "message": "NOM-PLT-L1, plate; a new coupon: its folder and case page are written when it runs",
+   "rows": []
+  },
+  {
+   "id": "units",
+   "label": "Units consistent",
+   "state": "pass",
+   "message": "every row in mm, MPa and N; the model is written in mm-MPa and forces come out in N",
+   "rows": []
+  },
+  {
+   "id": "geometry",
+   "label": "Geometry defined",
+   "state": "pass",
+   "message": "100 by 100 mm",
+   "rows": []
+  },
+  {
+   "id": "material",
+   "label": "Material defined",
+   "state": "pass",
+   "message": "Nominal-Alloy: the team's own constants: nominal isotropic values of the validation case plate-ss-isotropic-uniform-pressure-navier, not a cited material; rights class user-supplied; no strengths, so no failure criterion can be reported",
+   "rows": []
+  },
+  {
+   "id": "laminate",
+   "label": "Laminate assigned",
+   "state": "pass",
+   "message": "1 plies [0], 1 mm thick; symmetric; the flat shell kernel solves it",
+   "rows": []
+  },
+  {
+   "id": "constraints",
+   "label": "Constraints defined",
+   "state": "pass",
+   "message": "Edge-Left (17 nodes) holds z, the tilt about x; Edge-Right (17 nodes) holds z, the tilt about x; Edge-Bottom (17 nodes) holds z, the tilt about y; Edge-Top (17 nodes) holds z, the tilt about y; Corner-Origin (1 nodes) holds x, y; Corner-X (1 nodes) holds y; no rigid-body motion is left",
+   "rows": []
+  },
+  {
+   "id": "load",
+   "label": "Load applied",
+   "state": "pass",
+   "message": "a pressure of -0.01 MPa on Face along the normal (pushing toward +z)",
+   "rows": []
+  },
+  {
+   "id": "mesh",
+   "label": "Mesh quality acceptable",
+   "state": "pass",
+   "message": "256 elements, 289 nodes (structured mesh, order 1); aspect ratio 1 at worst (warns above 10); smallest angle 90° at worst (warns below 10°); largest angle 90° at worst (warns above 160°); Jacobian ratio 1 at worst (warns below 0.1)",
+   "rows": []
+  },
+  {
+   "id": "criterion",
+   "label": "Failure criterion",
+   "state": "warn",
+   "message": "no failure criterion: first-ply failure will not be reported (the material has no strengths)",
+   "rows": [
+    "Failure criterion"
+   ]
+  },
+  {
+   "id": "probes",
+   "label": "Result points inside the coupon",
+   "state": "pass",
+   "message": "results are read at node centre at (50, 50), element centre (mm)",
+   "rows": []
+  },
+  {
+   "id": "solver",
+   "label": "Reference solver installed",
+   "state": "pass",
+   "message": "CalculiX 2.22 at C:\\Tools\\PrePoMax v2.6.0\\Solver\\ccx_dynamic.exe: the reference solver that checks our engine's result",
+   "rows": []
+  },
+  {
+   "id": "document",
+   "label": "Document builder installed",
+   "state": "pass",
+   "message": "Tectonic at C:\\Users\\erikv\\AppData\\Local\\Programs\\tectonic\\tectonic.EXE: the package gets its PDF",
+   "rows": []
+  }
+ ],
+ "designation": "NOM-PLT-L1",
+ "coupon_exists": false,
+ "attempts": 0,
+ "state": "ready",
+ "problems": []
+}

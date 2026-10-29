@@ -5,11 +5,13 @@ import {
   checkSetup, couponValues, fetchExplanation, fetchFields, getJob, listCoupons, POLL_MS, startSolve, StudioError,
   type CheckAnswer, type CouponSummary, type Explanation, type Fields, type JobStatus, type Preview,
 } from "@/lib/studio-api";
-import { blankForm, buildValues, exampleForm, formFromValues, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
+import { blankForm, buildValues, exampleForm, formFromValues, PLATE_TEST, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
+import { emptyPlate, plateFromValues, plateValues, regionOptions, regionsOfElement, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
 import { printed } from "@/lib/studio-colors";
 import { CouponForm } from "./coupon-form";
 import { ChecklistPanel } from "./checklist-panel";
 import { JobProgress } from "./job-progress";
+import { PlatePanel } from "./plate-panel";
 import { ResultsView } from "./results-view";
 import { Scene } from "./scene";
 import type { SceneMarker } from "./scene-canvas";
@@ -26,23 +28,34 @@ function remember(key: string, value: string) {
   try { window.localStorage.setItem(key, value); } catch { /* a private window or blocked storage: the name is simply not kept */ }
 }
 
-export function PreviewScene({ preview }: { preview: Preview }) {
+/** The nodes a load acts on: a node set, or the corner nodes of an element set (a pressure on an area region). */
+function nodesOf(preview: Preview, set: string): number[] {
+  if (preview.mesh.node_sets[set]) return preview.mesh.node_sets[set];
+  const elements = preview.mesh.element_sets[set];
+  if (!elements) return [];
+  return [...new Set(elements.flatMap((e) => preview.mesh.quads[e] ?? []))];
+}
+
+export function PreviewScene({ preview, onPick, picked }: { preview: Preview; onPick?: (element: number | null) => void; picked?: number | null }) {
   const held: SceneMarker[] = preview.held.filter((h, i, all) => all.findIndex((x) => x.set === h.set) === i)
-    .map((h) => ({ nodes: preview.mesh.node_sets[h.set] ?? [], label: `held: ${h.set} (${h.through ? "through a reference point" : "node by node"})` }));
-  const loaded = { nodes: preview.mesh.node_sets[preview.loaded.set] ?? [], direction: preview.loaded.direction,
-    label: `${preview.loaded.control} ${printed(preview.loaded.value)} ${preview.loaded.unit}` };
+    .map((h) => ({ nodes: nodesOf(preview, h.set), label: `held: ${h.set} (${h.through ? "through a reference point" : "node by node"})` }));
+  const loads = (preview.loads ?? [preview.loaded]).map((l) => ({ nodes: nodesOf(preview, l.set), direction: l.direction,
+    label: `${l.control} ${printed(l.value)} ${l.unit} on ${l.set}` }));
   return (
     <div className="studio-scene-block" data-testid="preview">
-      <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loaded={loaded} />
+      <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loaded={loads[0] ?? null}
+        loads={loads.slice(1)} onPick={onPick} picked={picked ?? null} />
       <p className="studio-muted">{preview.coupon.designation ?? "The coupon"}, {preview.coupon.test}: {preview.geometry.length} by {preview.geometry.width} {preview.labels.length},
         {" "}{preview.plies.length} plies {preview.coupon.layup}, {printed(preview.geometry.thickness)} {preview.labels.length} thick; {preview.mesh.element_count} elements.
-        The violet frames are held; the amber frame and arrow are the loading.</p>
+        The violet frames are held; the amber frames and arrows are the loading.{onPick ? " Click an element to hold or load the region it belongs to." : ""}</p>
     </div>
   );
 }
 
 export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [form, setForm] = useState<StudioForm>(() => blankForm());
+  const [plate, setPlate] = useState<PlateLists>(() => emptyPlate());
+  const [pickedElement, setPickedElement] = useState<number | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runBy, setRunBy] = useState("");
   const [message, setMessage] = useState("");
@@ -69,6 +82,13 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
     setErrors({}); setChecked(null); setMessage("");
     setStatus("Inputs changed. Check the setup again before solving.");
   }, []);
+  const editPlate = useCallback((lists: PlateLists) => {
+    setPlate(lists);
+    setErrors({}); setChecked(null); setMessage("");
+    setStatus("Supports or loads changed. Check the setup again before solving.");
+  }, []);
+  const isPlate = form.test === PLATE_TEST;
+  const values = () => buildValues(form, isPlate ? plateValues(plate) : undefined);
 
   async function check(): Promise<CheckAnswer | null> {
     if (!apiBaseUrl) return null;
@@ -76,7 +96,7 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
     const controller = new AbortController();
     aborts.current.push(controller);
     try {
-      const answer = await checkSetup(apiBaseUrl, buildValues(form), controller.signal);
+      const answer = await checkSetup(apiBaseUrl, values(), controller.signal);
       setChecked(answer);
       setErrors(rowErrorsFrom(answer.checklist));
       setStatus(answer.state === "ready" ? `Setup ready: ${answer.designation ?? "the coupon"} can be solved.` : "The setup is blocked; the items below say what to fix.");
@@ -99,7 +119,7 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
     remember(RUN_BY_KEY, name);
     setMessage(""); setFields(null); setExplanation(null); fieldsLoaded.current = null;
     try {
-      const started = await startSolve(apiBaseUrl, buildValues(form), name, answer.checklist.coupon_exists);
+      const started = await startSolve(apiBaseUrl, values(), name, answer.checklist.coupon_exists);
       setJob(started);
       setStatus("Solving. The fields appear as soon as our engine has run.");
     } catch (error) {
@@ -137,8 +157,9 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   async function loadCoupon(name: string) {
     if (!apiBaseUrl || !name) return;
     try {
-      const values = await couponValues(apiBaseUrl, name);
-      setForm({ ...formFromValues(values), filled_by: form.filled_by || runBy, date: today() });
+      const loaded = await couponValues(apiBaseUrl, name);
+      setForm({ ...formFromValues(loaded), filled_by: form.filled_by || runBy, date: today() });
+      setPlate(plateFromValues(loaded));
       setErrors({}); setChecked(null); setMessage(""); setFields(null); setExplanation(null); setJob(null);
       setStatus(`Coupon ${name} loaded; change what you need and check the setup. Solving it adds the next attempt.`);
     } catch (error) {
@@ -165,6 +186,7 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
           ) : null}
         </div>
         <CouponForm form={form} errors={errors} disabled={busy} onChange={edit} />
+        {isPlate ? <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} /> : null}
         <div className="studio-field studio-run-by">
           <label htmlFor="studio-run-by">Run by</label>
           <input id="studio-run-by" type="text" value={runBy} onChange={(e) => setRunBy(e.target.value)} disabled={busy} autoComplete="name" />
@@ -186,7 +208,26 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
           </>
         ) : (
           <>
-            {checked?.preview ? <PreviewScene preview={checked.preview} /> : (
+            {checked?.preview ? (
+              <>
+                <PreviewScene preview={checked.preview} onPick={isPlate ? setPickedElement : undefined} picked={pickedElement} />
+                {isPlate && pickedElement !== null ? (() => {
+                  const preview = checked.preview;
+                  const touched = regionsOfElement(pickedElement, preview.mesh.quads, preview.mesh.node_sets, preview.mesh.element_sets, regionOptions(form, plate));
+                  return (
+                    <div className="studio-picked" data-testid="picked-regions">
+                      <span>Element {pickedElement + 1} belongs to:</span>
+                      {touched.map((r) => (
+                        <span key={r.name}><strong>{r.name}</strong>{" "}
+                          <button type="button" className="studio-text-button" onClick={() => editPlate(withSupport(plate, r.name))}>hold</button>{" "}
+                          <button type="button" className="studio-text-button" onClick={() => editPlate(withLoad(plate, r.name, r.kind))}>load</button></span>
+                      ))}
+                      {!touched.length ? <span className="studio-muted">no named region; draw a box around it</span> : null}
+                    </div>
+                  );
+                })() : null}
+              </>
+            ) : (
               <div className="studio-empty" data-testid="empty-scene">
                 <h3>No model yet</h3>
                 <p>Check the setup and the coupon appears here: its mesh, the held tab and the pulled tab.</p>

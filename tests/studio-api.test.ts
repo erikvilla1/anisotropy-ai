@@ -9,6 +9,8 @@ test("the readers accept the package's files and refuse other shapes", () => {
   assert.equal(readChecklist(fixture("checklist")).items.length, 12);
   assert.equal(readPreview(fixture("preview")).mesh.element_count, 250);
   const fields = readFields(fixture("fields"));
+  const bending = readFields(JSON.parse(readFileSync("tests/fixtures/studio-bending/fields.json", "utf8")));
+  assert.equal(bending.nodal.displacement[0].length, 3);
   assert.equal(fields.summary.earliest, "tsai_hill");
   assert.equal(readExplanation(fixture("explanation")).writer, "template");
   assert.equal(readJob(fixture("job-running")).stage, "our engine");

@@ -89,7 +89,7 @@ def plot_model(model: FEModel, path: Path, units: str | None = None) -> Path:
     height = float(np.ptp(xy[:, 1])) or 1.0
     grip = model.mesh.node_sets.get("Grip-Top")
     top = np.array([xy[grip, 0].mean(), xy[grip, 1].max()]) if grip is not None else None  # the coupon's top edge, not the middle of the tab
-    if top is not None:
+    if top is not None and model.spec.loading is not None:  # a plate lists its loads; no single arrow stands for them
         value = model.spec.loading.value
         outside = top[1] + 0.06 * height  # the arrow stands above the coupon: away from the edge for a pull, onto it for a push
         start, end = ((top[1], outside) if value > 0 else (outside, top[1]))
