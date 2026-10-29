@@ -48,7 +48,7 @@ ITEMS = (  # in the order the studio lists them: id, label
 ITEM_OF_KEY = {  # which item a form row belongs to
     **{key: "identity" for key in ("filled_by", "date", "notes", "test", "material_code", "layup_code", "standard", "size_from", "team_model", "test_data",
                                    "name_part", "name_instance", "name_material", "name_layup", "name_section")},
-    **{key: "geometry" for key in ("length", "width", "tab_length", "hole_diameter")},
+    **{key: "geometry" for key in ("length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span")},
     **{key: "mesh" for key in ("hole_circumferential", "hole_radial", "hole_ring", "hole_growth", "element_size", "mesh_nx", "mesh_partitions", "mesh_seeds")},
     **{key: "laminate" for key in ("symmetric", "ply_thickness", *(f"ply_{i}" for i in range(1, 17)))},
     **{key: "material" for key in ("library", "own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c",
@@ -212,6 +212,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             size += f", {length(g.tab_length):g} {lab['length']} tabs with a node row on each tab line"
         if g.hole_diameter:
             size += f", central hole of {length(g.hole_diameter):g} {lab['length']}"
+        if model.bending:
+            size += (f", {length(g.span):g} {lab['length']} span with {length(g.overhang):g} {lab['length']} overhangs"
+                     + (f", {length(g.load_span):g} {lab['length']} loading span" if g.load_span else "") + ", a node row on each support and nose line")
         notes.note("geometry", "pass", size)
         # material
         has_strengths = material.strengths is not None
@@ -220,28 +223,44 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         # laminate
         angles = full_angles(spec)
         thickness = length(sum(p.thickness_m for p in plies))
-        if is_symmetric_layup(plies):
-            notes.note("laminate", "pass", f"{len(angles)} plies {layup_text(spec)}, {thickness:g} {lab['length']} thick; symmetric, so B = 0 and the "
-                       "membrane model applies")
+        symmetric = is_symmetric_layup(plies)
+        if model.bending:
+            kernel_words = "the flat shell kernel solves the bending" + ("" if symmetric else "; the layup is not symmetric, so stretching and bending couple (B is kept)")
         else:
-            notes.note("laminate", "fail", f"{len(angles)} plies: the layup is not symmetric (B does not vanish) and the membrane model needs B = 0; "
-                       "set Symmetric to yes or mirror the plies", ("Symmetric", "Ply 1 (bottom)"))
-        # constraints: both grips present, the held one removing every in-plane rigid-body motion
+            kernel_words = ("symmetric, so B = 0 and the membrane model applies" if symmetric
+                            else "not symmetric (B does not vanish), so the flat shell kernel solves it with stretching and bending coupled")
+        notes.note("laminate", "pass", f"{len(angles)} plies {layup_text(spec)}, {thickness:g} {lab['length']} thick; {kernel_words}")
         sets = model.node_sets
-        bottom, top = sets.get("Grip-Bottom"), sets.get("Grip-Top")
         held = [b for b in model.boundaries if b.value == 0.0]
-        if bottom is None or top is None or bottom.size == 0 or top.size == 0:
-            notes.note("constraints", "fail", "a grip set is empty: no node lies within the tab length of an end", ("Tab length (mm)", "Grip region"))
-        elif not any(b.dof_first <= 1 and b.dof_last >= 2 for b in held):
-            notes.note("constraints", "fail", "no grip holds both in-plane directions; the coupon could move as a rigid body", ("Grip kind",))
+        if model.bending:
+            # constraints: w held along both support lines, the in-plane motion pinned at the centre node of each
+            supports = [sets.get(name) for name in ("Support-Left", "Support-Right")]
+            if any(s is None or s.size == 0 for s in supports):
+                notes.note("constraints", "fail", "a support line holds no node; the support lines must fall on node rows", ("Support span (mm)", "Overhang (mm)"))
+            elif not ({"Pin-Left", "Pin-Right"} <= set(sets)):
+                notes.note("constraints", "fail", "the in-plane pins are missing; the coupon could slide as a rigid body", ("Support span (mm)",))
+            else:
+                notes.note("constraints", "pass", f"both support lines held along z ({supports[0].size} and {supports[1].size} nodes); the centre node of each "
+                           "pins the in-plane motion without restraining the coupon's stretch or contraction; no rigid-body motion is left")
+            amount = from_si(loading.value, "length", units)
+            noses = ", ".join(model.nose_sets)
+            notes.note("load", "pass", f"the loading nose{'s' if len(model.nose_sets) > 1 else ''} ({noses}) moved {abs(amount):g} {lab['length']} "
+                       f"{'down onto' if amount < 0 else 'up from'} the coupon along z; the supports carry the reaction")
         else:
-            how = "through a reference point at each end" if model.couplings else "node by node"
-            notes.note("constraints", "pass", f"bottom grip held in every direction ({bottom.size} nodes), top grip held across the width "
-                       f"({top.size} nodes), {how}; no rigid-body motion is left")
-        # load
-        amount = from_si(loading.value, "length" if loading.control == "displacement" else "force", units)
-        unit = lab["length" if loading.control == "displacement" else "force"]
-        notes.note("load", "pass", f"{loading.control} of {abs(amount):g} {unit} on the top grip along the coupon, {'a push' if amount < 0 else 'a pull'}")
+            # constraints: both grips present, the held one removing every in-plane rigid-body motion
+            bottom, top = sets.get("Grip-Bottom"), sets.get("Grip-Top")
+            if bottom is None or top is None or bottom.size == 0 or top.size == 0:
+                notes.note("constraints", "fail", "a grip set is empty: no node lies within the tab length of an end", ("Tab length (mm)", "Grip region"))
+            elif not any(b.dof_first <= 1 and b.dof_last >= 2 for b in held):
+                notes.note("constraints", "fail", "no grip holds both in-plane directions; the coupon could move as a rigid body", ("Grip kind",))
+            else:
+                how = "through a reference point at each end" if model.couplings else "node by node"
+                notes.note("constraints", "pass", f"bottom grip held in every direction ({bottom.size} nodes), top grip held across the width "
+                           f"({top.size} nodes), {how}; no rigid-body motion is left")
+            # load
+            amount = from_si(loading.value, "length" if loading.control == "displacement" else "force", units)
+            unit = lab["length" if loading.control == "displacement" else "force"]
+            notes.note("load", "pass", f"{loading.control} of {abs(amount):g} {unit} on the top grip along the coupon, {'a push' if amount < 0 else 'a pull'}")
         # mesh
         quality = element_quality(mesh.xy, mesh.corners)
         summary = quality_summary(quality)

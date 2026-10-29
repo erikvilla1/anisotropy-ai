@@ -30,7 +30,11 @@ export const fieldByKey: Record<string, FieldDefinition> = Object.fromEntries(fi
 export const fieldByLabel: Record<string, FieldDefinition> = Object.fromEntries(fields.map((field) => [field.label, field]));
 export const PLY_KEYS = fields.map((field) => field.key).filter((key) => /^ply_\d+$/.test(key));
 export const HOLE_KEYS = ["hole_diameter", "hole_circumferential", "hole_radial", "hole_ring", "hole_growth"];
+export const BENDING_KEYS = ["span", "overhang", "load_span"];
+export const GRIP_KEYS = ["grips", "region", "tab_length"];
 export const OPEN_HOLE_TEST = "open-hole tension";
+export const BENDING_TESTS = ["three-point bending", "four-point bending"];
+export const FOUR_POINT_TEST = "four-point bending";
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /** The public IM7/8552 example (the stand-in of `fea/tests/public_coupon.py`): a complete, solvable coupon to start from. */
@@ -53,17 +57,29 @@ export function exampleForm(today: string): StudioForm {
   return { ...blankForm(), ...EXAMPLE, date: today };
 }
 
-/** The sections to show for a test: the open-hole rows only for open-hole tension (the tool ignores them otherwise). */
+/** The sections to show for a test: the open-hole rows only for open-hole tension, the bending rows only for the bending tests, which
+ * have supports instead of grips and tabs, and the loading span only for four-point bending (the tool ignores the rest otherwise). */
 export function sectionsFor(form: StudioForm): SectionDefinition[] {
   const openHole = form.test === OPEN_HOLE_TEST;
-  return formDefinition.sections.filter((section) => openHole || !section.fields.some((field) => HOLE_KEYS.includes(field.key)));
+  const bending = BENDING_TESTS.includes(form.test);
+  const visible = (field: FieldDefinition): boolean => {
+    if (HOLE_KEYS.includes(field.key)) return openHole;
+    if (BENDING_KEYS.includes(field.key)) return bending && (field.key !== "load_span" || form.test === FOUR_POINT_TEST);
+    if (GRIP_KEYS.includes(field.key)) return !bending;
+    return true;
+  };
+  return formDefinition.sections
+    .map((section) => ({ title: section.title, fields: section.fields.filter(visible) }))
+    .filter((section) => section.fields.length > 0);
 }
 
 /** The values object: numbers parsed where the row is a number, blanks left out, a text that is not a number left as text so the
  * API's check refuses it by row. No physics, no defaults beyond the form's own. */
 export function buildValues(form: StudioForm): StudioValues {
   const values: StudioValues = { form_version: FORM_VERSION };
+  const visible = new Set(sectionsFor(form).flatMap((section) => section.fields.map((field) => field.key)));
   for (const field of fields) {
+    if (!visible.has(field.key)) continue; // a row the test does not use (the tabs of a bending coupon) is not sent
     const text = (form[field.key] ?? "").trim();
     if (!text) continue;
     if ((field.kind === "number" || field.kind === "whole" || field.kind === "angle") && NUMBER.test(text)) values[field.key] = Number(text);

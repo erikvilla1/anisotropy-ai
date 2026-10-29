@@ -17,11 +17,13 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.fields import field_data
-from anisotropy_fea.membrane import solve_membrane
+from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.mesher import MeshError
 from anisotropy_fea.quality import element_quality
@@ -94,26 +96,39 @@ def main() -> None:
 
         deck = read_deck(deck_path, units)
         try:
-            solution = solve_membrane(deck)
+            solution = solve_deck(deck)
         except KernelError as exc:
             raise SystemExit(f"the kernel refused the generated deck: {exc}") from None
         print("written", plot_solution(deck, solution, units, args.out / f"{stem}-solved.png"))
         print("written", write_vtu(deck, solution, units, args.out / f"{stem}.vtu"))
-        # under displacement control the moving grip carries the reaction; under force control the fixed grip does
-        moving = spec.loading.control == "displacement"
-        reaction_set = ("RF-Top" if moving else "RF-Bottom") if model.couplings else ("Grip-Top" if moving else "Grip-Bottom")
-        rf = solution.reaction_of(deck.nsets[reaction_set])
-        applied = sum(load.value for load in model.loads)
-        residual = max(abs(solution.total_reaction[0]), abs(solution.total_reaction[1] + applied))
-        report += f"\nkernel solve: reaction at {reaction_set} = [{from_si(rf[0], 'force', units):.6g}, {from_si(rf[1], 'force', units):.6g}] N; " \
-                  f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n"
+        if model.bending:
+            # the nose carries the force the coupon resists; the supports share it
+            reaction_set = model.nose_sets[0]
+            rf = solution.reaction_of(deck.nsets[reaction_set])[:3]
+            residual = float(max(abs(v) for v in solution.total_reaction[:3]))
+            supports = "; ".join(f"{name} {from_si(solution.reaction_of(deck.nsets[name])[2], 'force', units):.6g} N" for name in model.support_sets[:2])
+            w = solution.displacement[:, 2]
+            at = int(np.argmax(np.abs(w)))
+            components = ", ".join(f"{from_si(v, 'force', units):.6g}" for v in rf)
+            report += (f"\nkernel solve (flat shell): reaction at {reaction_set} = [{components}] N "
+                       f"(x, y, z); supports along z: {supports}; largest deflection w = {from_si(w[at], 'length', units):.6g} at node {at + 1}; "
+                       f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n")
+        else:
+            # under displacement control the moving grip carries the reaction; under force control the fixed grip does
+            moving = spec.loading.control == "displacement"
+            reaction_set = ("RF-Top" if moving else "RF-Bottom") if model.couplings else ("Grip-Top" if moving else "Grip-Bottom")
+            rf = solution.reaction_of(deck.nsets[reaction_set])
+            applied = sum(load.value for load in model.loads)
+            residual = max(abs(solution.total_reaction[0]), abs(solution.total_reaction[1] + applied))
+            report += f"\nkernel solve: reaction at {reaction_set} = [{from_si(rf[0], 'force', units):.6g}, {from_si(rf[1], 'force', units):.6g}] N; " \
+                      f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n"
         field = element_ply_states(solution)
         available = []
         for criterion in spec.output.fpf_criteria:
             try:
                 failure = strength_ratios(solution, criterion, deck_f12_star(deck), field)
                 report += (f"first-ply failure, {criterion}: factor {failure.factor:.6g} on the applied loading, element {failure.element[0]}.{failure.element[1]}, "
-                           f"ply {failure.ply}, {failure.governing_mode}\n")
+                           f"ply {failure.ply}{f' ({failure.face} face)' if failure.face else ''}, {failure.governing_mode}\n")
                 available.append(criterion)
             except KernelError as exc:
                 report += f"first-ply failure, {criterion}: not available ({exc})\n"

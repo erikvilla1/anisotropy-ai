@@ -14,7 +14,7 @@ import numpy as np
 
 from anisotropy_engine.laminate import Ply, abd_matrices
 
-from .model import Deck, ElementKey, Material, NodeKey, ShellSection, is_symmetric_layup, section_plies
+from .model import Deck, ElementKey, Material, NodeKey, ShellSection, expanded_layers, is_symmetric_layup, section_plies
 
 
 class KernelError(ValueError):
@@ -26,6 +26,9 @@ class Section:
     name: str
     plies: list[Ply]
     A: np.ndarray  # (3, 3), N/m: N = A eps with engineering shear strain (ADR-0004)
+    B: np.ndarray | None = None  # (3, 3), N: the coupling stiffness; set for a shell mesh (ADR-0053), None for the membrane
+    D: np.ndarray | None = None  # (3, 3), N m: the bending stiffness
+    H: np.ndarray | None = None  # (2, 2), N/m: the shear-corrected transverse shear stiffness for [gamma_xz, gamma_yz]
 
 
 @dataclass(frozen=True)
@@ -72,8 +75,44 @@ def section_stiffness(section: ShellSection, materials: dict[str, Material], nam
     return Section(name=name, plies=plies, A=A)
 
 
-def mesh_from_deck(deck: Deck) -> Mesh:
-    """Instances' nodes and elements, then the assembly's reference nodes, as flat arrays."""
+SHEAR_CORRECTION = 5.0 / 6.0  # the shear correction factor of the flat shell (ADR-0053); shell.py states the choice
+
+
+def transverse_shear_stiffness(section: ShellSection, materials: dict[str, Material], name: str, correction: float = SHEAR_CORRECTION) -> np.ndarray:
+    """H (2, 2) for [gamma_xz, gamma_yz]: the correction factor times the sum over the plies of thickness times the ply's transverse
+    shear stiffness rotated to the laminate axes, Q55 = G13 c^2 + G23 s^2, Q44 = G13 s^2 + G23 c^2, Q45 = (G13 - G23) c s, with c and s the
+    cosine and sine of the ply angle. An isotropic material takes G13 = G23 = G; a lamina must state G13 and G23."""
+    H = np.zeros((2, 2))
+    for layer in expanded_layers(section):
+        material = materials[layer.material]
+        if material.elastic is None:
+            raise KernelError(f"section {name!r}: material {material.name!r} has no *Elastic")
+        e = material.elastic
+        if e.kind == "ISOTROPIC":
+            G13 = G23 = e.G12
+        else:
+            if e.G13 is None or e.G23 is None:
+                raise KernelError(f"section {name!r}: material {material.name!r} states no G13 and G23; a shell needs both (*Elastic, type=LAMINA with "
+                                  "all five constants)")
+            G13, G23 = e.G13, e.G23
+        c, s = np.cos(np.radians(layer.angle_deg)), np.sin(np.radians(layer.angle_deg))
+        Q55 = G13 * c * c + G23 * s * s
+        Q44 = G13 * s * s + G23 * c * c
+        Q45 = (G13 - G23) * c * s
+        H += layer.thickness * np.array([[Q55, Q45], [Q45, Q44]])
+    return correction * H
+
+
+def shell_section_stiffness(section: ShellSection, materials: dict[str, Material], name: str) -> Section:
+    """The engine plies of a section with A, B, D and the transverse shear stiffness H: the laminate's full law, B included (ADR-0053)."""
+    plies = section_plies(section, materials)
+    A, B, D = abd_matrices(plies)
+    return Section(name=name, plies=plies, A=A, B=B, D=D, H=transverse_shear_stiffness(section, materials, name))
+
+
+def mesh_from_deck(deck: Deck, shell: bool = False) -> Mesh:
+    """Instances' nodes and elements, then the assembly's reference nodes, as flat arrays. With `shell`, every section carries the
+    laminate's full law for the flat shell kernel and an unsymmetric layup is allowed."""
     if deck.units is None:
         raise KernelError("the deck has not been converted to SI; read it with read_deck(path, units)")
     keys: list[NodeKey] = []
@@ -95,7 +134,8 @@ def mesh_from_deck(deck: Deck) -> Mesh:
             continue
         section_of_label: dict[int, int] = {}
         for section in part.sections:
-            sections.append(section_stiffness(section, deck.materials, f"{instance_name}.{section.elset}"))
+            stiffness = shell_section_stiffness if shell else section_stiffness
+            sections.append(stiffness(section, deck.materials, f"{instance_name}.{section.elset}"))
             for label in part.elsets[section.elset].tolist():
                 section_of_label[label] = len(sections) - 1
         for label, nodes in zip(part.elements.labels.tolist(), part.elements.connectivity):

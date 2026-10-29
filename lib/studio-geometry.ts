@@ -63,12 +63,12 @@ export function boundaryOwners(quads: number[][]): number[] {
  * the bottom face at -thickness/2 (reversed) and a wall on every boundary edge. `xy` gives the (deformed) node positions when
  * they differ from `nodes`.
  */
-export function plateMesh(nodes: number[][], quads: number[][], thickness: number, xy?: number[][]): PlateMesh {
+export function plateMesh(nodes: number[][], quads: number[][], thickness: number, xy?: number[][], heights?: number[] | null): PlateMesh {
   const points = xy ?? nodes;
   const positions: number[] = [], triangles: number[] = [], vertexNode: number[] = [], vertexElement: number[] = [];
   const z = thickness / 2;
   const add = (node: number, element: number, height: number) => {
-    positions.push(points[node][0], points[node][1], height);
+    positions.push(points[node][0], points[node][1], height + (heights ? heights[node] : 0));
     vertexNode.push(node);
     vertexElement.push(element);
     return vertexNode.length - 1;
@@ -99,30 +99,43 @@ export function vertexColors(mesh: PlateMesh, by: "node" | "element", colors: nu
   return out;
 }
 
-/** The outline of one element on the top face, as a closed loop of x, y, z, for the critical element's frame. */
-export function elementLoop(nodes: number[][], quad: number[], height: number): number[][] {
-  return quad.map((node) => [nodes[node][0], nodes[node][1], height]);
+/** The outline of one element on the top face, as a closed loop of x, y, z, for the critical element's frame; `heights` lifts each node (a deflection). */
+export function elementLoop(nodes: number[][], quad: number[], height: number, heights?: number[] | null): number[][] {
+  return quad.map((node) => [nodes[node][0], nodes[node][1], height + (heights ? heights[node] : 0)]);
 }
 
 /** Every element edge once, on the top face: the wireframe. Returns pairs of points. */
-export function elementEdges(nodes: number[][], quads: number[][], height: number): number[][][] {
+export function elementEdges(nodes: number[][], quads: number[][], height: number, heights?: number[] | null): number[][][] {
   const seen = new Set<string>();
   const out: number[][][] = [];
+  const lift = (node: number) => height + (heights ? heights[node] : 0);
   for (const quad of quads) {
     for (let k = 0; k < 4; k++) {
       const a = quad[k], b = quad[(k + 1) % 4];
       const key = a < b ? `${a}-${b}` : `${b}-${a}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push([[nodes[a][0], nodes[a][1], height], [nodes[b][0], nodes[b][1], height]]);
+      out.push([[nodes[a][0], nodes[a][1], lift(a)], [nodes[b][0], nodes[b][1], lift(b)]]);
     }
   }
   return out;
 }
 
-/** Node coordinates moved by their displacement times a display scale. */
+/** Node coordinates moved by their in-plane displacement times a display scale. */
 export function deformedPositions(nodes: number[][], displacement: number[][], scale: number): number[][] {
   return nodes.map(([x, y], i) => [x + scale * displacement[i][0], y + scale * displacement[i][1]]);
+}
+
+/** The deflection of every node times a display scale, when the package wrote a third component (a shell solve, ADR-0053); else null. */
+export function deformedHeights(displacement: number[][], scale: number): number[] | null {
+  if (!displacement.length || displacement[0].length < 3) return null;
+  return displacement.map((u) => scale * u[2]);
+}
+
+/** The mean lift of a node set, so a frame drawn on the deformed plate sits on it. */
+export function meanHeight(heights: number[] | null, indices: number[]): number {
+  if (!heights || !indices.length) return 0;
+  return indices.reduce((sum, i) => sum + (heights[i] ?? 0), 0) / indices.length;
 }
 
 /** A display scale that makes the largest displacement about a tenth of the plate's longest side, rounded to one significant digit. */

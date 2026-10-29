@@ -19,8 +19,20 @@ A case is a TOML file:
     "*" = [-0.0031, 0.01, 0.0004]
     [expected.section_force]              # [Nx, Ny, Nxy] at an element's centroid, force per length; "*" as above
     "*" = [0.0, 123.4, 0.0]
+    [expected.w]                          # [w] at a node: the out-of-plane displacement of a shell solve (ADR-0053)
+    "Coupon-1.3" = [-0.5]
+    [expected.rotation]                   # [theta_x, theta_y] at a node, radians
+    "Coupon-1.3" = [0.0, 0.01]
+    [expected.rf_z]                       # [RFz] at a node or summed over an assembly node set
+    "Support-Left" = [250.0]
+    [expected.curvature]                  # [kappa_x, kappa_y, kappa_xy] at an element's centroid, 1/length
+    "*" = [0.001, 0.0, 0.0]
+    [expected.moment]                     # [Mx, My, Mxy] at an element's centroid, moment per unit width (force units)
+    "*" = [12.3, 0.4, 0.0]
+    [expected.shear_force]                # [Qx, Qy] at an element's centroid, force per length
+    "*" = [0.0, 1.0]
     [expected.ply_stress_local."*"]       # per ply, bottom ply is 1: [sigma_1, sigma_2, tau_12] in material axes, stress units
-    1 = [1234.5, 12.3, -4.5]
+    1 = [1234.5, 12.3, -4.5]              # a shell state has two faces per ply: write "1:bottom" and "1:top" instead of 1
     [expected.ply_strain_local."Coupon-1.1"]   # per ply: [eps_1, eps_2, gamma_12]
     2 = [0.004, -0.001, 0.002]
     [expected.ply_mises."Coupon-1.1"]          # per ply: [von Mises of the in-plane ply stress]
@@ -47,10 +59,10 @@ from anisotropy_engine.cases import Comparison
 from anisotropy_engine.failure import CRITERIA
 
 from .abaqus_reader import read_deck
-from .membrane import solve_membrane
+from .kernel import solve_deck
 from .model import Deck, ElementKey, NodeKey
-from .recovery import deck_f12_star, element_ply_states, ply_mises, strength_ratios
-from .results import MembraneSolution
+from .recovery import FACES, deck_f12_star, element_ply_states, ply_mises, strength_ratios
+from .results import ShellSolution, Solution
 from .units import from_si
 
 # group -> (unit kind for conversion out of SI, vector length, what a name may be)
@@ -59,10 +71,17 @@ GROUPS: dict[str, tuple[str | None, int, str]] = {
     "u": ("length", 2, "a node"),
     "strain": (None, 3, "an element or *"),
     "section_force": ("force_per_length", 3, "an element or *"),
+    "w": ("length", 1, "a node"),
+    "rotation": (None, 2, "a node"),
+    "rf_z": ("force", 1, "a node or an assembly node set"),
+    "curvature": ("per_length", 3, "an element or *"),
+    "moment": ("force", 3, "an element or *"),
+    "shear_force": ("force_per_length", 2, "an element or *"),
 }
+SHELL_GROUPS = ("w", "rotation", "rf_z", "curvature", "moment", "shear_force")  # a membrane solve has none of these
 # ply group -> (unit kind, vector length)
 PLY_GROUPS: dict[str, tuple[str | None, int]] = {"ply_stress_local": ("stress", 3), "ply_strain_local": (None, 3), "ply_mises": ("stress", 1)}
-FPF_FIELDS = ("ratio", "element", "ply", "mode")
+FPF_FIELDS = ("ratio", "element", "ply", "mode", "face")
 REQUIRED = ("title", "source", "units", "mesh", "expected")
 
 
@@ -106,8 +125,9 @@ def validate_case(case: dict) -> None:
                 if not isinstance(plies, dict) or not plies:
                     raise ValueError(f"[expected.{group}.{name!r}] must be a table of ply number = [{length} values]")
                 for ply, vector in plies.items():
-                    if not str(ply).isdigit() or int(ply) < 1:
-                        raise ValueError(f"[expected.{group}.{name!r}] ply keys are numbers from 1 (bottom); got {ply!r}")
+                    number, _, face = str(ply).partition(":")
+                    if not number.isdigit() or int(number) < 1 or face not in ("", *FACES):
+                        raise ValueError(f"[expected.{group}.{name!r}] ply keys are numbers from 1 (bottom), with :bottom or :top for a shell state; got {ply!r}")
                     _check_vector(f"[expected.{group}.{name!r}] ply {ply}", vector, length)
         elif group == "fpf":
             if not isinstance(rows, dict) or not rows:
@@ -133,9 +153,10 @@ def deck_path(case: dict) -> Path:
     return (Path(case["_dir"]) / case["mesh"]["deck"]).resolve()
 
 
-def solve_case(case: dict) -> tuple[Deck, MembraneSolution]:
+def solve_case(case: dict) -> tuple[Deck, Solution]:
+    """The deck solved by the kernel its loads and layup call for (`kernel.solve_deck`)."""
     deck = read_deck(deck_path(case), case["units"])
-    return deck, solve_membrane(deck)
+    return deck, solve_deck(deck)
 
 
 def parse_node_name(name: str) -> NodeKey:
@@ -187,10 +208,18 @@ def fe_results(case: dict) -> tuple[dict[str, tuple[np.ndarray, float]], dict[st
             for name, plies in rows.items():
                 for element_label, e in _elements(name, solution):
                     for ply in plies:
-                        k = int(ply) - 1
+                        number, _, face = str(ply).partition(":")
+                        k = int(number) - 1
                         if k >= field[e].shape[0]:
                             raise ValueError(f"{group}[{element_label}][{ply}]: element has {field[e].shape[0]} plies")
-                        vectors[f"{element_label}][{ply}"] = field[e][k]
+                        if ply_field.faces is None:
+                            if face:
+                                raise ValueError(f"{group}[{element_label}][{ply}]: a membrane state has one value per ply; write {number}")
+                            vectors[f"{element_label}][{ply}"] = field[e][k]
+                        else:
+                            if not face:
+                                raise ValueError(f"{group}[{element_label}][{ply}]: a shell state has two faces per ply; write {number}:bottom or {number}:top")
+                            vectors[f"{element_label}][{ply}"] = field[e][k, ply_field.faces.index(face)]
             store(group, vectors, PLY_GROUPS[group][0])
         elif group == "fpf":
             f12_star = deck_f12_star(deck)
@@ -200,26 +229,33 @@ def fe_results(case: dict) -> tuple[dict[str, tuple[np.ndarray, float]], dict[st
                 identities[f"fpf[{criterion}][element]"] = element_name(failure.element)
                 identities[f"fpf[{criterion}][ply]"] = failure.ply
                 identities[f"fpf[{criterion}][mode]"] = failure.governing_mode
+                identities[f"fpf[{criterion}][face]"] = failure.face
     return numbers, identities
 
 
-def _elements(name: str, solution: MembraneSolution) -> list[tuple[str, int]]:
+def _elements(name: str, solution: Solution) -> list[tuple[str, int]]:
     mesh = solution.mesh
     if name == "*":
         return [(element_name(key), e) for e, key in enumerate(mesh.element_keys)]
     return [(name, mesh.element(parse_element_name(name)))]
 
 
-def _quantity(group: str, name: str, deck: Deck, solution: MembraneSolution) -> dict[str, np.ndarray]:
-    """The SI vectors a name stands for; `*` expands to every element."""
+def _quantity(group: str, name: str, deck: Deck, solution: Solution) -> dict[str, np.ndarray]:
+    """The SI vectors a name stands for; `*` expands to every element. The in-plane groups read the first two components of a shell
+    solve; a shell group asked of a membrane solve is reported as a result the case cannot produce."""
     mesh = solution.mesh
-    if group == "rf":
+    shell = isinstance(solution, ShellSolution)
+    if group in SHELL_GROUPS and not shell:
+        raise ValueError(f"{group}[{name}]: a membrane solve has no {group}; the deck neither bends nor carries a pressure")
+    if group in ("rf", "rf_z"):
+        columns = slice(0, 2) if group == "rf" else slice(2, 3)
         if name in deck.nsets:
-            return {name: solution.reaction_of(deck.nsets[name])}
-        return {name: solution.reaction[mesh.node(parse_node_name(name))]}
-    if group == "u":
-        return {name: solution.displacement[mesh.node(parse_node_name(name))]}
-    field = solution.strain if group == "strain" else solution.section_force
+            return {name: solution.reaction_of(deck.nsets[name])[columns]}
+        return {name: solution.reaction[mesh.node(parse_node_name(name))][columns]}
+    if group in ("u", "w", "rotation"):
+        columns = {"u": slice(0, 2), "w": slice(2, 3), "rotation": slice(3, 5)}[group]
+        return {name: solution.displacement[mesh.node(parse_node_name(name))][columns]}
+    field = getattr(solution, group)
     return {label: field[e] for label, e in _elements(name, solution)}
 
 
@@ -263,7 +299,7 @@ def compare(case: dict) -> tuple[list[Comparison], list[str]]:
         elif group == "fpf":
             for criterion, fields in rows.items():
                 add(f"fpf[{criterion}][ratio]", [fields["ratio"]])
-                for field in ("element", "ply", "mode"):
+                for field in ("element", "ply", "mode", "face"):
                     if field in fields:
                         label = f"fpf[{criterion}][{field}]"
                         if identities.get(label) != fields[field]:

@@ -74,9 +74,10 @@ def test_the_summary_names_the_extremes(solved, data):
     e, k = summary["max_ply"]["S11"]["element"], summary["max_ply"]["S11"]["ply"] - 1
     assert abs(stress[e, k, 0]) == pytest.approx(np.abs(stress[:, :, 0]).max()) and summary["max_ply"]["S11"]["value"] == pytest.approx(stress[e, k, 0])
     assert summary["max_ply"]["mises"]["value"] == pytest.approx(np.asarray(data["element"]["ply"]["mises"]).max())
-    assert summary["applied"] == {"control": "displacement", "value": pytest.approx(1.0), "unit": "mm"}
-    assert applied_loading(deck, solution) == ("displacement", pytest.approx(1e-3))
-    assert summary["reaction"]["sense"] == "tension" and summary["reaction"]["value"] > 0
+    assert summary["applied"] == {"control": "displacement", "value": pytest.approx(1.0), "unit": "mm", "dof": 2, "direction": "along the coupon"}
+    applied = applied_loading(deck, solution)
+    assert (applied["control"], applied["value"], applied["dof"], applied["set"]) == ("displacement", pytest.approx(1e-3), 2, "the top grip")
+    assert summary["reaction"]["sense"] == "in tension" and summary["reaction"]["value"] > 0 and summary["reaction"]["set"] == "the top grip"
     assert summary["equilibrium_residual"] < 1e-6 and summary["free_residual"] < 1e-6
     for criterion, found in summary["fpf"].items():
         expected = strength_ratios(solution, criterion, deck_f12_star(deck))
@@ -114,7 +115,7 @@ def test_every_number_in_a_sentence_is_a_fact(data):
     for sentence in sentences:
         for token in numbers_in(sentence):
             assert token in printed or token.lstrip("-+") in printed, (token, sentence)
-    assert sentences[0].startswith("IM7-UNT-L1, unnotched tension, under a displacement of 1 mm: the top grip carries")
+    assert sentences[0].startswith("IM7-UNT-L1, unnotched tension, under a displacement of 1 mm along the coupon: the top grip carries")
     assert "The largest displacement is" in sentences[1] and "S11 =" in sentences[2] and "von Mises" in sentences[2]
     assert any("criterion at the applied loading" in s for s in sentences) and sentences[-1].startswith("The earliest of the criteria is")
     assert any(MODE_WORDS[facts[f"{c}_mode"]] in s for c in facts["criteria"] for s in sentences)

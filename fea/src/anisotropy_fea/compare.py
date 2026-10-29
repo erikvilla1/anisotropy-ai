@@ -53,10 +53,12 @@ from anisotropy_engine.rotation import strain_transformation, stress_transformat
 from .calculix import DatResults
 from .cases import GROUPS, PLY_GROUPS, element_name, fe_results, validate_case
 from .femodel import FEModel
+from .units import unit_factors
 
 SOLVER_FIELDS = ("name", "version", "element_type", "run_by", "run_date", "machine", "source")
 RECORD_FIELDS = ("title", "units", "spec", "deck_kernel", "deck_reference", "deck_kernel_sha256", "deck_reference_sha256", "solver", "expected")
-CONVENTION_FIELDS = ("calculix_version", "layer_order", "points_per_layer_thickness", "in_plane_points", "point_order", "stress_axes", "shear_strain", "detected_on", "detected_by")
+CONVENTION_FIELDS = ("calculix_version", "layer_order", "points_per_layer_thickness", "in_plane_points", "point_order", "stress_axes", "shear_strain", "detected_on", "detected_by",
+                     "pressure_label", "pressure_direction", "shell_set_totals")
 
 
 class RecordError(ValueError):
@@ -192,6 +194,26 @@ def layer_values(block_values: np.ndarray, z: np.ndarray, plies: int, points_per
     return out
 
 
+def layer_face_values(block_values: np.ndarray, z: np.ndarray, plies: int, points_per_layer: int, interfaces: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
+    """The value on the bottom and top face of each ply, plies bottom-first: a straight line in z through the ply's integration
+    points (two levels per layer, each the mean of its in-plane points), extended to the ply's faces at the z of `interfaces` (plies + 1
+    values from the bottom face up, in the .dat's length unit). Exact for a value that varies linearly through the ply, as a shell's
+    in-plane stress does under bending (ADR-0053)."""
+    levels = np.unique(np.round(z, 9))
+    if levels.size != plies * points_per_layer:
+        raise RecordError(f"expected {plies * points_per_layer} z levels for {plies} plies, found {levels.size}")
+    if points_per_layer < 2:
+        raise RecordError("a face value needs at least two integration levels per layer")
+    out = []
+    for k in range(plies):
+        mine = levels[k * points_per_layer:(k + 1) * points_per_layer]
+        means = np.array([block_values[np.flatnonzero(np.round(z, 9) == level)].mean(axis=0) for level in mine])
+        slope, intercept = np.polyfit(mine, means, 1)  # one straight line per component
+        bottom, top = interfaces[k], interfaces[k + 1]
+        out.append((slope * bottom + intercept, slope * top + intercept))
+    return out
+
+
 def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
                          element_probes: list[str] | None = None, node_probes: list[str] | None = None) -> dict:
     """The `[expected]` tables a CalculiX run gives for a model: reactions, the displacements of the node probes named (all by
@@ -200,25 +222,26 @@ def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
     instance = model.instance
     shear = 2.0 if conventions["shear_strain"] == "tensor" else 1.0
     per_layer = int(conventions["points_per_layer_thickness"])
+    bending = model.bending  # a bending coupon's record holds RFz, w and both faces of every ply (ADR-0053)
     expected: dict = {}
     rf = {}
-    for grip in ("Grip-Top", "Grip-Bottom"):
+    for grip in model.support_sets:
         try:
             total = dat.total_force(grip)
         except KeyError:
             continue
-        rf[grip] = [float(total[0]), float(total[1])]
+        rf[grip] = [float(total[2])] if bending else [float(total[0]), float(total[1])]
     if rf:
-        expected["rf"] = rf
+        expected["rf_z" if bending else "rf"] = rf
     u = {}
     for name, index in model.probe_nodes.items():
         if node_probes is not None and name not in node_probes:
             continue
         block = dat.displacements(f"Probe-{name}")
         values = block.row(index + 1)
-        u[f"{instance}.{index + 1}"] = [float(values[0]), float(values[1])]
+        u[f"{instance}.{index + 1}"] = [float(values[2])] if bending else [float(values[0]), float(values[1])]
     if u:
-        expected["u"] = u
+        expected["w" if bending else "u"] = u
     plies = model.section.plies
     angles = [p.angle_deg for p in plies]
     strain, stress_local, strain_local = {}, {}, {}
@@ -228,6 +251,17 @@ def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
         label = element_name((instance, index + 1))
         S, E, C = dat.stresses(f"Probe-{name}"), dat.strains(f"Probe-{name}"), dat.coordinates(f"Probe-{name}")
         z = C.values[:, 2]
+        if bending:
+            thickness = sum(p.thickness_m for p in plies)
+            unit = unit_factors(model.spec.units)["length"]
+            interfaces = (np.concatenate([[-thickness / 2.0], -thickness / 2.0 + np.cumsum([p.thickness_m for p in plies])])) / unit
+            stresses = layer_face_values(S.values[:, [0, 1, 3]], z, len(plies), per_layer, interfaces)
+            strains = layer_face_values(E.values[:, [0, 1, 3]], z, len(plies), per_layer, interfaces)
+            stress_local[label] = {f"{k + 1}:{face}": [float(v) for v in stress_transformation(angles[k]) @ s]
+                                   for k, pair in enumerate(stresses) for face, s in zip(("bottom", "top"), pair)}
+            strain_local[label] = {f"{k + 1}:{face}": [float(v) for v in strain_transformation(angles[k]) @ (e * np.array([1.0, 1.0, shear]))]
+                                   for k, pair in enumerate(strains) for face, e in zip(("bottom", "top"), pair)}
+            continue
         mean = E.values[:, [0, 1, 3]].mean(axis=0)
         strain[label] = [float(mean[0]), float(mean[1]), float(shear * mean[2])]
         stresses = layer_values(S.values[:, [0, 1, 3]], z, len(plies), per_layer)
@@ -270,7 +304,8 @@ def format_record(record: dict) -> str:
             continue
         if group in PLY_GROUPS:
             for name, plies in rows.items():
-                lines += ["", f'[expected.{group}."{name}"]'] + [f"{ply} = {value(v)}" for ply, v in plies.items()]
+                # a ply number is a bare key; a face key such as 1:bottom must be quoted
+                lines += ["", f'[expected.{group}."{name}"]'] + [f"{ply if str(ply).isdigit() else value(ply)} = {value(v)}" for ply, v in plies.items()]
         elif group == "fpf":
             for criterion, fields in rows.items():
                 lines += ["", f"[expected.fpf.{criterion}]"] + [f"{k} = {value(v)}" for k, v in fields.items()]

@@ -138,9 +138,9 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
         out.append("*Output, field, variable=PRESELECT")
         out.append("*Output, history, variable=PRESELECT")
     if requests.node_print:
-        reaction_set = "RF-Top" if model.couplings else "Grip-Top"
-        out.append(f"*Node Print, nset={reaction_set}, totals=YES")
-        out.append("RF")
+        for reaction_set in (model.support_sets if model.bending else model.support_sets[:1]):  # the moving grip, or the supports and the nose
+            out.append(f"*Node Print, nset={reaction_set}, totals=YES")
+            out.append("RF")
         for name in model.probe_nodes:
             out.append(f"*Node Print, nset=Probe-{name}")
             out.append("U")

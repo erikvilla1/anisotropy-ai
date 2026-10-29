@@ -82,7 +82,7 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
         out += [f"{b.target}, {b.dof_first}, {b.dof_last}, {number(length(b.value))}" for b in moving]
     requests = spec.output.calculix
     if requests.node_print:
-        for grip in ("Grip-Top", "Grip-Bottom"):
+        for grip in model.support_sets:
             if grip in model.node_sets:
                 out.append(f"*NODE PRINT, NSET={grip}, TOTALS=YES")
                 out.append("RF")

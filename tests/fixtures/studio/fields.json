@@ -7,6 +7,9 @@
   "force_per_length": "N/mm",
   "modulus": "GPa",
   "stiffness": "N/mm",
+  "per_length": "1/mm",
+  "moment": "N·mm/mm",
+  "rotation": "rad",
   "strain": "-",
   "ratio": "-"
  },
@@ -17,6 +20,7 @@
   "test": "unnotched tension",
   "layup": "[45/0/-45/90]s"
  },
+ "kernel": "membrane",
  "mesh": {
   "nodes": [
    [
@@ -3873,7 +3877,9 @@
    -45.0,
    0.0,
    45.0
-  ]
+  ],
+  "faces": null,
+  "translations": 2
  },
  "nodal": {
   "displacement": [
@@ -79949,17 +79955,21 @@
    "components": [
     0.0,
     1.0
-   ]
+   ],
+   "axis": "y"
   },
   "reaction": {
    "set": "the top grip",
    "value": 16222.038876522856,
-   "sense": "tension"
+   "dof": 2,
+   "sense": "in tension"
   },
   "applied": {
    "control": "displacement",
    "value": 1.0,
-   "unit": "mm"
+   "unit": "mm",
+   "dof": 2,
+   "direction": "along the coupon"
   },
   "max_ply": {
    "S11": {
@@ -79971,7 +79981,8 @@
     "xy": [
      12.5,
      176.75
-    ]
+    ],
+    "face": null
    },
    "S22": {
     "value": 62.33378038380057,
@@ -79982,7 +79993,8 @@
     "xy": [
      2.5,
      191.5357143
-    ]
+    ],
+    "face": null
    },
    "S12": {
     "value": 45.86112822501148,
@@ -79993,7 +80005,8 @@
     "xy": [
      12.5,
      176.75
-    ]
+    ],
+    "face": null
    },
    "mises": {
     "value": 1202.8931010067379,
@@ -80004,7 +80017,8 @@
     "xy": [
      12.5,
      176.75
-    ]
+    ],
+    "face": null
    }
   },
   "fpf": {
@@ -80015,6 +80029,7 @@
     "label": "Strip-1.56",
     "ply": 2,
     "angle": 0.0,
+    "face": null,
     "mode": "transverse tension",
     "place": "at the edge of a gripped tab",
     "touches_grip": true,
@@ -80034,6 +80049,7 @@
     "label": "Strip-1.56",
     "ply": 2,
     "angle": 0.0,
+    "face": null,
     "mode": "interactive",
     "place": "at the edge of a gripped tab",
     "touches_grip": true,

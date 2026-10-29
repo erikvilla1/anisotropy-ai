@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
 import { Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { bounds, centroid, deformedPositions, elementEdges, elementLoop, plateMesh, setBox, vertexColors } from "@/lib/studio-geometry";
+import { bounds, centroid, deformedHeights, deformedPositions, elementEdges, elementLoop, meanHeight, plateMesh, setBox, vertexColors } from "@/lib/studio-geometry";
 import { CRITICAL, HELD, LOADED } from "@/lib/studio-colors";
 import { WebGLMissing, webglAvailable } from "./webgl-missing";
 
@@ -31,11 +31,11 @@ function frame(box: { min: number[]; max: number[] }, z: number): [number, numbe
   return [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z], [x0, y0, z]];
 }
 
-function Plate({ nodes, quads, thickness, colors, xy, wireframe, onPick }: {
-  nodes: number[][]; quads: number[][]; thickness: number; colors?: SceneColors | null; xy: number[][]; wireframe: boolean;
+function Plate({ nodes, quads, thickness, colors, xy, heights, wireframe, onPick }: {
+  nodes: number[][]; quads: number[][]; thickness: number; colors?: SceneColors | null; xy: number[][]; heights: number[] | null; wireframe: boolean;
   onPick?: (element: number | null) => void;
 }) {
-  const plate = useMemo(() => plateMesh(nodes, quads, thickness, xy), [nodes, quads, thickness, xy]);
+  const plate = useMemo(() => plateMesh(nodes, quads, thickness, xy, heights), [nodes, quads, thickness, xy, heights]);
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(plate.positions, 3));
@@ -47,10 +47,10 @@ function Plate({ nodes, quads, thickness, colors, xy, wireframe, onPick }: {
   useEffect(() => () => geometry.dispose(), [geometry]);
   const edges = useMemo(() => {
     const g = new THREE.BufferGeometry();
-    const points = elementEdges(xy, quads, thickness / 2).flat(2);
+    const points = elementEdges(xy, quads, thickness / 2, heights).flat(2);
     g.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
     return g;
-  }, [xy, quads, thickness]);
+  }, [xy, quads, thickness, heights]);
   useEffect(() => () => edges.dispose(), [edges]);
   return (
     <group>
@@ -72,6 +72,7 @@ export function SceneCanvas(props: SceneProps) {
   const [webgl, setWebgl] = useState<boolean | null>(null);
   useEffect(() => { setWebgl(webglAvailable()); }, []);
   const xy = useMemo(() => (displacement && scale ? deformedPositions(nodes, displacement, scale) : nodes), [nodes, displacement, scale]);
+  const heights = useMemo(() => (displacement && scale ? deformedHeights(displacement, scale) : null), [displacement, scale]);
   const extent = useMemo(() => bounds(nodes), [nodes]);
   const size = Math.max(extent.size[0], extent.size[1], 1);
   const centre = [extent.min[0] + extent.size[0] / 2, extent.min[1] + extent.size[1] / 2] as const;
@@ -86,30 +87,32 @@ export function SceneCanvas(props: SceneProps) {
         <ambientLight intensity={0.85} />
         <directionalLight position={[size, -size, 2 * size]} intensity={1.1} />
         <directionalLight position={[-size, size, -size]} intensity={0.3} />
-        <Plate nodes={nodes} quads={quads} thickness={thickness} colors={colors} xy={xy} wireframe={wireframe} onPick={onPick} />
+        <Plate nodes={nodes} quads={quads} thickness={thickness} colors={colors} xy={xy} heights={heights} wireframe={wireframe} onPick={onPick} />
         {held.map((marker, i) => {
           const box = setBox(xy, marker.nodes);
           if (!box) return null;
-          return <Line key={`held-${i}`} points={frame(box, top)} color={HELD} lineWidth={2} />;
+          return <Line key={`held-${i}`} points={frame(box, top + meanHeight(heights, marker.nodes))} color={HELD} lineWidth={2} />;
         })}
         {loaded && setBox(xy, loaded.nodes) ? (() => {
           const box = setBox(xy, loaded.nodes)!;
           const at = centroid(xy, loaded.nodes);
+          const lift = top + meanHeight(heights, loaded.nodes);
           const sign = loaded.direction.startsWith("-") ? -1 : 1;
-          const along = loaded.direction.endsWith("x") ? [sign, 0, 0] : [0, sign, 0];
+          const along = loaded.direction.endsWith("x") ? [sign, 0, 0] : loaded.direction.endsWith("y") ? [0, sign, 0] : [0, 0, sign];
           const length = 0.18 * size;
+          const origin = along[2] < 0 ? [at[0], at[1], lift + length] : [at[0], at[1], lift]; // a push along -z is drawn arriving onto the plate
           return (
             <group>
-              <Line points={frame(box, top)} color={LOADED} lineWidth={2} />
-              <arrowHelper args={[new THREE.Vector3(...along), new THREE.Vector3(at[0], at[1], top), length, LOADED, 0.3 * length, 0.15 * length]} />
+              <Line points={frame(box, lift)} color={LOADED} lineWidth={2} />
+              <arrowHelper args={[new THREE.Vector3(...along), new THREE.Vector3(...origin), length, LOADED, 0.3 * length, 0.15 * length]} />
             </group>
           );
         })() : null}
         {highlight !== null && highlight >= 0 && highlight < quads.length ? (
-          <Line points={[...elementLoop(xy, quads[highlight], top), elementLoop(xy, quads[highlight], top)[0]] as [number, number, number][]} color={CRITICAL} lineWidth={3} />
+          <Line points={[...elementLoop(xy, quads[highlight], top, heights), elementLoop(xy, quads[highlight], top, heights)[0]] as [number, number, number][]} color={CRITICAL} lineWidth={3} />
         ) : null}
         {picked !== null && picked >= 0 && picked < quads.length && picked !== highlight ? (
-          <Line points={[...elementLoop(xy, quads[picked], top), elementLoop(xy, quads[picked], top)[0]] as [number, number, number][]} color="#eef0e9" lineWidth={2} />
+          <Line points={[...elementLoop(xy, quads[picked], top, heights), elementLoop(xy, quads[picked], top, heights)[0]] as [number, number, number][]} color="#eef0e9" lineWidth={2} />
         ) : null}
         <OrbitControls makeDefault target={[centre[0], centre[1], 0]} enableDamping={false} />
       </Canvas>

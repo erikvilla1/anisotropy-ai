@@ -1,5 +1,5 @@
 {
- "form_version": "0.3",
+ "form_version": "0.4",
  "fea_version": "0.1.0",
  "units": "mm-MPa",
  "row_units": {
@@ -53,14 +53,16 @@
      "key": "test",
      "label": "Test",
      "kind": "list",
-     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled) or in-plane shear (a strip of +45 and -45 plies only, pulled); see Definitions, Tests",
+     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan) or four-point bending (pushed down at two lines); see Definitions, Tests",
      "required": true,
      "default": null,
      "words": [
       "unnotched tension",
       "unnotched compression",
       "open-hole tension",
-      "in-plane shear"
+      "in-plane shear",
+      "three-point bending",
+      "four-point bending"
      ],
      "at_least": null,
      "above": null
@@ -134,13 +136,13 @@
    ]
   },
   {
-   "title": "Geometry (mm): the coupon lies with its length along y, the direction it is pulled or pushed",
+   "title": "Geometry (mm): the coupon lies with its length along y, the direction it is pulled, pushed or spanned",
    "fields": [
     {
      "key": "length",
      "label": "Length (mm)",
      "kind": "number",
-     "help": "the whole coupon from end to end along the pull, tabs included, e.g. 250",
+     "help": "the whole coupon from end to end along the pull, tabs included, e.g. 250; for bending, the span plus the two overhangs",
      "required": true,
      "default": null,
      "words": [],
@@ -162,12 +164,50 @@
      "key": "tab_length",
      "label": "Tab length (mm)",
      "kind": "number",
-     "help": "how much of each end the grip holds, e.g. 56; 0 for no tabs, and then set Grip region to line",
-     "required": true,
+     "help": "how much of each end the grip holds, e.g. 56; 0 for no tabs, and then set Grip region to line. Required for the pulled and pushed tests; leave it blank for bending, which has supports instead of grips",
+     "required": false,
      "default": null,
      "words": [],
      "at_least": 0,
      "above": null
+    }
+   ]
+  },
+  {
+   "title": "Bending (three- and four-point bending only; ignored for the other tests)",
+   "fields": [
+    {
+     "key": "span",
+     "label": "Support span (mm)",
+     "kind": "number",
+     "help": "the distance between the two support lines, e.g. 48; ASTM D7264 takes 32 times the laminate thickness. The coupon lies across the supports with its length along y",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "overhang",
+     "label": "Overhang (mm)",
+     "kind": "number",
+     "help": "how far the coupon reaches past each support, so that Length = span + 2 overhang; 0 for a coupon that ends at its supports",
+     "required": false,
+     "default": 0.0,
+     "words": [],
+     "at_least": 0,
+     "above": null
+    },
+    {
+     "key": "load_span",
+     "label": "Loading span (mm)",
+     "kind": "number",
+     "help": "four-point bending only: the distance between the two loading noses, centred on the span, e.g. half the support span",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
     }
    ]
   },
@@ -630,13 +670,13 @@
    ]
   },
   {
-   "title": "Loading: the bottom grip is held, the top grip moves",
+   "title": "Loading: the bottom grip is held, the top grip moves; in bending, the supports hold and the nose moves",
    "fields": [
     {
      "key": "control",
      "label": "Loading type",
      "kind": "list",
-     "help": "displacement: the top grip moves by the value, in mm; force: a total force, in N, pulls or pushes the top grip",
+     "help": "displacement: the top grip moves by the value, in mm; force: a total force, in N, pulls or pushes the top grip. Bending takes displacement: the loading nose travels by the value",
      "required": true,
      "default": null,
      "words": [
@@ -650,7 +690,7 @@
      "key": "value",
      "label": "Value (mm or N)",
      "kind": "number",
-     "help": "the amount as a positive number, e.g. 1 mm or 10000 N; for compression we push, for the other tests we pull",
+     "help": "the amount as a positive number, e.g. 1 mm or 10000 N; for compression we push, for the other tests we pull; in bending the nose pushes down by this travel",
      "required": true,
      "default": null,
      "words": [],
@@ -709,7 +749,7 @@
    ]
   },
   {
-   "title": "Grips",
+   "title": "Grips (ignored for bending, which rests on supports)",
    "fields": [
     {
      "key": "grips",
@@ -810,7 +850,7 @@
   "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one.",
   "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give its interaction term f12*; or pick one criterion, or none.",
   "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
-  "Open hole: the hole rows are read only for open-hole tension. Loading: give the amount; for compression we apply it as a push.",
+  "Open hole: the hole rows are read only for open-hole tension. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it.",
   "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway to the tab. You do not enter these points: we place them from the geometry.",
   "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
   "Send the file back as it is. If something is missing or inconsistent, we send it back with every problem named."
@@ -865,9 +905,19 @@
      "example": "ASTM D3518. Every ply +45 or -45, as many of each."
     },
     {
-     "term": "Bending",
-     "meaning": "Three- and four-point bending are not on this form yet.",
-     "example": ""
+     "term": "Three-point bending",
+     "meaning": "A strip resting on two support lines, pushed down at midspan by a loading nose that moves by the value you give. It gives the flexural stiffness and strength; the outer plies carry most of the stress, the bottom ones in tension.",
+     "example": "ASTM D7264 procedure A: 13 mm wide, span 32 times the thickness."
+    },
+    {
+     "term": "Four-point bending",
+     "meaning": "A strip on two support lines, pushed down by two loading noses centred on the span. Between the noses the moment is constant, so the failure is not under a nose.",
+     "example": "ASTM D7264 procedure B: the loading span is half the support span."
+    },
+    {
+     "term": "Support span, overhang, loading span",
+     "meaning": "The span is the distance between the support lines; the overhang is what reaches past each support (Length = span + 2 overhang); the loading span is the distance between the two noses of four-point bending.",
+     "example": "Span 48, overhang 6: a 60 mm coupon."
     }
    ]
   },
@@ -1056,7 +1106,9 @@
   "unnotched tension": "unnotched_tension",
   "unnotched compression": "compression",
   "open-hole tension": "open_hole_tension",
-  "in-plane shear": "shear_pm45"
+  "in-plane shear": "shear_pm45",
+  "three-point bending": "three_point_bending",
+  "four-point bending": "four_point_bending"
  },
  "criteria": [
   "all",

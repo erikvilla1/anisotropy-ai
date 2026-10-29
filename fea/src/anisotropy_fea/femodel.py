@@ -3,11 +3,16 @@
 Everything a deck needs is decided here once, in SI: the material definition, the section with its plies,
 the orientation angles, reference points and couplings for coupled grips, every boundary condition, every
 load, the probe sets, and the header lines that say where the numbers came from. The writers only format it.
+
+A bending coupon (ADR-0053) rests on two support lines where w is held, is pushed by the loading nose line(s) with a
+prescribed w, and is pinned in its plane at the centre node of each support line (both in-plane directions at the left
+support, the across direction at the right), which removes the in-plane rigid motions without restraining the coupon's
+Poisson contraction or its length change.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -83,13 +88,32 @@ class FEModel:
     heading: tuple[str, ...]
     instance: str  # from the spec's [names], or DEFAULT_NAMES
     part: str
+    pins: dict[str, int] = field(default_factory=dict)  # single-node sets that pin a bending coupon in its plane: set name -> mesh node index
 
     @property
     def node_sets(self) -> dict[str, np.ndarray]:
         sets = dict(self.mesh.node_sets)
+        for name, index in self.pins.items():
+            sets[name] = np.array([index])
         for name, index in self.probe_nodes.items():
             sets[f"Probe-{name}"] = np.array([index])
         return sets
+
+    @property
+    def bending(self) -> bool:
+        return self.spec.kind in BENDING_KINDS
+
+    @property
+    def support_sets(self) -> tuple[str, ...]:
+        """The node sets whose reaction a deck prints and a record compares: the two grips of an in-plane coupon (reference points when
+        coupled), the supports and the loading nose(s) of a bending coupon."""
+        if self.bending:
+            return tuple(name for name in node_lines(self.spec))
+        return ("RF-Top", "RF-Bottom") if self.couplings else ("Grip-Top", "Grip-Bottom")
+
+    @property
+    def nose_sets(self) -> tuple[str, ...]:
+        return tuple(name for name in node_lines(self.spec) if name.startswith("Nose")) if self.bending else ()
 
     @property
     def element_sets(self) -> dict[str, np.ndarray]:
@@ -100,12 +124,14 @@ class FEModel:
 
 
 def mesh_for_spec(spec: CouponSpec) -> Mesh2D:
-    """The mesh the spec asks for: a structured rectangle, or Gmsh's O-grid for the open-hole coupon. Bending geometries are a later chunk."""
+    """The mesh the spec asks for: a structured rectangle, or Gmsh's O-grid for the open-hole coupon. A bending coupon is a structured
+    rectangle with a node row on each support and nose line (`spec.node_lines`)."""
     if not spec.si:
         raise SpecError("mesh_for_spec needs the spec in SI (load_spec)")
-    if spec.kind in BENDING_KINDS:
-        raise SpecError(f"{spec.kind} models are not built yet (planned: the bending chunk, CalculiX only)")
     g = spec.geometry
+    if spec.kind in BENDING_KINDS:
+        nx, ny = mesh_counts(spec)
+        return structured_rectangle(g.width, g.length, nx, ny, spec.mesh.element_order, node_rows=node_lines(spec), ys=row_coordinates(spec))
     bands = {}
     node_bands = {}
     if g.tab_length:
@@ -143,7 +169,14 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
     couplings: tuple[CouplingDefinition, ...] = ()
     boundaries: list[BoundaryDefinition] = []
     loads: list[LoadDefinition] = []
-    if spec.grips.kind == "coupling":
+    pins: dict[str, int] = {}
+    if spec.kind in BENDING_KINDS:
+        lines = node_lines(spec)
+        pins = {"Pin-Left": mesh.nearest_node((g.width / 2, lines["Support-Left"])), "Pin-Right": mesh.nearest_node((g.width / 2, lines["Support-Right"]))}
+        boundaries += [BoundaryDefinition("Support-Left", 3, 3), BoundaryDefinition("Support-Right", 3, 3),
+                       BoundaryDefinition("Pin-Left", 1, 2), BoundaryDefinition("Pin-Right", 1, 1)]
+        boundaries += [BoundaryDefinition(name, 3, 3, loading.value) for name in lines if name.startswith("Nose")]
+    elif spec.grips.kind == "coupling":
         reference_points = (ReferencePoint("RF-Bottom", 1, (g.width / 2, 0.0)), ReferencePoint("RF-Top", 2, (g.width / 2, g.length)))
         couplings = (CouplingDefinition("Grip-Bottom", "RF-Bottom", "Grip-Bottom"), CouplingDefinition("Grip-Top", "RF-Top", "Grip-Top"))
         boundaries.append(BoundaryDefinition("RF-Bottom", 1, 6))
@@ -174,13 +207,17 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
         f"out-of-plane constants: G13 {material.G13:g}, G23 {material.G23:g}, E3 {material.E3:g}, nu13 {material.nu13:g}, nu23 {material.nu23:g} (SI; "
         + ("transverse isotropy stated in the spec" if spec.material.transverse.transverse_isotropy else "given in the spec") + ")"
         + ("; nu13 = nu23 = 0 written for plane stress, as Abaqus LAMINA and our kernel assume (plane_stress = true in the spec)" if material.plane_stress else ""),
-        f"grips {spec.grips.kind} on the {'end node rows' if spec.grips.region == 'line' else 'whole tab regions'}; "
-        f"loading {loading.control} {loading.value:g} " + ("m" if loading.control == "displacement" else "N"),
+        (f"supports at y = {g.overhang:g} and {g.length - g.overhang:g} m (w held along the row; the centre node of each row pins the in-plane motion), "
+         f"loading nose{'s' if spec.kind == 'four_point_bending' else ''} at y = "
+         + ", ".join(f"{y:g}" for name, y in node_lines(spec).items() if name.startswith("Nose")) + f" m moved {loading.value:g} m along z"
+         if spec.kind in BENDING_KINDS else
+         f"grips {spec.grips.kind} on the {'end node rows' if spec.grips.region == 'line' else 'whole tab regions'}; "
+         f"loading {loading.control} {loading.value:g} " + ("m" if loading.control == "displacement" else "N")),
         f"units of this deck: {spec.units}",
     )
     return FEModel(spec=spec, mesh=mesh, material=material, section=section, orientation_angles=orientation_angles,
                    reference_points=reference_points, couplings=couplings, boundaries=tuple(boundaries), loads=tuple(loads),
-                   probe_nodes=probe_nodes, probe_elements=probe_elements, heading=heading, instance=names["instance"], part=names["part"])
+                   probe_nodes=probe_nodes, probe_elements=probe_elements, heading=heading, instance=names["instance"], part=names["part"], pins=pins)
 
 
 def consistent_edge_loads(mesh: Mesh2D, node_set: str, dof: int, total: float, instance: str) -> list[LoadDefinition]:

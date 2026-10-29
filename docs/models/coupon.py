@@ -72,13 +72,13 @@ from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric
 from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
-from anisotropy_fea.membrane import solve_membrane  # noqa: E402
+from anisotropy_fea.kernel import solve_deck  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import to_si  # noqa: E402
 from anisotropy_fea.recovery import deck_f12_star, strength_ratios  # noqa: E402
 from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place, gauge_element, gripped_groups, laminate_check,  # noqa: E402
                                    model_facts, solve_record, summarize)
-from anisotropy_fea.spec import TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
+from anisotropy_fea.spec import BENDING_KINDS, TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
 from anisotropy_fea.units import from_si  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
@@ -364,13 +364,22 @@ def abaqus_chapter(src: Sources, spec, deck, solution, units: str, committed: Pa
 def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[str, dict]:
     labels = documents.UNIT_LABEL[units]
     documents.plot_deck_module.plot_solution(deck, solution, units, figures / "solution.png", title=f"Our engine's solution, units {units}")
-    out = [r"Our engine solved the model of Section~\ref{sec:model} while this document was built. Figure~\ref{fig:solution} shows the deformed "
-           r"mesh, the three membrane strains, the axial section force and the maximum-stress failure index of every element.",
-           documents.figure("figures/solution.png", r"Our engine's solution: the mesh with its deformed outline and the reactions at the "
-                            r"reference points, the strains along the coupon ($\varepsilon_y$), across it ($\varepsilon_x$) and in shear "
-                            r"($\gamma_{xy}$), the axial section force $N_y$, and the maximum-stress failure index $1/R$ with the first ply to fail "
-                            r"by maximum stress marked x. The field panels show the free length, where the strain is: the gripped tabs move rigidly and carry none. A "
-                            r"signed field is drawn red above zero and blue below; a field of one sign runs from white at zero.", "fig:solution",
+    bending = spec.kind in BENDING_KINDS
+    out = [(r"Our engine solved the model of Section~\ref{sec:model} while this document was built. Figure~\ref{fig:solution} shows the mesh "
+            r"with its reactions, the deflection, the bending moment and the curvature along the coupon, the transverse shear force and the "
+            r"maximum-stress failure index of every element." if bending else
+            r"Our engine solved the model of Section~\ref{sec:model} while this document was built. Figure~\ref{fig:solution} shows the deformed "
+            r"mesh, the three membrane strains, the axial section force and the maximum-stress failure index of every element."),
+           documents.figure("figures/solution.png", (r"Our engine's solution: the mesh with the reactions at the supports and the nose, the "
+                                                     r"deflection $w$, the bending moment $M_y$ and the curvature $\kappa_y$ along the coupon, the "
+                                                     r"transverse shear force $Q_y$, and the maximum-stress failure index $1/R$ with the first ply to fail "
+                                                     r"by maximum stress marked x. A signed field is drawn red above zero and blue below; a field of one "
+                                                     r"sign runs from white at zero." if bending else
+                                                     r"Our engine's solution: the mesh with its deformed outline and the reactions at the "
+                                                     r"reference points, the strains along the coupon ($\varepsilon_y$), across it ($\varepsilon_x$) and in shear "
+                                                     r"($\gamma_{xy}$), the axial section force $N_y$, and the maximum-stress failure index $1/R$ with the first ply to fail "
+                                                     r"by maximum stress marked x. The field panels show the free length, where the strain is: the gripped tabs move rigidly and carry none. A "
+                                                     r"signed field is drawn red above zero and blue below; a field of one sign runs from white at zero."), "fig:solution",
                             r"\linewidth", r"0.55\textheight")]
     summary: dict = {}
     try:
@@ -506,7 +515,9 @@ def reading_chapter(src: Sources, card: dict[str, str], c) -> str:
             r"\begin{itemize}",
             r"\item " + escape(f"Test data: {card['Test data']}. Until a real coupon is tested, the results are verified against another solver, not validated."),
             r"\item " + escape(f"Standard: {card['Standard']}. Size from: {card['Size from']}."),
-            r"\item The kernel is a membrane model: no bending, no buckling, no through-thickness stress (Section~\ref{sec:theory}).",
+            (r"\item The kernel is a flat shell: bending with first-order transverse shear, no buckling, no through-thickness stress "
+             r"(Section~\ref{sec:theory})." if card.get("Test") in {TEST_CODES[k][1] for k in BENDING_KINDS} else
+             r"\item The kernel is a membrane model: no bending, no buckling, no through-thickness stress (Section~\ref{sec:theory})."),
             r"\end{itemize}"]
     if c is not None:
         out += [r"From the team's side:", team.open_section(c)]
@@ -658,7 +669,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         raise SystemExit(f"{documents.rel(committed)} is not what the generator writes from {src.spec.name} today; run fea/tools/regenerate_decks.py first")
     deck_file = committed if committed.is_file() else src.latex / f"{src.spec.stem}-abaqus.inp"
     deck = to_si(parse_deck(text, source_path=deck_file.name), units)
-    solution = solve_membrane(deck)
+    solution = solve_deck(deck)
     record = load_record(src.record)
     rows, problems = comparison_rows(record)
     summaries = summarize(rows)

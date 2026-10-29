@@ -6,7 +6,10 @@
   "stress": "MPa",
   "force_per_length": "N/mm",
   "modulus": "GPa",
-  "stiffness": "N/mm"
+  "stiffness": "N/mm",
+  "per_length": "1/mm",
+  "moment": "N·mm/mm",
+  "rotation": "rad"
  },
  "coupon": {
   "designation": "IM7-UNT-L1",

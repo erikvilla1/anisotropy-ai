@@ -74,6 +74,8 @@ def test_conventions_file_is_complete_and_what_the_mapper_implements():
     assert conventions["layer_order"] == "first-line-bottom" and conventions["shear_strain"] == "tensor"
     assert conventions["points_per_layer_thickness"] == 2 and conventions["in_plane_points"] == 4
     assert conventions["calculix_version"].startswith("2.")
+    assert conventions["pressure_label"] == "P" and conventions["pressure_direction"].startswith("along the element normal")
+    assert "under-report" in conventions["shell_set_totals"]
 
 
 def test_layer_values_groups_points_by_z():
@@ -127,6 +129,59 @@ def test_calculix_runs_the_small_coupon_in_equilibrium_and_the_conventions_hold(
     field = element_ply_states(solution)
     assert mean[1] == pytest.approx(solution.strain[e][1], rel=0.05) and mean[0] == pytest.approx(solution.strain[e][0], rel=0.2)
     assert field.stress_xy[e].shape == (len(plies), 3)
+
+
+PRESSURE_PLATE = """*HEADING
+Pressure sign detection: one S8R plate 20 by 10 mm, 1 mm thick, clamped along x = 0, *DLOAD P = 0.01 on its face
+*NODE, NSET=Nall
+1, 0., 0., 0.
+2, 20., 0., 0.
+3, 20., 10., 0.
+4, 0., 10., 0.
+5, 10., 0., 0.
+6, 20., 5., 0.
+7, 10., 10., 0.
+8, 0., 5., 0.
+*ELEMENT, TYPE=S8R, ELSET=All
+1, 1, 2, 3, 4, 5, 6, 7, 8
+*NSET, NSET=Root
+1, 4, 8
+*NSET, NSET=Tip
+2, 3, 6
+*MATERIAL, NAME=Alu
+*ELASTIC
+70000., 0.3
+*SHELL SECTION, ELSET=All, MATERIAL=Alu
+1.
+*BOUNDARY
+Root, 1, 6
+*STEP
+*STATIC
+*DLOAD
+All, P, 0.01
+*NODE PRINT, NSET=Tip
+U
+*NODE PRINT, NSET=Root, TOTALS=YES
+RF
+*END STEP
+"""
+
+
+@needs_ccx
+def test_calculix_pushes_a_positive_shell_pressure_along_the_normal(tmp_path):
+    """The detection run of 2026-10-28, repeated: a positive P on an S8R plate with counterclockwise nodes deflects it toward +z, the opposite
+    of the Abaqus P label the kernel follows (fea/checks/calculix-conventions.toml); the clamped set's printed total under-reports the load."""
+    deck = tmp_path / "pressure.inp"
+    deck.write_text(PRESSURE_PLATE, encoding="utf-8")
+    result = run_calculix(deck, workdir=tmp_path)
+    assert result.errors == () and result.returncode == 0
+    dat = parse_dat(result.dat_text)
+    tip = dat.displacements("Tip")
+    assert tip.row(2)[2] > 0 and tip.row(3)[2] > 0 and tip.row(2)[2] == pytest.approx(2.693197e-02, rel=1e-4)
+    total = dat.total_force("Root")
+    assert total[2] == pytest.approx(-1.666667, rel=1e-4)  # 2 N applied; the shell set's total holds 5/6 of it
+    conventions = load_conventions(paths.CONVENTIONS)
+    assert conventions["pressure_direction"].startswith("along the element normal")
 
 
 @needs_ccx

@@ -74,7 +74,7 @@ def test_the_blank_form_has_its_sheets_rows_lists_and_record(blank):
     assert sheet.protection.sheet and sheet.cell(rows["Length (mm)"], 3).value.startswith("required")
     lists = {str(v.sqref): v.formula1 for v in sheet.data_validations.dataValidation if v.type == "list"}
     assert lists[f"B{rows['Library material']}"] == f"'{LIBRARY}'!$A$2:$A${len(library_records()) + 1}"
-    assert lists[f"B{rows['Test']}"] == '"unnotched tension,unnotched compression,open-hole tension,in-plane shear"'
+    assert lists[f"B{rows['Test']}"] == '"unnotched tension,unnotched compression,open-hole tension,in-plane shear,three-point bending,four-point bending"'
     assert str(sheet.cell(rows["Library material"], 3).value).startswith("=IFERROR(INDEX(")
     assert str(sheet.cell(rows["Library material"], 3).value).endswith(f',"{LIBRARY_HELP}")')  # the instruction until a material is picked
     library = book[LIBRARY]

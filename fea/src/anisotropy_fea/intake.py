@@ -29,15 +29,15 @@ from typing import Any
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
 
 from . import __version__, forms, paths
-from .spec import (ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
+from .spec import (BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
                    to_si)
 from .units import unit_factors
 
-FORM_VERSION = "0.3"
+FORM_VERSION = "0.4"
 INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD = "Coupon", "How to fill it in", "Definitions", "Library materials", "Record"
 UNITS = "mm-MPa"
-TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45")  # the in-plane kinds, as the form lists them
-assert set(TEST_ORDER) == set(IN_PLANE_KINDS)
+TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45", "three_point_bending", "four_point_bending")  # as the form lists them
+assert set(TEST_ORDER) == set(IN_PLANE_KINDS) | set(BENDING_KINDS)
 TESTS = {TEST_CODES[kind][1]: kind for kind in TEST_ORDER}  # the test's name on the form -> the spec's kind
 YES_NO = ("yes", "no")
 CONTROLS = ("displacement", "force")
@@ -85,7 +85,8 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
     )),
     ("The coupon", (
         Field("test", "Test", "list", "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), "
-              "open-hole tension (a strip with a hole at its centre, pulled) or in-plane shear (a strip of +45 and -45 plies only, pulled); "
+              "open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), "
+              "three-point bending (a strip on two supports pushed down at midspan) or four-point bending (pushed down at two lines); "
               "see Definitions, Tests", required=True, words=tuple(TESTS)),
         Field("material_code", "Material code", "text", "a short code for the material in the coupon's name, capital letters and digits: X840PW in "
               "X840PW-UNT-L1; leave blank to reuse the code we already use for this material"),
@@ -98,11 +99,20 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
               default="not built yet"),
         Field("test_data", "Test data", "text", "measured results we can compare with (a test report or a file name), or none", default="none"),
     )),
-    ("Geometry (mm): the coupon lies with its length along y, the direction it is pulled or pushed", (
-        Field("length", "Length (mm)", "number", "the whole coupon from end to end along the pull, tabs included, e.g. 250", required=True, above=0),
+    ("Geometry (mm): the coupon lies with its length along y, the direction it is pulled, pushed or spanned", (
+        Field("length", "Length (mm)", "number", "the whole coupon from end to end along the pull, tabs included, e.g. 250; for bending, the span plus the "
+              "two overhangs", required=True, above=0),
         Field("width", "Width (mm)", "number", "across the coupon, e.g. 25", required=True, above=0),
-        Field("tab_length", "Tab length (mm)", "number", "how much of each end the grip holds, e.g. 56; 0 for no tabs, and then set Grip region to line",
-              required=True, at_least=0),
+        Field("tab_length", "Tab length (mm)", "number", "how much of each end the grip holds, e.g. 56; 0 for no tabs, and then set Grip region to line. "
+              "Required for the pulled and pushed tests; leave it blank for bending, which has supports instead of grips", at_least=0),
+    )),
+    ("Bending (three- and four-point bending only; ignored for the other tests)", (
+        Field("span", "Support span (mm)", "number", "the distance between the two support lines, e.g. 48; ASTM D7264 takes 32 times the laminate "
+              "thickness. The coupon lies across the supports with its length along y", above=0),
+        Field("overhang", "Overhang (mm)", "number", "how far the coupon reaches past each support, so that Length = span + 2 overhang; 0 for a coupon "
+              "that ends at its supports", default=0.0, at_least=0),
+        Field("load_span", "Loading span (mm)", "number", "four-point bending only: the distance between the two loading noses, centred on the span, "
+              "e.g. half the support span", above=0),
     )),
     ("Open hole (open-hole tension only; ignored for the other tests)", (
         Field("hole_diameter", "Hole diameter (mm)", "number", "the diameter of the hole at the centre of the coupon, e.g. 6", above=0),
@@ -154,11 +164,11 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("f12_star", "Tsai-Wu interaction f12*", "number", "the normalised interaction term of the Tsai-Wu criterion, a number between -1 and 1, "
               "neither included; required for Tsai-Wu; leave it blank otherwise, and Tsai-Wu is not reported"),
     )),
-    ("Loading: the bottom grip is held, the top grip moves", (
+    ("Loading: the bottom grip is held, the top grip moves; in bending, the supports hold and the nose moves", (
         Field("control", "Loading type", "list", "displacement: the top grip moves by the value, in mm; force: a total force, in N, pulls or pushes "
-              "the top grip", required=True, words=CONTROLS),
+              "the top grip. Bending takes displacement: the loading nose travels by the value", required=True, words=CONTROLS),
         Field("value", "Value (mm or N)", "number", "the amount as a positive number, e.g. 1 mm or 10000 N; for compression we push, for the other "
-              "tests we pull", required=True, above=0),
+              "tests we pull; in bending the nose pushes down by this travel", required=True, above=0),
     )),
     ("Mesh: an element size, or your Abaqus mesh", (
         Field("element_size", "Element size (mm)", "number", "the size of the small pieces (elements) the coupon is divided into for the calculation, "
@@ -171,7 +181,7 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("mesh_seeds", "Your Abaqus mesh: rows per segment", "text", "how many rows of elements lie in each segment between those lines, from the "
               "bottom, so one more number than there are lines, e.g. 28, 27, 10, 27, 28"),
     )),
-    ("Grips", (
+    ("Grips (ignored for bending, which rests on supports)", (
         Field("grips", "Grip kind", "list", "coupling: the gripped nodes at each end are tied to one reference point, held at the bottom and moved at "
               "the top, as in your Abaqus models; nodal: the gripped nodes themselves are held or moved", default="coupling", words=GRIPS),
         Field("region", "Grip region", "list", "tabs: every node on the tab is held; line: only the row of nodes at each end (use it when Tab length "
@@ -194,6 +204,7 @@ NAME_KEYS = {"name_part": "part", "name_instance": "instance", "name_material": 
 # Which rows of the form a spec rule concerns, when `parse_spec` refuses the rendered spec.
 ROWS_OF_KEY = {
     "geometry.length": "length", "geometry.width": "width", "geometry.tab_length": "tab_length", "geometry.hole_diameter": "hole_diameter",
+    "geometry.span": "span", "geometry.overhang": "overhang", "geometry.load_span": "load_span",
     "mesh.hole": "hole_circumferential", "mesh.element_size": "element_size", "mesh.nx": "mesh_nx", "mesh.y_partitions": "mesh_partitions",
     "mesh.y_seeds": "mesh_seeds", "mesh.ny": "element_size", "mesh.mesher": "test", "layup.angles": "ply_1", "layup.ply_thickness": "ply_thickness",
     "material.library": "library", "material.E1": "own_E1", "material.E2": "own_E2", "material.G12": "own_G12", "material.nu12": "own_nu12",
@@ -219,7 +230,9 @@ HOW_TO = (
     "its interaction term f12*; or pick one criterion, or none.",
     "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, "
     "give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
-    "Open hole: the hole rows are read only for open-hole tension. Loading: give the amount; for compression we apply it as a push.",
+    "Open hole: the hole rows are read only for open-hole tension. Bending: the span, overhang and loading span rows are read only for the two "
+    "bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending "
+    "the nose pushes down by it.",
     "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway "
     "to the tab. You do not enter these points: we place them from the geometry.",
     "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
@@ -246,7 +259,14 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
          "ASTM D5766: 36 mm wide with a 6 mm hole."),
         ("In-plane shear", "A strip made of +45 and -45 plies only, pulled. The plies are loaded in shear, which gives the shear stiffness and "
          "strength.", "ASTM D3518. Every ply +45 or -45, as many of each."),
-        ("Bending", "Three- and four-point bending are not on this form yet.", ""),
+        ("Three-point bending", "A strip resting on two support lines, pushed down at midspan by a loading nose that moves by the value you give. It "
+         "gives the flexural stiffness and strength; the outer plies carry most of the stress, the bottom ones in tension.",
+         "ASTM D7264 procedure A: 13 mm wide, span 32 times the thickness."),
+        ("Four-point bending", "A strip on two support lines, pushed down by two loading noses centred on the span. Between the noses the moment "
+         "is constant, so the failure is not under a nose.", "ASTM D7264 procedure B: the loading span is half the support span."),
+        ("Support span, overhang, loading span", "The span is the distance between the support lines; the overhang is what reaches past each "
+         "support (Length = span + 2 overhang); the loading span is the distance between the two noses of four-point bending.",
+         "Span 48, overhang 6: a 60 mm coupon."),
     )),
     ("Layup and plies", (
         ("Ply", "One layer of the laminate: fibres in resin, all at one angle.", ""),
@@ -637,8 +657,8 @@ def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
         match = DESIGNATION.match(spec.coupon.designation)
         values.update(material_code=match["material"], layup_code=match["layup"], standard=spec.coupon.standard, size_from=spec.coupon.size_from,
                       team_model=spec.coupon.team_model, test_data=spec.coupon.test_data)
-    values.update(length=back(g.length, L), width=back(g.width, L), tab_length=back(g.tab_length, L) if g.tab_length is not None else 0.0,
-                  hole_diameter=back(g.hole_diameter, L))
+    values.update(length=back(g.length, L), width=back(g.width, L), tab_length=back(g.tab_length, L) if g.tab_length is not None else None,
+                  hole_diameter=back(g.hole_diameter, L), span=back(g.span, L), overhang=back(g.overhang, L), load_span=back(g.load_span, L))
     if m.hole is not None:
         values.update(hole_circumferential=m.hole.circumferential, hole_radial=m.hole.radial_layers, hole_ring=m.hole.ring_ratio, hole_growth=m.hole.growth)
     values.update(angles=[int(a) if float(a).is_integer() else a for a in spec.layup.angles], symmetric="yes" if spec.layup.symmetric else "no",
@@ -731,6 +751,9 @@ class Values:
     names: dict[str, str] | None
     criteria: tuple[str, ...] | None = None  # the criteria asked for by name; None = "all", every one the material allows
     f12_star: float | None = None
+    span: float | None = None  # bending kinds: the distance between the support lines
+    overhang: float | None = None  # bending kinds: what reaches past each support
+    load_span: float | None = None  # four-point bending: the distance between the loading noses
 
     @property
     def test_code(self) -> str:
@@ -819,6 +842,27 @@ def check_form(form: FormInput) -> Values:
     team_model, test_data = text("team_model") or "not built yet", text("test_data") or "none"
 
     length, width, tab_length = number("length"), number("width"), number("tab_length")
+    bending = kind in BENDING_KINDS
+    if tab_length is None and kind and not bending:
+        problems.append("Tab length (mm): required for the pulled and pushed tests (0 for no tabs)")
+    if bending and tab_length:
+        problems.append("Tab length (mm): a bending coupon has supports, not tabs; leave it blank or 0")
+    span, overhang, load_span = number("span"), number("overhang"), number("load_span")
+    if bending:
+        if span is None:
+            problems.append("Support span (mm): required for bending")
+        overhang = 0.0 if overhang is None else overhang
+        if span is not None and length is not None and abs(length - (span + 2 * overhang)) > 1e-9 * length:
+            problems.append(f"Length (mm): must equal the support span plus twice the overhang, {span + 2 * overhang:g}, not {length:g}")
+        if kind == "four_point_bending":
+            if load_span is None:
+                problems.append("Loading span (mm): required for four-point bending")
+            elif span is not None and not load_span < span:
+                problems.append(f"Loading span (mm): must be smaller than the support span {span:g}, not {load_span:g}")
+        elif load_span is not None:
+            problems.append("Loading span (mm): belongs to four-point bending only")
+    elif kind and (span is not None or load_span is not None or overhang):  # the overhang row carries a default of 0 on every form
+        problems.append("Support span, Overhang and Loading span: belong to the bending tests only")
     hole_diameter = number("hole_diameter")
     if kind == "open_hole_tension" and hole_diameter is None:
         problems.append("Hole diameter (mm): required for open-hole tension")
@@ -891,6 +935,8 @@ def check_form(form: FormInput) -> Values:
 
     control = word("control")
     value = number("value")
+    if bending and control == "force":
+        problems.append("Loading type: bending takes displacement (the travel of the loading nose); force control is not built")
 
     element_size = number("element_size")
     mesh_nx = number("mesh_nx", whole=True)
@@ -914,9 +960,10 @@ def check_form(form: FormInput) -> Values:
             problems.append(f"{form.label(key)}: {names[spec_key]!r} must start with a letter and hold only letters, digits, - and _")
     if problems:
         raise IntakeError(f"{form.path.name}: " + "; ".join(problems))
-    return Values(filled_by, day, notes, kind, material_code, layup_code, standard, size_from, team_model, test_data, length, width, tab_length,
+    return Values(filled_by, day, notes, kind, material_code, layup_code, standard, size_from, team_model, test_data, length, width, tab_length or 0.0,
                   hole_diameter, hole, angles, symmetric, ply_thickness, library, own, G13, G23, control, value, element_size if size_given else None,
-                  mesh_nx, partitions, seeds, grips, region, names or None, criteria, f12_star)
+                  mesh_nx, partitions, seeds, grips, region, names or None, criteria, f12_star,
+                  span=span if bending else None, overhang=overhang if bending else None, load_span=load_span if bending else None)
 
 
 # --------------------------------------------------------------------------------------------- the coupon's name
@@ -1018,6 +1065,12 @@ def mesh_data(values: Values) -> tuple[dict, dict[str, str]]:
     size, L, w, tab = values.element_size, values.length, values.width, values.tab_length
     rows = lambda length: max(1, round(length / size))  # noqa: E731
     data["nx"] = rows(w)
+    if values.kind in BENDING_KINDS:  # a node row on each support line and each nose line
+        lines = sorted({y for y in bending_lines_of(values) if 0.0 < y < L})
+        edges = [0.0, *lines, L]
+        data.update(y_partitions=lines, y_seeds=[rows(b - a) for a, b in zip(edges, edges[1:])])
+        comments["mesh.y_seeds"] = f"about {size:g} mm rows, with a node row on each support line and each loading-nose line"
+        return data, comments
     if tab > 0:
         data.update(y_partitions=[tab, L - tab], y_seeds=[rows(tab), rows(L - 2 * tab), rows(tab)])
         comments["mesh.y_seeds"] = f"about {size:g} mm rows, with a node row on each tab line"
@@ -1027,10 +1080,25 @@ def mesh_data(values: Values) -> tuple[dict, dict[str, str]]:
     return data, comments
 
 
+def bending_lines_of(values: Values) -> list[float]:
+    """The support lines and the loading-nose line(s) of a bending coupon, as y from the bottom end (what spec.node_lines will compute)."""
+    L = values.length
+    lines = [values.overhang, L - values.overhang]
+    if values.kind == "three_point_bending":
+        lines.append(L / 2)
+    else:
+        lines += [L / 2 - values.load_span / 2, L / 2 + values.load_span / 2]
+    return lines
+
+
 def probes_data(values: Values) -> dict:
-    """Where the results are read: the gauge centre, a point near the grip, and beside a hole when there is one."""
+    """Where the results are read: the gauge centre, a point near the grip, and beside a hole when there is one; on a bending coupon the
+    centre element under the nose and a quarter-span node and element."""
     L, w, tab = values.length, values.width, values.tab_length
     x, y = w / 2, L / 2
+    if values.kind in BENDING_KINDS:
+        quarter = (values.overhang + y) / 2
+        return {"nodes": {"quarter": [x, quarter]}, "elements": {"centre": [x, y], "quarter": [x, quarter]}}
     if values.kind == "open_hole_tension":
         r = values.hole_diameter / 2
         far_y = (tab + y) / 2
@@ -1043,6 +1111,8 @@ def probes_data(values: Values) -> dict:
 def gauge_probes(kind: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The node and element probes a CalculiX record keeps: those in the gauge. Beside a tab line or a hole the bilinear kernel element
     and S8R differ in the small components, so those probes are left out of the record, as the coupons' records were made (ADR-0049)."""
+    if kind in BENDING_KINDS:  # the element beside the nose line differs on its secondary components (the record reading says how much)
+        return (("quarter",), ("quarter",))
     return (("gauge",), ("far",)) if kind == "open_hole_tension" else (("centre",), ("centre",))
 
 
@@ -1073,16 +1143,26 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     material, material_comments, material_name, strengths = material_data(values)
     comments.update(material_comments)
     kind = values.kind
+    bending = kind in BENDING_KINDS
     test_name = TEST_CODES[kind][1]
-    sign = -1.0 if kind == "compression" else 1.0
+    sign = -1.0 if kind == "compression" or bending else 1.0  # a push, and the nose moving down onto the coupon, are negative
     layup = "[" + "/".join(f"{a:g}" for a in values.angles) + "]" + ("s" if values.symmetric else "")
-    grip_words = (f"{'coupled' if grips_kind == 'coupling' else 'nodal'} grips on {values.tab_length:g} mm tabs" if values.region == "tabs"
-                  else f"{'coupled' if grips_kind == 'coupling' else 'nodal'} grips on the end lines")
-    load_words = (f"{values.value:g} mm {'push' if kind == 'compression' else 'pull'}" if values.control == "displacement"
-                  else f"{values.value:g} N {'compression' if kind == 'compression' else 'tension'}")
+    if bending:
+        grip_words = f"{values.span:g} mm span" + (f", {values.load_span:g} mm loading span" if kind == "four_point_bending" else "")
+        load_words = f"nose{'s' if kind == 'four_point_bending' else ''} pushed down {values.value:g} mm"
+    else:
+        grip_words = (f"{'coupled' if grips_kind == 'coupling' else 'nodal'} grips on {values.tab_length:g} mm tabs" if values.region == "tabs"
+                      else f"{'coupled' if grips_kind == 'coupling' else 'nodal'} grips on the end lines")
+        load_words = (f"{values.value:g} mm {'push' if kind == 'compression' else 'pull'}" if values.control == "displacement"
+                      else f"{values.value:g} N {'compression' if kind == 'compression' else 'tension'}")
     hole_words = f", {values.hole_diameter:g} mm hole in {values.width:g} mm" if kind == "open_hole_tension" else ""
     title = f"{designation.name}, {test_name}: {material_name} {layup}{hole_words}, {grip_words}, {load_words}"
-    geometry: dict = {"length": values.length, "width": values.width, "tab_length": values.tab_length}
+    if bending:
+        geometry: dict = {"length": values.length, "width": values.width, "span": values.span, "overhang": values.overhang}
+        if kind == "four_point_bending":
+            geometry["load_span"] = values.load_span
+    else:
+        geometry = {"length": values.length, "width": values.width, "tab_length": values.tab_length}
     if kind == "open_hole_tension":
         geometry["hole_diameter"] = values.hole_diameter
     data: dict = {
@@ -1093,7 +1173,7 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
         "layup": {"angles": [int(a) if float(a).is_integer() else a for a in values.angles], "symmetric": values.symmetric,
                   "ply_thickness": values.ply_thickness if values.ply_thickness is not None else "library"},
         "material": material,
-        "grips": {"kind": grips_kind, "region": values.region},
+        **({} if bending else {"grips": {"kind": grips_kind, "region": values.region}}),
         "loading": {"control": values.control, "value": sign * values.value},
         "probes": probes_data(values),
     }
@@ -1113,9 +1193,13 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
                       "calculix": {"node_print": True, "el_print": True, "frd": True, "el_print_global": True}}
     comments["layup.angles"] = "bottom ply first; the lower half when symmetric"
     comments["layup.ply_thickness"] = "from the library record" if values.ply_thickness is None else "as given on the form"
-    comments["grips.kind"] = ("a reference point at each end drives the whole tab, as in the team's decks" if grips_kind == "coupling"
-                              else "the grip nodes held directly: the CalculiX twin, which reports no reaction at a coupled reference node")
-    comments["loading.value"] = "a push: negative along the coupon" if kind == "compression" else "along the coupon"
+    if not bending:
+        comments["grips.kind"] = ("a reference point at each end drives the whole tab, as in the team's decks" if grips_kind == "coupling"
+                                  else "the grip nodes held directly: the CalculiX twin, which reports no reaction at a coupled reference node")
+    comments["loading.value"] = ("the nose moves down onto the coupon: negative along z" if bending
+                                 else "a push: negative along the coupon" if kind == "compression" else "along the coupon")
+    if bending:
+        comments["geometry.span"] = "the distance between the support lines, as given on the form; w is held along each line"
     comments["output.fpf_criteria"] = (("every criterion the material allows" if values.criteria is None else "as chosen on the form") if criteria
                                        else ("no strengths given, so no failure criterion" if not strengths else "none chosen on the form"))
     header = (f"{designation.name}, {test_name}: built from the coupon input form {form_name}, filled in by {values.filled_by} on {values.day}.",
@@ -1249,6 +1333,8 @@ def size_words(values: Values) -> str:
     size = f"{values.length:g} mm long, {values.width:g} mm wide"
     if values.tab_length:
         size += f", {values.tab_length:g} mm tabs at each end"
+    if values.kind in BENDING_KINDS:
+        size += f", {values.span:g} mm span" + (f", {values.load_span:g} mm loading span" if values.kind == "four_point_bending" else "")
     if values.kind == "open_hole_tension":
         size += f", central hole of {values.hole_diameter:g} mm"
     return size
@@ -1282,7 +1368,8 @@ def case_page(values: Values, designation: Designation, form_name: str, day: str
         (f"`team/{day}/`", "the coupon input form as received", "the team"),
         (f"`ours/{name}.toml`", f"the spec of the team's build; its deck `ours/decks/{name}-abaqus.inp` is the one to open in Abaqus/CAE",
          "`fea/tools/coupon_from_form.py`"),
-        (f"`ours/{name}-nodal.toml`", "the CalculiX twin: the same grips as direct constraints on the tab nodes", "`fea/tools/coupon_from_form.py`"),
+        (f"`ours/{name}-nodal.toml`", "the CalculiX twin: the same grips as direct constraints on the tab nodes" if values.kind not in BENDING_KINDS
+         else "the CalculiX twin: the same model (a bending coupon has no couplings to replace)", "`fea/tools/coupon_from_form.py`"),
         ("`ours/decks/`", "the decks written from the two specs; never edited by hand", "`fea/tools/regenerate_decks.py`"),
         ("`ours/verification/`", "the CalculiX record and its reading; the team comparison once the team has built the coupon", "us"),
         ("`ours/runs/`", "`attempt-NN_<date>/run/`, NN being the row of the attempt log", "`fea/tools/new_attempt.py`, then our tools"),
