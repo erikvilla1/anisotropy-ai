@@ -871,6 +871,9 @@ def check_form(form: FormInput) -> Values:
         problems.append("Tab length (mm): required for the pulled and pushed tests (0 for no tabs)")
     if bending and tab_length:
         problems.append("Tab length (mm): a bending coupon has supports, not tabs; leave it blank or 0")
+    if not bending and tab_length and length is not None and length > 0 and 2 * tab_length >= length:  # before the spec: its mesh rule would name the partition rows
+        problems.append(f"Length (mm) and Tab length (mm): the two tabs, {2 * tab_length:g} mm, must be shorter than the length, {length:g} mm, "
+                        "so that a gauge section is left between them (is the length the long side?)")
     span, overhang, load_span = number("span"), number("overhang"), number("load_span")
     if bending:
         if span is None:

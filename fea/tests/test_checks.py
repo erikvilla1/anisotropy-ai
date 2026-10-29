@@ -109,6 +109,14 @@ def test_blank_choices_keep_their_own_words(tmp_path):
     assert items["load"].rows == ("Loading type",) and items["load"].message == "Loading type: required; one of displacement, force"
 
 
+def test_a_short_length_is_refused_by_the_geometry_rows(tmp_path):
+    # the founder's third try (2026-10-29): length and width swapped; the spec's mesh rule had named the Abaqus partition rows instead
+    items = by_id(checklist(tmp_path, PUBLIC_FILL, length=25, width=250)[0])
+    assert items["geometry"].state == "fail" and items["geometry"].rows == ("Length (mm)",)
+    assert items["geometry"].message.startswith("Length (mm) and Tab length (mm): the two tabs, 112 mm, must be shorter than the length, 25 mm")
+    assert items["mesh"].state == "pending"
+
+
 def test_a_mesh_refusal_lands_under_the_mesh_item(tmp_path):
     # the founder's second try (2026-10-29): an element size and the Abaqus mesh rows both given; the refusal had shown under "Who and which coupon"
     items = by_id(checklist(tmp_path, PUBLIC_FILL, element_size=2.0)[0])  # the public fill states the Abaqus mesh rows; now the size too
