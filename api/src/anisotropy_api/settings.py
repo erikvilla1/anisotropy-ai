@@ -16,6 +16,23 @@ from dotenv import find_dotenv, load_dotenv
 
 RECORDING_VARIABLE = "ANISOTROPY_RUN_RECORDS"
 DATABASE_VARIABLE = "DATABASE_URL"
+ASSISTANT_PROVIDER_VARIABLE = "ANISOTROPY_ASSISTANT_PROVIDER"
+ASSISTANT_MODEL_VARIABLE = "ANISOTROPY_ASSISTANT_MODEL"
+CREDENTIAL_VARIABLES = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")  # what the Anthropic SDK reads; one of them must be present
+PROVIDERS = ("anthropic",)
+
+
+@dataclass(frozen=True)
+class AssistantSettings:
+    """The assistant's model, as ADR-0027 requires it: off unless a deployment names a provider and a model (ADR-0052). With it off,
+    only the template writes, and a solve makes no outbound request."""
+
+    provider: str | None
+    model: str | None
+
+    @property
+    def on(self) -> bool:
+        return self.provider is not None
 
 
 @dataclass(frozen=True)
@@ -24,6 +41,7 @@ class Settings:
 
     database_url: str | None
     run_records: bool
+    assistant: AssistantSettings = AssistantSettings(None, None)
 
 
 def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
@@ -43,7 +61,24 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
             f"{DATABASE_VARIABLE} is not set. Run records are on by default and need the database "
             f"(see .env.example and ADR-0025). To run without recording, set {RECORDING_VARIABLE}=off."
         )
-    return Settings(database_url=url, run_records=switch == "on")
+    return Settings(database_url=url, run_records=switch == "on", assistant=assistant_settings(environ))
+
+
+def assistant_settings(environ: Mapping[str, str]) -> AssistantSettings:
+    """The assistant is off unless the provider is named; named, it needs its model and a credential, each refusal naming the variable."""
+    provider = environ.get(ASSISTANT_PROVIDER_VARIABLE, "").strip().lower() or None
+    if provider is None:
+        return AssistantSettings(None, None)
+    if provider not in PROVIDERS:
+        raise RuntimeError(f"{ASSISTANT_PROVIDER_VARIABLE} must be one of {', '.join(PROVIDERS)} or unset, not {provider!r}")
+    model = environ.get(ASSISTANT_MODEL_VARIABLE, "").strip() or None
+    if model is None:
+        raise RuntimeError(f"{ASSISTANT_MODEL_VARIABLE} is not set: name the model the assistant uses (see .env.example and ADR-0052), or unset "
+                           f"{ASSISTANT_PROVIDER_VARIABLE} to run with the template writer only")
+    if not any(environ.get(name, "").strip() for name in CREDENTIAL_VARIABLES):
+        raise RuntimeError(f"{ASSISTANT_PROVIDER_VARIABLE}={provider} needs a credential: set {' or '.join(CREDENTIAL_VARIABLES)}, or unset "
+                           f"{ASSISTANT_PROVIDER_VARIABLE} to run with the template writer only")
+    return AssistantSettings(provider, model)
 
 
 def database_url_for_migrations() -> str:

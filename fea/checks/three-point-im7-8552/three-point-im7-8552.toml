@@ -1,0 +1,53 @@
+# Three-point bending coupon in the proportions of ASTM D7264 (13 mm wide, span 32 times the thickness), IM7/8552 quasi-isotropic
+# [45/0/-45/90]s, resting on two support lines and pushed down 1 mm by the loading nose at midspan. Public material from the engine
+# library (open publisher). Units mm-MPa. The first bending coupon of the flat shell kernel (ADR-0053); CalculiX S8R is the reference.
+title = "IM7-3PB-L1, three-point bending: IM7/8552 [45/0/-45/90]s, 48 mm span, nose pushed down 1 mm"
+kind = "three_point_bending"
+units = "mm-MPa"
+
+[coupon]
+designation = "IM7-3PB-L1"
+standard = "ASTM D7264 proportions"
+size_from = "ASTM D7264: 13 mm wide, span 32 times the laminate thickness (46.8 mm) rounded to 48 mm, 6 mm overhang at each end"
+team_model = "not built yet"
+test_data = "none"
+
+[geometry]
+length = 60.0
+width = 13.0
+span = 48.0
+overhang = 6.0
+
+[mesh]
+mesher = "structured"
+element_order = 1
+nx = 6
+ny = 30             # 2 mm rows: the support lines at 6 and 54 mm and the nose line at 30 mm fall on node rows
+
+[layup]
+angles = [45, 0, -45, 90]
+symmetric = true
+ply_thickness = "library"
+
+[material]
+library = "im7-8552"
+dataset = "ncamp-im7-8552-2019-rtd-measured-v1"
+f12_star = 0.0      # Tsai-Wu interaction term, stated (Abaqus's documented default)
+[material.transverse]
+G13 = 4688.43       # set equal to G12: a stated choice, the dataset gives no G13; the shell's transverse shear stiffness reads it
+G23 = 3000.0        # nominal, no source; read by the shell's transverse shear stiffness and by CalculiX
+plane_stress = true  # nu13 = nu23 = 0 for CalculiX, the plane stress Abaqus LAMINA and our engine assume (ADR-0030, amendment 1)
+transverse_isotropy = true
+
+[loading]
+control = "displacement"
+value = -1.0        # the nose moves 1 mm along -z: down onto the coupon
+
+[probes]
+nodes = { quarter = [6.5, 18.0] }
+elements = { centre = [6.5, 30.0], quarter = [6.5, 18.0] }
+
+[output]
+fpf_criteria = ["max_stress", "tsai_hill", "tsai_wu"]
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = true, el_print_global = true }

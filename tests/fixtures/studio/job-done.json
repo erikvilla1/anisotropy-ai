@@ -1,0 +1,29 @@
+{
+ "job_id": "0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00",
+ "state": "done",
+ "actor": "studio",
+ "started_at": "2026-10-28T20:00:00+00:00",
+ "finished_at": "2026-10-28T20:01:20+00:00",
+ "coupon": "IM7-UNT-L1",
+ "attempt": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28",
+ "message": "57 of 57 recorded values agree with CalculiX; our reaction +0.31 % from CalculiX's",
+ "stage": "the outputs",
+ "stages_done": ["the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the package"],
+ "stages": ["the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the package", "the outputs"],
+ "outputs": {
+  "package": ".local/fea/IM7-UNT-L1/documents/2026-10-28_IM7-UNT-L1",
+  "document": ".local/fea/IM7-UNT-L1/documents/2026-10-28_IM7-UNT-L1/IM7-UNT-L1.pdf",
+  "abaqus_deck": ".local/fea/IM7-UNT-L1/documents/2026-10-28_IM7-UNT-L1/2-our-model/abaqus/IM7-UNT-L1-abaqus.inp",
+  "prepomax_deck": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/calculix/IM7-UNT-L1-nodal-ccx.inp",
+  "prepomax_results": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/calculix/IM7-UNT-L1-nodal-ccx.frd",
+  "kernel_summary": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/kernel/summary.txt",
+  "kernel_vtu": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/kernel/IM7-UNT-L1.vtu",
+  "fields": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/kernel/IM7-UNT-L1-fields.json",
+  "explanation": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/kernel/IM7-UNT-L1-explanation.json",
+  "record": ".local/fea/IM7-UNT-L1/ours/verification/IM7-UNT-L1-calculix.toml",
+  "checklist": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/studio/checklist.json",
+  "preview": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/studio/preview.json"
+ },
+ "run_id": "5e1c2b8a-3d4f-4a6b-8c9d-0e1f2a3b4c5d",
+ "log_tail": ["== the package", "== the outputs", "Done: attempt 02 of IM7-UNT-L1"]
+}

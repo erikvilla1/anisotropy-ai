@@ -473,6 +473,35 @@ class CouponCheckResponse(Contract):
     preview: dict[str, Any] | None
 
 
+class ExplainRequest(Contract):
+    """What to explain of a job (ADR-0052): the setup, from the attempt's checklist, or the result, from the solve's fact sheet."""
+
+    kind: Literal["setup", "result"]
+
+
+class ExplainReceipt(Contract):
+    """What the run record keeps of an explanation: the job, the kind and the digest of the facts the writer saw."""
+
+    job_id: str
+    kind: str
+    facts_sha256: str
+
+
+class ExplainResponse(Contract):
+    """An explanation (ADR-0052): the prose, who wrote it (`template`, or the provider's name with its model), and when the model's draft
+    was withheld by the number guard or the model did not answer, why; the template's prose stands in both cases."""
+
+    run_id: str | None
+    job_id: str
+    kind: str
+    writer: str
+    model: str | None
+    prose: list[str]
+    withheld: bool
+    reason: str | None
+    facts: dict[str, Any]
+
+
 class CouponSummary(Contract):
     """One coupon on this machine, from its spec and its case page (ADR-0051)."""
 

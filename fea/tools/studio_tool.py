@@ -26,7 +26,7 @@ from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, setup_checklist
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.fields import field_data
 from anisotropy_fea.intake import IntakeError, read_input, values_of_spec
-from anisotropy_fea.membrane import solve_membrane
+from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.preview import preview_data
 from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
@@ -97,7 +97,7 @@ def fixtures(values_path: Path, out: Path, root: Path) -> None:
     deck_path = out / f"{spec.coupon.designation if spec.coupon else 'coupon'}-abaqus.inp"
     deck_path.write_text(deck_text, encoding="utf-8", newline="\n")
     deck = read_deck(deck_path, spec.units)
-    solution = solve_membrane(deck)
+    solution = solve_deck(deck)
     coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
               "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
     data = field_data(deck, solution, spec.units, criteria=tuple(spec.output.fpf_criteria), quality=quality, coupon=coupon)

@@ -1,0 +1,70 @@
+title = "IM7-3PB-L1, three-point bending: IM7/8552 [45/0/-45/90]s, 48 mm span, nose pushed down 1 mm: CalculiX 2.22 S8R against the kernel"
+units = "mm-MPa"
+spec = "../three-point-im7-8552.toml"
+deck_kernel = "../decks/three-point-im7-8552-abaqus.inp"
+deck_reference = "../decks/three-point-im7-8552-ccx.inp"
+deck_kernel_sha256 = "47aa852e050eef7e63daf0e9d496e52b665336a6865cc5d8e45fdbfe8671b324"
+deck_reference_sha256 = "dbaf6fa842d4d33b94299a3e2cb8d53dc38c2d113df429c18ccdd72df2abc8df"
+
+[solver]
+name = "calculix"
+version = "2.22"
+element_type = "S8R"
+run_by = "Claude Code for Erik Villa"
+run_date = "2026-10-28"
+machine = "founder Windows 11, PrePoMax v2.6.0 bundle"
+source = "dat"
+conventions = "../../calculix-conventions.toml"
+notes = "First bending comparison (ADR-0053): the kernel's MITC4 flat shell against S8R. Reactions along z, the quarter-span deflection and both faces of every ply at the quarter-span element; the element beside the nose line is left out, as the reading note says (its 0-degree fibre stress differs by 7.8 percent)."
+
+[known_differences]
+kernel = "four-node MITC4 flat shell (ADR-0053), full 2 by 2 integration, first-order shear deformation with the correction factor 5/6, curvature and transverse shear at the element centroid, ply stresses on both faces of every ply from the laminate law"
+reference = "S8R expanded to a C3D20R brick, reduced integration, three-dimensional constitutive law with E3, nu13, nu23, transverse shear, drilling rotation removed; each ply's face values extrapolated linearly from its two integration levels"
+
+[expected]
+tolerance = 0.03
+floor = 0.02
+
+[expected.rf_z]
+"Support-Left" = [21.29235]
+"Support-Right" = [21.29235]
+"Nose" = [-42.5847]
+
+[expected.w]
+"Coupon-1.67" = [-0.6772544]
+
+[expected.ply_stress_local."Coupon-1.51"]
+"1:bottom" = [112.11939853740276, 6.086425941371867, 10.838443532629379]
+"1:top" = [84.08954646259727, 4.564819058628151, 8.128831467370603]
+"2:bottom" = [-67.91580961482515, 10.416240503864167, 0.7712943330050545]
+"2:top" = [-45.27720038517491, 6.944160496135848, 0.5141961169949464]
+"3:bottom" = [38.495774175605895, 3.719336335069094, -5.419221779344266]
+"3:top" = [19.24788769939411, 1.859664039930914, -2.7096120956557357]
+"4:bottom" = [69.9163428647895, -0.09080737564641543, -0.25709814553884214]
+"4:top" = [-1.5417173384474833e-06, -3.189922138084065e-10, 1.1480548364524596e-08]
+"5:bottom" = [1.5417173600162487e-06, 3.1899218927571185e-10, -1.148054839396383e-08]
+"5:top" = [-69.91634286478951, 0.09080737564641547, 0.25709814553884214]
+"6:bottom" = [-19.24788769939413, -1.8596640399309157, 2.7096120956557415]
+"6:top" = [-38.49577417560589, -3.719336335069094, 5.419221779344268]
+"7:bottom" = [45.2772003851749, -6.944160496135849, -0.5141961169949465]
+"7:top" = [67.91580961482516, -10.416240503864167, -0.7712943330050545]
+"8:bottom" = [-84.08954646259733, -4.564819058628144, -8.128831467370624]
+"8:top" = [-112.11939853740284, -6.086425941371874, -10.83844353262939]
+
+[expected.ply_strain_local."Coupon-1.51"]
+"1:bottom" = [0.000679821077938537, 0.0004604744679722773, 0.002311740476166019]
+"1:top" = [0.0005098655695614632, 0.0003453555845277228, 0.0017338048238339815]
+"2:bottom" = [-0.00043929183097696407, 0.0012945133829294767, 0.00016450996045664306]
+"2:top" = [-0.0002928612440230363, 0.0008630089670705252, 0.0001096733095433572]
+"3:bottom" = [0.0002302371878232538, 0.00033991049827989664, -0.0011558702346596325]
+"3:top" = [0.0001151185771767462, 0.0001699552367201033, -0.0005779350153403673]
+"4:bottom" = [0.00043150447033958903, -0.000146430644517374, -5.48366497251391e-05]
+"4:top" = [-4.244637556837933e-12, 6.510448699334594e-12, -2.2733651466432135e-12]
+"5:bottom" = [4.2446375760041e-12, -6.510448742458471e-12, 2.2733651322685876e-12]
+"5:top" = [-0.00043150447033958903, 0.000146430644517374, 5.4836649725139116e-05]
+"6:bottom" = [-0.0001151185771767464, -0.00016995523672010357, 0.0005779350153403683]
+"6:top" = [-0.00023023718782325388, -0.00033991049827989674, 0.001155870234659633]
+"7:bottom" = [0.0002928612440230363, -0.0008630089670705251, -0.00010967330954335723]
+"7:top" = [0.00043929183097696407, -0.0012945133829294765, -0.000164509960456643]
+"8:bottom" = [-0.0005098655695614635, -0.0003453555845277229, -0.0017338048238339822]
+"8:top" = [-0.0006798210779385376, -0.0004604744679722776, -0.002311740476166021]

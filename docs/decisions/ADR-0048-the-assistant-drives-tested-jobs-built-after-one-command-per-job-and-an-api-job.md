@@ -32,7 +32,7 @@ ADR-0027's later items, customer datasets with authentication and then container
 ## As built (2026-10-27)
 
 - Step 1 for coupons: `fea/tools/run_coupon.py` (ADR-0049). Step 2 for coupons: `POST /v1/coupon-jobs` (ADR-0050).
-- Steps 3 and 4: not started.
+- Step 3 for coupons: the assistant's record and its first writer, [ADR-0052](ADR-0052-the-assistant-explains-from-a-fact-sheet-through-one-provider-interface-with-a-number-guard.md) (2026-10-28): it explains a job's setup and result from the fea package's fact sheet and does not yet draft inputs. Step 4: not started.
 
 ## Why (evidence)
 

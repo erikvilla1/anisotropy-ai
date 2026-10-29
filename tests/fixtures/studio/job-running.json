@@ -1,0 +1,19 @@
+{
+ "job_id": "0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00",
+ "state": "running",
+ "actor": "studio",
+ "started_at": "2026-10-28T20:00:00+00:00",
+ "finished_at": null,
+ "coupon": "IM7-UNT-L1",
+ "attempt": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28",
+ "message": null,
+ "stage": "our engine",
+ "stages_done": ["the setup check", "the input", "the decks", "the attempt"],
+ "stages": ["the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the package", "the outputs"],
+ "outputs": {
+  "checklist": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/studio/checklist.json",
+  "preview": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/studio/preview.json"
+ },
+ "run_id": null,
+ "log_tail": ["== the setup check", "== the input", "== the decks", "== the attempt", "== our engine"]
+}

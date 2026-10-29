@@ -17,7 +17,7 @@ import numpy as np
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.calculix import CalculixError, parse_dat, run_calculix
 from anisotropy_fea.femodel import build_model
-from anisotropy_fea.membrane import solve_membrane
+from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.spec import load_spec
 from anisotropy_fea.units import from_si
 from anisotropy_fea.write_abaqus import write_abaqus
@@ -50,24 +50,27 @@ def main() -> None:
     kernel_deck = args.out / f"{stem}-kernel.inp"
     kernel_deck.write_text(write_abaqus(twin), encoding="utf-8", newline="\n")
     deck = read_deck(kernel_deck, units)
-    solution = solve_membrane(deck)
-    for grip in ("Grip-Top", "Grip-Bottom"):
+    solution = solve_deck(deck)
+    components = 3 if twin.bending else 2  # a bending coupon's reactions and deflections are along z (ADR-0053)
+    for grip in twin.support_sets:
         try:
             total = dat.total_force(grip)
         except KeyError:
             continue
         ours = solution.reaction_of(deck.nsets[grip])
-        print(f"{grip}: CalculiX total force [{total[0]:.6g}, {total[1]:.6g}] N; kernel [{from_si(ours[0], 'force', units):.6g}, {from_si(ours[1], 'force', units):.6g}] N")
+        print(f"{grip}: CalculiX total force [{', '.join(f'{v:.6g}' for v in total[:components])}] N; "
+              f"kernel [{', '.join(f'{from_si(v, 'force', units):.6g}' for v in ours[:components])}] N")
     for name, index in twin.probe_nodes.items():
         theirs = dat.displacements(f"Probe-{name}").row(index + 1)
         ours = solution.displacement_of((twin.instance, index + 1))
-        print(f"probe node {name} (node {index + 1}): CalculiX U [{theirs[0]:.6g}, {theirs[1]:.6g}]; kernel [{from_si(ours[0], 'length', units):.6g}, {from_si(ours[1], 'length', units):.6g}]")
+        print(f"probe node {name} (node {index + 1}): CalculiX U [{', '.join(f'{v:.6g}' for v in theirs[:components])}]; "
+              f"kernel [{', '.join(f'{from_si(v, 'length', units):.6g}' for v in ours[:components])}]")
     for name, index in twin.probe_elements.items():
         strains = dat.strains(f"Probe-{name}").values[:, [0, 1, 3]].mean(axis=0)
         ours = solution.strain[index]
         print(f"probe element {name} (element {index + 1}): CalculiX mean strain [{strains[0]:.4g}, {strains[1]:.4g}, gamma {2 * strains[2]:.4g}]; "
               f"kernel centroid [{ours[0]:.4g}, {ours[1]:.4g}, {ours[2]:.4g}]")
-    print("equilibrium (kernel): sum of reactions", np.round(solution.total_reaction, 6), "N")
+    print("equilibrium (kernel): sum of reactions", np.round(solution.total_reaction[:components], 6), "N")
 
 
 if __name__ == "__main__":
