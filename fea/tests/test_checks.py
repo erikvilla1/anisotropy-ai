@@ -99,6 +99,16 @@ def test_blank_and_wrong_rows_block_the_run_under_their_items(tmp_path):
     assert len(checked.problems) == 1 and checked.problems[0].startswith("values.json: ")
 
 
+def test_blank_choices_keep_their_own_words(tmp_path):
+    # the founder's first try of the studio on main (2026-10-29): three blank choices, and Test's message carried the other rows' words
+    checked, _, _ = checklist(tmp_path, PUBLIC_FILL, test=None, symmetric=None, control=None)
+    items = by_id(checked)
+    assert items["identity"].rows == ("Test",) and items["identity"].message == (
+        "Test: required; one of unnotched tension, unnotched compression, open-hole tension, in-plane shear, three-point bending, four-point bending, plate")
+    assert items["laminate"].rows == ("Symmetric",) and items["laminate"].message == "Symmetric: required; one of yes, no"
+    assert items["load"].rows == ("Loading type",) and items["load"].message == "Loading type: required; one of displacement, force"
+
+
 def test_a_spec_rule_lands_on_the_rows_it_names(tmp_path):
     checked, _, _ = checklist(tmp_path, PUBLIC_FILL, tab_length=0.0)  # tabs region with no tabs: refused by the spec, not the form
     items = by_id(checked)
@@ -155,6 +165,9 @@ def test_every_form_row_belongs_to_an_item():
     assert set(ITEM_OF_KEY) == set(FIELDS) and set(ITEM_OF_KEY.values()) <= {item_id for item_id, _ in ITEMS}
     assert split_problems("values.json: Length (mm): required; Library material and Own material: give one of the two") == [
         ("Length (mm)", "Length (mm): required"), ("Library material", "Library material and Own material: give one of the two")]
+    # a row's words list is part of its problem, not the next rows' (found on the first run of the studio on main, 2026-10-29)
+    assert split_problems("values.json: Test: required; one of unnotched tension, plate; Symmetric: required; one of yes, no") == [
+        ("Test", "Test: required; one of unnotched tension, plate"), ("Symmetric", "Symmetric: required; one of yes, no")]
 
 
 # --------------------------------------------------------------------------------------------- mesh quality

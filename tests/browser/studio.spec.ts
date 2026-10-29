@@ -202,6 +202,16 @@ test("a blocked setup names its rows and the solve stays off", async ({ page }) 
   await expect(page.getByTestId("solve-button")).toBeEnabled(); // inputs changed: the check must run again, and it will before a solve
 });
 
+test("a fresh form's choices start blank, not on their first word", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/studio");
+  for (const label of ["Test", "Symmetric", "Loading type"]) await expect(page.getByLabel(label, { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Test", { exact: true }).locator("option:checked")).toHaveText("choose one");
+  await page.getByLabel("Test", { exact: true }).selectOption("unnotched tension");
+  await expect(page.getByLabel("Test", { exact: true })).toHaveValue("unnotched tension");
+});
+
 test("a coupon reopens into the form and the viewer window reads a job by its address", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);

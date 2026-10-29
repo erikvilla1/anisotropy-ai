@@ -133,6 +133,9 @@ def split_problems(message: str) -> list[tuple[str, str]]:
         label = next((lab for lab in ITEM_OF_LABEL if problem.startswith(lab + ":")), "")
         if not label:  # a problem naming two rows, "Library material and Own material: ...": the first row it names
             label = next((lab for lab in ITEM_OF_LABEL if problem.startswith(lab + " ")), "")
+        if not label and ": " not in problem and pairs:  # the rest of the previous row's problem: "Test: required; one of a, b"
+            pairs[-1] = (pairs[-1][0], pairs[-1][1] + "; " + problem)
+            continue
         pairs.append((label, problem))
     return pairs
 

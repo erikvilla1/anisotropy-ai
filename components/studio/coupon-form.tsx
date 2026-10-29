@@ -19,7 +19,7 @@ function Field({ field, value, error, disabled, onChange }: { field: FieldDefini
   } else if (field.kind === "list" && field.words.length) {
     control = (
       <select id={id} value={value} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={describedBy} onChange={(e) => onChange(e.target.value)}>
-        {field.required ? null : <option value="">(blank)</option>}
+        <option value="">{field.required ? "choose one" : "(blank)"}</option>
         {field.words.map((word) => <option key={word} value={word}>{word}</option>)}
       </select>
     );
