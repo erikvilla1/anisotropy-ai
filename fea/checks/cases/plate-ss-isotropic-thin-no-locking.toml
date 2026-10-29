@@ -1,0 +1,19 @@
+title = "The same plate a thousand times thinner than wide (h/a = 1e-3): the MITC4 shell does not lock"
+source = "The Navier series with transverse shear deformation (Whitney 1987, Chapter 10, as fea/tools/plate_closed_forms.py states it) for a simply supported 100 mm square isotropic plate, E = 70000 MPa, nu = 0.3, h = 0.1 mm (h/a = 0.001), under a uniform pressure q = 0.01 MPa toward +z with D = E h^3 / (12 (1 - nu^2)) = 6.41025641 N mm and the shear stiffness 5/6 G h; 199 odd harmonics. The Kirchhoff value of the centre deflection, Whitney (5.7) with (5.16), is 633.7270151 mm (Timoshenko and Woinowsky-Krieger tabulate 0.00406 q a^4 / D = 633.36 mm for nu = 0.3); the shear-deformation value, which is the exact solution of the theory the element discretizes, is 633.7302987 mm. A displacement-based bilinear plate element would lock on this plate and give a deflection orders of magnitude too small; the MITC4 tying keeps the error at the level of the thick plate's (the tool's table)."
+units = "mm-MPa"
+
+[mesh]
+deck = "../decks/plate-ss-16x16-isotropic-thin.inp"
+
+[expected]
+tolerance = 0.005
+[expected.rf_z]
+"Edges" = [-100.0]
+[expected.w]
+"Plate-1.145" = [633.7302987057086]
+[expected.rotation]
+"Plate-1.141" = [0.0, -13.66514895556683]
+[expected.moment]
+"Plate-1.137" = [4.756944158665014, 4.75694415866677, -0.023760987239597194]
+[expected.curvature]
+"Plate-1.137" = [0.5708332990397115, 0.5708332990401035, -0.01059061145536312]

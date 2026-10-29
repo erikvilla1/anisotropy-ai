@@ -16,11 +16,14 @@ export type CheckAnswer = { run_id: string | null; state: "ready" | "blocked"; d
 export type Preview = {
   units: string; labels: Record<string, string>;
   coupon: { designation: string | null; title: string; kind: string; test: string; card: [string, string][]; layup: string };
-  geometry: { length: number; width: number; tab_length: number; hole_diameter: number | null; thickness: number };
+  geometry: { length: number; width: number; tab_length: number; hole_diameter: number | null; thickness: number;
+    span?: number | null; overhang?: number | null; load_span?: number | null };
   mesh: { nodes: number[][]; quads: number[][]; node_sets: Record<string, number[]>; element_sets: Record<string, number[]>; order: number; mesher: string;
     node_count: number; element_count: number };
   held: { set: string; through: string | null; dofs: number[]; directions: string[]; nodes: number }[];
   loaded: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number };
+  loads?: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number }[];
+  regions?: { edges: string[]; areas: string[] } | null;
   plies: { index: number; angle: number; thickness: number; z_bottom: number; z_top: number; material: string }[];
   material: { name: string; source: string; rights: string; E1: number; E2: number; G12: number; nu12: number; G13: number; G23: number;
     strengths: Record<string, number> | null; f12_star: number | null; criteria: string[]; citation_lines: string[]; ply_thickness: number; plies: number };
@@ -28,21 +31,27 @@ export type Preview = {
   quality?: { summary: QualitySummary; per_element: Record<string, number[]> };
 };
 export type QualitySummary = { elements: number; acceptable: boolean; measures: Record<string, { word: string; worst: number; element: number; threshold: number; warns: string; over: number }> };
-export type Extreme = { value: number; element: number; label: string; ply: number; angle: number; xy: number[] };
+/** One value per ply (a membrane solve), or one per face of the ply, bottom then top (a shell solve, ADR-0053); `Fields.mesh.faces` says which. */
+export type Faced<T> = T | T[];
+export type Extreme = { value: number; element: number; label: string; ply: number; angle: number; xy: number[]; face?: string | null };
 export type FirstPlyFailure = { factor: number; index: number; element: number; label: string; ply: number; angle: number; mode: string; place: string;
-  touches_grip: boolean; tied_plies: number[]; xy: number[] };
+  touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null };
 export type Fields = {
-  units: string; labels: Record<string, string>; coupon: Partial<Preview["coupon"]>;
+  units: string; labels: Record<string, string>; coupon: Partial<Preview["coupon"]>; kernel?: string;
   mesh: { nodes: number[][]; quads: number[][]; node_labels: string[]; element_labels: string[]; node_sets: Record<string, number[]>;
-    element_sets: Record<string, number[]>; node_count: number; element_count: number; plies: number; angles: number[] };
-  nodal: { displacement: number[][]; magnitude: number[]; reaction: number[][];
-    averages: { strain: (number | null)[][]; section_force: (number | null)[][]; ply_stress_12: (number | null)[][][]; ply_mises: (number | null)[][];
-      failure_index: Record<string, (number | null)[]> }; averages_note: string };
+    element_sets: Record<string, number[]>; node_count: number; element_count: number; plies: number; angles: number[];
+    faces?: string[] | null; translations?: number };
+  nodal: { displacement: number[][]; magnitude: number[]; reaction: number[][]; rotation?: number[][]; moment_reaction?: number[][];
+    averages: { strain: (number | null)[][]; section_force: (number | null)[][]; ply_stress_12: Faced<(number | null)[]>[][]; ply_mises: Faced<number | null>[][];
+      failure_index: Record<string, (number | null)[]>; curvature?: (number | null)[][]; moment?: (number | null)[][]; shear_force?: (number | null)[][] };
+    averages_note: string };
   element: { strain: number[][]; section_force: number[][]; centroids: number[][];
-    ply: { stress_12: number[][][]; stress_xy: number[][][]; strain_12: number[][][]; mises: number[][] };
-    failure: Record<string, { ratio: (number | null)[][]; index: number[][]; mode: number[][]; worst_ply: number[]; element_index: number[] }>; modes: string[] };
-  summary: { max_displacement: { value: number; node: number; label: string; xy: number[]; components: number[] };
-    reaction: { set: string; value: number; sense: string }; applied: { control: string; value: number; unit: string };
+    curvature?: number[][]; moment?: number[][]; shear_force?: number[][]; shear_strain?: number[][];
+    ply: { stress_12: Faced<number[]>[][]; stress_xy: Faced<number[]>[][]; strain_12: Faced<number[]>[][]; mises: Faced<number>[][] };
+    failure: Record<string, { ratio: Faced<number | null>[][]; index: Faced<number>[][]; mode: Faced<number>[][]; worst_ply: number[]; worst_face?: string[];
+      element_index: number[] }>; modes: string[] };
+  summary: { max_displacement: { value: number; node: number; label: string; xy: number[]; components: number[]; axis?: string };
+    reaction: { set: string; value: number; sense: string; dof?: number }; applied: { control: string; value: number; unit: string; dof?: number; direction?: string; total_force?: number };
     max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number };
   quality?: QualitySummary;
 };
@@ -175,6 +184,25 @@ export async function fetchFields(apiBase: string, jobId: string, signal?: Abort
 
 export async function fetchExplanation(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Explanation> {
   return readExplanation(await call(fileUrl(apiBase, jobId, "explanation"), { method: "GET", signal }, "the explanation"));
+}
+
+export type ExplainAnswer = { run_id: string | null; job_id: string; kind: "setup" | "result"; writer: string; model: string | null; prose: string[];
+  withheld: boolean; reason: string | null; facts: Record<string, unknown> };
+
+export function readExplainAnswer(payload: unknown): ExplainAnswer {
+  if (!isObject(payload) || typeof payload.writer !== "string" || !Array.isArray(payload.prose) || !payload.prose.every((s) => typeof s === "string")
+    || typeof payload.withheld !== "boolean") {
+    throw new StudioError("The explanation answered with an unexpected shape.");
+  }
+  return payload as unknown as ExplainAnswer;
+}
+
+/** The explanation of a job's result or setup through the API (ADR-0052): the template's sentences, or a model's rephrasing kept only
+ * when every number in it is a fact; the answer says who wrote it. */
+export async function explainJob(apiBase: string, jobId: string, kind: "setup" | "result", signal?: AbortSignal): Promise<ExplainAnswer> {
+  const payload = await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/explain`,
+    { method: "POST", headers, body: JSON.stringify({ kind }), signal }, "the explanation");
+  return readExplainAnswer(payload);
 }
 
 /** The downloadable files of a job, in the order the page lists them, with the words of fea/tools/run_coupon.py. */

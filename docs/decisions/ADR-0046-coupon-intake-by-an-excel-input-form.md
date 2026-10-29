@@ -129,3 +129,13 @@ Option 3.
 **Decision.** Option 3. `form_version` is required and must be the current form's; `angles` may stand in for the ply rows; a mesh row may hold a list; an unknown key is refused by name. `intake.read_input` takes either file by its suffix; `convert` and `fea/tools/run_coupon.py` accept both and file the input in `team/<date>/` on every run, a `--replace` included, so each attempt row has its input. `intake.values_of_spec` reads a coupon's spec back into its rows (a spec in other units, of order 2, without plane stress, or asking for a set of criteria the row does not offer is refused by name), so the studio reopens a coupon to change it. The Excel form stays for the team.
 
 **Evidence.** `fea/tests/test_values_input.py`: 28 passed (2026-10-28): the values give the specs the filled form gives; every refusal names its row; the public coupon and four filled variants read back into the values that made them; a values file is filed with its coupon.
+
+## Amendment 4, 2026-10-28 (the bending tests on the form; form version 0.4)
+
+**Context.** The flat shell kernel (ADR-0053) builds three- and four-point bending coupons from the spec, whose bending kinds the form did not offer ("Three- and four-point bending are not on this form yet").
+
+**Options.** (1) A second form for bending: two files to keep in step. (2) The same form with a bending block, read only for the two bending tests, as the open-hole block is read only for open-hole tension (chosen).
+
+**Decision.** Option 2. The Test row offers three-point bending and four-point bending; a block Bending holds Support span (mm), Overhang (mm, default 0) and Loading span (mm, four-point only); for a bending test the tab length is left blank and the grip rows are ignored, since the coupon rests on two support lines; Length must equal the span plus twice the overhang, stated and checked, not derived; the loading type is displacement, the nose's travel, pushed down by the amount given; the mesh is seeded so that a node row falls on each support and nose line; the results are read at the quarter span (a node and an element), the element beside the nose line being left out of the record. The studio's form shows the bending rows for the bending tests and hides the grips and tabs. The sheet Definitions explains the two tests and the spans.
+
+**Evidence.** `fea/tests/test_intake.py` and `test_values_input.py` with the form at 0.4; the public bending coupon `fea/checks/three-point-im7-8552/` and its browser fixtures `tests/fixtures/studio-bending/`, made from a values file of the form's rows.

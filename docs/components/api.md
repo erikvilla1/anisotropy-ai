@@ -20,6 +20,8 @@ All three analysis endpoints require the `X-Anisotropy-Actor` header (which clie
 
 For the coupon studio (ADR-0051, ADR-0050 amendment 1): `POST /v1/coupon-jobs/check` runs `fea/tools/studio_tool.py check` on the values and answers with the setup checklist and the preview without a run (504 when the tool does not answer within two minutes; recorded by the values' digest); `GET /v1/coupon-jobs` lists this process's jobs; `GET /v1/coupon-jobs/{job_id}/files/{key}` serves one file of a job by key, from the repository or the job's folder only (`fields`, `explanation`, `checklist` and `preview` while it runs, every key once done, `package` as the zip); `GET /v1/coupons` and `GET /v1/coupons/{name}/values` list the coupons on the machine and read one back as the values object. The studio is the actor `studio` (migration 0004).
 
+`POST /v1/coupon-jobs/{job_id}/explain` (ADR-0052): the explanation of a job's result or setup, by the template (always) or by the model a deployment names in `ANISOTROPY_ASSISTANT_PROVIDER` and `ANISOTROPY_ASSISTANT_MODEL` with a credential; a model's draft stands only when every number in it is the engine's, else the template's words with the reason. Recorded with the facts' digest, and with `llm_provider` and `llm_model_version` when a model wrote.
+
 ## Dependencies and connections
 
 Uvicorn -> FastAPI -> Pydantic contract -> existing `anisotropy_engine` -> NumPy. Separate `api/pyproject.toml` and `api/uv.lock`; no HTTP dependency added to the engine. pytest and HTTPX2 exercise the app in process.
@@ -36,7 +38,7 @@ The website's `/calculator` now calls this endpoint. CORS allows credential-free
 
 ## Out of scope and limits
 
-Local development only. No authentication and no language model yet (the library loader and the run records exist since ADR-0020 and ADR-0026). A job's status is lost when the process stops (ADR-0050). One material per laminate. No hole geometry, ply stress/failure endpoint, thermal/moisture effects or design approval. A caller's citation is not verified evidence; units are declared, not inferred. Extreme finite inputs can still be poorly conditioned; a finite result alone is not a numerical accuracy guarantee.
+Local development only. No authentication; a language model only behind the assistant's settings, and then only to rephrase (ADR-0052); no language model yet (the library loader and the run records exist since ADR-0020 and ADR-0026). A job's status is lost when the process stops (ADR-0050). One material per laminate. No hole geometry, ply stress/failure endpoint, thermal/moisture effects or design approval. A caller's citation is not verified evidence; units are declared, not inferred. Extreme finite inputs can still be poorly conditioned; a finite result alone is not a numerical accuracy guarantee.
 
 ## Owner
 

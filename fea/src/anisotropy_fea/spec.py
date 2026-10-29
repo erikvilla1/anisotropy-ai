@@ -26,9 +26,13 @@ from anisotropy_engine.library import library_material
 
 from .units import unit_factors
 
-Kind = Literal["unnotched_tension", "open_hole_tension", "compression", "shear_pm45", "three_point_bending", "four_point_bending"]
+Kind = Literal["unnotched_tension", "open_hole_tension", "compression", "shear_pm45", "three_point_bending", "four_point_bending", "plate"]
 BENDING_KINDS = ("three_point_bending", "four_point_bending")
 IN_PLANE_KINDS = ("unnotched_tension", "open_hole_tension", "compression", "shear_pm45")
+PLATE_KINDS = ("plate",)  # a plate states its supports and loads as lists over named regions (ADR-0054)
+EDGE_REGIONS = ("Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right")  # the plate's four edges, as node rows; Hole joins them when there is a hole
+AREA_REGIONS = ("Face",)  # every element; Tab-Bottom and Tab-Top join when there are tabs; a [[regions]] box is an area too
+RESERVED_REGIONS = (*EDGE_REGIONS, "Hole", *AREA_REGIONS, "Tab-Bottom", "Tab-Top", "Gauge", "Grip-Bottom", "Grip-Top")
 LINE_TOLERANCE = 1e-9  # relative to the length: a node row must sit on a tab or support line within this
 
 
@@ -116,6 +120,35 @@ class Grips(Record):
     region: Literal["line", "tabs"]  # line: the end node rows only; tabs: every node within tab_length of each end (the team's decks)
 
 
+class Region(Record):
+    """A named box of a plate (ADR-0054): the nodes inside it form a node set, the elements whose centroid lies inside it an element set."""
+
+    name: str
+    x0: float
+    x1: float
+    y0: float
+    y1: float
+
+
+class Support(Record):
+    """What a plate holds (ADR-0054): the degrees of freedom named, on every node of a region; a nonzero value is a prescribed displacement
+    (dofs 1 to 3, length units) or rotation (dofs 4 to 6, radians) and needs exactly one dof."""
+
+    region: str
+    dofs: list[int]
+    value: float = 0.0
+
+
+class Load(Record):
+    """What a plate carries (ADR-0054): a total force along one dof spread over a region as consistent nodal loads, or a uniform
+    pressure (stress units, positive against the plate's normal as the Abaqus P label) on an area region."""
+
+    region: str
+    dof: int | None = None
+    total: float | None = None
+    pressure: float | None = None
+
+
 class Loading(Record):
     control: Literal["displacement", "force"]
     value: float  # displacement: length at the moving grip (negative = compression); force: total force; bending: nose displacement (dof 3)
@@ -165,6 +198,7 @@ TEST_CODES = {  # per kind: the test code of a coupon designation and the test's
     "shear_pm45": ("IPS", "in-plane shear"),
     "three_point_bending": ("3PB", "three-point bending"),
     "four_point_bending": ("4PB", "four-point bending"),
+    "plate": ("PLT", "plate"),
 }
 DESIGNATION = re.compile(r"^(?P<material>[A-Z][A-Z0-9]*)-(?P<test>[A-Z0-9]+)-(?P<layup>L[1-9][0-9]*)$")
 
@@ -199,9 +233,12 @@ class CouponSpec(Record):
     mesh: MeshControls
     layup: Layup
     material: MaterialSpec
-    loading: Loading
+    loading: Loading | None = None  # the one loading of a coupon kind; a plate lists its loads instead
     output: OutputRequests
-    grips: Grips | None = None  # required for in-plane kinds, absent for bending
+    grips: Grips | None = None  # required for in-plane kinds, absent for bending and for a plate
+    supports: list[Support] = []  # a plate's supports (ADR-0054)
+    loads: list[Load] = []  # a plate's loads
+    regions: list[Region] = []  # a plate's own boxes, beside the built-in regions
     probes: Probes = Probes()
     names: Names | None = None  # the deck's part, instance, material, layup and section-set names; our names when absent
     source_sha256: str = ""
@@ -246,15 +283,51 @@ def validate_spec(spec: CouponSpec) -> None:
         raise SpecError(str(exc)) from None
     g, m, kind = spec.geometry, spec.mesh, spec.kind
     bending = kind in BENDING_KINDS
+    plate = kind in PLATE_KINDS
 
     def need(condition: bool, message: str) -> None:
         if not condition:
             raise SpecError(message)
 
     # geometry keys per kind
-    need((g.hole_diameter is None) == (kind != "open_hole_tension"), "geometry.hole_diameter is required for open_hole_tension and refused for every other kind")
-    need((m.hole is None) == (kind != "open_hole_tension"), "[mesh.hole] is required for open_hole_tension and refused for every other kind")
-    if bending:
+    if plate:
+        need((m.hole is None) == (g.hole_diameter is None), "a plate with geometry.hole_diameter needs [mesh.hole], and [mesh.hole] needs a hole")
+        need((m.mesher == "gmsh") == (g.hole_diameter is not None), "a plate with a hole is meshed by gmsh; without a hole by the structured mesher")
+        need(g.span is None and g.overhang is None and g.load_span is None, "span, overhang and load_span belong to bending kinds only")
+        need(g.tab_length is None or (g.tab_length >= 0 and 2 * g.tab_length < g.length), "geometry.tab_length must be zero or positive and the two tabs shorter than the length")
+        need(spec.grips is None and spec.loading is None, "a plate takes no [grips] or [loading] table: it lists [[supports]] and [[loads]] over its regions")
+        need(len(spec.supports) >= 1, "a plate needs at least one [[supports]] entry")
+        need(len(spec.loads) >= 1 or any(s.value != 0.0 for s in spec.supports), "a plate needs a [[loads]] entry or a support with a nonzero value")
+        names = [r.name for r in spec.regions]
+        need(len(set(names)) == len(names), "regions: every name must be unique")
+        for r in spec.regions:
+            need(bool(ABAQUS_NAME.match(r.name)) and r.name not in RESERVED_REGIONS and not r.name.startswith(("Probe-", "RF-", "Pin-")),
+                 f"regions: {r.name!r} is not a name a region may take (a letter, then letters, digits, - or _; not a built-in region's name)")
+            need(r.x0 < r.x1 and r.y0 < r.y1, f"regions: {r.name!r} needs x0 < x1 and y0 < y1")
+            need(0 <= r.x0 and r.x1 <= g.width and 0 <= r.y0 and r.y1 <= g.length, f"regions: {r.name!r} must lie inside the plate")
+        known = plate_regions(spec)
+        for i, s in enumerate(spec.supports):
+            need(s.region in known, f"supports[{i}]: region {s.region!r} is not one of {', '.join(known)}")
+            need(len(s.dofs) >= 1 and all(1 <= d <= 6 for d in s.dofs) and len(set(s.dofs)) == len(s.dofs), f"supports[{i}]: dofs are distinct numbers from 1 to 6")
+            need(s.value == 0.0 or len(s.dofs) == 1, f"supports[{i}]: a nonzero value needs exactly one dof")
+        for i, ld in enumerate(spec.loads):
+            need(ld.region in known, f"loads[{i}]: region {ld.region!r} is not one of {', '.join(known)}")
+            force = ld.dof is not None or ld.total is not None
+            need(force != (ld.pressure is not None), f"loads[{i}]: give dof and total (a force), or pressure, not both and not neither")
+            if force:
+                need(ld.dof is not None and ld.total is not None, f"loads[{i}]: a force needs both dof and total")
+                need(1 <= ld.dof <= 5 and ld.total != 0.0, f"loads[{i}]: dof must be 1 to 5 and total nonzero")
+            else:
+                need(ld.pressure != 0.0, f"loads[{i}]: pressure must be nonzero")
+                need(ld.region in area_regions(spec), f"loads[{i}]: a pressure acts on an area region ({', '.join(area_regions(spec))}), not on {ld.region!r}")
+    else:
+        need(not spec.supports and not spec.loads and not spec.regions, "[[supports]], [[loads]] and [[regions]] belong to the plate kind only")
+        need(spec.loading is not None, "a coupon kind needs its [loading] table")
+        need((g.hole_diameter is None) == (kind != "open_hole_tension"), "geometry.hole_diameter is required for open_hole_tension and refused for every other kind")
+        need((m.hole is None) == (kind != "open_hole_tension"), "[mesh.hole] is required for open_hole_tension and refused for every other kind")
+    if plate:
+        pass
+    elif bending:
         need(g.span is not None and g.overhang is not None, "bending kinds need geometry.span and geometry.overhang")
         need(g.tab_length is None, "bending kinds take no geometry.tab_length")
         need(spec.grips is None, "bending kinds take no [grips] table: the supports and noses are the constraints")
@@ -271,8 +344,9 @@ def validate_spec(spec: CouponSpec) -> None:
         need(spec.grips is not None, "in-plane kinds need a [grips] table with kind = \"nodal\" or \"coupling\" and region = \"line\" or \"tabs\"")
         if spec.grips is not None and spec.grips.region == "tabs":
             need(g.tab_length > 0, "grips.region = \"tabs\" needs a positive geometry.tab_length")
-    need((m.mesher == "gmsh") == (kind == "open_hole_tension"),
-         "mesh.mesher = \"gmsh\" goes with open_hole_tension and open_hole_tension needs mesh.mesher = \"gmsh\": the structured mesher cannot cut a hole and makes every other kind")
+    if not plate:
+        need((m.mesher == "gmsh") == (kind == "open_hole_tension"),
+             "mesh.mesher = \"gmsh\" goes with open_hole_tension and open_hole_tension needs mesh.mesher = \"gmsh\": the structured mesher cannot cut a hole and makes every other kind")
     if g.hole_diameter is not None:
         need(g.hole_diameter < g.width, "geometry.hole_diameter must be smaller than the width")
         need(m.element_size is not None, "mesh.mesher = \"gmsh\" takes mesh.element_size for the blocks around the hole; nx and ny describe the structured rectangle only")
@@ -345,11 +419,12 @@ def validate_spec(spec: CouponSpec) -> None:
         else:
             need(t.E3 is not None and t.nu13 is not None, "material.transverse: with transverse_isotropy = false, E3 and nu13 are required")
     # loading
-    need(spec.loading.value != 0, "loading.value must not be zero")
-    if kind == "compression":
-        need(spec.loading.value < 0, "compression needs a negative loading.value (a positive value is a tension coupon)")
-    if kind in ("unnotched_tension", "open_hole_tension", "shear_pm45"):
-        need(spec.loading.value > 0, f"{kind} needs a positive loading.value")
+    if spec.loading is not None:
+        need(spec.loading.value != 0, "loading.value must not be zero")
+        if kind == "compression":
+            need(spec.loading.value < 0, "compression needs a negative loading.value (a positive value is a tension coupon)")
+        if kind in ("unnotched_tension", "open_hole_tension", "shear_pm45"):
+            need(spec.loading.value > 0, f"{kind} needs a positive loading.value")
     # output
     for criterion in spec.output.fpf_criteria:
         need(criterion in CRITERIA, f"output.fpf_criteria: unknown criterion {criterion!r}; known: {', '.join(CRITERIA)}")
@@ -425,6 +500,22 @@ def node_lines(spec: CouponSpec) -> dict[str, float]:
     return lines
 
 
+def edge_regions(spec: CouponSpec) -> tuple[str, ...]:
+    """The regions of a plate that are lines of nodes: the four edges and, with a hole, its ring."""
+    return (*EDGE_REGIONS, *(("Hole",) if spec.geometry.hole_diameter is not None else ()))
+
+
+def area_regions(spec: CouponSpec) -> tuple[str, ...]:
+    """The regions of a plate that hold elements: the whole face, the tabs when there are tabs, and the spec's own boxes."""
+    tabs = ("Tab-Bottom", "Tab-Top") if spec.geometry.tab_length else ()
+    return (*AREA_REGIONS, *tabs, *(r.name for r in spec.regions))
+
+
+def plate_regions(spec: CouponSpec) -> tuple[str, ...]:
+    """Every region a plate's supports and loads may name."""
+    return (*edge_regions(spec), *area_regions(spec))
+
+
 def on_a_row(y: float, length: float, ny: int) -> bool:
     position = y / length * ny
     return abs(position - round(position)) <= LINE_TOLERANCE * ny
@@ -456,10 +547,14 @@ def to_si(spec: CouponSpec) -> CouponSpec:
     mat = spec.material.model_copy(update={"E1": scale(spec.material.E1, S), "E2": scale(spec.material.E2, S), "G12": scale(spec.material.G12, S),
                                            "F1t": scale(spec.material.F1t, S), "F1c": scale(spec.material.F1c, S), "F2t": scale(spec.material.F2t, S),
                                            "F2c": scale(spec.material.F2c, S), "F6": scale(spec.material.F6, S), "transverse": transverse})
-    loading = spec.loading.model_copy(update={"value": spec.loading.value * (L if spec.loading.control == "displacement" else F)})
+    loading = None if spec.loading is None else spec.loading.model_copy(update={"value": spec.loading.value * (L if spec.loading.control == "displacement" else F)})
     probes = spec.probes.model_copy(update={"nodes": {k: (x * L, y * L) for k, (x, y) in spec.probes.nodes.items()},
                                             "elements": {k: (x * L, y * L) for k, (x, y) in spec.probes.elements.items()}})
-    return spec.model_copy(update={"geometry": g, "mesh": m, "layup": layup, "material": mat, "loading": loading, "probes": probes, "si": True})
+    supports = [s.model_copy(update={"value": s.value * (L if all(d <= 3 for d in s.dofs) else 1.0)}) for s in spec.supports]  # rotations stay in radians
+    loads = [ld.model_copy(update={"total": scale(ld.total, F), "pressure": scale(ld.pressure, S)}) for ld in spec.loads]
+    regions = [r.model_copy(update={"x0": r.x0 * L, "x1": r.x1 * L, "y0": r.y0 * L, "y1": r.y1 * L}) for r in spec.regions]
+    return spec.model_copy(update={"geometry": g, "mesh": m, "layup": layup, "material": mat, "loading": loading, "probes": probes, "si": True,
+                                   "supports": supports, "loads": loads, "regions": regions})
 
 
 # --- what the model takes from the spec ---------------------------------------------------------

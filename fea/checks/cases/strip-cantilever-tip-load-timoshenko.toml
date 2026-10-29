@@ -1,0 +1,19 @@
+title = "A cantilever strip with nu = 0 under a tip load: the shell reproduces the Timoshenko beam, shear deflection included"
+source = "The Timoshenko cantilever beam (as fea/tools/plate_closed_forms.py states it) for a strip 100 mm long, 10 mm wide, 2 mm thick, E = 70000 MPa, nu = 0 (so the plate's D11 = E h^3 / 12 is the beam's EI / b), clamped at x = 0 and loaded by 10 N along +z at x = L: w(L) = P L^3 / (3 EI) + P L / (k G A) with k = 5/6 and G = E / 2, = 7.142857143 + 0.001714285714 = 7.144571429 mm; theta_y(L) = -P L^2 / (2 EI); M_x = -P (L - x) / b and Q_x = P / b per unit width, evaluated at the centroid of the root element on the centre row. The strip is 40 by 4 elements; the table printed by the tool gives the discretization error."
+units = "mm-MPa"
+
+[mesh]
+deck = "../decks/strip-40x4-cantilever-isotropic.inp"
+
+[expected]
+tolerance = 0.003
+[expected.rf_z]
+"Left" = [-10.0]
+[expected.w]
+"Strip-1.123" = [7.144571428571431]
+[expected.rotation]
+"Strip-1.123" = [0.0, -0.10714285714285715]
+[expected.moment]
+"Strip-1.81" = [-98.75, 0.0, 0.0]
+[expected.shear_force]
+"Strip-1.81" = [1.0, 0.0]

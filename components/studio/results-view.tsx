@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DOWNLOADS, fileUrl, type Explanation, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
+import { DOWNLOADS, explainJob, fileUrl, StudioError, type ExplainAnswer, type Explanation, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
 import { colorsOf, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
@@ -20,19 +20,20 @@ export function Legend({ scale, label, unit, by }: { scale: Scale; label: string
   );
 }
 
-export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string) => void }) {
+export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
   const s = fields.summary, lab = fields.labels;
   return (
     <div className="studio-panel" data-testid="summary">
       <h3>Summary</h3>
       <dl className="studio-summary">
-        <div><dt>Applied</dt><dd>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}</dd></div>
+        <div><dt>Applied</dt><dd>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}{s.applied.direction ? `, ${s.applied.direction}` : ""}</dd></div>
         <div><dt>Reaction at {s.reaction.set}</dt><dd data-testid="summary-reaction">{printed(Math.abs(s.reaction.value))} {lab.force} ({s.reaction.sense})</dd></div>
-        <div><dt>Largest displacement</dt><dd>{printed(s.max_displacement.value)} {lab.length} at node {s.max_displacement.label.split(".").pop()}</dd></div>
+        <div><dt>Largest displacement</dt><dd>{printed(s.max_displacement.value)} {lab.length} at node {s.max_displacement.label.split(".").pop()}
+          {s.max_displacement.axis === "z" ? " (the deflection w)" : ""}</dd></div>
         {Object.entries(s.max_ply).map(([name, m]) => (
           <div key={name}><dt>Largest ply {name === "mises" ? "von Mises" : name}</dt>
-            <dd>{printed(m.value)} {lab.stress} in ply {m.ply} ({m.angle}°) at element {m.label.split(".").pop()}
-              <button type="button" className="studio-text-button" onClick={() => onShow(m.element, m.ply, s.earliest ?? "")}>show</button></dd></div>
+            <dd>{printed(m.value)} {lab.stress} in ply {m.ply} ({m.angle}°){m.face ? `, ${m.face} face,` : ""} at element {m.label.split(".").pop()}
+              <button type="button" className="studio-text-button" onClick={() => onShow(m.element, m.ply, s.earliest ?? "", m.face)}>show</button></dd></div>
         ))}
       </dl>
       <h4>First-ply failure</h4>
@@ -44,9 +45,9 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
               <tr key={criterion} data-criterion={criterion} className={criterion === s.earliest ? "studio-earliest" : undefined}>
                 <td>{criterion.replace("_", " ")}{criterion === s.earliest ? " (earliest)" : ""}</td>
                 <td data-testid={`fpf-factor-${criterion}`}>{printed(f.factor)}</td><td>{printed(f.index)}</td>
-                <td>{f.ply} ({f.angle}°){f.tied_plies.length > 1 ? `, tied ${f.tied_plies.join(", ")}` : ""}</td>
+                <td>{f.ply} ({f.angle}°){f.face ? `, ${f.face} face` : ""}{f.tied_plies.length > 1 ? `, tied ${f.tied_plies.join(", ")}` : ""}</td>
                 <td>{f.mode}</td><td>element {f.label.split(".").pop()}, {f.place}</td>
-                <td><button type="button" className="studio-text-button" onClick={() => onShow(f.element, f.ply, criterion)}>show</button></td>
+                <td><button type="button" className="studio-text-button" onClick={() => onShow(f.element, f.ply, criterion, f.face)}>show</button></td>
               </tr>
             ))}
           </tbody>
@@ -58,13 +59,17 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
   );
 }
 
-export function ExplanationPanel({ explanation }: { explanation: Explanation | null }) {
-  if (!explanation) return null;
+export function ExplanationPanel({ explanation, answer }: { explanation: Explanation | null; answer?: ExplainAnswer | null }) {
+  if (!explanation && !answer) return null;
+  const prose = answer?.prose ?? explanation?.sentences ?? [];
+  const writer = answer?.writer ?? explanation?.writer ?? "template";
+  const badge = writer === "template" ? "written by the template from the engine's numbers" : `written by ${writer}${answer?.model ? ` (${answer.model})` : ""}, every number checked against the engine's`;
   return (
-    <div className="studio-panel" data-testid="explanation">
-      <h3>What this shows <span className="studio-badge studio-badge-writer">{explanation.writer === "template" ? "written by the template from the engine's numbers" : `writer: ${explanation.writer}`}</span></h3>
-      {explanation.sentences.map((sentence, i) => <p key={i}>{sentence}</p>)}
-      {explanation.setup_sentences.length ? <details><summary>The setup, as checked</summary>{explanation.setup_sentences.map((s, i) => <p key={i}>{s}</p>)}</details> : null}
+    <div className="studio-panel" data-testid="explanation" data-writer={writer}>
+      <h3>What this shows <span className="studio-badge studio-badge-writer">{badge}</span></h3>
+      {answer?.reason ? <p className="studio-muted" data-testid="explanation-reason">{answer.withheld ? "The model's draft was withheld: " : "The template's words stand: "}{answer.reason}.</p> : null}
+      {prose.map((sentence, i) => <p key={i}>{sentence}</p>)}
+      {explanation?.setup_sentences.length ? <details><summary>The setup, as checked</summary>{explanation.setup_sentences.map((s, i) => <p key={i}>{s}</p>)}</details> : null}
     </div>
   );
 }
@@ -92,6 +97,15 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
   const [wireframe, setWireframe] = useState(true);
   const [picked, setPicked] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<number | null>(() => (fields.summary.earliest ? fields.summary.fpf[fields.summary.earliest].element : null));
+  const [answer, setAnswer] = useState<ExplainAnswer | null>(null);
+  useEffect(() => {
+    // once our engine has written the explanation, the API's writer (the template, or a model behind a setting) rephrases it (ADR-0052)
+    if (!job || !apiBase || !("explanation" in job.outputs)) return;
+    let cancelled = false;
+    explainJob(apiBase, job.job_id, "result").then((a) => { if (!cancelled) setAnswer(a); })
+      .catch((error) => { if (!cancelled && !(error instanceof StudioError && error.status === 409)) setAnswer(null); });
+    return () => { cancelled = true; };
+  }, [job?.job_id, job?.state, "explanation" in (job?.outputs ?? {}), apiBase]);
   useEffect(() => { setChoice(DEFAULT_CHOICE(fields)); setScale(suggestedScale(fields.mesh.nodes, fields.nodal.magnitude)); }, [fields]);
   const options = useMemo(() => fieldOptions(fields), [fields]);
   const option = options.find((o) => o.id === choice.id) ?? options[0];
@@ -103,9 +117,10 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
   const loaded = preview ? { nodes: fields.mesh.node_sets[preview.loaded.set] ?? preview.mesh.node_sets[preview.loaded.set] ?? [],
     direction: preview.loaded.direction, label: `${preview.loaded.control} ${printed(preview.loaded.value)} ${preview.loaded.unit}` } : null;
   const readout = picked !== null ? elementReadout(fields, picked, choice, printed) : null;
-  const show = (element: number, ply: number, criterion: string) => {
+  const show = (element: number, ply: number, criterion: string, face?: string | null) => {
     setHighlight(element); setPicked(element);
-    setChoice((c) => ({ ...c, ply, criterion: criterion || c.criterion }));
+    const faceIndex = face && fields.mesh.faces ? Math.max(0, fields.mesh.faces.indexOf(face)) : undefined;
+    setChoice((c) => ({ ...c, ply, criterion: criterion || c.criterion, face: faceIndex ?? c.face }));
   };
   return (
     <div className="studio-results" data-testid="results">
@@ -127,6 +142,13 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
           <label>Ply
             <select value={choice.ply} onChange={(e) => setChoice({ ...choice, ply: Number(e.target.value) })} aria-label="Ply">
               {fields.mesh.angles.map((angle, i) => <option key={i} value={i + 1}>{i + 1}: {angle}°</option>)}
+            </select>
+          </label>
+        ) : null}
+        {option.perFace && fields.mesh.faces ? (
+          <label>Face
+            <select value={choice.face} onChange={(e) => setChoice({ ...choice, face: Number(e.target.value) })} aria-label="Face">
+              {fields.mesh.faces.map((face, i) => <option key={face} value={i}>{face}</option>)}
             </select>
           </label>
         ) : null}
@@ -157,7 +179,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
         </div>
       ) : <p className="studio-muted studio-pick-hint">Click an element on the plate to read its values. The critical element is framed in red.</p>}
       <SummaryPanel fields={fields} onShow={show} />
-      <ExplanationPanel explanation={explanation} />
+      <ExplanationPanel explanation={explanation} answer={answer} />
       {job ? <Downloads apiBase={apiBase} job={job} /> : null}
     </div>
   );

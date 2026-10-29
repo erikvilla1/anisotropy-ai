@@ -1,6 +1,8 @@
 """A synchronous local API. It adapts HTTP to the engine and to our coupon tool; it contains no laminate math."""
 
 import datetime as dt
+import hashlib
+import json
 import math
 import tomllib
 import uuid
@@ -22,13 +24,14 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
+from .assistant import TemplateAssistant, assistant_for
 from .coupon_jobs import CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
 from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run
 from .settings import load_settings
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    CouponJobRequest, CouponSummary, CouponValuesOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest,
-    PrescribedCurvatureResponse, RunOutput, RunSummary, VerificationResponse,
+    CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, LibraryMaterialInput, MaterialProvenance,
+    PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, RunSummary, VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
@@ -62,6 +65,7 @@ async def lifespan(app: FastAPI):
     if app.state.records is not None:
         check_ready(app.state.records)
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command())
+    app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     yield
     if app.state.records is not None:
         app.state.records.dispose()
@@ -132,7 +136,7 @@ Actor = Annotated[str, Depends(actor_from_header)]
 
 
 def _record(request: Request, actor: str, problem: BaseModel, *, response: dict | None = None,
-            error: str | None = None) -> uuid.UUID | None:
+            error: str | None = None, llm: tuple[str | None, str | None] = (None, None)) -> uuid.UUID | None:
     """Write the run and return its id; None when recording is switched off.
 
     `inputs` is the request as received: only the fields the client sent. When the row cannot be
@@ -146,7 +150,8 @@ def _record(request: Request, actor: str, problem: BaseModel, *, response: dict 
         return record_run(engine, actor=actor, endpoint=request.url.path,
                           inputs=problem.model_dump(mode="json", exclude_unset=True),
                           engine_version=version("anisotropy-engine"), api_version=version("anisotropy-api"),
-                          git_commit=getattr(request.app.state, "git_commit", None), response=response, error=error)
+                          git_commit=getattr(request.app.state, "git_commit", None), response=response, error=error,
+                          llm_provider=llm[0], llm_model_version=llm[1])
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=(
             f"The result was not returned because it could not be recorded: {str(exc).splitlines()[0]}"
@@ -160,11 +165,13 @@ def _run_header(run_id: uuid.UUID | None) -> dict[str, str] | None:
 Body = TypeVar("Body", bound=BaseModel)
 
 
-def _deliver(request: Request, response: Response, actor: str, problem: BaseModel, compute: Callable[[], Body]) -> Body:
+def _deliver(request: Request, response: Response, actor: str, problem: BaseModel, compute: Callable[[], Body],
+             llm_of: Callable[[Body], tuple[str | None, str | None]] | None = None) -> Body:
     """Compute, record the outcome, and attach the run id (ADR-0026).
 
     A 422 raised while computing is recorded as a rejection and re-raised with the run id in its
-    header; a successful body is recorded as returned, without run_id, and returned with it.
+    header; a successful body is recorded as returned, without run_id, and returned with it. `llm_of`
+    names the language model whose draft the body holds, for the record (ADR-0052).
     """
     try:
         body = compute()
@@ -173,7 +180,8 @@ def _deliver(request: Request, response: Response, actor: str, problem: BaseMode
             raise
         run_id = _record(request, actor, problem, error=str(exc.detail))
         raise HTTPException(status_code=422, detail=exc.detail, headers=_run_header(run_id)) from exc
-    run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}))
+    run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}),
+                     llm=llm_of(body) if llm_of is not None else (None, None))
     if run_id is None:
         return body
     response.headers[RUN_ID_HEADER] = str(run_id)
@@ -378,6 +386,44 @@ def coupon_job_file(job_id: uuid.UUID, key: str, request: Request) -> FileRespon
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FileResponse(path, media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"), filename=path.name)
+
+
+def _job_json(jobs: CouponJobs, job: Job, key: str, what: str) -> dict:
+    """One JSON file of a job by its key, or 409 while the tool has not written it."""
+    try:
+        path = jobs.output_file(job, key)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail=f"coupon job {job.id} has {what} yet; it has: {exc.args[0]}") from exc
+    except (FileNotFoundError, PermissionError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail=f"the file {key} of coupon job {job.id} is not readable yet: {exc}") from exc
+
+
+@app.post(COUPON_JOBS + "/{job_id}/explain", response_model=ExplainResponse)
+def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor, request: Request, response: Response) -> ExplainResponse:
+    """An explanation of a job's result or setup (ADR-0052): the template's sentences the fea package wrote, or, when a provider is
+    named in the settings, the model's rephrasing of them from the same fact sheet, kept only when every number in it is a fact.
+    Recorded with its actor and, when a model wrote it, the model's name (ADR-0026)."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(jobs, job_id)
+    explanation = _job_json(jobs, job, "explanation", "no explanation")
+    facts, sentences = explanation.get("facts", {}), list(explanation.get("sentences", []))
+    checklist = _job_json(jobs, job, "checklist", "no setup check") if problem.kind == "setup" else None
+    template = list(explanation.get("setup_sentences", [])) if problem.kind == "setup" else sentences
+    seen = checklist if problem.kind == "setup" else facts
+    receipt = ExplainReceipt(job_id=str(job_id), kind=problem.kind,
+                             facts_sha256=hashlib.sha256(json.dumps(seen, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest())
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+
+    def compute() -> ExplainResponse:
+        draft = assistant.explain_setup(checklist, template) if problem.kind == "setup" else assistant.explain_result(facts, template)
+        return ExplainResponse(run_id=None, job_id=str(job_id), kind=problem.kind, writer=draft.writer, model=draft.model, prose=list(draft.prose),
+                               withheld=draft.withheld, reason=draft.reason, facts=facts if problem.kind == "result" else {"checklist": checklist})
+
+    return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
 
 
 @app.get("/v1/coupons", response_model=list[CouponSummary])

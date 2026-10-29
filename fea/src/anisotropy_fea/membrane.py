@@ -16,7 +16,7 @@ from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.linalg import splu
 
 from .mesh import KernelError, Mesh, mesh_from_deck
-from .model import Deck, all_boundaries, coupled_nodes, node_name, reference_node, resolve_nodes
+from .model import Deck, all_boundaries, coupled_nodes, membrane_limits, node_name, reference_node, resolve_nodes
 from .results import MembraneSolution
 
 # Natural coordinates of the four nodes, counterclockwise, and the 2 by 2 Gauss rule.
@@ -152,7 +152,9 @@ def assemble(mesh: Mesh, dofmap: DofMap) -> csr_matrix:
 
 
 def solve_membrane(deck: Deck, mesh: Mesh | None = None) -> MembraneSolution:
-    """Displacements, reactions, element strains and section forces for a deck in SI."""
+    """Displacements, reactions, element strains and section forces for a deck in SI. What the membrane cannot represent is refused by
+    `membrane_limits` first; `kernel.solve_deck` sends such a deck to the flat shell instead."""
+    membrane_limits(deck)
     mesh = mesh if mesh is not None else mesh_from_deck(deck)
     dofmap = constraint_map(deck, mesh)
     K = assemble(mesh, dofmap)

@@ -25,6 +25,7 @@ from .model import (
     ConcentratedLoad,
     Deck,
     DeckError,
+    DistributedLoad,
     Elastic,
     ElementKey,
     Elements,
@@ -164,6 +165,7 @@ class _StepBuilder:
     procedure: str | None = None
     boundaries: list[Boundary] = field(default_factory=list)
     cloads: list[ConcentratedLoad] = field(default_factory=list)
+    dloads: list[DistributedLoad] = field(default_factory=list)
 
 
 class _Parser:
@@ -661,7 +663,7 @@ class _Parser:
         if self.step.procedure is None:
             raise DeckError(f"line {self.step.line}: *Step {self.step.name!r} has no *Static procedure")
         self.steps.append(Step(name=self.step.name, nlgeom=self.step.nlgeom, boundaries=tuple(self.step.boundaries),
-                               cloads=tuple(self.step.cloads), line=self.step.line))
+                               cloads=tuple(self.step.cloads), dloads=tuple(self.step.dloads), line=self.step.line))
         self.step = None
 
     def boundary_(self, block: KeywordBlock) -> None:
@@ -708,6 +710,31 @@ class _Parser:
             self.step.cloads.append(ConcentratedLoad(target=self._target(tokens[0], line), dof=self._int(tokens[1], line, "load dof"),
                                                      value=self._float(tokens[2], line, "load value"), line=line))
 
+    def dload_(self, block: KeywordBlock) -> None:
+        """`*Dload` with the P label only: `element set or Instance.label, P, pressure` (ADR-0053)."""
+        self._params(block, ())
+        if self.step is None:
+            raise DeckError(f"line {block.line}: *Dload outside a *Step is not supported")
+        for tokens, line in zip(block.data, block.data_lines):
+            if len(tokens) != 3:
+                raise DeckError(f"line {line}: a distributed load line is `element set or element, P, pressure`")
+            label = tokens[1].upper()
+            if label != "P":
+                raise DeckError(f"line {line}: distributed load label {tokens[1]!r} is not supported; P (a uniform pressure on the shell) is")
+            self.step.dloads.append(DistributedLoad(target=self._element_target(tokens[0], line), label=label,
+                                                    value=self._float(tokens[2], line, "pressure"), line=line))
+
+    def _element_target(self, token: str, line: int) -> str | ElementKey:
+        """A distributed load target: an assembly element set name or `Instance.label`."""
+        instance, dot, label = token.rpartition(".")
+        if dot and label.isdigit():
+            if instance not in self.instances:
+                raise DeckError(f"line {line}: {token!r} names instance {instance!r}, which is not defined")
+            return (instance, int(label))
+        if token.isdigit():
+            raise DeckError(f"line {line}: a bare element label {token!r} names no instance; write Instance.label or an assembly element set")
+        return token
+
 
 HANDLERS = {
     "heading": _Parser.heading_,
@@ -734,6 +761,7 @@ HANDLERS = {
     "end step": _Parser.end_step_,
     "boundary": _Parser.boundary_,
     "cload": _Parser.cload_,
+    "dload": _Parser.dload_,
 }
 
 SUPPORTED_KEYWORDS = tuple(sorted(HANDLERS))
