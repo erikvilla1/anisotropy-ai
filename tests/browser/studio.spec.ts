@@ -210,6 +210,7 @@ test("a fresh form's choices start blank, not on their first word", async ({ pag
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/studio");
+  await page.getByRole("tab", { name: "Full form" }).click(); // the studio opens on the chat since ADR-0055
   for (const label of ["Test", "Symmetric", "Loading type"]) await expect(page.getByLabel(label, { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Test", { exact: true }).locator("option:checked")).toHaveText("choose one");
   await page.getByLabel("Test", { exact: true }).selectOption("unnotched tension");
