@@ -6,8 +6,9 @@ as lists, the units and what the row means beside each), a "How to fill it in" s
 with an example, a read-only sheet of the library materials the team may pick, and a hidden Record sheet for our tools. The library list and the versions are read at write time, so the form is
 generated, never kept as a file in the repository.
 
-`read_form` reads a filled-in form back by its labels; `check_form` turns the cells into typed values and names every problem
-at once (ADR-0003); `designation_for` gives the coupon its name by the rules of the coupon tests (one code, one meaning);
+`read_form` reads a filled-in form back by its labels, and `read_values` reads the same rows from one JSON object, the values file
+the studio sends (ADR-0046 amendment 2); `read_input` takes either. `check_form` turns the cells into typed values and names every
+problem at once (ADR-0003); `designation_for` gives the coupon its name by the rules of the coupon tests (one code, one meaning);
 `spec_data` builds the spec as a plain dict with our defaults filled in; `render_toml` writes it as the commented TOML the rest of
 the tools read; `build_specs` does all of that for the team's build and its CalculiX twin and lets `spec.parse_spec` judge the
 exact text that will be written. The form never re-implements a spec rule.
@@ -17,6 +18,7 @@ Units on the form are mm, MPa and N; the spec is written in "mm-MPa".
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -27,9 +29,11 @@ from typing import Any
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
 
 from . import __version__, forms, paths
-from .spec import ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, SpecError, full_angles, load_spec, parse_spec
+from .spec import (ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
+                   to_si)
+from .units import unit_factors
 
-FORM_VERSION = "0.2"
+FORM_VERSION = "0.3"
 INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD = "Coupon", "How to fill it in", "Definitions", "Library materials", "Record"
 UNITS = "mm-MPa"
 TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45")  # the in-plane kinds, as the form lists them
@@ -42,7 +46,11 @@ REGIONS = ("tabs", "line")
 PLIES = 16  # rows offered for the ply angles
 HOLE_DEFAULTS = {"circumferential": 32, "radial_layers": 6, "ring_ratio": 2.0, "growth": 1.2}  # the public open-hole check's O-grid
 ELEMENT_SIZE_DEFAULT = 2.0  # mm, the public checks' row spacing
-FPF_CRITERIA = ("max_stress", "tsai_hill")  # when the material has strengths
+FPF_CRITERIA = ("max_stress", "tsai_hill")  # what "all" reports when the material has strengths; Tsai-Wu joins when f12* is given
+CRITERION_WORDS = ("all", "maximum stress", "tsai-hill", "tsai-wu", "none")  # the Failure criterion row
+CRITERION_OF_WORD = {"maximum stress": "max_stress", "tsai-hill": "tsai_hill", "tsai-wu": "tsai_wu"}
+WORD_OF_CRITERION = {criterion: word for word, criterion in CRITERION_OF_WORD.items()}
+VALUES_SUFFIX = ".json"  # a values file: the form's rows as one JSON object, what the studio sends (ADR-0046 amendment 2)
 MATERIAL_CODE = re.compile(r"^[A-Z][A-Z0-9]*$")
 LAYUP_CODE = re.compile(r"^L[1-9][0-9]*$")
 LIBRARY_HELP = ("pick a material by its id; the sheet Library materials lists each one with its constants and source, and once you pick one "
@@ -139,6 +147,13 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("G23", "G23 (MPa)", "number", "out-of-plane shear stiffness across the fibres and the thickness, as in your Abaqus material (Lamina). "
               "No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material", required=True, above=0),
     )),
+    ("Failure criterion: which first-ply failure criterion we report", (
+        Field("criteria", "Failure criterion", "list", "all: every criterion the material allows (maximum stress and Tsai-Hill, and Tsai-Wu when "
+              "f12* is given below); or one of them; or none. A criterion needs the material's strengths; see Definitions, First-ply failure",
+              default="all", words=CRITERION_WORDS),
+        Field("f12_star", "Tsai-Wu interaction f12*", "number", "the normalised interaction term of the Tsai-Wu criterion, a number between -1 and 1, "
+              "neither included; required for Tsai-Wu; leave it blank otherwise, and Tsai-Wu is not reported"),
+    )),
     ("Loading: the bottom grip is held, the top grip moves", (
         Field("control", "Loading type", "list", "displacement: the top grip moves by the value, in mm; force: a total force, in N, pulls or pushes "
               "the top grip", required=True, words=CONTROLS),
@@ -185,7 +200,7 @@ ROWS_OF_KEY = {
     "material.F1t": "own_F1t", "material.F1c": "own_F1c", "material.F2t": "own_F2t", "material.F2c": "own_F2c", "material.F6": "own_F6",
     "material.transverse": "G13", "grips.region": "region", "grips.kind": "grips", "loading.value": "value", "loading.control": "control",
     "names.part": "name_part", "names.instance": "name_instance", "names.material": "name_material", "names.layup": "name_layup",
-    "names.section_set": "name_section", "coupon.designation": "material_code",
+    "names.section_set": "name_section", "coupon.designation": "material_code", "output.fpf_criteria": "criteria", "material.f12_star": "f12_star",
 }
 
 HOW_TO = (
@@ -200,6 +215,8 @@ HOW_TO = (
     "in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions "
     "says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has "
     "no ply thickness, give one.",
+    "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give "
+    "its interaction term f12*; or pick one criterion, or none.",
     "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, "
     "give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
     "Open hole: the hole rows are read only for open-hole tension. Loading: give the amount; for compression we apply it as a push.",
@@ -256,6 +273,11 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
         ("nu12", "Poisson's ratio: how much the ply narrows across the fibres when it is stretched along them. No unit.", "IM7/8552: 0.316."),
         ("Strengths F1t, F1c, F2t, F2c, F6", "The stress at which a ply fails: along the fibres in tension (F1t) and compression (F1c), across the "
          "fibres in tension (F2t) and compression (F2c), and in in-plane shear (F6). Compression as a positive number. Give all five or none.", ""),
+        ("Failure criterion", "The rule that says when a ply has failed, from its stresses and strengths. Maximum stress: a ply fails when one "
+         "stress reaches its strength. Tsai-Hill and Tsai-Wu: the stresses are combined, so no single one governs. All reports every criterion "
+         "the material's strengths allow.", "all, our default; or one of maximum stress, tsai-hill, tsai-wu; or none."),
+        ("f12*", "The interaction term of the Tsai-Wu criterion, normalised, between -1 and 1 (neither included). Tsai-Wu needs it; the other "
+         "criteria do not.", "Leave it blank and Tsai-Wu is not reported."),
         ("G13, G23", "Out-of-plane shear stiffness: G13 in the plane that holds the fibres and the thickness, G23 across the fibres and the "
          "thickness. Abaqus needs them for the shell section (its Lamina material asks for them). Our own solver does not use them, so they do "
          "not change our results for a thin coupon pulled or pushed.",
@@ -289,8 +311,8 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
     )),
     ("What we send back", (
         ("Reaction force", "The force the grip needs to make the movement you gave.", ""),
-        ("First-ply failure", "The load at which the first ply anywhere in the coupon reaches its strength, by the maximum stress and the Tsai-Hill "
-         "criteria; given as a fraction of your load, with the place and the ply.", "0.93: the first ply fails at 93% of a 1 mm pull."),
+        ("First-ply failure", "The load at which the first ply anywhere in the coupon reaches its strength, by the criterion you chose on the "
+         "Failure criterion row; given as a fraction of your load, with the place and the ply.", "0.93: the first ply fails at 93% of a 1 mm pull."),
         ("Where we read results", "At the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and "
          "halfway to the tab. We place these points from the geometry; you do not enter them.", ""),
         ("Coupon name", "Material code, test code and layup code. Test codes: UNT unnotched tension, UNC unnotched compression, OHT open-hole "
@@ -538,6 +560,140 @@ def read_form(path: Path | str) -> FormInput:
     return FormInput(path, version, cells)
 
 
+def read_values(path: Path | str) -> FormInput:
+    """The form's rows read from a values file: one JSON object whose keys are the rows' field keys, as the studio sends them.
+
+    `form_version` is required and must be the current form's; `angles` may stand in for the ply rows; a mesh row may hold a list
+    where the form holds comma-separated text; a yes-or-no row may hold a boolean; an absent key is a blank cell; an unknown key is
+    refused by name (ADR-0003).
+    """
+    path = Path(path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise IntakeError(f"{path.name}: not a values file ({exc})") from None
+    if not isinstance(data, dict):
+        raise IntakeError(f"{path.name}: a values file is one JSON object of the form's rows by field key")
+    data = dict(data)
+    version = data.pop("form_version", None)
+    if version is None:
+        raise IntakeError(f"{path.name}: form_version is required; the current form is {FORM_VERSION}")
+    if str(version) != FORM_VERSION:
+        raise IntakeError(f"{path.name}: form_version {version!r} is not the current form's, {FORM_VERSION}; the rows follow the current definition")
+    angles = data.pop("angles", None)
+    if angles is not None:
+        if not isinstance(angles, list):
+            raise IntakeError(f"{path.name}: angles must be a list of ply angles, bottom ply first")
+        if len(angles) > PLIES:
+            raise IntakeError(f"{path.name}: angles lists {len(angles)} plies; the form holds {PLIES} ply rows")
+        if any(f"ply_{i}" in data for i in range(1, PLIES + 1)):
+            raise IntakeError(f"{path.name}: give angles or the ply rows (ply_1, ply_2, ...), not both")
+        for i, angle in enumerate(angles, start=1):
+            data[f"ply_{i}"] = angle
+    unknown = sorted(key for key in data if key not in FIELDS)
+    if unknown:
+        raise IntakeError(f"{path.name}: unknown keys {', '.join(unknown)}; the keys are the form's field keys")
+    cells: dict[str, Any] = {}
+    for key, f in FIELDS.items():
+        value = data.get(key)
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value)
+        elif isinstance(value, bool) and f.words == YES_NO:
+            value = "yes" if value else "no"
+        elif isinstance(value, dict):
+            raise IntakeError(f"{path.name}: {key} holds an object; a row holds one value")
+        cells[key] = None if value is None or (isinstance(value, str) and not value.strip()) else value
+    return FormInput(path, str(version), cells)
+
+
+def read_input(path: Path | str) -> FormInput:
+    """A filled-in form (.xlsx) or a values file (.json), by its suffix."""
+    path = Path(path)
+    if path.suffix.lower() == ".xlsx":
+        return read_form(path)
+    if path.suffix.lower() == VALUES_SUFFIX:
+        return read_values(path)
+    raise IntakeError(f"{path.name}: a coupon arrives as a filled-in form (.xlsx) or a values file (.json)")
+
+
+def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
+    """The form's rows, by field key, that `spec_data` would turn back into this spec: how the studio reopens a coupon to change it.
+
+    Works on a spec as parsed (its own units) or loaded (SI). The rows the spec does not record (who filled it in, when, the notes)
+    are blank. A spec the form cannot state, in other units or asking for a set of criteria the row does not offer, is refused.
+    """
+    if spec.units != UNITS:
+        raise IntakeError(f"the form states a coupon in {UNITS}; the spec is in {spec.units}")
+    if not (spec.material.transverse.plane_stress and spec.material.transverse.transverse_isotropy):
+        raise IntakeError("the form fixes plane_stress = true and transverse_isotropy = true for the out-of-plane constants; the spec states them otherwise")
+    if spec.mesh.element_order != 1:
+        raise IntakeError(f"the form fixes element_order = 1; the spec asks for order {spec.mesh.element_order}")
+    f = unit_factors(spec.units) if spec.si else {kind: 1.0 for kind in unit_factors(spec.units)}
+    L, S, F = f["length"], f["stress"], f["force"]
+    back = lambda v, k: None if v is None else v / k  # noqa: E731
+    g, m, mat, t = spec.geometry, spec.mesh, spec.material, spec.material.transverse
+    values: dict[str, Any] = {"form_version": FORM_VERSION, "filled_by": None, "date": None, "notes": None, "test": TEST_CODES[spec.kind][1]}
+    if spec.coupon is not None:
+        match = DESIGNATION.match(spec.coupon.designation)
+        values.update(material_code=match["material"], layup_code=match["layup"], standard=spec.coupon.standard, size_from=spec.coupon.size_from,
+                      team_model=spec.coupon.team_model, test_data=spec.coupon.test_data)
+    values.update(length=back(g.length, L), width=back(g.width, L), tab_length=back(g.tab_length, L) if g.tab_length is not None else 0.0,
+                  hole_diameter=back(g.hole_diameter, L))
+    if m.hole is not None:
+        values.update(hole_circumferential=m.hole.circumferential, hole_radial=m.hole.radial_layers, hole_ring=m.hole.ring_ratio, hole_growth=m.hole.growth)
+    values.update(angles=[int(a) if float(a).is_integer() else a for a in spec.layup.angles], symmetric="yes" if spec.layup.symmetric else "no",
+                  ply_thickness=None if spec.layup.ply_thickness == "library" else back(spec.layup.ply_thickness, L))
+    if mat.library is not None:
+        values["library"] = mat.library
+    else:
+        values.update(own_name=spec.names.material if spec.names is not None else None, own_E1=back(mat.E1, S), own_E2=back(mat.E2, S),
+                      own_G12=back(mat.G12, S), own_nu12=mat.nu12, own_F1t=back(mat.F1t, S), own_F1c=back(mat.F1c, S), own_F2t=back(mat.F2t, S),
+                      own_F2c=back(mat.F2c, S), own_F6=back(mat.F6, S), own_source=mat.source)
+    values.update(G13=back(t.G13, S), G23=back(t.G23, S), f12_star=mat.f12_star)
+    strengths = mat.library is not None and library_material(mat.library, mat.dataset).lamina.strengths is not None or mat.F1t is not None
+    asked = list(spec.output.fpf_criteria)
+    every = [*FPF_CRITERIA, *(["tsai_wu"] if mat.f12_star is not None else [])] if strengths else []
+    if asked == every:
+        values["criteria"] = "all"
+    elif not asked:
+        values["criteria"] = "none"
+    elif len(asked) == 1:
+        values["criteria"] = WORD_OF_CRITERION[asked[0]]
+    else:
+        raise IntakeError(f"the form's Failure criterion row offers all, one criterion or none; the spec asks for {', '.join(asked)}")
+    values.update(control=spec.loading.control, value=abs(back(spec.loading.value, L if spec.loading.control == "displacement" else F)))
+    if m.y_seeds is not None:
+        values.update(mesh_nx=m.nx, mesh_partitions=[back(p, L) for p in m.y_partitions], mesh_seeds=list(m.y_seeds))
+    elif m.element_size is not None:
+        values["element_size"] = back(m.element_size, L)
+    elif g.tab_length:  # nx and ny with tabs: the same mesh seeded by segment, the tab lines being node rows (validate_spec)
+        tab_rows = round(m.ny * g.tab_length / g.length)
+        values.update(mesh_nx=m.nx, mesh_partitions=[back(g.tab_length, L), back(g.length - g.tab_length, L)],
+                      mesh_seeds=[tab_rows, m.ny - 2 * tab_rows, tab_rows])
+    else:  # nx and ny without tabs: an element size that mesh_data rounds back to the same counts, or nothing the form can state
+        size = g.length / m.ny
+        if max(1, round(g.width / size)) != m.nx:
+            raise IntakeError(f"the form states a mesh by element size or by seeds per segment; {m.nx} by {m.ny} elements on this coupon is neither")
+        values["element_size"] = back(size, L)
+    if spec.grips is not None:
+        values.update(grips=spec.grips.kind, region=spec.grips.region)
+    if spec.names is not None:
+        names = spec.names.model_dump()
+        given = {key: names[key] for key in ("part", "instance", "layup", "section_set") if names[key] != DEFAULT_NAMES[key]}
+        if mat.library is not None and names["material"] != mat.library.upper():
+            given["material"] = names["material"]
+        for key, spec_key in NAME_KEYS.items():
+            if spec_key in given:
+                values[key] = given[spec_key]
+    return {key: value for key, value in values.items() if value is not None or key in ("filled_by", "date", "notes")}
+
+
+def spec_from_values(values: Values, designation: Designation, source_name: str) -> CouponSpec:
+    """The spec the team's build would be, in SI, judged by `parse_spec`; nothing is written."""
+    main, _ = build_specs(values, designation, source_name)
+    return to_si(parse_spec(main, source_name))
+
+
 @dataclass(frozen=True)
 class Values:
     """What the form says, typed and checked: the inputs `spec_data` builds the spec from."""
@@ -573,6 +729,8 @@ class Values:
     grips: str
     region: str
     names: dict[str, str] | None
+    criteria: tuple[str, ...] | None = None  # the criteria asked for by name; None = "all", every one the material allows
+    f12_star: float | None = None
 
     @property
     def test_code(self) -> str:
@@ -709,6 +867,28 @@ def check_form(form: FormInput) -> Values:
         own["strengths"] = strengths if len(given) == len(STRENGTH_KEYS) else None
     G13, G23 = number("G13"), number("G23")
 
+    strengths_known: bool | None = None  # whether the material has strengths, when the form says enough to know
+    if library and not own_given:
+        try:
+            strengths_known = library_material(library).lamina.strengths is not None
+        except ValueError as exc:
+            problems.append(f"{form.label('library')}: {exc}")
+    elif own is not None:
+        strengths_known = own["strengths"] is not None
+    criterion_word, f12_star = word("criteria"), number("f12_star")
+    criteria: tuple[str, ...] | None = None
+    if criterion_word == "none":
+        criteria = ()
+    elif criterion_word in CRITERION_OF_WORD:
+        criteria = (CRITERION_OF_WORD[criterion_word],)
+    if f12_star is not None and not -1.0 < f12_star < 1.0:
+        problems.append(f"{form.label('f12_star')}: must lie strictly between -1 and 1, not {f12_star:g}")
+    if criteria and strengths_known is False:
+        problems.append(f"{form.label('criteria')}: the material has no strengths, so no criterion can be reported; choose none, pick a library "
+                        "material with strengths, or give your own")
+    if criteria and "tsai_wu" in criteria and f12_star is None:
+        problems.append(f"{form.label('f12_star')}: required for Tsai-Wu")
+
     control = word("control")
     value = number("value")
 
@@ -736,7 +916,7 @@ def check_form(form: FormInput) -> Values:
         raise IntakeError(f"{form.path.name}: " + "; ".join(problems))
     return Values(filled_by, day, notes, kind, material_code, layup_code, standard, size_from, team_model, test_data, length, width, tab_length,
                   hole_diameter, hole, angles, symmetric, ply_thickness, library, own, G13, G23, control, value, element_size if size_given else None,
-                  mesh_nx, partitions, seeds, grips, region, names or None)
+                  mesh_nx, partitions, seeds, grips, region, names or None, criteria, f12_star)
 
 
 # --------------------------------------------------------------------------------------------- the coupon's name
@@ -921,7 +1101,14 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
         deck_material = values.own["name"] if values.own else values.library.upper()
         given = {**DEFAULT_NAMES, "material": deck_material, **(values.names or {})}
         data["names"] = {key: given[key] for key in ("part", "instance", "material", "layup", "section_set")}
-    data["output"] = {"fpf_criteria": list(FPF_CRITERIA) if strengths else [],
+    if values.f12_star is not None:
+        material["f12_star"] = values.f12_star
+        comments["material.f12_star"] = "the Tsai-Wu interaction term, as given on the form"
+    if values.criteria is None:  # "all": every criterion the material allows
+        criteria = [*FPF_CRITERIA, *(["tsai_wu"] if values.f12_star is not None else [])] if strengths else []
+    else:
+        criteria = list(values.criteria)
+    data["output"] = {"fpf_criteria": criteria,
                       "abaqus": {"field_preselect": True, "node_print": True, "el_print": True},
                       "calculix": {"node_print": True, "el_print": True, "frd": True, "el_print_global": True}}
     comments["layup.angles"] = "bottom ply first; the lower half when symmetric"
@@ -929,7 +1116,8 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     comments["grips.kind"] = ("a reference point at each end drives the whole tab, as in the team's decks" if grips_kind == "coupling"
                               else "the grip nodes held directly: the CalculiX twin, which reports no reaction at a coupled reference node")
     comments["loading.value"] = "a push: negative along the coupon" if kind == "compression" else "along the coupon"
-    comments["output.fpf_criteria"] = "the material has strengths" if strengths else "no strengths given, so no failure criterion"
+    comments["output.fpf_criteria"] = (("every criterion the material allows" if values.criteria is None else "as chosen on the form") if criteria
+                                       else ("no strengths given, so no failure criterion" if not strengths else "none chosen on the form"))
     header = (f"{designation.name}, {test_name}: built from the coupon input form {form_name}, filled in by {values.filled_by} on {values.day}.",
               *([f"Notes from the team: {values.notes}"] if values.notes else []),
               "Units mm-MPa. Our defaults (element order, plane stress, probes, output requests) are commented where they stand.")
@@ -1078,7 +1266,9 @@ def team_readme(values: Values, designation: Designation, form_name: str, day: s
     ]
     if values.notes:
         lines += ["", f"Notes from the team: {values.notes}"]
-    lines += ["", "| File | What it is |", "| --- | --- |", f"| `{form_name}` | the coupon input form as received (form version {FORM_VERSION}) |", ""]
+    what = ("the coupon's values as the studio sent them: the form's rows as one JSON object" if form_name.lower().endswith(VALUES_SUFFIX)
+            else "the coupon input form as received")
+    lines += ["", "| File | What it is |", "| --- | --- |", f"| `{form_name}` | {what} (form version {FORM_VERSION}) |", ""]
     return "\n".join(lines)
 
 
@@ -1149,14 +1339,15 @@ def case_page(values: Values, designation: Designation, form_name: str, day: str
 
 
 def convert(form_path: Path | str, *, root: Path | str | None = None, day: str | None = None, replace: bool = False, dry_run: bool = False) -> Intake:
-    """Read a filled-in form and start its coupon under `root` (default .local/fea): the two specs in ours/, the form as received in
-    team/<day>/ with a README, and a case page when there is none. Specs that exist are refused unless `replace`, which rewrites the
-    two specs and nothing else. With `dry_run` nothing is written."""
+    """Read a filled-in form, or a values file, and start its coupon under `root` (default .local/fea): the two specs in ours/, the
+    input as received in team/<day>/ with a README, and a case page when there is none. Specs that exist are refused unless
+    `replace`, which rewrites the two specs and files the input it read them from, so that every attempt has its input; the README
+    and the case page are never rewritten. With `dry_run` nothing is written."""
     form_path = Path(form_path)
     root = Path(root) if root is not None else paths.LOCAL
     day = day or date.today().isoformat()
     date.fromisoformat(day)
-    form = read_form(form_path)
+    form = read_input(form_path)
     values = check_form(form)
     designation = designation_for(values, root)
     main, twin = build_specs(values, designation, form_path.name)
@@ -1175,13 +1366,13 @@ def convert(form_path: Path | str, *, root: Path | str | None = None, day: str |
     for path, text in specs.items():
         path.write_text(text, encoding="utf-8", newline="\n")
         written.append(path)
+    received = folder / paths.TEAM_FILES / day
+    copy = received / form_path.name
+    if copy.resolve() != form_path.resolve():
+        received.mkdir(parents=True, exist_ok=True)
+        copy.write_bytes(form_path.read_bytes())
+        written.append(copy)
     if not existing:
-        received = folder / paths.TEAM_FILES / day
-        copy = received / form_path.name
-        if copy.resolve() != form_path.resolve():
-            received.mkdir(parents=True, exist_ok=True)
-            copy.write_bytes(form_path.read_bytes())
-            written.append(copy)
         readme = received / "README.md"
         if not readme.exists():
             received.mkdir(parents=True, exist_ok=True)

@@ -71,12 +71,9 @@ from anisotropy_fea.model import coupled_nodes, expanded_layers, node_name, refe
 from anisotropy_fea.report import (COMPONENTS, GROUP_KIND, ComparisonRow, GroupSummary, comparison_rows, element_centroids,  # noqa: E402
                                    laminate_check, model_facts, not_reported, solve_record, summarize)
 from anisotropy_fea.spec import TEST_CODES, coupon_card, load_spec, spec_material  # noqa: E402
-from anisotropy_fea.units import from_si  # noqa: E402
+from anisotropy_fea.units import UNIT_LABEL, from_si  # noqa: E402  (UNIT_LABEL: one table for the documents and the studio)
 
 escape, code, inline, number, convert, heading = manual.escape, manual.code, manual.inline, manual.number, manual.convert, manual.heading
-
-UNIT_LABEL = {"mm-MPa": {"force": "N", "length": "mm", "stress": "MPa", "force_per_length": "N/mm", "modulus": "GPa", "stiffness": "N/mm"},
-              "m-Pa": {"force": "N", "length": "m", "stress": "Pa", "force_per_length": "N/m", "modulus": "GPa", "stiffness": "N/m"}}
 GROUP_TITLE = {"rf": "Reactions", "u": "Displacements", "strain": "Membrane strain at element centroids",
                "section_force": "Section forces", "ply_stress_local": "Ply stresses in material axes",
                "ply_strain_local": "Ply strains in material axes", "ply_mises": "Ply von Mises stress", "fpf": "First-ply failure"}

@@ -3,6 +3,7 @@
 import base64
 import binascii
 import hashlib
+import json
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, FiniteFloat, PositiveFloat, Tag, model_validator
@@ -328,15 +329,21 @@ class PrescribedCurvatureResponse(Contract):
 FORM_LIMIT_BYTES = 5_000_000  # a filled-in form is tens of kilobytes
 
 
-class CouponJobRequest(Contract):
-    """Start a coupon job (ADR-0050): a filled-in input form, or the name of a coupon that has its specs, and who runs it.
+VALUES_LIMIT_BYTES = 200_000  # a values object is a few kilobytes
 
-    The form travels as base64 with its file name. The run record keeps the form's name and SHA-256; the tool files the form
-    itself in the coupon's team/<date>/ folder. The options are those of fea/tools/run_coupon.py.
+
+class CouponJobRequest(Contract):
+    """Start a coupon job (ADR-0050): a filled-in input form, the coupon's values as the studio sends them (ADR-0051), or the name of
+    a coupon that has its specs, and who runs it.
+
+    The form travels as base64 with its file name; the values travel as one JSON object of the form's rows by field key. The run
+    record keeps the input's name and SHA-256; the tool files the input itself in the coupon's team/<date>/ folder. The options are
+    those of fea/tools/run_coupon.py.
     """
 
     form_name: Annotated[str, Field(pattern=r"^[^/\\:*?\"<>|\s-][^/\\:*?\"<>|]*\.xlsx$", max_length=120)] | None = None
     form_base64: str | None = None
+    values: dict[str, Any] | None = None
     coupon: Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$", max_length=80)] | None = None
     run_by: Annotated[str, Field(pattern=r"^[^\s-][^\r\n]*$", max_length=120)]
     replace: bool = False
@@ -346,15 +353,27 @@ class CouponJobRequest(Contract):
     @model_validator(mode="after")
     def one_source(self) -> Self:
         given = self.form_name is not None or self.form_base64 is not None
-        if given == (self.coupon is not None):
-            raise ValueError("give a form (form_name and form_base64) or a coupon, not both and not neither")
+        sources = sum((given, self.values is not None, self.coupon is not None))
+        if sources != 1:
+            raise ValueError("give a form (form_name and form_base64), the values, or a coupon: one of the three, not none and not several")
         if given and (self.form_name is None or self.form_base64 is None):
             raise ValueError("a form needs both form_name and form_base64")
         if self.coupon is not None and self.replace:
-            raise ValueError("replace rewrites a coupon's specs from its form, so it needs a form")
+            raise ValueError("replace rewrites a coupon's specs from its input, so it needs a form or the values")
         if given:
             self.form_bytes()
+        if self.values is not None:
+            self.values_bytes()
         return self
+
+    def values_bytes(self) -> bytes:
+        """The values object as the file the tool reads: JSON with sorted keys, so the digest does not depend on the order sent."""
+        if not self.values:
+            raise ValueError("values must hold the form's rows by field key; the object is empty")
+        content = json.dumps(self.values, sort_keys=True, ensure_ascii=False, indent=1).encode("utf-8")
+        if len(content) > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the values are {len(content)} bytes; the form's rows are far below {VALUES_LIMIT_BYTES}")
+        return content
 
     def form_bytes(self) -> bytes:
         try:
@@ -368,9 +387,13 @@ class CouponJobRequest(Contract):
         return content
 
     def recorded_inputs(self) -> dict[str, Any]:
-        """What the run record keeps of the request."""
-        source = {"coupon": self.coupon} if self.coupon is not None else {
-            "form": {"name": self.form_name, "sha256": hashlib.sha256(self.form_bytes()).hexdigest()}}
+        """What the run record keeps of the request: the input's digest, never the team's constants."""
+        if self.coupon is not None:
+            source: dict[str, Any] = {"coupon": self.coupon}
+        elif self.values is not None:
+            source = {"values": {"sha256": hashlib.sha256(self.values_bytes()).hexdigest(), "form_version": str(self.values.get("form_version", ""))}}
+        else:
+            source = {"form": {"name": self.form_name, "sha256": hashlib.sha256(self.form_bytes()).hexdigest()}}
         return {**source, "run_by": self.run_by, "replace": self.replace, "pdf": self.pdf, "theory": self.theory}
 
     def options(self) -> list[str]:
@@ -380,8 +403,9 @@ class CouponJobRequest(Contract):
 
 
 class CouponJobOutput(Contract):
-    """A coupon job as it stands (ADR-0050). `outputs` are paths from the repository root, by key; `run_id` names the job's
-    receipt once it has ended (null while it runs, or when recording is switched off)."""
+    """A coupon job as it stands (ADR-0050). `outputs` are paths from the repository root, by key: the files made so far while it
+    runs (ADR-0051), every file once it is done; `stage` is the step the tool is at and `stages_done` the steps behind it;
+    `run_id` names the job's receipt once it has ended (null while it runs, or when recording is switched off)."""
 
     job_id: str
     state: Literal["running", "done", "stopped", "refused"]
@@ -391,6 +415,9 @@ class CouponJobOutput(Contract):
     coupon: str | None
     attempt: str | None
     message: str | None
+    stage: str | None
+    stages_done: list[str]
+    stages: list[str]
     outputs: dict[str, str]
     run_id: str | None
     log_tail: list[str]
@@ -398,7 +425,72 @@ class CouponJobOutput(Contract):
     @classmethod
     def of(cls, job) -> "CouponJobOutput":
         outcome = job.outcome or {}
+        progress = job.progress() or {}
+        outputs = outcome.get("outputs") if outcome else progress.get("outputs", {})
         return cls(job_id=str(job.id), state=job.state, actor=job.actor, started_at=job.started_at.isoformat(),
-                   finished_at=None if job.finished_at is None else job.finished_at.isoformat(), coupon=outcome.get("coupon"),
-                   attempt=outcome.get("attempt"), message=outcome.get("message"), outputs=outcome.get("outputs", {}),
+                   finished_at=None if job.finished_at is None else job.finished_at.isoformat(), coupon=outcome.get("coupon") or progress.get("coupon"),
+                   attempt=outcome.get("attempt") or progress.get("attempt"), message=outcome.get("message"), stage=progress.get("stage"),
+                   stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), outputs=outputs or {},
                    run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail())
+
+
+class CouponCheckReceipt(Contract):
+    """What the run record keeps of a check: the values' digest and version, never the rows (the team's own constants stay with the coupon)."""
+
+    values: dict[str, str | int]
+
+
+class CouponCheckRequest(Contract):
+    """The studio's setup check (ADR-0051): the form's rows as one JSON object, judged without a run."""
+
+    values: dict[str, Any]
+
+    @model_validator(mode="after")
+    def not_empty(self) -> Self:
+        if not self.values:
+            raise ValueError("values must hold the form's rows by field key; the object is empty")
+        return self
+
+    def values_bytes(self) -> bytes:
+        content = json.dumps(self.values, sort_keys=True, ensure_ascii=False, indent=1).encode("utf-8")
+        if len(content) > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the values are {len(content)} bytes; the form's rows are far below {VALUES_LIMIT_BYTES}")
+        return content
+
+    def receipt(self) -> CouponCheckReceipt:
+        return CouponCheckReceipt(values={"sha256": hashlib.sha256(self.values_bytes()).hexdigest(),
+                                          "form_version": str(self.values.get("form_version", "")), "rows": len(self.values)})
+
+
+class CouponCheckResponse(Contract):
+    """What the check found: the checklist as fea/src/anisotropy_fea/checks.py writes it, and the model to draw when the inputs build
+    one. Recorded as a run, since it reaches the engine (ADR-0026)."""
+
+    run_id: str | None
+    state: Literal["ready", "blocked"]
+    designation: str | None
+    checklist: dict[str, Any]
+    preview: dict[str, Any] | None
+
+
+class CouponSummary(Contract):
+    """One coupon on this machine, from its spec and its case page (ADR-0051)."""
+
+    name: str
+    designation: str | None
+    kind: str
+    test: str
+    title: str
+    layup: str
+    status: str | None
+    accepted: str | None
+    attempts: int
+    category: str | None
+    problem: str | None = None
+
+
+class CouponValuesOutput(Contract):
+    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading."""
+
+    name: str
+    values: dict[str, Any]

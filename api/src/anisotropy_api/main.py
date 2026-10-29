@@ -22,13 +22,13 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
-from .coupon_jobs import CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, runner_command
+from .coupon_jobs import CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
 from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run
 from .settings import load_settings
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponJobOutput, CouponJobRequest,
-    LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, RunSummary,
-    VerificationResponse,
+    AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
+    CouponJobRequest, CouponSummary, CouponValuesOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest,
+    PrescribedCurvatureResponse, RunOutput, RunSummary, VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     app.state.records = connect(settings.database_url) if settings.run_records else None
     if app.state.records is not None:
         check_ready(app.state.records)
-    app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app))
+    app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command())
     yield
     if app.state.records is not None:
         app.state.records.dispose()
@@ -286,14 +286,16 @@ def _known_job(jobs: CouponJobs, job_id: uuid.UUID) -> Job:
 
 @app.post(COUPON_JOBS, status_code=202, response_model=CouponJobOutput)
 def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Request, response: Response) -> CouponJobOutput:
-    """Start a coupon job (ADR-0050): fea/tools/run_coupon.py takes a filled-in input form, or a coupon that has its specs, to the
-    coupon's package, in the background. One job runs at a time; another is refused with 409 while it runs. Poll the job at the
-    Location header until its state is no longer running; its receipt is a run record written when it ends (ADR-0026).
+    """Start a coupon job (ADR-0050): fea/tools/run_coupon.py takes a filled-in input form, the coupon's values as the studio sends
+    them (ADR-0051), or a coupon that has its specs, to the coupon's package, in the background. One job runs at a time; another is
+    refused with 409 while it runs. Poll the job at the Location header until its state is no longer running: its stage and the
+    files made so far appear as it goes; its receipt is a run record written when it ends (ADR-0026).
     """
     jobs = _coupon_jobs(request)
-    form = None if job_request.coupon is not None else (job_request.form_name, job_request.form_bytes())
+    form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
+    values = job_request.values_bytes() if job_request.values is not None else None
     try:
-        job = jobs.start(actor, job_request.recorded_inputs(), job_request.options(), form=form, coupon=job_request.coupon)
+        job = jobs.start(actor, job_request.recorded_inputs(), job_request.options(), form=form, coupon=job_request.coupon, values=values)
     except JobBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except JobRefused as exc:
@@ -301,6 +303,37 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
     response.headers["Location"] = f"{COUPON_JOBS}/{job.id}"
     with jobs.lock:
         return CouponJobOutput.of(job)
+
+
+@app.post(COUPON_JOBS + "/check", response_model=CouponCheckResponse)
+def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Request, response: Response) -> CouponCheckResponse:
+    """The studio's setup check (ADR-0051): the values judged as fea/tools/run_coupon.py would judge them, item by item, and the
+    model to draw when they build one. Nothing is written to the coupons' folders. It reaches the engine, so it is recorded with
+    its actor (ADR-0026); the studio tool answers within two minutes or the check is refused with 504.
+    """
+    jobs = _coupon_jobs(request)
+
+    def compute() -> CouponCheckResponse:
+        try:
+            found = jobs.check(problem.values_bytes())
+        except CheckTimedOut as exc:
+            raise HTTPException(status_code=504, detail=str(exc)) from exc
+        except JobRefused as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        checklist = found["checklist"]
+        return CouponCheckResponse(run_id=None, state=checklist["state"], designation=checklist.get("designation"), checklist=checklist,
+                                   preview=found["preview"])
+
+    return _deliver(request, response, actor, problem.receipt(), compute)
+
+
+@app.get(COUPON_JOBS, response_model=list[CouponJobOutput])
+def list_coupon_jobs(request: Request) -> list[CouponJobOutput]:
+    """Every coupon job of this API process, newest first (ADR-0051); jobs of earlier processes are in GET /v1/runs?endpoint=/v1/coupon-jobs."""
+    jobs = _coupon_jobs(request)
+    listed = jobs.listed()
+    with jobs.lock:
+        return [CouponJobOutput.of(job) for job in listed]
 
 
 @app.get(COUPON_JOBS + "/{job_id}", response_model=CouponJobOutput)
@@ -326,6 +359,51 @@ def coupon_job_package(job_id: uuid.UUID, request: Request) -> FileResponse:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FileResponse(archive, media_type="application/zip", filename=archive.name)
+
+
+MEDIA_TYPES = {".json": "application/json", ".txt": "text/plain; charset=utf-8", ".inp": "text/plain; charset=utf-8", ".toml": "text/plain; charset=utf-8",
+               ".vtu": "application/xml", ".pdf": "application/pdf", ".frd": "text/plain; charset=utf-8", ".zip": "application/zip"}
+
+
+@app.get(COUPON_JOBS + "/{job_id}/files/{key}")
+def coupon_job_file(job_id: uuid.UUID, key: str, request: Request) -> FileResponse:
+    """One file of a job by its key (ADR-0051): `fields`, `explanation`, `checklist` and `preview` as soon as the tool reports them,
+    while the job runs; every key the status lists once it is done; `package` is the zip. An unknown key names the keys there are."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(jobs, job_id)
+    try:
+        path = jobs.output_file(job, key)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"coupon job {job_id} has no file {key!r}; it has: {exc.args[0]}") from exc
+    except (FileNotFoundError, PermissionError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"), filename=path.name)
+
+
+@app.get("/v1/coupons", response_model=list[CouponSummary])
+def list_coupons(request: Request) -> list[CouponSummary]:
+    """Every coupon on this machine, from its spec and its case page (ADR-0051): what the studio offers to reopen."""
+    jobs = _coupon_jobs(request)
+    try:
+        return [CouponSummary(**entry) for entry in jobs.list_coupons()]
+    except CheckTimedOut as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except JobRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/v1/coupons/{name}/values", response_model=CouponValuesOutput)
+def coupon_values(name: str, request: Request) -> CouponValuesOutput:
+    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading."""
+    jobs = _coupon_jobs(request)
+    try:
+        return CouponValuesOutput(name=name, values=jobs.coupon_values(name))
+    except UnknownCoupon as exc:
+        raise HTTPException(status_code=404, detail=exc.args[0]) from exc
+    except CheckTimedOut as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except JobRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/v1/materials")

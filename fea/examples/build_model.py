@@ -4,24 +4,29 @@
 
 Writes into the output folder: <spec>-abaqus.inp (the complete model in our Abaqus dialect), <spec>-model.png (the mesh
 and sets before solving), summary.txt (counts, sets, layup, material citation, boundary table, SHA-256 of the deck),
-and when --solve is kept (default) <spec>-solved.png and <spec>.vtu from our membrane kernel. Pass --no-solve to only
-generate. The deck for CalculiX arrives in a later chunk.
+and when --solve is kept (default) <spec>-solved.png, <spec>.vtu, <spec>-fields.json (every field and the summary the
+studio's viewer reads, ADR-0051) and <spec>-explanation.json (the template's sentences about the result) from our membrane
+kernel. Pass --no-solve to only generate. The deck for CalculiX is written with --target.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import sys
 from pathlib import Path
 
 from anisotropy_fea.abaqus_reader import read_deck
+from anisotropy_fea.explain import explanation
 from anisotropy_fea.femodel import build_model
+from anisotropy_fea.fields import field_data
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.mesher import MeshError
+from anisotropy_fea.quality import element_quality
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
-from anisotropy_fea.spec import SpecError, load_spec
+from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
 from anisotropy_fea.units import from_si
 from anisotropy_fea.write_abaqus import write_abaqus
 
@@ -103,13 +108,26 @@ def main() -> None:
         report += f"\nkernel solve: reaction at {reaction_set} = [{from_si(rf[0], 'force', units):.6g}, {from_si(rf[1], 'force', units):.6g}] N; " \
                   f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n"
         field = element_ply_states(solution)
+        available = []
         for criterion in spec.output.fpf_criteria:
             try:
                 failure = strength_ratios(solution, criterion, deck_f12_star(deck), field)
                 report += (f"first-ply failure, {criterion}: factor {failure.factor:.6g} on the applied loading, element {failure.element[0]}.{failure.element[1]}, "
                            f"ply {failure.ply}, {failure.governing_mode}\n")
+                available.append(criterion)
             except KernelError as exc:
                 report += f"first-ply failure, {criterion}: not available ({exc})\n"
+        coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
+                  "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
+        data = field_data(deck, solution, units, criteria=tuple(available), quality=element_quality(model.mesh.xy, model.mesh.corners), coupon=coupon)
+        fields_path = args.out / f"{stem}-fields.json"
+        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        print("written", fields_path)
+        words = explanation(data["summary"], coupon, units, data["labels"])
+        explanation_path = args.out / f"{stem}-explanation.json"
+        explanation_path.write_text(json.dumps(words, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print("written", explanation_path)
+        report += "".join(f"{sentence}\n" for sentence in words["sentences"])
     (args.out / "summary.txt").write_text(report, encoding="utf-8", newline="\n")
     print("written", args.out / "summary.txt")
     print(report)

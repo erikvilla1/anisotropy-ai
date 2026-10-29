@@ -16,6 +16,12 @@ DECK_UNIT_SYSTEMS: dict[str, dict[str, float]] = {
 
 KINDS = ("length", "stress", "force", "force_per_length")  # force_per_length: a section force resultant, N/mm or N/m
 
+# How each kind is written for a reader, per system: the documents, the studio and the case pages share one table.
+UNIT_LABEL: dict[str, dict[str, str]] = {
+    "mm-MPa": {"force": "N", "length": "mm", "stress": "MPa", "force_per_length": "N/mm", "modulus": "GPa", "stiffness": "N/mm"},
+    "m-Pa": {"force": "N", "length": "m", "stress": "Pa", "force_per_length": "N/m", "modulus": "GPa", "stiffness": "N/m"},
+}
+
 
 def unit_factors(units: str | None) -> dict[str, float]:
     """The conversion factors for a stated unit system; refuses anything else, including no statement."""

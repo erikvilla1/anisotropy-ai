@@ -56,3 +56,13 @@ A background thread per job, calling the tool as a program, with the form in bas
 ## How we will know it was wrong
 
 If two people need coupon jobs at the same time, or a restart loses a job that mattered: then a jobs table or a queue.
+
+## Amendment 1, 2026-10-28 (what the studio needs: the values as an input, a check without a run, the stage and the files while a job runs, a listing, and the actor `studio`; asked for by the founder)
+
+**Context.** The coupon studio (ADR-0051) sends the form's rows from the browser, must check a setup before solving, needs the fields as soon as our engine has run while CalculiX and the PDF continue, lists the jobs and the coupons, and reopens a coupon. This record built the job with a form or a coupon name, a status of the console's last lines, and the package zip.
+
+**Options.** For the check: (1) start a job and stop it after the check, which takes an attempt number and writes files; (2) a synchronous request that runs `fea/tools/studio_tool.py check` and waits (chosen: a check is a few seconds, and it writes nothing to the coupons' folders). For the files while a job runs: (1) wait for the job to end (a minute with a PDF); (2) the tool rewrites a progress file after every step, and the API serves any file it has reported by its key (chosen). For the inputs of the check's run record: (1) the rows themselves, as `/v1/cases/solve` records its case; (2) the values' digest, version and row count, as this record keeps the form's digest (chosen: the team's own constants stay with the coupon, ADR-0046).
+
+**Decision.** `POST /v1/coupon-jobs` also takes `values`, one of the three inputs; the tool reads them from a file named by the job and files it with the coupon. `POST /v1/coupon-jobs/check` answers with the checklist and the preview, 504 when the tool does not answer within two minutes, recorded by the values' digest. The job's status carries `stage`, `stages_done` and the files made so far; `GET /v1/coupon-jobs/{id}/files/{key}` serves one by key, from the repository or the job's folder only; `GET /v1/coupon-jobs` lists this process's jobs newest first. `GET /v1/coupons` and `GET /v1/coupons/{name}/values` run the studio tool's `coupons` and `values`. The studio sends the actor `studio`, added by migration 0004. The check's temporary folder is removed after the answer. Still not built: cancelling a job, and a status that survives a restart.
+
+**Evidence.** `cd api && uv run pytest -q tests/test_coupon_jobs_api.py tests/test_coupon_check_api.py`: 38 passed without the database (2026-10-28); the four database tests are in the evaluation note `docs/evaluations/fea/2026-10-28-studio-foundations.md`. A stand-in plays the studio tool, as one plays the run tool.
