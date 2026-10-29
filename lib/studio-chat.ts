@@ -96,7 +96,7 @@ export function stepOfKey(key: string): ChatStep | null {
   if (PLY_KEYS.includes(key) || ["symmetric", "ply_thickness"].includes(key)) return "layup";
   if (["length", "width", "tab_length", "size_from", "span", "overhang", "load_span", "hole_diameter"].includes(key)) return "geometry";
   if (["control", "value"].includes(key)) return "loading";
-  if (key === "filled_by") return "name";
+  if (["filled_by", "material_code", "layup_code"].includes(key)) return "name"; // who runs it and the codes in the coupon's name
   if (["criteria", "f12_star", "element_size", "grips", "region", "date", "notes"].includes(key)) return "review";
   return null;
 }
@@ -105,7 +105,7 @@ export function stepOfKey(key: string): ChatStep | null {
 export const CHAT_LABELS: Record<string, string> = {
   length: "Length, tabs included (mm)", width: "Width (mm)", tab_length: "Tab length (mm, 0 for none)", hole_diameter: "Hole diameter (mm)",
   span: "Support span (mm)", overhang: "Overhang past each support (mm)", load_span: "Loading-nose span (mm)", size_from: "Where the size comes from",
-  ply_thickness: "Cured ply thickness (mm)", G13: "G13 (MPa)", G23: "G23 (MPa)", value: "Amount", own_name: "Material name (no spaces)",
+  ply_thickness: "Cured ply thickness (mm)", material_code: "Material code for the coupon's name, e.g. IM7", G13: "G13 (MPa)", G23: "G23 (MPa)", value: "Amount", own_name: "Material name (no spaces)",
   own_E1: "E1 (MPa)", own_E2: "E2 (MPa)", own_G12: "G12 (MPa)", own_nu12: "ν12", own_source: "Source of these numbers",
   own_F1t: "F1t (MPa)", own_F1c: "F1c (MPa)", own_F2t: "F2t (MPa)", own_F2c: "F2c (MPa)", own_F6: "F6 (MPa)", element_size: "Element size (mm)",
 };
