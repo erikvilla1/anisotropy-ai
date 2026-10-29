@@ -61,7 +61,7 @@ const QUESTIONS: Record<ChatStep | "advanced" | "reopen", { title: string; text?
   layup: { title: "What is the layup?", text: "Type it in laminate notation, bottom ply first, or pick one. Angles are measured from x, across the coupon's width: 90° runs along the load, 0° across it." },
   geometry: { title: "Coupon size", text: "The coupon's length runs along the load." },
   loading: { title: "How is it loaded?" },
-  name: { title: "Who is running it?", text: "Your name goes in the attempt log and the CalculiX record. It is remembered in this browser." },
+  name: { title: "Who is running it?", text: "Your name goes in the attempt log and the CalculiX record, and is remembered in this browser. A material we have not run before also needs a short code for the coupon's name, such as IM7; leave it blank to reuse the one we have." },
   review: { title: "Checking the setup" },
   advanced: { title: "Mesh, failure criteria and grips", text: "These have working defaults; change them only if you need to." },
   reopen: { title: "Reopen a saved coupon", text: "It loads as it was last run; solving it again adds the next attempt." },
@@ -434,7 +434,10 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm }
           </>
         );
       case "name":
-        return <RowsCard keys={["filled_by"]} form={form} submit="Continue" onApply={(rows) => rows.filled_by?.trim() && answer(rows.filled_by.trim(), { filled_by: rows.filled_by.trim() })} />;
+        return <RowsCard keys={["filled_by", "material_code"]} form={form} submit="Continue" onApply={(rows) => {
+          const name = rows.filled_by?.trim(), code = rows.material_code?.trim() ?? "";
+          if (name) answer(code ? `${name}; material code ${code}` : name, { filled_by: name, material_code: code });
+        }} />;
       case "advanced":
         return <RowsCard keys={["element_size", "criteria", "f12_star", ...(isBending(form) ? [] : ["grips", "region"])]} form={form} submit="Apply and check again"
           onApply={(rows) => answer(`Settings: element size ${rows.element_size} mm, criteria ${rows.criteria}${rows.grips ? `, grips ${rows.grips}` : ""}`, rows)}
