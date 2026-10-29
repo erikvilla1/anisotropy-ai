@@ -43,11 +43,12 @@ GET  /v1/coupon-jobs                   this process's jobs, newest first
 GET  /v1/coupon-jobs/{job_id}/files/{key}  one file by key (fields, explanation, checklist, preview while it runs; every key once done)
 GET  /v1/coupons                       every coupon on this machine, from its spec and case page
 GET  /v1/coupons/{name}/values         a coupon's rows as the values object the studio edits
+POST /v1/coupon-jobs/{job_id}/explain  {"kind": "result" | "setup"}  -> the explanation and who wrote it (ADR-0052)
 ```
 
 `uv run python examples/coupon_job.py <filled form>.xlsx --run-by "Erik Villa" --actor founder-terminal` does all three from a terminal: it prints each step as the job reaches it and saves the package zip (`--api` for another address, `--out` for another folder).
 
-Every request needs the `X-Anisotropy-Actor` header. A second job while one runs gets 409. A job's status is kept in memory until the API stops. When a job ends, its receipt is a run record with endpoint `/v1/coupon-jobs`, solved or rejected; the record keeps the form's name and SHA-256, and the tool files the form itself in the coupon's `team/<date>/` folder. A values object is recorded by its digest the same way, and a check by the values' digest too (ADR-0050 amendment 1). The studio's own requests carry the actor `studio` (migration 0004). The status of a running job says its stage and the files made so far.
+Every request needs the `X-Anisotropy-Actor` header. A second job while one runs gets 409. A job's status is kept in memory until the API stops. When a job ends, its receipt is a run record with endpoint `/v1/coupon-jobs`, solved or rejected; the record keeps the form's name and SHA-256, and the tool files the form itself in the coupon's `team/<date>/` folder. A values object is recorded by its digest the same way, and a check by the values' digest too (ADR-0050 amendment 1). The studio's own requests carry the actor `studio` (migration 0004). The status of a running job says its stage and the files made so far. The assistant is off unless `ANISOTROPY_ASSISTANT_PROVIDER`, `ANISOTROPY_ASSISTANT_MODEL` and `ANTHROPIC_API_KEY` (or `ANTHROPIC_AUTH_TOKEN`) are set; off, the template writes every explanation and no request leaves the machine.
 
 ## Database (run records, ADR-0025)
 

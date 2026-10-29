@@ -131,8 +131,9 @@ def test_a_blocked_setup_is_refused_before_anything_is_written(tool, tmp_path, m
     with pytest.raises(tool.Refused, match="the setup check blocks the run: Geometry defined: Length \\(mm\\): required"):
         tool.run(str(public_values(tmp_path, length=None)), "A. Engineer", pdf=False)
     assert not paths.LOCAL.exists()
-    with pytest.raises(tool.Refused, match="Laminate assigned: 4 plies: the layup is not symmetric"):
-        tool.run(str(public_values(tmp_path, symmetric="no")), "A. Engineer", pdf=False)
+    # an unsymmetric layup no longer blocks a run: the flat shell solves it (ADR-0053); a criterion without its constant still does
+    with pytest.raises(tool.Refused, match=r"Failure criterion: Tsai-Wu interaction f12\*: required for Tsai-Wu"):
+        tool.run(str(public_values(tmp_path, criteria="tsai-wu")), "A. Engineer", pdf=False)
     assert not paths.LOCAL.exists()
 
 

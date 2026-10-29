@@ -3,7 +3,8 @@
 Every number in a sentence is in the fact sheet first, and the sentence quotes it: the fact sheet is what a later assistant may
 rephrase and what its guard checks against (ADR-0048, ADR-0052). The template never computes: it reads `fields.field_data`'s
 summary and says, in the words the coupon document uses, what the coupon carries, where it moves most, which ply is stressed
-most, and by each criterion whether the laminate exceeds it and which ply limits it, where, and why.
+most, and by each criterion whether the laminate exceeds it and which ply limits it, on which face when the coupon bends
+(ADR-0053), where, and why.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ MODE_WORDS = {  # the engine's governing modes, each with what it means for an e
     "interactive": "the combined stresses (no single component governs)",
     "none": "no stress at all (the ply carries nothing there)",
 }
+AXIS_WORDS = {"x": "across the coupon", "y": "along the coupon", "z": "out of the plane (the deflection w)"}
 DIGITS = 4
 
 
@@ -36,15 +38,18 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
         "designation": coupon.get("designation") or "the coupon", "test": coupon.get("test") or "", "layup": coupon.get("layup") or "",
         "units": units, "length_unit": labels["length"], "force_unit": labels["force"], "stress_unit": labels["stress"],
         "control": summary["applied"]["control"], "applied": abs(float(summary["applied"]["value"])), "applied_unit": summary["applied"]["unit"],
-        "reaction": abs(float(summary["reaction"]["value"])), "sense": summary["reaction"]["sense"],
+        "applied_direction": summary["applied"].get("direction", "along the coupon"),
+        "reaction": abs(float(summary["reaction"]["value"])), "sense": summary["reaction"]["sense"], "reaction_set": summary["reaction"].get("set", "the top grip"),
         "max_displacement": float(summary["max_displacement"]["value"]), "max_displacement_node": summary["max_displacement"]["label"].rsplit(".", 1)[-1],
         "max_displacement_x": float(summary["max_displacement"]["xy"][0]), "max_displacement_y": float(summary["max_displacement"]["xy"][1]),
+        "max_displacement_axis": summary["max_displacement"].get("axis", "y"),
     }
     for name, m in summary["max_ply"].items():
         facts[f"max_{name}"] = float(m["value"])
         facts[f"max_{name}_ply"] = int(m["ply"])
         facts[f"max_{name}_angle"] = float(m["angle"])
         facts[f"max_{name}_element"] = m["label"].rsplit(".", 1)[-1]
+        facts[f"max_{name}_face"] = m.get("face")
     facts["criteria"] = list(summary["fpf"])
     facts["earliest"] = summary.get("earliest")
     for criterion, f in summary["fpf"].items():
@@ -52,6 +57,7 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
         facts[f"{criterion}_index"] = float(f["index"])
         facts[f"{criterion}_ply"] = int(f["ply"])
         facts[f"{criterion}_angle"] = float(f["angle"])
+        facts[f"{criterion}_face"] = f.get("face")
         facts[f"{criterion}_element"] = f["label"].rsplit(".", 1)[-1]
         facts[f"{criterion}_mode"] = f["mode"]
         facts[f"{criterion}_place"] = f["place"]
@@ -60,17 +66,23 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
     return facts
 
 
+def _face(face: str | None) -> str:
+    return f" on its {face} face" if face else ""
+
+
 def result_sentences(facts: dict[str, Any]) -> list[str]:
     """What the result says, one sentence at a time, every number quoted from the facts."""
-    out = [f"{facts['designation']}, {facts['test']}, under a {facts['control']} of {number(facts['applied'])} {facts['applied_unit']}: the top grip "
-           f"carries {number(facts['reaction'])} {facts['force_unit']} in {facts['sense']}.",
+    out = [f"{facts['designation']}, {facts['test']}, under a {facts['control']} of {number(facts['applied'])} {facts['applied_unit']} "
+           f"{facts['applied_direction']}: {facts['reaction_set']} carries {number(facts['reaction'])} {facts['force_unit']}, {facts['sense']}.",
            f"The largest displacement is {number(facts['max_displacement'])} {facts['length_unit']} at node {facts['max_displacement_node']} "
-           f"({number(facts['max_displacement_x'])}, {number(facts['max_displacement_y'])} {facts['length_unit']}).",
+           f"({number(facts['max_displacement_x'])}, {number(facts['max_displacement_y'])} {facts['length_unit']}), mostly "
+           f"{AXIS_WORDS.get(facts['max_displacement_axis'], facts['max_displacement_axis'])}.",
            "The largest ply stresses in material axes are "
            + ", ".join(f"{name} = {number(facts[f'max_{name}'])} {facts['stress_unit']} in ply {facts[f'max_{name}_ply']} "
-                       f"({number(facts[f'max_{name}_angle'])} degrees) at element {facts[f'max_{name}_element']}" for name in ("S11", "S22", "S12"))
+                       f"({number(facts[f'max_{name}_angle'])} degrees){_face(facts[f'max_{name}_face'])} at element {facts[f'max_{name}_element']}"
+                       for name in ("S11", "S22", "S12"))
            + f"; the largest ply von Mises stress is {number(facts['max_mises'])} {facts['stress_unit']} in ply {facts['max_mises_ply']} "
-           f"({number(facts['max_mises_angle'])} degrees) at element {facts['max_mises_element']}."]
+           f"({number(facts['max_mises_angle'])} degrees){_face(facts['max_mises_face'])} at element {facts['max_mises_element']}."]
     if not facts["criteria"]:
         out.append("No failure criterion was asked for, so first-ply failure is not reported.")
         return out
@@ -81,7 +93,8 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
         mode = MODE_WORDS.get(facts[f"{criterion}_mode"], facts[f"{criterion}_mode"])
         tied = facts[f"{criterion}_tied"]
         where = facts[f"{criterion}_place"]
-        who = f"ply {ply} ({number(angle)} degrees)" + (f", tied with {'ply' if len(tied) == 1 else 'plies'} {', '.join(str(p) for p in tied)}" if tied else "")
+        who = (f"ply {ply} ({number(angle)} degrees){_face(facts[f'{criterion}_face'])}"
+               + (f", tied with {'ply' if len(tied) == 1 else 'plies'} {', '.join(str(p) for p in tied)}" if tied else ""))
         if factor >= 1.0:
             text = (f"The laminate does not exceed the {name} criterion at the applied loading: the first ply to fail would be {who}, at element "
                     f"{facts[f'{criterion}_element']}, {where}, by {mode}, at {number(factor)} times the applied loading "

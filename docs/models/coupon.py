@@ -72,13 +72,13 @@ from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric
 from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
-from anisotropy_fea.membrane import solve_membrane  # noqa: E402
+from anisotropy_fea.kernel import solve_deck  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import to_si  # noqa: E402
 from anisotropy_fea.recovery import deck_f12_star, strength_ratios  # noqa: E402
 from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place, gauge_element, gripped_groups, laminate_check,  # noqa: E402
                                    model_facts, solve_record, summarize)
-from anisotropy_fea.spec import TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
+from anisotropy_fea.spec import BENDING_KINDS, TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
 from anisotropy_fea.units import from_si  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
@@ -126,6 +126,16 @@ def statement(spec, card: dict[str, str]) -> str:
                   else "as the team does in its Abaqus model of the tension coupon")
     grips = ((f"{held} is tied to a reference point by a kinematic coupling, {team_model}" if spec.grips.kind == "coupling"
               else f"{held} is held directly") if spec.grips else "it rests on its supports")
+    if loading is None:  # a plate: its supports and loads are lists over named regions (ADR-0054)
+        dof_words = {1: "x", 2: "y", 3: "z", 4: "the tilt about x", 5: "the tilt about y", 6: "the rotation about z"}
+        held_words = "; ".join(f"{s.region} holds " + ", ".join(dof_words[d] for d in s.dofs)
+                               + (f" at {from_si(s.value, 'length', units):g} {unit}" if s.value and max(s.dofs) <= 3 else f" at {s.value:g} rad" if s.value else "")
+                               for s in spec.supports)
+        load_words = "; ".join((f"a pressure of {from_si(ld.pressure, 'stress', units):g} {units.split('-')[1]} on {ld.region}" if ld.pressure is not None
+                                else f"{from_si(ld.total, 'force', units):g} N along {dof_words[ld.dof]} over {ld.region}") for ld in spec.loads)
+        return escape(f"The plate {card['Coupon']}: {card['Size']}; layup {card['Layup']}; material {card['Material'].split(' (')[0]}. "
+                      f"In the model, {held_words}" + (f", and it carries {load_words}" if load_words else "") + ". The questions our engine answers: what the "
+                      "supports carry, the strain and the stress in every ply, and at what share of the loading the first ply fails.")
     if loading.control == "displacement":
         value = from_si(abs(loading.value), "length", units)
         load = f"the top end is {'pulled' if loading.value > 0 else 'pushed'} {value:g} {unit} along the coupon while the bottom end is held"
@@ -233,12 +243,17 @@ def problem_chapter(spec, card: dict[str, str], c, units: str, figures: Path, sp
         rf"\section{{{material_heading(spec)}}}\label{{sec:material}}",
         team.material_section(c) if c is not None else material_section(spec, units, spec_path),
         r"\section{Supports and loading}",
-        escape(f"Grips: {grips.kind} on the {'whole tab regions' if grips.region == 'tabs' else 'end node rows'}. "
-               f"Loading: {spec.loading.control}, {from_si(spec.loading.value, 'length' if spec.loading.control == 'displacement' else 'force', units):g} "
-               f"{labels['length' if spec.loading.control == 'displacement' else 'force']} at the top grip"
-               + (f" ({'a pull' if spec.loading.value > 0 else 'a shortening'})" if spec.loading.control == "displacement" else "") + ". "
-               "The analysis is linear and static, in the plane of the laminate (a membrane: no bending, no buckling).")
-        + r" Figure~\ref{fig:model} shows the model." if grips else "",
+        (escape(f"Grips: {grips.kind} on the {'whole tab regions' if grips.region == 'tabs' else 'end node rows'}. "
+                f"Loading: {spec.loading.control}, {from_si(spec.loading.value, 'length' if spec.loading.control == 'displacement' else 'force', units):g} "
+                f"{labels['length' if spec.loading.control == 'displacement' else 'force']} at the top grip"
+                + (f" ({'a pull' if spec.loading.value > 0 else 'a shortening'})" if spec.loading.control == "displacement" else "") + ". "
+                "The analysis is linear and static, in the plane of the laminate (a membrane: no bending, no buckling).")
+         + r" Figure~\ref{fig:model} shows the model.") if grips else
+        (escape("Supports and loads as the spec lists them over the plate's regions: " + "; ".join(
+            f"{s.region} holds dofs {', '.join(str(d) for d in s.dofs)}" + (f" at {s.value:g}" if s.value else "") for s in spec.supports)
+            + ("; " + "; ".join((f"{ld.region} under a pressure of {from_si(ld.pressure, 'stress', units):g} {labels['stress']}" if ld.pressure is not None
+                                  else f"{ld.region} loaded by {from_si(ld.total, 'force', units):g} {labels['force']} along dof {ld.dof}") for ld in spec.loads)
+               if spec.loads else "") + ". The analysis is linear and static.") + r" Figure~\ref{fig:model} shows the model.") if spec.loading is None else "",
         documents.figure("figures/model.png", "The generated model: element sets, the gripped node sets (every node of each tab, named in "
                          "the legend), the reference points, the probes "
                          "(where values are read; Chapter 6 says which of them the CalculiX record compares), and the loading at the top grip, "
@@ -364,13 +379,22 @@ def abaqus_chapter(src: Sources, spec, deck, solution, units: str, committed: Pa
 def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[str, dict]:
     labels = documents.UNIT_LABEL[units]
     documents.plot_deck_module.plot_solution(deck, solution, units, figures / "solution.png", title=f"Our engine's solution, units {units}")
-    out = [r"Our engine solved the model of Section~\ref{sec:model} while this document was built. Figure~\ref{fig:solution} shows the deformed "
-           r"mesh, the three membrane strains, the axial section force and the maximum-stress failure index of every element.",
-           documents.figure("figures/solution.png", r"Our engine's solution: the mesh with its deformed outline and the reactions at the "
-                            r"reference points, the strains along the coupon ($\varepsilon_y$), across it ($\varepsilon_x$) and in shear "
-                            r"($\gamma_{xy}$), the axial section force $N_y$, and the maximum-stress failure index $1/R$ with the first ply to fail "
-                            r"by maximum stress marked x. The field panels show the free length, where the strain is: the gripped tabs move rigidly and carry none. A "
-                            r"signed field is drawn red above zero and blue below; a field of one sign runs from white at zero.", "fig:solution",
+    bending = spec.kind in BENDING_KINDS
+    out = [(r"Our engine solved the model of Section~\ref{sec:model} while this document was built. Figure~\ref{fig:solution} shows the mesh "
+            r"with its reactions, the deflection, the bending moment and the curvature along the coupon, the transverse shear force and the "
+            r"maximum-stress failure index of every element." if bending else
+            r"Our engine solved the model of Section~\ref{sec:model} while this document was built. Figure~\ref{fig:solution} shows the deformed "
+            r"mesh, the three membrane strains, the axial section force and the maximum-stress failure index of every element."),
+           documents.figure("figures/solution.png", (r"Our engine's solution: the mesh with the reactions at the supports and the nose, the "
+                                                     r"deflection $w$, the bending moment $M_y$ and the curvature $\kappa_y$ along the coupon, the "
+                                                     r"transverse shear force $Q_y$, and the maximum-stress failure index $1/R$ with the first ply to fail "
+                                                     r"by maximum stress marked x. A signed field is drawn red above zero and blue below; a field of one "
+                                                     r"sign runs from white at zero." if bending else
+                                                     r"Our engine's solution: the mesh with its deformed outline and the reactions at the "
+                                                     r"reference points, the strains along the coupon ($\varepsilon_y$), across it ($\varepsilon_x$) and in shear "
+                                                     r"($\gamma_{xy}$), the axial section force $N_y$, and the maximum-stress failure index $1/R$ with the first ply to fail "
+                                                     r"by maximum stress marked x. The field panels show the free length, where the strain is: the gripped tabs move rigidly and carry none. A "
+                                                     r"signed field is drawn red above zero and blue below; a field of one sign runs from white at zero."), "fig:solution",
                             r"\linewidth", r"0.55\textheight")]
     summary: dict = {}
     try:
@@ -400,8 +424,11 @@ def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[st
                                       rf"$\tau_{{12}}$ ({escape(labels['stress'])})"], ply_rows, r"rrrrr")]
     criteria = spec.output.fpf_criteria
     if criteria and any(m.fail_stress for m in deck.materials.values()):
-        applied = from_si(spec.loading.value, "length" if spec.loading.control == "displacement" else "force", units)  # signed: a shortening is negative
-        unit = labels["length" if spec.loading.control == "displacement" else "force"]
+        if spec.loading is not None:
+            applied = from_si(spec.loading.value, "length" if spec.loading.control == "displacement" else "force", units)  # signed: a shortening is negative
+            unit = labels["length" if spec.loading.control == "displacement" else "force"]
+        else:  # a plate: the factor scales every load and prescribed value together
+            applied, unit = 1.0, "of the loading"
         angles = full_angles(spec)
         rows, found, places, notes, at_grip = [], [], {}, [], False
         for criterion in criteria:
@@ -506,7 +533,9 @@ def reading_chapter(src: Sources, card: dict[str, str], c) -> str:
             r"\begin{itemize}",
             r"\item " + escape(f"Test data: {card['Test data']}. Until a real coupon is tested, the results are verified against another solver, not validated."),
             r"\item " + escape(f"Standard: {card['Standard']}. Size from: {card['Size from']}."),
-            r"\item The kernel is a membrane model: no bending, no buckling, no through-thickness stress (Section~\ref{sec:theory}).",
+            (r"\item The kernel is a flat shell: bending with first-order transverse shear, no buckling, no through-thickness stress "
+             r"(Section~\ref{sec:theory})." if card.get("Test") in {TEST_CODES[k][1] for k in BENDING_KINDS} else
+             r"\item The kernel is a membrane model: no bending, no buckling, no through-thickness stress (Section~\ref{sec:theory})."),
             r"\end{itemize}"]
     if c is not None:
         out += [r"From the team's side:", team.open_section(c)]
@@ -658,7 +687,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         raise SystemExit(f"{documents.rel(committed)} is not what the generator writes from {src.spec.name} today; run fea/tools/regenerate_decks.py first")
     deck_file = committed if committed.is_file() else src.latex / f"{src.spec.stem}-abaqus.inp"
     deck = to_si(parse_deck(text, source_path=deck_file.name), units)
-    solution = solve_membrane(deck)
+    solution = solve_deck(deck)
     record = load_record(src.record)
     rows, problems = comparison_rows(record)
     summaries = summarize(rows)

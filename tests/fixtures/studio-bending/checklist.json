@@ -1,0 +1,93 @@
+{
+ "items": [
+  {
+   "id": "identity",
+   "label": "Who and which coupon",
+   "state": "pass",
+   "message": "IM7-3PB-L1, three-point bending; a new coupon: its folder and case page are written when it runs",
+   "rows": []
+  },
+  {
+   "id": "units",
+   "label": "Units consistent",
+   "state": "pass",
+   "message": "every row in mm, MPa and N; the model is written in mm-MPa and forces come out in N",
+   "rows": []
+  },
+  {
+   "id": "geometry",
+   "label": "Geometry defined",
+   "state": "pass",
+   "message": "60 by 13 mm, 48 mm span with 6 mm overhangs, a node row on each support and nose line",
+   "rows": []
+  },
+  {
+   "id": "material",
+   "label": "Material defined",
+   "state": "pass",
+   "message": "IM7-8552: library im7-8552 / ncamp-im7-8552-2019-rtd-measured-v1 (record 2026-10-10.1; Hexcel 8552 IM7 unidirectional prepreg 190 gsm 35% RC · qualification material property data report · CAM-RP-2009-015 · Rev B · Wichita State University · NIAR / NCAMP · 2019-04-16); rights class open-publisher; strengths given",
+   "rows": []
+  },
+  {
+   "id": "laminate",
+   "label": "Laminate assigned",
+   "state": "pass",
+   "message": "8 plies [45/0/-45/90]s, 1.46304 mm thick; the flat shell kernel solves the bending",
+   "rows": []
+  },
+  {
+   "id": "constraints",
+   "label": "Constraints defined",
+   "state": "pass",
+   "message": "both support lines held along z (7 and 7 nodes); the centre node of each pins the in-plane motion without restraining the coupon's stretch or contraction; no rigid-body motion is left",
+   "rows": []
+  },
+  {
+   "id": "load",
+   "label": "Load applied",
+   "state": "pass",
+   "message": "the loading nose (Nose) moved 1 mm down onto the coupon along z; the supports carry the reaction",
+   "rows": []
+  },
+  {
+   "id": "mesh",
+   "label": "Mesh quality acceptable",
+   "state": "pass",
+   "message": "180 elements, 217 nodes (structured mesh, order 1); aspect ratio 1.08 at worst (warns above 10); smallest angle 90° at worst (warns below 10°); largest angle 90° at worst (warns above 160°); Jacobian ratio 1 at worst (warns below 0.1)",
+   "rows": []
+  },
+  {
+   "id": "criterion",
+   "label": "Failure criterion",
+   "state": "pass",
+   "message": "first-ply failure by max_stress, tsai_hill",
+   "rows": []
+  },
+  {
+   "id": "probes",
+   "label": "Result points inside the coupon",
+   "state": "pass",
+   "message": "results are read at node quarter at (6.5, 18), element centre, element quarter (mm)",
+   "rows": []
+  },
+  {
+   "id": "solver",
+   "label": "Reference solver installed",
+   "state": "pass",
+   "message": "CalculiX 2.22 at C:\\Tools\\PrePoMax v2.6.0\\Solver\\ccx_dynamic.exe: the reference solver that checks our engine's result",
+   "rows": []
+  },
+  {
+   "id": "document",
+   "label": "Document builder installed",
+   "state": "pass",
+   "message": "Tectonic at C:\\Users\\erikv\\AppData\\Local\\Programs\\tectonic\\tectonic.EXE: the package gets its PDF",
+   "rows": []
+  }
+ ],
+ "designation": "IM7-3PB-L1",
+ "coupon_exists": false,
+ "attempts": 0,
+ "state": "ready",
+ "problems": []
+}

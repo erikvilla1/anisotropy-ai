@@ -1,13 +1,14 @@
 # Finite element theory
 
-Every equation the finite element layer uses, and the function that computes it (ADR-0029). The element formulation follows K.-J. Bathe, *Finite Element Procedures*, 2nd edition (2014), Chapter 5 (formulation and calculation of isoparametric finite element matrices); the laminate stiffness comes from the engine ([engine theory](../../engine/docs/theory.md), Section 3). The kernel works in SI units throughout; a deck's units are converted once on entry (ADR-0002).
+Every equation the finite element layer uses, and the function that computes it (ADR-0029, ADR-0053). The element formulation follows K.-J. Bathe, *Finite Element Procedures*, 2nd edition (2014), Chapter 5 (formulation and calculation of isoparametric finite element matrices, and the mixed-interpolated plate elements); the plate theory follows J. M. Whitney, *Structural Analysis of Laminated Anisotropic Plates* (1987), Chapters 5 and 10; the laminate stiffness comes from the engine ([engine theory](../../engine/docs/theory.md), Section 3). The kernels work in SI units throughout; a deck's units are converted once on entry (ADR-0002).
 
 ## Conventions
 
 - The laminate x axis is the deck's global x axis: the only orientation our deck reader accepts is the global one, so ply angles are measured from global x, counterclockwise, as in ADR-0004.
-- Each node has two degrees of freedom, $`u`$ along x and $`v`$ along y. Abaqus dofs 1 and 2. There are no out-of-plane or rotational degrees of freedom.
-- Strain is the membrane (midplane) strain $`\boldsymbol{\varepsilon} = [\varepsilon_x, \varepsilon_y, \gamma_{xy}]^T`$ with engineering shear.
-- Section forces are resultants per unit width, $`\mathbf{N} = [N_x, N_y, N_{xy}]^T`$ in N/m, what Abaqus reports as SF.
+- In the membrane kernel (Sections 1 to 7) each node has two degrees of freedom, $`u`$ along x and $`v`$ along y, Abaqus dofs 1 and 2; there are no out-of-plane or rotational degrees of freedom. The flat shell kernel (Section 8) adds $`w`$ along z and the rotations $`\theta_x`$, $`\theta_y`$ about the x and y axes, Abaqus dofs 3 to 5; the drilling rotation, dof 6, is never carried.
+- Strain is the membrane (midplane) strain $`\boldsymbol{\varepsilon} = [\varepsilon_x, \varepsilon_y, \gamma_{xy}]^T`$ with engineering shear; the shell adds the curvature $`\boldsymbol{\kappa}`$ and the transverse shear strain $`\boldsymbol{\gamma} = [\gamma_{xz}, \gamma_{yz}]^T`$, engineering too.
+- Section forces are resultants per unit width, $`\mathbf{N} = [N_x, N_y, N_{xy}]^T`$ in N/m, what Abaqus reports as SF; the shell adds the moments $`\mathbf{M}`$ in N (Abaqus SM) and the transverse shear forces $`\mathbf{Q}`$ in N/m.
+- A uniform pressure (`*Dload`, label P) is positive against the element normal, which is $`+z`$ for counterclockwise nodes: a positive pressure pushes the plate toward $`-z`$.
 - Element nodes are listed counterclockwise, as Abaqus S4-family elements list them.
 
 ## 1. What the membrane model represents, and when it refuses
@@ -160,6 +161,113 @@ computed by `strength_ratios`, which also returns every ratio and governing mode
 
 <!-- code: strength_ratios, deck_f12_star -->
 
+## 8. The flat shell: bending, transverse shear and pressure (`shell.py`)
+
+The membrane of Sections 1 to 7 stays the kernel for the in-plane coupons; every result it gives is pinned by the cases and records above. A deck that bends, carries a pressure, prescribes or loads a degree of freedom out of the plane, or has an unsymmetric layup goes to the flat shell of this section (ADR-0053), which keeps the same mesh, the same four-node element and the same engine laminate law. Which kernel a deck gets is computed by `needs_shell`, the dispatch is computed by `solve_deck`, and what the membrane refuses when it is asked directly is checked by `membrane_limits`.
+
+<!-- code: needs_shell, solve_deck, membrane_limits -->
+
+### 8.1 Kinematics and the laminate law
+
+Each node carries five degrees of freedom, $`u, v, w, \theta_x, \theta_y`$: the translations along x, y, z and the rotations about the x and y axes, Abaqus dofs 1 to 5. The drilling rotation, dof 6, has no stiffness in a flat plate and is dropped (a boundary on it is noted, a load on it refused). The displacement through the thickness is that of the first-order shear deformation theory (Whitney, *Structural Analysis of Laminated Anisotropic Plates*, 1987, Eq. 10.1, written with the rotations about the axes, $`\psi_x = \theta_y`$ and $`\psi_y = -\theta_x`$):
+
+```math
+u(x, y, z) = u_0 + z\,\theta_y, \qquad v(x, y, z) = v_0 - z\,\theta_x, \qquad w(x, y, z) = w ,
+```
+
+so the in-plane strain is $`\boldsymbol{\varepsilon} = \boldsymbol{\varepsilon}_0 + z\,\boldsymbol{\kappa}`$ with the membrane strain of Section 2 and the curvatures (Whitney Eqs. 10.2 and 10.3)
+
+```math
+\boldsymbol{\kappa} = \begin{bmatrix} \kappa_x \\ \kappa_y \\ \kappa_{xy} \end{bmatrix}
+= \begin{bmatrix} \partial \theta_y / \partial x \\ -\,\partial \theta_x / \partial y \\ \partial \theta_y / \partial y - \partial \theta_x / \partial x \end{bmatrix},
+\qquad
+\boldsymbol{\gamma} = \begin{bmatrix} \gamma_{xz} \\ \gamma_{yz} \end{bmatrix}
+= \begin{bmatrix} \partial w / \partial x + \theta_y \\ \partial w / \partial y - \theta_x \end{bmatrix}
+```
+
+the transverse shear strains (Whitney Eq. 10.4), constant through the thickness. The section forces follow the engine's laminate law with $`\mathbf{B}`$ kept ([engine theory](../../engine/docs/theory.md), Section 3; Whitney Eq. 10.5) and the shear law of Whitney Eqs. 10.6 and 10.7:
+
+```math
+\mathbf{N} = \mathbf{A}\boldsymbol{\varepsilon}_0 + \mathbf{B}\boldsymbol{\kappa}, \qquad
+\mathbf{M} = \mathbf{B}\boldsymbol{\varepsilon}_0 + \mathbf{D}\boldsymbol{\kappa}, \qquad
+\mathbf{Q} = \mathbf{H}\boldsymbol{\gamma}, \qquad
+\mathbf{H} = k \sum_{\text{plies}} t_k \begin{bmatrix} \bar{Q}_{55} & \bar{Q}_{45} \\ \bar{Q}_{45} & \bar{Q}_{44} \end{bmatrix}_k ,
+```
+
+with $`\bar{Q}_{55} = G_{13} c^2 + G_{23} s^2`$, $`\bar{Q}_{44} = G_{13} s^2 + G_{23} c^2`$, $`\bar{Q}_{45} = (G_{13} - G_{23})\, c\, s`$ for a ply at angle $`\theta`$ ($`c = \cos\theta`$, $`s = \sin\theta`$) and the shear correction factor $`k = 5/6`$, Reissner's value (Whitney Section 10.4 lists 5/6, $`\pi^2/12`$ and 2/3 as the values in use; 5/6 is a stated choice, applied to every laminate alike). $`\mathbf{M}`$ is the moment per unit width in N and $`\mathbf{Q}`$ the transverse shear force per unit width in N/m. A lamina must state $`G_{13}`$ and $`G_{23}`$; an isotropic material takes both equal to $`G`$. The transverse shear stiffness is computed by `transverse_shear_stiffness`, and the section with $`\mathbf{A}`$, $`\mathbf{B}`$, $`\mathbf{D}`$ and $`\mathbf{H}`$ is computed by `shell_section_stiffness`.
+
+<!-- code: transverse_shear_stiffness -->
+
+<!-- code: shell_section_stiffness -->
+
+### 8.2 The MITC4 element
+
+The element is the bilinear quadrilateral of Section 2 with the five dofs per node, and the element dof vector is $`\mathbf{u}_e = [u_1, v_1, w_1, \theta_{x1}, \theta_{y1}, \dots, \theta_{y4}]^T`$. With the physical derivatives $`\partial N_i / \partial x`$ and $`\partial N_i / \partial y`$ of Section 2, the membrane strain is $`\boldsymbol{\varepsilon}_0 = \mathbf{B}_m \mathbf{u}_e`$ and the curvature $`\boldsymbol{\kappa} = \mathbf{B}_b \mathbf{u}_e`$, with the rows of $`\mathbf{B}_m`$ computed by `membrane_rows` and the rows of $`\mathbf{B}_b`$ computed by `bending_rows`:
+
+```math
+\mathbf{B}_{b,i} = \begin{bmatrix} 0 & 0 & 0 & 0 & \partial N_i / \partial x \\ 0 & 0 & 0 & -\partial N_i / \partial y & 0 \\ 0 & 0 & 0 & -\partial N_i / \partial x & \partial N_i / \partial y \end{bmatrix}.
+```
+
+<!-- code: membrane_rows -->
+
+<!-- code: bending_rows -->
+
+A displacement-based bilinear plate element locks as the plate gets thin, because the bilinear $`w`$ cannot make $`\boldsymbol{\gamma}`$ vanish while bending. The MITC4 element of Bathe and Dvorkin (K.-J. Bathe, *Finite Element Procedures*, 2nd ed., 2014, the mixed-interpolated plate elements of Chapter 5; the section and equation numbers are not checked against a copy here) interpolates the transverse shear strains from their values at the edge midpoints instead. In natural coordinates the covariant shear strains of the bilinear fields are
+
+```math
+\gamma_\xi = \frac{\partial w}{\partial \xi} + \frac{\partial x}{\partial \xi}\theta_y - \frac{\partial y}{\partial \xi}\theta_x, \qquad
+\gamma_\eta = \frac{\partial w}{\partial \eta} + \frac{\partial x}{\partial \eta}\theta_y - \frac{\partial y}{\partial \eta}\theta_x ,
+```
+
+computed by `covariant_shear_rows` at a point. The assumed field takes $`\gamma_\xi`$ at the midpoints A $`(0, 1)`$ and C $`(0, -1)`$ and $`\gamma_\eta`$ at D $`(1, 0)`$ and B $`(-1, 0)`$, and interpolates each linearly across the element,
+
+```math
+\gamma_\xi(\xi, \eta) = \tfrac12 (1 + \eta)\, \gamma_\xi^A + \tfrac12 (1 - \eta)\, \gamma_\xi^C, \qquad
+\gamma_\eta(\xi, \eta) = \tfrac12 (1 + \xi)\, \gamma_\eta^D + \tfrac12 (1 - \xi)\, \gamma_\eta^B ,
+```
+
+and the Cartesian strains follow from $`[\gamma_\xi, \gamma_\eta]^T = \mathbf{J}\,[\gamma_{xz}, \gamma_{yz}]^T`$ with the Jacobian of Section 2. The rows of the resulting $`\mathbf{B}_s`$, $`\boldsymbol{\gamma} = \mathbf{B}_s \mathbf{u}_e`$, are computed by `shear_rows`. On a pure bending field $`w = -\kappa x^2 / 2`$, $`\theta_y = \kappa x`$, the tied strains vanish at every point, which the displacement-based element cannot do.
+
+<!-- code: covariant_shear_rows -->
+
+<!-- code: shear_rows -->
+
+The element stiffness, with the 2 by 2 Gauss rule of Section 2 and the laminate matrices of Section 8.1, is computed by `element_stiffness_shell`:
+
+```math
+\mathbf{k}_e = \sum_{g} w_g\, \det \mathbf{J}_g \left( \mathbf{B}_m^T \mathbf{A} \mathbf{B}_m + \mathbf{B}_m^T \mathbf{B} \mathbf{B}_b + \mathbf{B}_b^T \mathbf{B} \mathbf{B}_m + \mathbf{B}_b^T \mathbf{D} \mathbf{B}_b + \mathbf{B}_s^T \mathbf{H} \mathbf{B}_s \right).
+```
+
+It is symmetric and has exactly six zero eigenvalues: three translations, the two tilts and the in-plane rotation; no spurious mode.
+
+<!-- code: element_stiffness_shell -->
+
+A uniform pressure $`p`$ on an element (`*Dload` with the P label) becomes the consistent nodal forces on $`w`$, computed by `pressure_loads`:
+
+```math
+f_{w,i} = -\,p \sum_g w_g\, \det \mathbf{J}_g\, N_i(\xi_g, \eta_g) ,
+```
+
+the sign being that of the Abaqus label, positive against the element normal, which is $`+z`$ for counterclockwise nodes. The CalculiX convention is not assumed; it is detected by a run and recorded in `fea/checks/calculix-conventions.toml` (Section 9 of that file once the detection run exists; UNVERIFIED until then).
+
+<!-- code: pressure_loads -->
+
+### 8.3 Constraints, assembly and solution
+
+Degrees of freedom are numbered $`5i`$ to $`5i + 4`$ for node $`i`$. A kinematic coupling aliases every coupled dof the coupling names (dofs 1 to 5; dof 6 is dropped) to the reference node's, so a coupled edge translates and tilts with its reference node and the reference node's reaction carries the summed forces and moments. Prescribed values on dofs 1 to 5, concentrated loads on dofs 1 to 5 (forces in N, moments in N m) and the pressure forces are collected on the reduced dofs, with the same conflict and detachment refusals as Section 3; all of this is computed by `constraint_map_shell`, and the sparse global stiffness is computed by `assemble_shell`. The partition, the sparse LU solve, the singularity checks and the reactions as the residual at the prescribed dofs are those of Section 4; a plate whose translation along z or whose tilts are nowhere held is refused with that message. The solve is computed by `solve_shell`.
+
+<!-- code: constraint_map_shell -->
+
+<!-- code: assemble_shell -->
+
+<!-- code: solve_shell -->
+
+### 8.4 Recovery with faces
+
+At every element's centroid the membrane strain, the curvature and the transverse shear strain are $`\mathbf{B}_m \mathbf{u}_e`$, $`\mathbf{B}_b \mathbf{u}_e`$ and $`\mathbf{B}_s \mathbf{u}_e`$, computed by `element_states`; the section forces, moments and shear forces follow from the law of Section 8.1. Because the curvature is not zero, each ply's strain differs between its bottom and top face, $`\boldsymbol{\varepsilon}(z) = \boldsymbol{\varepsilon}_0 + z\,\boldsymbol{\kappa}`$, so the ply recovery of Section 6 keeps both faces of every ply (the engine's `ply_surfaces` with the element's curvature) and the strength ratios of Section 7 are evaluated on each face; the first ply to fail is named with its face, and ties are broken by element, then ply, then the bottom face. A membrane state keeps one value per ply as before.
+
+<!-- code: element_states -->
+
 ## Checks
 
 Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
@@ -172,12 +280,16 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - A coupled edge driven by a reference node gives the same displacements as the same edge prescribed node by node, and the reference node's reaction equals the summed edge reactions (`test_membrane_solve.py`).
 - The gripped test coupon of 2 by 8 elements: reactions in equilibrium, top and bottom reference reactions equal and opposite; refined to 4 by 16 and 8 by 32 elements, its reaction does not grow and converges (`test_membrane_solve.py`).
 - Ply stresses in material axes equal the engine's `ply_surfaces` on the uniform cases for all ten plies; the first-ply-failure factor, governing ply and mode equal the engine's `first_ply_failure` for maximum stress, Tsai-Hill and Tsai-Wu; the factor halves when the imposed displacement doubles; in the gripped 2 by 8 test coupon the first ply to fail sits within two element rows of a grip, a property of that test deck and not of every coupon; missing strengths, strain limits or $`f_{12}^*`$ are refused by name (`test_recovery.py`).
+- The shell element: its strain rows match hand values on the unit square; $`\mathbf{k}_e`$ is symmetric with exactly six zero eigenvalues on a rectangle and on a skewed quadrilateral; the three rigid translations and three rigid rotations give no strain and no force; a pure bending field is carried with constant curvature and zero transverse shear at every point, and its nodal forces are the edge moments; pressure loads are consistent and sum to the load; a clockwise element is refused (`test_shell_element.py`).
+- Engine equality under bending (validation case `bend-1x1-im7-engine-equality`): one unsymmetric IM7/8552 [0/30/-30/90] element under a prescribed uniform curvature reproduces the engine's $`\mathbf{N} = \mathbf{B}\boldsymbol{\kappa}`$, $`\mathbf{M} = \mathbf{D}\boldsymbol{\kappa}`$, both faces of every ply and the first-ply-failure factor, ply, face and mode to a relative 1e-12 (`test_shell_solve.py`).
+- The shell reproduces the membrane on a symmetric in-plane deck, and through a kinematic coupling on the gripped coupon, to 1e-12 and 1e-10; the dispatch sends the in-plane decks to the membrane and a bending, pressure or unsymmetric deck to the shell; a plate free to move out of its plane and a load on the drilling rotation are refused by name; an unsymmetric layup under tension is refused by the membrane and solved, bending, by the shell (`test_shell_solve.py`).
+- Closed forms (cases `plate-ss-isotropic-uniform-pressure-navier`, `plate-ss-isotropic-thin-no-locking`, `plate-ss-cross-ply-sinusoidal-navier`, `strip-cantilever-tip-load-timoshenko`): the simply supported isotropic square plate under uniform pressure reproduces Whitney's Navier series with transverse shear deformation within 0.5 % on 16 by 16 elements, and does so unchanged when the plate is a thousand times thinner than wide, where a displacement-based bilinear element would lock; the simply supported IM7/8552 [0/90]s plate under a sinusoidal pressure reproduces the one-term solution, both faces of every ply included, within 1 % on 32 by 32 elements; the cantilever strip with $`\nu = 0`$ reproduces the Timoshenko beam's tip deflection, shear part included, within 0.02 % and its tip rotation, root moment and shear force to 1e-9 (`test_fe_validation_cases.py`; the closed forms themselves are checked in `test_plate_closed_forms.py` against the tabulated 0.00406 coefficient, the Kirchhoff limit and the plate equation).
 
 ## Not modeled yet
 
-- Bending and the $`\mathbf{D}`$ matrix; unsymmetric layups; transverse shear
 - Rotated laminate axes (an `*Orientation` other than the global axes)
 - Triangles, higher-order shells, solids, membranes (M3D4)
-- Distributed loads and pressure; thermal strain
+- Distributed loads other than a uniform pressure per element (surface tractions, gravity, line loads by `*Dload`); thermal strain
+- Interlaminar stresses from equilibrium (the transverse shear stress is uniform through the thickness in the shell's law, Whitney Eq. 10.22, and is not reported per ply)
 - Abaqus-style failure indices (MSTRS, TSAIH, TSAIW) as numbers to compare against; progressive failure
 - Finite element buckling

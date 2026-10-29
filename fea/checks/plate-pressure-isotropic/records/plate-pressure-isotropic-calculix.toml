@@ -1,0 +1,37 @@
+title = "NOM-PLT-L1, plate: a 100 mm square isotropic plate, simply supported on four edges, under a uniform pressure toward +z: CalculiX 2.22 S8R against the kernel"
+units = "mm-MPa"
+spec = "../plate-pressure-isotropic.toml"
+deck_kernel = "../decks/plate-pressure-isotropic-abaqus.inp"
+deck_reference = "../decks/plate-pressure-isotropic-ccx.inp"
+deck_kernel_sha256 = "ab764d5c2c516ae7e24c376461bc05771948c7ada24b677abd3a522f9d7148bd"
+deck_reference_sha256 = "dd03f1b5783ce5dd28b0de5f240996a43caa662d7bbad4d7f277ac896127cd64"
+
+[solver]
+name = "calculix"
+version = "2.22"
+element_type = "S8R"
+run_by = "Claude Code for Erik Villa"
+run_date = "2026-10-28"
+machine = "founder Windows 11, PrePoMax v2.6.0 bundle"
+source = "dat"
+conventions = "../../calculix-conventions.toml"
+notes = "The first plate stated by supports and loads (ADR-0054): a uniform pressure through the CalculiX *DLOAD with the sign flipped as the conventions file records. The reaction totals are left out: CalculiX printed -23.9 N per edge against the kernel's -25.3 N, 5.5 percent short, while its own deflection agrees within 0.12 percent; the printed totals of a shell node set are known to be incomplete (shell_set_totals in the conventions file). The record holds the centre deflection and both faces of the one ply at the centre element."
+
+[known_differences]
+kernel = "four-node MITC4 flat shell (ADR-0053), full 2 by 2 integration, first-order shear deformation with the correction factor 5/6, curvature and transverse shear at the element centroid, ply stresses on both faces of every ply from the laminate law"
+reference = "S8R expanded to a C3D20R brick, reduced integration, three-dimensional constitutive law with E3, nu13, nu23, transverse shear, drilling rotation removed; each ply's face values extrapolated linearly from its two integration levels"
+
+[expected]
+tolerance = 0.03
+floor = 0.02
+
+[expected.w]
+"Coupon-1.145" = [0.6339994]
+
+[expected.ply_stress_local."Coupon-1.137"]
+"1:bottom" = [-28.478205255666314, -28.478205255666314, 0.14227554610702475]
+"1:top" = [28.478205255666314, 28.478205255666314, -0.14227554610702475]
+
+[expected.ply_strain_local."Coupon-1.137"]
+"1:bottom" = [-0.00028478205255666304, -0.00028478205255666304, 5.284520123141897e-06]
+"1:top" = [0.00028478205255666304, 0.00028478205255666304, -5.284520123141897e-06]

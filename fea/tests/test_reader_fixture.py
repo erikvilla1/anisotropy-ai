@@ -137,7 +137,7 @@ def test_the_isotropic_plate_uses_a_homogeneous_section_and_a_node_target_with_a
 
 def test_the_supported_keyword_list_is_what_the_readme_documents():
     assert SUPPORTED_KEYWORDS == (
-        "assembly", "boundary", "cload", "coupling", "elastic", "element", "elset", "end assembly", "end instance", "end part",
+        "assembly", "boundary", "cload", "coupling", "dload", "elastic", "element", "elset", "end assembly", "end instance", "end part",
         "end step", "fail stress", "heading", "instance", "kinematic", "material", "node", "nset", "orientation", "part",
         "shell section", "static", "step", "surface",
     )
