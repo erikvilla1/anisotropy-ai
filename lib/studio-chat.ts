@@ -138,6 +138,8 @@ export function layupRows(layup: { plies: number[]; symmetric: boolean }): Studi
 }
 
 const NUM = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
+/** A load keeps a typed minus sign, so the setup check refuses it rather than the chat quietly dropping it (ADR-0003). */
+const SIGNED = String.raw`(-?(?:\d+(?:\.\d+)?|\.\d+))`;
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** What a typed message states, as form rows, with a few words for each thing understood. Unknown words are left alone. */
@@ -185,8 +187,8 @@ export function readMessage(text: string): { rows: StudioForm; understood: strin
   const thickness = single(`${NUM}\\s*mm\\s*(?:per\\s*)?ply|ply\\s*thickness\\s*(?:of|=|:)?\\s*${NUM}`);
   if (thickness) set("ply_thickness", thickness, `ply thickness ${thickness} mm`);
 
-  const force = new RegExp(`${NUM}\\s*(kn|n)\\b`).exec(t);
-  const travel = single(`${NUM}\\s*mm\\s*(?:of\\s*)?(?:displacement|pull|push|stroke|travel|deflection|extension)|(?:displacement|pull|push|stroke|travel|deflection|extension|displace)\\s*(?:of|by|=|:)?\\s*${NUM}\\s*mm`);
+  const force = new RegExp(`${SIGNED}\\s*(kn|n)\\b`).exec(t);
+  const travel = single(`${SIGNED}\\s*mm\\s*(?:of\\s*)?(?:displacement|pull|push|stroke|travel|deflection|extension)|(?:displacement|pull|push|stroke|travel|deflection|extension|displace)\\s*(?:of|by|=|:)?\\s*${SIGNED}\\s*mm`);
   if (travel) { rows.control = "displacement"; set("value", travel, `${travel} mm displacement`); }
   else if (force) {
     const newtons = force[2] === "kn" ? Number((Number(force[1]) * 1000).toPrecision(12)) : Number(force[1]);

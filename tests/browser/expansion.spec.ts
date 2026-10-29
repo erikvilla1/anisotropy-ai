@@ -1,13 +1,11 @@
 import { test, expect } from "@playwright/test";
 
-test("negative chat inputs remain visible and show validation errors", async ({ page }) => {
+test("a negative load stays negative so the setup check can refuse it (ADR-0003)", async ({ page }) => {
   await page.goto("/chat");
-  await page.getByRole("textbox", { name: "Message the scope assistant" }).fill("Apply -20 kN with -5 mm thickness");
+  await page.getByRole("textbox", { name: "Message the coupon assistant" }).fill("Unnotched tension, apply -20 kN");
   await page.getByRole("button", { name: "Send message" }).click();
-  await expect(page.locator(".scope-fields").last()).toContainText("-20 kN");
-  await expect(page.locator(".scope-fields").last()).toContainText("-5 mm");
-  await expect(page.locator(".validation-errors").last()).toContainText("applied_load_kN must be positive");
-  await expect(page.locator(".validation-errors").last()).toContainText("thickness_mm must be positive");
+  await expect(page.locator(".chat-understood").last()).toContainText("-20000 N force");
+  await expect(page.getByTestId("chat-spec")).toContainText("-20000 N force");
 });
 
 test("navigation routes load directly with research-focused About", async ({
@@ -30,59 +28,8 @@ test("navigation routes load directly with research-focused About", async ({
   await page.getByRole("link", { name: "Development process streamlining" }).click();
   await expect(page).toHaveURL(/\/chat\/?$/);
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Edit specification", exact: false }),
-  ).toBeVisible();
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
   expect(errors).toEqual([]);
-});
-
-test("spec editor validates and feeds the chat and downloadable report outline", async ({
-  page,
-}) => {
-  await page.goto("/chat");
-  await page
-    .getByRole("button", { name: "Edit specification", exact: false })
-    .click();
-  const dialog = page.getByRole("dialog");
-  await dialog
-    .getByRole("combobox", { name: "Test method", exact: true })
-    .selectOption("ASTM D5766");
-  await dialog
-    .getByLabel("Material system", { exact: true })
-    .fill("CF-EP sample");
-  await dialog.getByLabel("Width (mm)", { exact: true }).fill("36");
-  await dialog.getByLabel("Length (mm)", { exact: true }).fill("250");
-  await dialog.getByLabel("Hole diameter (mm)", { exact: true }).fill("40");
-  await dialog.getByRole("button", { name: "Save draft" }).click();
-  await expect(dialog.getByRole("alert")).toContainText(
-    "less than coupon width",
-  );
-  await dialog.getByLabel("Hole diameter (mm)", { exact: true }).fill("6");
-  await dialog.getByLabel("Ply count", { exact: true }).fill("16");
-  await dialog
-    .getByLabel("Ply stacking sequence", { exact: true })
-    .fill("[45/-45/0/90]2s");
-  await dialog.getByRole("button", { name: "Save draft" }).click();
-  await expect(dialog).not.toBeVisible();
-  await expect(page.locator(".scope-fields").last()).toContainText(
-    "[45/-45/0/90]2s",
-  );
-  await page.getByLabel("Response format").selectOption("report");
-  await page
-    .getByRole("textbox", { name: "Message the scope assistant" })
-    .fill("Prepare my report outline");
-  await page.getByRole("button", { name: "Send message" }).click();
-  const event = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download LaTeX outline" }).click();
-  const file = await event;
-  expect(file.suggestedFilename()).toBe("anisotropy-ai-report-outline.tex");
-  const stream = await file.createReadStream();
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
-  const text = Buffer.concat(chunks).toString();
-  expect(text).toContain("CF-EP sample");
-  expect(text).toContain("250");
-  expect(text).toContain("No engineering conclusion is available");
 });
 
 test("material filters, empty state, references and scope handoff", async ({
@@ -115,14 +62,10 @@ test("material filters, empty state, references and scope handoff", async ({
     .getByRole("button", { name: "7781 / E-765", exact: false })
     .click();
   await page.getByRole("link", { name: "Discuss this material" }).click();
-  await page
-    .getByRole("button", { name: "Edit specification", exact: false })
-    .click();
-  await expect(
-    page.getByRole("dialog").getByLabel("Material system", { exact: true }),
-  ).toHaveValue(
-    "7781 / E-765",
-  );
+  await expect(page).toHaveURL(/\/chat\/?$/); // not a library material of the engine: the chat asks from the start
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
+  await page.goto("/chat?material=im7-8552");
+  await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
 });
 
 test("expanded pages fit phones and tablets with local-only visual assets", async ({

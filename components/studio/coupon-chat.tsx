@@ -12,6 +12,7 @@ import {
   parseLayup, readMessage, stepOfKey, TEST_CHOICES, type ChatStep,
 } from "@/lib/studio-chat";
 import { printed } from "@/lib/studio-colors";
+import { handoffKey } from "../home-composer";
 import { PreviewScene } from "./coupon-studio";
 import { JobProgress } from "./job-progress";
 import { ResultsView } from "./results-view";
@@ -28,6 +29,24 @@ type Entry =
   | { id: number; role: "assistant"; kind: "result"; job: string };
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
 type NewEntry = Without<Entry>;
+
+/** What another page handed over: a message typed on the home page (session storage, or ?prompt= when storage is blocked) and a
+ * library material (?material=), each used once. */
+function readHandoff(): { prompt: string; material: string } {
+  const params = new URLSearchParams(window.location.search);
+  let prompt = params.get("prompt") ?? "";
+  try {
+    const stored = window.sessionStorage.getItem(handoffKey);
+    if (stored) {
+      window.sessionStorage.removeItem(handoffKey);
+      const payload = JSON.parse(stored) as { prompt?: unknown };
+      if (typeof payload.prompt === "string") prompt = payload.prompt;
+    }
+  } catch { /* storage blocked: the address carries the message */ }
+  const material = libraryOptions.some((m) => m.id === params.get("material")) ? params.get("material")! : "";
+  if (params.has("prompt") || params.has("material")) window.history.replaceState(null, "", window.location.pathname);
+  return { prompt: prompt.trim().slice(0, 2000), material };
+}
 
 function today(): string { return new Date().toISOString().slice(0, 10); }
 function remembered(key: string): string { try { return window.localStorage.getItem(key) ?? ""; } catch { return ""; } }
@@ -128,7 +147,16 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm }
     if (initialForm && initialForm.test) {
       add({ role: "assistant", kind: "text", title: "Picked up from the full form", body: <p>I have the rows you filled in. Here is what is still needed, then I check the setup.</p> });
       proceed(start);
-    } else ask("test");
+      return;
+    }
+    // a library material sent from its page, or a message typed on the home page, starts the conversation
+    const handoff = readHandoff();
+    if (handoff.material) {
+      setForm({ ...start, library: handoff.material });
+      add({ role: "assistant", kind: "text", title: `Material: ${materialName(handoff.material)}`, body: <p>Taken from the library page; change it any time.</p> });
+    }
+    ask("test");
+    if (handoff.prompt) send(handoff.prompt);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -261,8 +289,8 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm }
     })();
   }, [job, apiBaseUrl, add]);
 
-  function send() {
-    const text = input.trim();
+  function send(value = input) {
+    const text = value.trim();
     if (!text) return;
     setInput("");
     if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
@@ -275,7 +303,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm }
     const { rows, understood } = readMessage(text);
     if (!understood.length) {
       add({ role: "user", text }, { role: "assistant", kind: "text", title: "I could not read a coupon value in that",
-        body: <p>Try the options above, or a phrase like “250 x 25 mm, 56 mm tabs”, “[0/90]2s”, “AS4/8552” or “10 kN”. Type “full form” for every row.</p> });
+        body: <p>I set up and run coupon tests: try the options above, or a phrase like “open-hole tension”, “250 x 25 mm, 56 mm tabs”, “[0/90]2s”, “AS4/8552” or “10 kN”. Type “full form” for every row.</p> });
       return;
     }
     add({ role: "user", text }, { role: "assistant", kind: "text", title: "Got it", body: <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul> });

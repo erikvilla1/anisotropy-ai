@@ -25,7 +25,7 @@
 - The rows carry between the chat and the full form, which keeps the plate, the Abaqus mesh and the Abaqus names.
 - The chat states the angle convention when it asks for the layup; the convention itself is unchanged (ADR-0004).
 - The browser computes no result (ADR-0001). It converts kN to N on entry and offers the tape estimate G13 = G12, G23 = E2/3 from the library's numbers as a choice the engineer clicks, noted on the coupon as the form's help asks; no row is filled without the engineer's click or words (ADR-0003).
-- `/chat` stays the scripted preview for now.
+- `/chat` stays the scripted preview for now (changed by amendment 1).
 
 ## Why (evidence)
 
@@ -41,3 +41,10 @@
 ## How we will know it was wrong
 
 - Engineers in the first feedback round open the full form for coupons the chat covers, or a typed message is read into a wrong row.
+
+## Amendment 1 (2026-10-29): `/chat` is the coupon assistant
+
+- Decided by: Founder, 2026-10-29, on the question "Should /chat become the new coupon assistant?": "Point /chat at the coupon chat" (option 2 above, taken after option 1 shipped).
+- `/chat` renders the same guided chat and full-form tab as `/studio`, full screen under the chat header. The home page's message and a library material (`?material=` with a library id) start the conversation there; the home composer drops its response-format menu.
+- The scripted preview's answers (scope brief, comparison table, data checklist, scope JSON, LaTeX outline, specification editor) are no longer reachable from `/chat`; their browser tests are replaced by the chat's. `components/workspace.tsx` keeps serving `/data`; its unused assistant code and `lib/demo.ts`'s scope helpers can go in a later cleanup.
+- A typed load keeps its minus sign (`-20 kN` is read as -20000 N) so the setup check refuses it rather than the chat dropping the sign (ADR-0003).
