@@ -16,6 +16,7 @@ export type SceneProps = {
   displacement?: number[][] | null; scale?: number;
   held?: SceneMarker[];
   loaded?: (SceneMarker & { direction: string }) | null;
+  loads?: (SceneMarker & { direction: string })[]; // further loads of a plate (ADR-0054), drawn like `loaded`
   highlight?: number | null;
   picked?: number | null;
   wireframe?: boolean;
@@ -67,7 +68,7 @@ function Plate({ nodes, quads, thickness, colors, xy, heights, wireframe, onPick
 }
 
 export function SceneCanvas(props: SceneProps) {
-  const { nodes, quads, thickness, colors = null, displacement = null, scale = 1, held = [], loaded = null, highlight = null, picked = null,
+  const { nodes, quads, thickness, colors = null, displacement = null, scale = 1, held = [], loaded = null, loads = [], highlight = null, picked = null,
     wireframe = true, onPick } = props;
   const [webgl, setWebgl] = useState<boolean | null>(null);
   useEffect(() => { setWebgl(webglAvailable()); }, []);
@@ -93,21 +94,22 @@ export function SceneCanvas(props: SceneProps) {
           if (!box) return null;
           return <Line key={`held-${i}`} points={frame(box, top + meanHeight(heights, marker.nodes))} color={HELD} lineWidth={2} />;
         })}
-        {loaded && setBox(xy, loaded.nodes) ? (() => {
-          const box = setBox(xy, loaded.nodes)!;
-          const at = centroid(xy, loaded.nodes);
-          const lift = top + meanHeight(heights, loaded.nodes);
-          const sign = loaded.direction.startsWith("-") ? -1 : 1;
-          const along = loaded.direction.endsWith("x") ? [sign, 0, 0] : loaded.direction.endsWith("y") ? [0, sign, 0] : [0, 0, sign];
+        {[...(loaded ? [loaded] : []), ...loads].map((load, i) => {
+          const box = setBox(xy, load.nodes);
+          if (!box) return null;
+          const at = centroid(xy, load.nodes);
+          const lift = top + meanHeight(heights, load.nodes);
+          const sign = load.direction.startsWith("-") ? -1 : 1;
+          const along = load.direction.endsWith("x") ? [sign, 0, 0] : load.direction.endsWith("y") ? [0, sign, 0] : [0, 0, sign];
           const length = 0.18 * size;
           const origin = along[2] < 0 ? [at[0], at[1], lift + length] : [at[0], at[1], lift]; // a push along -z is drawn arriving onto the plate
           return (
-            <group>
+            <group key={`load-${i}`}>
               <Line points={frame(box, lift)} color={LOADED} lineWidth={2} />
               <arrowHelper args={[new THREE.Vector3(...along), new THREE.Vector3(...origin), length, LOADED, 0.3 * length, 0.15 * length]} />
             </group>
           );
-        })() : null}
+        })}
         {highlight !== null && highlight >= 0 && highlight < quads.length ? (
           <Line points={[...elementLoop(xy, quads[highlight], top, heights), elementLoop(xy, quads[highlight], top, heights)[0]] as [number, number, number][]} color={CRITICAL} lineWidth={3} />
         ) : null}
@@ -119,7 +121,7 @@ export function SceneCanvas(props: SceneProps) {
       {held.length || loaded ? (
         <p className="studio-scene-key">
           {held.map((marker, i) => <span key={i}><span className="studio-key-swatch" style={{ borderColor: HELD }} aria-hidden="true" /> {marker.label}</span>)}
-          {loaded ? <span><span className="studio-key-swatch" style={{ borderColor: LOADED }} aria-hidden="true" /> {loaded.label} (the arrow)</span> : null}
+          {[...(loaded ? [loaded] : []), ...loads].map((load, i) => <span key={`k${i}`}><span className="studio-key-swatch" style={{ borderColor: LOADED }} aria-hidden="true" /> {load.label} (the arrow)</span>)}
           {highlight !== null ? <span><span className="studio-key-swatch" style={{ borderColor: CRITICAL }} aria-hidden="true" /> the critical element</span> : null}
         </p>
       ) : null}

@@ -79,7 +79,14 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
     out.append("*STATIC")
     if moving:
         out.append("*BOUNDARY")
-        out += [f"{b.target}, {b.dof_first}, {b.dof_last}, {number(length(b.value))}" for b in moving]
+        out += [f"{b.target}, {b.dof_first}, {b.dof_last}, {number(length(b.value) if b.dof_last <= 3 else b.value)}" for b in moving]
+    if model.loads:
+        out.append("*CLOAD")
+        out += [f"{load.target.rsplit('.', 1)[-1] if '.' in load.target else load.target}, {load.dof}, {number(from_si(load.value, 'force', units))}" for load in model.loads]
+    if model.pressures:
+        out.append("** A CalculiX shell pressure is positive along the element normal, the opposite of the Abaqus P label (fea/checks/calculix-conventions.toml): the sign is flipped here.")
+        out.append("*DLOAD")
+        out += [f"{pressure.elset}, P, {number(-stress(pressure.value))}" for pressure in model.pressures]
     requests = spec.output.calculix
     if requests.node_print:
         for grip in model.support_sets:

@@ -17,11 +17,12 @@ export type FormDefinition = {
   sections: SectionDefinition[]; how_to: string[];
   glossary: { group: string; terms: { term: string; meaning: string; example: string }[] }[];
   tests: Record<string, string>; criteria: string[]; library: LibraryEntry[];
+  plate?: { test: string; edges: string[]; areas: string[]; with_tabs: string[]; with_hole: string[]; dofs: Record<string, string> };
 };
 /** Every row's text as typed, by field key; blank means the row is empty. */
 export type StudioForm = Record<string, string>;
-/** The values object the API takes: the rows with numbers parsed, blanks left out (ADR-0046 amendment 3). */
-export type StudioValues = Record<string, string | number | boolean | number[]>;
+/** The values object the API takes: the rows with numbers parsed, blanks left out (ADR-0046 amendment 3); a plate adds its lists (ADR-0054). */
+export type StudioValues = Record<string, string | number | boolean | number[] | unknown[]>;
 
 export const formDefinition = definition as FormDefinition;
 export const FORM_VERSION = formDefinition.form_version;
@@ -32,9 +33,11 @@ export const PLY_KEYS = fields.map((field) => field.key).filter((key) => /^ply_\
 export const HOLE_KEYS = ["hole_diameter", "hole_circumferential", "hole_radial", "hole_ring", "hole_growth"];
 export const BENDING_KEYS = ["span", "overhang", "load_span"];
 export const GRIP_KEYS = ["grips", "region", "tab_length"];
+export const LOADING_KEYS = ["control", "value"];
 export const OPEN_HOLE_TEST = "open-hole tension";
 export const BENDING_TESTS = ["three-point bending", "four-point bending"];
 export const FOUR_POINT_TEST = "four-point bending";
+export const PLATE_TEST = formDefinition.plate?.test ?? "plate";
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /** The public IM7/8552 example (the stand-in of `fea/tests/public_coupon.py`): a complete, solvable coupon to start from. */
@@ -57,15 +60,19 @@ export function exampleForm(today: string): StudioForm {
   return { ...blankForm(), ...EXAMPLE, date: today };
 }
 
-/** The sections to show for a test: the open-hole rows only for open-hole tension, the bending rows only for the bending tests, which
- * have supports instead of grips and tabs, and the loading span only for four-point bending (the tool ignores the rest otherwise). */
+/** The sections to show for a test: the open-hole rows only for open-hole tension and for a plate, the bending rows only for the bending
+ * tests, which have supports instead of grips and tabs, the loading span only for four-point bending, and for a plate (ADR-0054) neither the
+ * grips nor the loading rows, since it lists its supports and loads over regions (the tool ignores the rest otherwise). */
 export function sectionsFor(form: StudioForm): SectionDefinition[] {
   const openHole = form.test === OPEN_HOLE_TEST;
   const bending = BENDING_TESTS.includes(form.test);
+  const plate = form.test === PLATE_TEST;
   const visible = (field: FieldDefinition): boolean => {
-    if (HOLE_KEYS.includes(field.key)) return openHole;
+    if (HOLE_KEYS.includes(field.key)) return openHole || plate;
     if (BENDING_KEYS.includes(field.key)) return bending && (field.key !== "load_span" || form.test === FOUR_POINT_TEST);
-    if (GRIP_KEYS.includes(field.key)) return !bending;
+    if (field.key === "tab_length") return !bending;
+    if (GRIP_KEYS.includes(field.key)) return !bending && !plate;
+    if (LOADING_KEYS.includes(field.key)) return !plate;
     return true;
   };
   return formDefinition.sections
@@ -75,7 +82,7 @@ export function sectionsFor(form: StudioForm): SectionDefinition[] {
 
 /** The values object: numbers parsed where the row is a number, blanks left out, a text that is not a number left as text so the
  * API's check refuses it by row. No physics, no defaults beyond the form's own. */
-export function buildValues(form: StudioForm): StudioValues {
+export function buildValues(form: StudioForm, lists?: Record<string, unknown[]>): StudioValues {
   const values: StudioValues = { form_version: FORM_VERSION };
   const visible = new Set(sectionsFor(form).flatMap((section) => section.fields.map((field) => field.key)));
   for (const field of fields) {
@@ -85,6 +92,7 @@ export function buildValues(form: StudioForm): StudioValues {
     if ((field.kind === "number" || field.kind === "whole" || field.kind === "angle") && NUMBER.test(text)) values[field.key] = Number(text);
     else values[field.key] = text;
   }
+  if (form.test === PLATE_TEST && lists) for (const [key, list] of Object.entries(lists)) values[key] = list as unknown as number[];
   return values;
 }
 

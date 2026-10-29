@@ -3050,6 +3050,22 @@
     299,
     305
    ],
+   "Edge-Bottom": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "Edge-Top": [
+    300,
+    301,
+    302,
+    303,
+    304,
+    305
+   ],
    "Tab-Bottom-Line": [
     66,
     67,
@@ -3339,57 +3355,7 @@
   "node_count": 306,
   "element_count": 250
  },
- "held": [
-  {
-   "set": "Grip-Bottom",
-   "through": "RF-Bottom",
-   "dofs": [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6
-   ],
-   "directions": [
-    "x",
-    "y",
-    "z",
-    "rotation about x",
-    "rotation about y",
-    "rotation about z"
-   ],
-   "nodes": 72
-  },
-  {
-   "set": "Grip-Top",
-   "through": "RF-Top",
-   "dofs": [
-    1
-   ],
-   "directions": [
-    "x"
-   ],
-   "nodes": 72
-  },
-  {
-   "set": "Grip-Top",
-   "through": "RF-Top",
-   "dofs": [
-    3,
-    4,
-    5,
-    6
-   ],
-   "directions": [
-    "z",
-    "rotation about x",
-    "rotation about y",
-    "rotation about z"
-   ],
-   "nodes": 72
-  }
- ],
+ "held": [],
  "loaded": {
   "set": "Grip-Top",
   "through": "RF-Top",
@@ -3400,6 +3366,19 @@
   "unit": "mm",
   "nodes": 72
  },
+ "loads": [
+  {
+   "set": "Grip-Top",
+   "through": "RF-Top",
+   "control": "displacement",
+   "dof": 2,
+   "direction": "+y",
+   "value": 1.0,
+   "unit": "mm",
+   "nodes": 72
+  }
+ ],
+ "regions": null,
  "plies": [
   {
    "index": 1,

@@ -22,6 +22,8 @@ export type Preview = {
     node_count: number; element_count: number };
   held: { set: string; through: string | null; dofs: number[]; directions: string[]; nodes: number }[];
   loaded: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number };
+  loads?: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number }[];
+  regions?: { edges: string[]; areas: string[] } | null;
   plies: { index: number; angle: number; thickness: number; z_bottom: number; z_top: number; material: string }[];
   material: { name: string; source: string; rights: string; E1: number; E2: number; G12: number; nu12: number; G13: number; G23: number;
     strengths: Record<string, number> | null; f12_star: number | null; criteria: string[]; citation_lines: string[]; ply_thickness: number; plies: number };

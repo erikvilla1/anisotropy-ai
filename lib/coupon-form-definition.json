@@ -1,5 +1,5 @@
 {
- "form_version": "0.4",
+ "form_version": "0.5",
  "fea_version": "0.1.0",
  "units": "mm-MPa",
  "row_units": {
@@ -53,7 +53,7 @@
      "key": "test",
      "label": "Test",
      "kind": "list",
-     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan) or four-point bending (pushed down at two lines); see Definitions, Tests",
+     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines) or plate (a laminate held and loaded on regions you name, stated from the studio); see Definitions, Tests",
      "required": true,
      "default": null,
      "words": [
@@ -62,7 +62,8 @@
       "open-hole tension",
       "in-plane shear",
       "three-point bending",
-      "four-point bending"
+      "four-point bending",
+      "plate"
      ],
      "at_least": null,
      "above": null
@@ -212,13 +213,13 @@
    ]
   },
   {
-   "title": "Open hole (open-hole tension only; ignored for the other tests)",
+   "title": "Open hole (open-hole tension, or a plate with a hole; ignored for the other tests)",
    "fields": [
     {
      "key": "hole_diameter",
      "label": "Hole diameter (mm)",
      "kind": "number",
-     "help": "the diameter of the hole at the centre of the coupon, e.g. 6",
+     "help": "the diameter of the hole at the centre of the coupon, e.g. 6; on a plate the hole's ring becomes a region you can hold or load",
      "required": false,
      "default": null,
      "words": [],
@@ -850,7 +851,7 @@
   "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one.",
   "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give its interaction term f12*; or pick one criterion, or none.",
   "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
-  "Open hole: the hole rows are read only for open-hole tension. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it.",
+  "Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
   "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway to the tab. You do not enter these points: we place them from the geometry.",
   "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
   "Send the file back as it is. If something is missing or inconsistent, we send it back with every problem named."
@@ -903,6 +904,11 @@
      "term": "In-plane shear",
      "meaning": "A strip made of +45 and -45 plies only, pulled. The plies are loaded in shear, which gives the shear stiffness and strength.",
      "example": "ASTM D3518. Every ply +45 or -45, as many of each."
+    },
+    {
+     "term": "Plate",
+     "meaning": "A flat laminate held and loaded on regions you name: an edge, a tab, the ring of a hole, the whole face, or a box you draw on it. Each support says which directions it holds (and a travel, if it moves); each load is a force along a direction spread over its region, or a pressure on an area. Stated from the studio, which draws the regions; the Excel form has no rows for them.",
+     "example": "A square plate simply supported on its four edges under a pressure."
     },
     {
      "term": "Three-point bending",
@@ -1108,7 +1114,8 @@
   "open-hole tension": "open_hole_tension",
   "in-plane shear": "shear_pm45",
   "three-point bending": "three_point_bending",
-  "four-point bending": "four_point_bending"
+  "four-point bending": "four_point_bending",
+  "plate": "plate"
  },
  "criteria": [
   "all",
@@ -1424,5 +1431,32 @@
    "Source": "Experimental and Numerical Investigation of Wide Area Blunt Impact Damage to Composite Aircraft Structures · Tables 3.1 and 3.2, §3.2.1 · University of California, San Diego · PhD dissertation in Structural Engineering (chair Hyonny Kim) · 2015",
    "Rights": "licensed-reference"
   }
- ]
+ ],
+ "plate": {
+  "test": "plate",
+  "edges": [
+   "Edge-Bottom",
+   "Edge-Top",
+   "Edge-Left",
+   "Edge-Right"
+  ],
+  "areas": [
+   "Face"
+  ],
+  "with_tabs": [
+   "Tab-Bottom",
+   "Tab-Top"
+  ],
+  "with_hole": [
+   "Hole"
+  ],
+  "dofs": {
+   "1": "x",
+   "2": "y",
+   "3": "z",
+   "4": "tilt about x",
+   "5": "tilt about y",
+   "6": "rotation about z"
+  }
+ }
 }

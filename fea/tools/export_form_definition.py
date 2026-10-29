@@ -19,6 +19,7 @@ from pathlib import Path
 from anisotropy_fea import __version__, paths
 from anisotropy_fea.intake import (BLOCKS, CRITERION_WORDS, FORM_VERSION, GLOSSARY, HOW_TO, LIBRARY_COLUMNS, TESTS, UNITS, library_records,
                                    library_row)
+from anisotropy_fea.spec import AREA_REGIONS, EDGE_REGIONS
 
 TARGET = paths.ROOT / "lib" / "coupon-form-definition.json"
 
@@ -39,6 +40,8 @@ def definition() -> dict:
         "tests": dict(TESTS),
         "criteria": list(CRITERION_WORDS),
         "library": library,
+        "plate": {"test": "plate", "edges": list(EDGE_REGIONS), "areas": list(AREA_REGIONS), "with_tabs": ["Tab-Bottom", "Tab-Top"], "with_hole": ["Hole"],
+                  "dofs": {"1": "x", "2": "y", "3": "z", "4": "tilt about x", "5": "tilt about y", "6": "rotation about z"}},
     }
 
 

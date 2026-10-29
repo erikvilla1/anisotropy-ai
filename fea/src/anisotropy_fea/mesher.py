@@ -136,13 +136,16 @@ def with_midside_nodes(xy: list[tuple[float, float]], corners: np.ndarray) -> tu
 
 def sets_by_coordinates(points: np.ndarray, corners: np.ndarray, width: float, length: float,
                         node_rows: dict[str, float] | None, element_bands: dict[str, tuple[float, float]] | None,
-                        node_bands: dict[str, tuple[float, float]] | None, tolerance: float) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+                        node_bands: dict[str, tuple[float, float]] | None, tolerance: float,
+                        boxes: dict[str, tuple[float, float, float, float]] | None = None) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """The named sets of a plate [0, width] x [0, length] with loading axis y, found from coordinates.
 
-    Node sets: Grip-Bottom (y = 0), Grip-Top (y = length), Edge-Left (x = 0), Edge-Right (x = width), one per entry of
-    `node_rows` (name -> y) which must coincide with a node row, and one per entry of `node_bands` (name -> (y0, y1))
+    Node sets: Grip-Bottom (y = 0), Grip-Top (y = length), Edge-Left (x = 0), Edge-Right (x = width), one
+    per entry of `node_rows` (name -> y) which must coincide with a node row, and one per entry of `node_bands` (name -> (y0, y1))
     holding every node in the band; a band set replaces a default set of the same name. Midside nodes on a line belong
     to its set. Element sets: one per entry of `element_bands` (name -> (y0, y1)) holding the elements whose centroid lies in the band.
+    A box (name -> (x0, x1, y0, y1), ADR-0054) gives both a node set of the nodes inside it and an element set of the elements whose
+    centroid lies inside it.
     """
 
     def nodes_on(predicate) -> np.ndarray:
@@ -164,6 +167,10 @@ def sets_by_coordinates(points: np.ndarray, corners: np.ndarray, width: float, l
         node_sets[name] = nodes_on(lambda x, y, y0=y0, y1=y1: y0 - tol_y <= y <= y1 + tol_y)
     centroid_y = points[corners].mean(axis=1)[:, 1]
     element_sets = {name: np.flatnonzero((centroid_y >= y0) & (centroid_y <= y1)) for name, (y0, y1) in (element_bands or {}).items()}
+    centroids = points[corners].mean(axis=1)
+    for name, (x0, x1, y0, y1) in (boxes or {}).items():
+        node_sets[name] = nodes_on(lambda x, y, x0=x0, x1=x1, y0=y0, y1=y1: x0 - tol_x <= x <= x1 + tol_x and y0 - tol_y <= y <= y1 + tol_y)
+        element_sets[name] = np.flatnonzero((centroids[:, 0] >= x0) & (centroids[:, 0] <= x1) & (centroids[:, 1] >= y0) & (centroids[:, 1] <= y1))
     return node_sets, element_sets
 
 
@@ -173,7 +180,7 @@ def sets_by_coordinates(points: np.ndarray, corners: np.ndarray, width: float, l
 def structured_rectangle(width: float, length: float, nx: int, ny: int, order: int = 1,
                          node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
                          node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9,
-                         ys: list[float] | None = None) -> Mesh2D:
+                         ys: list[float] | None = None, boxes: dict[str, tuple[float, float, float, float]] | None = None) -> Mesh2D:
     """A rectangle [0, width] x [0, length] with nx by ny elements, loading axis y; sets as in `sets_by_coordinates`.
 
     The node rows are evenly spaced unless `ys` gives all ny + 1 of them (bottom first, from 0 to the length, increasing):
@@ -203,7 +210,7 @@ def structured_rectangle(width: float, length: float, nx: int, ny: int, order: i
     for name, y_line in (node_rows or {}).items():
         if not any(abs(float(y) - y_line) <= tolerance * length for y in ys):
             raise MeshError(f"no node row lies on {name!r} at y = {y_line:g}; choose ny so that {y_line:g} / ({length:g} / ny) is an integer")
-    node_sets, element_sets = sets_by_coordinates(points, corners, width, length, node_rows, element_bands, node_bands, tolerance)
+    node_sets, element_sets = sets_by_coordinates(points, corners, width, length, node_rows, element_bands, node_bands, tolerance, boxes)
     return Mesh2D(xy=points, corners=corners, midside=midside, node_sets=node_sets, element_sets=element_sets, order=order, mesher="structured")
 
 
@@ -222,7 +229,8 @@ def gmsh_available() -> str | None:
 def gmsh_open_hole_plate(width: float, length: float, hole_diameter: float, element_size: float, circumferential: int, radial_layers: int,
                          ring_ratio: float, growth: float, order: int = 1, tab_length: float = 0.0,
                          node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
-                         node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9) -> Mesh2D:
+                         node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9,
+                         boxes: dict[str, tuple[float, float, float, float]] | None = None) -> Mesh2D:
     """A plate [0, width] x [0, length] with a central circular hole, meshed by Gmsh as a transfinite butterfly O-grid.
 
     Blocks: four annular blocks between the hole and an inner square of half-side `ring_ratio` times the hole radius
@@ -340,7 +348,7 @@ def gmsh_open_hole_plate(width: float, length: float, hole_diameter: float, elem
     if order == 2:
         points_list, midside = with_midside_nodes(points_list, corners)
     points = np.asarray(points_list, dtype=float)
-    node_sets, element_sets = sets_by_coordinates(points, corners, width, length, node_rows, element_bands, node_bands, tolerance)
+    node_sets, element_sets = sets_by_coordinates(points, corners, width, length, node_rows, element_bands, node_bands, tolerance, boxes)
     size = max(width, length)
     on_circle = np.abs(np.hypot(points[:, 0] - cx, points[:, 1] - cy) - radius) <= tolerance * size
     hole = set(np.flatnonzero(on_circle).tolist())

@@ -1,0 +1,86 @@
+# A 100 mm square isotropic plate, 1 mm thick, simply supported on its four edges and loaded by a uniform pressure: the first plate stated
+# with [[supports]] and [[loads]] over named regions (ADR-0054), the same plate as the validation case plate-ss-isotropic-uniform-pressure-navier,
+# with CalculiX S8R as the reference. Nominal isotropic values, not a cited material; the material code NOM says so. Units mm-MPa.
+title = "NOM-PLT-L1, plate: a 100 mm square isotropic plate, simply supported on four edges, under a uniform pressure toward +z"
+kind = "plate"
+units = "mm-MPa"
+
+[coupon]
+designation = "NOM-PLT-L1"
+standard = "none"
+size_from = "the validation case plate-ss-isotropic-uniform-pressure-navier (fea/tools/plate_closed_forms.py)"
+team_model = "not built yet"
+test_data = "none"
+
+[geometry]
+length = 100.0
+width = 100.0
+
+[mesh]
+mesher = "structured"
+element_order = 1
+nx = 16
+ny = 16
+
+[layup]
+angles = [0]
+symmetric = false
+ply_thickness = 1.0
+
+[material]
+E1 = 70000.0        # nominal isotropic values chosen for the validation case, not a cited material (explicit constants without a source, as the Kirsch check states its plate)
+E2 = 70000.0
+G12 = 26923.076923076922   # E / (2 (1 + nu)) with nu = 0.3
+nu12 = 0.3
+[material.transverse]
+G13 = 26923.076923076922
+G23 = 26923.076923076922
+plane_stress = true
+transverse_isotropy = true
+
+# Simple support (Whitney 10.25): w and the rotation about the edge's normal held on every edge; the in-plane rigid motions pinned at two corners.
+[[supports]]
+region = "Edge-Left"
+dofs = [3, 4]
+[[supports]]
+region = "Edge-Right"
+dofs = [3, 4]
+[[supports]]
+region = "Edge-Bottom"
+dofs = [3, 5]
+[[supports]]
+region = "Edge-Top"
+dofs = [3, 5]
+[[supports]]
+region = "Corner-Origin"
+dofs = [1, 2]
+[[supports]]
+region = "Corner-X"
+dofs = [2]
+
+# The Abaqus P label is positive against the normal, so a negative pressure pushes the plate toward +z; the CalculiX deck flips the sign.
+[[loads]]
+region = "Face"
+pressure = -0.01
+
+[[regions]]
+name = "Corner-Origin"
+x0 = 0.0
+x1 = 0.1
+y0 = 0.0
+y1 = 0.1
+[[regions]]
+name = "Corner-X"
+x0 = 99.9
+x1 = 100.0
+y0 = 0.0
+y1 = 0.1
+
+[probes]
+nodes = { centre = [50.0, 50.0] }
+elements = { centre = [53.125, 53.125] }
+
+[output]
+fpf_criteria = []
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = true, el_print_global = true }

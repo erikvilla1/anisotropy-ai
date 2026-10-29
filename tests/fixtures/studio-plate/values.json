@@ -1,0 +1,41 @@
+{
+ "form_version": "0.5",
+ "filled_by": "A. Engineer",
+ "date": "2026-10-28",
+ "test": "plate",
+ "standard": "none",
+ "size_from": "the public check fea/checks/plate-pressure-isotropic/",
+ "team_model": "not built yet",
+ "test_data": "none",
+ "length": 100.0,
+ "width": 100.0,
+ "angles": [0],
+ "symmetric": "no",
+ "ply_thickness": 1.0,
+ "own_name": "Nominal-Alloy",
+ "own_E1": 70000.0,
+ "own_E2": 70000.0,
+ "own_G12": 26923.076923076922,
+ "own_nu12": 0.3,
+ "own_source": "nominal isotropic values of the validation case plate-ss-isotropic-uniform-pressure-navier, not a cited material",
+ "G13": 26923.076923076922,
+ "G23": 26923.076923076922,
+ "criteria": "none",
+ "element_size": 6.25,
+ "notes": "the public isotropic plate under pressure, for the browser tests",
+ "material_code": "NOM",
+ "layup_code": "L1",
+ "supports": [
+  {"region": "Edge-Left", "dofs": [3, 4]},
+  {"region": "Edge-Right", "dofs": [3, 4]},
+  {"region": "Edge-Bottom", "dofs": [3, 5]},
+  {"region": "Edge-Top", "dofs": [3, 5]},
+  {"region": "Corner-Origin", "dofs": [1, 2]},
+  {"region": "Corner-X", "dofs": [2]}
+ ],
+ "loads": [{"region": "Face", "pressure": -0.01}],
+ "regions": [
+  {"name": "Corner-Origin", "x0": 0.0, "x1": 0.1, "y0": 0.0, "y1": 0.1},
+  {"name": "Corner-X", "x0": 99.9, "x1": 100.0, "y0": 0.0, "y1": 0.1}
+ ]
+}
