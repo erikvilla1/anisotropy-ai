@@ -15,7 +15,7 @@ test("the example coupon solves end to end from the studio", async ({ page }) =>
   await page.getByLabel("Run by", { exact: true }).fill("Studio live test");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 300_000 });
-  await expect(page.getByTestId("summary-reaction")).toContainText("N (tension)");
+  await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 300_000 });
   await expect(page.getByTestId("job-message")).toContainText("recorded values agree with CalculiX");
   await page.screenshot({ path: ".local/website/screenshots/studio-live.png", fullPage: true });

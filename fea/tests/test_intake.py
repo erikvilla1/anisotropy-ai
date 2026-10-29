@@ -207,6 +207,7 @@ def own_constants() -> dict:
     (dict(test="bending"), "Test: 'bending' is not one of unnotched tension, unnotched compression, open-hole tension, in-plane shear"),
     (dict(material_code="im7 prepreg"), "Material code: 'IM7 PREPREG' is not capital letters and digits"),
     (dict(date="last Tuesday"), "Date: 'last Tuesday' is not a date"),
+    (dict(length=25.0, width=250.0), "Length (mm) and Tab length (mm): the two tabs, 112 mm, must be shorter than the length, 25 mm"),
 ])
 def test_a_refusal_names_its_row(blank, tmp_path, changes, message):
     with pytest.raises(IntakeError, match=re.escape(message)):

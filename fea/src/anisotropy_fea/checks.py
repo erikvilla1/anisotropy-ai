@@ -130,11 +130,26 @@ def split_problems(message: str) -> list[tuple[str, str]]:
     body = message.split(": ", 1)[1] if ": " in message and not message.startswith(tuple(ITEM_OF_LABEL)) else message
     pairs = []
     for problem in body.split("; "):
-        label = next((lab for lab in ITEM_OF_LABEL if problem.startswith(lab + ":")), "")
-        if not label:  # a problem naming two rows, "Library material and Own material: ...": the first row it names
-            label = next((lab for lab in ITEM_OF_LABEL if problem.startswith(lab + " ")), "")
+        label = row_label_of(problem)
+        if not label and ": " not in problem and pairs:  # the rest of the previous row's problem: "Test: required; one of a, b"
+            pairs[-1] = (pairs[-1][0], pairs[-1][1] + "; " + problem)
+            continue
         pairs.append((label, problem))
     return pairs
+
+
+def row_label_of(problem: str) -> str:
+    """The form row a problem names first: by its label, by the label without its unit ("Element size and Your Abaqus mesh: ..."),
+    or by a group of rows' common head ("Your Abaqus mesh: give all three rows"); '' when it names none."""
+    for label in ITEM_OF_LABEL:
+        if problem.startswith(label + ":") or problem.startswith(label + " "):
+            return label
+    head = problem.split(": ", 1)[0]
+    first = head.split(" and ", 1)[0].split(" or ", 1)[0]
+    for label in ITEM_OF_LABEL:
+        if label.startswith(head + ":") or label.split(" (", 1)[0] == first:
+            return label
+    return ""
 
 
 def coupon_attempts(root: Path, designation: str | None) -> tuple[bool, int]:
