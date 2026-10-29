@@ -52,8 +52,8 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
   );
 }
 
-export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const [form, setForm] = useState<StudioForm>(() => blankForm());
+export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBaseUrl: string; initialForm?: StudioForm | null; onFormChange?: (form: StudioForm) => void }) {
+  const [form, setForm] = useState<StudioForm>(() => initialForm ?? blankForm());
   const [plate, setPlate] = useState<PlateLists>(() => emptyPlate());
   const [pickedElement, setPickedElement] = useState<number | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -70,6 +70,7 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const fieldsLoaded = useRef<string | null>(null);
   const aborts = useRef<AbortController[]>([]);
   useEffect(() => { setRunBy(remembered(RUN_BY_KEY)); return () => aborts.current.forEach((c) => c.abort("unmount")); }, []);
+  useEffect(() => { onFormChange?.(form); }, [form, onFormChange]);
   useEffect(() => {
     if (!apiBaseUrl) return;
     const controller = new AbortController();
@@ -194,7 +195,7 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
         </div>
         <div className="studio-buttons">
           <button type="button" className="studio-button" onClick={check} disabled={busy || !apiBaseUrl} data-testid="check-button">Check setup</button>
-          <button type="button" className="studio-button studio-button-primary" onClick={solve} disabled={busy || !apiBaseUrl || (checked !== null && checked.state !== "ready")} data-testid="solve-button">Solve</button>
+          <button type="button" className="studio-button studio-button-primary" onClick={solve} disabled={busy || !apiBaseUrl || (checked !== null && checked.state !== "ready")} data-testid="solve-button">Run analysis</button>
         </div>
         {message ? <p className="studio-alert" role="alert">{message}</p> : null}
         <p className="studio-status" role="status" data-testid="status">{status}</p>

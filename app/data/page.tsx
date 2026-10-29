@@ -13,7 +13,7 @@ export default function DataPage() {
           </p>
         </div>
         <Link className="text-button" href="/chat">
-          Return to scope studio →
+          Open the coupon assistant →
         </Link>
       </div>
       <Workspace activeTab="data" setActiveTab={() => {}} standalone />
