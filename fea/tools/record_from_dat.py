@@ -52,6 +52,8 @@ def main() -> None:
                              "where the element types are known to differ and say so in the comparison note")
     parser.add_argument("--node-probes", nargs="*", default=None,
                         help="node probes whose displacements are recorded; default all. Same rule as --element-probes")
+    parser.add_argument("--no-reactions", action="store_true",
+                        help="leave the reaction totals out: a CalculiX shell node set's printed total can be incomplete (fea/checks/calculix-conventions.toml, shell_set_totals); say so in --notes")
     parser.add_argument("--notes", default="")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -65,7 +67,7 @@ def main() -> None:
     if conventions["calculix_version"].split(".")[0] != args.version.split(".")[0]:
         raise SystemExit(f"conventions were detected on CalculiX {conventions['calculix_version']}; this run is {args.version}: re-run the detection first")
     dat = parse_dat(args.dat.read_text(encoding="utf-8", errors="replace"))
-    expected = reference_quantities(model, dat, conventions, element_probes=args.element_probes, node_probes=args.node_probes)
+    expected = reference_quantities(model, dat, conventions, element_probes=args.element_probes, node_probes=args.node_probes, reactions=not args.no_reactions)
     expected = {"tolerance": args.tolerance, "floor": args.floor, **expected}
     out_dir = args.out.parent
     out_dir.mkdir(parents=True, exist_ok=True)  # a coupon started from its input form has no verification/ yet

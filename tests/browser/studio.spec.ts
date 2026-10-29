@@ -19,9 +19,12 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
       const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
-      dir = values.test === BENDING ? "studio-bending" : "studio";
+      dir = values.test === BENDING ? "studio-bending" : values.test === "plate" ? "studio-plate" : "studio";
       if (dir === "studio-bending") {
         return json(route, { run_id: "run-3", state: "ready", designation: "IM7-3PB-L1", checklist: fixture("checklist", dir), preview: fixture("preview", dir) });
+      }
+      if (dir === "studio-plate") {
+        return json(route, { run_id: "run-4", state: "ready", designation: "NOM-PLT-L1", checklist: fixture("checklist", dir), preview: fixture("preview", dir) });
       }
       if (!("length" in values)) {
         const checklist = fixture("checklist");
@@ -140,6 +143,46 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await expect(page.getByTestId("explanation")).toContainText("under the loading nose", { timeout: 15_000 });
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: ".local/website/screenshots/studio-bending.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});
+
+test("a plate is stated by its regions: hold an edge, press the face, check and solve (ADR-0054)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/studio");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await page.getByLabel("Test", { exact: true }).selectOption("plate");
+  await expect(page.getByTestId("plate-panel")).toBeVisible();
+  await expect(page.getByLabel("Grip kind", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Loading type", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Length (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Width (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Tab length (mm)", { exact: true }).fill("");
+  await page.getByTestId("add-support").click();
+  await page.getByLabel("Support 1 region", { exact: true }).selectOption("Edge-Left");
+  await page.getByTestId("add-load").click();
+  await page.getByLabel("Load 1 pressure", { exact: true }).fill("-0.01");
+  await expect(page.getByTestId("plate-words")).toContainText("Edge-Left holds x, y, z");
+  await page.getByTestId("check-button").click();
+  await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "ready");
+  const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
+  expect(sent.test).toBe("plate");
+  expect(sent.supports).toEqual([{ region: "Edge-Left", dofs: [1, 2, 3] }]);
+  expect(sent.loads).toEqual([{ region: "Face", pressure: -0.01 }]);
+  expect(sent.control).toBeUndefined();
+  expect(sent.grips).toBeUndefined();
+  await expect(page.getByTestId("preview")).toContainText("pressure");
+  await expect(page.getByTestId("preview")).toContainText("Click an element to hold or load");
+  await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
+  await page.getByTestId("solve-button").click();
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("summary-reaction")).toContainText("holding the plate down");
+  await page.getByLabel("Field", { exact: true }).selectOption("u_z");
+  await expect(page.getByTestId("legend")).toContainText("Deflection w (z)");
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-plate.png", fullPage: true });
   expect(browserErrors).toEqual([]);
 });
 

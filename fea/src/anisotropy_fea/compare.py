@@ -215,7 +215,7 @@ def layer_face_values(block_values: np.ndarray, z: np.ndarray, plies: int, point
 
 
 def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
-                         element_probes: list[str] | None = None, node_probes: list[str] | None = None) -> dict:
+                         element_probes: list[str] | None = None, node_probes: list[str] | None = None, reactions: bool = True) -> dict:
     """The `[expected]` tables a CalculiX run gives for a model: reactions, the displacements of the node probes named (all by
     default), and for the element probes named (all by default) the mean strain, per-ply stresses and per-ply strains.
     Node and element keys carry the model's instance name, as the kernel deck written from the same model does."""
@@ -225,7 +225,7 @@ def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
     bending = model.bending  # a bending coupon's record holds RFz, w and both faces of every ply (ADR-0053)
     expected: dict = {}
     rf = {}
-    for grip in model.support_sets:
+    for grip in model.support_sets if reactions else ():  # left out when a shell set's printed total is known to be incomplete (the conventions file)
         try:
             total = dat.total_force(grip)
         except KeyError:

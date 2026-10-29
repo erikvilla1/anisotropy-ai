@@ -36,6 +36,7 @@ MODES = ("longitudinal tension", "longitudinal compression", "transverse tension
 STRESS_NAMES = ("S11", "S22", "S12")  # the material-axis stress components, as the team's CAE exports name them
 DIGITS = 9  # significant digits written for the arrays; the summary keeps full precision
 SENSE = {2: ("in tension", "in compression"), 3: ("lifting the coupon", "pressing the coupon down")}  # by the sign of the reaction, positive first
+SUPPORT_SENSE = {1: ("pushing along +x", "pushing along -x"), 2: ("pushing along +y", "pushing along -y"), 3: ("pushing the plate up", "holding the plate down")}
 
 
 def rounded(values: np.ndarray) -> list:
@@ -108,7 +109,23 @@ def applied_loading(deck: Deck, solution: Solution) -> dict[str, Any]:
         if forces[2] != 0.0:
             return {"control": "force", "value": float(forces[2]), "dof": 3, "set": "the supports",
                     "nodes": [i for i in range(mesh.node_count) if solution.reaction[i, 2] != 0.0], "direction": "along z"}
-    bottom, top = gripped_groups(deck, solution)
+    try:
+        bottom, top = gripped_groups(deck, solution)
+    except KernelError:  # a plate loaded in its plane (ADR-0054): the loads say what is applied, every support carries the reaction
+        forces = applied_forces(deck, solution)
+        dof = int(np.argmax(np.abs(forces[:2]))) + 1 if np.any(forces[:2] != 0.0) else 2
+        held = [i for i in range(mesh.node_count) if solution.reaction[i, dof - 1] != 0.0]
+        if forces[dof - 1] != 0.0:
+            return {"control": "force", "value": float(forces[dof - 1]), "dof": dof, "set": "the supports", "nodes": held, "direction": f"along {'xyz'[dof - 1]}"}
+        moved = {}
+        for boundary in all_boundaries(deck):
+            if boundary.value != 0.0 and boundary.dof_first <= 2:
+                for key in resolve_nodes(deck, boundary.target, boundary.line):
+                    moved[mesh.node(key)] = (boundary.dof_first, boundary.value)
+        if moved:
+            dof, value = next(iter(moved.values()))
+            return {"control": "displacement", "value": value, "dof": dof, "set": "the moved region", "nodes": sorted(moved), "direction": f"along {'xyz'[dof - 1]}"}
+        return {"control": "force", "value": 0.0, "dof": 2, "set": "the supports", "nodes": held, "direction": "along y"}
     pull = float(np.mean(list(top.values())) - np.mean(list(bottom.values())))
     if pull != 0.0:
         return {"control": "displacement", "value": pull, "dof": 2, "set": "the top grip", "nodes": sorted(top), "direction": "along the coupon"}
@@ -195,7 +212,7 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
         "max_displacement": {"value": float(length(magnitude[at])), "node": at, "label": node_name(mesh.node_keys[at]),
                              "xy": length(mesh.xy[at]).tolist(), "components": length(displacement[at]).tolist(), "axis": axis},
         "reaction": {"set": applied["set"], "value": float(from_si(reaction_value, "force", units)), "dof": dof,
-                     "sense": SENSE[dof][0 if reaction_value > 0 else 1]},
+                     "sense": (SUPPORT_SENSE if applied["set"] in ("the supports", "the moved region") else SENSE)[dof][0 if reaction_value > 0 else 1]},
         "applied": {"control": applied["control"], "value": float(from_si(applied["value"], applied_kind, units)), "unit": lab[applied_kind], "dof": dof,
                     "direction": applied["direction"]},
         "max_ply": {},

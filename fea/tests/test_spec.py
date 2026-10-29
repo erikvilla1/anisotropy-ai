@@ -30,8 +30,8 @@ def test_every_spec_loads_and_converts_to_si():
             assert material.source.startswith("the team's own constants: ")
             continue
         if spec.material.library is None:
-            # the Kirsch plate: nominal isotropic constants written in the spec, no dataset to cite; its title and comments say so
-            assert "Kirsch" in spec.title and material.rights == "spec" and material.E1 == material.E2 and material.strengths is None
+            # the Kirsch plate and the pressure plate (ADR-0054): nominal isotropic constants written in the spec, no dataset to cite; the title and comments say so
+            assert ("Kirsch" in spec.title or spec.kind == "plate") and material.rights == "spec" and material.E1 == material.E2 and material.strengths is None
             continue
         # A spec names a library record whose values may be cited: public-domain, open-publisher, or a licensed reference cited
         # by table and page (ADR-0018; ADR-0030 amendment 4). User-supplied data and explicit constants stay out of specs (R-16).
