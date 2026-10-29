@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CouponStudio } from "@/components/studio/coupon-studio";
+import { StudioModes } from "@/components/studio/studio-modes";
 import "./studio.css";
 
 export const metadata: Metadata = {
@@ -13,9 +13,9 @@ export default function StudioPage() {
       <div className="studio-heading">
         <span className="eyebrow">STUDIO / COUPON TESTS</span>
         <h1>From the coupon to its stresses.</h1>
-        <p>State the coupon, check the setup, solve, and read every ply. The engine computes every number; the page draws it.</p>
+        <p>Describe the coupon or answer a few questions. The setup is checked against the run&apos;s rules, solved by our engine and CalculiX, and every ply is drawn in 3D. The engine computes every number; the page draws it.</p>
       </div>
-      <CouponStudio apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
+      <StudioModes apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
     </main>
   );
 }

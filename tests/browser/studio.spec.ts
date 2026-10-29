@@ -64,6 +64,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByRole("link", { name: "Studio", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("From the coupon to its stresses.");
   await expect(page.getByTestId("empty-scene")).toBeVisible();
+  await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByRole("button", { name: "Load example" }).click();
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
   await page.getByTestId("check-button").click();
@@ -112,6 +113,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/studio");
+  await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByRole("button", { name: "Load example" }).click();
   await page.getByLabel("Test", { exact: true }).selectOption(BENDING);
   await expect(page.getByLabel("Support span (mm)", { exact: true })).toBeVisible();
@@ -152,6 +154,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/studio");
+  await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByRole("button", { name: "Load example" }).click();
   await page.getByLabel("Test", { exact: true }).selectOption("plate");
   await expect(page.getByTestId("plate-panel")).toBeVisible();
@@ -190,6 +193,7 @@ test("a blocked setup names its rows and the solve stays off", async ({ page }) 
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/studio");
+  await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByRole("button", { name: "Load example" }).click();
   await page.getByLabel("Length (mm)", { exact: true }).fill("");
   await page.getByTestId("check-button").click();
@@ -206,6 +210,7 @@ test("a coupon reopens into the form and the viewer window reads a job by its ad
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/studio");
+  await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByLabel("Reopen a coupon", { exact: true }).selectOption("IM7-UNT-L1");
   await page.getByRole("button", { name: "Reopen", exact: true }).click();
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
@@ -217,4 +222,72 @@ test("a coupon reopens into the form and the viewer window reads a job by its ad
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
   await page.goto("/studio/view");
   await expect(page.getByText("No job in the address")).toBeVisible();
+});
+
+test("the guided chat asks one thing at a time, checks the setup itself, reads typed changes and runs (ADR-0055)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/studio");
+  const question = page.getByTestId("chat-question");
+  await expect(question).toHaveAttribute("data-step", "test");
+  await page.getByRole("button", { name: /^Unnotched tension/ }).click();
+  await expect(question).toHaveAttribute("data-step", "material");
+  await page.getByRole("button", { name: "IM7 / 8552", exact: true }).click();
+  await expect(question).toHaveAttribute("data-step", "shear");
+  await page.getByRole("button", { name: /Use the tape estimate/ }).click();
+  await expect(question).toHaveAttribute("data-step", "layup");
+  await expect(question).toContainText("90° runs along the load");
+  await page.getByRole("button", { name: /Quasi-isotropic/ }).click();
+  await expect(question).toHaveAttribute("data-step", "geometry");
+  await page.getByRole("button", { name: /250 × 25 mm, 56 mm tabs/ }).click();
+  await expect(question).toHaveAttribute("data-step", "loading");
+  await page.getByRole("button", { name: "Displacement 1 mm", exact: true }).click();
+  await expect(question).toHaveAttribute("data-step", "name");
+  await page.getByLabel("Filled in by", { exact: true }).fill("A. Engineer");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  expect(calls.checks).toHaveLength(1);
+  const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
+  expect([sent.test, sent.library, sent.length, sent.tab_length, sent.ply_4, sent.symmetric, sent.value, sent.filled_by])
+    .toEqual(["unnotched tension", "im7-8552", 250, 56, 90, "yes", 1, "A. Engineer"]);
+  expect([sent.G13, sent.G23]).toEqual([4688, 2988]);
+  expect(String(sent.notes)).toContain("tape estimate");
+  await expect(page.getByTestId("chat-spec")).toContainText("[45/0/-45/90]s, 8 plies");
+  await expect(page.getByTestId("preview")).toContainText("50 elements");
+
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("make it [0/90]2s");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
+  await expect(page.getByTestId("chat-check")).toHaveCount(2);
+  const changed = (calls.checks[1] as { values: Record<string, unknown> }).values;
+  expect([changed.ply_1, changed.ply_2, changed.ply_3, changed.ply_4, changed.ply_5]).toEqual([0, 90, 0, 90, undefined]);
+  await expect(page.getByTestId("chat-spec")).toContainText("[0/90/0/90]s, 8 plies");
+
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 15_000 });
+  expect((calls.solves[0] as { run_by: string }).run_by).toBe("A. Engineer");
+  await expect(page.getByTestId("chat-reaction")).toContainText("N");
+  await expect(page.getByTestId("results")).toBeVisible();
+  await expect(page.getByTestId("chat-result")).toContainText("57 of 57 recorded values agree", { timeout: 15_000 });
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-chat.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});
+
+test("one typed line fills the coupon and the chat asks only for what is missing (ADR-0055)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/studio");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
+  await expect(page.getByText("Got it").last()).toBeVisible();
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear"); // the library lists no G13 or G23
+  await expect(page.getByTestId("chat-spec")).toContainText("36 mm");
+  await expect(page.getByTestId("chat-spec")).toContainText("Ø6 mm hole");
+  await expect(page.getByTestId("chat-spec")).toContainText("10000 N force");
+  await page.getByRole("tab", { name: "Full form" }).click();
+  await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveValue("6"); // the rows carry over to the full form
+  await expect(page.getByLabel("Ply 2", { exact: true })).toHaveValue("0");
+  expect(calls.checks).toHaveLength(0);
 });
