@@ -38,7 +38,7 @@ def migrated_database():
     engine = create_engine(TEST_URL)
     with engine.begin() as connection:
         if inspect(connection).has_table("runs"):
-            connection.execute(text("TRUNCATE runs"))
+            connection.execute(text("TRUNCATE runs CASCADE"))  # and the jobs that point at runs (migration 0006)
     command.downgrade(alembic_config(TEST_URL), "base")
     command.upgrade(alembic_config(TEST_URL), "head")
     yield engine
@@ -47,7 +47,7 @@ def migrated_database():
 
 @pytest.fixture
 def empty_runs(migrated_database):
-    """The migrated database with an empty runs table."""
+    """The migrated database with empty runs and jobs tables."""
     with migrated_database.begin() as connection:
-        connection.execute(text("TRUNCATE runs"))
+        connection.execute(text("TRUNCATE runs CASCADE"))
     return migrated_database
