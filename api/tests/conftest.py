@@ -13,10 +13,14 @@ from alembic.config import Config
 from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine, text
 
+from anisotropy_api.settings import sqlalchemy_url
+
 API_DIR = Path(__file__).resolve().parents[1]
 
 load_dotenv(find_dotenv(usecwd=True), override=False)
 TEST_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
+if TEST_URL:
+    TEST_URL = sqlalchemy_url(TEST_URL, "TEST_DATABASE_URL")  # a hosted branch's plain postgresql:// address works too
 needs_test_database = pytest.mark.skipif(not TEST_URL, reason="TEST_DATABASE_URL not set: no test database to run against")
 
 

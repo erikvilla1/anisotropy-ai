@@ -25,7 +25,7 @@ playwright-report
 next-env.d.ts
 package.json
 package-lock.json
-playwright*.config.ts
+/*.ts
 tsconfig.json
 skills-lock.json
 .neon

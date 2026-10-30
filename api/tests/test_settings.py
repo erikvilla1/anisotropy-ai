@@ -1,8 +1,10 @@
 """Startup configuration: records on by default, refusal without a database, explicit off switch (ADR-0026)."""
 
 import pytest
+from sqlalchemy.engine import make_url
 
-from anisotropy_api.settings import ASSISTANT_MODEL_VARIABLE, ASSISTANT_PROVIDER_VARIABLE, DATABASE_VARIABLE, RECORDING_VARIABLE, load_settings
+from anisotropy_api.settings import (ASSISTANT_MODEL_VARIABLE, ASSISTANT_PROVIDER_VARIABLE, DATABASE_VARIABLE, RECORDING_VARIABLE,
+                                     UNPOOLED_DATABASE_VARIABLE, database_url_for_migrations, load_settings, sqlalchemy_url)
 
 
 def test_records_on_by_default_with_database():
@@ -35,6 +37,46 @@ def test_off_keeps_a_database_address_when_given():
 def test_rejects_other_switch_values(value):
     with pytest.raises(RuntimeError, match="must be 'on' or 'off'"):
         load_settings({RECORDING_VARIABLE: value, DATABASE_VARIABLE: "postgresql+psycopg://u:p@h/db"})
+
+
+# ------------------------------------------------------------------------------- a hosted server's addresses (ADR-0056)
+
+NEON_STYLE = "postgresql://u:p@ep-x-pooler.aws.neon.tech/db?sslmode=require&channel_binding=require"
+
+
+def test_plain_postgresql_address_is_routed_to_psycopg_with_its_query_kept():
+    routed = make_url(sqlalchemy_url(NEON_STYLE, DATABASE_VARIABLE))
+    assert routed.drivername == "postgresql+psycopg"
+    assert (routed.username, routed.password, routed.host, routed.database) == ("u", "p", "ep-x-pooler.aws.neon.tech", "db")
+    assert dict(routed.query) == {"sslmode": "require", "channel_binding": "require"}
+    assert sqlalchemy_url("postgres://u:p@h/db", DATABASE_VARIABLE) == "postgresql+psycopg://u:p@h/db"
+    assert load_settings({DATABASE_VARIABLE: NEON_STYLE}).database_url.startswith("postgresql+psycopg://")
+
+
+def test_psycopg_address_passes_unchanged():
+    assert sqlalchemy_url("postgresql+psycopg://u:p@h/db", DATABASE_VARIABLE) == "postgresql+psycopg://u:p@h/db"
+
+
+@pytest.mark.parametrize("value", ["postgresql+psycopg2://u:p@h/db", "mysql://u:p@h/db", "sqlite:///x.db"])
+def test_other_drivers_are_refused_by_name(value):
+    with pytest.raises(RuntimeError, match=f"{DATABASE_VARIABLE} must start with postgresql://"):
+        load_settings({DATABASE_VARIABLE: value})
+
+
+def test_unreadable_address_names_the_variable_not_the_value():
+    with pytest.raises(RuntimeError, match="TEST_DATABASE_URL is not a database address"):
+        sqlalchemy_url("not an address", "TEST_DATABASE_URL")
+
+
+def test_migrations_prefer_the_unpooled_address():
+    environ = {DATABASE_VARIABLE: NEON_STYLE, UNPOOLED_DATABASE_VARIABLE: "postgresql://u:p@ep-x.aws.neon.tech/db?sslmode=require"}
+    assert database_url_for_migrations(environ) == "postgresql+psycopg://u:p@ep-x.aws.neon.tech/db?sslmode=require"
+
+
+def test_migrations_use_the_one_address_of_a_local_server():
+    assert database_url_for_migrations({DATABASE_VARIABLE: "postgresql+psycopg://u:p@127.0.0.1:5432/db"}) == "postgresql+psycopg://u:p@127.0.0.1:5432/db"
+    with pytest.raises(RuntimeError, match="migrations need the database"):
+        database_url_for_migrations({RECORDING_VARIABLE: "off"})
 
 
 # --------------------------------------------------------------------------------------------- the assistant (ADR-0052)
