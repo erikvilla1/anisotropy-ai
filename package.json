@@ -8,9 +8,12 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
+    "build:hosted": "tsx scripts/build-hosted.ts",
     "start": "serve out -l 3000",
     "preview": "serve out -l 3001",
     "typecheck": "tsc --noEmit",
+    "typecheck:worker": "wrangler types && tsc -p worker",
+    "deploy": "wrangler deploy",
     "export:library": "tsx scripts/export-material-library.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
@@ -37,6 +40,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@cloudflare/containers": "^0.3.7",
     "@neon/config": "^1.9.6",
     "@neon/env": "^1.6.6",
     "@playwright/test": "^1.63.0",
@@ -47,6 +51,7 @@
     "@types/three": "^0.186.0",
     "serve": "^14.2.6",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "wrangler": "^4.156.0"
   }
 }

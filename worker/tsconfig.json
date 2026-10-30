@@ -1,0 +1,16 @@
+{
+  // The Worker's own TypeScript settings: the Cloudflare runtime's types (worker-configuration.d.ts, written by `npx wrangler types`)
+  // instead of the browser's, which the website's root tsconfig uses. `npm run typecheck:worker` checks it.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "types": []
+  },
+  "include": ["./**/*.ts", "../worker-configuration.d.ts"]
+}

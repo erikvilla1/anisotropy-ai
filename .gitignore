@@ -71,3 +71,7 @@ docs/.obsidian/
 /.claude/skills/
 /.claude/agents/
 .neon
+
+# Wrangler keeps its local state and dry-run bundles here (ADR-0056); `npm run typecheck:worker` regenerates the runtime types.
+.wrangler/
+worker-configuration.d.ts
