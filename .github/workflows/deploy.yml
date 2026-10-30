@@ -1,0 +1,64 @@
+# The hosted tier's deploy (ADR-0056): a merge to main that passed the Tests workflow builds the site with the API at /api, applies
+# the migrations to the hosted database and deploys the Worker with its container image; a pull request uploads a preview version
+# of the Worker (its code and the site, not a new container image). `workflow_dispatch` deploys main by hand, for the first deploy
+# and for a rollout while a Tests job unrelated to the site is red. docs/walkthroughs/hosted-deploy.md explains the pieces and
+# how to roll back (`npx wrangler rollback`).
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency: deploy-production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build the site with the API at /api on the same origin
+        run: npm run build:hosted
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --project api --locked
+      - name: Apply the migrations to the hosted database (ADR-0025; the unpooled address when there is one)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: cd api && uv run alembic upgrade head
+      - name: Deploy the Worker and its container image
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --var ANISOTROPY_GIT_COMMIT:${{ github.event.workflow_run.head_sha || github.sha }}
+
+  preview:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:hosted
+      - name: Upload a preview version of the Worker (no production traffic, no new container image)
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: versions upload --var ANISOTROPY_GIT_COMMIT:${{ github.event.pull_request.head.sha }}
