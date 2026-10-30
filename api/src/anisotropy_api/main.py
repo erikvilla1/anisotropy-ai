@@ -94,6 +94,13 @@ app.add_middleware(
 )
 
 
+@app.get("/healthz")
+async def healthz() -> dict[str, str]:
+    """Alive, without touching the database or any tool: what a platform polls to know the container answers (ADR-0056).
+    Not a run, so no actor header and no run record."""
+    return {"status": "ok"}
+
+
 @app.exception_handler(RequestValidationError)
 async def invalid_request(_request: Request, exc: RequestValidationError) -> JSONResponse:
     """Return field locations and reasons without echoing malformed/non-finite input."""

@@ -102,6 +102,34 @@ jobs:
       - run: npm run build
       - run: npm run test:studio
 
+  image:
+    # The solver image (ADR-0056): built from the Dockerfile, then CalculiX, Gmsh and one public coupon job through the API
+    # inside it, all with the network off, so the image proves it needs nothing it does not carry (docker/README.md).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the image
+        run: docker build --build-arg GIT_COMMIT=$GITHUB_SHA -t anisotropy-solver:ci .
+      - name: Image size
+        run: "docker image inspect anisotropy-solver:ci --format 'Image size: {{.Size}} bytes'"
+      - name: CalculiX and Gmsh inside the image, network off (ccx -v exits with code 201, so its line needs the fallback)
+        run: |
+          docker run --rm --network none anisotropy-solver:ci ccx -v | tee ccx-version.txt || true
+          grep -q "Version" ccx-version.txt
+          docker run --rm --network none anisotropy-solver:ci /app/fea/.venv/bin/python -c "import gmsh; print('Gmsh', gmsh.__version__)"
+          docker run --rm --network none anisotropy-solver:ci tectonic --version
+      - name: One public coupon job through the API, network off, to its package with the PDF
+        run: |
+          docker run -d --name api --network none -e ANISOTROPY_RUN_RECORDS=off \
+            -v "$PWD/tests/fixtures/studio/values.json:/check/values.json:ro" \
+            -v "$PWD/docker/check-image.py:/check/check-image.py:ro" anisotropy-solver:ci
+          docker exec api /app/api/.venv/bin/python /check/check-image.py --values /check/values.json --summary /tmp/summary.json
+      - name: The API's log and the container's end
+        if: always()
+        run: |
+          docker logs api || true
+          docker rm -f api || true
+
   manual:
     runs-on: ubuntu-latest
     steps:

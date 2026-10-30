@@ -11,8 +11,11 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import os
+import re
 import subprocess
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 from sqlalchemy import CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, inspect, select, text
@@ -102,15 +105,28 @@ def inputs_digest(inputs: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def git_commit() -> str | None:
-    """The repository commit the API runs from, or None when there is none (a plain install)."""
+COMMIT_VARIABLE = "ANISOTROPY_GIT_COMMIT"  # the commit a container image was built from; there is no .git inside it (ADR-0056)
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
+
+
+def git_commit(environ: Mapping[str, str] | None = None, cwd: Path | None = None) -> str | None:
+    """The repository commit the API runs from: the checkout's HEAD when the code sits in one, else the commit named by
+    ANISOTROPY_GIT_COMMIT (the solver image sets it at build), else None (a plain install). A variable that is set but is not a
+    40-digit commit is refused with its name (ADR-0003)."""
     try:
-        done = subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent,
+        done = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cwd or Path(__file__).resolve().parent,
                               capture_output=True, text=True, timeout=5, check=False)
+        found = done.stdout.strip() if done.returncode == 0 else ""
     except (OSError, subprocess.TimeoutExpired):
+        found = ""
+    if COMMIT.match(found):
+        return found
+    named = (os.environ if environ is None else environ).get(COMMIT_VARIABLE, "").strip().lower()
+    if not named:
         return None
-    commit = done.stdout.strip()
-    return commit if done.returncode == 0 and len(commit) == 40 else None
+    if not COMMIT.match(named):
+        raise RuntimeError(f"{COMMIT_VARIABLE} must be the 40-digit commit the image was built from, not {named!r}")
+    return named
 
 
 def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engine_version: str, api_version: str,
