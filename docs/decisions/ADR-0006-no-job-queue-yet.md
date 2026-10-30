@@ -1,6 +1,6 @@
 # ADR-0006: No job queue until analyses are slow
 
-- Status: Accepted
+- Status: Accepted; its trigger fired with coupon jobs (ADR-0050), and the queue comes after the hosted tier's closed beta by [ADR-0056](ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md)
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: v1 technical specification and v2 architecture (Celery and Redis workers)
