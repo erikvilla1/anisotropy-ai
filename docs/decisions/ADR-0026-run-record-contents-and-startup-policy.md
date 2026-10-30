@@ -1,6 +1,6 @@
 # ADR-0026: A run record is immutable, keeps rejected runs, names its actor, and the API refuses to start without the database
 
-- Status: Proposed
+- Status: Proposed; the signed-in email on every record and the actor `browser` since amendment 1 (the hosted tier behind Cloudflare Access, ADR-0056)
 - Date: 2026-10-14
 - Decided by: Founder | Drafted by: Claude Code
 - Related: ADR-0025 (database stack), ADR-0003 (no silent defaults), ADR-0001 (engine computes every number), [documentation guide](../documentation-guide.md) Document 6, risks R-03 and R-04
@@ -55,3 +55,13 @@ Easier: any consumer reads a row and has the whole story; a quoted number can be
 ## How we will know it was wrong
 
 If rows grow past tens of kilobytes or the table past what one PostgreSQL instance handles comfortably, split the response into referenced parts. If the actor list changes more than a few times a year, replace it with a registered-clients table. If the off switch appears in any non-test configuration, the startup policy is being worked around and should be revisited.
+
+## Amendment 1, 2026-10-30 (the signed-in email on every record, and the actor `browser`; with ADR-0056, not yet confirmed by the founder)
+
+**Context.** The hosted tier puts the API behind Cloudflare Access (ADR-0056), which verifies a user's email with the identity provider and adds a signed token, `Cf-Access-Jwt-Assertion`, to every request it lets through. This record's actor is a label naming the client, not a person; a hosted run should also say who was signed in, and the API must refuse a request that did not come through Access.
+
+**Options.** For who the person is: (1) a sign-in of our own, with users and sessions in the database: code to write, test and secure before the first invited user, which ADR-0027 had scheduled for the first proprietary customer; (2) Access's token, checked by the API against the team's published keys whenever its settings are present, and its `email` claim recorded (chosen). For where the email goes: (1) inside `inputs`, which the digest covers, so the same request from two people would get two digests and a reader would need to know the key; (2) a nullable column, `user_email`, beside the actor (chosen), empty with Access off and for a service token, which carries no email. For the actor list: `browser` is added for the hosted tier's clients; the site keeps sending `studio` and `calculator`.
+
+**Decision.** Migration 0005 adds `user_email` (nullable, 320 characters) and the actor `browser`. `record_run` takes `user_email`; every route that records passes the email the Access middleware put on the request; a coupon job keeps the email of the request that started it, on its status and in its receipt. The row stays immutable; the downgrade refuses while a row carries an email or the new actor. With Access off the column stays empty and nothing else changes. The check itself is ADR-0056's (`api/src/anisotropy_api/access.py`): the settings `ANISOTROPY_ACCESS_TEAM_DOMAIN` and `ANISOTROPY_ACCESS_AUD`, both or neither; `GET /healthz` and a CORS preflight exempt; 401 with the reason for a missing, expired, foreign or unsigned token; 503 when the team's keys cannot be fetched.
+
+**Evidence.** `cd api && uv run pytest -q tests` with the test database, 2026-10-30: 256 passed, among them `tests/test_access.py` (a valid token; a missing one; an expired one, another application's, another team's, another key's; a service token; `/healthz` and a preflight without a token; the keys unreachable; Access off; the email on a run record and in the listing) and the job's receipt with the email in `tests/test_coupon_jobs_api.py`. The migration's refusal to downgrade over a row with an email: `tests/test_run_records_db.py`. Live behind Cloudflare Access: no evidence yet (stage 2 of ADR-0056).

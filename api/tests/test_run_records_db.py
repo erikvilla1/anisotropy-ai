@@ -35,7 +35,7 @@ def test_migration_creates_the_table_with_every_column(engine):
     columns = {column["name"] for column in inspect(engine).get_columns("runs")}
     assert columns == {
         "id", "created_at", "actor", "endpoint", "status", "inputs", "inputs_sha256", "engine_version", "api_version",
-        "git_commit", "response", "error", "supersedes_run_id", "llm_provider", "llm_model_version",
+        "git_commit", "response", "error", "supersedes_run_id", "llm_provider", "llm_model_version", "user_email",
     }
     assert {index["name"] for index in inspect(engine).get_indexes("runs")} == {
         "runs_created_at_idx", "runs_actor_idx", "runs_endpoint_idx",
@@ -174,3 +174,28 @@ def test_api_refuses_to_start_when_the_database_is_unreachable(monkeypatch):
     with pytest.raises(RuntimeError, match="Cannot reach"):
         with TestClient(app):
             pass
+
+
+def test_migration_0005_undoes_cleanly_when_empty_and_refuses_over_an_email_or_the_browser_actor(engine):
+    """The signed-in email and the actor `browser` (ADR-0026 amendment 1): the column goes and comes back on an empty table; with a
+    row that carries either, the downgrade refuses, since rows are never rewritten."""
+    config = alembic_config(TEST_URL)
+    command.downgrade(config, "0004")
+    assert "user_email" not in {column["name"] for column in inspect(engine).get_columns("runs")}
+    command.upgrade(config, "head")
+    assert "user_email" in {column["name"] for column in inspect(engine).get_columns("runs")}
+    with Session(engine) as session:
+        session.add(solved_row(user_email="engineer@example.com"))
+        session.commit()
+    with pytest.raises(RuntimeError, match="signed-in email"):
+        command.downgrade(config, "0004")
+    with engine.begin() as connection:
+        connection.execute(text("TRUNCATE runs"))
+    with Session(engine) as session:
+        session.add(solved_row(actor="browser"))
+        session.commit()
+    with pytest.raises(RuntimeError, match="browser"):
+        command.downgrade(config, "0004")
+    assert "user_email" in {column["name"] for column in inspect(engine).get_columns("runs")}  # nothing was dropped
+    with Session(engine) as session:
+        assert session.scalar(select(Run.actor)) == "browser"  # and the row is as inserted

@@ -9,8 +9,10 @@ environment win over the file.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from dotenv import find_dotenv, load_dotenv
 from sqlalchemy.engine import make_url
@@ -27,6 +29,14 @@ ASSISTANT_PROVIDER_VARIABLE = "ANISOTROPY_ASSISTANT_PROVIDER"
 ASSISTANT_MODEL_VARIABLE = "ANISOTROPY_ASSISTANT_MODEL"
 CREDENTIAL_VARIABLES = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")  # what the Anthropic SDK reads; one of them must be present
 PROVIDERS = ("anthropic",)
+# Cloudflare Access in front of the API (ADR-0056): the team's domain, <team>.cloudflareaccess.com, which issues the tokens and
+# publishes the keys, and the application's audience tag. Both or neither.
+ACCESS_TEAM_DOMAIN_VARIABLE = "ANISOTROPY_ACCESS_TEAM_DOMAIN"
+ACCESS_AUDIENCE_VARIABLE = "ANISOTROPY_ACCESS_AUD"
+TEAM_DOMAIN = re.compile(r"^[a-z0-9-]+\.cloudflareaccess\.com$")
+# The website origins that may read the API's answers from a browser, comma-separated; unset, the local development origins apply.
+ALLOWED_ORIGINS_VARIABLE = "ANISOTROPY_ALLOWED_ORIGINS"
+LOCAL_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001")
 
 
 @dataclass(frozen=True)
@@ -43,12 +53,41 @@ class AssistantSettings:
 
 
 @dataclass(frozen=True)
+class AccessSettings:
+    """Cloudflare Access in front of the API (ADR-0056): off unless the team domain and the audience tag are both named. On, every
+    request but /healthz must carry the token Access adds, and the signed-in email goes to the run records."""
+
+    team_domain: str | None
+    audience: str | None
+
+    @property
+    def on(self) -> bool:
+        return self.team_domain is not None
+
+    @property
+    def issuer(self) -> str:
+        return f"https://{self.team_domain}"
+
+    @property
+    def certs_url(self) -> str:
+        return f"{self.issuer}/cdn-cgi/access/certs"
+
+
+@dataclass(frozen=True)
 class Settings:
     """What the process was told. `run_records` False means recording was switched off explicitly."""
 
     database_url: str | None
     run_records: bool
     assistant: AssistantSettings = AssistantSettings(None, None)
+    access: AccessSettings = AccessSettings(None, None)
+    allowed_origins: tuple[str, ...] = LOCAL_ORIGINS
+
+
+def environment() -> Mapping[str, str]:
+    """The process environment after the nearest `.env` file is loaded; values already in the environment win."""
+    load_dotenv(find_dotenv(usecwd=True), override=False)
+    return os.environ
 
 
 def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
@@ -57,8 +96,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     With no `environ`, the process environment is used after loading the nearest `.env` file.
     """
     if environ is None:
-        load_dotenv(find_dotenv(usecwd=True), override=False)
-        environ = os.environ
+        environ = environment()
     switch = environ.get(RECORDING_VARIABLE, "on").strip().lower()
     if switch not in {"on", "off"}:
         raise RuntimeError(f"{RECORDING_VARIABLE} must be 'on' or 'off', not {switch!r}")
@@ -70,7 +108,40 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
         )
     if url is not None:
         url = sqlalchemy_url(url, DATABASE_VARIABLE)
-    return Settings(database_url=url, run_records=switch == "on", assistant=assistant_settings(environ))
+    return Settings(database_url=url, run_records=switch == "on", assistant=assistant_settings(environ), access=access_settings(environ),
+                    allowed_origins=allowed_origins(environ))
+
+
+def access_settings(environ: Mapping[str, str]) -> AccessSettings:
+    """Off unless both variables are set; one without the other, or a domain that is not a team's, is refused with the fix."""
+    domain = environ.get(ACCESS_TEAM_DOMAIN_VARIABLE, "").strip().lower() or None
+    audience = environ.get(ACCESS_AUDIENCE_VARIABLE, "").strip() or None
+    if domain is None and audience is None:
+        return AccessSettings(None, None)
+    if domain is None:
+        raise RuntimeError(f"{ACCESS_AUDIENCE_VARIABLE} is set but {ACCESS_TEAM_DOMAIN_VARIABLE} is not: name the team domain, "
+                           f"<team>.cloudflareaccess.com, or unset both to run without Access")
+    if audience is None:
+        raise RuntimeError(f"{ACCESS_TEAM_DOMAIN_VARIABLE} is set but {ACCESS_AUDIENCE_VARIABLE} is not: name the Access application's "
+                           f"audience tag, or unset both to run without Access")
+    if not TEAM_DOMAIN.match(domain):
+        raise RuntimeError(f"{ACCESS_TEAM_DOMAIN_VARIABLE} must be the team's domain alone, such as myteam.cloudflareaccess.com, not {domain!r}")
+    return AccessSettings(domain, audience)
+
+
+def allowed_origins(environ: Mapping[str, str]) -> tuple[str, ...]:
+    """The origins that may read the API from a browser: the variable's comma-separated list when it is set, each an origin and
+    nothing more, else the local development origins."""
+    raw = environ.get(ALLOWED_ORIGINS_VARIABLE, "").strip()
+    if not raw:
+        return LOCAL_ORIGINS
+    origins = tuple(part.strip() for part in raw.split(","))
+    for origin in origins:
+        parts = urlsplit(origin)
+        if parts.scheme not in ("http", "https") or not parts.netloc or parts.path or parts.query or parts.fragment or origin.endswith("/"):
+            raise RuntimeError(f"{ALLOWED_ORIGINS_VARIABLE} must list origins, scheme://host[:port] separated by commas, such as "
+                               f"https://studio.example.com; {origin!r} is not one")
+    return origins
 
 
 def sqlalchemy_url(url: str, variable: str) -> str:

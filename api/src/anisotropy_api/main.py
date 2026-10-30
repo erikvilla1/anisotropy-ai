@@ -24,10 +24,12 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
+from .access import AccessMiddleware
+from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .coupon_jobs import CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
 from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run
-from .settings import load_settings
+from .settings import allowed_origins, environment, load_settings
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, LibraryMaterialInput, MaterialProvenance,
@@ -49,7 +51,7 @@ def job_recorder(app: FastAPI):
             return record_run(engine, actor=job.actor, endpoint=COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
                               api_version=version("anisotropy-api"), git_commit=getattr(app.state, "git_commit", None),
                               response={**outcome, "job_id": str(job.id)} if state == "done" else None,
-                              error=None if state == "done" else outcome["message"])
+                              error=None if state == "done" else outcome["message"], user_email=job.user_email)
         except SQLAlchemyError as exc:
             raise RecordingFailed(str(exc).splitlines()[0]) from exc
     return record
@@ -66,7 +68,10 @@ async def lifespan(app: FastAPI):
         check_ready(app.state.records)
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command())
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
+    # Behind Cloudflare Access, every request but /healthz must carry a valid token (ADR-0056); None means no sign-in, the local API.
+    app.state.access_verifier = access_verifier(settings.access) if settings.access.on else None
     yield
+    app.state.access_verifier = None
     if app.state.records is not None:
         app.state.records.dispose()
         app.state.records = None
@@ -79,14 +84,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Only the local website origins used by this development project may read API responses.
-# This browser policy is not authentication; deployment remains a separate future task.
+# The Access check sits inside the CORS layer (the last middleware added is the outermost), so a preflight is answered without a
+# token and a refusal still carries the CORS headers the browser needs to show it (ADR-0056).
+app.add_middleware(AccessMiddleware)
+
+# Only the website origins named in ANISOTROPY_ALLOWED_ORIGINS, or without it the local development origins, may read API
+# responses from a browser. This browser policy is not authentication; sign-in is Cloudflare Access in front of the API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", "http://127.0.0.1:3000",
-        "http://localhost:3001", "http://127.0.0.1:3001",
-    ],
+    allow_origins=list(allowed_origins(environment())),
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor"],
     expose_headers=[RUN_ID_HEADER, "Location"],
@@ -158,7 +164,7 @@ def _record(request: Request, actor: str, problem: BaseModel, *, response: dict 
                           inputs=problem.model_dump(mode="json", exclude_unset=True),
                           engine_version=version("anisotropy-engine"), api_version=version("anisotropy-api"),
                           git_commit=getattr(request.app.state, "git_commit", None), response=response, error=error,
-                          llm_provider=llm[0], llm_model_version=llm[1])
+                          llm_provider=llm[0], llm_model_version=llm[1], user_email=getattr(request.state, "user_email", None))
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=(
             f"The result was not returned because it could not be recorded: {str(exc).splitlines()[0]}"
@@ -310,7 +316,8 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
     form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
     values = job_request.values_bytes() if job_request.values is not None else None
     try:
-        job = jobs.start(actor, job_request.recorded_inputs(), job_request.options(), form=form, coupon=job_request.coupon, values=values)
+        job = jobs.start(actor, job_request.recorded_inputs(), job_request.options(), form=form, coupon=job_request.coupon, values=values,
+                         user_email=getattr(request.state, "user_email", None))
     except JobBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except JobRefused as exc:
