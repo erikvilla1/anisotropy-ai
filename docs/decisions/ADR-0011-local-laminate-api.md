@@ -1,6 +1,6 @@
 # ADR-0011: A separate synchronous FastAPI adapter with an explicit SI-base contract
 
-- Status: Accepted
+- Status: Accepted; for the hosted tier, sign-in comes from Cloudflare Access in front of the API and the loopback-only CORS list becomes a setting, by [ADR-0056](ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md)
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Codex
 - Related: [API walkthrough](../../api/README.md), [evaluation](../evaluations/api/2026-10-03-api-chunk-1.md), [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0006](ADR-0006-no-job-queue-yet.md)

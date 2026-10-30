@@ -1,6 +1,6 @@
 # ADR-0025: Run records go in PostgreSQL, run locally in Docker, reached through SQLAlchemy and Alembic
 
-- Status: Proposed
+- Status: Proposed; the hosting left to deployment is decided, Neon for the hosted tier's records, by [ADR-0056](ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md)
 - Date: 2026-10-14
 - Decided by: Founder | Drafted by: Claude Code
 - Related: [system overview](../00_system_overview.md) (run records "Planned, next"), [documentation guide](../documentation-guide.md) Document 6 (provenance record), risk R-03 and R-04 in the [risk register](../risks/risk_register.md), ADR-0006 (no job queue yet), ADR-0018 (source rights)

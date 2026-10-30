@@ -1,6 +1,6 @@
 # ADR-0050: Coupon jobs through the API run the coupon tool in the background, one at a time, with their status in memory and a run record when they end
 
-- Status: Proposed
+- Status: Proposed; for the hosted tier the status moves to a jobs table and the outputs to R2, one job at a time kept for the closed beta and one container per job after it, by [ADR-0056](ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md)
 - Date: 2026-10-27
 - Decided by: Founder, 2026-10-26 ("ok yes lets do it", on the plan: one request that takes a filled form and starts the job, one to check its status, one to download the package, all recorded in the run table) | Drafted by: Claude Code
 - Related: [ADR-0048](ADR-0048-the-assistant-drives-tested-jobs-built-after-one-command-per-job-and-an-api-job.md) (step 2), [ADR-0049](ADR-0049-one-command-takes-a-coupon-from-its-input-form-to-its-package.md), [ADR-0026](ADR-0026-run-record-contents-and-startup-policy.md), [ADR-0027](ADR-0027-deployment-tiers-and-assistant-model-location.md), [ADR-0003](ADR-0003-reject-invalid-input.md), `api/src/anisotropy_api/coupon_jobs.py`, `api/tests/test_coupon_jobs_api.py`, `fea/tools/run_coupon.py`
