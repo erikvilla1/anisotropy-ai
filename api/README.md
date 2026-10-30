@@ -80,6 +80,8 @@ uv sync --locked
 uv run uvicorn anisotropy_api.main:app --host 127.0.0.1 --port 8000
 ```
 
+Or in the solver image, which carries the API with CalculiX, Gmsh and Tectonic and listens on port 8080 (ADR-0056, [docker/README.md](../docker/README.md)): `docker build -t anisotropy-solver .` then `docker run --rm -p 8080:8080 -e ANISOTROPY_RUN_RECORDS=off anisotropy-solver`; `GET /healthz` answers `{"status":"ok"}` without the database.
+
 Open <http://127.0.0.1:8000/docs>. This is FastAPI's interactive API explorer. Expand `POST /v1/laminates/response`, select **Try it out**, paste `examples/zero-degree-tension.json`, and select **Execute**. The page displays the HTTP status and response JSON. Stop the server with Ctrl+C.
 
 Or, from a second PowerShell terminal at the repository root:

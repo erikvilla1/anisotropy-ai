@@ -28,6 +28,8 @@ Uvicorn -> FastAPI -> Pydantic contract -> existing `anisotropy_engine` -> NumPy
 
 Run records (ADR-0025, ADR-0026): SQLAlchemy 2 and psycopg 3 reach a local PostgreSQL 17 started by `docker-compose.yml`; Alembic migrations under `api/alembic/` own the `runs` table. Configuration is `DATABASE_URL` and the explicit `ANISOTROPY_RUN_RECORDS=off` switch, read from the environment or the nearest `.env` (python-dotenv). The API refuses to start without a reachable, migrated database unless switched off, and withholds a result (503) when its row cannot be written.
 
+The solver image (ADR-0056): the `Dockerfile` at the repository root builds the API with the engine and fea environments, CalculiX, Gmsh and Tectonic (its TeX files fetched at build by `docker/warm-tectonic.py`, which builds the public coupon's document once), listening on port 8080 as the service user `app`; `GET /healthz` answers without the database; `ANISOTROPY_GIT_COMMIT` gives the run records their commit where there is no `.git`. The CI job `image` runs one public coupon job inside it with the network off (`docker/check-image.py`, [docker/README.md](../../docker/README.md)).
+
 The website's `/calculator` now calls this endpoint. CORS allows credential-free JSON POST requests from localhost/127.0.0.1 on ports 3000/3001. See [the calculator card](calculator.md).
 
 ## Evaluation
