@@ -142,3 +142,34 @@ def test_origins_are_the_local_ones_unless_the_variable_replaces_them():
 def test_a_value_that_is_not_an_origin_is_refused(value):
     with pytest.raises(RuntimeError, match=ALLOWED_ORIGINS_VARIABLE):
         allowed_origins({ALLOWED_ORIGINS_VARIABLE: value})
+
+
+# ---------------------------------------------------------------------------------------- the object store (ADR-0050 amendment 2)
+
+from anisotropy_api.settings import STORAGE_VARIABLES, StorageSettings
+
+STORE = dict(zip(STORAGE_VARIABLES, ("coupons", "https://account.r2.cloudflarestorage.com/", "key-id", "secret")))
+
+
+def test_the_store_is_off_unless_all_four_variables_are_set():
+    assert load_settings(OFF).storage == StorageSettings(None, None, None, None) and not load_settings(OFF).storage.on
+
+
+def test_the_store_is_on_with_all_four_and_the_endpoint_loses_its_trailing_slash():
+    settings = load_settings({**OFF, **STORE})
+    assert settings.storage.on and settings.storage.bucket == "coupons" and settings.storage.endpoint == "https://account.r2.cloudflarestorage.com"
+    assert settings.storage.access_key_id == "key-id" and settings.storage.secret_access_key == "secret"
+    local = load_settings({**OFF, **STORE, "ANISOTROPY_R2_ENDPOINT": "http://127.0.0.1:9000"})  # a local MinIO
+    assert local.storage.endpoint == "http://127.0.0.1:9000"
+
+
+@pytest.mark.parametrize("missing", STORAGE_VARIABLES)
+def test_some_but_not_all_store_variables_are_refused_naming_the_missing_one(missing):
+    with pytest.raises(RuntimeError, match=missing):
+        load_settings({**OFF, **{name: value for name, value in STORE.items() if name != missing}})
+
+
+@pytest.mark.parametrize("endpoint", ["account.r2.cloudflarestorage.com", "https://account.r2.cloudflarestorage.com/bucket", "ftp://x", "https://x?y=1"])
+def test_an_endpoint_that_is_not_an_address_is_refused(endpoint):
+    with pytest.raises(RuntimeError, match="ANISOTROPY_R2_ENDPOINT"):
+        load_settings({**OFF, **STORE, "ANISOTROPY_R2_ENDPOINT": endpoint})

@@ -190,7 +190,7 @@ def test_migration_0005_undoes_cleanly_when_empty_and_refuses_over_an_email_or_t
     with pytest.raises(RuntimeError, match="signed-in email"):
         command.downgrade(config, "0004")
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE runs"))
+        connection.execute(text("TRUNCATE runs CASCADE"))
     with Session(engine) as session:
         session.add(solved_row(actor="browser"))
         session.commit()
@@ -199,3 +199,65 @@ def test_migration_0005_undoes_cleanly_when_empty_and_refuses_over_an_email_or_t
     assert "user_email" in {column["name"] for column in inspect(engine).get_columns("runs")}  # nothing was dropped
     with Session(engine) as session:
         assert session.scalar(select(Run.actor)) == "browser"  # and the row is as inserted
+
+
+# ------------------------------------------------------------------------------------------ the jobs table (ADR-0050 amendment 2)
+
+import datetime as _dt
+
+from anisotropy_api.records import fetch_job, insert_job, list_jobs, stop_orphans, update_job
+
+
+def _started(engine, job_id, process="p1", **fields):
+    insert_job(engine, job_id=job_id, actor="test", user_email=fields.get("user_email"), inputs={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer"},
+               started_at=_dt.datetime.now(_dt.timezone.utc), process=process)
+
+
+def test_migration_0006_creates_the_jobs_table_and_refuses_to_drop_it_over_rows(engine):
+    assert {column["name"] for column in inspect(engine).get_columns("jobs")} == {
+        "id", "actor", "user_email", "state", "stage", "stages_done", "stages", "coupon", "attempt", "message", "inputs", "outputs", "stored",
+        "started_at", "finished_at", "run_id", "log_tail", "process",
+    }
+    assert {index["name"] for index in inspect(engine).get_indexes("jobs")} == {"jobs_started_at_idx", "jobs_state_idx"}
+    config = alembic_config(TEST_URL)
+    command.downgrade(config, "0005")
+    assert not inspect(engine).has_table("jobs")
+    command.upgrade(config, "head")
+    _started(engine, uuid.uuid4())
+    with pytest.raises(RuntimeError, match="holds 1 job"):
+        command.downgrade(config, "0005")
+    assert inspect(engine).has_table("jobs")
+
+
+def test_the_jobs_table_keeps_each_status_and_a_new_process_marks_the_jobs_a_stopped_one_left(engine):
+    first, second = uuid.uuid4(), uuid.uuid4()
+    _started(engine, first, user_email="engineer@example.com")
+    _started(engine, second)
+    assert fetch_job(engine, first).state == "running" and fetch_job(engine, first).user_email == "engineer@example.com"
+    update_job(engine, first, state="done", stage="the outputs", stages_done=["the setup check"], stages=["the setup check", "the outputs"],
+               coupon="IM7-UNT-L1", attempt=".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-30", message="57 of 57", outputs={"fields": "x.json"},
+               stored={"fields": "coupons/IM7-UNT-L1/attempt-02_2026-10-30/files/fields/x.json"}, finished_at=_dt.datetime.now(_dt.timezone.utc), log_tail=["Done"])
+    assert stop_orphans(engine, "the API stopped while this job ran") == 1  # only the one still running
+    done, stopped = fetch_job(engine, first), fetch_job(engine, second)
+    assert done.state == "done" and done.stored["fields"].startswith("coupons/") and done.log_tail == ["Done"] and done.finished_at is not None
+    assert stopped.state == "stopped" and stopped.message == "the API stopped while this job ran" and stopped.finished_at is not None
+    assert [row.id for row in list_jobs(engine)] == [second, first]  # newest first
+    with pytest.raises(LookupError):
+        update_job(engine, uuid.uuid4(), state="done")
+    with pytest.raises(DBAPIError):
+        update_job(engine, first, state="weird")
+    assert fetch_job(engine, uuid.uuid4()) is None
+
+
+def test_the_api_marks_a_stopped_processs_job_at_startup_and_serves_it_from_the_table(engine, monkeypatch):
+    orphan = uuid.uuid4()
+    _started(engine, orphan, process="an earlier process")
+    monkeypatch.setenv(RECORDING_VARIABLE, "on")
+    monkeypatch.setenv(DATABASE_VARIABLE, TEST_URL)
+    with TestClient(app, headers={"X-Anisotropy-Actor": "test"}) as client:
+        status = client.get(f"/v1/coupon-jobs/{orphan}").json()
+        assert status["state"] == "stopped" and "stopped while this job ran" in status["message"] and status["outputs"] == {}
+        assert status["actor"] == "test" and status["log_tail"] == [] and status["finished_at"] is not None
+        assert [job["job_id"] for job in client.get("/v1/coupon-jobs").json()] == [str(orphan)]
+        assert client.get(f"/v1/coupon-jobs/{orphan}/package").status_code == 409
+        assert client.get(f"/v1/coupon-jobs/{uuid.uuid4()}").status_code == 404

@@ -313,3 +313,59 @@ def test_a_job_started_behind_access_keeps_the_signed_in_email(recording_behind_
     assert run["user_email"] == EMAIL and run["actor"] == "test" and run["endpoint"] == "/v1/coupon-jobs"  # the receipt names the person
     assert through.get("/v1/coupon-jobs").json()[0]["user_email"] == EMAIL
     assert through.get("/v1/coupon-jobs", headers={access.HEADER: ""}).status_code == 401  # and without the token, nothing
+
+
+# ---------------------------------------------------------------------------------- durable outputs (ADR-0050 amendment 2)
+
+import uuid as _uuid
+
+from memory_store import FailingStore, MemoryStore
+
+
+def storing_registry(tmp_path, store, monkeypatch) -> CouponJobs:
+    stand_in = tmp_path / "stand_in.py"
+    stand_in.write_text(STAND_IN, encoding="utf-8")
+    ours = tmp_path / "fea" / "IM7-UNT-L1" / "ours"
+    ours.mkdir(parents=True)
+    (ours / "IM7-UNT-L1.toml").write_text("[coupon]\n", encoding="utf-8")  # the coupon's folder, as the tool leaves it
+    registry = CouponJobs([sys.executable, str(stand_in)], job_recorder(app), tmp_path / "jobs", store=store, local_root=tmp_path / "fea")
+    monkeypatch.setattr(app.state, "coupon_jobs", registry, raising=False)
+    return registry
+
+
+def test_a_done_jobs_files_go_to_the_store_and_the_api_hands_out_links_there(tmp_path, monkeypatch):
+    store = MemoryStore()
+    registry = storing_registry(tmp_path, store, monkeypatch)
+    done = ended(client.post("/v1/coupon-jobs", json=form_request()).json()["job_id"])
+    assert done["state"] == "done"
+    attempt = "attempt-02_2026-10-27"
+    assert set(store.objects) == {f"coupons/IM7-UNT-L1/{attempt}/files/fields/fields.json", f"coupons/IM7-UNT-L1/{attempt}/package.zip",
+                                  "coupons/IM7-UNT-L1/folder/ours/IM7-UNT-L1.toml"}  # the file outside the repository and the job's folder is not stored
+    job = registry.get(_uuid.UUID(done["job_id"]))
+    assert job.stored == {"fields": f"coupons/IM7-UNT-L1/{attempt}/files/fields/fields.json", "package": f"coupons/IM7-UNT-L1/{attempt}/package.zip"}
+    assert store.objects[job.stored["package"]][1:] == ("application/zip", 'attachment; filename="2026-10-27_IM7-UNT-L1.zip"')
+    fields = client.get(f"/v1/coupon-jobs/{done['job_id']}/files/fields", follow_redirects=False)
+    assert fields.status_code == 307 and fields.headers["location"] == f"https://store.test/{job.stored['fields']}?expires=600"
+    package = client.get(f"/v1/coupon-jobs/{done['job_id']}/package", follow_redirects=False)
+    assert package.status_code == 307 and package.headers["location"].endswith("/package.zip?expires=600")
+    outside = client.get(f"/v1/coupon-jobs/{done['job_id']}/files/outside")  # not in the store: the disk rule still refuses it
+    assert outside.status_code == 404 and "outside" in outside.json()["detail"]
+
+
+def test_while_a_job_runs_its_files_come_from_the_disk(tmp_path, monkeypatch):
+    registry = storing_registry(tmp_path, MemoryStore(), monkeypatch)
+    started = client.post("/v1/coupon-jobs", json={"coupon": "WAITS", "run_by": "A. Engineer"}).json()
+    deadline = time.monotonic() + 30
+    while "fields" not in client.get(f"/v1/coupon-jobs/{started['job_id']}").json()["outputs"] and time.monotonic() < deadline:
+        time.sleep(0.05)
+    fields = client.get(f"/v1/coupon-jobs/{started['job_id']}/files/fields", follow_redirects=False)
+    assert fields.status_code == 200 and fields.json() == {"summary": {"reaction": {"value": 1.0}}}  # served from the disk, no link yet
+    (registry.root / "release").touch()
+    assert ended(started["job_id"])["state"] == "done"
+
+
+def test_a_store_that_fails_stops_the_job_and_withholds_its_result(tmp_path, monkeypatch):
+    storing_registry(tmp_path, FailingStore(), monkeypatch)
+    stopped = ended(client.post("/v1/coupon-jobs", json=form_request()).json()["job_id"])
+    assert stopped["state"] == "stopped" and "could not be copied to storage" in stopped["message"] and "AccessDenied" in stopped["message"]
+    assert stopped["outputs"] == {} and client.get(f"/v1/coupon-jobs/{stopped['job_id']}/package").status_code == 409

@@ -32,6 +32,8 @@ The solver image (ADR-0056): the `Dockerfile` at the repository root builds the 
 
 Behind Cloudflare Access (ADR-0056, `api/src/anisotropy_api/access.py`): with `ANISOTROPY_ACCESS_TEAM_DOMAIN` and `ANISOTROPY_ACCESS_AUD` set, a middleware inside the CORS layer refuses with 401 every request but `GET /healthz` and a preflight that lacks a valid `Cf-Access-Jwt-Assertion` token (PyJWT, RS256, the team's published keys matched by key id and refetched when one rotates; 503 when the keys cannot be fetched), and puts the token's email on the request; `record_run` writes it as `user_email` (migration 0005, which also admits the actor `browser`), and a coupon job keeps it for its receipt and status. `ANISOTROPY_ALLOWED_ORIGINS` replaces the local CORS origins. Unset, the API is the local one.
 
+Durable outputs (ADR-0050 amendment 2, `api/src/anisotropy_api/storage.py`): with the four `ANISOTROPY_R2_*` settings, a done job's reported files go by key, with its package zip and the coupon's whole folder, to an object store through the S3 API (boto3, path-style addresses, SigV4), the coupons are restored from the store into `.local/fea/` at startup, and the file endpoints redirect to ten-minute links; a job whose files cannot be stored is `stopped` and its result withheld. With run records on, the `jobs` table (migration 0006) keeps every job's status across restarts, and the rows still `running` when the API starts are marked `stopped` with the reason. The run record stays the immutable receipt.
+
 The website's `/calculator` now calls this endpoint. CORS allows credential-free JSON POST requests from localhost/127.0.0.1 on ports 3000/3001. See [the calculator card](calculator.md).
 
 ## Evaluation
