@@ -74,7 +74,7 @@ def test_the_blank_form_has_its_sheets_rows_lists_and_record(blank):
     assert sheet.protection.sheet and sheet.cell(rows["Length (mm)"], 3).value.startswith("required")
     lists = {str(v.sqref): v.formula1 for v in sheet.data_validations.dataValidation if v.type == "list"}
     assert lists[f"B{rows['Library material']}"] == f"'{LIBRARY}'!$A$2:$A${len(library_records()) + 1}"
-    assert lists[f"B{rows['Test']}"] == '"unnotched tension,unnotched compression,open-hole tension,in-plane shear"'
+    assert lists[f"B{rows['Test']}"] == '"unnotched tension,unnotched compression,open-hole tension,in-plane shear,three-point bending,four-point bending,plate"'
     assert str(sheet.cell(rows["Library material"], 3).value).startswith("=IFERROR(INDEX(")
     assert str(sheet.cell(rows["Library material"], 3).value).endswith(f',"{LIBRARY_HELP}")')  # the instruction until a material is picked
     library = book[LIBRARY]
@@ -207,6 +207,7 @@ def own_constants() -> dict:
     (dict(test="bending"), "Test: 'bending' is not one of unnotched tension, unnotched compression, open-hole tension, in-plane shear"),
     (dict(material_code="im7 prepreg"), "Material code: 'IM7 PREPREG' is not capital letters and digits"),
     (dict(date="last Tuesday"), "Date: 'last Tuesday' is not a date"),
+    (dict(length=25.0, width=250.0), "Length (mm) and Tab length (mm): the two tabs, 112 mm, must be shorter than the length, 25 mm"),
 ])
 def test_a_refusal_names_its_row(blank, tmp_path, changes, message):
     with pytest.raises(IntakeError, match=re.escape(message)):
@@ -315,9 +316,10 @@ def test_a_filled_form_is_filed_and_its_coupon_started(blank, tmp_path):
     with pytest.raises(IntakeError, match="already exist"):
         convert(form, root=root, day="2026-10-26")
     (folder / "README.md").write_text(page + "\nHand-written.\n", encoding="utf-8")
-    again = convert(form, root=root, day="2026-10-26", replace=True)
-    assert {p.name for p in again.written} == {f"{DESIGNATION}.toml", f"{DESIGNATION}-nodal.toml"}
-    assert "Hand-written." in (folder / "README.md").read_text(encoding="utf-8") and not (folder / "team/2026-10-26").exists()
+    again = convert(form, root=root, day="2026-10-26", replace=True)  # the two specs and the input they came from; no README, no page
+    assert sorted(p.relative_to(folder).as_posix() for p in again.written) == [f"ours/{DESIGNATION}-nodal.toml", f"ours/{DESIGNATION}.toml",
+                                                                                "team/2026-10-26/filled.xlsx"]
+    assert "Hand-written." in (folder / "README.md").read_text(encoding="utf-8") and not (folder / "team/2026-10-26/README.md").exists()
     # a dry run writes nothing
     dry = convert(form, root=tmp_path / "dry", day="2026-10-25", dry_run=True)
     assert dry.written == () and not (tmp_path / "dry").exists() and dry.main == intake.main and dry.twin == intake.twin

@@ -85,6 +85,23 @@ jobs:
       - run: npm run build
       - run: npm run test:calculator
 
+  studio-browser:
+    runs-on: ubuntu-latest
+    env:
+      # The studio test plays the API from tests/fixtures/studio by route interception, so any address will do (ADR-0051).
+      NEXT_PUBLIC_ANISOTROPY_API_URL: http://127.0.0.1:8000
+      BROWSER_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run test:studio
+
   manual:
     runs-on: ubuntu-latest
     steps:

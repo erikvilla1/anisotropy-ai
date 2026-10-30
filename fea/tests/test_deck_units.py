@@ -14,9 +14,10 @@ DECK = paths.CHECK_DECKS / "coupon-1x1-im7-8552.inp"
 
 def test_the_two_systems_and_their_factors():
     assert set(DECK_UNIT_SYSTEMS) == {"mm-MPa", "m-Pa"}
-    assert unit_factors("mm-MPa") == {"length": 1e-3, "stress": 1e6, "force": 1.0, "force_per_length": 1e3}
-    assert unit_factors("m-Pa") == {"length": 1.0, "stress": 1.0, "force": 1.0, "force_per_length": 1.0}
+    assert unit_factors("mm-MPa") == {"length": 1e-3, "stress": 1e6, "force": 1.0, "force_per_length": 1e3, "per_length": 1e3}
+    assert unit_factors("m-Pa") == {"length": 1.0, "stress": 1.0, "force": 1.0, "force_per_length": 1.0, "per_length": 1.0}
     assert from_si(461.869e3, "force_per_length", "mm-MPa") == pytest.approx(461.869)  # N/m to N/mm
+    assert from_si(2.0, "per_length", "mm-MPa") == pytest.approx(2e-3)  # a curvature of 2 per m is 0.002 per mm
 
 
 def test_scalar_conversions_round_trip():

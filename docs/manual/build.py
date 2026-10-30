@@ -38,7 +38,7 @@ GENERATED = HERE / "generated"
 BUILD = HERE / "build"
 REPO_URL = "https://github.com/erikvilla1/anisotropy-ai/blob/main/"
 ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library", "micromechanics")
-FEA_MODULES = ("mesh", "membrane", "recovery", "results", "cases", "model", "abaqus_reader", "units")
+FEA_MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units")
 # Each package with its theory document and the modules a code marker may name.
 PACKAGES = {"anisotropy_engine": ("engine/docs/theory.md", ENGINE_MODULES), "anisotropy_fea": ("fea/docs/theory.md", FEA_MODULES)}
 # Unit labels for finite element case results, by the deck's unit system and result group.
@@ -53,10 +53,22 @@ SPECIAL = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$", "#": r
 UNICODE = {"–": "--", "—": "---", "−": "$-$", "×": r"$\times$", "·": r"$\cdot$", "≥": r"$\geq$",
            "≤": r"$\leq$", "→": r"$\rightarrow$", "±": r"$\pm$", "…": r"\ldots{}", "θ": r"$\theta$",
            "≈": r"$\approx$", "’": "'", "“": "``", "”": "''", "§": r"\S{}"}
+SUPERSCRIPT = dict(zip("⁰⁴⁵⁶⁷⁸⁹⁺⁻", "0456789+-"))  # as in the library's units (10⁻⁶/°C); the fonts have no glyphs for them
+SUPERSCRIPT_RUN = re.compile(f"([{''.join(SUPERSCRIPT)}]+)")
 UNMAPPED: set[str] = set()
 
 
 def escape(text: str) -> str:
+    out = []
+    for part in SUPERSCRIPT_RUN.split(text):
+        if part[:1] in SUPERSCRIPT:  # a run of superscripts is one superscript: 10⁻⁶ is 10$^{-6}$
+            out.append("$^{" + "".join(SUPERSCRIPT[ch] for ch in part) + "}$")
+        else:
+            out.append(escape_plain(part))
+    return "".join(out)
+
+
+def escape_plain(text: str) -> str:
     out = []
     for ch in text:
         if ch in SPECIAL:
@@ -534,6 +546,7 @@ def tectonic() -> str | None:
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")  # it prints characters from the library's text, which cp1252 pipes cannot encode
     GENERATED.mkdir(exist_ok=True)
     fragments = {"meta": metadata(), "overview": overview(), "theory": theory(), "verification": verification(),
                  "fea_theory": theory("anisotropy_fea"), "fea_verification": fea_verification(),

@@ -26,6 +26,12 @@ KNOWN_DIFFERENCES = {
     "reference": "S8R expanded to a C3D20R brick, reduced integration, three-dimensional constitutive law with E3, nu13, nu23, transverse shear, "
                  "drilling rotation removed, values averaged over the element's integration points",
 }
+KNOWN_DIFFERENCES_BENDING = {
+    "kernel": "four-node MITC4 flat shell (ADR-0053), full 2 by 2 integration, first-order shear deformation with the correction factor 5/6, "
+              "curvature and transverse shear at the element centroid, ply stresses on both faces of every ply from the laminate law",
+    "reference": "S8R expanded to a C3D20R brick, reduced integration, three-dimensional constitutive law with E3, nu13, nu23, transverse shear, "
+                 "drilling rotation removed; each ply's face values extrapolated linearly from its two integration levels",
+}
 
 
 def main() -> None:
@@ -46,6 +52,8 @@ def main() -> None:
                              "where the element types are known to differ and say so in the comparison note")
     parser.add_argument("--node-probes", nargs="*", default=None,
                         help="node probes whose displacements are recorded; default all. Same rule as --element-probes")
+    parser.add_argument("--no-reactions", action="store_true",
+                        help="leave the reaction totals out: a CalculiX shell node set's printed total can be incomplete (fea/checks/calculix-conventions.toml, shell_set_totals); say so in --notes")
     parser.add_argument("--notes", default="")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -59,7 +67,7 @@ def main() -> None:
     if conventions["calculix_version"].split(".")[0] != args.version.split(".")[0]:
         raise SystemExit(f"conventions were detected on CalculiX {conventions['calculix_version']}; this run is {args.version}: re-run the detection first")
     dat = parse_dat(args.dat.read_text(encoding="utf-8", errors="replace"))
-    expected = reference_quantities(model, dat, conventions, element_probes=args.element_probes, node_probes=args.node_probes)
+    expected = reference_quantities(model, dat, conventions, element_probes=args.element_probes, node_probes=args.node_probes, reactions=not args.no_reactions)
     expected = {"tolerance": args.tolerance, "floor": args.floor, **expected}
     out_dir = args.out.parent
     out_dir.mkdir(parents=True, exist_ok=True)  # a coupon started from its input form has no verification/ yet
@@ -74,7 +82,7 @@ def main() -> None:
         "solver": {"name": "calculix", "version": args.version, "element_type": "S8R", "run_by": args.run_by, "run_date": args.run_date,
                    "machine": args.machine, "source": "dat",
                    "conventions": args.conventions.resolve().relative_to(out_dir.resolve(), walk_up=True).as_posix(), "notes": args.notes},
-        "known_differences": KNOWN_DIFFERENCES,
+        "known_differences": KNOWN_DIFFERENCES_BENDING if model.bending else KNOWN_DIFFERENCES,
         "expected": expected,
     }
     args.out.write_text(format_record(record), encoding="utf-8", newline="\n")

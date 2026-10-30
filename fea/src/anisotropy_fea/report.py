@@ -25,12 +25,12 @@ from anisotropy_engine.response import ply_surfaces
 from .abaqus_reader import read_deck
 from .cases import GROUPS, PLY_GROUPS, element_name
 from .compare import compare_record, record_as_case
-from .membrane import solve_membrane
+from .kernel import solve_deck
 from .mesh import KernelError, mesh_from_deck
 from .model import Deck, all_boundaries, coupled_nodes, expanded_layers, node_name, reference_node, resolve_nodes
-from .recovery import element_ply_states
-from .results import MembraneSolution
-from .units import from_si
+from .recovery import FailureField, element_ply_states, ply_ratio_per_ply
+from .results import MembraneSolution, Solution
+from .units import UNIT_LABEL, from_si
 
 # Component names per result group, in the order the record lists them.
 COMPONENTS: dict[str, tuple[str, ...]] = {
@@ -144,11 +144,11 @@ def not_reported(record: dict) -> int:
     return count
 
 
-def solve_record(record: dict) -> tuple[Deck, MembraneSolution]:
+def solve_record(record: dict) -> tuple[Deck, Solution]:
     """The kernel's solution of the record's kernel deck."""
     case = record_as_case(record)
     deck = read_deck(f"{case['_dir']}/{case['mesh']['deck']}", record["units"])
-    return deck, solve_membrane(deck)
+    return deck, solve_deck(deck)
 
 
 def element_centroids(solution: MembraneSolution, units: str) -> dict[str, tuple[float, float]]:
@@ -261,6 +261,68 @@ def gripped_groups(deck: Deck, solution: MembraneSolution) -> tuple[dict[int, fl
     if not any(mesh.node_keys[i][0] is not None for i in bottom) or not any(mesh.node_keys[i][0] is not None for i in top):
         raise KernelError("the gripped nodes are all on one side of the coupon")
     return bottom, top
+
+
+def fpf_place(deck: Deck, solution: MembraneSolution, field: FailureField, units: str) -> tuple[str, bool, list[int]]:
+    """Where the first ply to fail sits, in words: at the edge of a gripped tab, beside the hole, or its distance from the nearer tab line;
+    whether it touches a gripped tab; and the plies of that element that tie with the one named (the bottom-most is named). The coupon
+    document's cover and the studio's summary say it with these words."""
+    mesh = solution.mesh
+    e = mesh.element_keys.index(field.element)
+    ratios = ply_ratio_per_ply(field.ratio[e])  # the smaller face of each ply in a shell state
+    tied = [k + 1 for k, r in enumerate(ratios) if r <= ratios.min() * (1 + 1e-9)]
+    try:
+        bottom, top = gripped_groups(deck, solution)
+    except KernelError:
+        return bending_place(deck, solution, e, units), False, tied
+    gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
+    if gripped & set(mesh.connectivity[e, :4].tolist()):
+        return "at the edge of a gripped tab", True, tied
+    unit = UNIT_LABEL[units]["length"]
+    y = float(mesh.xy[mesh.connectivity[e, :4]].mean(axis=0)[1])
+    lo = max(float(mesh.xy[i, 1]) for i in bottom if mesh.node_keys[i][0] is not None)
+    hi = min(float(mesh.xy[i, 1]) for i in top if mesh.node_keys[i][0] is not None)
+    gauge = gauge_element(deck, solution)
+    if gauge.centre_in_hole and abs(y - 0.5 * (lo + hi)) < 0.1 * (hi - lo):
+        return "beside the hole", False, tied
+    return f"{from_si(min(y - lo, hi - y), 'length', units):.2g} {unit} from the nearer tab line", False, tied
+
+
+def bending_lines(deck: Deck, solution: Solution) -> tuple[dict[int, float], dict[int, float]]:
+    """Mesh node index -> prescribed dof-3 value for the supports (held at zero) and for the loading nose(s) (moved), of a coupon that bends
+    (ADR-0053); both empty for an in-plane deck."""
+    mesh = solution.mesh
+    supports: dict[int, float] = {}
+    noses: dict[int, float] = {}
+    for boundary in all_boundaries(deck):
+        if not boundary.dof_first <= 3 <= boundary.dof_last:
+            continue
+        for key in resolve_nodes(deck, boundary.target, boundary.line):
+            (noses if boundary.value != 0.0 else supports)[mesh.node(key)] = boundary.value
+    return supports, noses
+
+
+def bending_place(deck: Deck, solution: Solution, e: int, units: str) -> str:
+    """Where an element sits on a bending coupon, in words: under the loading nose, its distance from the nearer support or nose line,
+    or on the overhang; "in the coupon" when the deck has no support lines."""
+    mesh = solution.mesh
+    supports, noses = bending_lines(deck, solution)
+    if not supports or not noses:
+        return "in the coupon"
+    corners = set(mesh.connectivity[e, :4].tolist())
+    if corners & set(noses):
+        return "under the loading nose, where the line load concentrates"
+    unit = UNIT_LABEL[units]["length"]
+    y = float(mesh.xy[mesh.connectivity[e, :4]].mean(axis=0)[1])
+    support_lines = sorted({round(float(mesh.xy[i, 1]), 12) for i in supports})
+    nose_lines = sorted({round(float(mesh.xy[i, 1]), 12) for i in noses})
+    if y < support_lines[0] or y > support_lines[-1]:
+        return "on the overhang beyond a support, which carries no moment"
+    to_support = min(abs(y - line) for line in support_lines)
+    to_nose = min(abs(y - line) for line in nose_lines)
+    if to_nose < to_support:
+        return f"{from_si(to_nose, 'length', units):.2g} {unit} from the loading nose"
+    return f"{from_si(to_support, 'length', units):.2g} {unit} from the nearer support"
 
 
 def laminate_check(deck: Deck, solution: MembraneSolution) -> LaminateCheck:

@@ -109,3 +109,33 @@ Option 3.
 **Decision.** Option 3. `intake.write_blank_form` writes a short explanation beside every row of the sheet Coupon (all but the 14 later ply rows), and a sheet Definitions after the instructions, from `intake.GLOSSARY`: the coupon and its directions, the tests, the layup, the material, loading and grips, the mesh, and what we send back. The sheet states the direction convention our models and the team's Abaqus models share: the coupon lies with its length along y, ply angles are measured from x, so 0 = fibres across the coupon and 90 = fibres along the pull. For G13 and G23 without a measured value it gives the usual estimate for a tape, G13 = G12 and G23 = E2 / 3 (MIL-HDBK-17-3F, section 10.2.4.1, with nu23 = 0.5), and says a woven fabric has no reliable estimate; the form still requires both values. The row Library material shows that instruction until a material is picked. Labels align with the first line of their explanation. Form version 0.2; the reader accepts 0.1 forms unchanged, because the labels are unchanged.
 
 **Evidence.** `cd fea && uv run pytest -q tests/test_intake.py`: 35 passed, among them `test_every_row_says_what_it_means`, `test_the_definitions_answer_the_first_questions` and `test_a_form_of_version_0_1_still_reads`. The blank form was exported to PDF by Excel and read page by page (Coupon two pages, Definitions three). The team's experience with it: no evidence yet.
+
+## Amendment 2, 2026-10-28 (the Failure criterion and f12* rows; form version 0.3; asked for by the founder)
+
+**Context.** The founder wants the engineer to choose the failure criterion in the studio (ADR-0051). The form had no row for it: `FPF_CRITERIA` fixed maximum stress and Tsai-Hill whenever the material had strengths, and Tsai-Wu could not be asked for because its interaction term had no row.
+
+**Options.** (1) Keep the fixed pair and let the studio alone choose: two inputs for one coupon. (2) Two rows on the form, Failure criterion (all, one of the three, or none) and Tsai-Wu interaction f12*, read by the same checks (chosen).
+
+**Decision.** Option 2. "all", the default, reports every criterion the material allows: maximum stress and Tsai-Hill, and Tsai-Wu when f12* is given. A criterion on a material without strengths, Tsai-Wu without f12*, and an f12* outside (-1, 1) are refused by row. The library id is now checked on the form too, so an unknown id names its row instead of the spec's `material.library`. Form version 0.3; a 0.2 form still reads, its new rows blank.
+
+**Evidence.** `cd fea && uv run pytest -q tests/test_intake.py tests/test_values_input.py`: 35 and 28 passed (2026-10-28), among them `test_all_reports_every_criterion_the_material_allows` and the five refusals of `test_a_criterion_the_inputs_cannot_support_is_refused_by_row`. The team's experience: no evidence yet.
+
+## Amendment 3, 2026-10-28 (the same rows as one JSON object, a values file; asked for by the founder)
+
+**Context.** The studio (ADR-0051) sends the form's rows from the browser. This record rejected a web form "for now" because there was nothing to host; the API's coupon jobs (ADR-0050) are now the thing to host.
+
+**Options.** (1) The browser writes an Excel file: a spreadsheet library in the browser to make a file the tool reads back. (2) A second schema of the rows in TypeScript: two sources of truth. (3) One JSON object whose keys are the rows' field keys, read by `intake.read_values` into the same `FormInput` the Excel reader gives, so `check_form` and everything after it are unchanged; the rows' definition exported once to `lib/coupon-form-definition.json` with a drift test (chosen).
+
+**Decision.** Option 3. `form_version` is required and must be the current form's; `angles` may stand in for the ply rows; a mesh row may hold a list; an unknown key is refused by name. `intake.read_input` takes either file by its suffix; `convert` and `fea/tools/run_coupon.py` accept both and file the input in `team/<date>/` on every run, a `--replace` included, so each attempt row has its input. `intake.values_of_spec` reads a coupon's spec back into its rows (a spec in other units, of order 2, without plane stress, or asking for a set of criteria the row does not offer is refused by name), so the studio reopens a coupon to change it. The Excel form stays for the team.
+
+**Evidence.** `fea/tests/test_values_input.py`: 28 passed (2026-10-28): the values give the specs the filled form gives; every refusal names its row; the public coupon and four filled variants read back into the values that made them; a values file is filed with its coupon.
+
+## Amendment 4, 2026-10-28 (the bending tests on the form; form version 0.4)
+
+**Context.** The flat shell kernel (ADR-0053) builds three- and four-point bending coupons from the spec, whose bending kinds the form did not offer ("Three- and four-point bending are not on this form yet").
+
+**Options.** (1) A second form for bending: two files to keep in step. (2) The same form with a bending block, read only for the two bending tests, as the open-hole block is read only for open-hole tension (chosen).
+
+**Decision.** Option 2. The Test row offers three-point bending and four-point bending; a block Bending holds Support span (mm), Overhang (mm, default 0) and Loading span (mm, four-point only); for a bending test the tab length is left blank and the grip rows are ignored, since the coupon rests on two support lines; Length must equal the span plus twice the overhang, stated and checked, not derived; the loading type is displacement, the nose's travel, pushed down by the amount given; the mesh is seeded so that a node row falls on each support and nose line; the results are read at the quarter span (a node and an element), the element beside the nose line being left out of the record. The studio's form shows the bending rows for the bending tests and hides the grips and tabs. The sheet Definitions explains the two tests and the spans.
+
+**Evidence.** `fea/tests/test_intake.py` and `test_values_input.py` with the form at 0.4; the public bending coupon `fea/checks/three-point-im7-8552/` and its browser fixtures `tests/fixtures/studio-bending/`, made from a values file of the form's rows.

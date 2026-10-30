@@ -22,8 +22,9 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 # Who triggered a run. Adding one is a migration, so a new consumer is a reviewed change.
-# `founder-agent` is the founder's own tooling outside this repository, an outside client of the API (ADR-0028).
-ACTORS = ("founder-terminal", "calculator", "founder-agent", "assistant", "test")
+# `founder-agent` is the founder's own tooling outside this repository, an outside client of the API (ADR-0028);
+# `studio` is the website's coupon studio (ADR-0051, migration 0004).
+ACTORS = ("founder-terminal", "calculator", "founder-agent", "assistant", "test", "studio")
 STATUSES = ("solved", "rejected")
 
 
@@ -113,11 +114,13 @@ def git_commit() -> str | None:
 
 
 def record_run(engine: Engine, *, actor: str, endpoint: str, inputs: dict, engine_version: str, api_version: str,
-               git_commit: str | None, response: dict | None = None, error: str | None = None) -> uuid.UUID:
-    """Insert one row and return its id. A database failure raises; the caller decides what that means."""
+               git_commit: str | None, response: dict | None = None, error: str | None = None,
+               llm_provider: str | None = None, llm_model_version: str | None = None) -> uuid.UUID:
+    """Insert one row and return its id. A database failure raises; the caller decides what that means. `llm_provider` and
+    `llm_model_version` name the language model whose draft the response holds (ADR-0052); None when the template wrote it."""
     run = Run(actor=actor, endpoint=endpoint, status="solved" if error is None else "rejected", inputs=inputs,
               inputs_sha256=inputs_digest(inputs), engine_version=engine_version, api_version=api_version,
-              git_commit=git_commit, response=response, error=error)
+              git_commit=git_commit, response=response, error=error, llm_provider=llm_provider, llm_model_version=llm_model_version)
     with Session(engine) as session:
         session.add(run)
         session.commit()

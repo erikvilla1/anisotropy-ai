@@ -173,12 +173,23 @@ class ConcentratedLoad(Record):
     line: int
 
 
+class DistributedLoad(Record):
+    """A `*Dload` line with the P label: a uniform pressure on an element set or one element (ADR-0053). A positive value pushes
+    against the element normal, which is +z for counterclockwise nodes, so it loads the plate toward -z."""
+
+    target: str | ElementKey  # an assembly element set name, or one element
+    label: str  # "P" is the only label read
+    value: float  # pressure; stress units
+    line: int
+
+
 class Step(Record):
     name: str
     nlgeom: bool
     boundaries: tuple[Boundary, ...]
     cloads: tuple[ConcentratedLoad, ...]
     line: int
+    dloads: tuple[DistributedLoad, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -309,7 +320,8 @@ def prescribed_dofs(deck: Deck, key: NodeKey) -> dict[int, float]:
 
 
 def validate_deck(deck: Deck) -> tuple[str, ...]:
-    """Every reference resolves and the model is one the flat membrane kernel can represent. Returns notes."""
+    """Every reference resolves and the model is a flat plate one of the kernels can represent; what each kernel refuses is checked
+    when it is asked to solve (`membrane_limits` for the membrane). Returns notes."""
     notes: list[str] = []
     for part in deck.parts.values():
         _validate_part(deck, part)
@@ -338,11 +350,52 @@ def validate_deck(deck: Deck) -> tuple[str, ...]:
     for step in deck.steps:
         for load in step.cloads:
             resolve_nodes(deck, load.target, load.line)
-            if load.dof not in IN_PLANE_DOFS:
-                raise DeckError(f"line {load.line}: concentrated load on dof {load.dof}; the membrane model takes dofs 1 and 2 only")
+            if not 1 <= load.dof <= 6:
+                raise DeckError(f"line {load.line}: concentrated load on dof {load.dof}; a shell node has dofs 1 to 6")
+        for load in step.dloads:
+            resolve_elements(deck, load.target, load.line)
     for coupling in deck.couplings:
         notes.extend(_validate_coupling(deck, coupling))
     return tuple(notes)
+
+
+def resolve_elements(deck: Deck, target: str | ElementKey, line: int) -> tuple[ElementKey, ...]:
+    """The elements an assembly element set name or one `Instance.label` stands for."""
+    if isinstance(target, tuple):
+        instance, label = target
+        part = part_of_instance(deck, instance, f"line {line}")
+        if part.elements is None or not np.any(part.elements.labels == label):
+            raise DeckError(f"line {line}: element {instance}.{label} does not exist")
+        return (target,)
+    if target not in deck.elsets:
+        raise DeckError(f"line {line}: element set {target!r} is not defined at the assembly level")
+    return deck.elsets[target]
+
+
+def membrane_limits(deck: Deck) -> None:
+    """What the membrane kernel cannot represent, refused by name: an out-of-plane or rotational prescription with a value, a load on
+    dofs 3 to 6, a distributed load, or a coupling whose reference node can rotate (ADR-0029; the flat shell of ADR-0053 takes them).
+    Raises DeckError so the message names the deck line, as it did when validate_deck held these rules."""
+    for boundary in all_boundaries(deck):
+        for dof in range(boundary.dof_first, boundary.dof_last + 1):
+            if boundary.value != 0 and dof == 3:
+                raise DeckError(f"line {boundary.line}: a nonzero out-of-plane displacement (dof 3); the membrane model is in-plane only")
+            if boundary.value != 0 and dof in ROTATION_DOFS:
+                raise DeckError(f"line {boundary.line}: a nonzero prescribed rotation (dof {dof}); the membrane model has no rotations")
+    for step in deck.steps:
+        for load in step.cloads:
+            if load.dof not in IN_PLANE_DOFS:
+                raise DeckError(f"line {load.line}: concentrated load on dof {load.dof}; the membrane model takes dofs 1 and 2 only")
+        for load in step.dloads:
+            raise DeckError(f"line {load.line}: a distributed load; the membrane model takes concentrated loads on dofs 1 and 2 only")
+    for coupling in deck.couplings:
+        reference = reference_node(deck, coupling)
+        held = prescribed_dofs(deck, reference)
+        free_rotations = [dof for dof in ROTATION_DOFS if dof not in held]
+        if free_rotations:
+            raise DeckError(f"line {coupling.line}: reference node {node_name(reference)} of coupling {coupling.name!r} has rotation dofs "
+                            f"{free_rotations} free; the membrane model represents the coupling as a rigid translation of the edge, "
+                            f"so the reference node's rotations must be fixed")
 
 
 def _validate_part(deck: Deck, part: Part) -> None:
@@ -389,11 +442,10 @@ def _validate_boundaries(deck: Deck) -> None:
         if not 1 <= boundary.dof_first <= boundary.dof_last <= 6:
             raise DeckError(f"line {boundary.line}: boundary dofs {boundary.dof_first}..{boundary.dof_last} are outside 1..6")
         keys = resolve_nodes(deck, boundary.target, boundary.line)
+        if boundary.value != 0 and boundary.dof_first <= 3 < boundary.dof_last:
+            raise DeckError(f"line {boundary.line}: one nonzero value for dofs {boundary.dof_first} to {boundary.dof_last} would be a length and an "
+                            "angle at once; write translations and rotations on separate lines")
         for dof in range(boundary.dof_first, boundary.dof_last + 1):
-            if boundary.value != 0 and dof == 3:
-                raise DeckError(f"line {boundary.line}: a nonzero out-of-plane displacement (dof 3); the membrane model is in-plane only")
-            if boundary.value != 0 and dof in ROTATION_DOFS:
-                raise DeckError(f"line {boundary.line}: a nonzero prescribed rotation (dof {dof}); the membrane model has no rotations")
             for key in keys:
                 earlier = seen.get((key, dof))
                 if earlier is not None and earlier[0] != boundary.value:
@@ -405,13 +457,7 @@ def _validate_boundaries(deck: Deck) -> None:
 def _validate_coupling(deck: Deck, coupling: KinematicCoupling) -> list[str]:
     reference = reference_node(deck, coupling)
     if not set(IN_PLANE_DOFS) <= coupling.dofs:
-        raise DeckError(f"line {coupling.line}: coupling {coupling.name!r} leaves an in-plane dof free; the membrane model needs dofs 1 and 2 coupled")
-    held = prescribed_dofs(deck, reference)
-    free_rotations = [dof for dof in ROTATION_DOFS if dof not in held]
-    if free_rotations:
-        raise DeckError(f"line {coupling.line}: reference node {node_name(reference)} of coupling {coupling.name!r} has rotation dofs "
-                        f"{free_rotations} free; the membrane model represents the coupling as a rigid translation of the edge, "
-                        f"so the reference node's rotations must be fixed")
+        raise DeckError(f"line {coupling.line}: coupling {coupling.name!r} leaves an in-plane dof free; the kernels need dofs 1 and 2 coupled")
     surface = deck.surfaces.get(coupling.surface)
     if not isinstance(surface, NodeSurface):
         raise DeckError(f"line {coupling.line}: coupling {coupling.name!r} needs a node-based surface; "
@@ -458,13 +504,15 @@ def to_si(deck: Deck, units: str) -> Deck:
         return material.model_copy(update=update)
 
     def scale_boundary(boundary: Boundary) -> Boundary:
-        # Translations (dofs 1 to 3) are lengths; rotations are angles and validated to be zero.
+        # Translations (dofs 1 to 3) are lengths; rotations (dofs 4 to 6) are angles in radians, the same in every system. A nonzero
+        # value that spans both is refused by validate_deck.
         return boundary.model_copy(update={"value": boundary.value * length}) if boundary.dof_last <= 3 else boundary
 
     def scale_step(step: Step) -> Step:
         return step.model_copy(update={
             "boundaries": tuple(scale_boundary(b) for b in step.boundaries),
-            "cloads": tuple(load.model_copy(update={"value": load.value * force}) for load in step.cloads),
+            "cloads": tuple(load.model_copy(update={"value": load.value * (force if load.dof <= 3 else force * length)}) for load in step.cloads),
+            "dloads": tuple(load.model_copy(update={"value": load.value * stress}) for load in step.dloads),
         })
 
     parts = {

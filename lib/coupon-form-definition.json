@@ -1,0 +1,1462 @@
+{
+ "form_version": "0.5",
+ "fea_version": "0.1.0",
+ "units": "mm-MPa",
+ "row_units": {
+  "length": "mm",
+  "stress": "MPa",
+  "force": "N"
+ },
+ "sections": [
+  {
+   "title": "Who fills this in",
+   "fields": [
+    {
+     "key": "filled_by",
+     "label": "Filled in by",
+     "kind": "text",
+     "help": "your name, so we know whom to ask",
+     "required": true,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "date",
+     "label": "Date",
+     "kind": "date",
+     "help": "the day you filled it in, as YYYY-MM-DD, e.g. 2026-10-26",
+     "required": true,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "notes",
+     "label": "Notes to us",
+     "kind": "text",
+     "help": "anything we should know: where a value comes from, which values are estimates, what you want to learn from this coupon",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    }
+   ]
+  },
+  {
+   "title": "The coupon",
+   "fields": [
+    {
+     "key": "test",
+     "label": "Test",
+     "kind": "list",
+     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines) or plate (a laminate held and loaded on regions you name, stated from the studio); see Definitions, Tests",
+     "required": true,
+     "default": null,
+     "words": [
+      "unnotched tension",
+      "unnotched compression",
+      "open-hole tension",
+      "in-plane shear",
+      "three-point bending",
+      "four-point bending",
+      "plate"
+     ],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "material_code",
+     "label": "Material code",
+     "kind": "text",
+     "help": "a short code for the material in the coupon's name, capital letters and digits: X840PW in X840PW-UNT-L1; leave blank to reuse the code we already use for this material",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "layup_code",
+     "label": "Layup code",
+     "kind": "text",
+     "help": "a short code for the stacking sequence: L1, L2 and so on; leave blank and we reuse the code of this same stacking sequence or give the next free one",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "standard",
+     "label": "Standard",
+     "kind": "text",
+     "help": "the test standard the specimen follows, e.g. ASTM D3039, or none",
+     "required": false,
+     "default": "none",
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "size_from",
+     "label": "Where the size comes from",
+     "kind": "text",
+     "help": "where the length, width and tabs come from: a standard, a drawing, or your own design",
+     "required": true,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "team_model",
+     "label": "Your Abaqus model of this coupon",
+     "kind": "text",
+     "help": "the name of your Abaqus model or job for this coupon, or not built yet",
+     "required": false,
+     "default": "not built yet",
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "test_data",
+     "label": "Test data",
+     "kind": "text",
+     "help": "measured results we can compare with (a test report or a file name), or none",
+     "required": false,
+     "default": "none",
+     "words": [],
+     "at_least": null,
+     "above": null
+    }
+   ]
+  },
+  {
+   "title": "Geometry (mm): the coupon lies with its length along y, the direction it is pulled, pushed or spanned",
+   "fields": [
+    {
+     "key": "length",
+     "label": "Length (mm)",
+     "kind": "number",
+     "help": "the whole coupon from end to end along the pull, tabs included, e.g. 250; for bending, the span plus the two overhangs",
+     "required": true,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "width",
+     "label": "Width (mm)",
+     "kind": "number",
+     "help": "across the coupon, e.g. 25",
+     "required": true,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "tab_length",
+     "label": "Tab length (mm)",
+     "kind": "number",
+     "help": "how much of each end the grip holds, e.g. 56; 0 for no tabs, and then set Grip region to line. Required for the pulled and pushed tests; leave it blank for bending, which has supports instead of grips",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": 0,
+     "above": null
+    }
+   ]
+  },
+  {
+   "title": "Bending (three- and four-point bending only; ignored for the other tests)",
+   "fields": [
+    {
+     "key": "span",
+     "label": "Support span (mm)",
+     "kind": "number",
+     "help": "the distance between the two support lines, e.g. 48; ASTM D7264 takes 32 times the laminate thickness. The coupon lies across the supports with its length along y",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "overhang",
+     "label": "Overhang (mm)",
+     "kind": "number",
+     "help": "how far the coupon reaches past each support, so that Length = span + 2 overhang; 0 for a coupon that ends at its supports",
+     "required": false,
+     "default": 0.0,
+     "words": [],
+     "at_least": 0,
+     "above": null
+    },
+    {
+     "key": "load_span",
+     "label": "Loading span (mm)",
+     "kind": "number",
+     "help": "four-point bending only: the distance between the two loading noses, centred on the span, e.g. half the support span",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    }
+   ]
+  },
+  {
+   "title": "Open hole (open-hole tension, or a plate with a hole; ignored for the other tests)",
+   "fields": [
+    {
+     "key": "hole_diameter",
+     "label": "Hole diameter (mm)",
+     "kind": "number",
+     "help": "the diameter of the hole at the centre of the coupon, e.g. 6; on a plate the hole's ring becomes a region you can hold or load",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "hole_circumferential",
+     "label": "Nodes around the hole",
+     "kind": "whole",
+     "help": "how many mesh points sit on the edge of the hole; a multiple of 4, at least 8. More points give a rounder hole and a sharper peak stress",
+     "required": false,
+     "default": 32,
+     "words": [],
+     "at_least": 8,
+     "above": null
+    },
+    {
+     "key": "hole_radial",
+     "label": "Element rings around the hole",
+     "kind": "whole",
+     "help": "how many rings of elements surround the hole before the regular mesh starts; more rings give more detail near the hole",
+     "required": false,
+     "default": 6,
+     "words": [],
+     "at_least": 1,
+     "above": null
+    },
+    {
+     "key": "hole_ring",
+     "label": "Ring ratio",
+     "kind": "number",
+     "help": "how far the ringed region reaches from the hole's centre, in hole radii: 2 means a square reaching 2 radii out on each side; it must stay inside the width",
+     "required": false,
+     "default": 2.0,
+     "words": [],
+     "at_least": null,
+     "above": 1
+    },
+    {
+     "key": "hole_growth",
+     "label": "Ring growth",
+     "kind": "number",
+     "help": "how much thicker each ring is than the one inside it: 1.2 means 20% thicker, so the smallest elements sit at the edge of the hole, where stress changes fastest; 1 keeps every ring the same",
+     "required": false,
+     "default": 1.2,
+     "words": [],
+     "at_least": 1,
+     "above": null
+    }
+   ]
+  },
+  {
+   "title": "Layup, bottom ply first",
+   "fields": [
+    {
+     "key": "ply_1",
+     "label": "Ply 1 (bottom)",
+     "kind": "angle",
+     "help": "the fibre angle of the bottom ply in degrees, measured from x, which runs across the width: 0 = fibres across the coupon, 90 = fibres along the pull, 45 and -45 diagonal. Then one ply per row upward; leave the rest blank",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_2",
+     "label": "Ply 2",
+     "kind": "angle",
+     "help": "the next ply up",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_3",
+     "label": "Ply 3",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_4",
+     "label": "Ply 4",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_5",
+     "label": "Ply 5",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_6",
+     "label": "Ply 6",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_7",
+     "label": "Ply 7",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_8",
+     "label": "Ply 8",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_9",
+     "label": "Ply 9",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_10",
+     "label": "Ply 10",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_11",
+     "label": "Ply 11",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_12",
+     "label": "Ply 12",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_13",
+     "label": "Ply 13",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_14",
+     "label": "Ply 14",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_15",
+     "label": "Ply 15",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_16",
+     "label": "Ply 16",
+     "kind": "angle",
+     "help": "",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "symmetric",
+     "label": "Symmetric",
+     "kind": "list",
+     "help": "yes: the plies listed are the lower half and are mirrored, so 0, 45, -45, 90 becomes 8 plies; no: the plies listed are the whole stack",
+     "required": true,
+     "default": null,
+     "words": [
+      "yes",
+      "no"
+     ],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "ply_thickness",
+     "label": "Ply thickness (mm)",
+     "kind": "number",
+     "help": "the cured thickness of one ply, e.g. 0.127; leave blank only when the library material gives one (its Ply thickness column on the sheet Library materials)",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    }
+   ]
+  },
+  {
+   "title": "Material: pick one from our library, or give your own constants",
+   "fields": [
+    {
+     "key": "library",
+     "label": "Library material",
+     "kind": "list",
+     "help": "pick a material by its id; the sheet Library materials lists each one with its constants and source, and once you pick one this cell shows its constants",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "own_name",
+     "label": "Own material: name",
+     "kind": "text",
+     "help": "the material's name as in your Abaqus model, no spaces, e.g. X840-Z60",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "own_E1",
+     "label": "Own material: E1 (MPa)",
+     "kind": "number",
+     "help": "stiffness along the fibres (Young's modulus in direction 1)",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "own_E2",
+     "label": "Own material: E2 (MPa)",
+     "kind": "number",
+     "help": "stiffness across the fibres, in the plane of the ply (direction 2)",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "own_G12",
+     "label": "Own material: G12 (MPa)",
+     "kind": "number",
+     "help": "in-plane shear stiffness (shear modulus in the 1-2 plane)",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "own_nu12",
+     "label": "Own material: nu12",
+     "kind": "number",
+     "help": "Poisson's ratio: how much the ply narrows across the fibres when stretched along them, e.g. 0.3; no unit",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "own_F1t",
+     "label": "Own material: F1t (MPa)",
+     "kind": "number",
+     "help": "strength along the fibres in tension. Give all five strengths, or none: without them we predict no failure",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "own_F1c",
+     "label": "Own material: F1c (MPa)",
+     "kind": "number",
+     "help": "strength along the fibres in compression, as a positive number",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "own_F2t",
+     "label": "Own material: F2t (MPa)",
+     "kind": "number",
+     "help": "strength across the fibres in tension",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "own_F2c",
+     "label": "Own material: F2c (MPa)",
+     "kind": "number",
+     "help": "strength across the fibres in compression, as a positive number",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "own_F6",
+     "label": "Own material: F6 (MPa)",
+     "kind": "number",
+     "help": "in-plane shear strength",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "own_source",
+     "label": "Own material: source",
+     "kind": "text",
+     "help": "where these numbers come from: the supplier's datasheet and its date, or a test report. They stay with this coupon and never go into our library",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "G13",
+     "label": "G13 (MPa)",
+     "kind": "number",
+     "help": "out-of-plane shear stiffness in the plane of the fibres and the thickness, as in your Abaqus material (Lamina). No measured value? For a tape use G13 = G12 and say so in the notes; see Definitions, Material",
+     "required": true,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "G23",
+     "label": "G23 (MPa)",
+     "kind": "number",
+     "help": "out-of-plane shear stiffness across the fibres and the thickness, as in your Abaqus material (Lamina). No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material",
+     "required": true,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    }
+   ]
+  },
+  {
+   "title": "Failure criterion: which first-ply failure criterion we report",
+   "fields": [
+    {
+     "key": "criteria",
+     "label": "Failure criterion",
+     "kind": "list",
+     "help": "all: every criterion the material allows (maximum stress and Tsai-Hill, and Tsai-Wu when f12* is given below); or one of them; or none. A criterion needs the material's strengths; see Definitions, First-ply failure",
+     "required": false,
+     "default": "all",
+     "words": [
+      "all",
+      "maximum stress",
+      "tsai-hill",
+      "tsai-wu",
+      "none"
+     ],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "f12_star",
+     "label": "Tsai-Wu interaction f12*",
+     "kind": "number",
+     "help": "the normalised interaction term of the Tsai-Wu criterion, a number between -1 and 1, neither included; required for Tsai-Wu; leave it blank otherwise, and Tsai-Wu is not reported",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    }
+   ]
+  },
+  {
+   "title": "Loading: the bottom grip is held, the top grip moves; in bending, the supports hold and the nose moves",
+   "fields": [
+    {
+     "key": "control",
+     "label": "Loading type",
+     "kind": "list",
+     "help": "displacement: the top grip moves by the value, in mm; force: a total force, in N, pulls or pushes the top grip. Bending takes displacement: the loading nose travels by the value",
+     "required": true,
+     "default": null,
+     "words": [
+      "displacement",
+      "force"
+     ],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "value",
+     "label": "Value (mm or N)",
+     "kind": "number",
+     "help": "the amount as a positive number, e.g. 1 mm or 10000 N; for compression we push, for the other tests we pull; in bending the nose pushes down by this travel",
+     "required": true,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    }
+   ]
+  },
+  {
+   "title": "Mesh: an element size, or your Abaqus mesh",
+   "fields": [
+    {
+     "key": "element_size",
+     "label": "Element size (mm)",
+     "kind": "number",
+     "help": "the size of the small pieces (elements) the coupon is divided into for the calculation, e.g. 2. Smaller is finer: more detail near the grips and a hole, but slower. We put a row of nodes exactly on each tab line",
+     "required": false,
+     "default": 2.0,
+     "words": [],
+     "at_least": null,
+     "above": 0
+    },
+    {
+     "key": "mesh_nx",
+     "label": "Your Abaqus mesh: elements across the width",
+     "kind": "whole",
+     "help": "only if you already meshed this coupon in Abaqus: the number of elements across the width. Give this and the next two instead of an element size, and our mesh matches yours node for node",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": 1,
+     "above": null
+    },
+    {
+     "key": "mesh_partitions",
+     "label": "Your Abaqus mesh: partition lines (mm)",
+     "kind": "text",
+     "help": "where your partition lines cross the length, measured from the bottom end, comma-separated, e.g. 56, 110, 140, 194",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "mesh_seeds",
+     "label": "Your Abaqus mesh: rows per segment",
+     "kind": "text",
+     "help": "how many rows of elements lie in each segment between those lines, from the bottom, so one more number than there are lines, e.g. 28, 27, 10, 27, 28",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    }
+   ]
+  },
+  {
+   "title": "Grips (ignored for bending, which rests on supports)",
+   "fields": [
+    {
+     "key": "grips",
+     "label": "Grip kind",
+     "kind": "list",
+     "help": "coupling: the gripped nodes at each end are tied to one reference point, held at the bottom and moved at the top, as in your Abaqus models; nodal: the gripped nodes themselves are held or moved",
+     "required": false,
+     "default": "coupling",
+     "words": [
+      "coupling",
+      "nodal"
+     ],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "region",
+     "label": "Grip region",
+     "kind": "list",
+     "help": "tabs: every node on the tab is held; line: only the row of nodes at each end (use it when Tab length is 0)",
+     "required": false,
+     "default": "tabs",
+     "words": [
+      "tabs",
+      "line"
+     ],
+     "at_least": null,
+     "above": null
+    }
+   ]
+  },
+  {
+   "title": "Names in your Abaqus model (optional: give them and our Abaqus file uses them)",
+   "fields": [
+    {
+     "key": "name_part",
+     "label": "Abaqus name: part",
+     "kind": "text",
+     "help": "the part's name; leave all five blank and we use ours",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "name_instance",
+     "label": "Abaqus name: instance",
+     "kind": "text",
+     "help": "the instance's name in the assembly, e.g. Coupon-1",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "name_material",
+     "label": "Abaqus name: material",
+     "kind": "text",
+     "help": "the material's name under Property, Material",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "name_layup",
+     "label": "Abaqus name: layup",
+     "kind": "text",
+     "help": "the composite layup's name",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    },
+    {
+     "key": "name_section",
+     "label": "Abaqus name: section set",
+     "kind": "text",
+     "help": "the set the layup is assigned to",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null
+    }
+   ]
+  }
+ ],
+ "how_to": [
+  "What this form is for. You describe one coupon test; from it we build the model in our engine, solve it, and send back a package: the document, our Abaqus deck of the same coupon, and the audit form on which you compare your Abaqus results with ours.",
+  "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. Units are mm, MPa and N. Every row says what it means beside it; the sheet Definitions explains each term with an example.",
+  "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured from x, as in your Abaqus models: 0 = fibres across the coupon, 90 = fibres along the pull.",
+  "Layup: one ply per row, bottom ply first, angles in degrees. With Symmetric = yes, the plies you list are the lower half and are mirrored.",
+  "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one.",
+  "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give its interaction term f12*; or pick one criterion, or none.",
+  "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
+  "Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
+  "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway to the tab. You do not enter these points: we place them from the geometry.",
+  "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
+  "Send the file back as it is. If something is missing or inconsistent, we send it back with every problem named."
+ ],
+ "glossary": [
+  {
+   "group": "The coupon and its directions",
+   "terms": [
+    {
+     "term": "Coupon",
+     "meaning": "A test specimen: a flat strip of the laminate, held at both ends by grips and pulled or pushed along its length.",
+     "example": "A 250 x 25 mm strip with 56 mm tabs."
+    },
+    {
+     "term": "x and y",
+     "meaning": "Lay the coupon flat with its length running up the page. x runs across the width from the left edge (x = 0); y runs along the length from the bottom end (y = 0). The coupon is pulled or pushed along y.",
+     "example": "The centre of a 250 x 25 mm coupon is at x = 12.5, y = 125."
+    },
+    {
+     "term": "Tab, tab line",
+     "meaning": "A tab is the end region a grip holds. The tab line is where the tab ends and the free part of the coupon begins.",
+     "example": "With 56 mm tabs on a 250 mm coupon the tab lines are at y = 56 and y = 194."
+    },
+    {
+     "term": "Gauge section",
+     "meaning": "The free part between the tabs, where the coupon should fail and where results are read.",
+     "example": ""
+    }
+   ]
+  },
+  {
+   "group": "Tests",
+   "terms": [
+    {
+     "term": "Unnotched tension",
+     "meaning": "A plain strip pulled along its length. It gives the laminate's tensile stiffness and strength.",
+     "example": "ASTM D3039."
+    },
+    {
+     "term": "Unnotched compression",
+     "meaning": "A plain strip pushed along its length. It gives the compressive stiffness and strength. Our model is flat and in-plane, so it does not buckle.",
+     "example": "ASTM D6641."
+    },
+    {
+     "term": "Open-hole tension",
+     "meaning": "A strip with a hole drilled through its centre, pulled. The hole concentrates the stress at its edge.",
+     "example": "ASTM D5766: 36 mm wide with a 6 mm hole."
+    },
+    {
+     "term": "In-plane shear",
+     "meaning": "A strip made of +45 and -45 plies only, pulled. The plies are loaded in shear, which gives the shear stiffness and strength.",
+     "example": "ASTM D3518. Every ply +45 or -45, as many of each."
+    },
+    {
+     "term": "Plate",
+     "meaning": "A flat laminate held and loaded on regions you name: an edge, a tab, the ring of a hole, the whole face, or a box you draw on it. Each support says which directions it holds (and a travel, if it moves); each load is a force along a direction spread over its region, or a pressure on an area. Stated from the studio, which draws the regions; the Excel form has no rows for them.",
+     "example": "A square plate simply supported on its four edges under a pressure."
+    },
+    {
+     "term": "Three-point bending",
+     "meaning": "A strip resting on two support lines, pushed down at midspan by a loading nose that moves by the value you give. It gives the flexural stiffness and strength; the outer plies carry most of the stress, the bottom ones in tension.",
+     "example": "ASTM D7264 procedure A: 13 mm wide, span 32 times the thickness."
+    },
+    {
+     "term": "Four-point bending",
+     "meaning": "A strip on two support lines, pushed down by two loading noses centred on the span. Between the noses the moment is constant, so the failure is not under a nose.",
+     "example": "ASTM D7264 procedure B: the loading span is half the support span."
+    },
+    {
+     "term": "Support span, overhang, loading span",
+     "meaning": "The span is the distance between the support lines; the overhang is what reaches past each support (Length = span + 2 overhang); the loading span is the distance between the two noses of four-point bending.",
+     "example": "Span 48, overhang 6: a 60 mm coupon."
+    }
+   ]
+  },
+  {
+   "group": "Layup and plies",
+   "terms": [
+    {
+     "term": "Ply",
+     "meaning": "One layer of the laminate: fibres in resin, all at one angle.",
+     "example": ""
+    },
+    {
+     "term": "Ply angle",
+     "meaning": "The direction of a ply's fibres, in degrees, measured from x (across the width), positive counterclockwise when you look down on the coupon. 0 = fibres across the coupon, 90 = fibres along the pull, 45 and -45 diagonal. This is how your Abaqus models are set up: the coupon drawn along y, the layup in the global axes.",
+     "example": "If you think of 0 as the direction of the pull, add 90 to every angle: 0, 45, -45, 90 becomes 90, -45, 45, 0."
+    },
+    {
+     "term": "Bottom ply first",
+     "meaning": "List the plies from the bottom face up, in the order you would lay them on the tool.",
+     "example": ""
+    },
+    {
+     "term": "Symmetric",
+     "meaning": "The stack is mirrored about its middle. With Symmetric = yes, list only the lower half.",
+     "example": "0, 45, -45, 90 with yes is 8 plies: 0, 45, -45, 90, 90, -45, 45, 0."
+    },
+    {
+     "term": "Ply thickness",
+     "meaning": "The cured thickness of one ply.",
+     "example": "0.127 mm (0.005 in)."
+    }
+   ]
+  },
+  {
+   "group": "Material",
+   "terms": [
+    {
+     "term": "Library material",
+     "meaning": "A material whose constants we hold with their source and page. Pick its id; the sheet Library materials lists each one with its constants, and the row on the form shows the one you picked.",
+     "example": "im7-8552: IM7/8552 carbon/epoxy tape, NCAMP."
+    },
+    {
+     "term": "Empty cell on the sheet Library materials",
+     "meaning": "The source does not give that value. With no strength we cannot predict when a ply fails, so we leave failure out; with no ply thickness, give one on the form.",
+     "example": ""
+    },
+    {
+     "term": "Own material",
+     "meaning": "Your own constants, with where they come from. They stay with this coupon and never go into our library.",
+     "example": ""
+    },
+    {
+     "term": "Directions 1, 2, 3",
+     "meaning": "The ply's own directions: 1 along the fibres, 2 across the fibres in the plane of the ply, 3 through the thickness.",
+     "example": ""
+    },
+    {
+     "term": "E1, E2",
+     "meaning": "Stiffness (Young's modulus) along the fibres (E1) and across them (E2).",
+     "example": "IM7/8552 in our library: E1 = 162,096 MPa, E2 = 8,963 MPa."
+    },
+    {
+     "term": "G12",
+     "meaning": "In-plane shear stiffness: how the ply resists shear in its own plane.",
+     "example": "IM7/8552: G12 = 4,688 MPa."
+    },
+    {
+     "term": "nu12",
+     "meaning": "Poisson's ratio: how much the ply narrows across the fibres when it is stretched along them. No unit.",
+     "example": "IM7/8552: 0.316."
+    },
+    {
+     "term": "Strengths F1t, F1c, F2t, F2c, F6",
+     "meaning": "The stress at which a ply fails: along the fibres in tension (F1t) and compression (F1c), across the fibres in tension (F2t) and compression (F2c), and in in-plane shear (F6). Compression as a positive number. Give all five or none.",
+     "example": ""
+    },
+    {
+     "term": "Failure criterion",
+     "meaning": "The rule that says when a ply has failed, from its stresses and strengths. Maximum stress: a ply fails when one stress reaches its strength. Tsai-Hill and Tsai-Wu: the stresses are combined, so no single one governs. All reports every criterion the material's strengths allow.",
+     "example": "all, our default; or one of maximum stress, tsai-hill, tsai-wu; or none."
+    },
+    {
+     "term": "f12*",
+     "meaning": "The interaction term of the Tsai-Wu criterion, normalised, between -1 and 1 (neither included). Tsai-Wu needs it; the other criteria do not.",
+     "example": "Leave it blank and Tsai-Wu is not reported."
+    },
+    {
+     "term": "G13, G23",
+     "meaning": "Out-of-plane shear stiffness: G13 in the plane that holds the fibres and the thickness, G23 across the fibres and the thickness. Abaqus needs them for the shell section (its Lamina material asks for them). Our own solver does not use them, so they do not change our results for a thin coupon pulled or pushed.",
+     "example": "No measured value: for a tape the usual estimate is G13 = G12 and G23 = E2 / 3 (the ply taken as the same in every direction across the fibres, with nu23 = 0.5; MIL-HDBK-17-3F, section 10.2.4.1). For a woven fabric there is no reliable estimate: ask the supplier. Either way, write in the notes which values are estimates."
+    },
+    {
+     "term": "Source",
+     "meaning": "Where your own constants come from.",
+     "example": "The supplier's datasheet and its date, or a test report and its number."
+    }
+   ]
+  },
+  {
+   "group": "Loading and grips",
+   "terms": [
+    {
+     "term": "Displacement",
+     "meaning": "The top grip moves by a set distance; the bottom grip is held. We report the force it takes.",
+     "example": "1 mm."
+    },
+    {
+     "term": "Force",
+     "meaning": "A set total force pulls or pushes the top grip; the bottom grip is held. We report how far it moves.",
+     "example": "10000 N."
+    },
+    {
+     "term": "Coupling grip",
+     "meaning": "The gripped nodes at each end are tied to one reference point, which moves like a rigid grip: held at the bottom, moved at the top. This is how your Abaqus models grip the coupon.",
+     "example": ""
+    },
+    {
+     "term": "Nodal grip",
+     "meaning": "The gripped nodes are held or moved directly, without a reference point.",
+     "example": ""
+    },
+    {
+     "term": "Grip region",
+     "meaning": "tabs: every node on the tab is held. line: only the row of nodes at each end.",
+     "example": "Use line when Tab length is 0."
+    }
+   ]
+  },
+  {
+   "group": "Mesh",
+   "terms": [
+    {
+     "term": "Mesh, element, node",
+     "meaning": "For the calculation the coupon is divided into small four-sided pieces called elements; their corners are the nodes. The stress is worked out in every element. The whole set of elements is the mesh.",
+     "example": "A 250 x 20 mm coupon with 2 mm elements has 10 across and 125 along: 1,250 elements."
+    },
+    {
+     "term": "Element size",
+     "meaning": "About how long an element's side is. We divide the width, and each part of the length, into whole numbers of elements of about this size, with a row of nodes exactly on each tab line.",
+     "example": "2 mm, our default; 1 mm for a finer check."
+    },
+    {
+     "term": "Finer mesh",
+     "meaning": "Smaller elements. They show more detail where the stress changes quickly (at the end of a tab, around a hole) and take longer to solve. In the middle of a plain coupon the stress is the same everywhere, so a finer mesh changes nothing there.",
+     "example": ""
+    },
+    {
+     "term": "Your Abaqus mesh",
+     "meaning": "If you have meshed this coupon in Abaqus, give its seeds instead of an element size: elements across the width, the partition lines from the bottom, and the rows in each segment. Our mesh is then the same as yours node for node, and the results can be compared element by element.",
+     "example": "10 across; lines at 56, 110, 140, 194; rows 28, 27, 10, 27, 28."
+    },
+    {
+     "term": "Mesh around a hole",
+     "meaning": "Nodes around the hole: points on the hole's edge. Element rings: rings of elements around the hole. Ring ratio: how far the ringed region reaches, in hole radii. Ring growth: how much thicker each ring is than the one inside it.",
+     "example": "Our defaults: 32 nodes, 6 rings, ratio 2, growth 1.2."
+    }
+   ]
+  },
+  {
+   "group": "What we send back",
+   "terms": [
+    {
+     "term": "Reaction force",
+     "meaning": "The force the grip needs to make the movement you gave.",
+     "example": ""
+    },
+    {
+     "term": "First-ply failure",
+     "meaning": "The load at which the first ply anywhere in the coupon reaches its strength, by the criterion you chose on the Failure criterion row; given as a fraction of your load, with the place and the ply.",
+     "example": "0.93: the first ply fails at 93% of a 1 mm pull."
+    },
+    {
+     "term": "Where we read results",
+     "meaning": "At the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway to the tab. We place these points from the geometry; you do not enter them.",
+     "example": ""
+    },
+    {
+     "term": "Coupon name",
+     "meaning": "Material code, test code and layup code. Test codes: UNT unnotched tension, UNC unnotched compression, OHT open-hole tension, IPS in-plane shear.",
+     "example": "X840PW-UNT-L1: X840 plain weave, unnotched tension, layup 1."
+    }
+   ]
+  }
+ ],
+ "tests": {
+  "unnotched tension": "unnotched_tension",
+  "unnotched compression": "compression",
+  "open-hole tension": "open_hole_tension",
+  "in-plane shear": "shear_pm45",
+  "three-point bending": "three_point_bending",
+  "four-point bending": "four_point_bending",
+  "plate": "plate"
+ },
+ "criteria": [
+  "all",
+  "maximum stress",
+  "tsai-hill",
+  "tsai-wu",
+  "none"
+ ],
+ "library": [
+  {
+   "Id": "7781-5245c",
+   "Name": "7781 / 5245C",
+   "Dataset": "daniel-ishai-2006-7781-5245c-v2",
+   "E1 (MPa)": 29700.0,
+   "E2 (MPa)": 29700.0,
+   "G12 (MPa)": 5300.0,
+   "nu12": 0.17,
+   "F1t (MPa)": 367.0,
+   "F1c (MPa)": 549.0,
+   "F2t (MPa)": 367.0,
+   "F2c (MPa)": 549.0,
+   "F6 (MPa)": 97.1,
+   "Ply thickness (mm)": null,
+   "Source": "Engineering Mechanics of Composite Materials · Second edition · ISBN 978-0-19-515097-1 · Oxford University Press · 2006",
+   "Rights": "licensed-reference"
+  },
+  {
+   "Id": "7781-ea9396",
+   "Name": "7781 / EA 9396",
+   "Dataset": "mil-hdbk-17-2f-7781-ea9396-2002-ambient-measured-v1",
+   "E1 (MPa)": 24959.021401269467,
+   "E2 (MPa)": 25303.75926592788,
+   "G12 (MPa)": 5226.2260282216175,
+   "nu12": 0.115,
+   "F1t (MPa)": 357.1484277861211,
+   "F1c (MPa)": 341.9799617411507,
+   "F2t (MPa)": 374.38532101904195,
+   "F2c (MPa)": 281.3060975612691,
+   "F6 (MPa)": 79.28970887143615,
+   "Ply thickness (mm)": 0.2159,
+   "Source": "MIL-HDBK-17-2F · Composite Materials Handbook, Volume 2: Polymer Matrix Composites, Materials Properties · MIL-HDBK-17-2F · Volume 2 of 5 · canceled by Notice 1, 26 March 2013 · US Department of Defense · DLA ASSIST (ident 53882) · 2002-06-17",
+   "Rights": "public-domain"
+  },
+  {
+   "Id": "agp370-3501-6s",
+   "Name": "AGP370-5H / 3501-6S",
+   "Dataset": "daniel-ishai-2006-agp370-3501-6s-v2",
+   "E1 (MPa)": 77000.0,
+   "E2 (MPa)": 75000.0,
+   "G12 (MPa)": 6500.0,
+   "nu12": 0.06,
+   "F1t (MPa)": 963.0,
+   "F1c (MPa)": 900.0,
+   "F2t (MPa)": 856.0,
+   "F2c (MPa)": 900.0,
+   "F6 (MPa)": 71.0,
+   "Ply thickness (mm)": null,
+   "Source": "Engineering Mechanics of Composite Materials · Second edition · ISBN 978-0-19-515097-1 · Oxford University Press · 2006",
+   "Rights": "licensed-reference"
+  },
+  {
+   "Id": "as4-3501",
+   "Name": "AS4 / 3501-6",
+   "Dataset": "daniel-ishai-2006-as4-3501-v2",
+   "E1 (MPa)": 147000.0,
+   "E2 (MPa)": 10300.0,
+   "G12 (MPa)": 7000.0,
+   "nu12": 0.27,
+   "F1t (MPa)": 2280.0,
+   "F1c (MPa)": 1725.0,
+   "F2t (MPa)": 57.0,
+   "F2c (MPa)": 228.0,
+   "F6 (MPa)": 76.0,
+   "Ply thickness (mm)": null,
+   "Source": "Engineering Mechanics of Composite Materials · Second edition · ISBN 978-0-19-515097-1 · Oxford University Press · 2006",
+   "Rights": "licensed-reference"
+  },
+  {
+   "Id": "as4-8552",
+   "Name": "AS4 / 8552",
+   "Dataset": "ncamp-as4-8552-2011-rtd-measured-v2",
+   "E1 (MPa)": 131620.916726584,
+   "E2 (MPa)": 9238.974772845604,
+   "G12 (MPa)": 4826.330105217852,
+   "nu12": 0.302,
+   "F1t (MPa)": 2063.0492772618372,
+   "F1c (MPa)": 1484.372297646216,
+   "F2t (MPa)": 63.914400107670694,
+   "F2c (MPa)": 267.8613208395908,
+   "F6 (MPa)": 91.56237685327582,
+   "Ply thickness (mm)": null,
+   "Source": "Hexcel 8552 AS4 unidirectional prepreg · qualification material property data report · CAM-RP-2010-002 · Rev A · Wichita State University · NIAR / NCAMP · 2011-05-06",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "as4-8552s-pw",
+   "Name": "AS4 PW / 8552S",
+   "Dataset": "ncamp-as4-8552s-pw-2011-rtd-measured-v1",
+   "E1 (MPa)": 66051.7748685529,
+   "E2 (MPa)": 66603.35545200636,
+   "G12 (MPa)": 4964.2252510812195,
+   "nu12": 0.046,
+   "F1t (MPa)": null,
+   "F1c (MPa)": null,
+   "F2t (MPa)": null,
+   "F2c (MPa)": null,
+   "F6 (MPa)": null,
+   "Ply thickness (mm)": 0.19812,
+   "Source": "Hexcel 8552S AS4 plain weave fabric prepreg 193 gsm & 38% RC · qualification material property data report · CAM-RP-2010-006 · Rev N/C · Wichita State University · NIAR / NCAMP · 2011-04-14",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "as4-apc2",
+   "Name": "AS4 / APC2",
+   "Dataset": "daniel-ishai-2006-as4-apc2-v2",
+   "E1 (MPa)": 138000.0,
+   "E2 (MPa)": 8700.0,
+   "G12 (MPa)": 5000.0,
+   "nu12": 0.28,
+   "F1t (MPa)": 2060.0,
+   "F1c (MPa)": 1100.0,
+   "F2t (MPa)": 78.0,
+   "F2c (MPa)": 196.0,
+   "F6 (MPa)": 157.0,
+   "Ply thickness (mm)": null,
+   "Source": "Engineering Mechanics of Composite Materials · Second edition · ISBN 978-0-19-515097-1 · Oxford University Press · 2006",
+   "Rights": "licensed-reference"
+  },
+  {
+   "Id": "hts40-tc250",
+   "Name": "HTS40 PW / TC250",
+   "Dataset": "ncamp-hts40-tc250-2016-rtd-measured-v1",
+   "E1 (MPa)": 59708.598158838,
+   "E2 (MPa)": 59157.01757538454,
+   "G12 (MPa)": 3585.2737924475477,
+   "nu12": 0.04,
+   "F1t (MPa)": 871.014688845959,
+   "F1c (MPa)": 690.4409953378797,
+   "F2t (MPa)": 839.5056480161795,
+   "F2c (MPa)": 620.2523660934256,
+   "F6 (MPa)": 68.05125448357171,
+   "Ply thickness (mm)": 0.2159,
+   "Source": "TCAC 12k HTS40 SFP OSI/TC250 42% fabric prepreg · material property data report · CAM-RP-2011-005 · Rev A · Wichita State University · NIAR / NCAMP · 2016-09-26",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "im6g-3501-6",
+   "Name": "IM6G / 3501-6",
+   "Dataset": "daniel-ishai-2006-im6g-3501-6-v2",
+   "E1 (MPa)": 169000.0,
+   "E2 (MPa)": 9000.0,
+   "G12 (MPa)": 6500.0,
+   "nu12": 0.31,
+   "F1t (MPa)": 2240.0,
+   "F1c (MPa)": 1680.0,
+   "F2t (MPa)": 46.0,
+   "F2c (MPa)": 215.0,
+   "F6 (MPa)": 73.0,
+   "Ply thickness (mm)": null,
+   "Source": "Engineering Mechanics of Composite Materials · Second edition · ISBN 978-0-19-515097-1 · Oxford University Press · 2006",
+   "Rights": "licensed-reference"
+  },
+  {
+   "Id": "im7-8552",
+   "Name": "IM7 / 8552",
+   "Dataset": "ncamp-im7-8552-2019-rtd-measured-v1",
+   "E1 (MPa)": 162095.7439623882,
+   "E2 (MPa)": 8963.18448111887,
+   "G12 (MPa)": 4688.434959354486,
+   "nu12": 0.316,
+   "F1t (MPa)": 2558.5065363489152,
+   "F1c (MPa)": 1731.4803990333703,
+   "F2t (MPa)": 64.05229525353407,
+   "F2c (MPa)": 285.7187422288969,
+   "F6 (MPa)": 91.14869141568573,
+   "Ply thickness (mm)": 0.18288,
+   "Source": "Hexcel 8552 IM7 unidirectional prepreg 190 gsm 35% RC · qualification material property data report · CAM-RP-2009-015 · Rev B · Wichita State University · NIAR / NCAMP · 2019-04-16",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "im7-977-3",
+   "Name": "IM7 / 977-3",
+   "Dataset": "daniel-ishai-2006-im7-977-3-v2",
+   "E1 (MPa)": 190000.0,
+   "E2 (MPa)": 9900.0,
+   "G12 (MPa)": 7800.0,
+   "nu12": 0.35,
+   "F1t (MPa)": 3250.0,
+   "F1c (MPa)": 1590.0,
+   "F2t (MPa)": 62.0,
+   "F2c (MPa)": 200.0,
+   "F6 (MPa)": 75.0,
+   "Ply thickness (mm)": null,
+   "Source": "Engineering Mechanics of Composite Materials · Second edition · ISBN 978-0-19-515097-1 · Oxford University Press · 2006",
+   "Rights": "licensed-reference"
+  },
+  {
+   "Id": "im7-bt250e-6",
+   "Name": "IM7 / BT250E-6",
+   "Dataset": "ncamp-im7-bt250e-6-2017-rtd-measured-v1",
+   "E1 (MPa)": 155842.19909748447,
+   "E2 (MPa)": 8604.657101874114,
+   "G12 (MPa)": 4336.802337402899,
+   "nu12": 0.309,
+   "F1t (MPa)": 2453.0512235499054,
+   "F1c (MPa)": 1473.9887931627047,
+   "F2t (MPa)": 39.307011328352814,
+   "F2c (MPa)": 189.79198400904545,
+   "F6 (MPa)": 69.52673254430975,
+   "Ply thickness (mm)": 0.14731999999999998,
+   "Source": "TenCate BT250E-6 IM7 GP 12k unitape 148 gsm 33% RC · qualification material property data report · CAM-RP-2015-038 · Rev N/C · Wichita State University · NIAR / NCAMP · 2017-10-25",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "ims65-ep2190",
+   "Name": "IMS65 / EP2190",
+   "Dataset": "ncamp-ims65-ep2190-2025-rta-measured-v1",
+   "E1 (MPa)": 151960.45074143066,
+   "E2 (MPa)": 8652.920402926293,
+   "G12 (MPa)": 4173.396589554809,
+   "nu12": 0.3299,
+   "F1t (MPa)": 2866.8400824994046,
+   "F1c (MPa)": 1432.0410897910683,
+   "F2t (MPa)": 76.80759624589554,
+   "F2c (MPa)": 284.82242378078496,
+   "F6 (MPa)": 73.29127002637968,
+   "Ply thickness (mm)": 0.14224,
+   "Source": "Syensqo (formerly Solvay) EP2190 IMS65 unitape Gr 145 RC 35% · qualification material property data report, phases 1, 2 and 3 · CAM-RP-2022-001 · Rev – · Wichita State University · NIAR / NCAMP · 2025-09-18",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "m10e-3783",
+   "Name": "M10E / 3783",
+   "Dataset": "daniel-ishai-2006-m10e-3783-v2",
+   "E1 (MPa)": 24500.0,
+   "E2 (MPa)": 23800.0,
+   "G12 (MPa)": 4700.0,
+   "nu12": 0.11,
+   "F1t (MPa)": 433.0,
+   "F1c (MPa)": 377.0,
+   "F2t (MPa)": 386.0,
+   "F2c (MPa)": 335.0,
+   "F6 (MPa)": 84.0,
+   "Ply thickness (mm)": null,
+   "Source": "Engineering Mechanics of Composite Materials · Second edition · ISBN 978-0-19-515097-1 · Oxford University Press · 2006",
+   "Rights": "licensed-reference"
+  },
+  {
+   "Id": "t1100gc-tc380",
+   "Name": "T1100GC / TC380",
+   "Dataset": "ncamp-t1100gc-tc380-2025-rtd-measured-v1",
+   "E1 (MPa)": 158372.57502407723,
+   "E2 (MPa)": 7660.075352710049,
+   "G12 (MPa)": 3957.5906862786387,
+   "nu12": 0.3132,
+   "F1t (MPa)": 3277.0781414429216,
+   "F1c (MPa)": 1628.5416726463666,
+   "F2t (MPa)": 73.77390303690144,
+   "F2c (MPa)": 202.22323140862798,
+   "F6 (MPa)": 76.9454913917589,
+   "Ply thickness (mm)": 0.12191999999999999,
+   "Source": "Toray Advanced Composites TC380 T1100GC 24K 120 gsm unitape 35% RC · qualification material property data report · CAM-RP-2025-021 · Rev – · Wichita State University · NIAR / NCAMP · 2025-09-24",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "t650-5320-1",
+   "Name": "T650 / 5320-1",
+   "Dataset": "ncamp-t650-5320-1-2017-rtd-measured-v1",
+   "E1 (MPa)": 138426.0421749412,
+   "E2 (MPa)": 9176.921957207089,
+   "G12 (MPa)": 4950.435736494883,
+   "nu12": 0.326,
+   "F1t (MPa)": 2061.5600096865123,
+   "F1c (MPa)": 1640.0903911124237,
+   "F2t (MPa)": 69.60946963182778,
+   "F2c (MPa)": 274.0734971607355,
+   "F6 (MPa)": 93.08611821506604,
+   "Ply thickness (mm)": 0.1397,
+   "Source": "Solvay Cytec Cycom 5320-1 T650 unitape Gr 145 33% RC · qualification material property data report · CAM-RP-2013-002 · Rev A · Wichita State University · NIAR / NCAMP · 2017-01-27",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "t650-5320-1-pw",
+   "Name": "T650 PW / 5320-1",
+   "Dataset": "ncamp-t650-5320-1-pw-2015-rtd-measured-v1",
+   "E1 (MPa)": 68878.62535875192,
+   "E2 (MPa)": 68471.83467845498,
+   "G12 (MPa)": 5067.646610478745,
+   "nu12": 0.053,
+   "F1t (MPa)": 861.1551859167282,
+   "F1c (MPa)": 731.9956975438054,
+   "F2t (MPa)": 839.8503858808381,
+   "F2c (MPa)": 691.9923157288425,
+   "F6 (MPa)": 101.00819434491648,
+   "Ply thickness (mm)": 0.19558,
+   "Source": "Cytec Cycom 5320-1 T650 3k-PW fabric · qualification material property data report · CAM-RP-2012-017 · Rev N/C · Wichita State University · NIAR / NCAMP · 2015-10-13",
+   "Rights": "open-publisher"
+  },
+  {
+   "Id": "x840-z60-pw",
+   "Name": "X840 / Z60 plain weave 6K",
+   "Dataset": "chen-2015-x840-z60-pw-v1",
+   "E1 (MPa)": 80000.0,
+   "E2 (MPa)": 80000.0,
+   "G12 (MPa)": 6480.0,
+   "nu12": 0.06,
+   "F1t (MPa)": 993.0,
+   "F1c (MPa)": 772.0,
+   "F2t (MPa)": 855.0,
+   "F2c (MPa)": 896.0,
+   "F6 (MPa)": 71.0,
+   "Ply thickness (mm)": null,
+   "Source": "Experimental and Numerical Investigation of Wide Area Blunt Impact Damage to Composite Aircraft Structures · Tables 3.1 and 3.2, §3.2.1 · University of California, San Diego · PhD dissertation in Structural Engineering (chair Hyonny Kim) · 2015",
+   "Rights": "licensed-reference"
+  }
+ ],
+ "plate": {
+  "test": "plate",
+  "edges": [
+   "Edge-Bottom",
+   "Edge-Top",
+   "Edge-Left",
+   "Edge-Right"
+  ],
+  "areas": [
+   "Face"
+  ],
+  "with_tabs": [
+   "Tab-Bottom",
+   "Tab-Top"
+  ],
+  "with_hole": [
+   "Hole"
+  ],
+  "dofs": {
+   "1": "x",
+   "2": "y",
+   "3": "z",
+   "4": "tilt about x",
+   "5": "tilt about y",
+   "6": "rotation about z"
+  }
+ }
+}

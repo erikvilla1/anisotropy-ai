@@ -1,0 +1,19 @@
+title = "A simply supported isotropic square plate under uniform pressure: the shell reproduces the Navier solution with transverse shear deformation"
+source = "The Navier series with transverse shear deformation (Whitney 1987, Chapter 10, as fea/tools/plate_closed_forms.py states it) for a simply supported 100 mm square isotropic plate, E = 70000 MPa, nu = 0.3, h = 1 mm (h/a = 0.01), under a uniform pressure q = 0.01 MPa toward +z with D = E h^3 / (12 (1 - nu^2)) = 6410.25641 N mm and the shear stiffness 5/6 G h; 199 odd harmonics. The Kirchhoff value of the centre deflection, Whitney (5.7) with (5.16), is 0.6337270151 mm (Timoshenko and Woinowsky-Krieger tabulate 0.00406 q a^4 / D = 0.63336 mm for nu = 0.3); the shear-deformation value, which is the exact solution of the theory the element discretizes, is 0.6340553787 mm. The 16 by 16 mesh of MITC4 elements gives the centre deflection within 0.1 %, the quarter-point rotation within 0.3 % and the centroid moments and curvatures within 0.35 % (the tool's table); the twisting moment, half a percent of the bending moments, carries the largest relative difference."
+units = "mm-MPa"
+
+[mesh]
+deck = "../decks/plate-ss-16x16-isotropic.inp"
+
+[expected]
+tolerance = 0.005
+[expected.rf_z]
+"Edges" = [-100.0]
+[expected.w]
+"Plate-1.145" = [0.6340553787332289]
+[expected.rotation]
+"Plate-1.141" = [0.0, -0.013665148955348178]
+[expected.moment]
+"Plate-1.137" = [4.756944158587315, 4.756944158587329, -0.023760987239199387]
+[expected.curvature]
+"Plate-1.137" = [0.0005708332990304772, 0.0005708332990304804, -1.0590611455185823e-05]

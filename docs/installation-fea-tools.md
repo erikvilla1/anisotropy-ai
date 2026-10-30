@@ -19,8 +19,7 @@ What each tool is for, where to get it, and how our code finds it. Everything he
 
 ### Opening our models in PrePoMax
 
-Start `C:\Tools\PrePoMax v2.6.0\PrePoMax.exe`. File, Import, choose an Abaqus input file, and pick a generated deck, for example `.localeabaqusNnotched-im7-8552ours
-odalNnotched-im7-8552-nodal-abaqus.inp` (written by `fea/examples/build_model.py`; the committed copy is in `fea/checks/unnotched-im7-8552/decks/`). Whether PrePoMax takes the part-and-instance structure, the composite shell section with five-field layer lines and the LAMINA material of that deck is UNVERIFIED (the manual says its syntax is mostly common with Abaqus); the CalculiX-dialect deck that the next chunk writes is the one meant for it. Results from CalculiX (`.frd`) open through File, Open results. The smoke run's `.frd` under `.local/fea/checks/calculix/smoke/` is a first file to try.
+Start `C:\Tools\PrePoMax v2.6.0\PrePoMax.exe`. Open the CalculiX deck, not the Abaqus one: File, Import, and pick a `-ccx.inp`. For a spec with nodal grips, `fea/examples/run_calculix.py` writes it and runs it; for a deck with coupling grips, `fea/examples/convert_to_calculix.py <deck> --units mm-MPa --plane-stress --out <dir>` (or `--nu23 <value>` for a three-dimensional law) turns each coupling into direct constraints and runs it. Results (`.frd`) open through File, Open results. PrePoMax v2.6.0 refuses our Abaqus deck with coupling grips ("An item with the same key has already been added" in `InpFileReader.AddNodes`, founder, 2026-10-26): the reference points are assembly nodes numbered from 1, as Abaqus/CAE writes them, and PrePoMax reads every node into one numbering, so they collide with the part's nodes 1 and 2. Whether it takes our Abaqus deck with nodal grips is UNVERIFIED.
 
 ## Founder's Windows 11 machine (the steps, for a second machine)
 

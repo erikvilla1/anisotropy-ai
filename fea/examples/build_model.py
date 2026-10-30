@@ -4,23 +4,31 @@
 
 Writes into the output folder: <spec>-abaqus.inp (the complete model in our Abaqus dialect), <spec>-model.png (the mesh
 and sets before solving), summary.txt (counts, sets, layup, material citation, boundary table, SHA-256 of the deck),
-and when --solve is kept (default) <spec>-solved.png and <spec>.vtu from our membrane kernel. Pass --no-solve to only
-generate. The deck for CalculiX arrives in a later chunk.
+and when --solve is kept (default) <spec>-solved.png, <spec>.vtu, <spec>-fields.json (every field and the summary the
+studio's viewer reads, ADR-0051) and <spec>-explanation.json (the template's sentences about the result) from our membrane
+kernel. Pass --no-solve to only generate. The deck for CalculiX is written with --target.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import sys
 from pathlib import Path
 
+import numpy as np
+
 from anisotropy_fea.abaqus_reader import read_deck
+from anisotropy_fea.explain import explanation
 from anisotropy_fea.femodel import build_model
-from anisotropy_fea.membrane import solve_membrane
+from anisotropy_fea.fields import field_data
+from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.mesher import MeshError
+from anisotropy_fea.quality import element_quality
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
-from anisotropy_fea.spec import SpecError, load_spec
+from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
 from anisotropy_fea.units import from_si
 from anisotropy_fea.write_abaqus import write_abaqus
 
@@ -47,6 +55,8 @@ def summary(model, deck_text: str, units: str) -> str:
 
 
 def main() -> None:
+    # the report quotes the library's units (10⁻⁶/°C), which cp1252, Windows's encoding for piped or redirected output, cannot encode
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("spec", type=Path)
     parser.add_argument("--out", type=Path, required=True)
@@ -86,27 +96,62 @@ def main() -> None:
 
         deck = read_deck(deck_path, units)
         try:
-            solution = solve_membrane(deck)
+            solution = solve_deck(deck)
         except KernelError as exc:
             raise SystemExit(f"the kernel refused the generated deck: {exc}") from None
         print("written", plot_solution(deck, solution, units, args.out / f"{stem}-solved.png"))
         print("written", write_vtu(deck, solution, units, args.out / f"{stem}.vtu"))
-        # under displacement control the moving grip carries the reaction; under force control the fixed grip does
-        moving = spec.loading.control == "displacement"
-        reaction_set = ("RF-Top" if moving else "RF-Bottom") if model.couplings else ("Grip-Top" if moving else "Grip-Bottom")
-        rf = solution.reaction_of(deck.nsets[reaction_set])
-        applied = sum(load.value for load in model.loads)
-        residual = max(abs(solution.total_reaction[0]), abs(solution.total_reaction[1] + applied))
-        report += f"\nkernel solve: reaction at {reaction_set} = [{from_si(rf[0], 'force', units):.6g}, {from_si(rf[1], 'force', units):.6g}] N; " \
-                  f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n"
+        if model.bending:
+            # the nose carries the force the coupon resists; the supports share it
+            reaction_set = model.nose_sets[0]
+            rf = solution.reaction_of(deck.nsets[reaction_set])[:3]
+            residual = float(max(abs(v) for v in solution.total_reaction[:3]))
+            supports = "; ".join(f"{name} {from_si(solution.reaction_of(deck.nsets[name])[2], 'force', units):.6g} N" for name in model.support_sets[:2])
+            w = solution.displacement[:, 2]
+            at = int(np.argmax(np.abs(w)))
+            components = ", ".join(f"{from_si(v, 'force', units):.6g}" for v in rf)
+            report += (f"\nkernel solve (flat shell): reaction at {reaction_set} = [{components}] N "
+                       f"(x, y, z); supports along z: {supports}; largest deflection w = {from_si(w[at], 'length', units):.6g} at node {at + 1}; "
+                       f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n")
+        elif model.plate:
+            components = 3 if model.bending else 2
+            parts = []
+            for name in model.support_sets:
+                rf = solution.reaction_of(deck.nsets[name])[:components]
+                parts.append(f"{name} [" + ", ".join(f"{from_si(v, 'force', units):.6g}" for v in rf) + "] N")
+            report += (f"\nkernel solve ({'flat shell' if model.bending else 'membrane'}): reactions at the supports {'; '.join(parts)}; "
+                       f"sum of reactions {np.round(solution.total_reaction[:components], 6).tolist()} N (balances the applied loads); "
+                       f"largest free-dof residual {solution.free_residual:.3g} N\n")
+        else:
+            # under displacement control the moving grip carries the reaction; under force control the fixed grip does
+            moving = spec.loading.control == "displacement"
+            reaction_set = ("RF-Top" if moving else "RF-Bottom") if model.couplings else ("Grip-Top" if moving else "Grip-Bottom")
+            rf = solution.reaction_of(deck.nsets[reaction_set])
+            applied = sum(load.value for load in model.loads)
+            residual = max(abs(solution.total_reaction[0]), abs(solution.total_reaction[1] + applied))
+            report += f"\nkernel solve: reaction at {reaction_set} = [{from_si(rf[0], 'force', units):.6g}, {from_si(rf[1], 'force', units):.6g}] N; " \
+                      f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n"
         field = element_ply_states(solution)
+        available = []
         for criterion in spec.output.fpf_criteria:
             try:
                 failure = strength_ratios(solution, criterion, deck_f12_star(deck), field)
                 report += (f"first-ply failure, {criterion}: factor {failure.factor:.6g} on the applied loading, element {failure.element[0]}.{failure.element[1]}, "
-                           f"ply {failure.ply}, {failure.governing_mode}\n")
+                           f"ply {failure.ply}{f' ({failure.face} face)' if failure.face else ''}, {failure.governing_mode}\n")
+                available.append(criterion)
             except KernelError as exc:
                 report += f"first-ply failure, {criterion}: not available ({exc})\n"
+        coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
+                  "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
+        data = field_data(deck, solution, units, criteria=tuple(available), quality=element_quality(model.mesh.xy, model.mesh.corners), coupon=coupon)
+        fields_path = args.out / f"{stem}-fields.json"
+        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        print("written", fields_path)
+        words = explanation(data["summary"], coupon, units, data["labels"])
+        explanation_path = args.out / f"{stem}-explanation.json"
+        explanation_path.write_text(json.dumps(words, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print("written", explanation_path)
+        report += "".join(f"{sentence}\n" for sentence in words["sentences"])
     (args.out / "summary.txt").write_text(report, encoding="utf-8", newline="\n")
     print("written", args.out / "summary.txt")
     print(report)

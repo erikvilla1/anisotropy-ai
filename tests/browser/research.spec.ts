@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("homepage submits the initial message once to its own chat page", async ({
+test("homepage hands its message once to the coupon assistant (ADR-0055 amendment 1)", async ({
   page,
 }) => {
   await page.goto("/");
@@ -10,28 +10,18 @@ test("homepage submits the initial message once to its own chat page", async ({
   const input = page.getByRole("textbox", {
     name: "Describe your engineering question",
   });
-  await input.fill("D5766 coupon 250 x 36 mm at 20 kN");
+  await input.fill("Open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm");
   await input.press("Shift+Enter");
   await expect(page).toHaveURL(/\/$/);
-  await page.getByLabel("Response format").selectOption("json");
   await input.press("Enter");
   await expect(page).toHaveURL(/\/chat\/?$/);
-  await expect(page.locator(".conversation-turn")).toHaveCount(1);
-  await expect(page.locator(".conversation-turn pre")).toContainText(
-    '"width_mm": 36',
-  );
-  await expect(page.getByLabel("Response format")).toHaveValue("json");
-  await expect(
-    page.getByRole("tab", { name: "AI scope assistant" }),
-  ).toHaveCount(0);
+  await expect(page.locator(".chat-user")).toHaveCount(1);
+  await expect(page.getByTestId("chat-spec")).toContainText("open-hole tension");
+  await expect(page.getByTestId("chat-spec")).toContainText("[45/0/-45/90]s, 8 plies");
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear");
   await page.reload();
-  await expect(page.locator(".conversation-turn")).toHaveCount(0);
-  await page.goto("/");
-  await input.fill("Compare D3039 and D5766");
-  await page.getByRole("button", { name: "Start chat", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Two tests. Different questions." }),
-  ).toBeVisible();
+  await expect(page.locator(".chat-user")).toHaveCount(0);
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
 });
 
 test("physics topics group transformations, local recovery and failure functions", async ({

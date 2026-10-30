@@ -68,15 +68,13 @@ from anisotropy_fea.compare import load_record, record_disagreements  # noqa: E4
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import coupled_nodes, expanded_layers, node_name, reference_node  # noqa: E402
+from anisotropy_fea.results import ShellSolution  # noqa: E402
 from anisotropy_fea.report import (COMPONENTS, GROUP_KIND, ComparisonRow, GroupSummary, comparison_rows, element_centroids,  # noqa: E402
                                    laminate_check, model_facts, not_reported, solve_record, summarize)
 from anisotropy_fea.spec import TEST_CODES, coupon_card, load_spec, spec_material  # noqa: E402
-from anisotropy_fea.units import from_si  # noqa: E402
+from anisotropy_fea.units import UNIT_LABEL, from_si  # noqa: E402  (UNIT_LABEL: one table for the documents and the studio)
 
 escape, code, inline, number, convert, heading = manual.escape, manual.code, manual.inline, manual.number, manual.convert, manual.heading
-
-UNIT_LABEL = {"mm-MPa": {"force": "N", "length": "mm", "stress": "MPa", "force_per_length": "N/mm", "modulus": "GPa", "stiffness": "N/mm"},
-              "m-Pa": {"force": "N", "length": "m", "stress": "Pa", "force_per_length": "N/m", "modulus": "GPa", "stiffness": "N/m"}}
 GROUP_TITLE = {"rf": "Reactions", "u": "Displacements", "strain": "Membrane strain at element centroids",
                "section_force": "Section forces", "ply_stress_local": "Ply stresses in material axes",
                "ply_strain_local": "Ply strains in material axes", "ply_mises": "Ply von Mises stress", "fpf": "First-ply failure"}
@@ -319,7 +317,8 @@ def title_page(record: dict, record_path: Path, rows: list[ComparisonRow], probl
         ("Record", code(rel(record_path))),
         ("Reference solver", escape(f"{solver['name']} {solver['version']}, element {solver['element_type']}, read from its .{solver['source']}")),
         ("Run by", escape(f"{solver['run_by']} on {solver['run_date']}, {solver['machine']}")),
-        ("Our kernel", escape(f"anisotropy-fea {fea_version}: bilinear four-node membrane element on the engine's laminate stiffness")),
+        ("Our kernel", escape(f"anisotropy-fea {fea_version}: " + record.get("known_differences", {}).get(
+            "kernel", "bilinear four-node membrane element on the engine's laminate stiffness"))),
         ("Compared", escape(f"{len(rows)} numbers, tolerance {100 * record['expected']['tolerance']:g} %, floor {100 * record['expected'].get('floor', 0.0):g} %"
                             + (f"; {not_reported(record)} components not reported by the solver and skipped" if not_reported(record) else ""))),
         ("Source commit", code(git_commit())),
@@ -439,7 +438,10 @@ def model_section(record: dict, record_path: Path, deck, solution, units: str, f
                       f"[{from_si(solution.total_reaction[0], 'force', units):.3g}, {from_si(solution.total_reaction[1], 'force', units):.3g}] {labels['force']} "
                       f"and the largest residual at a free degree of freedom {solution.free_residual:.3g} N, both roundoff when the model is in equilibrium."))
     out.append(r"\begin{center}\includegraphics[width=\linewidth,height=0.6\textheight,keepaspectratio]{figures/solution.png}\end{center}")
-    out.append(r"{\small\color{muted}Mesh and deformed shape, the three membrane strains, the axial section force and the maximum-stress first-ply-failure map, all computed by the kernel while this document was built.}")
+    out.append(r"{\small\color{muted}" + ("Mesh, the deflection, the bending moment and the curvature along the coupon, the transverse shear force and "
+                                            "the maximum-stress first-ply-failure map" if isinstance(solution, ShellSolution) else
+                                            "Mesh and deformed shape, the three membrane strains, the axial section force and the maximum-stress first-ply-failure map")
+               + ", all computed by the kernel while this document was built.}")
     return "\n\n".join(out)
 
 
@@ -474,8 +476,8 @@ def deck_facts(deck, units: str) -> list[tuple[str, str]]:
     for coupling in deck.couplings:
         facts.append((escape(f"Coupling {coupling.name}"),
                       escape(f"reference node {node_name(reference_node(deck, coupling))} drives {len(coupled_nodes(deck, coupling))} nodes; the deck "
-                             f"couples dofs {', '.join(map(str, sorted(coupling.dofs)))}, of which our membrane model uses 1 and 2, with the reference "
-                             "node's rotations fixed")))
+                             f"couples dofs {', '.join(map(str, sorted(coupling.dofs)))}, of which our membrane model uses 1 and 2 with the reference "
+                             "node's rotations fixed, and our flat shell 1 to 5")))
     for boundary in deck.model_boundaries + tuple(b for step in deck.steps for b in step.boundaries):
         target = boundary.target if isinstance(boundary.target, str) else node_name(boundary.target)
         value = f" = {from_si(boundary.value, 'length', units):g} {labels['length']}" if boundary.value else ""
@@ -860,6 +862,7 @@ def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, the
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")  # it prints characters from the library's text, which cp1252 pipes cannot encode
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("record", type=Path, nargs="?", help="a comparison record (TOML)")
     parser.add_argument("--all", action="store_true", help="every check record (fea/checks/*/records); a coupon's record is a chapter of its coupon document")

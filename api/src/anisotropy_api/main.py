@@ -1,6 +1,8 @@
-"""A synchronous local API. It adapts HTTP to the engine; it contains no laminate math."""
+"""A synchronous local API. It adapts HTTP to the engine and to our coupon tool; it contains no laminate math."""
 
 import datetime as dt
+import hashlib
+import json
 import math
 import tomllib
 import uuid
@@ -13,7 +15,7 @@ import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -22,15 +24,35 @@ from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
+from .assistant import TemplateAssistant, assistant_for
+from .coupon_jobs import CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
 from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run
 from .settings import load_settings
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, LibraryMaterialInput,
-    MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, RunSummary,
-    VerificationResponse,
+    AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
+    CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, LibraryMaterialInput, MaterialProvenance,
+    PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, RunSummary, VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
+COUPON_JOBS = "/v1/coupon-jobs"
+
+
+def job_recorder(app: FastAPI):
+    """The receipt of an ended coupon job, written as every run is (ADR-0026): solved with the tool's outcome, or rejected with
+    its message."""
+    def record(job: Job, state: str, outcome: dict) -> uuid.UUID | None:
+        engine = getattr(app.state, "records", None)
+        if engine is None:
+            return None
+        try:
+            return record_run(engine, actor=job.actor, endpoint=COUPON_JOBS, inputs=job.inputs, engine_version=version("anisotropy-engine"),
+                              api_version=version("anisotropy-api"), git_commit=getattr(app.state, "git_commit", None),
+                              response={**outcome, "job_id": str(job.id)} if state == "done" else None,
+                              error=None if state == "done" else outcome["message"])
+        except SQLAlchemyError as exc:
+            raise RecordingFailed(str(exc).splitlines()[0]) from exc
+    return record
 
 
 @asynccontextmanager
@@ -42,6 +64,8 @@ async def lifespan(app: FastAPI):
     app.state.records = connect(settings.database_url) if settings.run_records else None
     if app.state.records is not None:
         check_ready(app.state.records)
+    app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command())
+    app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     yield
     if app.state.records is not None:
         app.state.records.dispose()
@@ -65,7 +89,7 @@ app.add_middleware(
     ],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor"],
-    expose_headers=[RUN_ID_HEADER],
+    expose_headers=[RUN_ID_HEADER, "Location"],
     allow_credentials=False,
 )
 
@@ -112,7 +136,7 @@ Actor = Annotated[str, Depends(actor_from_header)]
 
 
 def _record(request: Request, actor: str, problem: BaseModel, *, response: dict | None = None,
-            error: str | None = None) -> uuid.UUID | None:
+            error: str | None = None, llm: tuple[str | None, str | None] = (None, None)) -> uuid.UUID | None:
     """Write the run and return its id; None when recording is switched off.
 
     `inputs` is the request as received: only the fields the client sent. When the row cannot be
@@ -126,7 +150,8 @@ def _record(request: Request, actor: str, problem: BaseModel, *, response: dict 
         return record_run(engine, actor=actor, endpoint=request.url.path,
                           inputs=problem.model_dump(mode="json", exclude_unset=True),
                           engine_version=version("anisotropy-engine"), api_version=version("anisotropy-api"),
-                          git_commit=getattr(request.app.state, "git_commit", None), response=response, error=error)
+                          git_commit=getattr(request.app.state, "git_commit", None), response=response, error=error,
+                          llm_provider=llm[0], llm_model_version=llm[1])
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=(
             f"The result was not returned because it could not be recorded: {str(exc).splitlines()[0]}"
@@ -140,11 +165,13 @@ def _run_header(run_id: uuid.UUID | None) -> dict[str, str] | None:
 Body = TypeVar("Body", bound=BaseModel)
 
 
-def _deliver(request: Request, response: Response, actor: str, problem: BaseModel, compute: Callable[[], Body]) -> Body:
+def _deliver(request: Request, response: Response, actor: str, problem: BaseModel, compute: Callable[[], Body],
+             llm_of: Callable[[Body], tuple[str | None, str | None]] | None = None) -> Body:
     """Compute, record the outcome, and attach the run id (ADR-0026).
 
     A 422 raised while computing is recorded as a rejection and re-raised with the run id in its
-    header; a successful body is recorded as returned, without run_id, and returned with it.
+    header; a successful body is recorded as returned, without run_id, and returned with it. `llm_of`
+    names the language model whose draft the body holds, for the record (ADR-0052).
     """
     try:
         body = compute()
@@ -153,7 +180,8 @@ def _deliver(request: Request, response: Response, actor: str, problem: BaseMode
             raise
         run_id = _record(request, actor, problem, error=str(exc.detail))
         raise HTTPException(status_code=422, detail=exc.detail, headers=_run_header(run_id)) from exc
-    run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}))
+    run_id = _record(request, actor, problem, response=body.model_dump(mode="json", exclude={"run_id"}),
+                     llm=llm_of(body) if llm_of is not None else (None, None))
     if run_id is None:
         return body
     response.headers[RUN_ID_HEADER] = str(run_id)
@@ -246,6 +274,182 @@ def run_detail(run_id: uuid.UUID, request: Request) -> RunOutput:
     if run is None:
         raise HTTPException(status_code=404, detail=f"No run {run_id}")
     return RunOutput.of(run)
+
+
+def _coupon_jobs(request: Request) -> CouponJobs:
+    jobs = getattr(request.app.state, "coupon_jobs", None)
+    if jobs is None:
+        raise HTTPException(status_code=503, detail="Coupon jobs are not set up: the API was started without its startup step")
+    return jobs
+
+
+def _known_job(jobs: CouponJobs, job_id: uuid.UUID) -> Job:
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=(
+            f"No coupon job {job_id} in this API process; jobs are kept in memory until it stops, and every job that ended has "
+            f"its receipt in GET /v1/runs?endpoint={COUPON_JOBS}"))
+    return job
+
+
+@app.post(COUPON_JOBS, status_code=202, response_model=CouponJobOutput)
+def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Request, response: Response) -> CouponJobOutput:
+    """Start a coupon job (ADR-0050): fea/tools/run_coupon.py takes a filled-in input form, the coupon's values as the studio sends
+    them (ADR-0051), or a coupon that has its specs, to the coupon's package, in the background. One job runs at a time; another is
+    refused with 409 while it runs. Poll the job at the Location header until its state is no longer running: its stage and the
+    files made so far appear as it goes; its receipt is a run record written when it ends (ADR-0026).
+    """
+    jobs = _coupon_jobs(request)
+    form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
+    values = job_request.values_bytes() if job_request.values is not None else None
+    try:
+        job = jobs.start(actor, job_request.recorded_inputs(), job_request.options(), form=form, coupon=job_request.coupon, values=values)
+    except JobBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except JobRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    response.headers["Location"] = f"{COUPON_JOBS}/{job.id}"
+    with jobs.lock:
+        return CouponJobOutput.of(job)
+
+
+@app.post(COUPON_JOBS + "/check", response_model=CouponCheckResponse)
+def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Request, response: Response) -> CouponCheckResponse:
+    """The studio's setup check (ADR-0051): the values judged as fea/tools/run_coupon.py would judge them, item by item, and the
+    model to draw when they build one. Nothing is written to the coupons' folders. It reaches the engine, so it is recorded with
+    its actor (ADR-0026); the studio tool answers within two minutes or the check is refused with 504.
+    """
+    jobs = _coupon_jobs(request)
+
+    def compute() -> CouponCheckResponse:
+        try:
+            found = jobs.check(problem.values_bytes())
+        except CheckTimedOut as exc:
+            raise HTTPException(status_code=504, detail=str(exc)) from exc
+        except JobRefused as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        checklist = found["checklist"]
+        return CouponCheckResponse(run_id=None, state=checklist["state"], designation=checklist.get("designation"), checklist=checklist,
+                                   preview=found["preview"])
+
+    return _deliver(request, response, actor, problem.receipt(), compute)
+
+
+@app.get(COUPON_JOBS, response_model=list[CouponJobOutput])
+def list_coupon_jobs(request: Request) -> list[CouponJobOutput]:
+    """Every coupon job of this API process, newest first (ADR-0051); jobs of earlier processes are in GET /v1/runs?endpoint=/v1/coupon-jobs."""
+    jobs = _coupon_jobs(request)
+    listed = jobs.listed()
+    with jobs.lock:
+        return [CouponJobOutput.of(job) for job in listed]
+
+
+@app.get(COUPON_JOBS + "/{job_id}", response_model=CouponJobOutput)
+def coupon_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
+    """A coupon job as it stands: its state, the end of its console, and once it is done the files it made (ADR-0050)."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(jobs, job_id)
+    with jobs.lock:
+        return CouponJobOutput.of(job)
+
+
+@app.get(COUPON_JOBS + "/{job_id}/package")
+def coupon_job_package(job_id: uuid.UUID, request: Request) -> FileResponse:
+    """The package of a job that is done, as a zip: the document, the decks, the material, the results and the audit form."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(jobs, job_id)
+    with jobs.lock:
+        state, outcome = job.state, job.outcome
+    if state != "done":
+        raise HTTPException(status_code=409, detail=f"coupon job {job_id} is {state}" + ("" if outcome is None else f": {outcome['message']}"))
+    try:
+        archive = jobs.package_archive(job)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(archive, media_type="application/zip", filename=archive.name)
+
+
+MEDIA_TYPES = {".json": "application/json", ".txt": "text/plain; charset=utf-8", ".inp": "text/plain; charset=utf-8", ".toml": "text/plain; charset=utf-8",
+               ".vtu": "application/xml", ".pdf": "application/pdf", ".frd": "text/plain; charset=utf-8", ".zip": "application/zip"}
+
+
+@app.get(COUPON_JOBS + "/{job_id}/files/{key}")
+def coupon_job_file(job_id: uuid.UUID, key: str, request: Request) -> FileResponse:
+    """One file of a job by its key (ADR-0051): `fields`, `explanation`, `checklist` and `preview` as soon as the tool reports them,
+    while the job runs; every key the status lists once it is done; `package` is the zip. An unknown key names the keys there are."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(jobs, job_id)
+    try:
+        path = jobs.output_file(job, key)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"coupon job {job_id} has no file {key!r}; it has: {exc.args[0]}") from exc
+    except (FileNotFoundError, PermissionError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"), filename=path.name)
+
+
+def _job_json(jobs: CouponJobs, job: Job, key: str, what: str) -> dict:
+    """One JSON file of a job by its key, or 409 while the tool has not written it."""
+    try:
+        path = jobs.output_file(job, key)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail=f"coupon job {job.id} has {what} yet; it has: {exc.args[0]}") from exc
+    except (FileNotFoundError, PermissionError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail=f"the file {key} of coupon job {job.id} is not readable yet: {exc}") from exc
+
+
+@app.post(COUPON_JOBS + "/{job_id}/explain", response_model=ExplainResponse)
+def explain_coupon_job(job_id: uuid.UUID, problem: ExplainRequest, actor: Actor, request: Request, response: Response) -> ExplainResponse:
+    """An explanation of a job's result or setup (ADR-0052): the template's sentences the fea package wrote, or, when a provider is
+    named in the settings, the model's rephrasing of them from the same fact sheet, kept only when every number in it is a fact.
+    Recorded with its actor and, when a model wrote it, the model's name (ADR-0026)."""
+    jobs = _coupon_jobs(request)
+    job = _known_job(jobs, job_id)
+    explanation = _job_json(jobs, job, "explanation", "no explanation")
+    facts, sentences = explanation.get("facts", {}), list(explanation.get("sentences", []))
+    checklist = _job_json(jobs, job, "checklist", "no setup check") if problem.kind == "setup" else None
+    template = list(explanation.get("setup_sentences", [])) if problem.kind == "setup" else sentences
+    seen = checklist if problem.kind == "setup" else facts
+    receipt = ExplainReceipt(job_id=str(job_id), kind=problem.kind,
+                             facts_sha256=hashlib.sha256(json.dumps(seen, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest())
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+
+    def compute() -> ExplainResponse:
+        draft = assistant.explain_setup(checklist, template) if problem.kind == "setup" else assistant.explain_result(facts, template)
+        return ExplainResponse(run_id=None, job_id=str(job_id), kind=problem.kind, writer=draft.writer, model=draft.model, prose=list(draft.prose),
+                               withheld=draft.withheld, reason=draft.reason, facts=facts if problem.kind == "result" else {"checklist": checklist})
+
+    return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+@app.get("/v1/coupons", response_model=list[CouponSummary])
+def list_coupons(request: Request) -> list[CouponSummary]:
+    """Every coupon on this machine, from its spec and its case page (ADR-0051): what the studio offers to reopen."""
+    jobs = _coupon_jobs(request)
+    try:
+        return [CouponSummary(**entry) for entry in jobs.list_coupons()]
+    except CheckTimedOut as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except JobRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/v1/coupons/{name}/values", response_model=CouponValuesOutput)
+def coupon_values(name: str, request: Request) -> CouponValuesOutput:
+    """A coupon's rows as the values object the studio edits (ADR-0051): the inverse of the form's reading."""
+    jobs = _coupon_jobs(request)
+    try:
+        return CouponValuesOutput(name=name, values=jobs.coupon_values(name))
+    except UnknownCoupon as exc:
+        raise HTTPException(status_code=404, detail=exc.args[0]) from exc
+    except CheckTimedOut as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except JobRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/v1/materials")

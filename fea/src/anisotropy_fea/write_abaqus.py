@@ -126,21 +126,25 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
     for boundary in model.boundaries:
         line = f"{boundary.target}, {boundary.dof_first}, {boundary.dof_last}"
         if boundary.value != 0.0:
-            line += f", {number(length(boundary.value))}"
+            line += f", {number(length(boundary.value) if boundary.dof_last <= 3 else boundary.value)}"  # a rotation stays in radians
         out.append(line)
     if model.loads:
         out.append("*Cload")
         for load in model.loads:
             out.append(f"{load.target}, {load.dof}, {number(force(load.value))}")
+    if model.pressures:
+        out.append("*Dload")
+        for pressure in model.pressures:
+            out.append(f"{pressure.elset}, P, {number(stress(pressure.value))}")
     requests = spec.output.abaqus
     out.append("*Restart, write, frequency=0")
     if requests.field_preselect:
         out.append("*Output, field, variable=PRESELECT")
         out.append("*Output, history, variable=PRESELECT")
     if requests.node_print:
-        reaction_set = "RF-Top" if model.couplings else "Grip-Top"
-        out.append(f"*Node Print, nset={reaction_set}, totals=YES")
-        out.append("RF")
+        for reaction_set in (model.support_sets if model.bending else model.support_sets[:1]):  # the moving grip, or the supports and the nose
+            out.append(f"*Node Print, nset={reaction_set}, totals=YES")
+            out.append("RF")
         for name in model.probe_nodes:
             out.append(f"*Node Print, nset=Probe-{name}")
             out.append("U")

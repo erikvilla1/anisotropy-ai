@@ -1,0 +1,26 @@
+title = "A simply supported IM7/8552 [0/90]s plate under a sinusoidal pressure: the shell reproduces Whitney's Navier solution with transverse shear deformation, faces included"
+source = "One term of the Navier series with transverse shear deformation (Whitney 1987, Chapter 10, as fea/tools/plate_closed_forms.py states it) for a simply supported 100 mm square specially orthotropic IM7/8552 [0/90]s plate, h = 0.73152 mm (h/a = 0.0073152), under q = 0.01 sin(pi x / a) sin(pi y / a) MPa toward +z; D by hand from the ply constants (D11 = 4689.200896, D12 = 92.90759361, D22 = 921.8955898, D66 = 152.9413091 N mm), transverse shear stiffness 5/6 times the thickness-weighted G13 and G23 (2343.433464 and 2343.433464 N/mm). The Kirchhoff centre deflection, Whitney (5.7) with one term, is 1.60188794 mm; the shear-deformation value is 1.604796284 mm. The ply stresses are Q-bar times z kappa at the centroid of the element nearest the centre, rotated to the fibre axes, on the bottom and top face of each ply. The deck writes the sinusoidal pressure per element as its element average, so the total load is exact; on the 32 by 32 mesh the centre deflection, the quarter-point rotation and the centroid moments, curvatures and ply stresses agree within 0.4 % (the tool's convergence table: 1.3 % on 16 by 16, 5 % on 8 by 8)."
+units = "mm-MPa"
+
+[mesh]
+deck = "../decks/plate-ss-32x32-cross-ply-im7-8552.inp"
+
+[expected]
+tolerance = 0.01
+[expected.w]
+"Plate-1.545" = [1.6047962838940133]
+[expected.rotation]
+"Plate-1.537" = [0.0, -0.035573375598008675]
+[expected.moment]
+"Plate-1.529" = [7.540078567558477, 1.602323487528388, -0.001164876738597952]
+[expected.curvature]
+"Plate-1.529" = [0.0015766782051061944, 0.001579178950041808, -7.616495145733689e-06]
+[expected.ply_stress_local."Plate-1.529"]
+"1:bottom" = [-95.64238883736371, -6.84833559615913, 0.0130610717299764]
+"1:top" = [-47.821194418681856, -3.424167798079565, 0.0065305358649882]
+"2:bottom" = [-47.894435739882496, -3.4213483865288095, -0.0065305358649882]
+"2:top" = [0.0, 0.0, 0.0]
+"3:bottom" = [0.0, 0.0, 0.0]
+"3:top" = [47.894435739882496, 3.4213483865288095, 0.0065305358649882]
+"4:bottom" = [47.821194418681856, 3.424167798079565, -0.0065305358649882]
+"4:top" = [95.64238883736371, 6.84833559615913, -0.0130610717299764]

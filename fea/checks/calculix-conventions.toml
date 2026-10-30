@@ -28,3 +28,16 @@ stress_axes = "global"
 # at every point while sxy = 263.16 MPa = G gamma with gamma = 0.01 and the reaction 5263.16 N = tau h w. The engine's
 # gamma_xy is twice the printed exy.
 shear_strain = "tensor"
+
+# A shell pressure (*DLOAD with the P label) on an S8R element pushes along the element normal, +z for counterclockwise nodes: the opposite
+# of the Abaqus P label, which is positive against the normal and which the kernel follows (ADR-0053). Seen on 2026-10-28 (CalculiX 2.22) on
+# one isotropic S8R plate, 20 by 10 by 1 mm, E = 70000 MPa, nu = 0.3, clamped along x = 0, under P = 0.01 MPa: the free-edge nodes moved
+# w = +2.693197e-02 mm (the kernel's one MITC4 element on the same plate and sign: -3.3495823e-02 mm), and the clamped edge's printed total
+# reaction was RFz = -1.666667 N. A CalculiX deck that carries a pressure must therefore write P with the opposite sign of the Abaqus deck.
+pressure_label = "P"
+pressure_direction = "along the element normal (+z for counterclockwise nodes): opposite to the Abaqus P label"
+
+# The same run applied 0.01 MPa on 200 mm2, 2 N, yet *NODE PRINT, TOTALS=YES on the clamped shell nodes printed 1.666667 N: the totals over
+# a set of shell nodes do not hold every force that balances the load (the expanded nodes of the shell's knots carry the rest; the cause is
+# UNVERIFIED). A reaction total read from a shell node set is read with that in mind; the kernel's reactions balance the load to roundoff.
+shell_set_totals = "may under-report (1.666667 N printed of 2 N applied on the detection plate)"

@@ -52,6 +52,13 @@ def coupon():
     return module
 
 
+def test_the_librarys_superscript_units_are_typeset(coupon):
+    """Latin Modern has no glyphs for ⁻ or ⁶, so an AS4/3501 coupon's PDF printed its expansion coefficients in 10/°C."""
+    before = set(coupon.manual.UNMAPPED)
+    assert coupon.manual.escape("alpha1 = -0.9 10⁻⁶/°C & 2 mm²") == r"alpha1 = -0.9 10$^{-6}$/°C \& 2 mm²"
+    assert not {"⁻", "⁶"} & (coupon.manual.UNMAPPED - before)
+
+
 def team_sources(coupon, tmp: Path, spec_text: str = NAMED_SPEC):
     """A fixture coupon `grips` with a team comparison: the team's 2 by 8 deck and kernel-made field reports, our spec, and a
     committed CalculiX record standing in for the twin's."""

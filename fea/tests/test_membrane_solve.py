@@ -10,7 +10,7 @@ from anisotropy_engine.response import Loads, midplane_response
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
-from anisotropy_fea.model import section_plies
+from anisotropy_fea.model import DeckError, section_plies
 from _decks import edge_coupon, gripped_coupon
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 
@@ -152,3 +152,38 @@ def test_a_prescription_that_conflicts_through_a_coupling_is_refused(tmp_path):
                                                  "*Boundary\nSet-TopPull, 2, 2, 0.8\n*Boundary\nStrip-1.25, 2, 2\n"), encoding="utf-8")
     with pytest.raises(KernelError, match="conflicts with"):
         solve_membrane(read_deck(path, "mm-MPa"))
+
+
+TOP_FIX_ROTATIONS = "Set-TopFix, 4, 4\nSet-TopFix, 5, 5\nSet-TopFix, 6, 6\n"
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ("Top, 2, 2, 0.8", "Top, 6, 6, 0.1", "nonzero prescribed rotation"),
+    ("Top, 2, 2, 0.8", "Top, 3, 3, 0.1", "nonzero out-of-plane displacement"),
+    ("*Restart", "*Cload\nTop, 3, 5.\n*Restart", "dofs 1 and 2 only"),
+    ("*Restart", "*Elset, elset=Plate, instance=Coupon-1\n1,\n*End Assembly", "a distributed load"),
+], ids=["rotation", "dof 3", "dof-3 load", "pressure"])
+def test_what_the_membrane_cannot_represent_is_refused_when_it_is_asked_to_solve(tmp_path, old, new, message):
+    """Since ADR-0053 the deck reader accepts out-of-plane prescriptions, dof-3 loads and pressures, because the flat shell takes
+    them; the membrane kernel refuses them itself, naming the deck line, when it is the one asked."""
+    text = ONE.read_text(encoding="utf-8")
+    if message == "a distributed load":
+        text = text.replace("*End Assembly", new, 1).replace("*Restart", "*Dload\nPlate, P, 1.\n*Restart", 1)
+    else:
+        text = text.replace(old, new, 1)
+    deck_path = tmp_path / "deck.inp"
+    deck_path.write_text(text, encoding="utf-8")
+    deck = read_deck(deck_path, "mm-MPa")  # accepted by the reader
+    with pytest.raises(DeckError, match=message) as excinfo:
+        solve_membrane(deck)
+    assert str(excinfo.value).startswith("line ")
+
+
+def test_a_coupling_whose_reference_node_can_rotate_is_refused_by_the_membrane(tmp_path):
+    text = GRIPS.read_text(encoding="utf-8")
+    assert TOP_FIX_ROTATIONS in text
+    deck_path = tmp_path / "deck.inp"
+    deck_path.write_text(text.replace(TOP_FIX_ROTATIONS, "", 1), encoding="utf-8")
+    deck = read_deck(deck_path, "mm-MPa")
+    with pytest.raises(DeckError, match=r"rotation dofs \[4, 5, 6\] free"):
+        solve_membrane(deck)
