@@ -278,3 +278,38 @@ def test_a_values_job_and_a_studio_request_have_their_receipts(recording):
     studio = ended(recording.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer"},
                                   headers={"X-Anisotropy-Actor": "studio"}).json()["job_id"], recording)
     assert recording.get(f"/v1/runs/{studio['run_id']}").json()["actor"] == "studio"  # the constraint admits the new actor (migration 0004)
+
+
+# --------------------------------------------------------------------------------- behind Cloudflare Access (ADR-0056)
+
+from anisotropy_api import access
+from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, AccessSettings
+from access_tokens import AUDIENCE, EMAIL, TEAM, key_for, token
+
+
+@pytest.fixture
+def recording_behind_access(empty_runs, monkeypatch, tmp_path):
+    """The API with run records on and Access on, its coupon jobs running the stand-in; every request carries a valid token."""
+    monkeypatch.setenv(RECORDING_VARIABLE, "on")
+    monkeypatch.setenv(DATABASE_VARIABLE, TEST_URL)
+    monkeypatch.setenv(ACCESS_TEAM_DOMAIN_VARIABLE, TEAM)
+    monkeypatch.setenv(ACCESS_AUDIENCE_VARIABLE, AUDIENCE)
+    stand_in = tmp_path / "stand_in.py"
+    stand_in.write_text(STAND_IN, encoding="utf-8")
+    with TestClient(app, headers={"X-Anisotropy-Actor": "test", access.HEADER: token()}) as recorded:
+        app.state.coupon_jobs = CouponJobs([sys.executable, str(stand_in)], job_recorder(app), tmp_path / "jobs")
+        app.state.access_verifier = access.verifier(AccessSettings(TEAM, AUDIENCE), key_for=key_for)
+        yield recorded
+
+
+@needs_test_database
+def test_a_job_started_behind_access_keeps_the_signed_in_email(recording_behind_access):
+    through = recording_behind_access
+    started = through.post("/v1/coupon-jobs", json=form_request()).json()
+    assert started["user_email"] == EMAIL  # on the status from the start
+    done = ended(started["job_id"], through)
+    assert done["state"] == "done" and done["user_email"] == EMAIL
+    run = through.get(f"/v1/runs/{done['run_id']}").json()
+    assert run["user_email"] == EMAIL and run["actor"] == "test" and run["endpoint"] == "/v1/coupon-jobs"  # the receipt names the person
+    assert through.get("/v1/coupon-jobs").json()[0]["user_email"] == EMAIL
+    assert through.get("/v1/coupon-jobs", headers={access.HEADER: ""}).status_code == 401  # and without the token, nothing

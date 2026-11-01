@@ -86,6 +86,7 @@ class Job:
     finished_at: dt.datetime | None = None
     outcome: dict | None = None
     run_id: uuid.UUID | None = None
+    user_email: str | None = None  # the signed-in email Cloudflare Access verified for the request that started it (ADR-0056)
 
     @property
     def log(self) -> Path:
@@ -134,9 +135,9 @@ class CouponJobs:
         return self.root
 
     def start(self, actor: str, inputs: dict, options: list[str], *, form: tuple[str, bytes] | None = None, coupon: str | None = None,
-              values: bytes | None = None) -> Job:
+              values: bytes | None = None, user_email: str | None = None) -> Job:
         """Start a job from a filled-in form (its file name and bytes), the values (the JSON file's bytes) or a coupon's name; refused
-        while another runs."""
+        while another runs. `user_email` is the signed-in email, when Access is in front of the API, kept for the job's receipt."""
         if self.command is None:
             raise JobRefused("uv is not on PATH; a coupon job runs fea/tools/run_coupon.py through `uv run --project fea`")
         if sum(x is not None for x in (form, coupon, values)) != 1:
@@ -146,7 +147,7 @@ class CouponJobs:
             if busy is not None:
                 raise JobBusy(busy.id)
             job_id = uuid.uuid4()
-            job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc))
+            job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email)
             job.folder.mkdir(parents=True)
             source = coupon
             if form is not None:

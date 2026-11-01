@@ -177,12 +177,13 @@ class RunSummary(Contract):
     git_commit: str | None
     inputs_sha256: str
     error: str | None
+    user_email: str | None  # the signed-in email Cloudflare Access verified (ADR-0056); null with Access off
 
     @classmethod
     def of(cls, run) -> "RunSummary":
         return cls(run_id=str(run.id), created_at=run.created_at.isoformat(), actor=run.actor, endpoint=run.endpoint,
                    status=run.status, engine_version=run.engine_version, api_version=run.api_version,
-                   git_commit=run.git_commit, inputs_sha256=run.inputs_sha256, error=run.error)
+                   git_commit=run.git_commit, inputs_sha256=run.inputs_sha256, error=run.error, user_email=run.user_email)
 
 
 class RunOutput(Contract):
@@ -207,6 +208,7 @@ class RunOutput(Contract):
     supersedes_run_id: str | None
     llm_provider: str | None
     llm_model_version: str | None
+    user_email: str | None
 
     @classmethod
     def of(cls, run) -> "RunOutput":
@@ -214,7 +216,7 @@ class RunOutput(Contract):
                    inputs=run.inputs, inputs_sha256=run.inputs_sha256, engine_version=run.engine_version,
                    api_version=run.api_version, git_commit=run.git_commit, response=run.response, error=run.error,
                    supersedes_run_id=None if run.supersedes_run_id is None else str(run.supersedes_run_id),
-                   llm_provider=run.llm_provider, llm_model_version=run.llm_model_version)
+                   llm_provider=run.llm_provider, llm_model_version=run.llm_model_version, user_email=run.user_email)
 
 
 class PlyInput(Contract):
@@ -421,13 +423,14 @@ class CouponJobOutput(Contract):
     outputs: dict[str, str]
     run_id: str | None
     log_tail: list[str]
+    user_email: str | None = None  # the signed-in email of the request that started it (ADR-0056); null with Access off
 
     @classmethod
     def of(cls, job) -> "CouponJobOutput":
         outcome = job.outcome or {}
         progress = job.progress() or {}
         outputs = outcome.get("outputs") if outcome else progress.get("outputs", {})
-        return cls(job_id=str(job.id), state=job.state, actor=job.actor, started_at=job.started_at.isoformat(),
+        return cls(job_id=str(job.id), state=job.state, actor=job.actor, started_at=job.started_at.isoformat(), user_email=job.user_email,
                    finished_at=None if job.finished_at is None else job.finished_at.isoformat(), coupon=outcome.get("coupon") or progress.get("coupon"),
                    attempt=outcome.get("attempt") or progress.get("attempt"), message=outcome.get("message"), stage=progress.get("stage"),
                    stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), outputs=outputs or {},

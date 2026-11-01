@@ -11,7 +11,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from dotenv import find_dotenv, load_dotenv
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 
 from anisotropy_api.settings import sqlalchemy_url
 
@@ -33,10 +33,14 @@ def alembic_config(url: str) -> Config:
 
 @pytest.fixture(scope="session")
 def migrated_database():
-    """Everything down, then everything up, once per test session."""
+    """Everything down, then everything up, once per test session. The table is emptied first: the rows a previous session left
+    (every run the tests record) would make a downgrade refuse, since rows are never rewritten (migrations 0004 and 0005)."""
+    engine = create_engine(TEST_URL)
+    with engine.begin() as connection:
+        if inspect(connection).has_table("runs"):
+            connection.execute(text("TRUNCATE runs"))
     command.downgrade(alembic_config(TEST_URL), "base")
     command.upgrade(alembic_config(TEST_URL), "head")
-    engine = create_engine(TEST_URL)
     yield engine
     engine.dispose()
 

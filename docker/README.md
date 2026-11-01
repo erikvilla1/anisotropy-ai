@@ -16,7 +16,9 @@ curl http://127.0.0.1:8080/healthz        # {"status":"ok"}, without the databas
 ```
 
 With run records on, pass `DATABASE_URL` instead of the switch (ADR-0026); the API refuses to start without a reachable,
-migrated database. `GIT_COMMIT` becomes `ANISOTROPY_GIT_COMMIT` inside the image: there is no `.git` there, so that is where
+migrated database. Behind Cloudflare Access, pass `ANISOTROPY_ACCESS_TEAM_DOMAIN` and `ANISOTROPY_ACCESS_AUD` as well, and the
+container accepts only requests that carry Access's token (`api/src/anisotropy_api/access.py`); `ANISOTROPY_ALLOWED_ORIGINS`
+names the website origins when the site is not on the same origin. `GIT_COMMIT` becomes `ANISOTROPY_GIT_COMMIT` inside the image: there is no `.git` there, so that is where
 the run records' `git_commit` comes from.
 
 ## What is inside

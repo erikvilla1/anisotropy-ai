@@ -147,7 +147,7 @@ def test_the_listing_is_newest_first_with_a_summary_per_run(recording):
     assert [run["run_id"] for run in listing] == [third, second, first]
     assert set(listing[0]) == {
         "run_id", "created_at", "actor", "endpoint", "status", "engine_version", "api_version", "git_commit",
-        "inputs_sha256", "error",
+        "inputs_sha256", "error", "user_email",
     }
     assert listing[0]["status"] == "rejected" and "missing fields" in listing[0]["error"]
     assert listing[1]["actor"] == "calculator" and listing[1]["endpoint"] == "/v1/laminates/response"

@@ -4,7 +4,9 @@ import pytest
 from sqlalchemy.engine import make_url
 
 from anisotropy_api.settings import (ASSISTANT_MODEL_VARIABLE, ASSISTANT_PROVIDER_VARIABLE, DATABASE_VARIABLE, RECORDING_VARIABLE,
-                                     UNPOOLED_DATABASE_VARIABLE, database_url_for_migrations, load_settings, sqlalchemy_url)
+                                     UNPOOLED_DATABASE_VARIABLE, database_url_for_migrations, load_settings, sqlalchemy_url,
+                                     ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, ALLOWED_ORIGINS_VARIABLE, LOCAL_ORIGINS,
+                                     AccessSettings, allowed_origins)
 
 
 def test_records_on_by_default_with_database():
@@ -99,3 +101,44 @@ def test_a_named_provider_needs_its_model_and_a_credential():
         load_settings({**OFF, ASSISTANT_PROVIDER_VARIABLE: "other", ASSISTANT_MODEL_VARIABLE: "m", "ANTHROPIC_API_KEY": "k"})
     settings = load_settings({**OFF, ASSISTANT_PROVIDER_VARIABLE: "Anthropic", ASSISTANT_MODEL_VARIABLE: "claude-opus-5-5", "ANTHROPIC_AUTH_TOKEN": "t"})
     assert settings.assistant.on and settings.assistant.provider == "anthropic" and settings.assistant.model == "claude-opus-5-5"
+
+
+# ------------------------------------------------------------------------------------- Cloudflare Access and the origins (ADR-0056)
+
+def test_access_is_off_unless_both_variables_are_set():
+    settings = load_settings(OFF)
+    assert not settings.access.on and settings.access == AccessSettings(None, None)
+
+
+def test_access_is_on_with_both_and_the_addresses_follow():
+    settings = load_settings({**OFF, ACCESS_TEAM_DOMAIN_VARIABLE: " MyTeam.cloudflareaccess.com ", ACCESS_AUDIENCE_VARIABLE: " aud-tag "})
+    assert settings.access.on and settings.access.team_domain == "myteam.cloudflareaccess.com" and settings.access.audience == "aud-tag"
+    assert settings.access.issuer == "https://myteam.cloudflareaccess.com"
+    assert settings.access.certs_url == "https://myteam.cloudflareaccess.com/cdn-cgi/access/certs"
+
+
+@pytest.mark.parametrize("environ, missing", [({ACCESS_TEAM_DOMAIN_VARIABLE: "t.cloudflareaccess.com"}, ACCESS_AUDIENCE_VARIABLE),
+                                              ({ACCESS_AUDIENCE_VARIABLE: "aud-tag"}, ACCESS_TEAM_DOMAIN_VARIABLE)])
+def test_one_access_variable_without_the_other_is_refused(environ, missing):
+    with pytest.raises(RuntimeError, match=missing):
+        load_settings({**OFF, **environ})
+
+
+@pytest.mark.parametrize("domain", ["https://t.cloudflareaccess.com", "t.cloudflareaccess.com/", "example.com", "t", "t.cloudflareaccess.com:443"])
+def test_a_domain_that_is_not_a_teams_is_refused(domain):
+    with pytest.raises(RuntimeError, match=ACCESS_TEAM_DOMAIN_VARIABLE):
+        load_settings({**OFF, ACCESS_TEAM_DOMAIN_VARIABLE: domain, ACCESS_AUDIENCE_VARIABLE: "aud-tag"})
+
+
+def test_origins_are_the_local_ones_unless_the_variable_replaces_them():
+    assert allowed_origins({}) == LOCAL_ORIGINS and load_settings(OFF).allowed_origins == LOCAL_ORIGINS
+    given = allowed_origins({ALLOWED_ORIGINS_VARIABLE: " https://studio.example.com, http://localhost:3000 "})
+    assert given == ("https://studio.example.com", "http://localhost:3000")
+    assert load_settings({**OFF, ALLOWED_ORIGINS_VARIABLE: "https://studio.example.com"}).allowed_origins == ("https://studio.example.com",)
+
+
+@pytest.mark.parametrize("value", ["studio.example.com", "https://studio.example.com/", "https://studio.example.com/api",
+                                   "https://a.example.com,", "ftp://x.example.com", "https://a.example.com?x=1"])
+def test_a_value_that_is_not_an_origin_is_refused(value):
+    with pytest.raises(RuntimeError, match=ALLOWED_ORIGINS_VARIABLE):
+        allowed_origins({ALLOWED_ORIGINS_VARIABLE: value})

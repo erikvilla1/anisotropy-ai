@@ -30,6 +30,8 @@ Run records (ADR-0025, ADR-0026): SQLAlchemy 2 and psycopg 3 reach a local Postg
 
 The solver image (ADR-0056): the `Dockerfile` at the repository root builds the API with the engine and fea environments, CalculiX, Gmsh and Tectonic (its TeX files fetched at build by `docker/warm-tectonic.py`, which builds the public coupon's document once), listening on port 8080 as the service user `app`; `GET /healthz` answers without the database; `ANISOTROPY_GIT_COMMIT` gives the run records their commit where there is no `.git`. The CI job `image` runs one public coupon job inside it with the network off (`docker/check-image.py`, [docker/README.md](../../docker/README.md)).
 
+Behind Cloudflare Access (ADR-0056, `api/src/anisotropy_api/access.py`): with `ANISOTROPY_ACCESS_TEAM_DOMAIN` and `ANISOTROPY_ACCESS_AUD` set, a middleware inside the CORS layer refuses with 401 every request but `GET /healthz` and a preflight that lacks a valid `Cf-Access-Jwt-Assertion` token (PyJWT, RS256, the team's published keys matched by key id and refetched when one rotates; 503 when the keys cannot be fetched), and puts the token's email on the request; `record_run` writes it as `user_email` (migration 0005, which also admits the actor `browser`), and a coupon job keeps it for its receipt and status. `ANISOTROPY_ALLOWED_ORIGINS` replaces the local CORS origins. Unset, the API is the local one.
+
 The website's `/calculator` now calls this endpoint. CORS allows credential-free JSON POST requests from localhost/127.0.0.1 on ports 3000/3001. See [the calculator card](calculator.md).
 
 ## Evaluation
