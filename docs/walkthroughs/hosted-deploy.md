@@ -23,7 +23,7 @@ Docker Desktop must be running: `wrangler deploy` builds the image from the Dock
 npm ci
 npx wrangler login       # a browser window; signs Wrangler into the Cloudflare account
 npm run build:hosted     # the site into out/, calling the API at /api (scripts/build-hosted.ts sets the address; shells differ)
-npx wrangler deploy      # the Worker, then the image; prints the workers.dev address
+npx wrangler deploy      # the Worker, then the image, at https://app.anisotropy.dev
 ```
 
 Then the secrets, one by one (each asks for the value; nothing goes into the repository):
@@ -46,7 +46,7 @@ Wait a few minutes after the first deploy before expecting the container to answ
 ## Sign-in: the Access application
 
 1. Zero Trust → Integrations → Identity providers → add **One-time PIN** (new organisations do not get it by default).
-2. Zero Trust → Access controls → Applications → Add an application → Self-hosted and private → **Workers** → select `anisotropy-studio`. A Worker application covers its `workers.dev` address, any custom domain and its previews.
+2. Zero Trust → Access controls → Applications → Add an application → Self-hosted and private → **Workers** → select `anisotropy-studio`. A Worker application covers its custom domain, `app.anisotropy.dev`; the Worker has no `workers.dev` address and no preview URLs (ADR-0056 amendment 1).
 3. One policy, action Allow, Include → **Emails** → the invited addresses (or **Emails ending in** a domain).
 4. Save; then Configure → Additional settings → copy the **Application Audience (AUD) Tag** into the `ANISOTROPY_ACCESS_AUD` secret, with the team domain into `ANISOTROPY_ACCESS_TEAM_DOMAIN`.
 
@@ -54,11 +54,11 @@ To add or remove a user: edit the policy's email list. Access applies it at the 
 
 ## The bucket
 
-Create the R2 bucket, then an API token with **Object Read & Write** scoped to it; its Access Key ID and Secret Access Key are the two `ANISOTROPY_R2_*` key secrets. Add a CORS policy on the bucket allowing the site's origin (the `workers.dev` address, later the domain) for `GET` and `HEAD`: the browser fetches a job's files from the bucket through short-lived links, and without the policy those fetches fail.
+Create the R2 bucket, then an API token with **Object Read & Write** scoped to it; its Access Key ID and Secret Access Key are the two `ANISOTROPY_R2_*` key secrets. Add a CORS policy on the bucket allowing the site's origin, `https://app.anisotropy.dev`, for `GET` and `HEAD`: the browser fetches a job's files from the bucket through short-lived links, and without the policy those fetches fail.
 
 ## Deploys after the first
 
-`deploy.yml` runs when the Tests workflow finishes green on `main`: it builds the site, applies the migrations to Neon and runs `wrangler deploy`, passing the commit as `ANISOTROPY_GIT_COMMIT` so run records carry it. It needs three repository secrets: `CLOUDFLARE_API_TOKEN` (a token made from the "Edit Cloudflare Workers" template, with the account's Workers, Containers and R2 permissions), `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL` (and `DATABASE_URL_UNPOOLED` when Neon gives one). A pull request uploads a preview version of the Worker without production traffic and without a new container image. **Run workflow** on the Actions page deploys `main` by hand.
+`deploy.yml` runs when the Tests workflow finishes green on `main`: it builds the site, applies the migrations to Neon and runs `wrangler deploy`, passing the commit as `ANISOTROPY_GIT_COMMIT` so run records carry it. It needs three repository secrets: `CLOUDFLARE_API_TOKEN` (a token made from the "Edit Cloudflare Workers" template, with the account's Workers, Containers and R2 permissions, and Zone → Workers Routes → Edit on `anisotropy.dev` for the custom domain), `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL` (and `DATABASE_URL_UNPOOLED` when Neon gives one). A pull request uploads a preview version of the Worker without production traffic, without a new container image and, with preview URLs off, without an address of its own. **Run workflow** on the Actions page deploys `main` by hand.
 
 ## Rolling back
 
