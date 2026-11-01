@@ -15,7 +15,7 @@ import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -27,9 +27,10 @@ from anisotropy_engine.response import midplane_response, prescribed_curvature_r
 from .access import AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
-from .coupon_jobs import CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
-from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run
+from .coupon_jobs import LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
+from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run, stop_orphans
 from .settings import allowed_origins, environment, load_settings
+from .storage import R2Store, content_type, restore
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, LibraryMaterialInput, MaterialProvenance,
@@ -66,7 +67,18 @@ async def lifespan(app: FastAPI):
     app.state.records = connect(settings.database_url) if settings.run_records else None
     if app.state.records is not None:
         check_ready(app.state.records)
-    app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command())
+    # Durable outputs (ADR-0050 amendment 2): with an object store named, the coupons come back from it before any job runs, and
+    # every done job's files go to it; with the database, the jobs table keeps each job's status, and the jobs a stopped process
+    # never saw end are marked so.
+    store = R2Store(settings.storage) if settings.storage.on else None
+    if store is not None:
+        files, coupons = restore(store, LOCAL_FEA)
+        print(f"restored {files} file(s) of {coupons} coupon(s) from the bucket {settings.storage.bucket}", flush=True)
+    if app.state.records is not None:
+        orphans = stop_orphans(app.state.records, "the API stopped while this job ran, so it did not finish; start it again")
+        if orphans:
+            print(f"marked {orphans} job(s) of a stopped process as stopped", flush=True)
+    app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records)
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     # Behind Cloudflare Access, every request but /healthz must carry a valid token (ADR-0056); None means no sign-in, the local API.
     app.state.access_verifier = access_verifier(settings.access) if settings.access.on else None
@@ -300,8 +312,8 @@ def _known_job(jobs: CouponJobs, job_id: uuid.UUID) -> Job:
     job = jobs.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=(
-            f"No coupon job {job_id} in this API process; jobs are kept in memory until it stops, and every job that ended has "
-            f"its receipt in GET /v1/runs?endpoint={COUPON_JOBS}"))
+            f"No coupon job {job_id}: not in this API process, and not in the jobs table (which exists when run records are on); every "
+            f"job that ended has its receipt in GET /v1/runs?endpoint={COUPON_JOBS}"))
     return job
 
 
@@ -376,6 +388,9 @@ def coupon_job_package(job_id: uuid.UUID, request: Request) -> FileResponse:
         state, outcome = job.state, job.outcome
     if state != "done":
         raise HTTPException(status_code=409, detail=f"coupon job {job_id} is {state}" + ("" if outcome is None else f": {outcome['message']}"))
+    link = jobs.output_url(job, "package")
+    if link is not None:  # the store has it: the browser fetches it there, not through this container (ADR-0050 amendment 2)
+        return RedirectResponse(link, status_code=307)
     try:
         archive = jobs.package_archive(job)
     except FileNotFoundError as exc:
@@ -383,23 +398,23 @@ def coupon_job_package(job_id: uuid.UUID, request: Request) -> FileResponse:
     return FileResponse(archive, media_type="application/zip", filename=archive.name)
 
 
-MEDIA_TYPES = {".json": "application/json", ".txt": "text/plain; charset=utf-8", ".inp": "text/plain; charset=utf-8", ".toml": "text/plain; charset=utf-8",
-               ".vtu": "application/xml", ".pdf": "application/pdf", ".frd": "text/plain; charset=utf-8", ".zip": "application/zip"}
-
-
 @app.get(COUPON_JOBS + "/{job_id}/files/{key}")
-def coupon_job_file(job_id: uuid.UUID, key: str, request: Request) -> FileResponse:
+def coupon_job_file(job_id: uuid.UUID, key: str, request: Request) -> Response:
     """One file of a job by its key (ADR-0051): `fields`, `explanation`, `checklist` and `preview` as soon as the tool reports them,
-    while the job runs; every key the status lists once it is done; `package` is the zip. An unknown key names the keys there are."""
+    while the job runs; every key the status lists once it is done; `package` is the zip. An unknown key names the keys there are.
+    Once a job is done and an object store holds its files, the answer is a redirect to a short-lived link there (ADR-0050 amendment 2)."""
     jobs = _coupon_jobs(request)
     job = _known_job(jobs, job_id)
+    link = jobs.output_url(job, key)
+    if link is not None:
+        return RedirectResponse(link, status_code=307)
     try:
         path = jobs.output_file(job, key)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"coupon job {job_id} has no file {key!r}; it has: {exc.args[0]}") from exc
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return FileResponse(path, media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"), filename=path.name)
+    return FileResponse(path, media_type=content_type(path), filename=path.name)
 
 
 def _job_json(jobs: CouponJobs, job: Job, key: str, what: str) -> dict:

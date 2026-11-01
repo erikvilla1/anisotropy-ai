@@ -74,6 +74,40 @@ class Run(Base):
     )
 
 
+JOB_STATES = ("running", "done", "stopped", "refused")
+
+
+class JobRow(Base):
+    """A coupon job's status (ADR-0050 amendment 2, migration 0006): what GET /v1/coupon-jobs answers once the process that ran the
+    job is gone. Unlike a run, a row changes: `running` when the job starts, then `done`, `stopped` or `refused` with what the tool
+    reported, the files by key, where the store keeps them (`stored`) and the receipt's `run_id`. The receipt itself stays the
+    immutable run record (ADR-0026). `process` names the API process that ran the job, so a new process can tell which running
+    rows it never saw end."""
+
+    __tablename__ = "jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    actor: Mapped[str] = mapped_column(String(40), nullable=False)
+    user_email: Mapped[str | None] = mapped_column(String(320))
+    state: Mapped[str] = mapped_column(String(10), nullable=False)
+    stage: Mapped[str | None] = mapped_column(Text)
+    stages_done: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    stages: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    coupon: Mapped[str | None] = mapped_column(Text)
+    attempt: Mapped[str | None] = mapped_column(Text)
+    message: Mapped[str | None] = mapped_column(Text)
+    inputs: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    outputs: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    stored: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    started_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("runs.id"))
+    log_tail: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    process: Mapped[str] = mapped_column(String(36), nullable=False)
+
+    __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
+
+
 CONNECT_TIMEOUT_S = 5
 
 
@@ -92,11 +126,12 @@ def check_ready(engine: Engine) -> None:
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-            if not inspect(connection).has_table(Run.__tablename__):
-                raise RuntimeError(
-                    f"The database at {shown} has no '{Run.__tablename__}' table. "
-                    "Apply the migrations: cd api && uv run alembic upgrade head"
-                )
+            for table in (Run.__tablename__, JobRow.__tablename__):
+                if not inspect(connection).has_table(table):
+                    raise RuntimeError(
+                        f"The database at {shown} has no '{table}' table. "
+                        "Apply the migrations: cd api && uv run alembic upgrade head"
+                    )
     except OperationalError as exc:
         raise RuntimeError(f"Cannot reach the run records database at {shown}: {exc}") from exc
 
@@ -168,3 +203,47 @@ def list_runs(engine: Engine, *, actor: str | None = None, endpoint: str | None 
         statement = statement.where(Run.created_at < until)
     with Session(engine) as session:
         return list(session.scalars(statement))
+
+
+# ------------------------------------------------------------------------------------------- the jobs table (ADR-0050 amendment 2)
+
+def insert_job(engine: Engine, *, job_id: uuid.UUID, actor: str, user_email: str | None, inputs: dict, started_at: dt.datetime, process: str) -> None:
+    """The row of a job that has just started."""
+    with Session(engine) as session:
+        session.add(JobRow(id=job_id, actor=actor, user_email=user_email, state="running", inputs=inputs, started_at=started_at, process=process,
+                           stages_done=[], stages=[], outputs={}, stored={}, log_tail=[]))
+        session.commit()
+
+
+def update_job(engine: Engine, job_id: uuid.UUID, **fields) -> None:
+    """The row as the job now stands: its state, stage, what it reported, where the store keeps the files, its receipt's id."""
+    with Session(engine) as session:
+        row = session.get(JobRow, job_id)
+        if row is None:
+            raise LookupError(f"no row for coupon job {job_id}")
+        for name, value in fields.items():
+            setattr(row, name, value)
+        session.commit()
+
+
+def fetch_job(engine: Engine, job_id: uuid.UUID) -> JobRow | None:
+    with Session(engine) as session:
+        return session.get(JobRow, job_id)
+
+
+def list_jobs(engine: Engine, limit: int = 50) -> list[JobRow]:
+    """The newest jobs first."""
+    with Session(engine) as session:
+        return list(session.scalars(select(JobRow).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit)))
+
+
+def stop_orphans(engine: Engine, reason: str) -> int:
+    """Every row still `running` when a process starts belongs to a process that stopped before its job ended (one job at a time, one
+    process at a time in the beta): it is marked `stopped` with the reason. Returns how many."""
+    with Session(engine) as session:
+        rows = list(session.scalars(select(JobRow).where(JobRow.state == "running")))
+        now = dt.datetime.now(dt.timezone.utc)
+        for row in rows:
+            row.state, row.message, row.finished_at = "stopped", reason, now
+        session.commit()
+        return len(rows)

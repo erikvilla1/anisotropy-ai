@@ -20,11 +20,18 @@ import tempfile
 import threading
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from sqlalchemy import Engine
+from sqlalchemy.exc import SQLAlchemyError
+
+from .records import fetch_job, insert_job, list_jobs, update_job
+from .storage import ObjectStore, store_folder, store_job
 
 REPO = Path(__file__).resolve().parents[3]
 FEA = REPO / "fea"
+LOCAL_FEA = REPO / ".local" / "fea"  # where the tool keeps the coupons (fea/src/anisotropy_fea/paths.py)
 RUNNER = FEA / "tools" / "run_coupon.py"
 STUDIO = FEA / "tools" / "studio_tool.py"
 STATES = ("running", "done", "stopped", "refused")
@@ -80,25 +87,32 @@ class Job:
     id: uuid.UUID
     actor: str
     inputs: dict  # as the run record keeps them: the input's name and SHA-256, or the coupon; and the options
-    folder: Path  # the job's own folder: the input as sent, the console log, the progress, the outcome
+    folder: Path | None  # the job's own folder: the input as sent, the console log, the progress, the outcome; None for a job read back from its row
     started_at: dt.datetime
     state: str = "running"
     finished_at: dt.datetime | None = None
     outcome: dict | None = None
     run_id: uuid.UUID | None = None
     user_email: str | None = None  # the signed-in email Cloudflare Access verified for the request that started it (ADR-0056)
+    stored: dict[str, str] = field(default_factory=dict)  # output key -> where the object store keeps the file (ADR-0050 amendment 2)
+    snapshot: dict | None = None  # a job of an earlier process: its row's stage, stages, outputs and log tail, in place of the files
 
     @property
-    def log(self) -> Path:
-        return self.folder / "console.log"
+    def log(self) -> Path | None:
+        return None if self.folder is None else self.folder / "console.log"
 
     def log_tail(self) -> list[str]:
+        if self.folder is None:
+            return list((self.snapshot or {}).get("log_tail", []))
         if not self.log.is_file():
             return []
         return self.log.read_text(encoding="utf-8", errors="replace").splitlines()[-LOG_TAIL:]
 
     def progress(self) -> dict | None:
-        """The stage and the files so far, as the tool last wrote them; None before the first step or when the file is half-written."""
+        """The stage and the files so far, as the tool last wrote them; None before the first step or when the file is half-written.
+        For a job read back from its row, what the row kept."""
+        if self.folder is None:
+            return self.snapshot
         path = self.folder / PROGRESS
         if not path.is_file():
             return None
@@ -106,6 +120,16 @@ class Job:
             return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
+
+    @classmethod
+    def from_row(cls, row) -> "Job":
+        """A job as its row in the jobs table keeps it, for a job that another process ran (ADR-0050 amendment 2)."""
+        outcome = None if row.state == "running" else {"status": row.state, "message": row.message, "coupon": row.coupon, "attempt": row.attempt,
+                                                         "outputs": dict(row.outputs)}
+        snapshot = {"stage": row.stage, "done": list(row.stages_done), "stages": list(row.stages), "outputs": dict(row.outputs), "coupon": row.coupon,
+                    "attempt": row.attempt, "log_tail": list(row.log_tail)}
+        return cls(row.id, row.actor, dict(row.inputs), None, row.started_at, state=row.state, finished_at=row.finished_at, outcome=outcome,
+                   run_id=row.run_id, user_email=row.user_email, stored=dict(row.stored), snapshot=snapshot)
 
 
 Recorder = Callable[[Job, str, dict], "uuid.UUID | None"]  # writes the receipt of an ended job; None when recording is off
@@ -115,18 +139,33 @@ class CouponJobs:
     """The coupon jobs of this API process, at most one running, and the studio tool. `command` and `studio` are the tools'
     command lines without their arguments."""
 
-    def __init__(self, command: list[str] | None, recorder: Recorder, root: Path | None = None, studio: list[str] | None = None):
+    def __init__(self, command: list[str] | None, recorder: Recorder, root: Path | None = None, studio: list[str] | None = None,
+                 store: ObjectStore | None = None, table: Engine | None = None, local_root: Path | None = None):
+        """`store` is the object store a done job's files go to and `table` the database holding the jobs table (ADR-0050 amendment
+        2); None keeps the files on the local disk and the status in this process, as before. `local_root` is where the tool keeps
+        the coupons, .local/fea/ by default."""
         self.command, self.recorder, self.root, self.studio = command, recorder, root, studio
+        self.store, self.table, self.local_root = store, table, local_root or LOCAL_FEA
+        self.process = str(uuid.uuid4())
         self.jobs: dict[uuid.UUID, Job] = {}
         self.lock = threading.Lock()
 
     def get(self, job_id: uuid.UUID) -> Job | None:
-        return self.jobs.get(job_id)
+        """A job of this process, or of an earlier one from the jobs table."""
+        job = self.jobs.get(job_id)
+        if job is None and self.table is not None:
+            row = fetch_job(self.table, job_id)
+            job = None if row is None else Job.from_row(row)
+        return job
 
     def listed(self) -> list[Job]:
-        """Every job of this process, newest first."""
+        """Every job, newest first: this process's, and from the jobs table those of earlier processes."""
         with self.lock:
-            return sorted(self.jobs.values(), key=lambda job: job.started_at, reverse=True)
+            jobs = dict(self.jobs)
+        if self.table is not None:
+            for row in list_jobs(self.table):
+                jobs.setdefault(row.id, Job.from_row(row))
+        return sorted(jobs.values(), key=lambda job: job.started_at, reverse=True)
 
     def _folder(self) -> Path:
         if self.root is None:
@@ -158,6 +197,14 @@ class CouponJobs:
                 (job.folder / name).write_bytes(values)
                 source = str(job.folder / name)
             self.jobs[job.id] = job
+        if self.table is not None:  # the row before the work, so a process that stops mid-job leaves a row to mark stopped
+            try:
+                insert_job(self.table, job_id=job.id, actor=actor, user_email=user_email, inputs=inputs, started_at=job.started_at, process=self.process)
+            except SQLAlchemyError as exc:
+                with self.lock:
+                    del self.jobs[job.id]
+                shutil.rmtree(job.folder, ignore_errors=True)
+                raise JobRefused(f"the job could not be registered in the jobs table, so it was not started: {str(exc).splitlines()[0]}") from exc
         args = [*self.command, source, *options, "--result", str(job.folder / "outcome.json"), "--progress", str(job.folder / PROGRESS)]
         threading.Thread(target=self._run, args=(job, args), name=f"coupon-job-{job.id}", daemon=True).start()
         return job
@@ -174,6 +221,13 @@ class CouponJobs:
         except (OSError, json.JSONDecodeError) as exc:
             outcome = {"status": "stopped", "message": f"the job could not run: {exc}", "coupon": None, "attempt": None, "outputs": {}}
         state = outcome["status"] if outcome.get("status") in STATES[1:] else "stopped"
+        if state == "done" and self.store is not None:  # the files outlive this container only in the store (ADR-0050 amendment 2)
+            try:
+                job.stored = self._store(job, outcome)
+            except Exception as exc:  # boto3 raises its own families, the disk OSError: either way the files are not durable
+                state = "stopped"
+                outcome = {**outcome, "status": "stopped", "message": f"the job ended ({outcome.get('message')}) but its files could not be copied "
+                                                                      f"to storage: {str(exc).splitlines()[0]}; its result is withheld", "outputs": {}}
         try:
             run_id = self.recorder(job, state, outcome)
         except RecordingFailed as exc:  # no result without its receipt (ADR-0026)
@@ -183,16 +237,52 @@ class CouponJobs:
         with self.lock:
             job.outcome, job.run_id, job.finished_at = outcome, run_id, dt.datetime.now(dt.timezone.utc)
             job.state = state
+        if self.table is not None:
+            progress = job.progress() or {}
+            try:
+                update_job(self.table, job.id, state=state, stage=progress.get("stage"), stages_done=list(progress.get("done", [])),
+                           stages=list(progress.get("stages", [])), coupon=outcome.get("coupon"), attempt=outcome.get("attempt"), message=outcome.get("message"),
+                           outputs=dict(outcome.get("outputs") or {}), stored=dict(job.stored), finished_at=job.finished_at, run_id=run_id, log_tail=job.log_tail())
+            except (SQLAlchemyError, LookupError) as exc:
+                with self.lock:
+                    job.outcome = {**job.outcome, "message": f"{job.outcome.get('message')}; its row in the jobs table could not be updated: "
+                                                             f"{str(exc).splitlines()[0]}"}
+
+    def _store(self, job: Job, outcome: dict) -> dict[str, str]:
+        """A done job's files into the store: every reported file by key, the package zip, and the coupon's whole folder."""
+        coupon, attempt = outcome["coupon"], Path(outcome["attempt"]).name
+        outputs = {key: repository_path(path) for key, path in (outcome.get("outputs") or {}).items()}
+        outputs = {key: path for key, path in outputs.items()  # the same rule as output_file: under the repository or the job's folder
+                   if path.resolve().is_relative_to(REPO.resolve()) or path.resolve().is_relative_to(job.folder.resolve())}
+        package = outputs.get("package")
+        archive = self._archive(job, package) if package is not None and package.is_dir() else None
+        stored = store_job(self.store, coupon, attempt, outputs, archive)
+        folder = self.local_root / coupon
+        if folder.is_dir():
+            store_folder(self.store, folder, coupon)
+        return stored
 
     def package_archive(self, job: Job) -> Path:
         """The finished job's package folder as a zip in the job's folder, made once."""
         package = repository_path(job.outcome["outputs"]["package"])
         if not package.is_dir():
             raise FileNotFoundError(f"the package folder {job.outcome['outputs']['package']} is no longer there")
-        archive = job.folder / f"{package.name}.zip"
+        return self._archive(job, package)
+
+    def _archive(self, job: Job, package: Path) -> Path:
+        folder = job.folder if job.folder is not None else self._folder() / str(job.id)  # a job read back from its row has no folder yet
+        folder.mkdir(parents=True, exist_ok=True)
+        archive = folder / f"{package.name}.zip"
         if not archive.is_file():
             shutil.make_archive(str(archive.with_suffix("")), "zip", root_dir=package.parent, base_dir=package.name)
         return archive
+
+    def output_url(self, job: Job, key: str) -> str | None:
+        """A short-lived link to a done job's file in the object store, or None when the file is served from the disk: no store, the job
+        still running, or a file the store does not hold (ADR-0050 amendment 2)."""
+        if self.store is None or job.state != "done" or key not in job.stored:
+            return None
+        return self.store.link(job.stored[key])
 
     def output_file(self, job: Job, key: str) -> Path:
         """One of the job's files by its key, from the outcome once it is done or from the progress while it runs: `package` is the
@@ -204,7 +294,7 @@ class CouponJobs:
         if key == "package":
             return self.package_archive(job)
         path = repository_path(outputs[key]).resolve()
-        if not (path.is_relative_to(REPO.resolve()) or path.is_relative_to(job.folder.resolve())):
+        if not (path.is_relative_to(REPO.resolve()) or (job.folder is not None and path.is_relative_to(job.folder.resolve()))):
             raise PermissionError(f"the file {outputs[key]} lies outside the repository and the job's folder")
         if not path.is_file():
             raise FileNotFoundError(f"the file {outputs[key]} is no longer there")

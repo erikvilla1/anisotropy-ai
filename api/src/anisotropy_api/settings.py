@@ -36,6 +36,9 @@ ACCESS_AUDIENCE_VARIABLE = "ANISOTROPY_ACCESS_AUD"
 TEAM_DOMAIN = re.compile(r"^[a-z0-9-]+\.cloudflareaccess\.com$")
 # The website origins that may read the API's answers from a browser, comma-separated; unset, the local development origins apply.
 ALLOWED_ORIGINS_VARIABLE = "ANISOTROPY_ALLOWED_ORIGINS"
+# Durable outputs in an object store through the S3 API, R2 in the hosted tier (ADR-0056, ADR-0050 amendment 2): the bucket, the
+# endpoint (https://<account>.r2.cloudflarestorage.com, or a local MinIO) and the key pair. All four or none.
+STORAGE_VARIABLES = ("ANISOTROPY_R2_BUCKET", "ANISOTROPY_R2_ENDPOINT", "ANISOTROPY_R2_ACCESS_KEY_ID", "ANISOTROPY_R2_SECRET_ACCESS_KEY")
 LOCAL_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001")
 
 
@@ -74,6 +77,21 @@ class AccessSettings:
 
 
 @dataclass(frozen=True)
+class StorageSettings:
+    """The object store the hosted tier keeps a job's files in (ADR-0056): off unless the bucket, the endpoint and the key pair are all
+    named. Off, the files stay on the local disk, as before."""
+
+    bucket: str | None
+    endpoint: str | None
+    access_key_id: str | None
+    secret_access_key: str | None
+
+    @property
+    def on(self) -> bool:
+        return self.bucket is not None
+
+
+@dataclass(frozen=True)
 class Settings:
     """What the process was told. `run_records` False means recording was switched off explicitly."""
 
@@ -82,6 +100,7 @@ class Settings:
     assistant: AssistantSettings = AssistantSettings(None, None)
     access: AccessSettings = AccessSettings(None, None)
     allowed_origins: tuple[str, ...] = LOCAL_ORIGINS
+    storage: StorageSettings = StorageSettings(None, None, None, None)
 
 
 def environment() -> Mapping[str, str]:
@@ -109,7 +128,26 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     if url is not None:
         url = sqlalchemy_url(url, DATABASE_VARIABLE)
     return Settings(database_url=url, run_records=switch == "on", assistant=assistant_settings(environ), access=access_settings(environ),
-                    allowed_origins=allowed_origins(environ))
+                    allowed_origins=allowed_origins(environ), storage=storage_settings(environ))
+
+
+def storage_settings(environ: Mapping[str, str]) -> StorageSettings:
+    """Off unless all four variables are set; some but not all is refused naming the missing ones, and an endpoint that is not an
+    address is refused too."""
+    values = {name: environ.get(name, "").strip() or None for name in STORAGE_VARIABLES}
+    if all(value is None for value in values.values()):
+        return StorageSettings(None, None, None, None)
+    missing = [name for name, value in values.items() if value is None]
+    if missing:
+        raise RuntimeError(f"{', '.join(missing)} not set: the object store needs all four of {', '.join(STORAGE_VARIABLES)}, "
+                           "or none of them to keep a job's files on the local disk")
+    endpoint = values["ANISOTROPY_R2_ENDPOINT"]
+    parts = urlsplit(endpoint)
+    if parts.scheme not in ("http", "https") or not parts.netloc or parts.path.strip("/") or parts.query or parts.fragment:
+        raise RuntimeError(f"ANISOTROPY_R2_ENDPOINT must be the store's address, scheme://host[:port], such as "
+                           f"https://<account>.r2.cloudflarestorage.com, not {endpoint!r}")
+    return StorageSettings(values["ANISOTROPY_R2_BUCKET"], endpoint.rstrip("/"), values["ANISOTROPY_R2_ACCESS_KEY_ID"],
+                           values["ANISOTROPY_R2_SECRET_ACCESS_KEY"])
 
 
 def access_settings(environ: Mapping[str, str]) -> AccessSettings:
