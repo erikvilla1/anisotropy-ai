@@ -23,6 +23,7 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | How does the API call the engine? | [Chunk 1 walkthrough](../api/README.md) and [API component card](components/api.md) |
 | How does the website call the API? | [Chunk 2 walkthrough](walkthroughs/chunk-2-calculator.md) and [calculator component card](components/calculator.md) |
 | How do we solve for moments under a curvature constraint? | [Chunk 3 walkthrough](walkthroughs/chunk-3-constrained-analysis.md) and [analysis card](components/prescribed-curvature.md) |
+| How is the studio hosted, deployed and rolled back? | [The hosted tier walkthrough](walkthroughs/hosted-deploy.md) and [ADR-0056](decisions/ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md) |
 | What do AI agents read before working here? | [Agent skills](agents/README.md) |
 | Where do the team's FEA files, our models, and the homework files go? | [ADR-0036](decisions/ADR-0036-one-folder-per-fea-test.md) for FEA, [ADR-0032](decisions/ADR-0032-local-workspace-layout-by-tool-and-test.md) for homework, and the [workspace-layout skill](agents/skills/workspace-layout/SKILL.md) |
 | All of the above as one typeset PDF | [Engine manual](manual/) |

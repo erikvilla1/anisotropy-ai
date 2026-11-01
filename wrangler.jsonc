@@ -1,0 +1,39 @@
+// The hosted tier on Cloudflare (ADR-0056): one Worker serves the website's static export and forwards /api/* to the solver
+// container, built from the Dockerfile at this root. Deploy with `npx wrangler deploy` (Docker must be running: Wrangler builds
+// and pushes the image) after `npm run build:hosted`. docs/walkthroughs/hosted-deploy.md explains.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "anisotropy-studio",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-10-30",
+  "upload_source_maps": true,
+  "observability": { "enabled": true },
+  // The site: Next.js writes it to out/. The Worker runs first only for the API's paths; everything else is a static file,
+  // /studio from studio.html with or without the slash, and a miss gets the site's 404 page.
+  "assets": {
+    "directory": "./out",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  // The solver container: the API with CalculiX, Gmsh and Tectonic (Dockerfile). One instance, since the API runs one job at a time
+  // (ADR-0050); standard-3 is the plan's starting size, to be adjusted from the beta's measurements (ADR-0056).
+  "containers": [
+    {
+      "class_name": "ApiContainer",
+      "image": "./Dockerfile",
+      "instance_type": "standard-3",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "API", "class_name": "ApiContainer" }]
+  },
+  "exports": {
+    "ApiContainer": { "type": "durable-object", "storage": "sqlite" }
+  }
+  // Secrets, never here: `npx wrangler secret put <NAME>` for DATABASE_URL, the ANISOTROPY_ACCESS_*, ANISOTROPY_R2_* and
+  // assistant variables; the Worker hands them to the container (worker/routing.ts names them). ANISOTROPY_GIT_COMMIT is set by
+  // the deploy workflow as a variable (`--var`).
+}
