@@ -23,7 +23,7 @@ Docker Desktop must be running: `wrangler deploy` builds the image from the Dock
 npm ci
 npx wrangler login       # a browser window; signs Wrangler into the Cloudflare account
 npm run build:hosted     # the site into out/, calling the API at /api (scripts/build-hosted.ts sets the address; shells differ)
-npx wrangler deploy      # the Worker, then the image, at https://app.anisotropy.dev
+npx wrangler deploy      # the Worker, then the image, at https://anisotropy.dev
 ```
 
 Then the secrets, one by one (each asks for the value; nothing goes into the repository):
@@ -46,7 +46,7 @@ Wait a few minutes after the first deploy before expecting the container to answ
 ## Sign-in: the Access application
 
 1. Zero Trust → Integrations → Identity providers → add **One-time PIN** (new organisations do not get it by default; it sits beside any provider already listed).
-2. Zero Trust → Access controls → Applications → Add an application → Self-hosted and private → destination **Public DNS**: subdomain `app`, domain `anisotropy.dev`, path empty. Not the **Workers** tab: it targets the `workers.dev` address, which this Worker does not have (ADR-0056 amendment 1).
+2. Zero Trust → Access controls → Applications → Add an application → Self-hosted and private → destination **Public DNS**: subdomain empty, domain `anisotropy.dev`, path empty. Not the **Workers** tab: it targets the `workers.dev` address, which this Worker does not have (ADR-0056 amendments 1 and 2).
 3. Policies → **Create new policy**: action Allow, Include → **Emails** → the invited addresses (or **Emails ending in** a domain); save it and check it is listed under the application before saving the application. Access is default-deny: with no policy attached, the sign-in page still says a code was sent, but none is.
 4. Login methods: **One-time PIN** ticked.
 5. Save; then Configure → Additional settings → copy the **Application Audience (AUD) Tag** into the `ANISOTROPY_ACCESS_AUD` secret, and the team domain (`<team>.cloudflareaccess.com`, under Zero Trust → Settings) into `ANISOTROPY_ACCESS_TEAM_DOMAIN`.
@@ -55,7 +55,11 @@ To add or remove a user: edit the policy's email list. Access applies it at the 
 
 ## The bucket
 
-Create the R2 bucket, then an API token with **Object Read & Write** scoped to it; its Access Key ID and Secret Access Key are the two `ANISOTROPY_R2_*` key secrets. Add a CORS policy on the bucket allowing the site's origin, `https://app.anisotropy.dev`, for `GET` and `HEAD`: the browser fetches a job's files from the bucket through short-lived links, and without the policy those fetches fail.
+Create the R2 bucket, then an API token with **Object Read & Write** scoped to it; its Access Key ID and Secret Access Key are the two `ANISOTROPY_R2_*` key secrets. Add a CORS policy on the bucket allowing the site's origin, `https://anisotropy.dev`, for `GET` and `HEAD`: the browser fetches a job's files from the bucket through short-lived links, and without the policy those fetches fail.
+
+## Moving the address
+
+To serve the Worker at another hostname without a moment unguarded (as amendment 2 did, from `app.anisotropy.dev` to `anisotropy.dev`): first add the new hostname to the Access application (**+ Add public hostname**) beside the old one, and its origin to the bucket's CORS policy; then change `routes` in `wrangler.jsonc` and deploy; check the new address, then remove the old hostname from the application, its origin from the CORS policy and, if Workers → `anisotropy-studio` → Settings → Domains & Routes still lists it, the old custom domain. The application keeps its audience tag, so the secrets stay as they are.
 
 ## Deploys after the first
 
@@ -67,4 +71,4 @@ Create the R2 bucket, then an API token with **Object Read & Write** scoped to i
 
 ## What was and was not verified
 
-Verified on 2026-10-30: the Worker bundles and type-checks, its path rewriting has unit tests, `wrangler deploy --dry-run` accepts the configuration, and the site builds with `/api` as its API address. Verified on 2026-11-02: the deploy workflow's run from `main` (migrations, image, Worker); `app.anisotropy.dev` sends a visitor without a session to the Access sign-in, and the `workers.dev` address answers 404; sign-in with the emailed PIN; `/api/healthz` answers `{"status":"ok"}` from the container, which starts serving only after its database check and the restore from the bucket. Not yet verified: a coupon job end to end (Access's token checked on a real call, the files in R2, the ten-minute links through the bucket's CORS policy, the signed-in email on the record).
+Verified on 2026-10-30: the Worker bundles and type-checks, its path rewriting has unit tests, `wrangler deploy --dry-run` accepts the configuration, and the site builds with `/api` as its API address. Verified on 2026-11-02: the deploy workflow's run from `main` (migrations, image, Worker); `app.anisotropy.dev` (the address until amendment 2) sends a visitor without a session to the Access sign-in, and the `workers.dev` address answers 404; sign-in with the emailed PIN; `/api/healthz` answers `{"status":"ok"}` from the container, which starts serving only after its database check and the restore from the bucket. On 2026-11-03, after the cookie fix (#111), the founder reported that the studio works, signed in. Not yet verified: the move to `anisotropy.dev` (amendment 2); the files in R2, the ten-minute links through the bucket's CORS policy and the signed-in email on the record, each checked on its own.
