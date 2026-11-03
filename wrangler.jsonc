@@ -8,9 +8,9 @@
   "compatibility_date": "2026-10-30",
   "upload_source_maps": true,
   "observability": { "enabled": true },
-  // The one address (ADR-0056 amendment 1): app.anisotropy.dev as a custom domain, for which Cloudflare makes the DNS record and
+  // The one address (ADR-0056 amendments 1 and 2): anisotropy.dev as a custom domain, for which Cloudflare makes the DNS record and
   // the certificate. No workers.dev address and no preview URLs, so Access guards one origin and the bucket's CORS lists one.
-  "routes": [{ "pattern": "app.anisotropy.dev", "custom_domain": true }],
+  "routes": [{ "pattern": "anisotropy.dev", "custom_domain": true }],
   "workers_dev": false,
   "preview_urls": false,
   // The site: Next.js writes it to out/. The Worker runs first only for the API's paths; everything else is a static file,
