@@ -39,7 +39,7 @@ test("the check and the solve send the values with the studio's actor and read t
     const job = await startSolve("http://api.test", { form_version: "0.3" }, "A. Engineer", true);
     assert.equal(job.state, "running");
     assert.deepEqual(JSON.parse(calls[1].init.body as string), { values: { form_version: "0.3" }, run_by: "A. Engineer", replace: true });
-    assert.equal(calls[1].init.credentials, "omit");
+    assert.equal(calls[1].init.credentials, "same-origin");  // the Access cookie reaches the hosted /api, never another origin
   } finally {
     globalThis.fetch = original;
   }

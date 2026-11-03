@@ -72,7 +72,9 @@ function base(url: string): string { return url.replace(/\/+$/, ""); }
 async function call(url: string, init: RequestInit & { signal?: AbortSignal }, what: string): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, { ...init, credentials: "omit", cache: "no-store" });
+    // Same-origin credentials: hosted, the page and /api share app.anisotropy.dev, so the browser sends the Access sign-in cookie
+    // and Access lets the call through (ADR-0056); locally the API is another origin and gets no cookie, as before.
+    response = await fetch(url, { ...init, credentials: "same-origin", cache: "no-store" });
   } catch (error) {
     if (init.signal?.aborted) throw error;
     throw new StudioError(`The API did not answer (${what}). Is it running at the address the page was built with?`);
