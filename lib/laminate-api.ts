@@ -137,7 +137,8 @@ export async function requestAnalysis(baseUrl: string, request: AnalysisRequest,
   const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/laminates/response`, {
     // The actor header names this client in the run record (ADR-0026).
     method: "POST", headers: { "Content-Type": "application/json", "X-Anisotropy-Actor": "calculator" },
-    body: JSON.stringify(request), signal, credentials: "omit", cache: "no-store",
+    // Same-origin credentials carry the Access sign-in cookie to the hosted /api and nothing to another origin (ADR-0056).
+    body: JSON.stringify(request), signal, credentials: "same-origin", cache: "no-store",
   });
   let payload: unknown;
   try { payload = await response.json(); }

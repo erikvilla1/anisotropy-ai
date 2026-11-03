@@ -13,7 +13,7 @@ The decision is [ADR-0056](../decisions/ADR-0056-the-hosted-tier-runs-on-cloudfl
 | R2 | A done job's files, its package and the coupon folders; the coupons are restored from it when the container starts | the `ANISOTROPY_R2_*` secrets; the bucket's CORS policy |
 | GitHub Actions | [`deploy.yml`](../../.github/workflows/deploy.yml): build, migrate, deploy on a green merge to `main`; a preview version per pull request | repository secrets |
 
-The site is built with `NEXT_PUBLIC_ANISOTROPY_API_URL=/api`, so the browser calls the API on the same origin and no CORS list is needed. The Worker strips `/api` and hands the request to the container unchanged, headers included; the container's FastAPI refuses any request without Access's `Cf-Access-Jwt-Assertion` token when its Access settings are set.
+The site is built with `NEXT_PUBLIC_ANISOTROPY_API_URL=/api`, so the browser calls the API on the same origin and no CORS list is needed. The site's calls send same-origin credentials, so Access's `CF_Authorization` cookie goes with them; without it Access answers a call with a redirect to its sign-in page, which the browser does not follow across origins, and the studio says the API did not answer. The Worker strips `/api` and hands the request to the container unchanged, headers included; the container's FastAPI refuses any request without Access's `Cf-Access-Jwt-Assertion` token when its Access settings are set.
 
 ## The first deploy, from a laptop
 
@@ -45,10 +45,11 @@ Wait a few minutes after the first deploy before expecting the container to answ
 
 ## Sign-in: the Access application
 
-1. Zero Trust → Integrations → Identity providers → add **One-time PIN** (new organisations do not get it by default).
-2. Zero Trust → Access controls → Applications → Add an application → Self-hosted and private → **Workers** → select `anisotropy-studio`. A Worker application covers its custom domain, `app.anisotropy.dev`; the Worker has no `workers.dev` address and no preview URLs (ADR-0056 amendment 1).
-3. One policy, action Allow, Include → **Emails** → the invited addresses (or **Emails ending in** a domain).
-4. Save; then Configure → Additional settings → copy the **Application Audience (AUD) Tag** into the `ANISOTROPY_ACCESS_AUD` secret, with the team domain into `ANISOTROPY_ACCESS_TEAM_DOMAIN`.
+1. Zero Trust → Integrations → Identity providers → add **One-time PIN** (new organisations do not get it by default; it sits beside any provider already listed).
+2. Zero Trust → Access controls → Applications → Add an application → Self-hosted and private → destination **Public DNS**: subdomain `app`, domain `anisotropy.dev`, path empty. Not the **Workers** tab: it targets the `workers.dev` address, which this Worker does not have (ADR-0056 amendment 1).
+3. Policies → **Create new policy**: action Allow, Include → **Emails** → the invited addresses (or **Emails ending in** a domain); save it and check it is listed under the application before saving the application. Access is default-deny: with no policy attached, the sign-in page still says a code was sent, but none is.
+4. Login methods: **One-time PIN** ticked.
+5. Save; then Configure → Additional settings → copy the **Application Audience (AUD) Tag** into the `ANISOTROPY_ACCESS_AUD` secret, and the team domain (`<team>.cloudflareaccess.com`, under Zero Trust → Settings) into `ANISOTROPY_ACCESS_TEAM_DOMAIN`.
 
 To add or remove a user: edit the policy's email list. Access applies it at the next sign-in; the API records the signed-in email on every run (`user_email`).
 
@@ -66,4 +67,4 @@ Create the R2 bucket, then an API token with **Object Read & Write** scoped to i
 
 ## What was and was not verified
 
-Verified on 2026-10-30: the Worker bundles and type-checks, its path rewriting has unit tests, `wrangler deploy --dry-run` accepts the configuration, and the site builds with `/api` as its API address. Not verified until the first real deploy: the container answering on Cloudflare, Access's header reaching the container through the Worker, the R2 bucket with its CORS policy, and the deploy workflow's run.
+Verified on 2026-10-30: the Worker bundles and type-checks, its path rewriting has unit tests, `wrangler deploy --dry-run` accepts the configuration, and the site builds with `/api` as its API address. Verified on 2026-11-02: the deploy workflow's run from `main` (migrations, image, Worker); `app.anisotropy.dev` sends a visitor without a session to the Access sign-in, and the `workers.dev` address answers 404; sign-in with the emailed PIN; `/api/healthz` answers `{"status":"ok"}` from the container, which starts serving only after its database check and the restore from the bucket. Not yet verified: a coupon job end to end (Access's token checked on a real call, the files in R2, the ten-minute links through the bucket's CORS policy, the signed-in email on the record).
