@@ -38,4 +38,4 @@ The `project-rules` skill tells every agent to read `AGENTS.md`, which stays the
 
 ## What does not live here
 
-Tooling that is not part of the product, such as the founder's agent that drafts posts about simulations, lives outside this repository and reaches the engine the way any outside client does: HTTP requests to the API with an actor header (ADR-0028).
+Tooling that is not part of the product, such as the founder's agent that drafts posts about simulations, lives outside this repository and reaches the engine the way any outside client does: HTTP requests to the API with an actor header (ADR-0028). What every agent should know about the company, whichever tool runs it, is the shared brain in `docs/brain/` (ADR-0057).
