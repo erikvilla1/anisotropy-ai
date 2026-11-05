@@ -1,4 +1,4 @@
-# Anisotropy AI
+# Anisotropy
 
 A research-focused composites website with a materials library, educational physics references, a guided engineering chat preview and a laminate calculator. Built with Next.js, React, and TypeScript. The calculator uses the local Python API; the other pages run without a backend. No AI API keys are required.
 
@@ -49,12 +49,15 @@ The [local API and chunk 1 walkthrough](api/README.md) exposes one-material lami
 | `/` | Project overview, research imagery, roadmap, and chat entry |
 | `/about` | Engineering model, research priorities, and lab workflow |
 | `/industries` | Aerospace and research/education priorities; potential industries |
-| `/services` | Composite development workflow and planned product offerings |
+| `/services` | The five services, one card each, from `lib/services.ts` (ADR-0058) |
+| `/services/<slug>` | One page per service: computer-aided design, finite element modeling, test plans, documentation, manufacturing plans; what exists, a demonstration, what is planned, access |
+| `/contact` | The address to write to |
 | `/library` | Material records and physics references |
 | `/sources` | Textbook citations, recorded property values and unit conversions |
 | `/chat` | Dedicated conversation interface with editable specifications |
-| `/data` | Local CSV inspection and submission preview |
-| `/calculator` | Editable laminate form with engine stiffness, strains and curvatures |
+| `/studio` | The coupon studio: a coupon test set up, checked, solved and viewed (ADR-0051) |
+| `/data` | Local CSV inspection and submission preview (not in the header) |
+| `/calculator` | Editable laminate form with engine stiffness, strains and curvatures (not in the header) |
 
 ## Try the experience
 

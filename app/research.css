@@ -711,9 +711,6 @@
   object-fit: contain;
   flex-shrink: 0;
 }
-.wordmark .wordmark-ai {
-  margin-left: 5px;
-}
 .site-footer .brand-symbol {
   width: 34px;
   height: 32px;
