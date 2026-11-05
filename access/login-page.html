@@ -1,0 +1,381 @@
+<!doctype html>
+<!--
+  The Access sign-in page for anisotropy.dev (ADR-0056 amendment 3). Cloudflare Access renders this template (HTML and Liquid) in
+  place of its stock login page; the authbox element in the card is where Access puts its own email field and one-time code button, so the
+  sign-in itself is still Access's and nothing here can change who gets in. Rules from Cloudflare's "Access custom pages":
+  exactly one authbox element, outside any Liquid condition; message.text kept visible; no script, no inline event handlers,
+  no form of our own; images and fonts over HTTPS or inline. tests/access-login-page.test.ts checks them.
+
+  Edit this file, then run `npm run build:access-page` to write access/login-page.html (this file with access/mark.webp inlined),
+  and paste that file into Zero Trust → Reusable components → Custom pages → Access custom pages. docs/walkthroughs/hosted-deploy.md
+  has the steps.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="dark" />
+		<title>Sign in · {{ app_name | default: "Anisotropy Studio" }}</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Manrope:wght@500;600&display=swap"
+		/>
+		<style>
+			:root {
+				--bg: #0c0e0d;
+				--panel: #121513;
+				--raised: #181c19;
+				--line: #2a2e2b;
+				--text: #eef0e9;
+				--muted: #9ba29b;
+				--accent: #c1deb5;
+				--accent-ink: #17220f;
+				--font: "DM Sans", "DM Sans Variable", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+				--heading: "Manrope", "Manrope Variable", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+				color-scheme: dark;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				min-height: 100%;
+			}
+			body {
+				min-height: 100vh;
+				display: flex;
+				flex-direction: column;
+				background: var(--bg);
+				color: var(--text);
+				font-family: var(--font);
+				font-size: 14px;
+				line-height: 1.6;
+				-webkit-font-smoothing: antialiased;
+			}
+			h1,
+			p {
+				margin: 0;
+			}
+			a {
+				color: inherit;
+			}
+
+			/* The bar across the top, as on the site. */
+			.bar {
+				height: 72px;
+				padding: 0 48px;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				border-bottom: 1px solid var(--line);
+			}
+			.wordmark {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				font-family: var(--heading);
+				font-size: 22px;
+				font-weight: 600;
+				letter-spacing: -1px;
+				white-space: nowrap;
+				text-decoration: none;
+			}
+			.wordmark img {
+				width: 40px;
+				height: auto;
+			}
+			.wordmark-ai {
+				font-weight: 400;
+				color: var(--muted);
+				margin-left: 3px;
+			}
+			.tag {
+				font-size: 9px;
+				letter-spacing: 1.4px;
+				color: #838b83;
+				text-transform: uppercase;
+			}
+
+			/* The page: a heading on the left, the sign-in card on the right. */
+			main {
+				flex: 1;
+				width: 100%;
+				max-width: 1180px;
+				margin: 0 auto;
+				padding: 88px 48px 64px;
+				display: grid;
+				grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+				gap: 72px;
+				align-items: start;
+			}
+			.eyebrow {
+				font-size: 10px;
+				font-weight: 500;
+				letter-spacing: 1.8px;
+				text-transform: uppercase;
+				color: var(--accent);
+			}
+			h1 {
+				margin-top: 14px;
+				font-family: var(--heading);
+				font-size: clamp(32px, 4.4vw, 48px);
+				font-weight: 500;
+				line-height: 1.08;
+				letter-spacing: -1.6px;
+			}
+			.lede {
+				margin-top: 16px;
+				max-width: 520px;
+				font-size: 15px;
+				color: var(--muted);
+			}
+
+			/* The studio's summary strip, as a reminder of what is behind the door. */
+			.strip {
+				margin-top: 40px;
+				display: grid;
+				grid-template-columns: repeat(4, minmax(0, 1fr));
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				background: var(--panel);
+				overflow: hidden;
+			}
+			.strip div {
+				padding: 12px 14px 14px;
+				border-left: 1px solid var(--line);
+			}
+			.strip div:first-child {
+				border-left: 0;
+			}
+			.strip span {
+				display: block;
+				font-size: 10px;
+				letter-spacing: 1.4px;
+				text-transform: uppercase;
+				color: var(--muted);
+			}
+			.strip b {
+				display: block;
+				margin-top: 4px;
+				font-weight: 400;
+				font-size: 13px;
+			}
+
+			/* The card that holds Access's own controls. */
+			.card {
+				border: 1px solid var(--line);
+				border-radius: 10px;
+				background: var(--panel);
+				overflow: hidden;
+			}
+			.card-head {
+				display: flex;
+				align-items: center;
+				gap: 9px;
+				padding: 14px 18px;
+				border-bottom: 1px solid var(--line);
+				font-size: 12px;
+				color: var(--muted);
+			}
+			.dot {
+				width: 6px;
+				height: 6px;
+				border-radius: 50%;
+				background: var(--accent);
+				box-shadow: 0 0 0 3px #c1deb522;
+			}
+			.card-body {
+				padding: 22px 18px 20px;
+			}
+			.card-title {
+				font-family: var(--heading);
+				font-size: 18px;
+				font-weight: 500;
+			}
+			.card-note {
+				margin-top: 4px;
+				font-size: 13px;
+				color: var(--muted);
+			}
+			.message {
+				margin-top: 16px;
+				padding: 10px 12px;
+				border: 1px solid #5c4a2a;
+				border-radius: 6px;
+				background: #1d1912;
+				color: #f0d9a8;
+				font-size: 13px;
+			}
+			.authbox {
+				display: block;
+				margin-top: 18px;
+			}
+			.card-foot {
+				padding: 12px 18px;
+				border-top: 1px solid var(--line);
+				background: var(--raised);
+				font-size: 12px;
+				color: var(--muted);
+			}
+
+			/* Access's controls. Its markup is not documented, so these rules style the usual elements if they sit in the page;
+			   where they do not apply, the box keeps Access's own look inside the card. */
+			cf-access-authbox {
+				color: var(--text);
+				font-family: var(--font);
+				--cf-access-color-primary: var(--accent);
+			}
+			cf-access-authbox label {
+				display: block;
+				margin-bottom: 6px;
+				font-size: 12px;
+				color: var(--muted);
+			}
+			cf-access-authbox input[type="email"],
+			cf-access-authbox input[type="text"],
+			cf-access-authbox input:not([type]) {
+				width: 100%;
+				height: 44px;
+				padding: 0 12px;
+				border: 1px solid var(--line);
+				border-radius: 6px;
+				background: var(--bg);
+				color: var(--text);
+				font: inherit;
+				font-size: 14px;
+			}
+			cf-access-authbox input::placeholder {
+				color: #6f766f;
+			}
+			cf-access-authbox input:focus {
+				outline: 2px solid var(--accent);
+				outline-offset: 2px;
+				border-color: var(--accent);
+			}
+			cf-access-authbox button,
+			cf-access-authbox input[type="submit"] {
+				width: 100%;
+				height: 44px;
+				margin-top: 12px;
+				border: 1px solid var(--accent);
+				border-radius: 6px;
+				background: var(--accent);
+				background-image: none;
+				color: var(--accent-ink);
+				font: inherit;
+				font-size: 14px;
+				font-weight: 600;
+				cursor: pointer;
+			}
+			cf-access-authbox button:hover,
+			cf-access-authbox input[type="submit"]:hover {
+				filter: brightness(1.06);
+			}
+			cf-access-authbox button:focus-visible {
+				outline: 2px solid var(--accent);
+				outline-offset: 3px;
+			}
+			cf-access-authbox a {
+				color: var(--accent);
+			}
+			cf-access-authbox hr {
+				border: 0;
+				border-top: 1px solid var(--line);
+			}
+
+			footer {
+				padding: 22px 48px;
+				border-top: 1px solid var(--line);
+				display: flex;
+				justify-content: space-between;
+				gap: 16px;
+				font-size: 12px;
+				color: var(--muted);
+			}
+
+			@media (max-width: 860px) {
+				.bar {
+					height: 64px;
+					padding: 0 16px;
+				}
+				.wordmark {
+					font-size: 20px;
+				}
+				.wordmark img {
+					width: 34px;
+				}
+				main {
+					grid-template-columns: minmax(0, 1fr);
+					gap: 32px;
+					padding: 40px 16px 40px;
+				}
+				.strip {
+					grid-template-columns: repeat(2, minmax(0, 1fr));
+				}
+				.strip div:nth-child(3) {
+					border-left: 0;
+				}
+				.strip div:nth-child(n + 3) {
+					border-top: 1px solid var(--line);
+				}
+				footer {
+					padding: 18px 16px;
+					flex-direction: column;
+					gap: 4px;
+				}
+			}
+			@media (max-width: 420px) {
+				.tag {
+					display: none;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<header class="bar">
+			<span class="wordmark">
+				<img alt="" width="40" height="36" src="data:image/webp;base64,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" />
+				<span>Anisotropy<span class="wordmark-ai">AI</span></span>
+			</span>
+			<span class="tag">Research preview / v.01</span>
+		</header>
+
+		<main>
+			<section>
+				<p class="eyebrow">Studio / Sign in</p>
+				<h1>From the coupon to its stresses.</h1>
+				<p class="lede">
+					{{ app_name | default: "Anisotropy Studio" }} is invite-only. Sign in with the email you were invited with and we
+					send you a one-time code; no password to remember.
+				</p>
+				<div class="strip" aria-hidden="true">
+					<div><span>Test</span><b>open-hole tension</b></div>
+					<div><span>Material</span><b>IM7 / 8552</b></div>
+					<div><span>Layup</span><b>[45/0/-45/90]s</b></div>
+					<div><span>Solver</span><b>engine + CalculiX</b></div>
+				</div>
+			</section>
+
+			<section class="card" aria-labelledby="card-title">
+				<div class="card-head"><span class="dot"></span>Secure sign-in</div>
+				<div class="card-body">
+					<p class="card-title" id="card-title">Sign in to {{ app_name | default: "Anisotropy Studio" }}</p>
+					<p class="card-note">Enter your email to get a sign-in code.</p>
+					{% if message.text.size > 0 %}
+					<p class="message" role="status">{{ message.text }}</p>
+					{% endif %}
+					<div class="authbox"><cf-access-authbox></cf-access-authbox></div>
+				</div>
+				<div class="card-foot">No invite yet? Ask the Anisotropy team for access.</div>
+			</section>
+		</main>
+
+		<footer>
+			<span>Anisotropy AI · {{ app_domain | default: "anisotropy.dev" }}</span>
+			<span>Sign-in secured by Cloudflare Access</span>
+		</footer>
+	</body>
+</html>

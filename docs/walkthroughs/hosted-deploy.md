@@ -53,6 +53,18 @@ Wait a few minutes after the first deploy before expecting the container to answ
 
 To add or remove a user: edit the policy's email list. Access applies it at the next sign-in; the API records the signed-in email on every run (`user_email`).
 
+### The branded sign-in page
+
+Access shows our own page instead of its stock one (ADR-0056 amendment 3). The template is `access/login-page.src.html`; `npm run build:access-page` writes `access/login-page.html`, the same page with the mark inlined (the page is shown before sign-in, so it cannot load images from `anisotropy.dev`). Access still draws the email field and the code button inside the page, so who gets in is unchanged.
+
+1. Cloudflare One → Reusable components → Custom pages → **Access custom pages** → Manage → **Create custom page**: name `anisotropy-login`, type **Login**.
+2. Replace the starter template with the whole of `access/login-page.html`. Check **Problems** for errors, look at the preview, then **Publish** (publishing only saves it).
+3. Access controls → Applications → the `anisotropy.dev` application → Additional settings → **Custom block pages** → **Login page** → Custom page → `anisotropy-login` → Save.
+4. In the same application, Login methods: leave only **One-time PIN** ticked, so the page offers the email field alone (the stock page also listed a "Cloudflare" button).
+5. Open `anisotropy.dev` in a private window and sign in with a code. Changes take a few minutes to reach every edge.
+
+To undo it, set **Login page** back to **Cloudflare default**. The address bar still shows the team domain (`<team>.cloudflareaccess.com`) while the page is up; renaming the team changes the issuer the API checks, so it would need the `ANISOTROPY_ACCESS_TEAM_DOMAIN` secret changed in the same step.
+
 ## The bucket
 
 Create the R2 bucket, then an API token with **Object Read & Write** scoped to it; its Access Key ID and Secret Access Key are the two `ANISOTROPY_R2_*` key secrets. Add a CORS policy on the bucket allowing the site's origin, `https://anisotropy.dev`, for `GET` and `HEAD`: the browser fetches a job's files from the bucket through short-lived links, and without the policy those fetches fail.
