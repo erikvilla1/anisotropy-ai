@@ -34,6 +34,8 @@ PROVIDERS = ("anthropic",)
 ACCESS_TEAM_DOMAIN_VARIABLE = "ANISOTROPY_ACCESS_TEAM_DOMAIN"
 ACCESS_AUDIENCE_VARIABLE = "ANISOTROPY_ACCESS_AUD"
 TEAM_DOMAIN = re.compile(r"^[a-z0-9-]+\.cloudflareaccess\.com$")
+# Our own sign-in in front of the API (ADR-0058): the secret the Worker signs the identity token with, shared with the API.
+SESSION_SECRET_VARIABLE = "ANISOTROPY_SESSION_SECRET"
 # The website origins that may read the API's answers from a browser, comma-separated; unset, the local development origins apply.
 ALLOWED_ORIGINS_VARIABLE = "ANISOTROPY_ALLOWED_ORIGINS"
 # Durable outputs in an object store through the S3 API, R2 in the hosted tier (ADR-0056, ADR-0050 amendment 2): the bucket, the
@@ -77,6 +79,18 @@ class AccessSettings:
 
 
 @dataclass(frozen=True)
+class IdentitySettings:
+    """Our own sign-in in front of the API (ADR-0058): off unless the session secret is named. On, every request but /healthz must
+    carry the identity token the Worker signs for a signed-in user, and that email goes to the run records."""
+
+    secret: str | None
+
+    @property
+    def on(self) -> bool:
+        return self.secret is not None
+
+
+@dataclass(frozen=True)
 class StorageSettings:
     """The object store the hosted tier keeps a job's files in (ADR-0056): off unless the bucket, the endpoint and the key pair are all
     named. Off, the files stay on the local disk, as before."""
@@ -99,6 +113,7 @@ class Settings:
     run_records: bool
     assistant: AssistantSettings = AssistantSettings(None, None)
     access: AccessSettings = AccessSettings(None, None)
+    identity: IdentitySettings = IdentitySettings(None)
     allowed_origins: tuple[str, ...] = LOCAL_ORIGINS
     storage: StorageSettings = StorageSettings(None, None, None, None)
 
@@ -128,7 +143,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     if url is not None:
         url = sqlalchemy_url(url, DATABASE_VARIABLE)
     return Settings(database_url=url, run_records=switch == "on", assistant=assistant_settings(environ), access=access_settings(environ),
-                    allowed_origins=allowed_origins(environ), storage=storage_settings(environ))
+                    identity=identity_settings(environ), allowed_origins=allowed_origins(environ), storage=storage_settings(environ))
 
 
 def storage_settings(environ: Mapping[str, str]) -> StorageSettings:
@@ -165,6 +180,15 @@ def access_settings(environ: Mapping[str, str]) -> AccessSettings:
     if not TEAM_DOMAIN.match(domain):
         raise RuntimeError(f"{ACCESS_TEAM_DOMAIN_VARIABLE} must be the team's domain alone, such as myteam.cloudflareaccess.com, not {domain!r}")
     return AccessSettings(domain, audience)
+
+
+def identity_settings(environ: Mapping[str, str]) -> IdentitySettings:
+    """Off unless the secret is set; a secret shorter than the Worker accepts is refused, so the two never disagree."""
+    secret = environ.get(SESSION_SECRET_VARIABLE, "").strip() or None
+    if secret is not None and len(secret) < 32:
+        raise RuntimeError(f"{SESSION_SECRET_VARIABLE} must be at least 32 characters, the same secret the Worker signs with "
+                           "(openssl rand -base64 48), or unset to run without the sign-in")
+    return IdentitySettings(secret)
 
 
 def allowed_origins(environ: Mapping[str, str]) -> tuple[str, ...]:

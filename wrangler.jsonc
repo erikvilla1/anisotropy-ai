@@ -13,12 +13,12 @@
   "routes": [{ "pattern": "anisotropy.dev", "custom_domain": true }],
   "workers_dev": false,
   "preview_urls": false,
-  // The site: Next.js writes it to out/. The Worker runs first only for the API's paths; everything else is a static file,
-  // /studio from studio.html with or without the slash, and a miss gets the site's 404 page.
+  // The site: Next.js writes it to out/. The Worker runs first for every request, so the sign-in (ADR-0058) can check it before
+  // any file is served; a file is then /studio from studio.html with or without the slash, and a miss gets the site's 404 page.
   "assets": {
     "directory": "./out",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"],
+    "run_worker_first": true,
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },
@@ -32,13 +32,18 @@
       "max_instances": 1
     }
   ],
+  // SignInCodes keeps the sign-in codes (ADR-0058): reached as ctx.exports.SignInCodes rather than a binding, because a binding
+  // to a class that `exports` declares fails a preview upload until a deploy has provisioned it.
   "durable_objects": {
     "bindings": [{ "name": "API", "class_name": "ApiContainer" }]
   },
   "exports": {
-    "ApiContainer": { "type": "durable-object", "storage": "sqlite" }
+    "ApiContainer": { "type": "durable-object", "storage": "sqlite" },
+    "SignInCodes": { "type": "durable-object", "storage": "sqlite" }
   }
   // Secrets, never here: `npx wrangler secret put <NAME>` for DATABASE_URL, the ANISOTROPY_ACCESS_*, ANISOTROPY_R2_* and
-  // assistant variables; the Worker hands them to the container (worker/routing.ts names them). ANISOTROPY_GIT_COMMIT is set by
-  // the deploy workflow as a variable (`--var`).
+  // assistant variables; the Worker hands them to the container (worker/routing.ts names them). The sign-in's four
+  // (worker/sign-in.ts: ANISOTROPY_SESSION_SECRET, ANISOTROPY_INVITED, RESEND_API_KEY, ANISOTROPY_EMAIL_FROM) are secrets too;
+  // the container gets the session secret to check the identity token. ANISOTROPY_GIT_COMMIT is set by the deploy workflow as a
+  // variable (`--var`).
 }

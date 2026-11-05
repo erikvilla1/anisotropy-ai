@@ -1,4 +1,10 @@
-"""Cloudflare Access in front of the API (ADR-0056): when the settings name the team domain and the application's audience tag,
+"""Who is asking, in the hosted tier. Two ways in, each switched on by its settings, and either may be on during a switch:
+
+- Our own sign-in (ADR-0058): the Worker signs a short-lived token for the signed-in user, the `X-Anisotropy-Identity` header,
+  an HS256 JWT made with a key derived from the session secret both share (worker/sign-in.ts). Checked first when present.
+- Cloudflare Access (ADR-0056), below.
+
+Cloudflare Access in front of the API (ADR-0056): when the settings name the team domain and the application's audience tag,
 every request except GET /healthz and a CORS preflight must carry the token Access adds to each request it lets through, the
 `Cf-Access-Jwt-Assertion` header: signed by one of the team's published keys, issued by that team, for this application, not
 expired. The signed-in email the token carries goes with the request to the run records (ADR-0026 amendment 1). Without the
@@ -11,6 +17,8 @@ A service token carries no email; its request passes with no email recorded.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 from collections.abc import Callable
 from typing import Any
 
@@ -20,9 +28,12 @@ from jwt.exceptions import PyJWKClientConnectionError, PyJWTError
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from .settings import AccessSettings
+from .settings import AccessSettings, IdentitySettings
 
 HEADER = "Cf-Access-Jwt-Assertion"
+IDENTITY_HEADER = "X-Anisotropy-Identity"
+IDENTITY_AUDIENCE = "anisotropy-api"  # what worker/sign-in.ts writes; both sides must agree
+IDENTITY_ISSUER = "anisotropy-sign-in"
 ALGORITHMS = ["RS256"]  # what Access signs with; nothing else is accepted
 EXEMPT_PATHS = frozenset({"/healthz"})  # what a platform polls before any user has signed in
 
@@ -50,6 +61,22 @@ def verifier(settings: AccessSettings, key_for: Callable[[str], Any] | None = No
     return verify
 
 
+def identity_key(secret: str) -> bytes:
+    """The identity token's key: HMAC-SHA256(secret, "anisotropy identity v1"), as the Worker derives it (worker/sign-in.ts)."""
+    return hmac.new(secret.encode("utf-8"), b"anisotropy identity v1", hashlib.sha256).digest()
+
+
+def identity_verifier(settings: IdentitySettings) -> Callable[[str], dict]:
+    """A function that checks one identity token from the Worker and returns its claims, or raises jwt's error."""
+    key = identity_key(settings.secret)
+
+    def verify(token: str) -> dict:
+        return jwt.decode(token, key, algorithms=["HS256"], audience=IDENTITY_AUDIENCE, issuer=IDENTITY_ISSUER, leeway=30,
+                          options={"require": ["exp", "iat", "aud", "iss", "email"]})  # leeway: the Worker's and the container's clocks
+
+    return verify
+
+
 def signed_in_email(claims: dict) -> str | None:
     """The email Access verified with the identity provider, as the token states it; None for a service token, which has none."""
     email = claims.get("email")
@@ -60,9 +87,15 @@ def _refused(status: int, detail: str) -> JSONResponse:
     return JSONResponse({"detail": detail}, status_code=status)
 
 
+def _header(scope: Scope, name: str) -> str:
+    wanted = name.lower().encode("latin-1")
+    return next((value.decode("latin-1").strip() for key, value in scope["headers"] if key == wanted), "")
+
+
 class AccessMiddleware:
-    """Refuses, with 401, any request that lacks a valid Access token while Access is on, and sets `request.state.user_email`
-    for the handlers. `app.state.access_verifier` is the check, set by the lifespan from the settings; None means Access is off."""
+    """Refuses, with 401, any request that lacks a valid token while a sign-in is on, and sets `request.state.user_email` for the
+    handlers. `app.state.identity_verifier` (our sign-in) and `app.state.access_verifier` (Cloudflare Access) are the checks, set
+    by the lifespan from the settings; None means that one is off, and both None means the local API with no sign-in."""
 
     def __init__(self, app: ASGIApp):
         self.app = app
@@ -74,11 +107,27 @@ class AccessMiddleware:
         state = scope.setdefault("state", {})
         state.setdefault("user_email", None)
         verify = getattr(scope["app"].state, "access_verifier", None)
-        if verify is None or scope["path"] in EXEMPT_PATHS or scope["method"] == "OPTIONS":
+        verify_identity = getattr(scope["app"].state, "identity_verifier", None)
+        if (verify is None and verify_identity is None) or scope["path"] in EXEMPT_PATHS or scope["method"] == "OPTIONS":
             await self.app(scope, receive, send)
             return
-        wanted = HEADER.lower().encode("latin-1")
-        token = next((value.decode("latin-1").strip() for name, value in scope["headers"] if name == wanted), "")
+        identity = _header(scope, IDENTITY_HEADER) if verify_identity is not None else ""
+        if identity:
+            try:
+                claims = verify_identity(identity)
+            except jwt.ExpiredSignatureError:
+                await _refused(401, "The sign-in token has expired; reload the page")(scope, receive, send)
+                return
+            except PyJWTError as exc:
+                await _refused(401, f"The sign-in token is not valid: {exc}")(scope, receive, send)
+                return
+            state["user_email"] = signed_in_email(claims)
+            await self.app(scope, receive, send)
+            return
+        if verify is None:
+            await _refused(401, f"Not signed in: no {IDENTITY_HEADER} header. Sign in at the site's address")(scope, receive, send)
+            return
+        token = _header(scope, HEADER)
         if not token:
             await _refused(401, f"This API is behind Cloudflare Access and the request did not come through it: no {HEADER} header. "
                                 "Sign in at the site's address")(scope, receive, send)
