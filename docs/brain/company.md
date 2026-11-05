@@ -7,10 +7,10 @@ Anisotropy AI helps engineers analyze composite laminates and test coupons, with
 - **Christopher Valerio**, CEO. Prompt engineering and AI evaluation. Approves every X post before it goes out ([x.md](x.md)).
 - **Erik Villa**, founder of the repository; AI architecture and operations; documentation and records. Decides the decision records.
 - **Kai Saucedo**, software and UI/UX; marketing and communications.
-- **Jusung Park**, reference modeling and validation; operations and logistics.
-- **Tabassum Zaman**, fabrication, prototypes and mechanical testing; partnerships and outreach.
+- The **reference modeling and validation lead**; operations and logistics.
+- The **fabrication and testing lead**: fabrication, prototypes and mechanical testing; partnerships and outreach.
 
-Roles only; see [people.md](people.md). Working rule (2026-11-03): reversible decisions are quick, irreversible ones go to the board.
+Roles only, and names only for people who agreed to be named in public; see [people.md](people.md).
 
 ## Where things live
 
@@ -25,7 +25,7 @@ Roles only; see [people.md](people.md). Working rule (2026-11-03): reversible de
 
 ## Rules that bind every agent here
 
-- Work on a branch and open a pull request. Only this `docs/brain/` folder may be written to `main` directly (ADR-0057).
+- Work on a branch and open a pull request. A pull request that touches only `docs/brain/` merges without an approval; every other one waits for Erik's (ADR-0057 amendment 1).
 - Every choice between alternatives gets a decision record in `docs/decisions/`, from `_template.md`.
 - Never quote a number in public unless an engine run record or a validation case backs it (ADR-0028).
 - Nothing posts to X without Christopher's explicit yes ([x.md](x.md)).
@@ -34,3 +34,4 @@ Roles only; see [people.md](people.md). Working rule (2026-11-03): reversible de
 ## Log
 - 2026-11-04: Brain created (ADR-0057). First shared workflow: X posting ([x.md](x.md)).
 - 2026-11-05: Team of five and the seats from the 2026-11-03 weekly meeting recorded in [people.md](people.md). Team Notion: the Anisotropy workspace with Tasks Tracker, Meetings, X, Team and Resources at the top level.
+- 2026-11-04: Brain changes go through a pull request that merges without an approval; two seats unnamed until their holders agree; the board rule removed (ADR-0057 amendment 1, Erik).
