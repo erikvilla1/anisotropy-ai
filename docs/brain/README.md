@@ -21,7 +21,7 @@ This is the one folder in the repository an agent may write to `main` without a 
 | --- | --- |
 | `company.md` | What Anisotropy is, who builds it, where things live, the rules that bind every agent |
 | `people.md` | The team, roles only |
-| `voice.md` | How Anisotropy writes in public: audience, tone, the rules for an X post |
+| `voice.md` | How Anisotropy writes in public across every channel: audience, tone, and the rules per channel (X, LinkedIn, website) |
 | `x.md` | The X posting workflow in tool-neutral terms, its rules, and the log of every post |
 
 ## Log
