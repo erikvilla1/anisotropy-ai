@@ -8,7 +8,7 @@ import {
   Factory,
   GraduationCap,
 } from "lucide-react";
-export const metadata = { title: "Industries — Anisotropy AI" };
+export const metadata = { title: "Industries — Anisotropy" };
 const priorities = [
   {
     icon: Plane,

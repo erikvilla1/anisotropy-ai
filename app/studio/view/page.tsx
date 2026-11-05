@@ -4,7 +4,7 @@ import { StudioViewer } from "@/components/studio/studio-viewer";
 import "../studio.css";
 
 export const metadata: Metadata = {
-  title: "Viewer | Anisotropy AI",
+  title: "Viewer | Anisotropy",
   description: "The 3D view of one solved coupon, by its job.",
 };
 

@@ -226,11 +226,6 @@ img {
 .wordmark svg {
   color: var(--accent);
 }
-.wordmark-ai {
-  font-weight: 400;
-  color: var(--muted);
-  margin-left: 3px;
-}
 .brand-dot {
   color: var(--accent);
 }
@@ -2323,4 +2318,143 @@ img {
 }
 .research-image > img {
   inset: 0;
+}
+
+/* The Services disclosure in the header (ADR-0058): a link plus a button that shows the five service pages. */
+.nav-disclosure {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nav-disclosure-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #b6bcb6;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s, transform 0.2s;
+}
+.nav-disclosure-button:hover,
+.nav-disclosure-button:focus-visible,
+.nav-disclosure.open .nav-disclosure-button {
+  color: var(--accent);
+  background: #1b211b;
+}
+.nav-disclosure.open .nav-disclosure-button svg {
+  transform: rotate(180deg);
+}
+.nav-sublist {
+  position: absolute;
+  top: calc(100% + 14px);
+  left: -16px;
+  min-width: 240px;
+  margin: 0;
+  padding: 10px 0;
+  list-style: none;
+  background: #11170f;
+  border: 1px solid #3e4b34;
+  border-radius: 10px;
+  box-shadow: 0 18px 40px #00000066;
+  z-index: 40;
+}
+.nav-sublist::before {
+  content: "";
+  position: absolute;
+  top: -14px;
+  left: 0;
+  right: 0;
+  height: 14px;
+}
+.nav-sublist li a {
+  display: block;
+  padding: 9px 18px;
+  font-size: 12px;
+  color: #d5dad3;
+  white-space: nowrap;
+}
+.nav-sublist li a:hover,
+.nav-sublist li a:focus-visible,
+.nav-sublist li a[aria-current="page"] {
+  color: var(--accent);
+  background: #161c15;
+}
+@media (max-width: 640px) {
+  .nav-disclosure {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .nav-disclosure-button {
+    display: none;
+  }
+  .main-nav.open .nav-sublist {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: static;
+    min-width: 0;
+    padding: 0 0 0 14px;
+    border: 0;
+    border-left: 1px solid #3e4b34;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .nav-sublist li a {
+    padding: 6px 0;
+    font-size: 13px;
+  }
+}
+
+/* A photo or clip slot, or the labelled placeholder that holds its place (audit of 2026-10-31). */
+.media-slot {
+  margin: 0;
+}
+.media-slot-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.media-slot-frame img,
+.media-slot-frame video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.media-slot-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
+  text-align: center;
+  border: 1px dashed #4a5a44;
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 14px, #ffffff06 14px 15px),
+    var(--panel);
+}
+.media-slot-placeholder strong {
+  font-family: var(--heading);
+  font-weight: 500;
+  font-size: 15px;
+  color: #d5dad3;
+  max-width: 32ch;
+}
+.media-slot figcaption {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
 }

@@ -1,53 +1,31 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  BookOpen,
-  Box,
-  FileText,
-  Layers3,
-  ScanLine,
-} from "lucide-react";
-import { CouponVisual } from "@/components/coupon-visual";
-export const metadata = { title: "Services — Anisotropy AI" };
-const offerings = [
-  [
-    Layers3,
-    "Define the problem",
-    "Capture geometry, material, ply sequence, loads, boundary conditions, and manufacturing constraints in one structured scope.",
-    "01 / SCOPE",
-  ],
-  [
-    BookOpen,
-    "Choose a material basis",
-    "Explore composite properties, thicknesses, architectures, and source references. Keep missing values and review status visible.",
-    "02 / MATERIALS LIBRARY",
-  ],
-  [
-    Box,
-    "Build the geometry",
-    "Create a parametric coupon, inspect dimensions and the load path, and carry a consistent geometry into CAD and meshing.",
-    "03 / CAD & GEOMETRY",
-  ],
-  [
-    ScanLine,
-    "Investigate the response",
-    "Connect laminate theory with finite element analysis to inspect stress, strain, critical plies, and possible failure regions.",
-    "04 / ENGINEERING ANALYSIS",
-  ],
-  [
-    Layers3,
-    "Compare candidate layups",
-    "Search for lighter stacks within the specified load, stiffness, symmetry, balance, and manufacturing constraints.",
-    "05 / DESIGN EXPLORATION",
-  ],
-  [
-    FileText,
-    "Understand the conclusion",
-    "Follow a detailed solution from assumptions and equations to verification, test comparison, and a reproducible report.",
-    "06 / DOCUMENTATION & LEARNING",
-  ],
-] as const;
+import { ArrowUpRight, BookOpen, Box, ClipboardList, FileText, Layers3, ScanLine, Wrench } from "lucide-react";
+import { MediaSlot } from "@/components/media-slot";
+import { serviceHref, services, statusLabel, type Service } from "@/lib/services";
+import "./services.css";
+
+export const metadata = {
+  title: "Services — Anisotropy",
+  description: "Computer-aided design, finite element modeling, test plans, documentation and manufacturing plans for composite coupons, each on its own page.",
+};
+
+const icons: Record<Service["slug"], typeof Layers3> = {
+  "computer-aided-design": Box,
+  "finite-element-modeling": ScanLine,
+  "test-plans": ClipboardList,
+  documentation: FileText,
+  "manufacturing-plans": Wrench,
+};
+
+const media: Record<Service["slug"], { label: string; src?: string; alt?: string }> = {
+  "computer-aided-design": { label: "The studio's mesh of an open-hole coupon" },
+  "finite-element-modeling": { label: "A solved coupon in the studio: the first ply to fail" },
+  "test-plans": { label: "Coupon specimens before a tensile test", src: "/assets/images/coupon-01.jpg", alt: "A composite coupon specimen" },
+  documentation: { label: "Pages of a coupon package: model chapter and comparison table" },
+  "manufacturing-plans": { label: "Laying up a coupon panel", src: "/assets/images/carbon-weave.jpg", alt: "Woven carbon fiber" },
+};
+
+/** The services landing page (audit of 2026-10-31, item 13): one short summary per service, each leading to its page. */
 export default function Services() {
   return (
     <main id="main" className="inner-page services-page">
@@ -63,9 +41,8 @@ export default function Services() {
               to <em>a documented answer.</em>
             </h1>
             <p>
-              Bring the steps of composite development together: a material
-              library, a clear specification, CAD, physics, FEA, and
-              explanations that make the result understandable.
+              Five ways to use the same platform: the geometry, the model, the test, the document and the plan for
+              the shop, all from one coupon record. Each page says what exists today and what is planned.
             </p>
           </div>
           <div className="intro-aside">
@@ -99,114 +76,52 @@ export default function Services() {
           </Link>
         </div>
       </section>
-      <section className="section product-offerings">
+      <section className="section service-grid-section">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">LESS FRICTION BETWEEN STEPS</span>
+            <span className="eyebrow">THE FIVE SERVICES</span>
             <h2>
-              One question.
-              <br />A connected process.
+              One record.
+              <br />
+              Five ways to use it.
             </h2>
           </div>
           <p>
-            The product we are developing keeps the inputs, methods, and
-            evidence together as a composite moves from an idea to a testable
-            design.
+            A coupon described once feeds every service. The finite element model and the documentation are built;
+            geometry and test plans exist in part; manufacturing plans are stated as planned.
           </p>
         </div>
-        <div className="offering-grid">
-          {offerings.map(([Icon, title, desc, label]) => (
-            <article key={title}>
-              <div>
-                <Icon size={25} strokeWidth={1.4} />
-                <span>{label}</span>
-              </div>
-              <h3>{title}</h3>
-              <p>{desc}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-      <section className="section solution-section">
-        <div>
-          <span className="eyebrow">THE ANSWER SHOULD TEACH YOU SOMETHING</span>
-          <h2>
-            See the result.
-            <br />
-            Understand the route.
-          </h2>
-          <p>
-            For researchers, students, and engineering teams, a detailed
-            solution is part of the product. Follow the transformations from
-            global loads to local ply stresses and see why a criterion
-            identifies a critical ply.
-          </p>
-          <ul className="solution-list">
-            <li>Geometry and boundary-condition review</li>
-            <li>Stress, strain, and failure-mode assessment</li>
-            <li>Equations, substitutions, assumptions, and units</li>
-            <li>Material references and reproducible inputs</li>
-            <li>Verification history and a LaTeX report package</li>
-          </ul>
-          <Link className="text-button" href="/library">
-            Inspect the physics catalog <ArrowRight size={16} />
-          </Link>
-        </div>
-        <div className="concept-panel">
-          <div className="concept-top">
-            <span>COUPON / CRITICAL REGION</span>
-            <span className="sample-badge">CONCEPT</span>
-          </div>
-          <CouponVisual mode="failure" />
-          <p>
-            Illustrative visualization. Numerical analysis and generated CAD
-            files are planned capabilities.
-          </p>
-        </div>
-      </section>
-      <section className="section library-callout">
-        <div>
-          <span className="eyebrow">
-            A CORE PRODUCT / THE MATERIALS LIBRARY
-          </span>
-          <h2>
-            Build on knowledge.
-            <br />
-            Keep its source.
-          </h2>
-          <p>
-            Carbon and glass composites, sandwich cores, ply thicknesses, and
-            manufacturing context—connected to the methods used to understand
-            them.
-          </p>
-          <Link className="button primary" href="/library">
-            Explore the library <ArrowUpRight size={17} />
-          </Link>
-        </div>
-        <div className="library-preview-list">
-          {[
-            "22 initial source material records",
-            "Ply thicknesses & material context",
-            "Topic-based functions & governing equations",
-            "Source pages, units & review notes",
-          ].map((s, i) => (
-            <div key={s}>
-              <span>0{i + 1}</span>
-              {s}
-              <BookOpen size={16} />
-            </div>
-          ))}
+        <div className="service-grid">
+          {services.map((service, i) => {
+            const Icon = icons[service.slug];
+            const picture = media[service.slug];
+            return (
+              <article className="service-card" key={service.slug}>
+                <MediaSlot label={picture.label} src={picture.src} alt={picture.alt} ratio="3/2" />
+                <div className="service-card-body">
+                  <div className="service-card-top">
+                    <Icon size={22} strokeWidth={1.4} />
+                    <span className="tiny-label">0{i + 1} / {service.eyebrow}</span>
+                    <span className={`service-status service-status-${service.status}`}>{statusLabel[service.status]}</span>
+                  </div>
+                  <h3>{service.title}</h3>
+                  <p>{service.summary}</p>
+                  <Link className="text-button" href={serviceHref(service)}>
+                    Read about {service.title.toLowerCase()} <ArrowUpRight size={15} />
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
       <section className="section service-preview-note">
         <p>
-          Explore the product preview. The scope conversation, source library,
-          and local CSV review are interactive; production analysis, CAD
-          generation, optimization, and automated detailed solutions will follow
-          the engineering validation work.
+          The studio, the materials library and the calculator are interactive today. Every page under Services
+          names its planned parts as planned, without a date.
         </p>
-        <Link href="/data">
-          Explore test-data submission <ArrowUpRight size={15} />
+        <Link href="/contact">
+          Ask about access <ArrowUpRight size={15} />
         </Link>
       </section>
     </main>

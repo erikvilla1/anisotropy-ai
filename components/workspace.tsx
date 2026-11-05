@@ -105,7 +105,7 @@ function Answer({ reply }: { reply: Reply }) {
           className="text-button"
           onClick={() =>
             downloadFile(
-              "anisotropy-ai-report-outline.tex",
+              "anisotropy-report-outline.tex",
               latexReport(reply.scope),
               "application/x-tex",
             )
@@ -208,7 +208,7 @@ function Answer({ reply }: { reply: Reply }) {
           className="text-button"
           onClick={() =>
             downloadFile(
-              "anisotropy-ai-scope.json",
+              "anisotropy-scope.json",
               JSON.stringify(reply.scope, null, 2),
               "application/json",
             )
@@ -251,7 +251,7 @@ function Answer({ reply }: { reply: Reply }) {
       <>
         <h4>From a coupon specification to a traceable result.</h4>
         <p>
-          Anisotropy AI is a proposed engineering workflow for composite
+          Anisotropy is a proposed engineering workflow for composite
           laminates. The first phase focuses on unnotched and open-hole tension
           coupons in one carbon/epoxy material system.
         </p>
@@ -554,7 +554,7 @@ export function Workspace({
               </div>
               <div className="chat-toolbar">
                 <span>
-                  <span className="status-dot" /> Anisotropy AI{" "}
+                  <span className="status-dot" /> Anisotropy{" "}
                   <span className="muted">/ Chat</span>
                 </span>
                 <button
@@ -583,7 +583,7 @@ export function Workspace({
                   </span>
                   <div>
                     <span className="message-author">
-                      ANISOTROPY AI <small>DEMO</small>
+                      ANISOTROPY <small>DEMO</small>
                     </span>
                     <h4>What are you working toward?</h4>
                     <p>
@@ -617,7 +617,7 @@ export function Workspace({
                       </span>
                       <div>
                         <span className="message-author">
-                          ANISOTROPY AI{" "}
+                          ANISOTROPY{" "}
                           <small>{m.reply.kind.toUpperCase()}</small>
                         </span>
                         <Answer reply={m.reply} />

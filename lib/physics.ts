@@ -149,7 +149,7 @@ const existingPhysicsTopics: PhysicsTopic[] = [
     subtitle: "Geometry, boundary conditions, and independent checks",
     assumptions:
       "The relations below describe a small-displacement linear elastic analysis. Solver choice, element formulation, geometry tolerances, units, and acceptance thresholds belong in the analysis record.",
-    source: "Anisotropy AI · Analysis workflow",
+    source: "Anisotropy · Analysis workflow",
     url: "/services",
     methods: [
       m(
@@ -185,7 +185,7 @@ const existingPhysicsTopics: PhysicsTopic[] = [
     subtitle: "Local fields, calibrated models, and future development",
     assumptions:
       "A hole introduces nonuniform stress. Unnotched lamina strength alone does not validate open-hole strength. Coupon geometry, laminate architecture, characteristic length, and test evidence must match the chosen model.",
-    source: "Anisotropy AI · Research scope",
+    source: "Anisotropy · Research scope",
     url: "/services",
     methods: [
       m(
@@ -211,7 +211,7 @@ const existingPhysicsTopics: PhysicsTopic[] = [
     subtitle: "Search candidates, then verify the proposed stack",
     assumptions:
       "An optimization result is conditional on its material basis, load cases, constraints, and model validity. Candidate ranking alone does not qualify a design.",
-    source: "Anisotropy AI · Design exploration",
+    source: "Anisotropy · Design exploration",
     url: "/services",
     methods: [
       m(

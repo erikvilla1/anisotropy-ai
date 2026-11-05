@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Anisotropy AI helps engineers analyze composite laminates and test coupons, with results they can trace to equations, material sources and tests. The proposed first release is screening of unnotched laminates for one reviewed material family.
+Anisotropy helps engineers analyze composite laminates and test coupons, with results they can trace to equations, material sources and tests. The proposed first release is screening of unnotched laminates for one reviewed material family.
 
 ## Key principle
 
@@ -12,7 +12,7 @@ Tested, deterministic code computes every number. A language model, once added, 
 
 | Layer | What it does | Status | Where |
 | --- | --- | --- | --- |
-| Website | Product pages, materials library, physics references, chat/CSV previews and laminate calculator | Static export; calculator calls local API. Chat still uses a local parser | `app/`, `components/`, `lib/`, [calculator card](components/calculator.md) |
+| Website | Product pages (five service pages, a contact page, ADR-0058), materials library, physics references, the coupon studio, chat/CSV previews and the laminate calculator | Static export; calculator calls local API. Chat still uses a local parser | `app/`, `components/`, `lib/`, [calculator card](components/calculator.md) |
 | Material data | 25 cited property datasets with provenance and a rights class per source (NCAMP, NASA, AGATE, MIL-HDBK-17F, datasheets, textbook values); a monitor that detects source changes; a physics page with a card for every engine equation | Built | `lib/curated-materials.ts`, `lib/source-rights.ts`, `lib/physics*.ts`, `services/material-monitor/` |
 | Engine | Laminate stiffness and compliance; forward, prescribed-curvature and mixed-condition response; temperature change and residual stresses; first-ply failure by maximum stress, maximum strain, Tsai-Hill and Tsai-Wu with fixed and variable loads; engineering constants; plate buckling of simply supported symmetric laminates; plies of several materials and thicknesses | Built, version 0.1 | `engine/`, [engine card](components/engine.md), [constrained analysis](components/prescribed-curvature.md) |
 | Validation cases | Textbook/answer-key references and constructed analytical checks | Built, 32 cases | `engine/validation/` |
