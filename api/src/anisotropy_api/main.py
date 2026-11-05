@@ -25,6 +25,7 @@ from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 
 from .access import AccessMiddleware
+from .access import identity_verifier
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .coupon_jobs import LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
@@ -82,8 +83,11 @@ async def lifespan(app: FastAPI):
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     # Behind Cloudflare Access, every request but /healthz must carry a valid token (ADR-0056); None means no sign-in, the local API.
     app.state.access_verifier = access_verifier(settings.access) if settings.access.on else None
+    # Behind our own sign-in, the Worker's identity token instead (ADR-0058); either is accepted while both are on.
+    app.state.identity_verifier = identity_verifier(settings.identity) if settings.identity.on else None
     yield
     app.state.access_verifier = None
+    app.state.identity_verifier = None
     if app.state.records is not None:
         app.state.records.dispose()
         app.state.records = None

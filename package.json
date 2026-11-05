@@ -9,7 +9,6 @@
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "build:hosted": "tsx scripts/build-hosted.ts",
-    "build:access-page": "tsx scripts/build-access-page.ts",
     "start": "serve out -l 3000",
     "preview": "serve out -l 3001",
     "typecheck": "tsc --noEmit",

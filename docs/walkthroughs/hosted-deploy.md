@@ -1,6 +1,6 @@
 # The hosted tier: what runs where, how to deploy, how to roll back
 
-The decision is [ADR-0056](../decisions/ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md); this page is the operator's side of it. Everything below is invite-only: nobody reaches the site or the API without signing in through Cloudflare Access.
+The decision is [ADR-0056](../decisions/ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md); this page is the operator's side of it. Everything below is invite-only: nobody reaches the site or the API without signing in, through our own sign-in once its secrets are set (ADR-0058) and through Cloudflare Access before that.
 
 ## The pieces
 
@@ -8,7 +8,8 @@ The decision is [ADR-0056](../decisions/ADR-0056-the-hosted-tier-runs-on-cloudfl
 | --- | --- | --- |
 | The Worker `anisotropy-studio` | Serves the website's static export (`out/`) and forwards `/api/*` to the container | [`wrangler.jsonc`](../../wrangler.jsonc), [`worker/index.ts`](../../worker/index.ts) |
 | The container `ApiContainer` | The API with CalculiX, Gmsh and Tectonic, one instance, built from the [`Dockerfile`](../../Dockerfile) by `wrangler deploy` | `wrangler.jsonc` (`containers`), [docker/README.md](../../docker/README.md) |
-| Cloudflare Access | Sign-in with an email allow list and one-time PINs, in front of the Worker; adds the token the API checks | Zero Trust dashboard; the API's `ANISOTROPY_ACCESS_*` secrets |
+| Our sign-in (ADR-0058) | `/sign-in` in the Worker: an invite list, a code by email (Resend), a signed session cookie; adds the token the API checks | the four sign-in secrets (below); `SignInCodes` Durable Object |
+| Cloudflare Access | The sign-in before ADR-0058, to be removed once ours works | Zero Trust dashboard; the API's `ANISOTROPY_ACCESS_*` secrets |
 | Neon PostgreSQL | The run records and the jobs table | the `DATABASE_URL` secret; migrations by the deploy workflow |
 | R2 | A done job's files, its package and the coupon folders; the coupons are restored from it when the container starts | the `ANISOTROPY_R2_*` secrets; the bucket's CORS policy |
 | GitHub Actions | [`deploy.yml`](../../.github/workflows/deploy.yml): build, migrate, deploy on a green merge to `main`; a preview version per pull request | repository secrets |
@@ -53,25 +54,38 @@ Wait a few minutes after the first deploy before expecting the container to answ
 
 To add or remove a user: edit the policy's email list. Access applies it at the next sign-in; the API records the signed-in email on every run (`user_email`).
 
-### The branded sign-in page
+### The Access login page, until Access goes
 
-As set on 2026-11-05 (ADR-0056 amendment 3): this account has only Cloudflare's older login page settings, so the page is branded through them. Zero Trust → Reusable components → Custom pages → **Access login page** → Manage:
+Set on 2026-11-05 (ADR-0056 amendment 3), in Zero Trust → Reusable components → Custom pages → **Access login page**:
+- name `Anisotropy Studio`
+- the mark as the logo, from the public repository at a pinned commit (`https://raw.githubusercontent.com/erikvilla1/anisotropy-ai/9458317fb9fefa5785c7371f158c6ddc4814f82c/access/mark.png`)
+- a header and an invite-only message
+- background `#0c0e0d`
 
-- Organization name: `Anisotropy Studio` (the App Launcher shows it too).
-- Logo URL: `access/mark.png` from the public repository, at `https://raw.githubusercontent.com/erikvilla1/anisotropy-ai/<commit>/access/mark.png` (the page is shown before sign-in, so the logo cannot come from `anisotropy.dev`). Use a commit on `main` once this is merged.
-- Header text: "Sign in with the email you were invited with. We'll send you a one-time code."
-- Message: "Anisotropy Studio is invite-only. No invite yet? Ask the Anisotropy team for access."
-- Custom background colour: on, `#0c0e0d` (the site's `--bg`).
+The application allows **One-time PIN** only, with instant authentication. Our own sign-in below replaces all of this.
 
-The application allows only **One-time PIN** under Authentication, with instant authentication on, so the page shows the email field alone. Cloudflare keeps its own header and white card; the settings apply to every Access application in the account.
+## Sign-in: our own (ADR-0058)
 
-The full page in the studio's style, `access/login-page.src.html` (built to `access/login-page.html` by `npm run build:access-page`), is an **Access custom page** of type Login. That feature (a card named **Access custom pages** on the Custom pages screen, and a **Login page** row under the application's Additional settings → Custom block pages) is not offered on this account; Cloudflare's page says to ask support when it is missing. If it appears:
+[ADR-0058](../decisions/ADR-0058-our-own-email-code-sign-in-in-the-worker-replaces-cloudflare-access-in-front-of-the-hosted-tier.md): the Worker serves `/sign-in`, emails a six-digit code to an invited address, and sets a signed session cookie; every other request needs it, and the API gets the email as a token it checks. It is off until its four secrets are set, and a partial set answers 503 rather than opening the site.
 
-1. Access custom pages → Manage → **Create custom page**: name `anisotropy-login`, type **Login**; replace the starter with the whole of `access/login-page.html`; clear **Problems**; **Publish**.
-2. The application → Additional settings → Custom block pages → **Login page** → `anisotropy-login` → Save.
-3. Sign in from a private window. To undo it, set **Login page** back to **Cloudflare default**.
+**The email sender (once).** At [resend.com](https://resend.com), add the domain `anisotropy.dev` and add the DNS records it lists in Cloudflare → `anisotropy.dev` → DNS. Wait until Resend shows the domain verified, then create an API key with sending access.
 
-The address bar still shows the team domain (`<team>.cloudflareaccess.com`); renaming the team changes the issuer the API checks, so it would need the `ANISOTROPY_ACCESS_TEAM_DOMAIN` secret changed in the same step.
+**Switching it on**, after the code is deployed (the Worker then still runs behind Access, unchanged):
+
+```bash
+openssl rand -base64 48 | npx wrangler secret put ANISOTROPY_SESSION_SECRET   # signs sessions; the container gets it too
+npx wrangler secret put ANISOTROPY_INVITED       # e.g. erik@example.com, kai@example.com, @anisotropy.dev
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put ANISOTROPY_EMAIL_FROM    # Anisotropy <sign-in@anisotropy.dev>
+```
+
+Each `secret put` deploys the current version with the new value. Once all four are set, visitors sign in twice for a moment: Access first, then ours. Sign in with our page and check that the studio solves. Then, in Zero Trust → Access controls → Applications, delete the `Anisotropy Studio` application. Then remove `ANISOTROPY_ACCESS_TEAM_DOMAIN` and `ANISOTROPY_ACCESS_AUD` (`npx wrangler secret delete …`). Until those two go, the API accepts Access's token as well as ours. Nothing outside Cloudflare's network can reach the container, so this is safe.
+
+**Adding or removing a user:** change `ANISOTROPY_INVITED`. Removing an email ends that person's session at their next request.
+
+**Signing out:** `https://anisotropy.dev/sign-out`. Changing `ANISOTROPY_SESSION_SECRET` signs everyone out.
+
+**Going back to Access:** recreate the Access application first, then delete all four sign-in secrets. Deleting only some of them leaves the site answering 503.
 
 ## The bucket
 
