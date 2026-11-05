@@ -62,6 +62,30 @@ def test_textbook_values_in_si_convert_without_change_and_carry_thermal_expansio
     assert m.ply_thickness_m is None and any(item.startswith("ply thickness") for item in m.not_provided)
 
 
+def test_density_and_fiber_volume_fraction_are_cited_when_the_record_states_one_value():
+    textbook = library_material("as4-3501")  # Table A.4: 1.6 g/cm^3 recorded in kg/m^3, Vf 63 %
+    assert textbook.density_kg_per_m3 == 1600.0 and textbook.fiber_volume_fraction == pytest.approx(0.63)
+    assert textbook.value("density").source_value == 1.6 and textbook.value("density").source_unit == "g/cm³"
+    assert textbook.value("Vf").unit == "—" and textbook.value("Vf").key == "Vf"
+    ncamp = library_material("im7-8552")  # the panel summary: density-LT 1.58 g/cm^3, Vf-LT 57.3 %
+    assert ncamp.density_kg_per_m3 == pytest.approx(1580.0) and ncamp.fiber_volume_fraction == pytest.approx(0.573)
+    assert ncamp.value("density").key == "density-LT" and ncamp.value("Vf").key == "Vf-LT"
+    # Beside the values the analysis used, not among them: a deck header lists `values` and stays as it was.
+    assert [v.role for v in ncamp.extra_values] == ["density", "Vf"]
+    assert all(v.role not in ("density", "Vf") for v in ncamp.values)
+    assert not any(item.startswith(("density", "fiber volume")) for item in ncamp.not_provided)
+
+
+def test_a_record_without_a_density_or_a_fraction_says_so_instead_of_guessing():
+    m = library_material("x840-z60-pw")  # a density, no fiber volume fraction
+    assert m.density_kg_per_m3 == pytest.approx(1610.0) and m.fiber_volume_fraction is None
+    assert any(item == "fiber volume fraction: none of Vf, Vf-LT, Vf-WT, Vf-nominal" for item in m.not_provided)
+    nasa = library_material("im7-8552", "nasa-tm-20230001560-im7-8552-rt-measured-v1")  # neither
+    assert nasa.density_kg_per_m3 is None and nasa.fiber_volume_fraction is None
+    assert any(item.startswith("density: none of") for item in nasa.not_provided)
+    assert nasa.extra_values == () and all(v.role not in ("density", "Vf") for v in nasa.values)
+
+
 def test_fahrenheit_expansion_coefficients_convert_to_per_kelvin():
     assert (1e-6 / DEG_F) == pytest.approx(1.8e-6)
 

@@ -1,4 +1,4 @@
-# Component card: local laminate API | version 0.3 | updated 2026-10-28
+# Component card: local laminate API | version 0.4 | updated 2026-11-05
 
 ## Purpose and intended use
 
@@ -6,7 +6,7 @@ Expose the existing engine's stiffness and deformation calculations to local HTT
 
 ## Inputs / outputs
 
-`POST /v1/laminates/response`: explicit `SI_BASE` units, one elastic material and source-reference text, bottom-first ply stack and all six load resultants. Returns A/B/D, mid-plane engineering strains, curvatures, accepted inputs and engine package version. Unknown fields and invalid/non-finite values fail with 422.
+`POST /v1/laminates/response`: explicit `SI_BASE` units, one elastic material and source-reference text, bottom-first ply stack and all six load resultants. Returns A/B/D, mid-plane engineering strains, curvatures, accepted inputs and engine package version. Unknown fields and invalid/non-finite values fail with 422. Since ADR-0059 it also returns `summary` (the stack described before any load: ply count, total thickness, symmetric, antisymmetric, balanced, the kind judged on A, the couplings at a stated relative tolerance, and the areal mass from the cited density or the reason it is null) and `first_ply_failure` (under the request's loads, every load scaling together: the criteria the inputs support with R, the ply, its face, z, the mode and the loads at failure; the others listed as not computed with the engine's reason; `evaluated` false with the reason when every load is zero or a ply has no strengths). `material_provenance` carries `density_kg_per_m3` and `fiber_volume_fraction` when the record states them.
 
 `POST /v1/laminates/prescribed-curvature`: explicit `SI_BASE`, `bottom_to_top`, material/source, plies, three forces and three prescribed curvatures. Returns A/B/D, required applied moments, strain and the engine's forward verification with residuals/tolerances. Supplied moments are rejected. Numerical failure returns 422. [Chunk 3 walkthrough](../walkthroughs/chunk-3-constrained-analysis.md).
 

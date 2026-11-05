@@ -54,6 +54,8 @@ The calculator also reads the course's Excel input template directly: `uv run py
 | `fpf_ratio_max_stress`, `fpf_ratio_max_strain`, `fpf_ratio_tsai_hill`, `fpf_ratio_tsai_wu` | First-ply-failure strength ratio R on the variable loads (maximum strain needs strain limits; Tsai-Wu needs `f12_star`) |
 | `fpf_forces_...`, `fpf_moments_...` | Loads at first-ply failure, fixed + R * variable (suffix `max_stress`, `max_strain`, `tsai_hill` or `tsai_wu`) |
 | `fpf_ply_...`, `fpf_z_...` | Ply number (1 at the bottom) and z of the face where the first ply fails |
+| `total_thickness` | The stack's thickness h, the sum of the ply thicknesses, in the case's length unit |
+| `areal_mass` | Mass per area, the sum of density times thickness over the plies, when every ply's material is a library dataset that records a density (SI kg/m^2; US and psi lb/in^2, pound-mass); absent for a typed material |
 | `buckling_factor`, `buckling_loads`, `buckling_mode`, `buckling_orthotropic_factor` | Plate buckling with `[plate]` and `[buckling]`: factor on the reference resultants, critical [Nx, Ny, Nxy], (m, n) half-waves for the closed form, and the orthotropic estimate beside a Ritz result |
 
 Per-ply results can list every row, or only the plies an answer key reports, as a table keyed by ply number with ply 1 at the bottom:
