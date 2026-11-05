@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { CouponVisual } from "@/components/coupon-visual";
 
-export const metadata = { title: "About — Anisotropy AI" };
+export const metadata = { title: "About — Anisotropy" };
 export default function About() {
   return (
     <main id="main" className="inner-page">

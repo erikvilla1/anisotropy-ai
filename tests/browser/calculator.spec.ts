@@ -5,7 +5,7 @@ test("calculator sends converted inputs to the real engine and displays its resp
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   await page.goto("/");
-  await page.getByRole("link", { name: "Calculator", exact: true }).click();
+  await page.goto("/calculator");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("From layup to response.");
   await expect(page.getByTestId("calculation-results")).toHaveCount(0);
   const posted = page.waitForRequest((r) => r.url().endsWith("/v1/laminates/response") && r.method() === "POST");

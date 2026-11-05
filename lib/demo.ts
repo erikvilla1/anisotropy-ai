@@ -314,7 +314,7 @@ export function latexReport(scope: Scope): string {
   return String.raw`\documentclass{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,longtable,hyperref}
-\title{Anisotropy AI: Analysis Report Outline}
+\title{Anisotropy: Analysis Report Outline}
 \date{Product preview -- no analysis results}
 \begin{document}
 \maketitle

@@ -537,7 +537,7 @@ export default function Home() {
         </div>
         {lightbox && <img src={lightbox.image} alt={lightbox.title} />}
         <div className="lightbox-footer">
-          SOURCE RESEARCH ASSET <span>Anisotropy AI / Research library</span>
+          SOURCE RESEARCH ASSET <span>Anisotropy / Research library</span>
         </div>
       </dialog>
     </>

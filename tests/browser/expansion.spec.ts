@@ -68,6 +68,45 @@ test("material filters, empty state, references and scope handoff", async ({
   await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
 });
 
+test("the Services disclosure lists the five service pages and the contact page has an address (ADR-0058)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Show services" });
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("link", { name: "Finite element modeling", exact: true })).toBeHidden();
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(button).toHaveAttribute("aria-expanded", "true");
+  const fem = page.getByRole("link", { name: "Finite element modeling", exact: true });
+  await expect(fem).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await expect(button).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("link", { name: "Computer-aided design", exact: true })).toBeFocused();
+  await fem.click();
+  await expect(page).toHaveURL(/\/services\/finite-element-modeling\/?$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("ply by ply");
+  await expect(page.getByRole("link", { name: "Open the studio", exact: true })).toHaveAttribute("href", /\/studio$/);
+  await page.getByRole("link", { name: "Contact us", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/contact\/?$/);
+  await expect(page.getByRole("link", { name: /erikvilla947@gmail\.com/ })).toHaveAttribute("href", "mailto:erikvilla947@gmail.com");
+  await expect(page.getByRole("link", { name: "Calculator", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Studio", exact: true })).toHaveCount(0);
+  await expect(page.locator(".site-header .wordmark")).toHaveText("Anisotropy");
+});
+
+test("the mobile menu lists the five services under Services", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open menu" }).click();
+  for (const name of ["Computer-aided design", "Finite element modeling", "Test plans", "Documentation", "Manufacturing plans"])
+    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Test plans", exact: true }).click();
+  await expect(page).toHaveURL(/\/services\/test-plans\/?$/);
+});
+
 test("expanded pages fit phones and tablets with local-only visual assets", async ({
   page,
 }) => {
@@ -80,6 +119,8 @@ test("expanded pages fit phones and tablets with local-only visual assets", asyn
       "/about",
       "/industries",
       "/services",
+      "/services/finite-element-modeling",
+      "/contact",
       "/library",
       "/chat",
       "/data",

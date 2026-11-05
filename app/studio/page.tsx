@@ -3,7 +3,7 @@ import { StudioModes } from "@/components/studio/studio-modes";
 import "./studio.css";
 
 export const metadata: Metadata = {
-  title: "Coupon studio | Anisotropy AI",
+  title: "Coupon studio | Anisotropy",
   description: "State a coupon test, check its setup, solve it with the Anisotropy engine and read the result in 3D.",
 };
 

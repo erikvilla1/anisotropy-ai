@@ -9,7 +9,7 @@ import "./provenance.css";
 import { SiteHeader, SiteFooter } from "@/components/site-shell";
 
 export const metadata: Metadata = {
-  title: "Anisotropy AI — From material to understanding",
+  title: "Anisotropy — From material to understanding",
   description:
     "An engineering intelligence platform connecting composite coupon design, physical testing, and traceable analysis. Explore the first chapter.",
   icons: {

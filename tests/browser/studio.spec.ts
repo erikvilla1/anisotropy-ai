@@ -60,8 +60,8 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/");
-  await page.getByRole("link", { name: "Studio", exact: true }).click();
+  await page.goto("/services/finite-element-modeling");
+  await page.getByRole("link", { name: "Open the studio", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("From the coupon to its stresses.");
   await expect(page.getByTestId("empty-scene")).toBeVisible();
   await page.getByRole("tab", { name: "Full form" }).click();
