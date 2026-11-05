@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Discriminator, Field, FiniteFloat, P
 from anisotropy_engine.lamina import Lamina
 from anisotropy_engine.library import LibraryMaterial, library_material
 from anisotropy_engine.response import Loads
+from anisotropy_engine.summary import FailureSummary, LaminateSummary
 
 
 class Contract(BaseModel):
@@ -103,7 +104,9 @@ class MaterialProvenance(Contract):
     nu12: float
     ply_thickness_m: float | None
     not_provided: list[str]
-    values: list[CitedValueOutput]
+    values: list[CitedValueOutput]  # what the analysis used, then the density and fiber volume fraction the record states (ADR-0059)
+    density_kg_per_m3: float | None = Field(default=None, description="The composite density the record states; null when it states none")
+    fiber_volume_fraction: float | None = Field(default=None, description="A fraction; null when the record states none")
 
     @classmethod
     def of(cls, material: LibraryMaterial) -> "MaterialProvenance":
@@ -112,7 +115,8 @@ class MaterialProvenance(Contract):
                    citation=material.citation, E1_pa=material.lamina.E1, E2_pa=material.lamina.E2,
                    G12_pa=material.lamina.G12, nu12=material.lamina.nu12, ply_thickness_m=material.ply_thickness_m,
                    not_provided=list(material.not_provided),
-                   values=[CitedValueOutput(**vars(v)) for v in material.values])
+                   values=[CitedValueOutput(**vars(v)) for v in material.values + material.extra_values],
+                   density_kg_per_m3=material.density_kg_per_m3, fiber_volume_fraction=material.fiber_volume_fraction)
 
 
 class CaseRequest(Contract):
@@ -254,6 +258,82 @@ Vector3 = Annotated[list[FiniteFloat], Field(min_length=3, max_length=3)]
 Matrix3 = Annotated[list[Vector3], Field(min_length=3, max_length=3)]
 
 
+class CouplingOutput(Contract):
+    """Which couplings the stack shows, each judged to the summary's relative tolerance."""
+
+    extension_shear: bool = Field(description="A16 or A26 nonzero: an axial load shears the laminate")
+    extension_bending: bool = Field(description="any B nonzero: an in-plane load bends it")
+    bending_twisting: bool = Field(description="D16 or D26 nonzero: a bending moment twists it")
+
+
+class LaminateSummaryOutput(Contract):
+    """The stack described before any load (ADR-0059): counts, symmetry, kind, coupling and mass per area, in SI."""
+
+    ply_count: int
+    total_thickness_m: float
+    symmetric: bool
+    antisymmetric: bool
+    balanced: bool
+    kind: Literal["unidirectional", "cross-ply", "angle-ply", "quasi-isotropic", "general"]
+    coupling: CouplingOutput
+    relative_tolerance: float = Field(description="An entry counts as zero within this fraction of its matrix's largest entry")
+    areal_mass_kg_per_m2: float | None = Field(description="Sum of density times thickness; null when a ply's material records no density")
+    areal_mass_missing: str | None = Field(description="Why the areal mass is null, naming the plies without a density")
+
+    @classmethod
+    def of(cls, summary: LaminateSummary) -> "LaminateSummaryOutput":
+        coupling = summary.coupling
+        return cls(ply_count=int(summary.ply_count), total_thickness_m=float(summary.total_thickness_m),
+                   symmetric=bool(summary.symmetric), antisymmetric=bool(summary.antisymmetric), balanced=bool(summary.balanced),
+                   kind=summary.kind,
+                   coupling=CouplingOutput(extension_shear=bool(coupling.extension_shear), extension_bending=bool(coupling.extension_bending),
+                                           bending_twisting=bool(coupling.bending_twisting)),
+                   relative_tolerance=float(summary.tolerance),
+                   areal_mass_kg_per_m2=None if summary.areal_mass_kg_per_m2 is None else float(summary.areal_mass_kg_per_m2),
+                   areal_mass_missing=summary.areal_mass_missing)
+
+
+class CriterionOutput(Contract):
+    """First-ply failure by one criterion under the request's loads, every load scaling together."""
+
+    criterion: Literal["max_stress", "max_strain", "tsai_hill", "tsai_wu"]
+    strength_ratio: float | None = Field(description="R, the factor on every load at which the first ply fails; null when no face reaches the criterion")
+    ply: int = Field(description="The failing ply, 1 at the bottom face")
+    angle_deg: float
+    face: Literal["bottom", "top"]
+    z_m: float = Field(description="z of the failing face, positive upward from the mid-plane")
+    mode: str = Field(description="The governing maximum-stress or maximum-strain mode, or 'interactive' for Tsai-Hill and Tsai-Wu")
+    failure_loads: LoadInput = Field(description="R times the request's loads, N/m and N*m/m")
+
+
+class NotComputedOutput(Contract):
+    criterion: Literal["max_stress", "max_strain", "tsai_hill", "tsai_wu"]
+    reason: str
+
+
+class FirstPlyFailureOutput(Contract):
+    """First-ply failure under the request's loads by every criterion the inputs support (ADR-0059, ADR-0021).
+
+    evaluated is false, with the reason, when every load is zero or a ply's material has no strengths. A criterion
+    the inputs cannot support (maximum strain without strain limits, Tsai-Wu without f12_star) is listed under
+    not_computed with the engine's message; nothing is assumed.
+    """
+
+    evaluated: bool
+    reason: str | None
+    criteria: list[CriterionOutput]
+    not_computed: list[NotComputedOutput]
+
+    @classmethod
+    def of(cls, summary: FailureSummary) -> "FirstPlyFailureOutput":
+        return cls(evaluated=bool(summary.evaluated), reason=summary.reason,
+                   criteria=[CriterionOutput(criterion=r.criterion, strength_ratio=None if r.strength_ratio is None else float(r.strength_ratio),
+                                             ply=int(r.ply_number), angle_deg=float(r.angle_deg), face=r.face, z_m=float(r.z_m), mode=r.mode,
+                                             failure_loads=LoadInput(**{k: float(v) for k, v in r.failure_loads.model_dump().items()}))
+                             for r in summary.results],
+                   not_computed=[NotComputedOutput(criterion=n.criterion, reason=n.reason) for n in summary.not_computed])
+
+
 class AnalysisResponse(Contract):
     """Engine results in base units, with the accepted inputs echoed for inspection.
 
@@ -269,6 +349,8 @@ class AnalysisResponse(Contract):
     midplane_strain: Vector3 = Field(description="[epsilon_x, epsilon_y, gamma_xy]; engineering shear")
     curvature_per_m: Vector3 = Field(description="[kappa_x, kappa_y, kappa_xy], 1/m")
     material_provenance: MaterialProvenance | None = Field(default=None, description="Set when the material came from the library")
+    summary: LaminateSummaryOutput | None = Field(default=None, description="The stack described before any load (ADR-0059)")
+    first_ply_failure: FirstPlyFailureOutput | None = Field(default=None, description="First-ply failure under the request's loads (ADR-0059)")
 
 
 class ForceInput(Contract):

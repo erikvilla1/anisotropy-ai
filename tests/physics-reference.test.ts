@@ -45,7 +45,7 @@ test("laminate coupling, thickness scaling and constituent limits are consistent
   assert.throws(() => stack([0], 0), /positive/);
 });
 test("every current formula has a location and unit convention; future solver workflows are separate", () => {
-  assert.equal(physicsTopics.flatMap(t => t.methods).length, 39);
+  assert.equal(physicsTopics.flatMap(t => t.methods).length, 40);
   assert.ok(!physicsTopics.some(t => t.id === "fea" || t.id === "optimization"));
   for (const topic of physicsTopics) for (const method of topic.methods) {
     assert.ok(method.reference?.location && method.units);
@@ -62,6 +62,7 @@ test("every engine theory section has a card that names its function, cites a lo
   const byFunction: Record<string, string> = {
     abd_compliance: "Laminate compliance · ABD inverse", prescribed_curvature_response: "Known forces & prescribed curvature", mixed_response: "Mixed load & deformation conditions",
     engineering_constants: "Laminate engineering constants", first_ply_failure: "First-ply failure load", tsai_wu_ratio_combined: "Strength ratio with fixed & variable loads",
+    laminate_summary: "Laminate symmetry, balance & areal mass",
     thermal_resultants: "Thermal resultants · uniform ΔT", thermal_ply_surfaces: "Residual ply stress after ΔT",
     max_strain_ratio: "Maximum strain", tsai_hill_ratio: "Tsai–Hill", ritz_buckling: "Plate buckling · simply supported",
     rule_of_mixtures: "Longitudinal rule of mixtures", series_model: "Transverse inverse-mixture estimate", halpin_tsai: "Halpin–Tsai estimate",
@@ -75,6 +76,6 @@ test("every engine theory section has a card that names its function, cites a lo
   assert.match(card("Laminate engineering constants").detail, /full ABD inverse/);
   assert.equal(physicsTopics.find(t => t.id === "thermal")!.methods.length, 6);
   assert.equal(physicsTopics.find(t => t.id === "failure")!.methods.length, 9);
-  assert.equal(physicsTopics.find(t => t.id === "clt")!.methods.length, 18);
+  assert.equal(physicsTopics.find(t => t.id === "clt")!.methods.length, 19);
   assert.match(card("Plate buckling · simply supported").reference!.title, /Whitney/);
 });
