@@ -1,6 +1,6 @@
 # Anisotropy
 
-Anisotropy AI helps engineers analyze composite laminates and test coupons, with results they can trace to equations, material sources and tests. Tested, deterministic code computes every number; a language model may draft inputs and explain results but never produces a number in a result (ADR-0001). The full picture, layer by layer, is the [system overview](../00_system_overview.md).
+Anisotropy helps engineers analyze composite laminates and test coupons, with results they can trace to equations, material sources and tests. Tested, deterministic code computes every number; a language model may draft inputs and explain results but never produces a number in a result (ADR-0001). The full picture, layer by layer, is the [system overview](../00_system_overview.md).
 
 ## Who builds it
 
@@ -34,3 +34,4 @@ Roles only; see [people.md](people.md). Working rule (2026-11-03): reversible de
 ## Log
 - 2026-11-04: Brain created (ADR-0057). First shared workflow: X posting ([x.md](x.md)).
 - 2026-11-05: Team of five and the seats from the 2026-11-03 weekly meeting recorded in [people.md](people.md). Team Notion: the Anisotropy workspace with Tasks Tracker, Meetings, X, Team and Resources at the top level.
+- 2026-11-05: The public name is Anisotropy, without "AI": the wordmark, the page titles, the README and the package name say so since the website audit of 2026-10-31 (ADR-0058). Decision records, skills and history keep the wording they were written with. The site map behind it: a Services menu with one page per service, the calculator on the home page, a Contact page; accounts and use limits wait for a team meeting.
