@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
-from anisotropy_engine.cases import compare, engine_results, solve_case, validate_case_inputs
+from anisotropy_engine.cases import compare, engine_results, first_ply_failures, solve_case, validate_case_inputs
 from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
@@ -28,13 +28,15 @@ from anisotropy_engine.summary import first_ply_failure_summary, laminate_summar
 from .access import AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
+from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .coupon_jobs import LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
 from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run, stop_orphans
 from .settings import allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput,
+    CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
+    LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput,
     RunSummary, VerificationResponse,
 )
@@ -534,6 +536,39 @@ def analyze_laminate(problem: AnalysisRequest, actor: Actor, request: Request, r
         )
 
     return _deliver(request, response, actor, problem, compute)
+
+
+@app.post("/v1/laminates/solve", response_model=LaminateAnswer)
+def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Request, response: Response) -> LaminateAnswer:
+    """A laminate problem as the chat states it (ADR-0060): every value with its own unit, converted with the engine's unit table into
+    the case the engine's runner solves (ADR-0024), every result in the units asked for, the stack described (ADR-0059), and the
+    answer worded from the engine's numbers by the template or, behind the setting, by the model with the number guard (ADR-0052).
+    Recorded with its actor and, when a model wrote the words, the model's name (ADR-0026)."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+
+    def compute() -> LaminateAnswer:
+        try:
+            case = case_of(problem)
+            validate_case_inputs(case)
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                solution = solve_case(case)
+                results = engine_results(case)
+                failures = first_ply_failures(case, solution)
+                cited = solution.library.get("material")
+                summary = laminate_summary(solution.plies, [None if cited is None else cited.density_kg_per_m3] * len(solution.plies))
+        except (ValueError, TypeError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc) or exc.__class__.__name__) from exc
+        facts = facts_of(case, results, solution, failures, summary)
+        template = sentences_of(facts)
+        draft = assistant.explain_laminate(facts, template)
+        return LaminateAnswer(
+            run_id=None, engine_version=version("anisotropy-engine"), report_units=problem.report_units, units=unit_labels(problem.report_units),
+            case=case, results={key: _json_value(value) for key, (value, _scale) in results.items()}, criteria=list(failures),
+            summary=LaminateSummaryOutput.of(summary), material=None if cited is None else MaterialProvenance.of(cited),
+            writer=draft.writer, model=draft.model, prose=list(draft.prose), withheld=draft.withheld, reason=draft.reason, facts=facts,
+        )
+
+    return _deliver(request, response, actor, problem, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
 
 
 @app.post("/v1/laminates/prescribed-curvature", response_model=PrescribedCurvatureResponse)

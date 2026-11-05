@@ -48,3 +48,10 @@
 - `/chat` renders the same guided chat and full-form tab as `/studio`, full screen under the chat header. The home page's message and a library material (`?material=` with a library id) start the conversation there; the home composer drops its response-format menu.
 - The scripted preview's answers (scope brief, comparison table, data checklist, scope JSON, LaTeX outline, specification editor) are no longer reachable from `/chat`; their browser tests are replaced by the chat's. `components/workspace.tsx` keeps serving `/data`; its unused assistant code and `lib/demo.ts`'s scope helpers can go in a later cleanup.
 - A typed load keeps its minus sign (`-20 kN` is read as -20000 N) so the setup check refuses it rather than the chat dropping the sign (ADR-0003).
+
+## Amendment 2 (2026-11-05): the chat's first choice opens the laminate assistant
+
+- Decided by: Founder, 2026-11-05 (the mock-up of the laminate chat with its unit choices approved: "implement what we discussed make no mistakes"); the record is [ADR-0060](ADR-0060-the-chat-solves-laminate-problems-through-the-case-solver-with-every-value-in-its-own-unit.md).
+- The first question reads "What are we working out?" and offers, above the coupon tests, "Laminate response": a stack under loads per unit width with no coupon, solved by the engine's case solver in seconds. A typed "laminate response", "ABD", "classical lamination", "hand calc" or "homework" opens it too. The laminate assistant shares the Guided tab (`components/studio/studio-modes.tsx`), asks units, material, layup and loads with every value in its own unit, and shows the answer beside the conversation; "Back to the coupon tests" returns to this chat.
+- The laminate assistant counts ply angles from x, the direction of Nx, as the textbooks do; the coupon chat keeps the convention of ADR-0004 (angles across the width). Each question says which.
+

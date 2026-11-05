@@ -214,3 +214,53 @@ export const DOWNLOADS: [string, string][] = [
   ["kernel_summary", "Our engine's summary (text)"], ["kernel_vtu", "Every ply's stresses for ParaView (.vtu)"], ["fields", "Every field (JSON)"],
   ["explanation", "The explanation (JSON)"], ["record", "The CalculiX record (TOML)"], ["checklist", "The setup check (JSON)"], ["preview", "The preview (JSON)"],
 ];
+
+// ----------------------------------------------------------------------------------------------- laminate problems (ADR-0060)
+
+export type LaminateSummary = {
+  ply_count: number; total_thickness_m: number; symmetric: boolean; antisymmetric: boolean; balanced: boolean;
+  kind: "unidirectional" | "cross-ply" | "angle-ply" | "quasi-isotropic" | "general";
+  coupling: { extension_shear: boolean; extension_bending: boolean; bending_twisting: boolean };
+  relative_tolerance: number; areal_mass_kg_per_m2: number | null; areal_mass_missing: string | null;
+};
+/** The answer to a laminate problem: every result in the units asked for, keyed as the engine's case runner keys them, the stack
+ * described, the material cited when it came from the library, and the explanation with who wrote it (ADR-0052). */
+export type LaminateAnswer = {
+  run_id: string | null; engine_version: string; report_units: string; units: Record<string, string>;
+  case: Record<string, unknown>; results: Record<string, unknown>; criteria: string[]; summary: LaminateSummary;
+  material: { material_id: string; name: string; dataset_id: string; citation: string; ply_thickness_m: number | null; values: { role: string; value: number; unit: string }[] } | null;
+  writer: string; model: string | null; prose: string[]; withheld: boolean; reason: string | null; facts: Record<string, unknown>;
+};
+
+const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const vector3 = (v: unknown): v is number[] => Array.isArray(v) && v.length === 3 && v.every(finite);
+
+/** The answer's shape, checked before anything is drawn: the matrices, the strains, every ply's stresses and the words. */
+export function readLaminateAnswer(payload: unknown): LaminateAnswer {
+  const bad = () => new StudioError("The laminate solve answered with an unexpected shape.");
+  if (!isObject(payload) || typeof payload.engine_version !== "string" || typeof payload.report_units !== "string" || !isObject(payload.units)
+    || !isObject(payload.results) || !isObject(payload.summary) || !isObject(payload.case) || !Array.isArray(payload.criteria)
+    || typeof payload.writer !== "string" || !Array.isArray(payload.prose) || !payload.prose.every((s) => typeof s === "string")
+    || typeof payload.withheld !== "boolean" || !isObject(payload.facts)) throw bad();
+  const results = payload.results;
+  for (const prefix of ["Q", "A", "B", "D"]) for (const i of "126") for (const j of "126") if (!finite(results[`${prefix}${i}${j}`])) throw bad();
+  if (!vector3(results.strain_global) || !vector3(results.curvature) || !finite(results.Ex) || !finite(results.Ey) || !finite(results.Gxy) || !finite(results.nu_xy)
+    || !finite(results.total_thickness)) throw bad();
+  const plies = (payload.case.laminate as { layup?: unknown } | undefined)?.layup;
+  if (!Array.isArray(plies) || !plies.every(finite)) throw bad();
+  for (const key of ["ply_stress_local", "ply_stress_global", "ply_strain_local"]) {
+    const rows = results[key];
+    if (!Array.isArray(rows) || rows.length !== plies.length || !rows.every(vector3)) throw bad();
+  }
+  for (const criterion of payload.criteria) {
+    if (typeof criterion !== "string" || !finite(results[`fpf_ply_${criterion}`]) || !vector3(results[`fpf_forces_${criterion}`])
+      || !(results[`fpf_ratio_${criterion}`] === null || finite(results[`fpf_ratio_${criterion}`]))) throw bad();
+  }
+  return payload as unknown as LaminateAnswer;
+}
+
+/** One solve of a laminate problem: the values as typed with their units; the API converts and the engine solves. */
+export async function solveLaminate(apiBaseUrl: string, problem: unknown, signal?: AbortSignal): Promise<LaminateAnswer> {
+  const payload = await call(`${base(apiBaseUrl)}/v1/laminates/solve`, { method: "POST", headers, body: JSON.stringify(problem), signal }, "the laminate solve");
+  return readLaminateAnswer(payload);
+}

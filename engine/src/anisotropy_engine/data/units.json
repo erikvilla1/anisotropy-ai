@@ -1,0 +1,92 @@
+{
+ "description": "The units a value may carry (ADR-0060), by dimension, and the unit each reporting system uses for each quantity kind. Written from anisotropy_engine.units; tests/test_units.py holds the two equal. Names only: the factors stay in the engine.",
+ "units": {
+  "pressure": [
+   "Pa",
+   "kPa",
+   "MPa",
+   "GPa",
+   "psi",
+   "ksi",
+   "Msi"
+  ],
+  "length": [
+   "m",
+   "cm",
+   "mm",
+   "in"
+  ],
+  "force_per_length": [
+   "N/m",
+   "N/mm",
+   "kN/m",
+   "kN/mm",
+   "lb/in",
+   "kip/in"
+  ],
+  "moment_per_length": [
+   "N*m/m",
+   "N*mm/mm",
+   "kN*m/m",
+   "lb*in/in",
+   "kip*in/in"
+  ]
+ },
+ "kinds": {
+  "modulus": "pressure",
+  "stress": "pressure",
+  "length": "length",
+  "N": "force_per_length",
+  "M": "moment_per_length"
+ },
+ "systems": {
+  "SI": {
+   "modulus": "GPa",
+   "stress": "MPa",
+   "length": "mm",
+   "N": "N/m",
+   "M": "N*m/m",
+   "kappa": "1/m",
+   "A": "MN/m",
+   "B": "kN",
+   "D": "N*m",
+   "areal_mass": "kg/m^2"
+  },
+  "mm-MPa": {
+   "modulus": "MPa",
+   "stress": "MPa",
+   "length": "mm",
+   "N": "N/mm",
+   "M": "N*mm/mm",
+   "kappa": "1/mm",
+   "A": "N/mm",
+   "B": "N",
+   "D": "N*mm",
+   "areal_mass": "kg/m^2"
+  },
+  "US": {
+   "modulus": "Msi",
+   "stress": "ksi",
+   "length": "in",
+   "N": "lb/in",
+   "M": "lb*in/in",
+   "kappa": "1/in",
+   "A": "10^6 lb/in",
+   "B": "10^3 lb",
+   "D": "lb*in",
+   "areal_mass": "lb/in^2"
+  },
+  "psi": {
+   "modulus": "psi",
+   "stress": "psi",
+   "length": "in",
+   "N": "lb/in",
+   "M": "lb*in/in",
+   "kappa": "1/in",
+   "A": "lb/in",
+   "B": "lb",
+   "D": "lb*in",
+   "areal_mass": "lb/in^2"
+  }
+ }
+}

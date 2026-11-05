@@ -302,3 +302,80 @@ test("one typed line fills the coupon and the chat asks only for what is missing
   await expect(page.getByLabel("Ply 2", { exact: true })).toHaveValue("0");
   expect(calls.checks).toHaveLength(0);
 });
+
+test("the chat solves a laminate problem with each value in its own unit, and shows the answer in the units picked (ADR-0060)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const problems: Record<string, unknown>[] = [];
+  await mockApi(page, calls);
+  await page.route(API, async (route) => { // in front of the coupon stand-ins: the laminate solve, answered from the captured fixtures
+    const request = route.request();
+    if (new URL(request.url()).pathname !== "/v1/laminates/solve" || request.method() !== "POST") return route.fallback();
+    const problem = request.postDataJSON() as Record<string, unknown>;
+    problems.push(problem);
+    const body = fixture(problem.report_units === "US" ? "laminate-answer-us" : "laminate-answer");
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/studio");
+  await page.getByTestId("laminate-choice").click();
+  const question = page.getByTestId("chat-question");
+  await expect(question).toHaveAttribute("data-step", "units");
+  await page.locator("button[data-system='SI']").click();
+  await expect(question).toHaveAttribute("data-step", "material");
+
+  const message = page.getByLabel("Message the laminate assistant", { exact: true });
+  await message.fill("E1 147 GPa, E2 10300 MPa, G12 7, nu12 0.27, F1t 2280 MPa, F1c 1725 MPa, F2t 57 MPa, F2c 228 MPa, F6 76 MPa");
+  await message.press("Enter");
+  await expect(page.getByText("Got it").last()).toBeVisible();
+  await expect(question).toHaveAttribute("data-step", "layup");
+  await expect(question).toContainText("0° runs along x");
+  await message.fill("[0/45/-45/90]s, 0.125 mm plies");
+  await message.press("Enter");
+  await expect(question).toHaveAttribute("data-step", "loads");
+  await page.locator("#lam-Nx").fill("100");
+  await page.getByLabel("lam-Nx unit", { exact: true }).selectOption("N/mm"); // the system's unit is N/m; the typed value keeps its own
+  await page.getByRole("button", { name: "The rest are zero", exact: true }).click();
+  await page.getByRole("button", { name: "Use these loads", exact: true }).click();
+  await expect(question).toHaveAttribute("data-step", "review");
+  await expect(page.getByTestId("laminate-spec")).toContainText("[0/45/-45/90]s, 8 plies, 0.125 mm plies");
+  await expect(page.getByTestId("laminate-spec")).toContainText("Nx = 100 N/mm");
+  await page.locator("#lam-f12").fill("-0.5");
+  await page.getByTestId("laminate-solve").click();
+
+  await expect(page.getByTestId("laminate-answer")).toBeVisible({ timeout: 15_000 });
+  expect(problems).toHaveLength(1);
+  const sent = problems[0] as { material: Record<string, unknown>; layup: number[]; ply_thickness: unknown; loads: Record<string, unknown>; f12_star: number; report_units: string };
+  expect(sent.material.E1).toEqual({ value: 147, unit: "GPa" }); // as typed: the engine converts, the page never does
+  expect(sent.material.E2).toEqual({ value: 10300, unit: "MPa" });
+  expect(sent.material.F2t).toEqual({ value: 57, unit: "MPa" });
+  expect(sent.layup).toEqual([0, 45, -45, 90, 90, -45, 45, 0]);
+  expect(sent.ply_thickness).toEqual({ value: 0.125, unit: "mm" });
+  expect(sent.loads.Nx).toEqual({ value: 100, unit: "N/mm" });
+  expect(sent.loads.My).toEqual({ value: 0, unit: "N*m/m" });
+  expect([sent.f12_star, sent.report_units]).toEqual([-0.5, "SI"]);
+  expect(calls.checks).toHaveLength(0); // no coupon check: this is not a coupon
+
+  const results = page.getByTestId("laminate-results");
+  await expect(results).toHaveAttribute("data-units", "SI");
+  await expect(page.getByTestId("lam-eps-x")).toHaveText("1719");
+  await expect(page.getByTestId("lam-fpf")).toContainText("R = 3.207");
+  await expect(page.getByTestId("lam-ratio-tsai_wu")).toHaveText("3.207");
+  await expect(page.getByTestId("lam-fpf-table").locator("tr.studio-earliest")).toHaveAttribute("data-criterion", "tsai_wu");
+  await expect(page.getByTestId("lam-ply-table").locator("tr.studio-earliest")).toHaveAttribute("data-ply", "4");
+  await expect(page.getByTestId("matrix-A")).toContainText("N/m");
+  await expect(page.getByTestId("lam-explanation")).toHaveAttribute("data-writer", "template");
+  await expect(page.getByTestId("lam-explanation")).toContainText("By Tsai-Wu, ply 4 (90 degrees) fails first");
+
+  await page.getByRole("button", { name: "US customary", exact: true }).click(); // solved again by the engine in the other system
+  await expect(results).toHaveAttribute("data-units", "US", { timeout: 15_000 });
+  expect(problems).toHaveLength(2);
+  expect((problems[1] as { report_units: string; loads: { Nx: unknown } }).report_units).toBe("US");
+  expect((problems[1] as { loads: { Nx: unknown } }).loads.Nx).toEqual({ value: 100, unit: "N/mm" }); // the problem itself is unchanged
+  await expect(page.getByTestId("matrix-A")).toContainText("lb/in");
+  await expect(page.getByTestId("lam-ratio-tsai_wu")).toHaveText("3.207"); // a ratio has no unit
+  await expect(page.getByTestId("lam-explanation")).toContainText("Nx = 571 lb/in");
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-laminate.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});

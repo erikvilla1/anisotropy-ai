@@ -212,3 +212,44 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .chat-app-page { padding-top: 18px; padding-bottom: 24px; }
 .chat-app-page .studio-modes { margin-bottom: 12px; }
 .chat-app-page .chat-pane { top: 16px; height: calc(100dvh - 150px); max-height: none; }
+
+/* The laminate assistant (ADR-0060): the same chat, with a value and its unit menu in one row, the matrices and the ply table. */
+.chat-choice-wide { grid-column: 1 / -1; border-color: #4a5d3f; }
+.chat-choice-wide strong { display: inline-flex; gap: 6px; align-items: center; color: var(--accent); }
+.lam-card { gap: 12px; }
+.lam-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; }
+.lam-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c9d1c4; min-width: 0; }
+.lam-field small { color: var(--muted); font-size: 10.5px; margin-left: 4px; }
+.lam-field-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
+.lam-field input, .lam-field select { background: var(--bg); border: 1px solid #3c433c; border-radius: 6px; color: var(--text); padding: 7px 8px; font-size: 13px; min-width: 0; }
+.lam-field input { font-variant-numeric: tabular-nums; }
+.lam-field select { font-size: 11.5px; padding: 7px 4px; max-width: 110px; }
+.lam-field input:focus, .lam-field select:focus { outline: none; border-color: #839a73; }
+.lam-layup { align-items: flex-end; }
+.lam-layup > input { flex: 1 1 150px; }
+.lam-layup .lam-field { flex: 0 1 230px; }
+.lam-review .studio-summary { margin: 6px 0 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); }
+.lam-review .chat-inline { margin: 6px 0 10px; }
+.chat-refused li { color: #f6bba9; }
+.lam-results { display: grid; gap: 14px; }
+.lam-unitbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 13px; }
+.lam-unitbar small { flex-basis: 100%; color: var(--muted); font-size: 11.5px; }
+.lam-toggle { display: inline-flex; border: 1px solid #313c29; border-radius: 8px; overflow: hidden; }
+.lam-toggle button { font: inherit; font-size: 12.5px; background: #171d13; color: #c9d6bf; border: 0; padding: 6px 12px; cursor: pointer; }
+.lam-toggle button + button { border-left: 1px solid #313c29; }
+.lam-toggle button[aria-pressed=true] { background: var(--accent); color: #17220f; font-weight: 600; }
+.lam-toggle button:disabled { opacity: .6; cursor: default; }
+.lam-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lam-summary { margin-top: 4px; }
+.lam-matrices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 22px; }
+.lam-matrix { min-width: 0; }
+.lam-matrix-label { font-size: 12px; color: #b5bfae; margin-bottom: 6px; }
+.lam-matrix-label i { font-style: normal; color: var(--muted); }
+.lam-matrix-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px 10px; padding: 4px 8px; border-left: 1.5px solid #56634d; border-right: 1.5px solid #56634d; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.lam-matrix-note { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+.lam-axes { margin-bottom: 8px; }
+.lam-explanation p { font-size: 13px; color: #b5bfae; line-height: 1.65; margin: 0 0 8px; max-width: 70ch; }
+.calc-table-scroll { overflow-x: auto; }
+@media (max-width: 600px) {
+  .lam-grid3, .lam-matrices, .lam-stats { grid-template-columns: minmax(0, 1fr); }
+}

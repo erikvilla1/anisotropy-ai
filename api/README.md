@@ -4,6 +4,10 @@ This local API accepts one material, a bottom-first ply stack and six explicit l
 
 Chunk 3 adds `POST /v1/laminates/prescribed-curvature`: known forces and explicit curvature in, required moments and a numerical forward check out. Use `examples/flat-cross-ply.json`; see the [chunk 3 walkthrough](../docs/walkthroughs/chunk-3-constrained-analysis.md). The original forward endpoint below keeps its existing contract.
 
+## A laminate problem in its own units (ADR-0060)
+
+`POST /v1/laminates/solve` takes the chat's laminate problem with every value as `{"value": 147, "unit": "GPa"}` in any unit the engine's table lists (`engine/src/anisotropy_engine/units.py`), a library material or your own constants, the layup bottom ply first, the ply thickness, the six load resultants and `report_units` (`SI`, `mm-MPa`, `US` or `psi`), converts each value into a case in that system, runs the case solver and returns every result in that system with its unit labels, the stack summary, first-ply failure by every criterion the inputs support and the explanation. Example request: `tests/test_laminate_problems.py::homework`.
+
 ## The whole engine in one call (chunk 5)
 
 `POST /v1/cases/solve` takes a problem in the engine's case format, either as a JSON object under `case` or as the text of a `.toml` case under `toml`, and returns every result the case determines in the case's own units: stiffness and compliance, any of the seven applied forms including mixed conditions and a temperature change, library and several materials, first-ply failure by every criterion the inputs allow, plate buckling, and the answer-key comparison when the case has `[expected]`. Validation messages are the engine's own. Example: `examples/case-library-axial-check.json`; format: `../engine/validation/README.md`; see [the note](../docs/api-case-endpoint-2026-10-11.md) and ADR-0024.
