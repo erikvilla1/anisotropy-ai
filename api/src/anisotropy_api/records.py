@@ -18,7 +18,7 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
-from sqlalchemy import CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, inspect, select, text
+from sqlalchemy import CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, func, inspect, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
@@ -334,6 +334,25 @@ def project_jobs(engine: Engine, project_id: uuid.UUID, limit: int = 50) -> list
     """The jobs started for a project, newest first."""
     with Session(engine, expire_on_commit=False) as session:
         return list(session.scalars(select(JobRow).where(JobRow.project_id == project_id).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit)))
+
+
+# -------------------------------------------------------------------------------- the per-user limits (ADR-0056, stage 5)
+
+def _by_person(statement, user_email: str | None, actor: str):
+    """A person is the signed-in email when Access gave one; without it, the actor stands for the person (the local API, a service token)."""
+    return statement.where(JobRow.user_email == user_email) if user_email is not None else statement.where(JobRow.user_email.is_(None), JobRow.actor == actor)
+
+
+def running_job_of(engine: Engine, user_email: str | None, actor: str) -> JobRow | None:
+    """The person's job still `running`, in any process, or None (ADR-0056, the per-user limits)."""
+    with Session(engine) as session:
+        return session.scalars(_by_person(select(JobRow).where(JobRow.state == "running"), user_email, actor).limit(1)).first()
+
+
+def jobs_started_since(engine: Engine, user_email: str | None, actor: str, since: dt.datetime) -> int:
+    """How many jobs the person started at or after `since`, whatever became of them."""
+    with Session(engine) as session:
+        return session.scalar(_by_person(select(func.count()).select_from(JobRow).where(JobRow.started_at >= since), user_email, actor))
 
 
 def stop_orphans(engine: Engine, reason: str) -> int:

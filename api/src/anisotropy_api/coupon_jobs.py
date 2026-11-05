@@ -26,7 +26,7 @@ from pathlib import Path
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .records import fetch_job, insert_job, list_jobs, update_job
+from .records import fetch_job, insert_job, jobs_started_since, list_jobs, running_job_of, update_job
 from .storage import ObjectStore, store_folder, store_job
 
 REPO = Path(__file__).resolve().parents[3]
@@ -42,6 +42,10 @@ PROGRESS = "progress.json"
 
 class JobRefused(RuntimeError):
     """No job, or no check, can run on this machine; the message says what is missing."""
+
+
+class JobLimited(RuntimeError):
+    """The person has reached a per-user limit of the hosted tier (ADR-0056): a job of theirs still runs, or the day's cap is used up."""
 
 
 class JobBusy(RuntimeError):
@@ -141,12 +145,16 @@ class CouponJobs:
     command lines without their arguments."""
 
     def __init__(self, command: list[str] | None, recorder: Recorder, root: Path | None = None, studio: list[str] | None = None,
-                 store: ObjectStore | None = None, table: Engine | None = None, local_root: Path | None = None):
+                 store: ObjectStore | None = None, table: Engine | None = None, local_root: Path | None = None, per_day: int | None = None):
         """`store` is the object store a done job's files go to and `table` the database holding the jobs table (ADR-0050 amendment
         2); None keeps the files on the local disk and the status in this process, as before. `local_root` is where the tool keeps
-        the coupons, .local/fea/ by default."""
+        the coupons, .local/fea/ by default. `per_day`, with the table, is the hosted tier's per-user limit: one running job per
+        person and at most that many a day (ADR-0056); None means no such limit."""
         self.command, self.recorder, self.root, self.studio = command, recorder, root, studio
         self.store, self.table, self.local_root = store, table, local_root or LOCAL_FEA
+        if per_day is not None and table is None:
+            raise ValueError("a per-user limit counts jobs in the jobs table, so it needs the table")
+        self.per_day = per_day
         self.process = str(uuid.uuid4())
         self.jobs: dict[uuid.UUID, Job] = {}
         self.lock = threading.Lock()
@@ -183,6 +191,8 @@ class CouponJobs:
             raise JobRefused("uv is not on PATH; a coupon job runs fea/tools/run_coupon.py through `uv run --project fea`")
         if sum(x is not None for x in (form, coupon, values)) != 1:
             raise ValueError("a job starts from a form, the values or a coupon: one of the three")
+        if self.per_day is not None:
+            self._within_limits(actor, user_email)
         with self.lock:
             busy = next((job for job in self.jobs.values() if job.state == "running"), None)
             if busy is not None:
@@ -211,6 +221,20 @@ class CouponJobs:
         args = [*self.command, source, *options, "--result", str(job.folder / "outcome.json"), "--progress", str(job.folder / PROGRESS)]
         threading.Thread(target=self._run, args=(job, args), name=f"coupon-job-{job.id}", daemon=True).start()
         return job
+
+    def _within_limits(self, actor: str, user_email: str | None) -> None:
+        """The hosted tier's per-user limits (ADR-0056), from the jobs table: one running job per person, and at most `per_day` jobs
+        started since midnight UTC, whatever became of them. Refused with the reason the studio shows."""
+        who = user_email or f"the actor {actor}"
+        running = running_job_of(self.table, user_email, actor)
+        if running is not None:
+            raise JobLimited(f"a job of {who} is still running ({running.id}, started {running.started_at:%H:%M} UTC); one runs at a time per person, "
+                             "so wait for it to end or open it")
+        midnight = dt.datetime.now(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        started = jobs_started_since(self.table, user_email, actor, midnight)
+        if started >= self.per_day:
+            raise JobLimited(f"{who} has started {started} job(s) today, the cap of {self.per_day} per person per day (UTC); the next one can start "
+                             "tomorrow, or ask for a higher cap")
 
     def _run(self, job: Job, args: list[str]) -> None:
         result = job.folder / "outcome.json"

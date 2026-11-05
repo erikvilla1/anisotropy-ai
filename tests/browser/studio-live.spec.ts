@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-// The whole chain on this machine: the public example through the real API, our engine, CalculiX and the package. It writes a
-// coupon under .local/fea (IM7-UNT-L<n>, the next free layup code), so it runs only when asked for: STUDIO_LIVE=1.
-test.skip(!process.env.STUDIO_LIVE, "set STUDIO_LIVE=1 to run the studio against the real API and CalculiX");
+// The whole chain: the public example through the real API, our engine, CalculiX and the package. On this machine it writes a
+// coupon under .local/fea (IM7-UNT-L<n>, the next free layup code); against the hosted site (PREVIEW_URL, with a service token for
+// Cloudflare Access) it writes one in the hosted tier's store. So it runs only when asked for: STUDIO_LIVE=1 or PREVIEW_URL.
+test.skip(!process.env.STUDIO_LIVE && !process.env.PREVIEW_URL, "set STUDIO_LIVE=1 for the API on this machine, or PREVIEW_URL for the hosted site");
 
 test("the example coupon solves end to end from the studio", async ({ page }) => {
   await page.goto("/workspace/fea"); // the rows are the left column of the workspace (ADR-0062)
