@@ -83,7 +83,10 @@ GROUP_SHORT = {"rf": "Reactions", "u": "Displacements", "strain": "Strain", "sec
 MATH = {"RF_x": r"$R_x$", "RF_y": r"$R_y$", "u": "$u$", "v": "$v$", "eps_x": r"$\varepsilon_x$", "eps_y": r"$\varepsilon_y$",
         "gamma_xy": r"$\gamma_{xy}$", "N_x": "$N_x$", "N_y": "$N_y$", "N_xy": "$N_{xy}$", "sigma_1": r"$\sigma_1$",
         "sigma_2": r"$\sigma_2$", "tau_12": r"$\tau_{12}$", "eps_1": r"$\varepsilon_1$", "eps_2": r"$\varepsilon_2$",
-        "gamma_12": r"$\gamma_{12}$", "sigma_M": r"$\sigma_\mathrm{M}$", "ratio": "$R$"}
+        "gamma_12": r"$\gamma_{12}$", "sigma_M": r"$\sigma_\mathrm{M}$", "ratio": "$R$",
+        # the bending groups (ADR-0053): the deflection, the rotations, the vertical reaction, the curvatures, the moments, the shear forces
+        "w": "$w$", "theta_x": r"$\theta_x$", "theta_y": r"$\theta_y$", "RF_z": "$R_z$", "kappa_x": r"$\kappa_x$", "kappa_y": r"$\kappa_y$",
+        "kappa_xy": r"$\kappa_{xy}$", "M_x": "$M_x$", "M_y": "$M_y$", "M_xy": "$M_{xy}$", "Q_x": "$Q_x$", "Q_y": "$Q_y$"}
 
 
 # --------------------------------------------------------------------------------------------- small helpers

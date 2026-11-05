@@ -42,6 +42,13 @@ COMPONENTS: dict[str, tuple[str, ...]] = {
     "ply_strain_local": ("eps_1", "eps_2", "gamma_12"),
     "ply_mises": ("sigma_M",),
     "fpf": ("ratio",),
+    # The bending groups (ADR-0053), in the order cases.GROUPS gives their vectors.
+    "w": ("w",),
+    "rotation": ("theta_x", "theta_y"),
+    "rf_z": ("RF_z",),
+    "curvature": ("kappa_x", "kappa_y", "kappa_xy"),
+    "moment": ("M_x", "M_y", "M_xy"),
+    "shear_force": ("Q_x", "Q_y"),
 }
 # Unit kind (units.py) of each group; None for dimensionless groups.
 GROUP_KIND: dict[str, str | None] = {**{g: GROUPS[g][0] for g in GROUPS}, **{g: PLY_GROUPS[g][0] for g in PLY_GROUPS}, "fpf": None}
