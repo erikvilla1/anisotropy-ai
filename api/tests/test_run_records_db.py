@@ -261,3 +261,23 @@ def test_the_api_marks_a_stopped_processs_job_at_startup_and_serves_it_from_the_
         assert [job["job_id"] for job in client.get("/v1/coupon-jobs").json()] == [str(orphan)]
         assert client.get(f"/v1/coupon-jobs/{orphan}/package").status_code == 409
         assert client.get(f"/v1/coupon-jobs/{uuid.uuid4()}").status_code == 404
+
+
+def test_a_persons_running_job_and_todays_count_by_email_or_by_actor(engine):
+    """The per-user limits read the jobs table (ADR-0056, stage 5): a signed-in email is the person; without one, the actor is."""
+    from anisotropy_api.records import jobs_started_since, running_job_of
+
+    midnight = _dt.datetime.now(_dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    mine, done, theirs, local = (uuid.uuid4() for _ in range(4))
+    _started(engine, mine, user_email="engineer@example.com")
+    _started(engine, done, user_email="engineer@example.com")
+    update_job(engine, done, state="done", finished_at=_dt.datetime.now(_dt.timezone.utc))
+    _started(engine, theirs, user_email="other@example.com")
+    _started(engine, local)  # no email: the local API, or a service token
+    assert running_job_of(engine, "engineer@example.com", "test").id == mine
+    assert running_job_of(engine, "nobody@example.com", "test") is None
+    assert running_job_of(engine, None, "test").id == local and running_job_of(engine, None, "studio") is None
+    assert jobs_started_since(engine, "engineer@example.com", "test", midnight) == 2  # the done one counts: it was started today
+    assert jobs_started_since(engine, "other@example.com", "test", midnight) == 1
+    assert jobs_started_since(engine, None, "test", midnight) == 1 and jobs_started_since(engine, None, "studio", midnight) == 0
+    assert jobs_started_since(engine, "engineer@example.com", "test", midnight + _dt.timedelta(days=1)) == 0

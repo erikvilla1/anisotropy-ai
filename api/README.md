@@ -97,6 +97,8 @@ Behind Cloudflare Access (ADR-0056): with `ANISOTROPY_ACCESS_TEAM_DOMAIN` (the t
 
 Durable outputs (ADR-0050 amendment 2): with `ANISOTROPY_R2_BUCKET`, `ANISOTROPY_R2_ENDPOINT`, `ANISOTROPY_R2_ACCESS_KEY_ID` and `ANISOTROPY_R2_SECRET_ACCESS_KEY` set (all four or none), every done job's files, its package zip and the coupon's whole folder go to the bucket under `coupons/<coupon>/`, the coupons come back from the bucket into `.local/fea/` when the API starts, and `GET /v1/coupon-jobs/{id}/files/{key}` and `/package` answer with a redirect to a ten-minute link there. With run records on, the `jobs` table (migration 0006) keeps every job's status, so a job is still listed after the API restarts, and one that was running when the API stopped shows as `stopped` with the reason. Without the store, the files stay on the disk as before.
 
+Per-user limits (ADR-0056, stage 5): with `ANISOTROPY_JOBS_PER_USER_PER_DAY` set to a whole number, a person (the signed-in email, or the actor when there is none) may have one coupon job running at a time and start at most that many a day, UTC, counted in the `jobs` table; a request past either is refused with 429 and the reason, which the studio's chat shows. It needs run records on, and is refused at startup otherwise. Unset, there is no per-user limit; the one-job-at-a-time 409 stays.
+
 Open <http://127.0.0.1:8000/docs>. This is FastAPI's interactive API explorer. Expand `POST /v1/laminates/response`, select **Try it out**, paste `examples/zero-degree-tension.json`, and select **Execute**. The page displays the HTTP status and response JSON. Stop the server with Ctrl+C.
 
 Or, from a second PowerShell terminal at the repository root:

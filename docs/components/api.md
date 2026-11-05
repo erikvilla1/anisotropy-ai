@@ -34,6 +34,8 @@ Behind Cloudflare Access (ADR-0056, `api/src/anisotropy_api/access.py`): with `A
 
 Durable outputs (ADR-0050 amendment 2, `api/src/anisotropy_api/storage.py`): with the four `ANISOTROPY_R2_*` settings, a done job's reported files go by key, with its package zip and the coupon's whole folder, to an object store through the S3 API (boto3, path-style addresses, SigV4), the coupons are restored from the store into `.local/fea/` at startup, and the file endpoints redirect to ten-minute links; a job whose files cannot be stored is `stopped` and its result withheld. With run records on, the `jobs` table (migration 0006) keeps every job's status across restarts, and the rows still `running` when the API starts are marked `stopped` with the reason. The run record stays the immutable receipt.
 
+Per-user limits (ADR-0056, stage 5): `ANISOTROPY_JOBS_PER_USER_PER_DAY`, off unless set, gives each person (the signed-in email, else the actor) one running job at a time and a daily cap, read from the `jobs` table (`running_job_of`, `jobs_started_since`); a request past a limit is a 429 with the reason.
+
 The website's `/calculator` now calls this endpoint. CORS allows credential-free JSON POST requests from localhost/127.0.0.1 on ports 3000/3001. See [the calculator card](calculator.md).
 
 ## Evaluation

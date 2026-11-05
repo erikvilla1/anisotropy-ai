@@ -27,7 +27,8 @@ from anisotropy_engine.response import midplane_response, prescribed_curvature_r
 from .access import AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
-from .coupon_jobs import LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
+from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, UnknownCoupon, runner_command,
+                          studio_command)
 from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run, stop_orphans
 from .settings import allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore
@@ -78,7 +79,8 @@ async def lifespan(app: FastAPI):
         orphans = stop_orphans(app.state.records, "the API stopped while this job ran, so it did not finish; start it again")
         if orphans:
             print(f"marked {orphans} job(s) of a stopped process as stopped", flush=True)
-    app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records)
+    app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records,
+                                       per_day=settings.jobs_per_user_per_day)
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     # Behind Cloudflare Access, every request but /healthz must carry a valid token (ADR-0056); None means no sign-in, the local API.
     app.state.access_verifier = access_verifier(settings.access) if settings.access.on else None
@@ -321,7 +323,8 @@ def _known_job(jobs: CouponJobs, job_id: uuid.UUID) -> Job:
 def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Request, response: Response) -> CouponJobOutput:
     """Start a coupon job (ADR-0050): fea/tools/run_coupon.py takes a filled-in input form, the coupon's values as the studio sends
     them (ADR-0051), or a coupon that has its specs, to the coupon's package, in the background. One job runs at a time; another is
-    refused with 409 while it runs. Poll the job at the Location header until its state is no longer running: its stage and the
+    refused with 409 while it runs. With the hosted tier's per-user limit set, a person's second running job or a job past the day's
+    cap is refused with 429 and the reason (ADR-0056). Poll the job at the Location header until its state is no longer running: its stage and the
     files made so far appear as it goes; its receipt is a run record written when it ends (ADR-0026).
     """
     jobs = _coupon_jobs(request)
@@ -332,6 +335,8 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
                          user_email=getattr(request.state, "user_email", None))
     except JobBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except JobLimited as exc:  # the hosted tier's per-user limit (ADR-0056): the reason is what the studio shows
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     except JobRefused as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     response.headers["Location"] = f"{COUPON_JOBS}/{job.id}"
