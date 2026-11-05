@@ -69,6 +69,37 @@ test("malformed matrices, non-finite results and mismatched echoed inputs are re
   }
 });
 
+test("the stack's description and the failure check are optional, and whole when present (ADR-0059)", () => {
+  const request = buildAnalysisRequest(exampleForm()).request!;
+  const base = {
+    inputs: request, engine_version: "test", midplane_strain: [0, 0, 0], curvature_per_m: [0, 0, 0],
+    A_N_per_m: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], B_N: [[0, 0, 0], [0, 0, 0], [0, 0, 0]], D_N_m: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+  };
+  const summary = {
+    ply_count: 1, total_thickness_m: 0.00025, symmetric: true, antisymmetric: false, balanced: true, kind: "unidirectional",
+    coupling: { extension_shear: false, extension_bending: false, bending_twisting: false }, relative_tolerance: 1e-9,
+    areal_mass_kg_per_m2: null, areal_mass_missing: "plies [1] have no density",
+  };
+  const failure = {
+    evaluated: true, reason: null,
+    criteria: [{ criterion: "max_stress", strength_ratio: 2.5, ply: 1, angle_deg: 0, face: "bottom", z_m: -0.000125, mode: "fiber tension",
+      failure_loads: { Nx: 62500, Ny: 0, Nxy: 0, Mx: 0, My: 0, Mxy: 0 } }],
+    not_computed: [{ criterion: "tsai_wu", reason: "no f12_star" }],
+  };
+  assert.ok(readAnalysisResult({ ...base, summary: null, first_ply_failure: null }, request));
+  assert.ok(readAnalysisResult({ ...base, summary, first_ply_failure: failure }, request));
+  for (const invalid of [
+    { ...base, summary: { ...summary, kind: "isotropic" } },
+    { ...base, summary: { ...summary, coupling: {} } },
+    { ...base, summary: { ...summary, total_thickness_m: "thick" } },
+    { ...base, first_ply_failure: { ...failure, evaluated: "yes" } },
+    { ...base, first_ply_failure: { ...failure, criteria: [{ ...failure.criteria[0], face: "middle" }] } },
+    { ...base, first_ply_failure: { ...failure, criteria: [{ ...failure.criteria[0], failure_loads: { Nx: 1 } }] } },
+  ]) {
+    assert.throws(() => readAnalysisResult(invalid, request), /unexpected result/);
+  }
+});
+
 test("a library selection sends the dataset reference, not the rounded display values", () => {
   const im7 = findLibraryOption("im7-8552::ncamp-im7-8552-2019-rtd-measured-v1")!;
   assert.equal(im7.E1_GPa, "162.096");
