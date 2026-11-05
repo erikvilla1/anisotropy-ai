@@ -17,6 +17,10 @@ Which recorded key supplies which engine quantity:
   F12-5pct (ASTM D3518 at 5% strain). The 0.2% offset shear strength is never used as F6.
 - Thermal expansion, both or none: alpha1 and alpha2.
 - Ply thickness: tply, or tply-WT for the woven glass record.
+- Density and fiber volume fraction, each when the record states one value: density, density-LT,
+  density-WT or density-nominal; Vf, Vf-LT, Vf-WT or Vf-nominal (a percentage there, a fraction here).
+  No analysis uses them, so they sit in `extra_values`, apart from `values`: a deck header lists only
+  what the model used, and stays as it was.
 """
 
 import json
@@ -25,7 +29,7 @@ from functools import lru_cache
 from importlib.resources import files
 
 from .lamina import Lamina, Strengths, ThermalExpansion
-from .units import DEG_F, INCH, PSI
+from .units import DEG_F, FOOT, INCH, POUND_MASS, PSI
 
 LIBRARY_FILE = "data/material-library.json"
 
@@ -36,12 +40,17 @@ _TO_SI = {
     "—": (1.0, "—"),
     "m": (1.0, "m"), "mm": (1e-3, "m"), "in": (INCH, "m"),
     "10⁻⁶/K": (1e-6, "1/K"), "10⁻⁶/°C": (1e-6, "1/K"), "10⁻⁶/°F": (1e-6 / DEG_F, "1/K"),
+    "kg/m³": (1.0, "kg/m³"), "g/cm³": (1e3, "kg/m³"), "lb/ft³": (POUND_MASS / FOOT**3, "kg/m³"),
+    "%": (1e-2, "—"),
 }
 _MODULUS_UNITS = {"Pa", "MPa", "GPa", "psi", "ksi", "Msi"}
 _STRENGTH_KEYS = {"F1t": ("F1t",), "F1c": ("F1c", "F1c-derived"), "F2t": ("F2t",), "F2c": ("F2c",),
                   "F6": ("F12", "F12-5pct")}
 _ALPHA_KEYS = {"alpha1": ("alpha1",), "alpha2": ("alpha2",)}
 _THICKNESS_KEYS = ("tply", "tply-WT")
+_DENSITY_KEYS = ("density", "density-LT", "density-WT", "density-nominal")
+_DENSITY_UNITS = {"kg/m³", "g/cm³", "lb/ft³"}
+_VF_KEYS = ("Vf", "Vf-LT", "Vf-WT", "Vf-nominal")
 
 
 @dataclass(frozen=True)
@@ -76,9 +85,13 @@ class LibraryMaterial:
     values: tuple[CitedValue, ...]
     not_provided: tuple[str, ...]  # what this dataset cannot supply, and why
     authors: str | None = None  # the source's authors when the record names them; not part of `citation`, so deck headers stay as they were
+    density_kg_per_m3: float | None = None  # the composite density the record states, for the areal mass of a stack
+    fiber_volume_fraction: float | None = None  # a fraction, from the record's percentage
+    extra_values: tuple[CitedValue, ...] = ()  # density and Vf with their pages; stated by the record, used by no analysis
 
     def value(self, role: str) -> CitedValue:
-        for item in self.values:
+        """A cited value by its role: one the analysis used, or one the record states beside them."""
+        for item in self.values + self.extra_values:
             if item.role == role:
                 return item
         raise KeyError(role)
@@ -184,6 +197,22 @@ def library_material(material_id: str, dataset_id: str | None = None) -> Library
         cited.append(t)
         ply_thickness_m = t.value
 
+    extras: dict[str, float | None] = {"density": None, "Vf": None}
+    extra_values: list[CitedValue] = []
+    for role, keys, units, label in (("density", _DENSITY_KEYS, _DENSITY_UNITS, "density"),
+                                     ("Vf", _VF_KEYS, {"%"}, "fiber volume fraction")):
+        prop = _first(props, keys)
+        if prop is None:
+            not_provided.append(f"{label}: none of {', '.join(keys)}")
+            continue
+        try:
+            value = _cite(role, prop, d, units)
+        except ValueError as error:  # a range, a bound or a unit the loader does not convert: left out, never guessed
+            not_provided.append(f"{label}: {error}")
+            continue
+        extra_values.append(value)
+        extras[role] = value.value
+
     lamina = Lamina(E1=cited[0].value, E2=cited[1].value, G12=cited[2].value, nu12=cited[3].value,
                     strengths=strengths, thermal_expansion=expansion)
     source = d["source"]
@@ -191,4 +220,5 @@ def library_material(material_id: str, dataset_id: str | None = None) -> Library
     return LibraryMaterial(material_id=d["materialId"], name=d["name"], dataset_id=d["datasetId"], dataset=d["dataset"],
                            record_revision=d["recordRevision"], rights=source["rights"], citation=citation,
                            lamina=lamina, ply_thickness_m=ply_thickness_m, values=tuple(cited),
-                           not_provided=tuple(not_provided), authors=source.get("authors"))
+                           not_provided=tuple(not_provided), authors=source.get("authors"),
+                           density_kg_per_m3=extras["density"], fiber_volume_fraction=extras["Vf"], extra_values=tuple(extra_values))

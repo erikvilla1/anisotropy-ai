@@ -598,6 +598,50 @@ The lamina is assembled from the named models, computed by `lamina_from_constitu
 
 Not estimated here: strengths, expansion coefficients, $`E_3`$, $`G_{23}`$ and $`\nu_{23}`$, void content, discontinuous fibers, and the self-consistent and bounding methods of the same chapter.
 
+## 10. Laminate description (`summary.py`)
+
+The stack itself, before any load, as the response endpoint reports it beside the matrices (ADR-0059). Nothing here is new physics: each statement follows from the definitions of Section 3 and the textbook's classes of laminates (Daniel & Ishai Chapter 7). The thickness is the sum of the ply thicknesses, computed by `total_thickness`:
+
+```math
+h = \sum_{k=1}^{n} t_k
+```
+
+<!-- code: total_thickness -->
+
+Three properties of the stacking are checked by `is_symmetric`, `is_antisymmetric` and `is_balanced`. A laminate is symmetric when ply $`k`$ and ply $`n - 1 - k`$ (counted from the bottom, ADR-0004) have the same material, fiber angle and thickness, the middle ply of an odd count mirroring itself; then $`\mathbf{B} = 0`$. It is antisymmetric when every such pair has the same material and thickness and opposite angles, and at least one pair is off axis: the antisymmetric angle-ply $`[\theta/-\theta/\theta/-\theta]`$, which has $`B_{16}`$ and $`B_{26}`$ but $`D_{16} = D_{26} = 0`$. It is balanced when every off-axis ply at $`+\theta`$ has a partner at $`-\theta`$ of the same material and thickness anywhere in the stack, plies at $`0`$ and $`90`$ needing none; then $`A_{16} = A_{26} = 0`$. A fiber at $`\theta`$ is the fiber at $`\theta + 180°`$, so angles compare modulo $`180°`$.
+
+<!-- code: is_symmetric, is_antisymmetric, is_balanced -->
+
+The kind of laminate is judged first on $`\mathbf{A}`$ and then on the angles, computed by `laminate_kind`: quasi-isotropic when $`\mathbf{A}`$ is isotropic to the tolerance,
+
+```math
+A_{11} = A_{22}, \qquad A_{16} = A_{26} = 0, \qquad A_{66} = \tfrac{1}{2}\left(A_{11} - A_{12}\right),
+```
+
+which the stacks $`[0/\pm 60]_s`$ and $`[0/\pm 45/90]_s`$ satisfy; otherwise unidirectional (one fiber angle), cross-ply (only $`0`$ and $`90`$), angle-ply (only $`+\theta`$ and $`-\theta`$), or general.
+
+<!-- code: laminate_kind -->
+
+Which couplings the matrices show is computed by `coupling_flags`. An entry counts as zero when its magnitude is at most $`10^{-9}`$ of its matrix's largest entry, the relative tolerance of the forward verification (ADR-0013): $`A_{16}`$ and $`A_{26}`$ against $`\max|A_{ij}|`$ (extension-shear coupling), $`D_{16}`$ and $`D_{26}`$ against $`\max|D_{ij}|`$ (bending-twisting coupling), and $`\mathbf{B}`$ against $`\max|A_{ij}|\,h/2`$, the size $`\mathbf{B}`$ would have if the whole stiffness sat on one face (extension-bending coupling); $`\mathbf{B}`$ is roundoff for a symmetric stack, so its own largest entry would be no scale. The same tolerance decides the kind above.
+
+<!-- code: coupling_flags -->
+
+The mass per unit area needs a density for every ply, computed by `areal_mass`; a ply whose material records none is named, and the value is left out rather than guessed (ADR-0003):
+
+```math
+m_A = \sum_{k=1}^{n} \rho_k\, t_k
+```
+
+<!-- code: areal_mass -->
+
+All of it together, with the tolerance it used, is computed by `laminate_summary`.
+
+<!-- code: laminate_summary -->
+
+First-ply failure under the one loading given, every load scaling together with nothing held fixed and no temperature change, is computed by `first_ply_failure_summary` and `face_of`: maximum stress and Tsai-Hill whenever the plies have strengths, maximum strain only with strain limits and Tsai-Wu only with an explicit $`f_{12}^*`$ (Section 5, ADR-0021), the others reported as not computed with the reason; each result names the criterion, the strength ratio $`R`$, the ply (1 at the bottom), the face of that ply, the governing mode and the loads at failure $`R\,[\mathbf{N}; \mathbf{M}]`$. Without a load, or with a ply that has no strengths, nothing is evaluated and the reason is stated.
+
+<!-- code: first_ply_failure_summary, face_of -->
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature

@@ -23,6 +23,7 @@ from anisotropy_engine.cases import compare, engine_results, solve_case, validat
 from anisotropy_engine.laminate import Ply, abd_matrices
 from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
+from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 
 from .access import AccessMiddleware
 from .access import verifier as access_verifier
@@ -33,8 +34,9 @@ from .settings import allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, LibraryMaterialInput, MaterialProvenance,
-    PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput, RunSummary, VerificationResponse,
+    CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput,
+    LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput,
+    RunSummary, VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
@@ -507,11 +509,15 @@ def analyze_laminate(problem: AnalysisRequest, actor: Actor, request: Request, r
     def compute() -> AnalysisResponse:
         material, provenance = resolve_material(problem.material)
         plies = [Ply(material=material, **ply.model_dump()) for ply in problem.plies]
+        # The stack's density comes with a library material only; a typed material carries none (ADR-0059).
+        densities = [None if provenance is None else provenance.density_kg_per_m3] * len(plies)
         try:
             # Floating-point overflow/invalid operations must become errors, never JSON null/NaN.
             with np.errstate(over="raise", invalid="raise", divide="raise"):
                 A, B, D = abd_matrices(plies)
                 eps0, kappa = midplane_response(plies, problem.loads.to_engine())
+                summary = laminate_summary(plies, densities)
+                failure = first_ply_failure_summary(plies, problem.loads.to_engine())
             if not all(np.isfinite(value).all() for value in (A, B, D, eps0, kappa)):
                 raise FloatingPointError("Non-finite solver output")
         except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as exc:
@@ -524,6 +530,7 @@ def analyze_laminate(problem: AnalysisRequest, actor: Actor, request: Request, r
             inputs=problem,
             A_N_per_m=A.tolist(), B_N=B.tolist(), D_N_m=D.tolist(),
             midplane_strain=eps0.tolist(), curvature_per_m=kappa.tolist(),
+            summary=LaminateSummaryOutput.of(summary), first_ply_failure=FirstPlyFailureOutput.of(failure),
         )
 
     return _deliver(request, response, actor, problem, compute)

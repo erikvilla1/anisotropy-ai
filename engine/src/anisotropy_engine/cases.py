@@ -30,6 +30,7 @@ from .response import (
     prescribed_curvature_response,
 )
 from .rotation import strain_transformation, stress_transformation, transformed_compliance, transformed_reduced_stiffness
+from .summary import areal_mass
 from .mixed import AVERAGE_STRESSES, DEFORMATIONS, PAIRS, MixedResult, mixed_response
 from .thermal import thermal_ply_surfaces, thermal_resultants, thermomechanical_response
 from .units import UNIT_SYSTEMS
@@ -548,6 +549,14 @@ def engine_results(case: dict) -> dict:
         results[key] = (shown(getattr(constants, key), "modulus"), 0.0)
     results["nu_xy"] = (constants.nu_xy, 0.0)
     results["nu_yx"] = (constants.nu_yx, 0.0)
+
+    # The stack itself: its thickness, and its mass per area when every ply's material is a library
+    # dataset that records a density (a typed material carries none, so the key is absent).
+    results["total_thickness"] = (float(shown(h, "length")), 0.0)
+    densities = [solution.library[name].density_kg_per_m3 if name in solution.library else None
+                 for name in solution.ply_materials]
+    if all(rho is not None for rho in densities):
+        results["areal_mass"] = (float(shown(areal_mass(plies, densities), "areal_mass")), 0.0)
 
     # Plate buckling: the factor on the reference loads, the critical loads, and the mode.
     buckling = buckling_result(case, solution)
