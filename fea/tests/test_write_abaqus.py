@@ -177,7 +177,11 @@ def test_every_test_folder_has_the_same_shape():
         for record in paths.records_dir(folder).glob("*.toml"):
             if record in paths.all_records():  # the team summary's reading is the team comparison's (ADR-0039); the manifest is not a record
                 assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
-    assert len([r for r in paths.all_records() if paths.CHECKS in r.parents]) == 2 and paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
+    # The public checks with a CalculiX record, by name, so a check added without its record or a record that strays is noticed.
+    assert {r.parent.parent.name for r in paths.all_records() if paths.CHECKS in r.parents} == {
+        "open-hole-im7-8552", "plate-pressure-isotropic", "three-point-im7-8552", "unnotched-im7-8552",
+    }
+    assert paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
 
 
 def test_order_two_decks_are_written_as_s8r_with_nine_entries_per_element():

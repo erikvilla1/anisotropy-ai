@@ -2,6 +2,7 @@
 refreshes the case page; a failed step gets its row too; it refuses, before writing anything, without CalculiX or with an attempt
 log behind its folders; its record is made as the case page says. Everything runs under a temporary root, never .local/."""
 
+import functools
 import importlib.util
 import json
 import re
@@ -13,7 +14,7 @@ import pytest
 from public_coupon import DESIGNATION
 from test_intake import PUBLIC_FILL
 
-from anisotropy_fea import paths
+from anisotropy_fea import checks, paths
 from anisotropy_fea.calculix import find_ccx
 from anisotropy_fea.case_pages import NO_RECORD_YET, read_case
 from anisotropy_fea.intake import convert, fill_form, next_commands, write_blank_form
@@ -103,6 +104,9 @@ def pretend_calculix(tool, monkeypatch) -> None:
     monkeypatch.setattr(tool, "ccx_version", lambda ccx: "2.22")
     monkeypatch.setattr("anisotropy_fea.checks.ccx_version", lambda ccx: "2.22")
     monkeypatch.setattr("anisotropy_fea.checks.find_ccx", lambda: Path("ccx"))
+    # The setup check takes its CalculiX finder as a default argument, bound when checks.py was imported, so patching the
+    # module's name does not reach it: the tool's own name for the check gets a copy that is told where CalculiX is.
+    monkeypatch.setattr(tool, "setup_checklist", functools.partial(checks.setup_checklist, ccx=lambda: Path("ccx")))
 
 
 def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):

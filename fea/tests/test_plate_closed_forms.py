@@ -83,8 +83,10 @@ def test_the_committed_cases_and_decks_are_what_the_tool_writes_today(tool):
                 assert written["expected"]["tolerance"] == rows
                 continue
             for label, value in rows.items():
+                # The committed cases were written on the founder's machine; another platform's linear algebra rounds a value
+                # differently at the 1e-11 level (3.6e-11 seen on CI's Linux), far below any drift of the tool that matters.
                 if group == "ply_stress_local":
                     for ply, vector in value.items():
-                        np.testing.assert_allclose(written["expected"][group][label][ply], vector, rtol=1e-12, atol=0.0, err_msg=f"{name}: {group} {label} {ply}")
+                        np.testing.assert_allclose(written["expected"][group][label][ply], vector, rtol=1e-9, atol=0.0, err_msg=f"{name}: {group} {label} {ply}")
                 else:
-                    np.testing.assert_allclose(written["expected"][group][label], value, rtol=1e-12, atol=0.0, err_msg=f"{name}: {group} {label}")
+                    np.testing.assert_allclose(written["expected"][group][label], value, rtol=1e-9, atol=0.0, err_msg=f"{name}: {group} {label}")
