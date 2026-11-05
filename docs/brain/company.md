@@ -4,7 +4,7 @@ Anisotropy AI helps engineers analyze composite laminates and test coupons, with
 
 ## Who builds it
 
-- **Christopher Valerio**, CEO. Prompt engineering and AI evaluation. Approves every X post before it goes out ([x.md](x.md)).
+- **Christopher Valerio**, CEO. Prompt engineering and AI evaluation.
 - **Erik Villa**, founder of the repository; AI architecture and operations; documentation and records. Decides the decision records.
 - **Kai Saucedo**, software and UI/UX; marketing and communications.
 - **Jusung Park**, reference modeling and validation; operations and logistics.
@@ -28,7 +28,7 @@ Roles only; see [people.md](people.md). Working rule (2026-11-03): reversible de
 - Work on a branch and open a pull request. Only this `docs/brain/` folder may be written to `main` directly (ADR-0057).
 - Every choice between alternatives gets a decision record in `docs/decisions/`, from `_template.md`.
 - Never quote a number in public unless an engine run record or a validation case backs it (ADR-0028).
-- Nothing posts to X without Christopher's explicit yes ([x.md](x.md)).
+- Nothing posts to X without an explicit yes from Kai, Erik or Christopher in `#x-posts` ([x.md](x.md)).
 - No secrets, customer data, course material or the team's coupon models in the repository (`AGENTS.md`, ADR-0042).
 
 ## Log

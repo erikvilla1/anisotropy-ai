@@ -7,13 +7,13 @@ Roles only. No contact details and no personal facts: this repository is public.
 Seats from the org chart of 2026-11-03. Each person holds one technical seat and one non-technical seat; a lead decides alone inside the seat and checks with the CEO on anything that could alter results, cost, security, test plans or spending.
 
 ### Christopher Valerio
-- CEO (GitHub cvv-mx-256). Technical seat: prompt engineering and AI evaluation. Signs off on test plans, standards and spending. Reviews and approves every X post in Discord `#x-posts`; nothing posts without his yes.
+- CEO (GitHub cvv-mx-256). Technical seat: prompt engineering and AI evaluation. Signs off on test plans, standards and spending. One of the three X post approvers ([x.md](x.md)).
 
 ### Erik Villa
-- Founder of the repository (GitHub erikvilla1); decides the decision records ("Founder" in every ADR). Technical seat: AI architecture and operations (system design, model and API choices, deployment). Non-technical seat: documentation and records (decision log, changelog, meeting notes). Second for the CEO and for software.
+- Founder of the repository (GitHub erikvilla1); decides the decision records ("Founder" in every ADR). Technical seat: AI architecture and operations (system design, model and API choices, deployment). Non-technical seat: documentation and records (decision log, changelog, meeting notes). Second for the CEO and for software. One of the three X post approvers.
 
 ### Kai Saucedo
-- Technical seat: software and UI/UX (application, interface, data storage, file organization). Non-technical seat: marketing and communications (website, LinkedIn, X, brand, announcements); a technical claim is checked with the testing and modeling leads first. GitHub ka1saucedo.
+- Technical seat: software and UI/UX (application, interface, data storage, file organization). Non-technical seat: marketing and communications (website, LinkedIn, X, brand, announcements); a technical claim is checked with the testing and modeling leads first. One of the three X post approvers. GitHub ka1saucedo.
 
 ### Jusung Park
 - Technical seat: reference modeling and validation (FEA for validation, comparing model to test data). Non-technical seat: operations and logistics (purchasing, vendors, lab scheduling). Second for fabrication.
