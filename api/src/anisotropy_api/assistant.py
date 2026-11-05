@@ -36,6 +36,14 @@ RESULT_SYSTEM = (
     "printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio that is not in the "
     "sheet. Say nothing the sheet does not support. Do not use markdown."
 )
+LAMINATE_SYSTEM = (
+    "You explain the answer to a laminate problem (classical lamination theory) to the engineer or student who stated it. You are given a "
+    "fact sheet of numbers a tested engine computed, with the unit of each kind, and sentences a template wrote from it. Write three to "
+    "six plain sentences: what the stack is, how it deforms under the loads, how stiff it is, and by each failure criterion which ply "
+    "fails first, in which mode, at what multiple of the loads. Every number you write must appear in the fact sheet exactly as printed "
+    "there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio that is not in the "
+    "sheet. Say nothing the sheet does not support. Do not use markdown."
+)
 
 
 @dataclass(frozen=True)
@@ -64,6 +72,8 @@ class Assistant(Protocol):
     def explain_setup(self, checklist: dict[str, Any], template: list[str]) -> Draft: ...
 
     def explain_result(self, facts: dict[str, Any], template: list[str]) -> Draft: ...
+
+    def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft: ...
 
 
 def numbers_in(text: str) -> list[str]:
@@ -137,6 +147,9 @@ class TemplateAssistant:
     def explain_result(self, facts: dict[str, Any], template: list[str]) -> Draft:
         return Draft(tuple(template), "template", None)
 
+    def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft:
+        return Draft(tuple(template), "template", None)
+
 
 def _sentences(text: str) -> tuple[str, ...]:
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+|\n+", text.strip()) if p.strip()]
@@ -208,6 +221,12 @@ class ClaudeAssistant:
         view = model_view_of_facts(facts)
         user = "The fact sheet:\n" + json.dumps(view, ensure_ascii=False, indent=1) + "\n\nThe template's sentences:\n" + "\n".join(template)
         return self._draft(RESULT_SYSTEM, user, view, template)
+
+    def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft:
+        """A laminate problem's answer (ADR-0060): the fact sheet is the API's, in the reporting units, and the guard reads it as any other."""
+        view = model_view_of_facts(facts)
+        user = "The fact sheet:\n" + json.dumps(view, ensure_ascii=False, indent=1) + "\n\nThe template's sentences:\n" + "\n".join(template)
+        return self._draft(LAMINATE_SYSTEM, user, view, template)
 
 
 def assistant_for(provider: str | None, model: str | None) -> Assistant:

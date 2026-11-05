@@ -81,7 +81,7 @@ First-ply failure: by default every mechanical load scales with R, and a tempera
 
 Thermal inputs: `alpha1` and `alpha2` are in 1/degC (`SI`) or 1/degF (`US`, `psi`), and `delta_T` is a change in degC or degF. Stresses then come from each ply's mechanical strain, total strain minus its free thermal strain. The comparison cannot judge an expected zero when every value in that result is rounding noise, such as `M_T` of a symmetric laminate; leave such values out.
 
-Use `units = "SI"` for moduli in GPa, stresses in MPa and thickness in mm. For example, 140 GPa is entered as `E1 = 140`. `US` uses Msi/ksi/inches, and `psi` uses psi/inches. The engine still calculates in SI base units.
+Use `units = "SI"` for moduli in GPa, stresses in MPa and thickness in mm. For example, 140 GPa is entered as `E1 = 140`. `mm-MPa` is the millimetre-newton system of the coupon decks (MPa, mm, N/mm, N*mm/mm). `US` uses Msi/ksi/inches, and `psi` uses psi/inches. The engine still calculates in SI base units.
 
 New result keys are added when a problem needs them.
 

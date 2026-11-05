@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
+import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import {
   checkSetup, couponValues, fetchExplanation, fetchFields, getJob, listCoupons, POLL_MS, startSolve, StudioError,
   type CheckAnswer, type CouponSummary, type Explanation, type Fields, type JobStatus,
@@ -55,7 +55,7 @@ const materialName = (id: string) => libraryOptions.find((m) => m.id === id)?.na
 const libraryEntry = (id: string) => libraryOptions.find((m) => m.id === id);
 
 const QUESTIONS: Record<ChatStep | "advanced" | "reopen", { title: string; text?: string }> = {
-  test: { title: "What are we testing?", text: "Pick a test, or describe the whole coupon in one line, e.g. “open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 1 mm pull”." },
+  test: { title: "What are we working out?", text: "Pick a coupon test, or describe the whole coupon in one line, e.g. “open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 1 mm pull”. A laminate without a coupon, the hand-calculation kind, is the first choice." },
   material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or give your own." },
   shear: { title: "Out-of-plane shear moduli", text: "The engine needs G13 and G23, which the library does not list. Without measured values, the usual tape estimate is G13 = G12 and G23 = E2 / 3; the choice is noted on the coupon." },
   layup: { title: "What is the layup?", text: "Type it in laminate notation, bottom ply first, or pick one. Angles are measured from x, across the coupon's width: 90° runs along the load, 0° across it." },
@@ -106,8 +106,10 @@ function RowsCard({ keys, form, onApply, submit = "Continue", disabled, extra }:
 
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
 
-export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm }: {
+export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, onLaminate }: {
   apiBaseUrl: string; initialForm?: StudioForm | null; onFormChange?: (form: StudioForm) => void; onOpenForm: () => void;
+  /** Opens the laminate assistant (ADR-0060): a stack under loads per unit width, no coupon around it. */
+  onLaminate?: () => void;
 }) {
   const [form, setFormState] = useState<StudioForm>(() => initialForm ?? { ...blankForm(), date: today() });
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -297,6 +299,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm }
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
     if (/full form|spreadsheet|all (the )?rows/i.test(text)) { add({ role: "user", text }); onOpenForm(); return; }
+    if (onLaminate && /\b(laminate (response|problem|theory)|abd|classical lamination|hand calc|homework)\b/i.test(text)) { add({ role: "user", text }); onLaminate(); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
     if (step === "name" && !/\d/.test(text)) { answer(text, { filled_by: text }); return; }
@@ -319,6 +322,11 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm }
         return (
           <>
             <div className="chat-choice-grid">
+              {onLaminate ? (
+                <button type="button" className="chat-choice chat-choice-wide" data-testid="laminate-choice" onClick={onLaminate}>
+                  <strong><Calculator size={14} /> Laminate response</strong><span>a stack under loads per unit width, no coupon: the ABD matrices, strains, every ply's stresses and first-ply failure in seconds, in the units you pick</span>
+                </button>
+              ) : null}
               {TEST_CHOICES.map((c) => (
                 <button type="button" key={c.test} className="chat-choice" onClick={() => answer(c.title, { test: c.test })}>
                   <strong>{c.title}</strong><span>{c.detail}</span>

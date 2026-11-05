@@ -12,6 +12,7 @@ from anisotropy_engine.lamina import Lamina
 from anisotropy_engine.library import LibraryMaterial, library_material
 from anisotropy_engine.response import Loads
 from anisotropy_engine.summary import FailureSummary, LaminateSummary
+from anisotropy_engine.units import UNIT_SYSTEMS
 
 
 class Contract(BaseModel):
@@ -579,6 +580,110 @@ class ExplainResponse(Contract):
     run_id: str | None
     job_id: str
     kind: str
+    writer: str
+    model: str | None
+    prose: list[str]
+    withheld: bool
+    reason: str | None
+    facts: dict[str, Any]
+
+
+class Quantity(Contract):
+    """A value with the unit it was typed in (ADR-0060). The engine converts it with its unit table; the browser never does."""
+
+    value: FiniteFloat
+    unit: Annotated[str, Field(min_length=1, pattern=r"\S")]
+
+
+class OwnMaterial(Contract):
+    """Elastic constants typed by the engineer, each with its unit, and the five strengths together or none (ADR-0003)."""
+
+    name: Annotated[str, Field(min_length=1, pattern=r"\S")]
+    E1: Quantity
+    E2: Quantity
+    G12: Quantity
+    nu12: FiniteFloat
+    F1t: Quantity | None = None
+    F1c: Quantity | None = None
+    F2t: Quantity | None = None
+    F2c: Quantity | None = None
+    F6: Quantity | None = None
+    source: Annotated[str, Field(min_length=1, pattern=r"\S")] | None = Field(default=None, description="Where the numbers come from, when stated")
+
+    @model_validator(mode="after")
+    def all_five_strengths_or_none(self) -> Self:
+        given = [name for name in ("F1t", "F1c", "F2t", "F2c", "F6") if getattr(self, name) is not None]
+        if given and len(given) != 5:
+            raise ValueError(f"give all five strengths (F1t, F1c, F2t, F2c, F6) or none; got {', '.join(given)}")
+        return self
+
+
+class LibraryChoice(Contract):
+    """A material of the cited library by its id, and a dataset when not the primary one (ADR-0020)."""
+
+    library: Annotated[str, Field(min_length=1, pattern=r"\S")]
+    dataset: Annotated[str, Field(min_length=1, pattern=r"\S")] | None = None
+
+
+def _problem_material_kind(value) -> str:
+    if isinstance(value, (OwnMaterial, LibraryChoice)):
+        return "library" if isinstance(value, LibraryChoice) else "own"
+    return "library" if isinstance(value, dict) and "library" in value else "own"
+
+
+ProblemMaterial = Annotated[
+    Annotated[OwnMaterial, Tag("own")] | Annotated[LibraryChoice, Tag("library")],
+    Discriminator(_problem_material_kind),
+]
+
+
+class ProblemLoads(Contract):
+    """The six resultants per unit width, each with its unit; every one is required, zeros stated (ADR-0003)."""
+
+    Nx: Quantity
+    Ny: Quantity
+    Nxy: Quantity
+    Mx: Quantity
+    My: Quantity
+    Mxy: Quantity
+
+
+ReportUnits = Literal["SI", "mm-MPa", "US", "psi"]
+assert set(ReportUnits.__args__) == set(UNIT_SYSTEMS), "the reporting systems are the engine's"  # noqa: S101
+
+
+class LaminateProblem(Contract):
+    """A laminate problem as the chat states it (ADR-0060): the material, the stack as angles from the bottom face up (ADR-0004),
+    one ply thickness unless the library dataset records it, the six loads, Tsai-Wu's f12* when wanted, and the units to report in.
+    Every value carries its own unit; the API converts it with the engine's table and solves the case the engine's runner solves."""
+
+    title: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+    material: ProblemMaterial
+    layup: Annotated[list[FiniteFloat], Field(min_length=1, max_length=64)] = Field(description="Ply angles in degrees, bottom face first")
+    layup_notation: Annotated[str, Field(min_length=1, max_length=120)] | None = Field(default=None, description="The notation typed, for the record")
+    ply_thickness: Quantity | None = None
+    loads: ProblemLoads
+    f12_star: FiniteFloat | None = None
+    report_units: ReportUnits
+
+
+class LaminateAnswer(Contract):
+    """Everything the case determines, in the reporting system's units, with the stack described, the material cited when it came
+    from the library, and the explanation (ADR-0052: the template's sentences, or a model's rewording with every number checked).
+
+    `case` is the case the engine solved, every input in the reporting units, for inspection. `results` is keyed as
+    engine/validation/README.md lists the case runner's results. run_id is the record of this run (ADR-0026); null only when
+    recording is switched off."""
+
+    run_id: str | None
+    engine_version: str
+    report_units: ReportUnits
+    units: dict[str, str] = Field(description="The unit of each reported kind: modulus, stress, length, N, M, kappa, A, B, D, areal_mass")
+    case: dict[str, Any]
+    results: dict[str, Any]
+    criteria: list[str]
+    summary: LaminateSummaryOutput
+    material: MaterialProvenance | None
     writer: str
     model: str | None
     prose: list[str]
