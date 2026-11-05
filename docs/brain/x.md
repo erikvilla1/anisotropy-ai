@@ -4,8 +4,8 @@ Anisotropy's account on X: how a post gets out, in tool-neutral terms, the rules
 
 ## The loop
 
-1. **Draft.** Anyone on the team writes a draft as a subpage of the team's Notion page X → Drafts, titled `Mon D, YYYY · Topic` (Hawaii time), from any tool: an assistant in Discord ("make <subject> into an X draft"), Claude through the team's Notion connector, or by hand in Notion. A draft may hold several versions under headings such as Short and Long.
-2. **Polish.** Within about 15 minutes a check with no model and no cost notices the new draft. A copy editor then reads [voice.md](voice.md) and adds a `## Polished` version to the draft page. The original is never changed.
+1. **Draft.** Anyone on the team makes a new subpage under the team's Notion page X → Drafts. Two kinds arrive: a written post from a founder's assistant ("make that into an X draft"), titled `Mon D, YYYY · Topic` (Hawaii time) with versions under headings such as Short and Long; or a brain dump typed by hand, any title, no format. Nobody is asked to format anything.
+2. **Write or polish.** Within about 15 minutes a check with no model and no cost notices the new page. A copy editor then reads [voice.md](voice.md): for a written post it adds a `## Polished` version; for a brain dump it writes the Short (and Long) version from the notes, using only facts the notes contain, and dates the title. The author's text is never changed.
 3. **Review in Discord `#x-posts`.** The channel receives the draft's title and link, every version's exact text and its X-weighted count. Christopher reviews there. He may ask for edits; each edit is applied on the draft page and shown again in full with its count. Only his explicit `yes <draft> <version>` approves. Anyone else's yes, a "looks good", silence or an edit request posts nothing.
 4. **Post.** Exactly the approved text goes out, is fetched back to confirm it is live, and the link is replied in the channel. The draft page gets a `Posted <date> · <link> · <version>` line and moves to X → Posted. The post is logged below.
 
@@ -21,3 +21,4 @@ Anisotropy's account on X: how a post gets out, in tool-neutral terms, the rules
 
 ## Log
 <!-- - YYYY-MM-DD: <title> · <link> · <version> -->
+- 2026-11-05: Drafts may be brain dumps; the copy editor writes the post from them (Kai).
