@@ -55,7 +55,7 @@ function unavailable(reason: string): Response {
 }
 
 export default {
-  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+  async fetch(request: Request, env: WorkerEnv, ctx: ExecutionContext): Promise<Response> {
     const api = (forwarded: Request) => getContainer(env.API, "api").fetch(forwarded);
     let config;
     try {
@@ -67,7 +67,8 @@ export default {
       const path = apiPath(new URL(request.url).pathname);
       return path === null ? env.ASSETS.fetch(request) : api(forwardToApi(request, path, null));
     }
-    const codes = env.SIGN_IN.get(env.SIGN_IN.idFromName("codes"));
+    const namespace = ctx.exports.SignInCodes;  // the class `exports` declares in wrangler.jsonc, without a binding
+    const codes = namespace.get(namespace.idFromName("codes"));
     return signInGate(request, {
       config,
       sessionKey: await deriveKey(config.secret, "session"),

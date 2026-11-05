@@ -32,9 +32,10 @@
       "max_instances": 1
     }
   ],
-  // SIGN_IN keeps the sign-in codes (ADR-0058): one instance, so each code's attempts are counted in one place.
+  // SignInCodes keeps the sign-in codes (ADR-0058): reached as ctx.exports.SignInCodes rather than a binding, because a binding
+  // to a class that `exports` declares fails a preview upload until a deploy has provisioned it.
   "durable_objects": {
-    "bindings": [{ "name": "API", "class_name": "ApiContainer" }, { "name": "SIGN_IN", "class_name": "SignInCodes" }]
+    "bindings": [{ "name": "API", "class_name": "ApiContainer" }]
   },
   "exports": {
     "ApiContainer": { "type": "durable-object", "storage": "sqlite" },
