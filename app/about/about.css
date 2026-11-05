@@ -1,0 +1,108 @@
+/* The About page after the audit of 2026-10-31: what we are building, the workflow and the roadmap moved from the home
+   page, the lab sections, and the team. */
+.about-building .section-heading {
+  margin-bottom: 40px;
+}
+.about-building-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+  gap: 32px;
+  align-items: start;
+}
+.about-pillars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.about-pillars article {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.about-pillars article > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.about-pillars h3 {
+  margin: 0;
+  font-family: var(--heading);
+  font-size: 20px;
+  font-weight: 500;
+}
+.about-pillars p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.about-pillars a {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--accent);
+}
+.about-workflow .section-heading,
+.about-direction .section-heading {
+  margin-bottom: 44px;
+}
+.about-workflow .core-rule {
+  margin-top: 36px;
+}
+.about-direction .validation-gate {
+  margin-top: 32px;
+}
+.team-section .section-heading {
+  margin-bottom: 40px;
+}
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 18px;
+}
+.team-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.team-card .media-slot {
+  margin-bottom: 8px;
+}
+.team-card h3 {
+  margin: 0;
+  font-family: var(--heading);
+  font-size: 18px;
+  font-weight: 500;
+}
+.team-card .team-role {
+  color: var(--accent);
+}
+.team-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.team-note {
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  max-width: 70ch;
+}
+@media (max-width: 900px) {
+  .about-building-grid {
+    grid-template-columns: 1fr;
+  }
+}

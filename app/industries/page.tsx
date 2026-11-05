@@ -8,6 +8,7 @@ import {
   Factory,
   GraduationCap,
 } from "lucide-react";
+import { MediaSlot } from "@/components/media-slot";
 export const metadata = { title: "Industries — Anisotropy" };
 const priorities = [
   {
@@ -22,6 +23,7 @@ const priorities = [
     ],
     href: "/chat",
     action: "Define an aerospace research scope",
+    media: { label: "A composite aerostructure or a coupon cut from one", kind: "image" as const },
   },
   {
     icon: GraduationCap,
@@ -35,6 +37,12 @@ const priorities = [
     ],
     href: "/library",
     action: "Explore the materials & physics library",
+    media: {
+      label: "Microscopy of a tested coupon",
+      kind: "image" as const,
+      src: "/assets/images/microscopy.jpg",
+      alt: "Microscopy image of a composite specimen",
+    },
   },
 ];
 const potential = [
@@ -42,21 +50,25 @@ const potential = [
     icon: Wind,
     title: "Wind & energy",
     text: "Future laminate, blade, and repair studies grounded in relevant material and test evidence.",
+    media: "A blade section or a glass laminate panel",
   },
   {
     icon: Car,
     title: "Automotive & mobility",
     text: "Potential lightweight material screening and stiffness-to-mass trade studies.",
+    media: "A carbon body panel or chassis member",
   },
   {
     icon: Ship,
     title: "Marine",
     text: "Potential applications in composite panels, environmental conditioning, and repair assessment.",
+    media: "A hull panel or a conditioned coupon",
   },
   {
     icon: Factory,
     title: "Advanced manufacturing",
     text: "Future process-to-property studies linking fabrication conditions to measured behavior.",
+    media: "A layup or cure in progress",
   },
 ];
 export default function Industries() {
@@ -95,6 +107,7 @@ export default function Industries() {
         <div className="industry-grid priority-grid">
           {priorities.map((s) => (
             <article className="industry-card" key={s.title}>
+              <MediaSlot label={s.media.label} kind={s.media.kind} src={s.media.src} alt={s.media.alt} ratio="16/9" />
               <div className="industry-top">
                 <s.icon size={34} strokeWidth={1.2} />
                 <span>{s.label}</span>
@@ -129,6 +142,7 @@ export default function Industries() {
         <div className="potential-grid">
           {potential.map((s) => (
             <article key={s.title}>
+              <MediaSlot label={s.media} kind="clip" ratio="16/9" />
               <s.icon size={27} strokeWidth={1.3} />
               <span className="tiny-label">POTENTIAL INDUSTRY</span>
               <h3>{s.title}</h3>

@@ -19,6 +19,9 @@ test("navigation routes load directly with research-focused About", async ({
     "physical evidence",
   );
   await expect(page.locator(".technology-section")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The team." })).toBeVisible();
+  await expect(page.locator(".team-card")).toHaveCount(5);
+  await expect(page.getByRole("heading", { name: "Start small. Prove it. Build forward." })).toBeVisible();
   await page.getByRole("link", { name: "Industries", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Aerospace" })).toBeVisible();
   await page.getByRole("link", { name: "Services", exact: true }).click();
