@@ -15,7 +15,7 @@ These rules apply to AI coding assistants and to people. `next dev` rewrites onl
 ## Changes
 
 - Deliver work in small, reviewable chunks. After each chunk, explain what was implemented, what its functions and libraries do, how data flows between components, how it was checked, and what remains. Stop for the founder's walkthrough before starting the next chunk.
-- Work on a branch and open a pull request. Do not commit to `main` directly. The one exception is `docs/brain/` (see Shared brain below).
+- Work on a branch and open a pull request. Do not commit to `main` directly. Every pull request needs the founder's approval (`.github/CODEOWNERS`), except one that touches only `docs/brain/` (see Shared brain below).
 - Before opening a pull request, run the tests that cover the change: `cd engine && uv run pytest` for the engine; `cd fea && uv run pytest -q -ra tests ../engine/tests` for the finite element code; `npm test` and `npm run typecheck` for the website.
 
 ## Documentation
@@ -38,8 +38,8 @@ The full method is in `docs/documentation-guide.md`; the index is `docs/README.m
 ## Shared brain
 
 - `docs/brain/` is the team's shared memory for people and agents (ADR-0057). Read `docs/brain/company.md` first in every session here, and write durable facts about the company back there, dated, under the note's `## Log`.
-- It is the one folder you may commit to `main` without a pull request: pull first, commit only files inside `docs/brain/` with a message that starts `brain:`, push. Everything else still goes through a branch and a pull request.
-- The repository is public. The brain holds no secrets, customer data, contact details, personal facts beyond a role, drafts, prompts, page or channel ids, or agent configuration (ADR-0028, ADR-0042). `docs/brain/README.md` has the full rule.
+- It is the one folder whose pull requests merge without an approval (ADR-0057 amendment 1): pull first, commit only files inside `docs/brain/` on a `brain/<topic>` branch with a message that starts `brain:`, open the pull request and merge it yourself. Never push to `main` directly. Everything else waits for the founder's approval.
+- The repository is public. The brain holds no secrets, customer data, contact details, personal facts beyond a role, the name of anyone who has not agreed to be named, drafts, prompts, page or channel ids, or agent configuration (ADR-0028, ADR-0042). `docs/brain/README.md` has the full rule.
 
 ## Engine rules
 

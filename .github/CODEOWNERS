@@ -1,0 +1,5 @@
+# Every pull request to main needs the founder's approval (ADR-0057 amendment 1).
+* @erikvilla1
+
+# The shared brain has no owner, so a pull request that touches only docs/brain/ merges without an approval.
+/docs/brain/
