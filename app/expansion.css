@@ -1630,3 +1630,11 @@
     font-size: 38px;
   }
 }
+
+/* Media slots on the industry cards (audit of 2026-10-31, item 11). */
+.industry-card .media-slot {
+  margin-bottom: 24px;
+}
+.potential-grid article .media-slot {
+  margin-bottom: 16px;
+}

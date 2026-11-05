@@ -47,8 +47,8 @@ The [local API and chunk 1 walkthrough](api/README.md) exposes one-material lami
 | Route | Contents |
 | --- | --- |
 | `/` | Project overview, research imagery, roadmap, and chat entry |
-| `/about` | Engineering model, research priorities, and lab workflow |
-| `/industries` | Aerospace and research/education priorities; potential industries |
+| `/about` | What we are building, the workflow, the roadmap, the lab loop and the team |
+| `/industries` | Aerospace and research/education priorities; potential industries; media slots per card |
 | `/services` | The five services, one card each, from `lib/services.ts` (ADR-0058) |
 | `/services/<slug>` | One page per service: computer-aided design, finite element modeling, test plans, documentation, manufacturing plans; what exists, a demonstration, what is planned, access |
 | `/contact` | The address to write to |
