@@ -1,7 +1,7 @@
 ---
 name: project-rules
 description: Rules for any work in the Anisotropy AI repository (composite laminate engine, material library, website, docs). Load before writing code, documents, data or skills here, and whenever deciding whether something belongs in the engine, the material library, the docs, or nowhere in the repository.
-version: 0.2.5
+version: 0.2.6
 ---
 
 # Project rules
@@ -15,7 +15,7 @@ Before any change in this repository, and whenever you must decide where content
 1. Read `AGENTS.md` at the repository root and follow it. It is the authority. If this skill and `AGENTS.md` disagree, `AGENTS.md` wins; report the disagreement.
 2. Read `docs/documentation-guide.md` before writing a report or a changelog entry. Load the `decision-records` skill before writing or amending a decision record.
 3. Decide where the content goes with the table below. If nothing in the table fits, stop and ask the founder.
-4. Work on a branch and open a pull request. Never commit to `main`.
+4. Work on a branch and open a pull request. Never commit to `main`, except inside `docs/brain/`, the shared brain (ADR-0057): read `docs/brain/company.md` at the start of a session and write durable facts about the company back there.
 
 ## Where content goes
 
@@ -39,6 +39,7 @@ Before any change in this repository, and whenever you must decide where content
 | Every change | One line in `CHANGELOG.md` under Unreleased | AGENTS.md |
 | A new or changed agent skill | `docs/agents/skills/<name>/SKILL.md`, through a pull request | ADR-0023 |
 | A new or changed subagent | `docs/agents/subagents/<name>.md`, through a pull request | ADR-0047 |
+| A durable fact about the company, its people, its voice or a shared workflow, for every agent to know | `docs/brain/<note>.md`, dated under `## Log`, public-safe only, committed to `main` with a message that starts `brain:` | ADR-0057 |
 
 ## Pitfalls
 
