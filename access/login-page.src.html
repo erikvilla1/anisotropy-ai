@@ -87,11 +87,6 @@
 				width: 40px;
 				height: auto;
 			}
-			.wordmark-ai {
-				font-weight: 400;
-				color: var(--muted);
-				margin-left: 3px;
-			}
 			.tag {
 				font-size: 9px;
 				letter-spacing: 1.4px;
@@ -338,7 +333,7 @@
 		<header class="bar">
 			<span class="wordmark">
 				<img alt="" width="40" height="36" src="__ANISOTROPY_MARK__" />
-				<span>Anisotropy<span class="wordmark-ai">AI</span></span>
+				<span>Anisotropy</span>
 			</span>
 			<span class="tag">Research preview / v.01</span>
 		</header>
@@ -374,7 +369,7 @@
 		</main>
 
 		<footer>
-			<span>Anisotropy AI · {{ app_domain | default: "anisotropy.dev" }}</span>
+			<span>Anisotropy · {{ app_domain | default: "anisotropy.dev" }}</span>
 			<span>Sign-in secured by Cloudflare Access</span>
 		</footer>
 	</body>
