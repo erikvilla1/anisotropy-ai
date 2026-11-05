@@ -55,15 +55,23 @@ To add or remove a user: edit the policy's email list. Access applies it at the 
 
 ### The branded sign-in page
 
-Access shows our own page instead of its stock one (ADR-0056 amendment 3). The template is `access/login-page.src.html`; `npm run build:access-page` writes `access/login-page.html`, the same page with the mark inlined (the page is shown before sign-in, so it cannot load images from `anisotropy.dev`). Access still draws the email field and the code button inside the page, so who gets in is unchanged.
+As set on 2026-11-05 (ADR-0056 amendment 3): this account has only Cloudflare's older login page settings, so the page is branded through them. Zero Trust → Reusable components → Custom pages → **Access login page** → Manage:
 
-1. Cloudflare One → Reusable components → Custom pages → **Access custom pages** → Manage → **Create custom page**: name `anisotropy-login`, type **Login**.
-2. Replace the starter template with the whole of `access/login-page.html`. Check **Problems** for errors, look at the preview, then **Publish** (publishing only saves it).
-3. Access controls → Applications → the `anisotropy.dev` application → Additional settings → **Custom block pages** → **Login page** → Custom page → `anisotropy-login` → Save.
-4. In the same application, Login methods: leave only **One-time PIN** ticked, so the page offers the email field alone (the stock page also listed a "Cloudflare" button).
-5. Open `anisotropy.dev` in a private window and sign in with a code. Changes take a few minutes to reach every edge.
+- Organization name: `Anisotropy Studio` (the App Launcher shows it too).
+- Logo URL: `access/mark.png` from the public repository, at `https://raw.githubusercontent.com/erikvilla1/anisotropy-ai/<commit>/access/mark.png` (the page is shown before sign-in, so the logo cannot come from `anisotropy.dev`). Use a commit on `main` once this is merged.
+- Header text: "Sign in with the email you were invited with. We'll send you a one-time code."
+- Message: "Anisotropy Studio is invite-only. No invite yet? Ask the Anisotropy team for access."
+- Custom background colour: on, `#0c0e0d` (the site's `--bg`).
 
-To undo it, set **Login page** back to **Cloudflare default**. The address bar still shows the team domain (`<team>.cloudflareaccess.com`) while the page is up; renaming the team changes the issuer the API checks, so it would need the `ANISOTROPY_ACCESS_TEAM_DOMAIN` secret changed in the same step.
+The application allows only **One-time PIN** under Authentication, with instant authentication on, so the page shows the email field alone. Cloudflare keeps its own header and white card; the settings apply to every Access application in the account.
+
+The full page in the studio's style, `access/login-page.src.html` (built to `access/login-page.html` by `npm run build:access-page`), is an **Access custom page** of type Login. That feature (a card named **Access custom pages** on the Custom pages screen, and a **Login page** row under the application's Additional settings → Custom block pages) is not offered on this account; Cloudflare's page says to ask support when it is missing. If it appears:
+
+1. Access custom pages → Manage → **Create custom page**: name `anisotropy-login`, type **Login**; replace the starter with the whole of `access/login-page.html`; clear **Problems**; **Publish**.
+2. The application → Additional settings → Custom block pages → **Login page** → `anisotropy-login` → Save.
+3. Sign in from a private window. To undo it, set **Login page** back to **Cloudflare default**.
+
+The address bar still shows the team domain (`<team>.cloudflareaccess.com`); renaming the team changes the issuer the API checks, so it would need the `ANISOTROPY_ACCESS_TEAM_DOMAIN` secret changed in the same step.
 
 ## The bucket
 
