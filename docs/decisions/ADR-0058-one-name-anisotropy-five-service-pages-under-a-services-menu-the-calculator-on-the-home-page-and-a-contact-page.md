@@ -30,6 +30,10 @@ Facts that bound the choice: `/studio`, `/studio/view` and `/chat` are the route
 - Pictures and clips are slots with a label (`components/media-slot.tsx`); the team supplies the media later. No file is fetched from outside the site.
 - Accounts and per-account use limits are not built; they wait for the team meeting the audit asks for.
 
+## As built (2026-11-05)
+
+Four pull requests, in the order the plan set: the site map (the name, the header with the Services disclosure, `/services` and its five pages, `/contact`, the media slots); the engine and API description of a stack (ADR-0059); the About page with the workflow and the roadmap moved from the home page and the team at its end, plus the Industries media slots; and the home page with the laminate calculator up front (`components/home/`), the chat block under it, and five blurbs (mission, the five services, the evidence, the team, what is new). The home page draws the typed stack with react-three-fiber and asks the engine for every number per settled edit; "Want to check the math?" hands the inputs to `/calculator`, kept as the full solution. Differences from the plan: the Services item is a link plus a disclosure button rather than a menu role, so the existing navigation test keeps its "Services" link; the layup reader is the coupon chat's, so a layup may list as many plies as the coupon form has rows; the ABD grid shows A, B and D once each with a note that B appears twice in the ABD matrix.
+
 ## Why (evidence)
 
 - The audit of 2026-10-31, revised 2026-11-01, is the founder's; its items 1, 2, 3, 13, 14 and 15 are quoted above. The founder's four answers of 2026-11-05 are recorded in the Decided by line.

@@ -7,6 +7,8 @@ import {
   type AnalysisResult, type CalculatorForm, type FieldErrors,
 } from "@/lib/laminate-api";
 import { findLibraryOption, libraryOptions } from "@/lib/material-library-options";
+import { calculatorHandoffKey, readCalculatorHandoff } from "@/lib/home-calculator";
+import { formatted, Matrix } from "@/components/abd-matrix";
 
 const materialFields = [
   ["E1_GPa", "E₁ (GPa)", "Along the fibers"],
@@ -30,23 +32,6 @@ function NumericField({ name, label, value, error, hint, onChange }: {
   );
 }
 
-/** Formatting changes precision for display only; the engine supplies every result value. */
-function formatted(value: number) { return value === 0 ? "0" : value.toExponential(6); }
-
-function Matrix({ title, unit, meaning, values }: { title: string; unit: string; meaning: string; values: number[][] }) {
-  return (
-    <div className="calc-matrix">
-      <h3>{title} <span>{unit}</span></h3>
-      <p>{meaning}</p>
-      <div className="calc-table-scroll" tabIndex={0} role="region" aria-label={`${title} stiffness matrix`}>
-        <table aria-label={`${title} matrix`}><thead><tr><th scope="col">↔</th>{["x", "y", "xy"].map((axis) => <th scope="col" key={axis}>{axis}</th>)}</tr></thead>
-          <tbody>{values.map((row, i) => <tr key={i}><th scope="row">{["x", "y", "xy"][i]}</th>{row.map((value, j) => <td key={j}>{formatted(value)}</td>)}</tr>)}</tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [form, setForm] = useState<CalculatorForm>(exampleForm);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -56,6 +41,16 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [status, setStatus] = useState("Example inputs loaded. Select Analyze laminate to calculate.");
   const activeRequest = useRef<AbortController | null>(null);
   useEffect(() => () => activeRequest.current?.abort("unmount"), []);
+  // The home page's "Want to check the math?" leaves its inputs here once; they replace the example, nothing is calculated yet.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(calculatorHandoffKey);
+      if (!raw) return;
+      sessionStorage.removeItem(calculatorHandoffKey);
+      const handed = readCalculatorHandoff(raw);
+      if (handed) { setForm(handed); setStatus("Inputs carried over from the home page. Select Analyze laminate to calculate."); }
+    } catch { /* storage blocked: the example stays */ }
+  }, []);
 
   function update(next: CalculatorForm) {
     setForm(next); setErrors({}); setMessage(""); setResult(null);

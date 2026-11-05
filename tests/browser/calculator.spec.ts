@@ -1,6 +1,24 @@
 import { test, expect } from "@playwright/test";
 import example from "../../api/examples/zero-degree-tension.json";
 
+test("the home page's laminate view asks the real engine for its default stack and shows the engine's description (ADR-0059)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const answered = page.waitForResponse((r) => r.url().endsWith("/v1/laminates/response") && r.request().method() === "POST");
+  await page.goto("/");
+  const response = await answered;
+  expect(response.status()).toBe(200);
+  const result = await response.json();
+  expect(result.inputs.plies.map((p: { angle_deg: number }) => p.angle_deg)).toEqual([45, -45, 0, 90, 90, 0, -45, 45]);
+  expect(result.summary.symmetric).toBe(true);
+  expect(result.summary.kind).toBe("quasi-isotropic");
+  expect(result.first_ply_failure.evaluated).toBe(false);
+  await expect(page.getByTestId("specs")).toContainText("Quasi-isotropic");
+  await expect(page.getByTestId("specs")).toContainText("symmetric, balanced");
+  await expect(page.getByTestId("failure-panel")).toHaveCount(0);
+  expect(browserErrors).toEqual([]);
+});
+
 test("calculator sends converted inputs to the real engine and displays its response", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));

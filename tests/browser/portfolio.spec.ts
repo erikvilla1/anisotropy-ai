@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { sampleCSV } from "../../lib/demo";
 
-test("overview, source images, modal dismissal, and material source document", async ({
+test("overview, the home page's blurbs, and material source document", async ({
   page,
   request,
 }) => {
@@ -11,35 +11,10 @@ test("overview, source images, modal dismissal, and material source document", a
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "understanding",
   );
-  await page.getByRole("button", { name: "Next research image" }).click();
-  await expect(
-    page.getByRole("heading", { name: "One specimen. More context." }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Enlarge CSAI-04 · Source coupon image" })
-    .click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-  for (const name of [
-    "Vacuum jig setup",
-    "Twist drill surface evaluation",
-    "Research visualization study",
-  ]) {
-    await page.getByRole("button", { name, exact: false }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect
-      .poll(() =>
-        page
-          .getByRole("dialog")
-          .locator("img")
-          .evaluate(
-            (img: HTMLImageElement) => img.complete && img.naturalWidth > 0,
-          ),
-      )
-      .toBeTruthy();
-    await page.getByRole("button", { name: "Close image viewer" }).click();
-  }
+  // The lab imagery carousel and its lightbox left the home page (audit of 2026-10-31, item 6).
+  await expect(page.getByRole("button", { name: "Next research image" })).toHaveCount(0);
+  for (const name of ["Your layup, calculated.", "Five ways to use it.", "Knowledge worth building on.", "Five people, two seats each.", "Lately."])
+    await expect(page.getByRole("heading", { name })).toBeVisible();
   // Course material is never served as a public asset (ADR-0018).
   for (const path of ["/assets/documents/material-properties-2026-v2.pdf"])
     expect((await request.get(path)).status()).toBe(404);

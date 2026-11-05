@@ -15,6 +15,24 @@ export type MaterialProvenance = {
   material_id: string; name: string; dataset_id: string; dataset: string; record_revision: string | null; rights: string; citation: string;
   E1_pa: number; E2_pa: number; G12_pa: number; nu12: number; ply_thickness_m: number | null; not_provided: string[];
   values: { role: string; key: string; value: number; unit: string; source_value: number; source_unit: string; basis: string; page: number; printed_page: number | null; reference_url: string }[];
+  /** The record's density and fiber volume fraction (ADR-0059); null when the record states none. */
+  density_kg_per_m3?: number | null;
+  fiber_volume_fraction?: number | null;
+};
+/** The stack described before any load, as the engine reports it (ADR-0059). */
+export type LaminateSummary = {
+  ply_count: number; total_thickness_m: number; symmetric: boolean; antisymmetric: boolean; balanced: boolean;
+  kind: "unidirectional" | "cross-ply" | "angle-ply" | "quasi-isotropic" | "general";
+  coupling: { extension_shear: boolean; extension_bending: boolean; bending_twisting: boolean };
+  relative_tolerance: number; areal_mass_kg_per_m2: number | null; areal_mass_missing: string | null;
+};
+export type FailureCriterion = {
+  criterion: "max_stress" | "max_strain" | "tsai_hill" | "tsai_wu"; strength_ratio: number | null; ply: number; angle_deg: number;
+  face: "bottom" | "top"; z_m: number; mode: string; failure_loads: Record<LoadName, number>;
+};
+/** First-ply failure under the request's loads by every criterion the inputs support (ADR-0059, ADR-0021). */
+export type FirstPlyFailure = {
+  evaluated: boolean; reason: string | null; criteria: FailureCriterion[]; not_computed: { criterion: string; reason: string }[];
 };
 export type AnalysisRequest = {
   unit_system: "SI_BASE";
@@ -33,6 +51,8 @@ export type AnalysisResult = {
   midplane_strain: number[];
   curvature_per_m: number[];
   material_provenance?: MaterialProvenance | null;
+  summary?: LaminateSummary | null;
+  first_ply_failure?: FirstPlyFailure | null;
 };
 export type FieldErrors = Record<string, string>;
 
@@ -126,10 +146,43 @@ export function readAnalysisResult(payload: unknown, request: AnalysisRequest): 
     && inputs.plies.every((ply, i) => sameFields(ply, request.plies[i]));
   if (!isObject(payload) || typeof payload.engine_version !== "string" || !payload.engine_version.trim()
     || !matrix(payload.A_N_per_m) || !matrix(payload.B_N) || !matrix(payload.D_N_m)
-    || !vector(payload.midplane_strain) || !vector(payload.curvature_per_m) || !sameInputs) {
+    || !vector(payload.midplane_strain) || !vector(payload.curvature_per_m) || !sameInputs
+    || !validSummary(payload.summary) || !validFailure(payload.first_ply_failure)) {
     throw new CalculationError("The calculation service returned an unexpected result. Please try again.");
   }
   return payload as AnalysisResult;
+}
+
+const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const finiteOrNull = (v: unknown) => v === null || finite(v);
+const bool = (v: unknown): v is boolean => typeof v === "boolean";
+const KINDS = ["unidirectional", "cross-ply", "angle-ply", "quasi-isotropic", "general"];
+const CRITERIA = ["max_stress", "max_strain", "tsai_hill", "tsai_wu"];
+
+/** The stack's description (ADR-0059) is optional in an older service's answer; when present it must be whole. */
+export function validSummary(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!isObject(value) || !isObject(value.coupling)) return false;
+  const c = value.coupling;
+  return finite(value.ply_count) && finite(value.total_thickness_m) && bool(value.symmetric) && bool(value.antisymmetric)
+    && bool(value.balanced) && typeof value.kind === "string" && KINDS.includes(value.kind) && finite(value.relative_tolerance)
+    && finiteOrNull(value.areal_mass_kg_per_m2) && (value.areal_mass_missing === null || typeof value.areal_mass_missing === "string")
+    && bool(c.extension_shear) && bool(c.extension_bending) && bool(c.bending_twisting);
+}
+
+export function validFailure(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!isObject(value) || !bool(value.evaluated) || !(value.reason === null || typeof value.reason === "string")) return false;
+  if (!Array.isArray(value.criteria) || !Array.isArray(value.not_computed)) return false;
+  const validCriterion = (item: unknown) => {
+    if (!isObject(item)) return false;
+    const loads = item.failure_loads;
+    return typeof item.criterion === "string" && CRITERIA.includes(item.criterion) && finiteOrNull(item.strength_ratio) && finite(item.ply)
+      && finite(item.angle_deg) && (item.face === "bottom" || item.face === "top") && finite(item.z_m) && typeof item.mode === "string"
+      && isObject(loads) && loadNames.every((name) => finite(loads[name]));
+  };
+  return value.criteria.every(validCriterion)
+    && value.not_computed.every((item) => isObject(item) && typeof item.criterion === "string" && typeof item.reason === "string");
 }
 
 /** Send one explicit request; errors never fall back to example or locally computed results. */
