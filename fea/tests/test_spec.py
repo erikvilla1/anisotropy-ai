@@ -62,7 +62,8 @@ def test_a_file_cannot_set_the_loader_fields_or_an_unknown_unit_system():
     with pytest.raises(SpecError, match="si is set by the loader, not written in a file"):
         spec_with('units = "mm-MPa"', 'units = "mm-MPa"\nsi = true')
     with pytest.raises(SpecError, match="units must be stated as one of"):
-        spec_with('units = "mm-MPa"', 'units = "in-psi"')
+        spec_with('units = "mm-MPa"', 'units = "SI"')
+    assert parse_spec(NODAL.replace('units = "mm-MPa"', 'units = "in-psi"')).units == "in-psi"  # a coupon may be stated in inches (ADR-0061)
 
 
 def test_units_are_converted_once_and_only_dimensioned_numbers_change():
@@ -115,7 +116,7 @@ REFUSALS = [
     ("centre = [12.5, 125.0], grip_corner = [0.0, 56.0]", "centre = [30.0, 125.0]", "lies outside the coupon"),
     ("[grips]\nkind = \"nodal\"\nregion = \"tabs\"     # the whole tab is gripped, as in the team's decks\n", "", "in-plane kinds need a \\[grips\\] table"),
     ("region = \"tabs\"", "region = \"line\"\n[nonsense]\nx = 1", "nonsense"),
-    ("units = \"mm-MPa\"", "units = \"in-psi\"", "units must be stated"),
+    ("units = \"mm-MPa\"", "units = \"SI\"", "units must be stated"),
 ]
 
 

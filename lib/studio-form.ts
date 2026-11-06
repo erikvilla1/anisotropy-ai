@@ -6,17 +6,28 @@
 import definition from "./coupon-form-definition.json";
 
 export type FieldKind = "text" | "number" | "whole" | "date" | "list" | "angle";
+/** The kind of unit a row's number carries: a length, a stress, a force, or an amount that is a length or a force by the loading type. */
+export type UnitKind = "length" | "stress" | "force" | "amount";
 export type FieldDefinition = {
   key: string; label: string; kind: FieldKind; help: string; required: boolean;
   default: string | number | null; words: string[]; at_least: number | null; above: number | null;
+  unit: UnitKind | null;
+  /** For a row with a unit: its label in each unit system a coupon may be stated in, and our default in each (ADR-0061). */
+  labels?: Record<string, string>; defaults?: Record<string, number>;
 };
 export type SectionDefinition = { title: string; fields: FieldDefinition[] };
 export type LibraryEntry = Record<string, string | number | null>;
+export type UnitSystem = { words: string; labels: Record<string, string> };
+export type LibraryConstants = { E1: number; E2: number; G12: number; ply_thickness: number | null };
 export type FormDefinition = {
   form_version: string; fea_version: string; units: string; row_units: Record<string, string>;
+  /** Every system a coupon may be stated in, as the engine labels it; `deck_units` is the system the decks are written in. */
+  unit_systems: Record<string, UnitSystem>; deck_units: string;
   sections: SectionDefinition[]; how_to: string[];
   glossary: { group: string; terms: { term: string; meaning: string; example: string }[] }[];
   tests: Record<string, string>; criteria: string[]; library: LibraryEntry[];
+  /** Each library material's E1, E2, G12 and ply thickness in every system, written by the engine: the page converts nothing. */
+  library_constants: Record<string, Record<string, LibraryConstants>>;
   plate?: { test: string; edges: string[]; areas: string[]; with_tabs: string[]; with_hole: string[]; dofs: Record<string, string> };
 };
 /** Every row's text as typed, by field key; blank means the row is empty. */
@@ -28,7 +39,22 @@ export const formDefinition = definition as FormDefinition;
 export const FORM_VERSION = formDefinition.form_version;
 export const fields: FieldDefinition[] = formDefinition.sections.flatMap((section) => section.fields);
 export const fieldByKey: Record<string, FieldDefinition> = Object.fromEntries(fields.map((field) => [field.key, field]));
-export const fieldByLabel: Record<string, FieldDefinition> = Object.fromEntries(fields.map((field) => [field.label, field]));
+/** A row by its label in any unit system: what a checklist names ("Length (in)" for a coupon stated in inches). */
+export const fieldByLabel: Record<string, FieldDefinition> = Object.fromEntries(
+  fields.flatMap((field) => [[field.label, field], ...Object.values(field.labels ?? {}).map((label) => [label, field])]),
+);
+/** The unit systems in the order the engine offers them; the first is the form's own, mm-MPa. */
+export const UNIT_SYSTEMS: string[] = Object.keys(formDefinition.unit_systems);
+export const DEFAULT_UNITS = formDefinition.units;
+export const DECK_UNITS = formDefinition.deck_units;
+/** The system a form is stated in: its Units row, or the form's own when the row is blank or unknown (the check refuses the unknown word). */
+export const unitsOf = (form: StudioForm): string => (UNIT_SYSTEMS.includes(form.units ?? "") ? form.units : DEFAULT_UNITS);
+export const unitLabels = (units: string): Record<string, string> => formDefinition.unit_systems[units]?.labels ?? formDefinition.unit_systems[DEFAULT_UNITS].labels;
+export const unitWords = (units: string): string => formDefinition.unit_systems[units]?.words ?? units;
+/** A row's label in a system: "Length (mm)" is "Length (in)" for a coupon stated in in-psi; a row without a unit keeps its label. */
+export const labelFor = (field: FieldDefinition, units: string): string => field.labels?.[units] ?? field.label;
+/** A library material's constants in a system, as the engine wrote them; null when the material is not in the library. */
+export const libraryConstantsIn = (id: string, units: string): LibraryConstants | null => formDefinition.library_constants[id]?.[units] ?? null;
 export const PLY_KEYS = fields.map((field) => field.key).filter((key) => /^ply_\d+$/.test(key));
 export const HOLE_KEYS = ["hole_diameter", "hole_circumferential", "hole_radial", "hole_ring", "hole_growth"];
 export const BENDING_KEYS = ["span", "overhang", "load_span"];
@@ -42,17 +68,22 @@ const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /** The public IM7/8552 example (the stand-in of `fea/tests/public_coupon.py`): a complete, solvable coupon to start from. */
 export const EXAMPLE: StudioForm = {
-  filled_by: "", date: "", notes: "", test: "unnotched tension", material_code: "IM7", layup_code: "", standard: "none",
+  filled_by: "", date: "", notes: "", units: "mm-MPa", test: "unnotched tension", material_code: "IM7", layup_code: "", standard: "none",
   size_from: "the public IM7/8552 check fea/checks/unnotched-im7-8552/", team_model: "not built yet", test_data: "none",
   length: "250", width: "25", tab_length: "56", ply_1: "45", ply_2: "0", ply_3: "-45", ply_4: "90", symmetric: "yes", ply_thickness: "",
   library: "im7-8552", G13: "4688.43", G23: "3000", criteria: "all", f12_star: "", control: "displacement", value: "1", element_size: "2",
   grips: "coupling", region: "tabs",
 };
 
-/** Every row blank but the defaults the form states. */
-export function blankForm(): StudioForm {
+/** Every row blank but the defaults the form states, in the given unit system (a default length, the element size, is the engine's
+ * figure for that system). */
+export function blankForm(units: string = DEFAULT_UNITS): StudioForm {
   const form: StudioForm = {};
-  for (const field of fields) form[field.key] = field.default === null || field.default === undefined ? "" : String(field.default);
+  for (const field of fields) {
+    const value = field.defaults?.[units] ?? field.default;
+    form[field.key] = value === null || value === undefined ? "" : String(value);
+  }
+  form.units = UNIT_SYSTEMS.includes(units) ? units : DEFAULT_UNITS;
   return form;
 }
 
@@ -98,7 +129,7 @@ export function buildValues(form: StudioForm, lists?: Record<string, unknown[]>)
 
 /** The form's text from a values object (a coupon read back through `GET /v1/coupons/{name}/values`). */
 export function formFromValues(values: Record<string, unknown>): StudioForm {
-  const form = blankForm();
+  const form = blankForm(typeof values.units === "string" ? values.units : DEFAULT_UNITS);
   const angles = values.angles;
   if (Array.isArray(angles)) angles.forEach((angle, i) => { form[`ply_${i + 1}`] = angle === null || angle === undefined ? "" : String(angle); });
   for (const field of fields) {

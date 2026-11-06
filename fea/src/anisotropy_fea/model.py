@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict
 from anisotropy_engine.lamina import Lamina, Strengths
 from anisotropy_engine.laminate import Ply, abd_matrices
 
-from .units import unit_factors
+from .units import deck_unit_factors
 
 NodeKey = tuple[str | None, int]  # (instance name, label); None means an assembly-level node (a reference point)
 ElementKey = tuple[str, int]  # (instance name, label)
@@ -476,8 +476,8 @@ def _validate_coupling(deck: Deck, coupling: KinematicCoupling) -> list[str]:
 
 
 def to_si(deck: Deck, units: str) -> Deck:
-    """The same deck with every dimensioned number in SI base units, and `units` recorded."""
-    factors = unit_factors(units)
+    """The same deck with every dimensioned number in SI base units, and `units` recorded; a deck is stated in a deck system only."""
+    factors = deck_unit_factors(units)
     length, stress, force = factors["length"], factors["stress"], factors["force"]
 
     def scale_nodes(nodes: Nodes) -> Nodes:

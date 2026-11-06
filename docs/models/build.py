@@ -72,7 +72,7 @@ from anisotropy_fea.results import ShellSolution  # noqa: E402
 from anisotropy_fea.report import (COMPONENTS, GROUP_KIND, ComparisonRow, GroupSummary, comparison_rows, element_centroids,  # noqa: E402
                                    laminate_check, model_facts, not_reported, solve_record, summarize)
 from anisotropy_fea.spec import TEST_CODES, coupon_card, load_spec, spec_material  # noqa: E402
-from anisotropy_fea.units import UNIT_LABEL, from_si  # noqa: E402  (UNIT_LABEL: one table for the documents and the studio)
+from anisotropy_fea.units import UNIT_LABEL, from_si, unit_factors  # noqa: E402  (UNIT_LABEL: one table for the documents and the studio)
 
 escape, code, inline, number, convert, heading = manual.escape, manual.code, manual.inline, manual.number, manual.convert, manual.heading
 GROUP_TITLE = {"rf": "Reactions", "u": "Displacements", "strain": "Membrane strain at element centroids",
@@ -554,7 +554,7 @@ def clt_section(deck, solution, record: dict, rows: list[ComparisonRow], units: 
         check = laminate_check(deck, solution)
     except KernelError as exc:
         return ("Classical laminate theory gives no closed form for this deck: " + escape(str(exc)) + ". The comparison below stands on the kernel alone.")
-    per_length = {"mm-MPa": 1e3, "m-Pa": 1.0}[units]  # N/m to N/mm, or unchanged
+    per_length = unit_factors(units)["force_per_length"]  # N/m to N/mm, or unchanged
     A = roundoff(check.A, float(np.max(np.abs(check.A)))) / per_length
     a_rows = "\n".join(r" & ".join(mnumber(A[i, j], 6) for j in range(3)) + r" \\" for i in range(3))
     c = check.constants

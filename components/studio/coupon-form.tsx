@@ -1,13 +1,15 @@
 "use client";
 
-import { libraryOptions, PLY_KEYS, sectionsFor, shortHelp, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
+import { labelFor, libraryOptions, PLY_KEYS, sectionsFor, shortHelp, unitsOf, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
 
 type Props = { form: StudioForm; errors: Record<string, string>; disabled: boolean; onChange: (key: string, value: string) => void };
 
-function Field({ field, value, error, disabled, onChange }: { field: FieldDefinition; value: string; error?: string; disabled: boolean; onChange: (value: string) => void }) {
+function Field({ field, value, units, error, disabled, onChange }: {
+  field: FieldDefinition; value: string; units: string; error?: string; disabled: boolean; onChange: (value: string) => void;
+}) {
   const id = `studio-${field.key}`;
   const describedBy = error ? `${id}-error` : `${id}-hint`;
-  const label = <span className="studio-label-row"><label htmlFor={id}>{field.label}</label>{field.required ? <span className="studio-required" aria-hidden="true">*</span> : null}</span>;
+  const label = <span className="studio-label-row"><label htmlFor={id}>{labelFor(field, units)}</label>{field.required ? <span className="studio-required" aria-hidden="true">*</span> : null}</span>;
   let control;
   if (field.key === "library") {
     control = (
@@ -40,6 +42,7 @@ function Field({ field, value, error, disabled, onChange }: { field: FieldDefini
 }
 
 export function CouponForm({ form, errors, disabled, onChange }: Props) {
+  const units = unitsOf(form); // the Units row relabels every row with a unit as it changes (ADR-0061)
   return (
     <div className="studio-form" data-testid="studio-form">
       {sectionsFor(form).map((section) => {
@@ -63,7 +66,7 @@ export function CouponForm({ form, errors, disabled, onChange }: Props) {
             ) : null}
             {others.length ? (
               <div className="studio-field-grid">
-                {others.map((field) => <Field key={field.key} field={field} value={form[field.key] ?? ""} error={errors[field.key]} disabled={disabled}
+                {others.map((field) => <Field key={field.key} field={field} value={form[field.key] ?? ""} units={units} error={errors[field.key]} disabled={disabled}
                   onChange={(value) => onChange(field.key, value)} />)}
               </div>
             ) : null}

@@ -53,7 +53,7 @@ from anisotropy_engine.rotation import strain_transformation, stress_transformat
 from .calculix import DatResults
 from .cases import GROUPS, PLY_GROUPS, element_name, fe_results, validate_case
 from .femodel import FEModel
-from .units import unit_factors
+from .units import deck_units_of, unit_factors
 
 SOLVER_FIELDS = ("name", "version", "element_type", "run_by", "run_date", "machine", "source")
 RECORD_FIELDS = ("title", "units", "spec", "deck_kernel", "deck_reference", "deck_kernel_sha256", "deck_reference_sha256", "solver", "expected")
@@ -253,7 +253,7 @@ def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
         z = C.values[:, 2]
         if bending:
             thickness = sum(p.thickness_m for p in plies)
-            unit = unit_factors(model.spec.units)["length"]
+            unit = unit_factors(deck_units_of(model.spec.units))["length"]  # the .dat is in the deck's system
             interfaces = (np.concatenate([[-thickness / 2.0], -thickness / 2.0 + np.cumsum([p.thickness_m for p in plies])])) / unit
             stresses = layer_face_values(S.values[:, [0, 1, 3]], z, len(plies), per_layer, interfaces)
             strains = layer_face_values(E.values[:, [0, 1, 3]], z, len(plies), per_layer, interfaces)

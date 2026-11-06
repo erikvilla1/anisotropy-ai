@@ -19,7 +19,7 @@ from anisotropy_fea.calculix import CalculixError, parse_dat, run_calculix
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.spec import load_spec
-from anisotropy_fea.units import from_si
+from anisotropy_fea.units import deck_units_of, from_si
 from anisotropy_fea.write_abaqus import write_abaqus
 from anisotropy_fea.write_calculix import write_calculix
 
@@ -30,7 +30,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     spec = load_spec(args.spec)
-    units = spec.units
+    units = deck_units_of(spec.units)  # the decks and the numbers printed here are in the deck's system (ADR-0061)
     spec2 = spec.model_copy(update={"mesh": spec.mesh.model_copy(update={"element_order": 2})})
     model = build_model(spec2)
     args.out.mkdir(parents=True, exist_ok=True)

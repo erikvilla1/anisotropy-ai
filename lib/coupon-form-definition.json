@@ -1,5 +1,5 @@
 {
- "form_version": "0.5",
+ "form_version": "0.6",
  "fea_version": "0.1.0",
  "units": "mm-MPa",
  "row_units": {
@@ -7,6 +7,65 @@
   "stress": "MPa",
   "force": "N"
  },
+ "unit_systems": {
+  "mm-MPa": {
+   "words": "mm, MPa and N",
+   "labels": {
+    "force": "N",
+    "length": "mm",
+    "stress": "MPa",
+    "force_per_length": "N/mm",
+    "modulus": "GPa",
+    "stiffness": "N/mm",
+    "per_length": "1/mm",
+    "moment": "N·mm/mm",
+    "rotation": "rad"
+   }
+  },
+  "m-Pa": {
+   "words": "m, Pa and N",
+   "labels": {
+    "force": "N",
+    "length": "m",
+    "stress": "Pa",
+    "force_per_length": "N/m",
+    "modulus": "GPa",
+    "stiffness": "N/m",
+    "per_length": "1/m",
+    "moment": "N·m/m",
+    "rotation": "rad"
+   }
+  },
+  "in-psi": {
+   "words": "in, psi and lbf",
+   "labels": {
+    "force": "lbf",
+    "length": "in",
+    "stress": "psi",
+    "force_per_length": "lbf/in",
+    "modulus": "Msi",
+    "stiffness": "lbf/in",
+    "per_length": "1/in",
+    "moment": "lbf·in/in",
+    "rotation": "rad"
+   }
+  },
+  "in-ksi": {
+   "words": "in, ksi and lbf",
+   "labels": {
+    "force": "lbf",
+    "length": "in",
+    "stress": "ksi",
+    "force_per_length": "lbf/in",
+    "modulus": "Msi",
+    "stiffness": "lbf/in",
+    "per_length": "1/in",
+    "moment": "lbf·in/in",
+    "rotation": "rad"
+   }
+  }
+ },
+ "deck_units": "mm-MPa",
  "sections": [
   {
    "title": "Who fills this in",
@@ -20,7 +79,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "date",
@@ -31,7 +91,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "notes",
@@ -42,13 +103,31 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     }
    ]
   },
   {
    "title": "The coupon",
    "fields": [
+    {
+     "key": "units",
+     "label": "Units",
+     "kind": "list",
+     "help": "the unit system every number on this form is in: mm-MPa (mm, MPa and N), m-Pa (m, Pa and N), in-psi (in, psi and lbf) or in-ksi (in, ksi and lbf); the row labels are written for mm-MPa, so with another system read each unit as that system's. Results come back in the units you pick; our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick",
+     "required": false,
+     "default": "mm-MPa",
+     "words": [
+      "mm-MPa",
+      "m-Pa",
+      "in-psi",
+      "in-ksi"
+     ],
+     "at_least": null,
+     "above": null,
+     "unit": null
+    },
     {
      "key": "test",
      "label": "Test",
@@ -66,7 +145,8 @@
       "plate"
      ],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "material_code",
@@ -77,7 +157,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "layup_code",
@@ -88,7 +169,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "standard",
@@ -99,7 +181,8 @@
      "default": "none",
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "size_from",
@@ -110,7 +193,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "team_model",
@@ -121,7 +205,8 @@
      "default": "not built yet",
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "test_data",
@@ -132,12 +217,13 @@
      "default": "none",
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     }
    ]
   },
   {
-   "title": "Geometry (mm): the coupon lies with its length along y, the direction it is pulled, pushed or spanned",
+   "title": "Geometry: the coupon lies with its length along y, the direction it is pulled, pushed or spanned; lengths in the units stated above",
    "fields": [
     {
      "key": "length",
@@ -148,7 +234,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Length (mm)",
+      "m-Pa": "Length (m)",
+      "in-psi": "Length (in)",
+      "in-ksi": "Length (in)"
+     }
     },
     {
      "key": "width",
@@ -159,7 +252,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Width (mm)",
+      "m-Pa": "Width (m)",
+      "in-psi": "Width (in)",
+      "in-ksi": "Width (in)"
+     }
     },
     {
      "key": "tab_length",
@@ -170,7 +270,14 @@
      "default": null,
      "words": [],
      "at_least": 0,
-     "above": null
+     "above": null,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Tab length (mm)",
+      "m-Pa": "Tab length (m)",
+      "in-psi": "Tab length (in)",
+      "in-ksi": "Tab length (in)"
+     }
     }
    ]
   },
@@ -186,7 +293,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Support span (mm)",
+      "m-Pa": "Support span (m)",
+      "in-psi": "Support span (in)",
+      "in-ksi": "Support span (in)"
+     }
     },
     {
      "key": "overhang",
@@ -197,7 +311,20 @@
      "default": 0.0,
      "words": [],
      "at_least": 0,
-     "above": null
+     "above": null,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Overhang (mm)",
+      "m-Pa": "Overhang (m)",
+      "in-psi": "Overhang (in)",
+      "in-ksi": "Overhang (in)"
+     },
+     "defaults": {
+      "mm-MPa": 0.0,
+      "m-Pa": 0.0,
+      "in-psi": 0.0,
+      "in-ksi": 0.0
+     }
     },
     {
      "key": "load_span",
@@ -208,7 +335,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Loading span (mm)",
+      "m-Pa": "Loading span (m)",
+      "in-psi": "Loading span (in)",
+      "in-ksi": "Loading span (in)"
+     }
     }
    ]
   },
@@ -224,7 +358,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Hole diameter (mm)",
+      "m-Pa": "Hole diameter (m)",
+      "in-psi": "Hole diameter (in)",
+      "in-ksi": "Hole diameter (in)"
+     }
     },
     {
      "key": "hole_circumferential",
@@ -235,7 +376,8 @@
      "default": 32,
      "words": [],
      "at_least": 8,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "hole_radial",
@@ -246,7 +388,8 @@
      "default": 6,
      "words": [],
      "at_least": 1,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "hole_ring",
@@ -257,7 +400,8 @@
      "default": 2.0,
      "words": [],
      "at_least": null,
-     "above": 1
+     "above": 1,
+     "unit": null
     },
     {
      "key": "hole_growth",
@@ -268,7 +412,8 @@
      "default": 1.2,
      "words": [],
      "at_least": 1,
-     "above": null
+     "above": null,
+     "unit": null
     }
    ]
   },
@@ -284,7 +429,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_2",
@@ -295,7 +441,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_3",
@@ -306,7 +453,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_4",
@@ -317,7 +465,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_5",
@@ -328,7 +477,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_6",
@@ -339,7 +489,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_7",
@@ -350,7 +501,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_8",
@@ -361,7 +513,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_9",
@@ -372,7 +525,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_10",
@@ -383,7 +537,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_11",
@@ -394,7 +549,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_12",
@@ -405,7 +561,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_13",
@@ -416,7 +573,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_14",
@@ -427,7 +585,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_15",
@@ -438,7 +597,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_16",
@@ -449,7 +609,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "symmetric",
@@ -463,7 +624,8 @@
       "no"
      ],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "ply_thickness",
@@ -474,7 +636,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Ply thickness (mm)",
+      "m-Pa": "Ply thickness (m)",
+      "in-psi": "Ply thickness (in)",
+      "in-ksi": "Ply thickness (in)"
+     }
     }
    ]
   },
@@ -490,7 +659,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "own_name",
@@ -501,7 +671,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "own_E1",
@@ -512,7 +683,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: E1 (MPa)",
+      "m-Pa": "Own material: E1 (Pa)",
+      "in-psi": "Own material: E1 (psi)",
+      "in-ksi": "Own material: E1 (ksi)"
+     }
     },
     {
      "key": "own_E2",
@@ -523,7 +701,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: E2 (MPa)",
+      "m-Pa": "Own material: E2 (Pa)",
+      "in-psi": "Own material: E2 (psi)",
+      "in-ksi": "Own material: E2 (ksi)"
+     }
     },
     {
      "key": "own_G12",
@@ -534,7 +719,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: G12 (MPa)",
+      "m-Pa": "Own material: G12 (Pa)",
+      "in-psi": "Own material: G12 (psi)",
+      "in-ksi": "Own material: G12 (ksi)"
+     }
     },
     {
      "key": "own_nu12",
@@ -545,7 +737,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "own_F1t",
@@ -556,7 +749,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: F1t (MPa)",
+      "m-Pa": "Own material: F1t (Pa)",
+      "in-psi": "Own material: F1t (psi)",
+      "in-ksi": "Own material: F1t (ksi)"
+     }
     },
     {
      "key": "own_F1c",
@@ -567,7 +767,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: F1c (MPa)",
+      "m-Pa": "Own material: F1c (Pa)",
+      "in-psi": "Own material: F1c (psi)",
+      "in-ksi": "Own material: F1c (ksi)"
+     }
     },
     {
      "key": "own_F2t",
@@ -578,7 +785,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: F2t (MPa)",
+      "m-Pa": "Own material: F2t (Pa)",
+      "in-psi": "Own material: F2t (psi)",
+      "in-ksi": "Own material: F2t (ksi)"
+     }
     },
     {
      "key": "own_F2c",
@@ -589,7 +803,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: F2c (MPa)",
+      "m-Pa": "Own material: F2c (Pa)",
+      "in-psi": "Own material: F2c (psi)",
+      "in-ksi": "Own material: F2c (ksi)"
+     }
     },
     {
      "key": "own_F6",
@@ -600,7 +821,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: F6 (MPa)",
+      "m-Pa": "Own material: F6 (Pa)",
+      "in-psi": "Own material: F6 (psi)",
+      "in-ksi": "Own material: F6 (ksi)"
+     }
     },
     {
      "key": "own_source",
@@ -611,7 +839,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "G13",
@@ -622,7 +851,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "G13 (MPa)",
+      "m-Pa": "G13 (Pa)",
+      "in-psi": "G13 (psi)",
+      "in-ksi": "G13 (ksi)"
+     }
     },
     {
      "key": "G23",
@@ -633,7 +869,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "G23 (MPa)",
+      "m-Pa": "G23 (Pa)",
+      "in-psi": "G23 (psi)",
+      "in-ksi": "G23 (ksi)"
+     }
     }
    ]
   },
@@ -655,7 +898,8 @@
       "none"
      ],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "f12_star",
@@ -666,7 +910,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     }
    ]
   },
@@ -677,7 +922,7 @@
      "key": "control",
      "label": "Loading type",
      "kind": "list",
-     "help": "displacement: the top grip moves by the value, in mm; force: a total force, in N, pulls or pushes the top grip. Bending takes displacement: the loading nose travels by the value",
+     "help": "displacement: the top grip moves by the value, a length; force: a total force pulls or pushes the top grip. Bending takes displacement: the loading nose travels by the value",
      "required": true,
      "default": null,
      "words": [
@@ -685,7 +930,8 @@
       "force"
      ],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "value",
@@ -696,7 +942,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "amount",
+     "labels": {
+      "mm-MPa": "Value (mm or N)",
+      "m-Pa": "Value (m or N)",
+      "in-psi": "Value (in or lbf)",
+      "in-ksi": "Value (in or lbf)"
+     }
     }
    ]
   },
@@ -712,7 +965,20 @@
      "default": 2.0,
      "words": [],
      "at_least": null,
-     "above": 0
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Element size (mm)",
+      "m-Pa": "Element size (m)",
+      "in-psi": "Element size (in)",
+      "in-ksi": "Element size (in)"
+     },
+     "defaults": {
+      "mm-MPa": 2.0,
+      "m-Pa": 0.002,
+      "in-psi": 0.07874015748031496,
+      "in-ksi": 0.07874015748031496
+     }
     },
     {
      "key": "mesh_nx",
@@ -723,7 +989,8 @@
      "default": null,
      "words": [],
      "at_least": 1,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "mesh_partitions",
@@ -734,7 +1001,14 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Your Abaqus mesh: partition lines (mm)",
+      "m-Pa": "Your Abaqus mesh: partition lines (m)",
+      "in-psi": "Your Abaqus mesh: partition lines (in)",
+      "in-ksi": "Your Abaqus mesh: partition lines (in)"
+     }
     },
     {
      "key": "mesh_seeds",
@@ -745,7 +1019,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     }
    ]
   },
@@ -764,7 +1039,8 @@
       "nodal"
      ],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "region",
@@ -778,7 +1054,8 @@
       "line"
      ],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     }
    ]
   },
@@ -794,7 +1071,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "name_instance",
@@ -805,7 +1083,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "name_material",
@@ -816,7 +1095,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "name_layup",
@@ -827,7 +1107,8 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     },
     {
      "key": "name_section",
@@ -838,14 +1119,15 @@
      "default": null,
      "words": [],
      "at_least": null,
-     "above": null
+     "above": null,
+     "unit": null
     }
    ]
   }
  ],
  "how_to": [
   "What this form is for. You describe one coupon test; from it we build the model in our engine, solve it, and send back a package: the document, our Abaqus deck of the same coupon, and the audit form on which you compare your Abaqus results with ours.",
-  "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. Units are mm, MPa and N. Every row says what it means beside it; the sheet Definitions explains each term with an example.",
+  "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. The Units row says which units every number is in: mm, MPa and N unless you pick another system (m-Pa, in-psi or in-ksi); the results come back in the same units, and our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick. Every row says what it means beside it; the sheet Definitions explains each term with an example.",
   "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured from x, as in your Abaqus models: 0 = fibres across the coupon, 90 = fibres along the pull.",
   "Layup: one ply per row, bottom ply first, angles in degrees. With Symmetric = yes, the plies you list are the lower half and are mirrored.",
   "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one.",
@@ -1432,6 +1714,476 @@
    "Rights": "licensed-reference"
   }
  ],
+ "library_constants": {
+  "7781-5245c": {
+   "mm-MPa": {
+    "E1": 29700.0,
+    "E2": 29700.0,
+    "G12": 5300.0,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 29700000000.0,
+    "E2": 29700000000.0,
+    "G12": 5300000000.0,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 4307620.810587214,
+    "E2": 4307620.810587214,
+    "G12": 768700.0099701089,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 4307.620810587215,
+    "E2": 4307.620810587215,
+    "G12": 768.7000099701089,
+    "ply_thickness": null
+   }
+  },
+  "7781-ea9396": {
+   "mm-MPa": {
+    "E1": 24959.021401269467,
+    "E2": 25303.75926592788,
+    "G12": 5226.2260282216175,
+    "ply_thickness": 0.2159
+   },
+   "m-Pa": {
+    "E1": 24959021401.269466,
+    "E2": 25303759265.927883,
+    "G12": 5226226028.221618,
+    "ply_thickness": 0.00021590000000000002
+   },
+   "in-psi": {
+    "E1": 3620000.0,
+    "E2": 3670000.0,
+    "G12": 758000.0,
+    "ply_thickness": 0.0085
+   },
+   "in-ksi": {
+    "E1": 3620.0000000000005,
+    "E2": 3670.0,
+    "G12": 758.0000000000001,
+    "ply_thickness": 0.0085
+   }
+  },
+  "agp370-3501-6s": {
+   "mm-MPa": {
+    "E1": 77000.0,
+    "E2": 75000.0,
+    "G12": 6500.0,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 77000000000.0,
+    "E2": 75000000000.0,
+    "G12": 6500000000.0,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 11167905.80522611,
+    "E2": 10877830.329765692,
+    "G12": 942745.29524636,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 11167.905805226112,
+    "E2": 10877.830329765693,
+    "G12": 942.74529524636,
+    "ply_thickness": null
+   }
+  },
+  "as4-3501": {
+   "mm-MPa": {
+    "E1": 147000.0,
+    "E2": 10300.0,
+    "G12": 7000.0,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 147000000000.0,
+    "E2": 10300000000.0,
+    "G12": 7000000000.0,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 21320547.446340755,
+    "E2": 1493888.698621155,
+    "G12": 1015264.1641114646,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 21320.54744634076,
+    "E2": 1493.888698621155,
+    "G12": 1015.2641641114647,
+    "ply_thickness": null
+   }
+  },
+  "as4-8552": {
+   "mm-MPa": {
+    "E1": 131620.916726584,
+    "E2": 9238.974772845604,
+    "G12": 4826.330105217852,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 131620916726.584,
+    "E2": 9238974772.845604,
+    "G12": 4826330105.217853,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 19090000.0,
+    "E2": 1340000.0,
+    "G12": 700000.0,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 19090.0,
+    "E2": 1340.0000000000002,
+    "G12": 700.0,
+    "ply_thickness": null
+   }
+  },
+  "as4-8552s-pw": {
+   "mm-MPa": {
+    "E1": 66051.7748685529,
+    "E2": 66603.35545200636,
+    "G12": 4964.2252510812195,
+    "ply_thickness": 0.19811999999999996
+   },
+   "m-Pa": {
+    "E1": 66051774868.552895,
+    "E2": 66603355452.00636,
+    "G12": 4964225251.08122,
+    "ply_thickness": 0.00019811999999999998
+   },
+   "in-psi": {
+    "E1": 9580000.0,
+    "E2": 9660000.0,
+    "G12": 720000.0,
+    "ply_thickness": 0.0078
+   },
+   "in-ksi": {
+    "E1": 9580.0,
+    "E2": 9660.0,
+    "G12": 720.0,
+    "ply_thickness": 0.0078
+   }
+  },
+  "as4-apc2": {
+   "mm-MPa": {
+    "E1": 138000.0,
+    "E2": 8700.0,
+    "G12": 5000.0,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 138000000000.0,
+    "E2": 8700000000.0,
+    "G12": 5000000000.0,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 20015207.80676887,
+    "E2": 1261828.3182528203,
+    "G12": 725188.6886510461,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 20015.207806768874,
+    "E2": 1261.8283182528203,
+    "G12": 725.1886886510462,
+    "ply_thickness": null
+   }
+  },
+  "hts40-tc250": {
+   "mm-MPa": {
+    "E1": 59708.598158838,
+    "E2": 59157.01757538454,
+    "G12": 3585.2737924475477,
+    "ply_thickness": 0.2159
+   },
+   "m-Pa": {
+    "E1": 59708598158.838005,
+    "E2": 59157017575.38454,
+    "G12": 3585273792.447548,
+    "ply_thickness": 0.00021590000000000002
+   },
+   "in-psi": {
+    "E1": 8660000.0,
+    "E2": 8580000.0,
+    "G12": 520000.00000000006,
+    "ply_thickness": 0.0085
+   },
+   "in-ksi": {
+    "E1": 8660.0,
+    "E2": 8580.0,
+    "G12": 520.0000000000001,
+    "ply_thickness": 0.0085
+   }
+  },
+  "im6g-3501-6": {
+   "mm-MPa": {
+    "E1": 169000.0,
+    "E2": 9000.0,
+    "G12": 6500.0,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 169000000000.0,
+    "E2": 9000000000.0,
+    "G12": 6500000000.0,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 24511377.67640536,
+    "E2": 1305339.639571883,
+    "G12": 942745.29524636,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 24511.377676405362,
+    "E2": 1305.339639571883,
+    "G12": 942.74529524636,
+    "ply_thickness": null
+   }
+  },
+  "im7-8552": {
+   "mm-MPa": {
+    "E1": 162095.7439623882,
+    "E2": 8963.18448111887,
+    "G12": 4688.434959354486,
+    "ply_thickness": 0.18288
+   },
+   "m-Pa": {
+    "E1": 162095743962.38818,
+    "E2": 8963184481.11887,
+    "G12": 4688434959.3544855,
+    "ply_thickness": 0.00018287999999999998
+   },
+   "in-psi": {
+    "E1": 23510000.000000004,
+    "E2": 1300000.0,
+    "G12": 680000.0,
+    "ply_thickness": 0.0072
+   },
+   "in-ksi": {
+    "E1": 23510.000000000004,
+    "E2": 1300.0000000000002,
+    "G12": 680.0000000000001,
+    "ply_thickness": 0.0072
+   }
+  },
+  "im7-977-3": {
+   "mm-MPa": {
+    "E1": 190000.0,
+    "E2": 9900.0,
+    "G12": 7800.0,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 190000000000.0,
+    "E2": 9900000000.0,
+    "G12": 7800000000.0,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 27557170.168739755,
+    "E2": 1435873.6035290714,
+    "G12": 1131294.3542956319,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 27557.170168739754,
+    "E2": 1435.8736035290715,
+    "G12": 1131.294354295632,
+    "ply_thickness": null
+   }
+  },
+  "im7-bt250e-6": {
+   "mm-MPa": {
+    "E1": 155842.19909748447,
+    "E2": 8604.657101874114,
+    "G12": 4336.802337402899,
+    "ply_thickness": 0.14731999999999998
+   },
+   "m-Pa": {
+    "E1": 155842199097.48447,
+    "E2": 8604657101.874115,
+    "G12": 4336802337.402899,
+    "ply_thickness": 0.00014732
+   },
+   "in-psi": {
+    "E1": 22603000.0,
+    "E2": 1248000.0,
+    "G12": 629000.0,
+    "ply_thickness": 0.0058
+   },
+   "in-ksi": {
+    "E1": 22603.000000000004,
+    "E2": 1248.0000000000002,
+    "G12": 629.0,
+    "ply_thickness": 0.0058
+   }
+  },
+  "ims65-ep2190": {
+   "mm-MPa": {
+    "E1": 151960.45074143066,
+    "E2": 8652.920402926293,
+    "G12": 4173.396589554809,
+    "ply_thickness": 0.14223999999999998
+   },
+   "m-Pa": {
+    "E1": 151960450741.43066,
+    "E2": 8652920402.926292,
+    "G12": 4173396589.5548086,
+    "ply_thickness": 0.00014224
+   },
+   "in-psi": {
+    "E1": 22040000.0,
+    "E2": 1255000.0,
+    "G12": 605300.0,
+    "ply_thickness": 0.0056
+   },
+   "in-ksi": {
+    "E1": 22040.0,
+    "E2": 1255.0,
+    "G12": 605.3000000000001,
+    "ply_thickness": 0.0056
+   }
+  },
+  "m10e-3783": {
+   "mm-MPa": {
+    "E1": 24500.0,
+    "E2": 23800.0,
+    "G12": 4700.0,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 24500000000.0,
+    "E2": 23800000000.0,
+    "G12": 4700000000.0,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 3553424.574390126,
+    "E2": 3451898.1579789794,
+    "G12": 681677.3673319834,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 3553.424574390126,
+    "E2": 3451.8981579789797,
+    "G12": 681.6773673319834,
+    "ply_thickness": null
+   }
+  },
+  "t1100gc-tc380": {
+   "mm-MPa": {
+    "E1": 158372.57502407723,
+    "E2": 7660.075352710049,
+    "G12": 3957.5906862786387,
+    "ply_thickness": 0.12191999999999999
+   },
+   "m-Pa": {
+    "E1": 158372575024.07724,
+    "E2": 7660075352.710049,
+    "G12": 3957590686.278639,
+    "ply_thickness": 0.00012191999999999998
+   },
+   "in-psi": {
+    "E1": 22970000.0,
+    "E2": 1111000.0,
+    "G12": 574000.0,
+    "ply_thickness": 0.0048
+   },
+   "in-ksi": {
+    "E1": 22970.0,
+    "E2": 1111.0,
+    "G12": 574.0,
+    "ply_thickness": 0.0048
+   }
+  },
+  "t650-5320-1": {
+   "mm-MPa": {
+    "E1": 138426.0421749412,
+    "E2": 9176.921957207089,
+    "G12": 4950.435736494883,
+    "ply_thickness": 0.1397
+   },
+   "m-Pa": {
+    "E1": 138426042174.9412,
+    "E2": 9176921957.207088,
+    "G12": 4950435736.494883,
+    "ply_thickness": 0.00013969999999999998
+   },
+   "in-psi": {
+    "E1": 20077000.000000004,
+    "E2": 1331000.0,
+    "G12": 717999.9999999999,
+    "ply_thickness": 0.0055
+   },
+   "in-ksi": {
+    "E1": 20077.000000000004,
+    "E2": 1331.0000000000002,
+    "G12": 718.0,
+    "ply_thickness": 0.0055
+   }
+  },
+  "t650-5320-1-pw": {
+   "mm-MPa": {
+    "E1": 68878.62535875192,
+    "E2": 68471.83467845498,
+    "G12": 5067.646610478745,
+    "ply_thickness": 0.19558
+   },
+   "m-Pa": {
+    "E1": 68878625358.75192,
+    "E2": 68471834678.45499,
+    "G12": 5067646610.478745,
+    "ply_thickness": 0.00019558
+   },
+   "in-psi": {
+    "E1": 9990000.0,
+    "E2": 9931000.0,
+    "G12": 735000.0,
+    "ply_thickness": 0.0077
+   },
+   "in-ksi": {
+    "E1": 9990.0,
+    "E2": 9931.0,
+    "G12": 735.0000000000001,
+    "ply_thickness": 0.0077
+   }
+  },
+  "x840-z60-pw": {
+   "mm-MPa": {
+    "E1": 80000.0,
+    "E2": 80000.0,
+    "G12": 6480.0,
+    "ply_thickness": null
+   },
+   "m-Pa": {
+    "E1": 80000000000.0,
+    "E2": 80000000000.0,
+    "G12": 6480000000.0,
+    "ply_thickness": null
+   },
+   "in-psi": {
+    "E1": 11603019.018416738,
+    "E2": 11603019.018416738,
+    "G12": 939844.5404917558,
+    "ply_thickness": null
+   },
+   "in-ksi": {
+    "E1": 11603.019018416739,
+    "E2": 11603.019018416739,
+    "G12": 939.8445404917559,
+    "ply_thickness": null
+   }
+  }
+ },
  "plate": {
   "test": "plate",
   "edges": [

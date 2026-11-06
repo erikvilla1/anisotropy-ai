@@ -33,12 +33,12 @@ from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import Deck, node_name, reference_node  # noqa: E402
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, ply_ratio_per_ply, strength_ratios  # noqa: E402
 from anisotropy_fea.results import ShellSolution, Solution  # noqa: E402
-from anisotropy_fea.units import from_si  # noqa: E402
+from anisotropy_fea.units import UNIT_LABEL, from_si  # noqa: E402
 
 INK, MUTED, GRID = "#1C1F22", "#5D636A", "#D9DCE0"
-LENGTH_UNIT = {"mm-MPa": "mm", "m-Pa": "m"}
-FORCE_PER_LENGTH_UNIT = {"mm-MPa": "N/mm", "m-Pa": "N/m"}
-MOMENT_UNIT = {"mm-MPa": "N·mm/mm", "m-Pa": "N·m/m"}
+LENGTH_UNIT = {units: lab["length"] for units, lab in UNIT_LABEL.items()}  # one table for every stated system (ADR-0061)
+FORCE_PER_LENGTH_UNIT = {units: lab["force_per_length"] for units, lab in UNIT_LABEL.items()}
+MOMENT_UNIT = {units: lab["moment"] for units, lab in UNIT_LABEL.items()}
 TITLE, LABEL, TICKS = 13, 11, 10  # font sizes: the figure prints at about 0.6 of its size on a letter page
 SEQUENTIAL = "Blues"  # one hue, light to dark: magnitudes
 DIVERGING = "RdBu_r"  # two hues, neutral middle: signed fields, centred on zero

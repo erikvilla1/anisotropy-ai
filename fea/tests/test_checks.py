@@ -261,3 +261,28 @@ def test_the_preview_of_a_force_controlled_nodal_coupon(tmp_path):
     assert data["loaded"]["control"] == "force" and data["loaded"]["value"] == pytest.approx(10000.0) and data["loaded"]["unit"] == "N"
     assert data["loaded"]["set"] == "Grip-Top" and data["loaded"]["through"] is None and "quality" not in data
     assert build_model(model.spec).mesh.element_count == model.mesh.element_count
+
+
+# --------------------------------------------------------------------------------------------- a coupon stated in inches (ADR-0061)
+
+def test_a_coupon_stated_in_inches_is_checked_and_named_in_inches(tmp_path):
+    from test_intake import in_inches
+
+    checked, model, quality = checklist(tmp_path, in_inches(PUBLIC_FILL))
+    items = by_id(checked)
+    assert checked.state == "ready" and {item.state for item in checked.items} == {"pass"} and model.spec.units == "in-psi"
+    assert items["units"].message == ("every row in in, psi and lbf; the results come back in the same units; the Abaqus and CalculiX decks are written in "
+                                      "mm, MPa and N, as every deck we solve is")
+    assert items["geometry"].message.startswith("9.84252 by 0.984252 in, 2.20472 in tabs")
+    assert "displacement of 0.0393701 in on the top grip" in items["load"].message and items["probes"].message.endswith("(in)")
+    preview = preview_data(model, quality)
+    assert preview["units"] == "in-psi" and preview["loaded"]["unit"] == "in"
+    checked, _, _ = checklist(tmp_path / "blank", in_inches(PUBLIC_FILL), length=None, width="wide", G23=None)
+    items = by_id(checked)
+    assert items["geometry"].rows == ("Length (in)", "Width (in)") and items["material"].rows == ("G23 (psi)",) and "Length (in): required" in items["geometry"].message
+    own = own_constants()
+    msi = {key: own[key] * 1e6 / 6894.757293168 / 1e6 for key in ("own_E1", "own_E2", "own_G12")}  # the moduli in Msi, typed on the psi rows
+    checked, _, _ = checklist(tmp_path / "psi", in_inches({**PUBLIC_FILL, **own}), **msi)
+    items = by_id(checked)
+    assert items["units"].state == "warn" and "E1 = 23.51 psi" in items["units"].message and "Msi typed as psi, or the reverse" in items["units"].message
+    assert items["units"].rows == ("Own material: E1 (psi)", "Own material: E2 (psi)", "Own material: G12 (psi)") and checked.state == "ready"

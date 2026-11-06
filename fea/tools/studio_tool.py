@@ -30,6 +30,7 @@ from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.preview import preview_data
 from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
+from anisotropy_fea.units import deck_units_of
 from anisotropy_fea.write_abaqus import write_abaqus
 
 
@@ -96,7 +97,7 @@ def fixtures(values_path: Path, out: Path, root: Path) -> None:
     deck_text = write_abaqus(model)
     deck_path = out / f"{spec.coupon.designation if spec.coupon else 'coupon'}-abaqus.inp"
     deck_path.write_text(deck_text, encoding="utf-8", newline="\n")
-    deck = read_deck(deck_path, spec.units)
+    deck = read_deck(deck_path, deck_units_of(spec.units))  # the deck is in a deck system; the fields come back in the stated one (ADR-0061)
     solution = solve_deck(deck)
     coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
               "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}

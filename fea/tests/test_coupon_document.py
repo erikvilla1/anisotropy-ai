@@ -129,6 +129,31 @@ def test_the_teams_own_constants_make_a_document_and_a_package_without_a_library
     assert "3-material/IM7-8552-Lamina.csv" in readme and "the team's own constants as given on the coupon input form" in readme
 
 
+def test_a_coupon_stated_in_inches_is_read_in_inches_and_its_decks_stay_in_millimetres(coupon, tmp_path):
+    """A coupon stated in in-psi (ADR-0061): the document's problem and results read in inches, psi and pounds; the decks, the deck
+    chapters, the audit and the package's files stay in mm, MPa and N, and the document and the README say so."""
+    from anisotropy_fea.intake import build_specs, check_form, designation_for, read_values, values_of_spec
+    from anisotropy_fea.spec import parse_spec
+    from test_values_input import plane_stress, values_file
+
+    public = plane_stress(parse_spec(PUBLIC_COUPON))
+    values = values_of_spec(public.model_copy(update={"units": "in-psi"}))
+    values.update(filled_by="A. Engineer", date="2026-11-06")
+    form = read_values(values_file(tmp_path / "form", values))
+    checked = check_form(form)
+    assert checked.units == "in-psi"
+    main, _ = build_specs(checked, designation_for(checked, tmp_path / "none"), form.path.name)
+    assert 'units = "in-psi"' in main
+    tex_path, package = coupon.build_document(public_sources(coupon, tmp_path, main), pdf=False, theory=False)
+    tex = tex_path.read_text(encoding="utf-8")
+    assert "lengths are in in, stresses in psi, forces in lbf" in tex
+    assert "The coupon is stated in in, psi and lbf, and this document reads it so" in tex and "is in mm, MPa and N, so the decks" in tex
+    deck = (package / "2-our-model" / "abaqus" / f"{DESIGNATION}-abaqus.inp").read_text(encoding="utf-8")
+    assert "units of this deck: mm-MPa (the coupon is stated in in-psi)" in deck
+    readme = (package / "README.txt").read_text(encoding="utf-8")
+    assert "Numbers in the files are in mm, MPa and N; the PDF states the coupon in in, psi and lbf, as the team did." in readme
+
+
 def test_the_teams_own_constants_are_set_beside_their_deck_in_the_team_comparison(coupon, tmp_path):
     src = team_sources(coupon, tmp_path, OWN_FIXTURE)
     tex_path, package = coupon.build_document(src, pdf=False, theory=False, write_summary=False)

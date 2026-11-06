@@ -41,7 +41,7 @@ from .results import MembraneSolution
 from .side_by_side import PairedValue, agreement, ply_values
 from .forms import FONT, fit_rows, labelled as _labelled, lines_of, listing, one_font, printable, protect, text_of as _text  # noqa: F401  the house style of the forms
 from .spec import TEST_CODES
-from .units import from_si
+from .units import UNIT_LABEL, from_si
 
 RESULTS = ("Pass", "Fail", "N/A", "Not checked")  # an item's result on the form
 VERDICTS = ("Pass", "Pass with observations", "Fail")  # the audit's verdict
@@ -518,7 +518,7 @@ def _gauge_node(ev: Evidence, facts: _Facts) -> tuple[int, str] | None:
 
 def gauge_text(gauge: GaugeElement, units: str) -> str:
     """Where the gauge element is and why it was chosen, in words for the reader."""
-    unit = {"mm-MPa": "mm", "m-Pa": "m"}[units]
+    unit = UNIT_LABEL[units]["length"]
     at = f"centroid at ({from_si(gauge.xy[0], 'length', units):.4g}, {from_si(gauge.xy[1], 'length', units):.4g}) {unit}"
     if gauge.basis == "the far-field probe":
         return f"the far-field probe {at}, away from the hole and the grips (the coupon's centre is in the hole)"
@@ -653,7 +653,7 @@ def _auditor_evidence(item: Item, ev: Evidence, facts: _Facts) -> Found:
         coupling = ()
         if facts.laminate is not None:
             A = from_si(facts.laminate.A, "force_per_length", ev.units)
-            unit = {"mm-MPa": "N/mm", "m-Pa": "N/m"}[ev.units]
+            unit = UNIT_LABEL[ev.units]["force_per_length"]
             share = max(abs(A[0, 2]), abs(A[1, 2])) / abs(A[0, 0])
             square = all(abs(p.material.E1 - p.material.E2) <= 1e-9 * p.material.E1 for p in facts.laminate.plies)
             unbalanced = _layup_text(facts.angles).startswith("unbalanced")
@@ -695,7 +695,7 @@ def _facts(evidence: Evidence) -> _Facts:
         reaction: float | None = float(solution.reaction[list(top)].sum(axis=0)[1])
     except KernelError:
         reaction = None
-    length_unit, stress_unit = {"mm-MPa": ("mm", "MPa"), "m-Pa": ("m", "Pa")}[evidence.units]
+    length_unit, stress_unit = UNIT_LABEL[evidence.units]["length"], UNIT_LABEL[evidence.units]["stress"]
     return _Facts(check, reason, _deck_angles(deck), length_unit, stress_unit, reaction, gauge_element(deck, solution), evidence.units)
 
 
@@ -720,7 +720,7 @@ def tolerance_text(item: Item, units: str) -> str:
     if item.tolerance.relative is not None:
         relative = item.tolerance.relative
         return f"{relative:g} relative" if relative < 1e-4 else f"{100 * relative:g} %"
-    unit = {"mm-MPa": "mm", "m-Pa": "m"}[units]
+    unit = UNIT_LABEL[units]["length"]
     return f"{from_si(item.tolerance.length_m, 'length', units):g} {unit}"
 
 
@@ -772,7 +772,7 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
     """The form's numbers, from the evidence the rows were scored from: the band agreement per quantity and layer, the gauge centre
     against laminate theory, the reaction, and every compared value."""
     ev = evidence
-    length_unit, stress_unit = {"mm-MPa": ("mm", "MPa"), "m-Pa": ("m", "Pa")}[ev.units]
+    length_unit, stress_unit = UNIT_LABEL[ev.units]["length"], UNIT_LABEL[ev.units]["stress"]
     items = {item.id: item for item in rubric.items}
     glance: list[tuple[str, str]] = []
     tables: list[Table] = []
@@ -945,7 +945,7 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
     unlocked = Protection(locked=False)
     shades = {"Pass": ("C6EFCE", "006100"), "Pass with observations": ("FFEB9C", "9C5700"), "Fail": ("FFC7CE", "9C0006"),
               "N/A": ("EDEDED", "595959"), "Not checked": ("EDEDED", "595959")}
-    length_unit, stress_unit = {"mm-MPa": ("mm", "MPa"), "m-Pa": ("m", "Pa")}[units]
+    length_unit, stress_unit = UNIT_LABEL[units]["length"], UNIT_LABEL[units]["stress"]
     letter = {name: get_column_letter(i + 1) for i, name in enumerate(RUBRIC_COLUMNS)}
     cover_widths = {1: 26, 2: 104}
 

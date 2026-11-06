@@ -346,3 +346,91 @@ def test_the_deck_tool_skips_the_calculix_deck_of_a_coupling_spec():
     lines = tool.regenerate(paths.spec_path("unnotched-im7-8552-coupling"), ccx=True, writer=lambda path, text: written.append(path) or "unchanged")
     assert [line.split()[0] for line in lines] == ["unchanged", "skipped"] and "coupled reference node" in lines[1]
     assert [p.name for p in written] == ["unnotched-im7-8552-coupling-abaqus.inp"]
+
+
+# --------------------------------------------------------------------------------------------- the units a coupon is stated in (ADR-0061)
+
+INCH_MM = 25.4
+PSI_PA = 6894.757293168
+
+
+def in_inches(values: dict) -> dict:
+    """The public fill restated in in-psi: every length in inches, every modulus in psi, the Units row set."""
+    psi = lambda mpa: mpa * 1e6 / PSI_PA  # noqa: E731
+    changed = {**values, "units": "in-psi", "length": values["length"] / INCH_MM, "width": values["width"] / INCH_MM, "tab_length": values["tab_length"] / INCH_MM,
+               "G13": psi(values["G13"]), "G23": psi(values["G23"]), "value": values["value"] / INCH_MM}
+    if values.get("mesh_partitions"):
+        changed["mesh_partitions"] = ", ".join(f"{float(p) / INCH_MM:.12g}" for p in values["mesh_partitions"].split(","))
+    if values.get("element_size") is not None:
+        changed["element_size"] = values["element_size"] / INCH_MM
+    if values.get("hole_diameter") is not None:
+        changed["hole_diameter"] = values["hole_diameter"] / INCH_MM
+    return changed
+
+
+def test_the_units_row_defaults_to_mm_mpa_and_is_read_whatever_its_case(blank, tmp_path):
+    form = read_form(filled(blank, tmp_path, PUBLIC_FILL))
+    assert form.units == "mm-MPa" and check_form(form).units == "mm-MPa" and form.label("length") == "Length (mm)"
+    form = read_form(filled(blank, tmp_path / "upper", PUBLIC_FILL, units="IN-PSI"))
+    assert form.units == "in-psi" and check_form(form).units == "in-psi"
+    assert form.label("length") == "Length (in)" and form.label("own_E1") == "Own material: E1 (psi)" and form.label("value") == "Value (in or lbf)"
+    assert FIELDS["units"].words == ("mm-MPa", "m-Pa", "in-psi", "in-ksi") and FIELDS["units"].default == "mm-MPa"
+    with pytest.raises(IntakeError, match="Units: 'SI' is not one of mm-MPa, m-Pa, in-psi, in-ksi"):
+        check_form(read_form(filled(blank, tmp_path / "bad", PUBLIC_FILL, units="SI")))
+
+
+def test_a_coupon_stated_in_inches_is_the_same_coupon_in_si(blank, tmp_path):
+    main_mm, _ = specs_of(blank, tmp_path / "mm", PUBLIC_FILL)
+    main_in, twin_in = specs_of(blank, tmp_path / "in", in_inches(PUBLIC_FILL))
+    spec_in = parse_spec(main_in)
+    assert spec_in.units == "in-psi" and spec_in.geometry.length == pytest.approx(250.0 / INCH_MM) and spec_in.material.transverse.G13 == pytest.approx(4688.43e6 / PSI_PA)
+    assert "in tabs" in spec_in.title and "0.0393701 in pull" in spec_in.title and "mm" not in spec_in.title
+    assert main_in.splitlines()[-1] != "" and "Units in-psi; the decks are written in mm-MPa" in main_in
+    si_mm, si_in = load_spec_text(main_mm), load_spec_text(main_in)
+    for field in ("length", "width", "tab_length"):
+        assert getattr(si_in.geometry, field) == pytest.approx(getattr(si_mm.geometry, field))
+    assert si_in.mesh.y_partitions == pytest.approx(si_mm.mesh.y_partitions) and si_in.mesh.y_seeds == si_mm.mesh.y_seeds
+    assert si_in.material.transverse.G13 == pytest.approx(si_mm.material.transverse.G13) and si_in.loading.value == pytest.approx(si_mm.loading.value)
+    assert si_in.probes.elements["near_grip"][1] == pytest.approx(si_mm.probes.elements["near_grip"][1])  # the fixed 1 mm offset past the tab
+    # the deck is written in mm-MPa whatever the coupon is stated in, and says so
+    deck_in, deck_mm = write_abaqus(build_model(si_in)), write_abaqus(build_model(si_mm))
+    assert "** units of this deck: mm-MPa (the coupon is stated in in-psi)" in deck_in and "** units of this deck: mm-MPa\n" in deck_mm
+    nodes = lambda text: [line for line in text.splitlines()[text.splitlines().index("*Node") + 1:][:3]]  # noqa: E731
+    for line_in, line_mm in zip(nodes(deck_in), nodes(deck_mm)):
+        assert [float(v) for v in line_in.split(",")] == pytest.approx([float(v) for v in line_mm.split(",")], rel=1e-8, abs=1e-8)
+    # the card and the words a reader sees are in inches
+    card = dict(coupon_card(si_in))
+    assert card["Size"].startswith("9.84252 in long, 0.984252 in wide, 2.20472 in tabs")
+
+
+def test_own_constants_in_psi_mean_the_same_material(blank, tmp_path):
+    own = own_constants()
+    psi = lambda mpa: mpa * 1e6 / PSI_PA  # noqa: E731
+    own_in = {**in_inches({**PUBLIC_FILL, **own}), **{key: psi(own[key]) for key in ("own_E1", "own_E2", "own_G12", "own_F1t", "own_F1c", "own_F2t", "own_F2c", "own_F6")},
+              "ply_thickness": own["ply_thickness"] / INCH_MM}
+    main_in, _ = specs_of(blank, tmp_path / "in", own_in)
+    main_mm, _ = specs_of(blank, tmp_path / "mm", {**PUBLIC_FILL, **own})
+    si_in, si_mm = load_spec_text(main_in), load_spec_text(main_mm)
+    assert si_in.material.E1 == pytest.approx(si_mm.material.E1) and si_in.material.F6 == pytest.approx(si_mm.material.F6)
+    assert si_in.layup.ply_thickness == pytest.approx(si_mm.layup.ply_thickness)
+    form = read_form(filled(blank, tmp_path / "form", own_in))
+    checked = check_form(form)
+    assert designation_for(checked, tmp_path / "none").material_code == "IM7"  # the same material gets the same meaning, so no clash with the mm statement
+
+
+def test_a_refusal_names_the_rows_in_the_stated_units(blank, tmp_path):
+    with pytest.raises(IntakeError) as caught:
+        check_form(read_form(filled(blank, tmp_path, in_inches(PUBLIC_FILL), length=None, G23="soft", test="open-hole tension")))
+    text = str(caught.value)
+    assert "Length (in): required" in text and "G23 (psi): a number is needed" in text and "Hole diameter (in): required for open-hole tension" in text
+    with pytest.raises(IntakeError, match=r"Length \(in\) and Tab length \(in\): the two tabs, 4.40945 in, must be shorter than the length, 0.984252 in"):
+        check_form(read_form(filled(blank, tmp_path / "short", in_inches(PUBLIC_FILL), length=25.0 / INCH_MM, width=250.0 / INCH_MM)))
+
+
+def test_the_default_element_size_follows_the_stated_units(blank, tmp_path):
+    from anisotropy_fea.intake import element_size_default
+
+    assert element_size_default("mm-MPa") == 2.0 and element_size_default("in-psi") == pytest.approx(2.0 / INCH_MM) and element_size_default("m-Pa") == pytest.approx(0.002)
+    main_in, _ = specs_of(blank, tmp_path, in_inches(OHT_FILL))  # the open-hole mesh takes its element size from the row, in inches
+    spec = parse_spec(main_in)
+    assert spec.mesh.element_size == pytest.approx(2.0 / INCH_MM) and spec.probes.elements["hole_side"][0] == pytest.approx((36.0 / 2 + 3.0 + 0.2) / INCH_MM)

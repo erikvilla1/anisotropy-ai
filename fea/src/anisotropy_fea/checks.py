@@ -27,7 +27,7 @@ from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
 from .spec import BENDING_KINDS, TEST_CODES, SpecError, full_angles, layup_text, spec_plies
-from .units import UNIT_LABEL, from_si
+from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
 STATES = ("pass", "warn", "fail", "missing", "pending")
 SEVERITY = {"pass": 0, "warn": 1, "fail": 2, "missing": 2}
@@ -48,6 +48,7 @@ ITEMS = (  # in the order the studio lists them: id, label
 ITEM_OF_KEY = {  # which item a form row belongs to
     **{key: "identity" for key in ("filled_by", "date", "notes", "test", "material_code", "layup_code", "standard", "size_from", "team_model", "test_data",
                                    "name_part", "name_instance", "name_material", "name_layup", "name_section")},
+    "units": "units",
     **{key: "geometry" for key in ("length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span")},
     **{key: "mesh" for key in ("hole_circumferential", "hole_radial", "hole_ring", "hole_growth", "element_size", "mesh_nx", "mesh_partitions", "mesh_seeds")},
     **{key: "laminate" for key in ("symmetric", "ply_thickness", *(f"ply_{i}" for i in range(1, 17)))},
@@ -57,7 +58,7 @@ ITEM_OF_KEY = {  # which item a form row belongs to
     **{key: "load" for key in ("control", "value")},
     **{key: "constraints" for key in ("grips", "region")},
 }
-ITEM_OF_LABEL = {f.label: ITEM_OF_KEY[key] for key, f in FIELDS.items()}
+ITEM_OF_LABEL = {f.label_in(units): ITEM_OF_KEY[key] for units in UNIT_SYSTEMS for key, f in FIELDS.items()}  # a row's label in any stated system
 ITEM_OF_LABEL.update({"Supports": "constraints", "Loads": "load", "Regions": "geometry"})  # a plate's lists, not rows of the form (ADR-0054)
 
 
@@ -197,6 +198,8 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     root = Path(root) if root is not None else paths.LOCAL
     notes = _Notes()
     problems: list[str] = []
+    units = form.units  # the stated system: every row the checklist names carries its unit in it (ADR-0061)
+    row = lambda key: FIELDS[key].label_in(units)  # noqa: E731
     values: Values | None = None
     named = None
     spec = None
@@ -218,7 +221,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             spec = spec_from_values(values, named, form.path.name)
         except IntakeError as exc:
             problems.append(str(exc))
-            concerned = tuple(form_rows_of(str(exc)))
+            concerned = tuple(form_rows_of(str(exc), units))
             item_id = ITEM_OF_LABEL.get(concerned[0], "geometry") if concerned else "geometry"
             notes.note(item_id, "fail", str(exc).split(": the spec refuses the inputs: ", 1)[-1], concerned)
     plies = None
@@ -228,33 +231,36 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             plies = spec_plies(spec)  # the engine's plies: it refuses a lamina whose compliance is not positive
         except (SpecError, MeshError) as exc:
             problems.append(str(exc))
-            notes.note("mesh", "fail", str(exc), ("Element size (mm)",))
+            notes.note("mesh", "fail", str(exc), (row("element_size"),))
         except ValueError as exc:
             model = None
             reason = str(exc).split("Value error, ", 1)[-1].split(" [type=", 1)[0]
             problems.append(reason)
             notes.note("material", "fail", f"our engine refuses these constants: {reason}",
-                       ("Own material: E1 (MPa)", "Own material: E2 (MPa)", "Own material: G12 (MPa)", "Own material: nu12"))
+                       (row("own_E1"), row("own_E2"), row("own_G12"), row("own_nu12")))
     designation = named.name if named is not None else None
     exists, attempts = coupon_attempts(root, designation)
 
     if model is not None:
-        units = spec.units
+        assert spec.units == units, "the spec is written in the units the form states"
         lab = UNIT_LABEL[units]
         g, material, mesh, loading = spec.geometry, model.material, model.mesh, spec.loading  # loading is None for a plate (ADR-0054)
         length = lambda v: from_si(v, "length", units)  # noqa: E731
         notes.note("identity", "pass", f"{designation}, {TEST_CODES[spec.kind][1]}; " + (
             f"the coupon has {attempts} row{'s' if attempts != 1 else ''} in its attempt log, so this run is attempt {attempts + 1}" if exists
             else "a new coupon: its folder and case page are written when it runs"))
-        # units: the form fixes mm, MPa and N; a modulus outside the engine's plausible range after conversion means the wrong unit
+        # units: every row is in the stated system; a modulus outside the engine's plausible range after conversion means the wrong unit
         moduli = (("E1", material.E1), ("E2", material.E2), ("G12", material.G12), ("G13", material.G13), ("G23", material.G23))
         suspicious = [name for name, value in moduli if not PLAUSIBLE_MODULUS_PA[0] <= value <= PLAUSIBLE_MODULUS_PA[1]]
+        deck_units = deck_units_of(units)
         if suspicious:
             shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in suspicious)
-            notes.note("units", "warn", f"{shown}: outside the plausible range for a modulus in {lab['stress']} (GPa typed as MPa, or the reverse?)",
-                       tuple(f"Own material: {name} (MPa)" if name in ("E1", "E2", "G12") else f"{name} (MPa)" for name in suspicious))
+            notes.note("units", "warn", f"{shown}: outside the plausible range for a modulus in {lab['stress']} ({lab['modulus']} typed as {lab['stress']}, "
+                       "or the reverse?)", tuple(row(f"own_{name}") if name in ("E1", "E2", "G12") else row(name) for name in suspicious))
         else:
-            notes.note("units", "pass", f"every row in mm, MPa and N; the model is written in {units} and forces come out in {lab['force']}")
+            notes.note("units", "pass", f"every row in {units_words(units)}; the results come back in the same units"
+                       + (f"; the Abaqus and CalculiX decks are written in {units_words(deck_units)}, as every deck we solve is" if deck_units != units
+                          else f", and the decks are written in {units}"))
         # geometry
         size = f"{length(g.length):g} by {length(g.width):g} {lab['length']}"
         if g.tab_length:
@@ -315,9 +321,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             # constraints: w held along both support lines, the in-plane motion pinned at the centre node of each
             supports = [sets.get(name) for name in ("Support-Left", "Support-Right")]
             if any(s is None or s.size == 0 for s in supports):
-                notes.note("constraints", "fail", "a support line holds no node; the support lines must fall on node rows", ("Support span (mm)", "Overhang (mm)"))
+                notes.note("constraints", "fail", "a support line holds no node; the support lines must fall on node rows", (row("span"), row("overhang")))
             elif not ({"Pin-Left", "Pin-Right"} <= set(sets)):
-                notes.note("constraints", "fail", "the in-plane pins are missing; the coupon could slide as a rigid body", ("Support span (mm)",))
+                notes.note("constraints", "fail", "the in-plane pins are missing; the coupon could slide as a rigid body", (row("span"),))
             else:
                 notes.note("constraints", "pass", f"both support lines held along z ({supports[0].size} and {supports[1].size} nodes); the centre node of each "
                            "pins the in-plane motion without restraining the coupon's stretch or contraction; no rigid-body motion is left")
@@ -329,7 +335,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             # constraints: both grips present, the held one removing every in-plane rigid-body motion
             bottom, top = sets.get("Grip-Bottom"), sets.get("Grip-Top")
             if bottom is None or top is None or bottom.size == 0 or top.size == 0:
-                notes.note("constraints", "fail", "a grip set is empty: no node lies within the tab length of an end", ("Tab length (mm)", "Grip region"))
+                notes.note("constraints", "fail", "a grip set is empty: no node lies within the tab length of an end", (row("tab_length"), "Grip region"))
             elif not any(b.dof_first <= 1 and b.dof_last >= 2 for b in held):
                 notes.note("constraints", "fail", "no grip holds both in-plane directions; the coupon could move as a rigid body", ("Grip kind",))
             else:
@@ -349,7 +355,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         if spec.mesh.mesher == "gmsh":
             version = gmsh()
             notes.note("mesh", "pass" if version else "fail", f"Gmsh {version} meshes the hole" if version else
-                       "Gmsh is not installed: the open-hole mesh cannot be made (from fea/: uv sync --extra mesh)", ("Hole diameter (mm)",))
+                       "Gmsh is not installed: the open-hole mesh cannot be made (from fea/: uv sync --extra mesh)", (row("hole_diameter"),))
         # criterion
         criteria = list(spec.output.fpf_criteria)
         if not criteria:

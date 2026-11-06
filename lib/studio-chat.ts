@@ -3,7 +3,10 @@
  * notation it understands. It only fills the same form rows the full form fills; nothing here judges a value or computes a result:
  * `intake.check_form` does, through the setup check (ADR-0001, ADR-0003). A message that names nothing it can read changes nothing.
  */
-import { BENDING_TESTS, fieldByKey, formDefinition, FOUR_POINT_TEST, libraryOptions, OPEN_HOLE_TEST, PLATE_TEST, PLY_KEYS, type StudioForm } from "./studio-form";
+import {
+  BENDING_TESTS, blankForm, DEFAULT_UNITS, fieldByKey, fields, FOUR_POINT_TEST, labelFor, libraryConstantsIn, libraryOptions, OPEN_HOLE_TEST, PLATE_TEST, PLY_KEYS,
+  UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
+} from "./studio-form";
 
 export type ChatStep = "test" | "material" | "shear" | "layup" | "geometry" | "loading" | "name" | "review";
 export const STEP_ORDER: ChatStep[] = ["test", "material", "shear", "layup", "geometry", "loading", "name", "review"];
@@ -50,15 +53,16 @@ export function layupNotation(form: StudioForm): string {
   return `[${plies.join("/")}]${form.symmetric === "yes" ? "s" : ""}`;
 }
 
-/** The library's in-plane shear and transverse moduli, for the tape estimate of G13 and G23; the numbers are the library's. */
-export function libraryConstants(id: string): { G12: number; E2: number } | null {
-  const entry = formDefinition.library.find((row) => String(row.Id) === id);
-  const G12 = entry?.["G12 (MPa)"], E2 = entry?.["E2 (MPa)"];
-  return typeof G12 === "number" && typeof E2 === "number" ? { G12, E2 } : null;
+/** The library's in-plane shear and transverse moduli in the coupon's units, for the tape estimate of G13 and G23; the numbers are
+ * the engine's, written per system into the form definition (the page converts nothing). */
+export function libraryConstants(id: string, units: string = DEFAULT_UNITS): { G12: number; E2: number } | null {
+  const constants = libraryConstantsIn(id, units);
+  return constants ? { G12: constants.G12, E2: constants.E2 } : null;
 }
 
+/** The library material's ply thickness in the coupon's units; null when the record gives none or the material is not in the library. */
 export function libraryThickness(form: StudioForm): number | null {
-  return libraryOptions.find((m) => m.id === form.library)?.thickness ?? null;
+  return form.library ? libraryConstantsIn(form.library, unitsOf(form))?.ply_thickness ?? null : null;
 }
 
 /** The rows a step needs before the chat moves on; the setup check still judges them all. */
@@ -90,7 +94,7 @@ export function nextStep(form: StudioForm): ChatStep {
 
 /** The step that asks for a row, so a blocked check item can send the engineer back to it; null when only the full form has it. */
 export function stepOfKey(key: string): ChatStep | null {
-  if (["test", "standard"].includes(key)) return "test";
+  if (["test", "standard", "units"].includes(key)) return "test";
   if (key === "library" || key.startsWith("own_")) return "material";
   if (["G13", "G23"].includes(key)) return "shear";
   if (PLY_KEYS.includes(key) || ["symmetric", "ply_thickness"].includes(key)) return "layup";
@@ -101,15 +105,50 @@ export function stepOfKey(key: string): ChatStep | null {
   return null;
 }
 
-/** The label the chat uses for a row: the form's label, shorter where the form's is written for the spreadsheet. */
-export const CHAT_LABELS: Record<string, string> = {
-  length: "Length, tabs included (mm)", width: "Width (mm)", tab_length: "Tab length (mm, 0 for none)", hole_diameter: "Hole diameter (mm)",
-  span: "Support span (mm)", overhang: "Overhang past each support (mm)", load_span: "Loading-nose span (mm)", size_from: "Where the size comes from",
-  ply_thickness: "Cured ply thickness (mm)", material_code: "Material code for the coupon's name, e.g. IM7", G13: "G13 (MPa)", G23: "G23 (MPa)", value: "Amount", own_name: "Material name (no spaces)",
-  own_E1: "E1 (MPa)", own_E2: "E2 (MPa)", own_G12: "G12 (MPa)", own_nu12: "ν12", own_source: "Source of these numbers",
-  own_F1t: "F1t (MPa)", own_F1c: "F1c (MPa)", own_F2t: "F2t (MPa)", own_F2c: "F2c (MPa)", own_F6: "F6 (MPa)", element_size: "Element size (mm)",
-};
-export const labelOf = (key: string) => CHAT_LABELS[key] ?? fieldByKey[key]?.label ?? key;
+/** The label the chat uses for a row, with the unit of the coupon's system: the form's label, shorter where the form's is written for
+ * the spreadsheet. */
+export function labelOf(key: string, units: string = DEFAULT_UNITS): string {
+  const u = unitLabels(units);
+  const chat: Record<string, string> = {
+    length: `Length, tabs included (${u.length})`, tab_length: `Tab length (${u.length}, 0 for none)`, overhang: `Overhang past each support (${u.length})`,
+    load_span: `Loading-nose span (${u.length})`, size_from: "Where the size comes from", ply_thickness: `Cured ply thickness (${u.length})`,
+    material_code: "Material code for the coupon's name, e.g. IM7", value: "Amount", own_name: "Material name (no spaces)", own_nu12: "ν12",
+    own_source: "Source of these numbers",
+  };
+  if (chat[key]) return chat[key];
+  const field = fieldByKey[key];
+  if (!field) return key;
+  return labelFor(field, units).replace(/^Own material: /, "");
+}
+
+/** The rows whose numbers carry a unit, element size apart (it has a default in every system): what a change of units clears. */
+export const DIMENSIONED_KEYS: string[] = fields.filter((f) => f.unit !== null && f.key !== "element_size").map((f) => f.key);
+/** The dimensioned rows the engineer has stated: filled, and not at the form's own default (an overhang of 0 is 0 in every system). */
+export const statedDimensioned = (form: StudioForm): string[] =>
+  DIMENSIONED_KEYS.filter((key) => filled(form, key) && form[key].trim() !== String(fieldByKey[key].default ?? ""));
+
+/** The unit system a message names, by its words; null when it names none. A bare "in" is not read as inches: too common a word. */
+export function unitsNamed(text: string): string | null {
+  const t = ` ${text.toLowerCase()} `;
+  if (/\bin-ksi\b|\bksi\b/.test(t)) return "in-ksi";
+  if (/\bin-psi\b|\bpsi\b|\bimperial\b|\bus (customary )?units\b|\binch(es)?\b|\bpounds?\b|\blbf\b|\blbs?\b/.test(t)) return "in-psi";
+  if (/\bm-pa\b|\bmet(re|er)s?\b|\bpascals?\b|\bsi units\b/.test(t)) return "m-Pa";
+  if (/\bmm-mpa\b|\bmillimet(re|er)s?\b|\bmpa\b|\bmetric\b/.test(t)) return "mm-MPa";
+  return null;
+}
+
+/** "switch to inches", "use psi", "restate in m-Pa": a request to change the system, which clears the dimensioned rows. */
+export const isSwitchRequest = (text: string): boolean => /\b(switch|use|restate|change|work|state)\b/i.test(text) && unitsNamed(text) !== null;
+
+/** The form restated in another system: the Units row set, every filled dimensioned row cleared (a number typed in mm is not a number in
+ * inches, and the page converts nothing), the element size back to the system's default. Returns the rows cleared, by key. */
+export function switchUnits(form: StudioForm, units: string): { form: StudioForm; cleared: string[] } {
+  if (!UNIT_SYSTEMS.includes(units)) return { form, cleared: [] };
+  const cleared = statedDimensioned(form);
+  const next: StudioForm = { ...form, units, element_size: blankForm(units).element_size };
+  for (const key of cleared) next[key] = "";
+  return { form: next, cleared };
+}
 
 /** The laminate notation: [45/0/-45/90]s, [0/90]2s, [±45]3, [0_2/90]s, [0/45/-45/90]; repeat counts and ± expand, s marks the lower half. */
 export function parseLayup(text: string): { plies: number[]; symmetric: boolean } | null {
@@ -142,12 +181,21 @@ const NUM = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
 const SIGNED = String.raw`(-?(?:\d+(?:\.\d+)?|\.\d+))`;
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-/** What a typed message states, as form rows, with a few words for each thing understood. Unknown words are left alone. */
-export function readMessage(text: string): { rows: StudioForm; understood: string[] } {
+/** The words a typed number carries its unit in, per system: a length ("250 mm", "10 in", 10"), and a force with its thousandfold. */
+const LENGTH_WORDS: Record<string, string> = { "mm-MPa": "mm", "m-Pa": "m", "in-psi": String.raw`in|inch|inches|"`, "in-ksi": String.raw`in|inch|inches|"` };
+const FORCE_WORDS: Record<string, string> = { "mm-MPa": "kn|n", "m-Pa": "kn|n", "in-psi": "kips?|lbf|lbs?", "in-ksi": "kips?|lbf|lbs?" };
+const THOUSANDS = /^(kn|kips?)$/;
+
+/** What a typed message states, as form rows, with a few words for each thing understood; the numbers are read in the coupon's units
+ * (mm-MPa unless another is given). Unknown words are left alone. */
+export function readMessage(text: string, units: string = DEFAULT_UNITS): { rows: StudioForm; understood: string[] } {
   const rows: StudioForm = {};
   const understood: string[] = [];
   const t = ` ${text.toLowerCase()} `;
   const set = (key: string, value: string, words: string) => { rows[key] = value; understood.push(words); };
+  const u = unitLabels(units);
+  const L = `(?:${LENGTH_WORDS[units] ?? LENGTH_WORDS[DEFAULT_UNITS]})`;
+  const F = FORCE_WORDS[units] ?? FORCE_WORDS[DEFAULT_UNITS];
 
   const test = /open[\s-]?hole|\boht\b|d5766/.test(t) ? OPEN_HOLE_TEST
     : /four[\s-]?point|4[\s-]?point|\b4pb\b/.test(t) ? FOUR_POINT_TEST
@@ -171,43 +219,85 @@ export function readMessage(text: string): { rows: StudioForm; understood: strin
     understood.push(`layup: ${text.match(/\[[^\]]+\]\s*\d*\s*s?/i)?.[0].replace(/\s+/g, "")} (${layup.plies.length * (layup.symmetric ? 2 : 1)} plies)`);
   }
 
-  const size = new RegExp(`${NUM}\\s*(?:mm)?\\s*(?:x|×|by)\\s*${NUM}\\s*mm`).exec(t);
+  const size = new RegExp(`${NUM}\\s*${L}?\\s*(?:x|×|by)\\s*${NUM}\\s*${L}`).exec(t);
   if (size) {
     const [a, b] = [Number(size[1]), Number(size[2])];
-    set("length", String(Math.max(a, b)), `length ${Math.max(a, b)} mm`);
-    set("width", String(Math.min(a, b)), `width ${Math.min(a, b)} mm`);
+    set("length", String(Math.max(a, b)), `length ${Math.max(a, b)} ${u.length}`);
+    set("width", String(Math.min(a, b)), `width ${Math.min(a, b)} ${u.length}`);
   }
   const single = (pattern: string) => new RegExp(pattern).exec(t)?.slice(1).find(Boolean);
-  const tab = /no tabs?|without tabs?|tabless/.test(t) ? "0" : single(`${NUM}\\s*mm\\s*tabs?|tabs?\\s*(?:of|=|:)?\\s*${NUM}`);
-  if (tab !== undefined) set("tab_length", tab, tab === "0" ? "no tabs" : `${tab} mm tabs`);
-  const hole = single(`${NUM}\\s*mm\\s*(?:diameter\\s*)?hole|hole\\s*(?:diameter\\s*)?(?:of|=|:|ø)?\\s*${NUM}|[øØ]\\s*${NUM}`);
-  if (hole) set("hole_diameter", hole, `hole ${hole} mm`);
-  const span = single(`(?:support\\s*)?span\\s*(?:of|=|:)?\\s*${NUM}|${NUM}\\s*mm\\s*(?:support\\s*)?span`);
-  if (span) set("span", span, `span ${span} mm`);
-  const thickness = single(`${NUM}\\s*mm\\s*(?:per\\s*)?ply|ply\\s*thickness\\s*(?:of|=|:)?\\s*${NUM}`);
-  if (thickness) set("ply_thickness", thickness, `ply thickness ${thickness} mm`);
+  const tab = /no tabs?|without tabs?|tabless/.test(t) ? "0" : single(`${NUM}\\s*${L}\\s*tabs?|tabs?\\s*(?:of|=|:)?\\s*${NUM}`);
+  if (tab !== undefined) set("tab_length", tab, tab === "0" ? "no tabs" : `${tab} ${u.length} tabs`);
+  const hole = single(`${NUM}\\s*${L}\\s*(?:diameter\\s*)?hole|hole\\s*(?:diameter\\s*)?(?:of|=|:|ø)?\\s*${NUM}|[øØ]\\s*${NUM}`);
+  if (hole) set("hole_diameter", hole, `hole ${hole} ${u.length}`);
+  const span = single(`(?:support\\s*)?span\\s*(?:of|=|:)?\\s*${NUM}|${NUM}\\s*${L}\\s*(?:support\\s*)?span`);
+  if (span) set("span", span, `span ${span} ${u.length}`);
+  const thickness = single(`${NUM}\\s*${L}\\s*(?:per\\s*)?ply|ply\\s*thickness\\s*(?:of|=|:)?\\s*${NUM}`);
+  if (thickness) set("ply_thickness", thickness, `ply thickness ${thickness} ${u.length}`);
 
-  const force = new RegExp(`${SIGNED}\\s*(kn|n)\\b`).exec(t);
-  const travel = single(`${SIGNED}\\s*mm\\s*(?:of\\s*)?(?:displacement|pull|push|stroke|travel|deflection|extension)|(?:displacement|pull|push|stroke|travel|deflection|extension|displace)\\s*(?:of|by|=|:)?\\s*${SIGNED}\\s*mm`);
-  if (travel) { rows.control = "displacement"; set("value", travel, `${travel} mm displacement`); }
+  const force = new RegExp(`${SIGNED}\\s*(${F})\\b`).exec(t);
+  const travel = single(`${SIGNED}\\s*${L}\\s*(?:of\\s*)?(?:displacement|pull(?:ed)?|push(?:ed)?|stroke|travel|deflection|extension)|(?:displacement|pull(?:ed)?|push(?:ed)?|stroke|travel|deflection|extension|displaced?)\\s*(?:of|by|=|:)?\\s*${SIGNED}\\s*${L}`);
+  if (travel) { rows.control = "displacement"; set("value", travel, `${travel} ${u.length} displacement`); }
   else if (force) {
-    const newtons = force[2] === "kn" ? Number((Number(force[1]) * 1000).toPrecision(12)) : Number(force[1]);
-    rows.control = "force"; set("value", String(newtons), `${newtons} N force`);
+    const amount = THOUSANDS.test(force[2]) ? Number((Number(force[1]) * 1000).toPrecision(12)) : Number(force[1]);
+    rows.control = "force"; set("value", String(amount), `${amount} ${u.force} force`);
   }
   return { rows, understood };
 }
 
-/** The coupon in a line, for the summary card: only what is stated. */
+/** A message applied to the form: read in the coupon's system, or in the one it names when nothing dimensioned is stated yet or the
+ * message asks to switch (which clears the dimensioned rows, named in `note`); a message in another system while rows are filled
+ * changes nothing and says why, so no number is read in the wrong units (ADR-0003). */
+export function applyMessage(form: StudioForm, text: string): { rows: StudioForm; understood: string[]; note: string | null } {
+  const current = unitsOf(form);
+  const named = unitsNamed(text);
+  if (named === null || named === current) return { ...readMessage(text, current), note: null };
+  const stated = statedDimensioned(form);
+  if (stated.length && !isSwitchRequest(text)) {
+    return { rows: {}, understood: [], note: `That names ${unitWords(named)}, but this coupon is stated in ${unitWords(current)}. Say “switch to ${unitWords(named)}” `
+      + `to restate it (its ${stated.length} dimensioned row${stated.length === 1 ? "" : "s"} would be cleared), or type the values in ${unitWords(current)}.` };
+  }
+  const switched = switchUnits(form, named);
+  const read = readMessage(text, named);
+  const rows: StudioForm = { units: named, element_size: switched.form.element_size, ...Object.fromEntries(switched.cleared.map((key) => [key, ""])), ...read.rows };
+  const labels = switched.cleared.map((key) => labelOf(key, current).replace(/ \(.*\)$/, ""));
+  const note = switched.cleared.length ? `Now stated in ${unitWords(named)}; cleared ${labels.join(", ")}: give them again in ${unitWords(named)}.` : null;
+  return { rows, understood: [`units: ${unitWords(named)}`, ...read.understood], note };
+}
+
+/** The example sizes, loads and nose travels the chat offers as one click, per system: stated figures, not conversions. */
+export const SIZE_CHIPS: Record<string, { words: string; rows: StudioForm }> = {
+  "mm-MPa": { words: "250 × 25 mm, 56 mm tabs (the example's size)", rows: { length: "250", width: "25", tab_length: "56", size_from: "the public IM7/8552 example" } },
+  "m-Pa": { words: "0.25 × 0.025 m, 0.056 m tabs (the example's size)", rows: { length: "0.25", width: "0.025", tab_length: "0.056", size_from: "the public IM7/8552 example" } },
+  "in-psi": { words: "10 × 1 in, 2.2 in tabs (ASTM D3039 proportions)", rows: { length: "10", width: "1", tab_length: "2.2", size_from: "the proportions of ASTM D3039" } },
+  "in-ksi": { words: "10 × 1 in, 2.2 in tabs (ASTM D3039 proportions)", rows: { length: "10", width: "1", tab_length: "2.2", size_from: "the proportions of ASTM D3039" } },
+};
+export const LOAD_CHIPS: Record<string, { words: string; control: string; value: string }[]> = {
+  "mm-MPa": [{ words: "Displacement 1 mm", control: "displacement", value: "1" }, { words: "Displacement 0.5 mm", control: "displacement", value: "0.5" },
+             { words: "Force 10 kN", control: "force", value: "10000" }],
+  "m-Pa": [{ words: "Displacement 0.001 m", control: "displacement", value: "0.001" }, { words: "Displacement 0.0005 m", control: "displacement", value: "0.0005" },
+           { words: "Force 10 kN", control: "force", value: "10000" }],
+  "in-psi": [{ words: "Displacement 0.04 in", control: "displacement", value: "0.04" }, { words: "Displacement 0.02 in", control: "displacement", value: "0.02" },
+             { words: "Force 2000 lbf", control: "force", value: "2000" }],
+  "in-ksi": [{ words: "Displacement 0.04 in", control: "displacement", value: "0.04" }, { words: "Displacement 0.02 in", control: "displacement", value: "0.02" },
+             { words: "Force 2000 lbf", control: "force", value: "2000" }],
+};
+export const PUSH_CHIPS: Record<string, string[]> = { "mm-MPa": ["1", "2", "5"], "m-Pa": ["0.001", "0.002", "0.005"], "in-psi": ["0.04", "0.08", "0.2"], "in-ksi": ["0.04", "0.08", "0.2"] };
+
+/** The coupon in a line, for the summary card: only what is stated, in the units it is stated in. */
 export function couponLines(form: StudioForm): [string, string][] {
   const material = form.library ? libraryOptions.find((m) => m.id === form.library)?.name ?? form.library : form.own_name;
   const plies = pliesOf(form);
   const count = plies.length * (form.symmetric === "yes" ? 2 : 1);
-  const size = form.length && form.width ? `${form.length} × ${form.width} mm` : "";
+  const units = unitsOf(form);
+  const u = unitLabels(units);
+  const size = form.length && form.width ? `${form.length} × ${form.width} ${u.length}` : "";
   const extra = isBending(form)
-    ? [form.span && `span ${form.span} mm`, form.test === FOUR_POINT_TEST && form.load_span && `noses ${form.load_span} mm apart`].filter(Boolean).join(", ")
-    : [form.tab_length && (form.tab_length === "0" ? "no tabs" : `${form.tab_length} mm tabs`), form.test === OPEN_HOLE_TEST && form.hole_diameter && `Ø${form.hole_diameter} mm hole`].filter(Boolean).join(", ");
-  const load = form.value ? (form.control === "force" ? `${form.value} N force` : `${form.value} mm ${isBending(form) ? "nose travel" : "displacement"}`) : "";
+    ? [form.span && `span ${form.span} ${u.length}`, form.test === FOUR_POINT_TEST && form.load_span && `noses ${form.load_span} ${u.length} apart`].filter(Boolean).join(", ")
+    : [form.tab_length && (form.tab_length === "0" ? "no tabs" : `${form.tab_length} ${u.length} tabs`), form.test === OPEN_HOLE_TEST && form.hole_diameter && `Ø${form.hole_diameter} ${u.length} hole`].filter(Boolean).join(", ");
+  const load = form.value ? (form.control === "force" ? `${form.value} ${u.force} force` : `${form.value} ${u.length} ${isBending(form) ? "nose travel" : "displacement"}`) : "";
   return [
+    ["Units", unitWords(units)],
     ["Test", form.test],
     ["Material", material ?? ""],
     ["Layup", plies.length ? `${layupNotation(form)}, ${count} plies` : ""],
