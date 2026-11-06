@@ -149,3 +149,13 @@ Option 3.
 **Decision.** Option 2. The row Units, first in "The coupon", takes one of mm-MPa, m-Pa, in-psi and in-ksi (the words of `UNIT_SYSTEMS`, matched without regard to case; blank means mm-MPa, the labels' own system); every row with a unit has a label in each system (`Field.label_in`), the check names rows and refusals in the stated system, and a coupon reads back in its stated system (`values_of_spec`). The blank form and the library sheet stay in mm and MPa. A values file states `units` beside its rows. The decks a form's coupon makes are written in `deck_units_of` the stated system (ADR-0061).
 
 **Evidence.** `fea/tests/test_intake.py`, `test_values_input.py` and `test_checks.py` with the form at 0.6 (2026-11-06): the Units row's default, case and refusal; the public coupon restated in in-psi gives the same SI spec and a deck in mm-MPa; refusals name their rows in inches; a coupon reads back in in-psi.
+
+## Amendment 6, 2026-11-06 (the code rows are optional overrides; the form stays at 0.6)
+
+**Context.** ADR-0038 amendment 1 derives a blank material code. The rows Material code and Layup code stayed on the form so an older values file and the team's overrides still read.
+
+**Options.** (1) Remove the two rows and raise the form version: rejected, every values file filed so far and the team's forms carry them. (2) Keep them as optional rows whose help says what a blank one does: chosen.
+
+**Decision.** Option 2. Both rows keep their keys and their refusals (capital letters and digits; `L` and a number); their help text says that a blank code is reused or derived. No key changes, so `FORM_VERSION` stays 0.6 and `read_values` reads every file written since amendment 5. The workspace of [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) shows the two rows on its Advanced panel only.
+
+**Evidence.** `fea/tools/export_form_definition.py` run on 2026-11-06 changed the two help strings and nothing else in `lib/coupon-form-definition.json`; `cd fea && uv run pytest -q tests/test_intake.py tests/test_studio_tool.py`: the blank form's rows, lists and record unchanged but for the help, the definition equal to the package.

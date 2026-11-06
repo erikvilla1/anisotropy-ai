@@ -100,7 +100,7 @@ export function stepOfKey(key: string): ChatStep | null {
   if (PLY_KEYS.includes(key) || ["symmetric", "ply_thickness"].includes(key)) return "layup";
   if (["length", "width", "tab_length", "size_from", "span", "overhang", "load_span", "hole_diameter"].includes(key)) return "geometry";
   if (["control", "value"].includes(key)) return "loading";
-  if (["filled_by", "material_code", "layup_code"].includes(key)) return "name"; // who runs it and the codes in the coupon's name
+  if (key === "filled_by") return "name"; // who runs it; the codes in the coupon's name are derived (ADR-0038 amendment 1), overrides on the form
   if (["criteria", "f12_star", "element_size", "grips", "region", "date", "notes"].includes(key)) return "review";
   return null;
 }

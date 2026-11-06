@@ -281,8 +281,8 @@ def test_a_code_is_reused_proposed_or_refused_by_what_the_machine_already_has(bl
     assert name(material_code=None, layup_code=None) == "IM7-UNT-L1"  # the same material and stacking sequence: both codes reused
     assert name(material_code=None, layup_code=None, angles=[0, 90]) == "IM7-UNT-L2"  # a new stacking sequence: the next free code
     assert name(material_code=None, layup_code=None, angles=[0, 90], test="unnotched compression", value=0.1) == "IM7-UNC-L2"
-    with pytest.raises(IntakeError, match="Material code: this material has no code yet; give one"):
-        name(material_code=None, library="as4-8552", ply_thickness=0.18)
+    assert name(material_code=None, library="as4-8552", ply_thickness=0.18) == "AS48552-UNT-L1"  # a new library material names itself from its id
+    assert name(material_code=None, **own_constants()) == "M1-UNT-L1"  # own constants are numbered
     with pytest.raises(IntakeError, match="Material code: IM7 already names another material on this machine"):
         name(material_code="IM7", library="as4-8552", ply_thickness=0.18)
     with pytest.raises(IntakeError, match="Material code: this material already has the code IM7; use it"):

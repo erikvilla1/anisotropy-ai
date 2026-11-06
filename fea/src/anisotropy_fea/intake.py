@@ -113,10 +113,11 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
               "open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), "
               "three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines) or plate "
               "(a laminate held and loaded on regions you name, stated from the studio); see Definitions, Tests", required=True, words=tuple(TESTS)),
-        Field("material_code", "Material code", "text", "a short code for the material in the coupon's name, capital letters and digits: X840PW in "
-              "X840PW-UNT-L1; leave blank to reuse the code we already use for this material"),
-        Field("layup_code", "Layup code", "text", "a short code for the stacking sequence: L1, L2 and so on; leave blank and we reuse the code of this "
-              "same stacking sequence or give the next free one"),
+        Field("material_code", "Material code", "text", "optional: a short code for the material in the coupon's name, capital letters and digits, "
+              "X840PW in X840PW-UNT-L1; left blank, the code this material already has is reused, or a new one is derived from the library "
+              "record (IM78552 for im7-8552) or numbered (M1, M2, ...) for your own constants"),
+        Field("layup_code", "Layup code", "text", "optional: a short code for the stacking sequence, L1, L2 and so on; left blank, the code of this "
+              "same stacking sequence is reused or the next free one is given"),
         Field("standard", "Standard", "text", "the test standard the specimen follows, e.g. ASTM D3039, or none", default="none"),
         Field("size_from", "Where the size comes from", "text", "where the length, width and tabs come from: a standard, a drawing, or your own design",
               required=True),
@@ -1154,6 +1155,22 @@ def existing_coupons(root: Path) -> dict[str, Any]:
     return {d.name: load_spec(d / "ours" / f"{d.name}.toml") for d in sorted(root.iterdir()) if d.is_dir() and (d / "ours" / f"{d.name}.toml").is_file()}
 
 
+def derived_material_code(meaning: tuple, materials: dict[str, tuple]) -> str:
+    """A code for a material that has none (ADR-0038 amendment 1): the library record's id without its punctuation (im7-8552 gives IM78552,
+    7781-5245c gives M77815245C, since a code starts with a letter) when that code is free, else the next free M<n>, which is also what a
+    set of own constants gets. Never a code that already means something else, so a code still means one thing."""
+    if meaning[0] == "library":
+        candidate = re.sub(r"[^A-Z0-9]", "", str(meaning[1]).upper())
+        if candidate and not candidate[0].isalpha():
+            candidate = "M" + candidate
+        if candidate and MATERIAL_CODE.match(candidate) and candidate not in materials:
+            return candidate
+    n = 1
+    while f"M{n}" in materials:
+        n += 1
+    return f"M{n}"
+
+
 def designation_for(values: Values, root: Path) -> Designation:
     """The coupon's name, <material code>-<test code>-<layup code>, by the rules every coupon on this machine follows: a code
     means one thing and one thing has one code. A blank code is reused from the coupons that exist, or, for a layup, proposed."""
@@ -1172,7 +1189,7 @@ def designation_for(values: Values, root: Path) -> Designation:
     if code is None:
         code = next((c for c, m in materials.items() if m == meaning), None)
         if code is None:
-            problems.append("Material code: this material has no code yet; give one (capital letters and digits, e.g. IM7)")
+            code = derived_material_code(meaning, materials)  # a new material names itself (ADR-0038 amendment 1)
     else:
         if code in materials and materials[code] != meaning:
             problems.append(f"Material code: {code} already names another material on this machine; give another code")

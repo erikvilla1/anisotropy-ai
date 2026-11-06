@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import {
-  checkSetup, couponValues, fetchExplanation, fetchFields, getJob, listCoupons, POLL_MS, startSolve, StudioError,
-  type CheckAnswer, type CouponSummary, type Explanation, type Fields, type JobStatus,
-} from "@/lib/studio-api";
+import { couponValues, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import {
   blankForm, buildValues, exampleForm, fieldByKey, fieldByLabel, formFromValues, libraryOptions, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords,
   type StudioForm,
@@ -18,6 +15,7 @@ import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
 import { handoffKey } from "../home-composer";
 import { PreviewScene } from "./coupon-studio";
+import { useProject } from "./project-context";
 import { JobProgress } from "./job-progress";
 import { ResultsView } from "./results-view";
 
@@ -66,7 +64,7 @@ const QUESTIONS: Record<ChatStep | "advanced" | "reopen", { title: string; text?
   layup: { title: "What is the layup?", text: "Type it in laminate notation, bottom ply first, or pick one. Angles are measured from x, across the coupon's width: 90° runs along the load, 0° across it." },
   geometry: { title: "Coupon size", text: "The coupon's length runs along the load." },
   loading: { title: "How is it loaded?" },
-  name: { title: "Who is running it?", text: "Your name goes in the attempt log and the CalculiX record, and is remembered in this browser. A material we have not run before also needs a short code for the coupon's name, such as IM7; leave it blank to reuse the one we have." },
+  name: { title: "Who is running it?", text: "Your name goes in the attempt log and the CalculiX record, and is remembered in this browser. The coupon's name is derived from the material, the test and the layup." },
   review: { title: "Checking the setup" },
   advanced: { title: "Mesh, failure criteria and grips", text: "These have working defaults; change them only if you need to." },
   reopen: { title: "Reopen a saved coupon", text: "It loads as it was last run; solving it again adds the next attempt." },
@@ -112,30 +110,25 @@ function RowsCard({ keys, form, onApply, submit = "Continue", disabled, extra }:
 
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
 
-export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, onLaminate }: {
-  apiBaseUrl: string; initialForm?: StudioForm | null; onFormChange?: (form: StudioForm) => void; onOpenForm: () => void;
+export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate }: {
+  apiBaseUrl: string; onOpenForm: () => void;
   /** Opens the laminate assistant (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const [form, setFormState] = useState<StudioForm>(() => initialForm ?? { ...blankForm(), date: today() });
+  const { form, setForm: storeForm, run: runner, restored } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { checking, checked, job, fields, explanation, problem } = runner;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
   const [input, setInput] = useState("");
-  const [checking, setChecking] = useState(false);
-  const [checked, setChecked] = useState<CheckAnswer | null>(null);
-  const [job, setJob] = useState<JobStatus | null>(null);
-  const [fields, setFields] = useState<Fields | null>(null);
-  const [explanation, setExplanation] = useState<Explanation | null>(null);
   const [coupons, setCoupons] = useState<CouponSummary[]>([]);
   const [ownMaterial, setOwnMaterial] = useState(false);
-  const [problem, setProblem] = useState("");
   const nextId = useRef(1);
   const body = useRef<HTMLDivElement>(null);
   const formRef = useRef(form);
-  const fieldsLoaded = useRef<string | null>(null);
+  useEffect(() => { formRef.current = form; }, [form]); // rows edited on the form tab are the chat's rows too
   const started = useRef(false);
 
-  const setForm = useCallback((next: StudioForm) => { formRef.current = next; setFormState(next); onFormChange?.(next); }, [onFormChange]);
+  const setForm = useCallback((next: StudioForm) => { formRef.current = next; storeForm(next); }, [storeForm]);
   const add = useCallback((...items: NewEntry[]) => {
     const made = items.map((item) => ({ ...item, id: nextId.current++ }) as Entry);
     setEntries((list) => [...list, ...made]);
@@ -150,10 +143,11 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
     if (started.current) return;
     started.current = true;
     const name = remembered(RUN_BY_KEY);
-    const start = { ...formRef.current, filled_by: formRef.current.filled_by || name, date: formRef.current.date || today() };
+    const start: StudioForm = { ...formRef.current, filled_by: formRef.current.filled_by || name, date: formRef.current.date || today() };
     setForm(start);
-    if (initialForm && initialForm.test) {
-      add({ role: "assistant", kind: "text", title: "Picked up from the full form", body: <p>I have the rows you filled in. Here is what is still needed, then I check the setup.</p> });
+    if (start.test) {
+      add({ role: "assistant", kind: "text", title: restored ? "Picked up where you left off" : "Picked up from the full form",
+        body: <p>I have the rows you filled in. Here is what is still needed, then I check the setup.</p> });
       proceed(start);
       return;
     }
@@ -183,15 +177,11 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
         body: <p>This page was built without the API address (NEXT_PUBLIC_ANISOTROPY_API_URL), so I can take the setup down but cannot check or run it.</p> });
       return;
     }
-    setChecking(true); setProblem("");
     try {
-      const answer = await checkSetup(apiBaseUrl, buildValues(values));
-      setChecked(answer);
+      const answer = await runner.check(buildValues(values));
       add({ role: "assistant", kind: "check", answer });
     } catch (error) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "The setup check did not answer", body: <p>{error instanceof StudioError ? error.message : "The setup check failed."}</p> });
-    } finally {
-      setChecking(false);
     }
   }
 
@@ -211,9 +201,8 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
 
   /** A changed setup leaves the last results behind; a run still going keeps its progress. */
   function clearRun() {
-    setChecked(null);
-    if (job?.state === "running") return;
-    setJob(null); setFields(null); setExplanation(null); fieldsLoaded.current = null;
+    runner.clearChecked();
+    runner.clearResults(); // a run still going keeps its progress
   }
 
   /** Apply rows from a click or a card, echo what the engineer chose, and move on. */
@@ -242,7 +231,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
 
   function startOver() {
     const fresh = { ...blankForm(unitsOf(formRef.current)), date: today(), filled_by: formRef.current.filled_by };
-    setForm(fresh); setChecked(null); setJob(null); setFields(null); setExplanation(null); setOwnMaterial(false); fieldsLoaded.current = null;
+    setForm(fresh); runner.reset(); setOwnMaterial(false);
     setEntries([]);
     ask("test");
   }
@@ -274,11 +263,10 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
     if (!apiBaseUrl || !answerNow || answerNow.state !== "ready") return;
     const name = formRef.current.filled_by.trim();
     if (!name) { ask("name"); return; }
-    setProblem(""); setFields(null); setExplanation(null); fieldsLoaded.current = null; setActive(null);
+    setActive(null);
     add({ role: "user", text: "Run the analysis" });
     try {
-      const startedJob = await startSolve(apiBaseUrl, buildValues(formRef.current), name, answerNow.checklist.coupon_exists);
-      setJob(startedJob);
+      const startedJob = await runner.solve(buildValues(formRef.current), name, answerNow.checklist.coupon_exists);
       add({ role: "assistant", kind: "job", job: startedJob.job_id });
     } catch (error) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "The run could not start", body: <p>{error instanceof StudioError ? error.message : "Unknown error."}</p> });
@@ -286,30 +274,8 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
   }
 
   useEffect(() => {
-    if (!job || !apiBaseUrl || job.state !== "running") return;
-    const timer = window.setTimeout(async () => {
-      try { setJob(await getJob(apiBaseUrl, job.job_id)); }
-      catch (error) { setProblem(error instanceof StudioError ? error.message : "The job's status could not be read."); }
-    }, POLL_MS);
-    return () => window.clearTimeout(timer);
-  }, [job, apiBaseUrl]);
-
-  useEffect(() => {
-    if (!job || !apiBaseUrl || !("fields" in job.outputs)) return;
-    const stamp = `${job.job_id}:${"explanation" in job.outputs}`;
-    if (fieldsLoaded.current === stamp) return;
-    const first = fieldsLoaded.current === null || !fieldsLoaded.current.startsWith(job.job_id);
-    fieldsLoaded.current = stamp;
-    (async () => {
-      try {
-        setFields(await fetchFields(apiBaseUrl, job.job_id));
-        setExplanation("explanation" in job.outputs ? await fetchExplanation(apiBaseUrl, job.job_id) : null);
-        if (first) add({ role: "assistant", kind: "result", job: job.job_id });
-      } catch (error) {
-        setProblem(error instanceof StudioError ? error.message : "The results could not be read.");
-      }
-    })();
-  }, [job, apiBaseUrl, add]);
+    if (runner.loadedJob) add({ role: "assistant", kind: "result", job: runner.loadedJob }); // once per job, when its fields are first read
+  }, [runner.loadedJob, add]);
 
   function send(value = input) {
     const text = value.trim();
@@ -473,9 +439,9 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
           </>
         );
       case "name":
-        return <RowsCard keys={["filled_by", "material_code"]} form={form} submit="Continue" onApply={(rows) => {
-          const name = rows.filled_by?.trim(), code = rows.material_code?.trim() ?? "";
-          if (name) answer(code ? `${name}; material code ${code}` : name, { filled_by: name, material_code: code });
+        return <RowsCard keys={["filled_by"]} form={form} submit="Continue" onApply={(rows) => {
+          const name = rows.filled_by?.trim();
+          if (name) answer(name, { filled_by: name });
         }} />;
       case "advanced":
         return <RowsCard keys={["element_size", "criteria", "f12_star", ...(isBending(form) ? [] : ["grips", "region"])]} form={form} submit="Apply and check again"
