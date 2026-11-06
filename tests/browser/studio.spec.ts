@@ -240,7 +240,9 @@ test("the studio's old addresses go to the chat with their query (ADR-0055 amend
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/studio?material=im7-8552");
-  await expect(page).toHaveURL(/\/chat\/?\?material=im7-8552$/);
+  // The chat reads the material from the query once and then clears the query from the address (readHandoff), so the address
+  // is /chat with or without it by the time it is read; that the chat got the material is the next line.
+  await expect(page).toHaveURL(/\/chat\/?(\?material=im7-8552)?$/);
   await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
   await expect(page.getByTestId("coupon-tool")).toContainText("Coupon test"); // the first question lists the tools
   await page.goto("/studio/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
