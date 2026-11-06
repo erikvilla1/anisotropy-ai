@@ -5,10 +5,11 @@ import { projectTitle } from "@/lib/project-store";
 import { CouponChat, CouponSpec } from "@/components/studio/coupon-chat";
 import { CouponStudio } from "@/components/studio/coupon-studio";
 import { ProjectProvider, useProject } from "@/components/studio/project-context";
+import { FeaRail } from "./fea-rail";
 import { WorkspaceShell } from "./shell";
 
-/** The coupon FEA workspace (ADR-0062, part 2): the project's rows on the left (the full form's column, the step panels of part 3 replace
- * it), the model and the results in the centre, the coupon assistant on the right, all three on the one project store. */
+/** The coupon FEA workspace (ADR-0062): one panel per step on the left, the sketch, the model and the results in the centre, the coupon
+ * assistant on the right, all three on the one project store. */
 export function FeaWorkspace({ apiBaseUrl }: { apiBaseUrl: string }) {
   const router = useRouter();
   return (
@@ -25,8 +26,8 @@ function FeaColumns({ apiBaseUrl, onLaminate }: { apiBaseUrl: string; onLaminate
     <WorkspaceShell
       kind="Coupon FEA"
       title={<input type="text" aria-label="Project name" value={project.name} placeholder={projectTitle(project)} onChange={(e) => rename(e.target.value)} data-testid="project-name" />}
-      rail={<CouponStudio apiBaseUrl={apiBaseUrl} part="input" />}
-      stage={<><CouponSpec form={form} /><CouponStudio apiBaseUrl={apiBaseUrl} part="output" /></>}
+      rail={<FeaRail apiBaseUrl={apiBaseUrl} />}
+      stage={<><CouponSpec form={form} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>}
       assistant={<CouponChat apiBaseUrl={apiBaseUrl} bench={false} onOpenForm={showForm} onLaminate={onLaminate} />}
     />
   );

@@ -67,7 +67,10 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("empty-scene")).toBeVisible();
   await page.getByRole("button", { name: "Load example" }).click();
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
+  await expect(page.getByTestId("sketch")).toContainText("25 by 250 mm, 56 mm tabs"); // the typed rows drawn before any check (ADR-0062)
+  await expect(page.getByTestId("panel-geometry")).toHaveAttribute("data-state", "none");
   await page.getByTestId("check-button").click();
+  await expect(page.getByTestId("panel-geometry")).toHaveAttribute("data-state", "pass");
   await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "ready");
   await expect(page.getByTestId("checklist").locator("li[data-state=pass]")).toHaveCount(12);
   expect(calls.checks).toHaveLength(1);
@@ -197,6 +200,7 @@ test("a blocked setup names its rows and the solve stays off", async ({ page }) 
   await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "blocked");
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByTestId("checklist").locator("li[data-item=geometry]")).toHaveAttribute("data-state", "missing");
+  await expect(page.getByTestId("panel-geometry")).toHaveAttribute("data-state", "missing");
   await expect(page.getByTestId("solve-button")).toBeDisabled();
   expect(calls.solves).toHaveLength(0);
   await page.getByLabel("Length (mm)", { exact: true }).fill("250");

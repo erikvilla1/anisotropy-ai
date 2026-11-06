@@ -7,10 +7,10 @@ test.skip(!process.env.STUDIO_LIVE, "set STUDIO_LIVE=1 to run the studio against
 test("the example coupon solves end to end from the studio", async ({ page }) => {
   await page.goto("/workspace/fea"); // the rows are the left column of the workspace (ADR-0062)
   await page.getByRole("button", { name: "Load example" }).click();
-  await page.getByLabel("Filled in by", { exact: true }).fill("Studio live test"); // the coupon's codes are derived or reused (ADR-0038 amendment 1)
+  // the coupon's codes are derived or reused (ADR-0038 amendment 1); "Filled in by" sits under Advanced and takes the Run by name when blank
+  await page.getByLabel("Run by", { exact: true }).fill("Studio live test"); // names who fills and who runs the coupon
   await page.getByTestId("check-button").click();
   await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "ready", { timeout: 120_000 });
-  await page.getByLabel("Run by", { exact: true }).fill("Studio live test");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 300_000 });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
