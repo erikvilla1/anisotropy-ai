@@ -61,3 +61,14 @@
 .ws-layup-notation { margin-bottom: 10px; }
 .ws-layup-stack { margin-top: 10px; }
 .ws-rail .hero-laminate-canvas { aspect-ratio: 16 / 10; min-height: 170px; border-radius: 8px; }
+
+/* The laminate workspace (ADR-0062, part 5): the problem's strip, the stack in the centre, the panels' fields. */
+.ws-stage .lam-spec { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+.ws-stage-stack .hero-laminate-canvas { aspect-ratio: 16 / 9; min-height: 300px; border-radius: 8px; }
+.ws-panel-body .lam-grid3 { margin: 8px 0; }
+.ws-panel-body .lam-own { display: grid; gap: 10px; margin-top: 8px; }
+.ws-panel-body .lam-solve-options { flex-direction: column; align-items: stretch; gap: 10px; }
+.ws-panel-body .lam-check { flex-direction: row; align-items: flex-start; gap: 8px; }
+.ws-panel-body .lam-check input { margin-top: 3px; }
+.ws-panel-body .lam-material > .lam-field select { max-width: none; font-size: 13px; }
+.ws-panel-body .studio-alert li { font-size: 12px; }

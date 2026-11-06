@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, FolderOpen, Plus } from "lucide-react";
-import { newProject, projectTitle, readProjects, upsert, writeProjects, type CouponProject } from "@/lib/project-store";
+import { FolderOpen, Plus } from "lucide-react";
+import { newLaminateProject, newProject, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
 import { browserStorage } from "@/components/studio/project-context";
+import { problemLines } from "@/lib/laminate-chat";
 import { TEST_CHOICES } from "@/lib/studio-chat";
-import { WORKSPACES } from "@/lib/workspaces";
+import { workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
 
 function testTitle(test: string): string {
   return TEST_CHOICES.find((c) => c.test === test)?.title ?? test;
@@ -18,20 +19,36 @@ function when(stamp: string): string {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** `/workspace` (ADR-0062): the projects this browser keeps, newest first, and one tile per kind of work. Opening a project moves it to the
- * front, which is what the FEA workspace picks up; a new project starts blank. The server store of part 6 replaces the browser's list. */
+/** What a project is about, in a few words: a coupon's test, a laminate's layup. */
+function about(project: Project): string {
+  if (project.kind === "fea") return project.form.test ? testTitle(project.form.test) : "–";
+  const layup = problemLines(project.draft).find(([k]) => k === "Layup")?.[1];
+  return layup || "–";
+}
+
+function materialOf(project: Project): string {
+  if (project.kind === "fea") return project.form.library || project.form.own_name || "–";
+  return problemLines(project.draft).find(([k]) => k === "Material")?.[1] || "–";
+}
+
+const KIND_WORD: Record<Project["kind"], string> = { fea: "Coupon FEA", laminate: "Laminate response" };
+const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate" };
+
+/** `/workspace` (ADR-0062): the projects this browser keeps, both kinds, newest first, and one tile per kind of work. Opening a project moves
+ * it to the front, which is what its workspace picks up; a new project starts blank. The server store of part 6 replaces the browser's list. */
 export function WorkspaceChooser() {
   const router = useRouter();
-  const [projects, setProjects] = useState<CouponProject[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   useEffect(() => { setProjects(readProjects(browserStorage())); }, []);
 
-  function open(project: CouponProject) {
+  function open(project: Project) {
     const store = browserStorage();
     writeProjects(upsert(readProjects(store), project), store);
-    router.push("/workspace/fea");
+    router.push(workspace(ROUTE[project.kind]).href);
   }
-  function create() {
-    open(newProject());
+  function create(id: WorkspaceId) {
+    if (id === "fea") open(newProject());
+    else if (id === "laminate") open(newLaminateProject());
   }
 
   return (
@@ -44,19 +61,11 @@ export function WorkspaceChooser() {
       <div className="ws-tiles" data-testid="workspace-tiles">
         {WORKSPACES.map((w) => (
           w.status === "built" ? (
-            w.id === "fea" ? (
-              <button type="button" key={w.id} className="ws-tile" data-workspace={w.id} data-status={w.status} onClick={create}>
-                <span className="eyebrow">{w.eyebrow}</span>
-                <h3><Plus size={15} /> New {w.title.toLowerCase()} project</h3>
-                <p>{w.detail}</p>
-              </button>
-            ) : (
-              <Link key={w.id} className="ws-tile" href={w.href} data-workspace={w.id} data-status={w.status}>
-                <span className="eyebrow">{w.eyebrow}</span>
-                <h3>{w.title} <ArrowUpRight size={15} /></h3>
-                <p>{w.detail}</p>
-              </Link>
-            )
+            <button type="button" key={w.id} className="ws-tile" data-workspace={w.id} data-status={w.status} onClick={() => create(w.id)}>
+              <span className="eyebrow">{w.eyebrow}</span>
+              <h3><Plus size={15} /> New {w.title.toLowerCase()} project</h3>
+              <p>{w.detail}</p>
+            </button>
           ) : (
             <Link key={w.id} className="ws-tile" href={w.href} data-workspace={w.id} data-status={w.status}>
               <span className="eyebrow">{w.eyebrow} · PLANNED</span>
@@ -67,23 +76,24 @@ export function WorkspaceChooser() {
         ))}
       </div>
       <section className="studio-panel ws-projects" data-testid="workspace-projects">
-        <h3><FolderOpen size={15} /> Your coupon projects</h3>
+        <h3><FolderOpen size={15} /> Your projects</h3>
         {projects.length ? (
           <table className="studio-table">
-            <thead><tr><th>Project</th><th>Test</th><th>Material</th><th>Last change</th><th></th></tr></thead>
+            <thead><tr><th>Project</th><th>Kind</th><th>About</th><th>Material</th><th>Last change</th><th></th></tr></thead>
             <tbody>
               {projects.map((p) => (
-                <tr key={p.id} data-project={p.id}>
+                <tr key={p.id} data-project={p.id} data-kind={p.kind}>
                   <td>{projectTitle(p)}</td>
-                  <td>{p.form.test ? testTitle(p.form.test) : "–"}</td>
-                  <td>{p.form.library || p.form.own_name || "–"}</td>
+                  <td>{KIND_WORD[p.kind]}</td>
+                  <td>{about(p)}</td>
+                  <td>{materialOf(p)}</td>
                   <td>{when(p.updated)}</td>
                   <td><button type="button" className="chat-link" onClick={() => open(p)}>Open</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        ) : <p className="studio-muted">None yet in this browser. Start one from the tile above; it is kept here until you clear the site's data.</p>}
+        ) : <p className="studio-muted">None yet in this browser. Start one from the tiles above; it is kept here until you clear the site&apos;s data.</p>}
       </section>
     </div>
   );

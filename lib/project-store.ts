@@ -1,8 +1,10 @@
-/** The project: the one thing the workspace edits (ADR-0062). A coupon project holds the rows of the values file (ADR-0046 amendment 3)
- * and a plate's lists (ADR-0054), under a name the engineer gives; the check, the job and its files belong to the run, not to the project,
- * and the coupon's designation stays the fea package's (ADR-0038). Pure: no React, no browser, so `tests/project-store.test.ts` can run it.
- * The browser keeps the projects under one key so a reload picks up where the engineer left off, until the server store (part 6) exists. */
+/** The project: the one thing a workspace edits (ADR-0062). A coupon project holds the rows of the values file (ADR-0046 amendment 3)
+ * and a plate's lists (ADR-0054); a laminate project holds the draft of a laminate problem (ADR-0060), each value with its unit; both
+ * under a name the engineer gives. The check, the job and its files belong to the run, not to the project, and the coupon's designation
+ * stays the fea package's (ADR-0038). Pure: no React, no browser, so `tests/project-store.test.ts` can run it. The browser keeps the
+ * projects of both kinds under one key so a reload picks up where the engineer left off, until the server store (part 6) exists. */
 
+import { blankDraft, type LaminateDraft } from "./laminate-chat";
 import { blankForm, type StudioForm } from "./studio-form";
 import { emptyPlate, type PlateLists } from "./studio-plate";
 
@@ -19,11 +21,27 @@ export type CouponProject = {
   updated: string;
 };
 
+export type LaminateProject = {
+  id: string;
+  kind: "laminate";
+  name: string;
+  draft: LaminateDraft;
+  created: string;
+  updated: string;
+};
+
+export type Project = CouponProject | LaminateProject;
+
 export type ProjectAction =
   | { type: "form"; form: StudioForm }
   | { type: "plate"; plate: PlateLists }
   | { type: "rename"; name: string }
   | { type: "replace"; project: CouponProject };
+
+export type LaminateAction =
+  | { type: "draft"; draft: LaminateDraft }
+  | { type: "rename"; name: string }
+  | { type: "replace"; project: LaminateProject };
 
 /** What `localStorage` offers; a test passes a Map-backed stand-in. */
 export type StorageLike = { getItem(key: string): string | null; setItem(key: string, value: string): void };
@@ -38,8 +56,12 @@ export function newProject(form: StudioForm = blankForm(), now: string = new Dat
   return { id, kind: "fea", name: "", form, plate: emptyPlate(), created: now, updated: now };
 }
 
-export function projectTitle(project: CouponProject): string {
-  return project.name.trim() || "Untitled coupon";
+export function newLaminateProject(draft: LaminateDraft = blankDraft(), now: string = new Date().toISOString(), id: string = makeId()): LaminateProject {
+  return { id, kind: "laminate", name: "", draft, created: now, updated: now };
+}
+
+export function projectTitle(project: Project): string {
+  return project.name.trim() || (project.kind === "fea" ? "Untitled coupon" : "Untitled laminate");
 }
 
 export function reduce(project: CouponProject, action: ProjectAction, now: string = new Date().toISOString()): CouponProject {
@@ -51,27 +73,51 @@ export function reduce(project: CouponProject, action: ProjectAction, now: strin
   }
 }
 
-function isProject(value: unknown): value is CouponProject {
-  if (!value || typeof value !== "object") return false;
-  const p = value as Record<string, unknown>;
-  return typeof p.id === "string" && p.kind === "fea" && typeof p.name === "string" && typeof p.form === "object" && p.form !== null
-    && typeof p.plate === "object" && p.plate !== null && typeof p.created === "string" && typeof p.updated === "string";
+export function reduceLaminate(project: LaminateProject, action: LaminateAction, now: string = new Date().toISOString()): LaminateProject {
+  switch (action.type) {
+    case "draft": return { ...project, draft: action.draft, updated: now };
+    case "rename": return { ...project, name: action.name, updated: now };
+    case "replace": return action.project;
+  }
 }
 
-/** The projects the browser keeps, newest first; nothing when storage is blocked, empty or holds something else. */
-export function readProjects(storage: StorageLike | null | undefined): CouponProject[] {
+function hasShape(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const p = value as Record<string, unknown>;
+  return typeof p.id === "string" && typeof p.name === "string" && typeof p.created === "string" && typeof p.updated === "string";
+}
+
+function isCouponProject(value: unknown): value is CouponProject {
+  return hasShape(value) && value.kind === "fea" && typeof value.form === "object" && value.form !== null && typeof value.plate === "object" && value.plate !== null;
+}
+
+function isLaminateProject(value: unknown): value is LaminateProject {
+  return hasShape(value) && value.kind === "laminate" && typeof value.draft === "object" && value.draft !== null;
+}
+
+/** A kept project with the lists and the draft's rows a newer page expects filled in. */
+function whole(project: Project): Project {
+  if (project.kind === "fea") return { ...project, plate: { supports: project.plate.supports ?? [], loads: project.plate.loads ?? [], regions: project.plate.regions ?? [] } };
+  return { ...project, draft: { ...blankDraft(), ...project.draft } };
+}
+
+/** The projects the browser keeps, both kinds, newest first; nothing when storage is blocked, empty or holds something else. */
+export function readProjects(storage: StorageLike | null | undefined): Project[] {
   try {
     const raw = storage?.getItem(PROJECTS_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isProject).map((p) => ({ ...p, plate: { supports: p.plate.supports ?? [], loads: p.plate.loads ?? [], regions: p.plate.regions ?? [] } }));
+    return parsed.filter((p): p is Project => isCouponProject(p) || isLaminateProject(p)).map(whole);
   } catch {
     return [];
   }
 }
 
-export function writeProjects(list: CouponProject[], storage: StorageLike | null | undefined): boolean {
+export const couponProjects = (list: Project[]): CouponProject[] => list.filter((p): p is CouponProject => p.kind === "fea");
+export const laminateProjects = (list: Project[]): LaminateProject[] => list.filter((p): p is LaminateProject => p.kind === "laminate");
+
+export function writeProjects(list: Project[], storage: StorageLike | null | undefined): boolean {
   try {
     storage?.setItem(PROJECTS_KEY, JSON.stringify(list.slice(0, KEPT)));
     return true;
@@ -81,6 +127,6 @@ export function writeProjects(list: CouponProject[], storage: StorageLike | null
 }
 
 /** The list with this project first, replacing the one with its id, at most KEPT long. */
-export function upsert(list: CouponProject[], project: CouponProject): CouponProject[] {
+export function upsert(list: Project[], project: Project): Project[] {
   return [project, ...list.filter((p) => p.id !== project.id)].slice(0, KEPT);
 }

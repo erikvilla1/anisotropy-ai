@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KEPT, newProject, PROJECTS_KEY, projectTitle, readProjects, reduce, upsert, writeProjects, type StorageLike } from "../lib/project-store";
+import { couponProjects, KEPT, laminateProjects, newLaminateProject, newProject, PROJECTS_KEY, projectTitle, readProjects, reduce, reduceLaminate, upsert, writeProjects, type StorageLike } from "../lib/project-store";
+import { blankDraft } from "../lib/laminate-chat";
 import { blankForm } from "../lib/studio-form";
 
 function memory(): StorageLike & { map: Map<string, string> } {
@@ -43,4 +44,24 @@ test("projects are kept newest first under one key, read back whole, and storage
   assert.deepEqual(readProjects(blocked), []);
   assert.equal(writeProjects([a], blocked), false);
   assert.deepEqual(readProjects(null), []);
+});
+
+test("a laminate project keeps the draft of a problem beside the coupons, each kind picked out by its own workspace (ADR-0062, part 5)", () => {
+  const storage = memory();
+  const coupon = newProject(blankForm(), "2026-11-06T10:00:00.000Z", "c");
+  const laminate = newLaminateProject(blankDraft(), "2026-11-06T11:00:00.000Z", "l");
+  assert.equal(laminate.kind, "laminate");
+  assert.equal(projectTitle(laminate), "Untitled laminate");
+  const stated = reduceLaminate(laminate, { type: "draft", draft: { ...laminate.draft, system: "SI" } }, "2026-11-06T11:01:00.000Z");
+  assert.equal(stated.draft.system, "SI");
+  assert.equal(stated.updated, "2026-11-06T11:01:00.000Z");
+  assert.equal(reduceLaminate(stated, { type: "rename", name: "ABD check" }).name, "ABD check");
+  assert.ok(writeProjects(upsert(upsert([], coupon), stated), storage));
+  const kept = readProjects(storage);
+  assert.deepEqual(kept.map((p) => `${p.kind}:${p.id}`), ["laminate:l", "fea:c"]);
+  assert.deepEqual(couponProjects(kept).map((p) => p.id), ["c"]);
+  assert.deepEqual(laminateProjects(kept).map((p) => p.id), ["l"]);
+  storage.map.set(PROJECTS_KEY, JSON.stringify([{ ...stated, draft: { system: "US" } }])); // a draft kept by an older page: the missing rows are blank, not absent
+  const older = laminateProjects(readProjects(storage))[0];
+  assert.deepEqual(older.draft, { ...blankDraft(), system: "US" });
 });

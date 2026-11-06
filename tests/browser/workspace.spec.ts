@@ -38,6 +38,24 @@ test("the workspace opens on three tiles and the browser's projects, and a new p
   await page.getByTestId("workspace-projects").getByRole("button", { name: "Open" }).first().click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await expect(page.getByTestId("project-name")).toHaveValue("OHT study");
+
+  await page.getByRole("link", { name: "All projects" }).click(); // a laminate project is kept beside it and opens its own workspace (part 5)
+  await page.getByRole("button", { name: /New laminate response project/i }).click();
+  await expect(page).toHaveURL(/\/workspace\/laminate\/?$/);
+  await expect(page.getByTestId("laminate-rail").getByTestId("panel-units")).toBeVisible();
+  await expect(page.getByTestId("ws-stage").getByTestId("empty-stack")).toBeVisible();
+  await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "units");
+  await page.getByTestId("project-name").fill("ABD check");
+  await page.getByLabel("Units", { exact: true }).selectOption("mm-MPa"); // on the panel: the assistant moves on
+  await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "material");
+  await page.getByRole("link", { name: "All projects" }).click();
+  const rows = page.getByTestId("workspace-projects").locator("tbody tr");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toHaveAttribute("data-kind", "laminate");
+  await expect(rows.first()).toContainText("ABD check");
+  await rows.nth(1).getByRole("button", { name: "Open" }).click(); // the coupon project, untouched
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
+  await expect(page.getByTestId("project-name")).toHaveValue("OHT study");
 });
 
 test("the old addresses go to the workspace with their query, and the service pages point at it (ADR-0058 amendment 1)", async ({ page }) => {
