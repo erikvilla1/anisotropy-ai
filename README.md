@@ -54,8 +54,8 @@ The [local API and chunk 1 walkthrough](api/README.md) exposes one-material lami
 | `/contact` | The address to write to |
 | `/library` | Material records and physics references |
 | `/sources` | Textbook citations, recorded property values and unit conversions |
-| `/chat` | Dedicated conversation interface with editable specifications |
-| `/studio` | The coupon studio: a coupon test set up, checked, solved and viewed (ADR-0051) |
+| `/chat` | The chat: laminate response in the units you pick (ADR-0060) and the coupon studio, a coupon test set up, checked, solved and viewed (ADR-0051), from one first question (ADR-0055) |
+| `/studio` | Redirects to `/chat` (ADR-0055 amendment 3) |
 | `/data` | Local CSV inspection and submission preview (not in the header) |
 | `/calculator` | Editable laminate form with engine stiffness, strains and curvatures (not in the header) |
 

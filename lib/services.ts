@@ -27,7 +27,7 @@ export const services: readonly Service[] = [
     eyebrow: "CAD",
     summary: "Coupon geometry stated as a few dimensions and meshed from them. A CAD file to take elsewhere is planned.",
     status: "partly",
-    access: { label: "Open the studio", href: "/studio" },
+    access: { label: "Open the chat", href: "/chat" },
   },
   {
     slug: "finite-element-modeling",
@@ -35,7 +35,7 @@ export const services: readonly Service[] = [
     eyebrow: "FEM",
     summary: "A coupon test set up in the browser, checked, solved with our kernel and CalculiX, and viewed ply by ply.",
     status: "built",
-    access: { label: "Open the studio", href: "/studio" },
+    access: { label: "Open the chat", href: "/chat" },
   },
   {
     slug: "test-plans",
@@ -51,7 +51,7 @@ export const services: readonly Service[] = [
     eyebrow: "DOCUMENTATION",
     summary: "Every solved coupon leaves a package: the report, the decks, the comparison and a record of what was run.",
     status: "built",
-    access: { label: "Open the studio", href: "/studio" },
+    access: { label: "Open the chat", href: "/chat" },
   },
   {
     slug: "manufacturing-plans",

@@ -169,7 +169,7 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
   }
 
   const busy = checking || (job?.state === "running");
-  const viewerLink = job ? `/studio/view?job=${encodeURIComponent(job.job_id)}` : null;
+  const viewerLink = job ? `/chat/view?job=${encodeURIComponent(job.job_id)}` : null;
   return (
     <div className="studio-layout">
       <aside className="studio-input">
