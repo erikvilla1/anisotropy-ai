@@ -26,6 +26,7 @@ from anisotropy_fea.compare import compare_record, format_record, load_record, r
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.mesher import MeshError
 from anisotropy_fea.spec import SpecError, load_spec
+from anisotropy_fea.units import deck_units_of
 from anisotropy_fea.write_abaqus import write_abaqus
 
 KNOWN_DIFFERENCES = {
@@ -61,7 +62,7 @@ def main() -> None:
         model = build_model(spec)
     except (SpecError, MeshError) as exc:
         raise SystemExit(f"spec refused: {exc}") from None
-    units = spec.units
+    units = deck_units_of(spec.units)  # the deck's system (ADR-0061)
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.spec.stem
     deck_path = args.out / f"{stem}-abaqus.inp"

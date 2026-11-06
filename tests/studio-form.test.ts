@@ -2,8 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  blankForm, buildValues, EXAMPLE, exampleForm, fieldByKey, fields, FORM_VERSION, formDefinition, formFromValues, BENDING_KEYS, HOLE_KEYS, libraryOptions,
-  PLY_KEYS, rowErrorsFrom, sectionsFor, shortHelp, type Checklist,
+  blankForm, buildValues, DECK_UNITS, DEFAULT_UNITS, EXAMPLE, exampleForm, fieldByKey, fieldByLabel, fields, FORM_VERSION, formDefinition, formFromValues, BENDING_KEYS,
+  HOLE_KEYS, labelFor, libraryConstantsIn, libraryOptions, PLY_KEYS, rowErrorsFrom, sectionsFor, shortHelp, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords,
+  type Checklist,
 } from "../lib/studio-form";
 
 const values = JSON.parse(readFileSync("tests/fixtures/studio/values.json", "utf8"));
@@ -84,4 +85,36 @@ test("a checklist's failing rows land on their fields", () => {
 test("a row's hint is its help's first sentence", () => {
   assert.ok(shortHelp(fieldByKey.length).startsWith("the whole coupon"));
   assert.ok(shortHelp(fieldByKey.G13).length <= 140);
+});
+
+test("the form carries the engine's unit systems: labels per row, defaults per system and the library's constants, nothing converted here", () => {
+  assert.deepEqual(UNIT_SYSTEMS, ["mm-MPa", "m-Pa", "in-psi", "in-ksi"]);
+  assert.equal(DEFAULT_UNITS, "mm-MPa");
+  assert.equal(DECK_UNITS, "mm-MPa");
+  assert.equal(unitWords("in-psi"), "in, psi and lbf");
+  assert.deepEqual([unitLabels("in-ksi").stress, unitLabels("in-ksi").force, unitLabels("m-Pa").length], ["ksi", "lbf", "m"]);
+  assert.equal(labelFor(fieldByKey.length, "in-psi"), "Length (in)");
+  assert.equal(labelFor(fieldByKey.own_E1, "in-ksi"), "Own material: E1 (ksi)");
+  assert.equal(labelFor(fieldByKey.value, "m-Pa"), "Value (m or N)");
+  assert.equal(labelFor(fieldByKey.test, "in-psi"), "Test");
+  assert.equal(fieldByLabel["Length (in)"]?.key, "length");
+  assert.equal(fieldByLabel["Own material: G12 (psi)"]?.key, "own_G12");
+  assert.equal(fieldByKey.units.kind, "list");
+  assert.deepEqual(fieldByKey.units.words, UNIT_SYSTEMS);
+  const inches = blankForm("in-psi");
+  assert.equal(inches.units, "in-psi");
+  assert.ok(Math.abs(Number(inches.element_size) - 2 / 25.4) < 1e-9); // the engine's 2 mm default, in inches
+  assert.equal(blankForm().element_size, "2");
+  assert.equal(blankForm("furlongs").units, "mm-MPa");
+  assert.equal(unitsOf({ units: "in-ksi" }), "in-ksi");
+  assert.equal(unitsOf({ units: "SI" }), "mm-MPa");
+  assert.equal(unitsOf({}), "mm-MPa");
+  assert.equal(formFromValues({ units: "in-psi", length: 10 }).units, "in-psi");
+  assert.equal(formFromValues({ length: 250 }).units, "mm-MPa");
+  assert.equal(buildValues({ ...exampleForm("2026-10-29"), units: "in-psi" }).units, "in-psi");
+  const im7 = libraryConstantsIn("im7-8552", "in-psi")!;
+  assert.ok(Math.abs(im7.E1 - 23.51e6) < 1e4 && Math.abs(im7.ply_thickness! - 0.0072) < 1e-9);
+  assert.equal(libraryConstantsIn("no-such-material", "in-psi"), null);
+  assert.deepEqual(rowErrorsFrom({ ...checklist, items: [{ id: "geometry", label: "Geometry defined", state: "missing", message: "Length (in): required", rows: ["Length (in)"] }] }),
+    { length: "Length (in): required" });
 });

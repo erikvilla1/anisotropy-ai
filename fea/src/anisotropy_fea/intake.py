@@ -13,7 +13,8 @@ problem at once (ADR-0003); `designation_for` gives the coupon its name by the r
 the tools read; `build_specs` does all of that for the team's build and its CalculiX twin and lets `spec.parse_spec` judge the
 exact text that will be written. The form never re-implements a spec rule.
 
-Units on the form are mm, MPa and N; the spec is written in "mm-MPa".
+The Units row says which unit system every number on the form is in, "mm-MPa" unless another is picked; the spec is written in
+that system and the decks in `units.deck_units_of` it (ADR-0061). The library sheet lists its constants in MPa and mm.
 """
 
 from __future__ import annotations
@@ -31,11 +32,12 @@ from anisotropy_engine.library import LibraryMaterial, library_material, list_da
 from . import __version__, forms, paths
 from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
                    to_si)
-from .units import unit_factors
+from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
+from .units import from_si as value_from_si, to_si as value_to_si
 
-FORM_VERSION = "0.5"
+FORM_VERSION = "0.6"
 INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD = "Coupon", "How to fill it in", "Definitions", "Library materials", "Record"
-UNITS = "mm-MPa"
+UNITS = "mm-MPa"  # the system the rows are in unless the Units row says another, the one the labels are written in, and the library sheet's
 TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45", "three_point_bending", "four_point_bending", "plate")  # as the form lists them
 assert set(TEST_ORDER) == set(IN_PLANE_KINDS) | set(BENDING_KINDS) | set(PLATE_KINDS)
 PLATE_LISTS = ("supports", "loads", "regions")  # the lists a plate carries beside the rows, sent by the studio only (ADR-0054)
@@ -46,7 +48,7 @@ GRIPS = ("coupling", "nodal")
 REGIONS = ("tabs", "line")
 PLIES = 16  # rows offered for the ply angles
 HOLE_DEFAULTS = {"circumferential": 32, "radial_layers": 6, "ring_ratio": 2.0, "growth": 1.2}  # the public open-hole check's O-grid
-ELEMENT_SIZE_DEFAULT = 2.0  # mm, the public checks' row spacing
+ELEMENT_SIZE_DEFAULT = 2.0  # mm, the public checks' row spacing; `element_size_default` gives it in the stated units
 FPF_CRITERIA = ("max_stress", "tsai_hill")  # what "all" reports when the material has strengths; Tsai-Wu joins when f12* is given
 CRITERION_WORDS = ("all", "maximum stress", "tsai-hill", "tsai-wu", "none")  # the Failure criterion row
 CRITERION_OF_WORD = {"maximum stress": "max_stress", "tsai-hill": "tsai_hill", "tsai-wu": "tsai_wu"}
@@ -76,6 +78,24 @@ class Field:
     words: tuple[str, ...] = ()  # the list a "list" field offers; the library list is bound to the Library sheet instead
     at_least: float | None = None
     above: float | None = None
+    unit: str | None = None  # the kind of unit the row's number carries, read off the label: "length", "stress", "force" or "amount" (a length or a force)
+
+    def __post_init__(self) -> None:
+        for suffix, kind in LABEL_UNITS.items():
+            if self.unit is None and self.label.endswith(suffix):
+                object.__setattr__(self, "unit", kind)
+
+    def label_in(self, units: str) -> str:
+        """The label with its unit in the stated system: "Length (mm)" is "Length (in)" for a coupon stated in in-psi."""
+        if self.unit is None or units == UNITS:
+            return self.label
+        lab, mm = UNIT_LABEL[units], UNIT_LABEL[UNITS]
+        if self.unit == "amount":
+            return self.label.replace(f"({mm['length']} or {mm['force']})", f"({lab['length']} or {lab['force']})")
+        return self.label.replace(f"({mm[self.unit]})", f"({lab[self.unit]})")
+
+
+LABEL_UNITS = {"(mm)": "length", "(MPa)": "stress", "(N)": "force", "(mm or N)": "amount"}  # a label's unit, in the form's own system
 
 
 BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
@@ -85,6 +105,10 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("notes", "Notes to us", "text", "anything we should know: where a value comes from, which values are estimates, what you want to learn from this coupon"),
     )),
     ("The coupon", (
+        Field("units", "Units", "list", "the unit system every number on this form is in: mm-MPa (mm, MPa and N), m-Pa (m, Pa and N), in-psi "
+              "(in, psi and lbf) or in-ksi (in, ksi and lbf); the row labels are written for mm-MPa, so with another system read each unit as that "
+              "system's. Results come back in the units you pick; our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick",
+              default=UNITS, words=tuple(UNIT_SYSTEMS)),
         Field("test", "Test", "list", "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), "
               "open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), "
               "three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines) or plate "
@@ -100,7 +124,7 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
               default="not built yet"),
         Field("test_data", "Test data", "text", "measured results we can compare with (a test report or a file name), or none", default="none"),
     )),
-    ("Geometry (mm): the coupon lies with its length along y, the direction it is pulled, pushed or spanned", (
+    ("Geometry: the coupon lies with its length along y, the direction it is pulled, pushed or spanned; lengths in the units stated above", (
         Field("length", "Length (mm)", "number", "the whole coupon from end to end along the pull, tabs included, e.g. 250; for bending, the span plus the "
               "two overhangs", required=True, above=0),
         Field("width", "Width (mm)", "number", "across the coupon, e.g. 25", required=True, above=0),
@@ -167,7 +191,7 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
               "neither included; required for Tsai-Wu; leave it blank otherwise, and Tsai-Wu is not reported"),
     )),
     ("Loading: the bottom grip is held, the top grip moves; in bending, the supports hold and the nose moves", (
-        Field("control", "Loading type", "list", "displacement: the top grip moves by the value, in mm; force: a total force, in N, pulls or pushes "
+        Field("control", "Loading type", "list", "displacement: the top grip moves by the value, a length; force: a total force pulls or pushes "
               "the top grip. Bending takes displacement: the loading nose travels by the value", required=True, words=CONTROLS),
         Field("value", "Value (mm or N)", "number", "the amount as a positive number, e.g. 1 mm or 10000 N; for compression we push, for the other "
               "tests we pull; in bending the nose pushes down by this travel", required=True, above=0),
@@ -198,7 +222,8 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
     )),
 )
 FIELDS: dict[str, Field] = {f.key: f for _, fields in BLOCKS for f in fields}
-KEY_OF_LABEL: dict[str, str] = {f.label: f.key for f in FIELDS.values()}
+KEY_OF_LABEL: dict[str, str] = {f.label_in(units): f.key for units in UNIT_SYSTEMS for f in FIELDS.values()}  # a label in any system names its row
+assert all(f.label != f.label_in("in-psi") for f in FIELDS.values() if f.unit), "a row with a unit carries it in its label"
 OWN_KEYS = ("own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c", "own_F6", "own_source")
 STRENGTH_KEYS = ("own_F1t", "own_F1c", "own_F2t", "own_F2c", "own_F6")
 NAME_KEYS = {"name_part": "part", "name_instance": "instance", "name_material": "material", "name_layup": "layup", "name_section": "section_set"}
@@ -219,7 +244,9 @@ ROWS_OF_KEY = {
 HOW_TO = (
     "What this form is for. You describe one coupon test; from it we build the model in our engine, solve it, and send back a package: "
     "the document, our Abaqus deck of the same coupon, and the audit form on which you compare your Abaqus results with ours.",
-    "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. Units are mm, MPa and N. "
+    "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. The Units row says which "
+    "units every number is in: mm, MPa and N unless you pick another system (m-Pa, in-psi or in-ksi); the results come back in the same units, and "
+    "our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick. "
     "Every row says what it means beside it; the sheet Definitions explains each term with an example.",
     "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured "
     "from x, as in your Abaqus models: 0 = fibres across the coupon, 90 = fibres along the pull.",
@@ -554,8 +581,15 @@ class FormInput:
     cells: dict[str, Any]
     lists: dict[str, list] = field(default_factory=dict)  # supports, loads, regions of a plate, as sent
 
+    @property
+    def units(self) -> str:
+        """The unit system the Units row states; the form's own when the row is blank. A word that is no system is refused by `check_form`."""
+        value = forms.text_of(self.cells.get("units")).lower()
+        return next((name for name in UNIT_SYSTEMS if name.lower() == value), UNITS)
+
     def label(self, key: str) -> str:
-        return FIELDS[key].label
+        """A row's label with its unit in the stated system: what a refusal names."""
+        return FIELDS[key].label_in(self.units)
 
 
 def read_form(path: Path | str) -> FormInput:
@@ -656,8 +690,8 @@ def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
     Works on a spec as parsed (its own units) or loaded (SI). The rows the spec does not record (who filled it in, when, the notes)
     are blank. A spec the form cannot state, in other units or asking for a set of criteria the row does not offer, is refused.
     """
-    if spec.units != UNITS:
-        raise IntakeError(f"the form states a coupon in {UNITS}; the spec is in {spec.units}")
+    if spec.units not in UNIT_SYSTEMS:
+        raise IntakeError(f"the form states a coupon in one of {', '.join(UNIT_SYSTEMS)}; the spec is in {spec.units}")
     if not (spec.material.transverse.plane_stress and spec.material.transverse.transverse_isotropy):
         raise IntakeError("the form fixes plane_stress = true and transverse_isotropy = true for the out-of-plane constants; the spec states them otherwise")
     if spec.mesh.element_order != 1:
@@ -666,7 +700,8 @@ def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
     L, S, F = f["length"], f["stress"], f["force"]
     back = lambda v, k: None if v is None else v / k  # noqa: E731
     g, m, mat, t = spec.geometry, spec.mesh, spec.material, spec.material.transverse
-    values: dict[str, Any] = {"form_version": FORM_VERSION, "filled_by": None, "date": None, "notes": None, "test": TEST_CODES[spec.kind][1]}
+    values: dict[str, Any] = {"form_version": FORM_VERSION, "units": spec.units, "filled_by": None, "date": None, "notes": None,
+                              "test": TEST_CODES[spec.kind][1]}
     if spec.coupon is not None:
         match = DESIGNATION.match(spec.coupon.designation)
         values.update(material_code=match["material"], layup_code=match["layup"], standard=spec.coupon.standard, size_from=spec.coupon.size_from,
@@ -777,6 +812,7 @@ class Values:
     supports: list[dict] | None = None  # a plate's supports, loads and regions as the studio sent them (ADR-0054)
     loads: list[dict] | None = None
     regions: list[dict] | None = None
+    units: str = UNITS  # the unit system every number above is in (ADR-0061)
 
     @property
     def test_code(self) -> str:
@@ -795,35 +831,40 @@ def check_form(form: FormInput) -> Values:
 
     def number(key: str, whole: bool = False) -> float | int | None:
         value = cells.get(key)
-        f = FIELDS[key]
+        f, label = FIELDS[key], form.label(key)
         if value is None:
             if f.required:
-                problems.append(f"{f.label}: required")
+                problems.append(f"{label}: required")
             return None
         try:
             number_ = float(str(value).replace(",", ".")) if isinstance(value, str) else float(value)
         except (TypeError, ValueError):
-            problems.append(f"{f.label}: a number is needed, not {forms.text_of(value)!r}")
+            problems.append(f"{label}: a number is needed, not {forms.text_of(value)!r}")
             return None
         if whole and number_ != int(number_):
-            problems.append(f"{f.label}: a whole number is needed, not {number_:g}")
+            problems.append(f"{label}: a whole number is needed, not {number_:g}")
             return None
         if f.above is not None and not number_ > f.above:
-            problems.append(f"{f.label}: must be greater than {f.above:g}, not {number_:g}")
+            problems.append(f"{label}: must be greater than {f.above:g}, not {number_:g}")
         if f.at_least is not None and not number_ >= f.at_least:
-            problems.append(f"{f.label}: must be at least {f.at_least:g}, not {number_:g}")
+            problems.append(f"{label}: must be at least {f.at_least:g}, not {number_:g}")
         return int(number_) if whole else number_
 
     def word(key: str) -> str:
-        f = FIELDS[key]
+        f, label = FIELDS[key], form.label(key)
         value = forms.text_of(cells.get(key)).lower()
         if not value:
             if f.required:
-                problems.append(f"{f.label}: required; one of {', '.join(f.words)}")
+                problems.append(f"{label}: required; one of {', '.join(f.words)}")
             return f.default or ""
-        if value not in f.words:
-            problems.append(f"{f.label}: {forms.text_of(cells.get(key))!r} is not one of {', '.join(f.words)}")
-        return value
+        known = next((w for w in f.words if w.lower() == value), None)  # the words are matched whatever the case they are typed in
+        if known is None:
+            problems.append(f"{label}: {forms.text_of(cells.get(key))!r} is not one of {', '.join(f.words)}")
+        return known or value
+
+    units = word("units")  # the unit system every number is in; `form.units` already names the labels in it
+    lab = UNIT_LABEL[form.units]
+    L = form.label
 
     def numbers(key: str, whole: bool = False) -> list | None:
         raw = forms.text_of(cells.get(key))
@@ -868,31 +909,31 @@ def check_form(form: FormInput) -> Values:
     bending = kind in BENDING_KINDS
     plate = kind in PLATE_KINDS
     if tab_length is None and kind and not bending and not plate:
-        problems.append("Tab length (mm): required for the pulled and pushed tests (0 for no tabs)")
+        problems.append(f"{L('tab_length')}: required for the pulled and pushed tests (0 for no tabs)")
     if bending and tab_length:
-        problems.append("Tab length (mm): a bending coupon has supports, not tabs; leave it blank or 0")
+        problems.append(f"{L('tab_length')}: a bending coupon has supports, not tabs; leave it blank or 0")
     if not bending and tab_length and length is not None and length > 0 and 2 * tab_length >= length:  # before the spec: its mesh rule would name the partition rows
-        problems.append(f"Length (mm) and Tab length (mm): the two tabs, {2 * tab_length:g} mm, must be shorter than the length, {length:g} mm, "
-                        "so that a gauge section is left between them (is the length the long side?)")
+        problems.append(f"{L('length')} and {L('tab_length')}: the two tabs, {2 * tab_length:g} {lab['length']}, must be shorter than the length, "
+                        f"{length:g} {lab['length']}, so that a gauge section is left between them (is the length the long side?)")
     span, overhang, load_span = number("span"), number("overhang"), number("load_span")
     if bending:
         if span is None:
-            problems.append("Support span (mm): required for bending")
+            problems.append(f"{L('span')}: required for bending")
         overhang = 0.0 if overhang is None else overhang
         if span is not None and length is not None and abs(length - (span + 2 * overhang)) > 1e-9 * length:
-            problems.append(f"Length (mm): must equal the support span plus twice the overhang, {span + 2 * overhang:g}, not {length:g}")
+            problems.append(f"{L('length')}: must equal the support span plus twice the overhang, {span + 2 * overhang:g}, not {length:g}")
         if kind == "four_point_bending":
             if load_span is None:
-                problems.append("Loading span (mm): required for four-point bending")
+                problems.append(f"{L('load_span')}: required for four-point bending")
             elif span is not None and not load_span < span:
-                problems.append(f"Loading span (mm): must be smaller than the support span {span:g}, not {load_span:g}")
+                problems.append(f"{L('load_span')}: must be smaller than the support span {span:g}, not {load_span:g}")
         elif load_span is not None:
-            problems.append("Loading span (mm): belongs to four-point bending only")
+            problems.append(f"{L('load_span')}: belongs to four-point bending only")
     elif kind and (span is not None or load_span is not None or overhang):  # the overhang row carries a default of 0 on every form
         problems.append("Support span, Overhang and Loading span: belong to the bending tests only")
     hole_diameter = number("hole_diameter")
     if kind == "open_hole_tension" and hole_diameter is None:
-        problems.append("Hole diameter (mm): required for open-hole tension")
+        problems.append(f"{L('hole_diameter')}: required for open-hole tension")
     supports = loads = regions = None
     if plate:
         supports, loads, regions = plate_lists(form, problems, tab_length, hole_diameter)
@@ -983,7 +1024,7 @@ def check_form(form: FormInput) -> Values:
     elif abaqus_mesh and len(abaqus_mesh) != 3:
         problems.append("Your Abaqus mesh: give all three rows (elements across the width, partition lines, rows per segment)")
     elif not abaqus_mesh and not size_given:
-        problems.append("Element size (mm): required unless you give your Abaqus mesh")
+        problems.append(f"{L('element_size')}: required unless you give your Abaqus mesh")
     if partitions is not None and seeds is not None and len(seeds) != len(partitions) + 1:
         problems.append(f"Your Abaqus mesh: rows per segment: {len(seeds)} counts for {len(partitions)} partition lines; one count per segment, "
                         f"one more than the lines")
@@ -999,7 +1040,7 @@ def check_form(form: FormInput) -> Values:
                   hole_diameter, hole, angles, symmetric, ply_thickness, library, own, G13, G23, control, value, element_size if size_given else None,
                   mesh_nx, partitions, seeds, grips, region, names or None, criteria, f12_star,
                   span=span if bending else None, overhang=overhang if bending else None, load_span=load_span if bending else None,
-                  supports=supports, loads=loads, regions=regions)
+                  supports=supports, loads=loads, regions=regions, units=units)
 
 
 def plate_regions_of(tab_length: float | None, hole_diameter: float | None, regions: list[dict]) -> list[str]:
@@ -1095,7 +1136,7 @@ def material_meaning(values: Values) -> tuple:
     if values.library:
         return ("library", values.library, library_material(values.library).dataset_id)
     own = values.own
-    return ("own", *(round(own[k] * 1e6, 3) for k in ("E1", "E2", "G12")), round(own["nu12"], 6))
+    return ("own", *(round(value_to_si(own[k], "stress", values.units), 3) for k in ("E1", "E2", "G12")), round(own["nu12"], 6))
 
 
 def spec_material_meaning(spec) -> tuple:
@@ -1160,11 +1201,22 @@ def designation_for(values: Values, root: Path) -> Designation:
 
 # --------------------------------------------------------------------------------------------- the spec
 
+def element_size_default(units: str) -> float:
+    """Our default element size, 2 mm, in the stated units."""
+    return value_from_si(value_to_si(ELEMENT_SIZE_DEFAULT, "length", UNITS), "length", units)
+
+
+def in_stated(value_mm: float, units: str) -> float:
+    """A length our tools fix in mm (a probe offset), in the stated units."""
+    return value_from_si(value_to_si(value_mm, "length", UNITS), "length", units)
+
+
 def mesh_data(values: Values) -> tuple[dict, dict[str, str]]:
     """The [mesh] table: the team's Abaqus seeds, or seeds from an element size with a node row on each tab line."""
     comments: dict[str, str] = {}
+    unit = UNIT_LABEL[values.units]["length"]
     if values.kind == "open_hole_tension" or (values.kind in PLATE_KINDS and values.hole_diameter is not None):
-        size = values.element_size if values.element_size is not None else ELEMENT_SIZE_DEFAULT
+        size = values.element_size if values.element_size is not None else element_size_default(values.units)
         data = {"mesher": "gmsh", "element_order": 1, "element_size": size, "hole": dict(values.hole)}
         comments["mesh.element_size"] = "the blocks around the hole; the square and the rings follow [mesh.hole]"
         return data, comments
@@ -1180,14 +1232,14 @@ def mesh_data(values: Values) -> tuple[dict, dict[str, str]]:
         lines = sorted({y for y in bending_lines_of(values) if 0.0 < y < L})
         edges = [0.0, *lines, L]
         data.update(y_partitions=lines, y_seeds=[rows(b - a) for a, b in zip(edges, edges[1:])])
-        comments["mesh.y_seeds"] = f"about {size:g} mm rows, with a node row on each support line and each loading-nose line"
+        comments["mesh.y_seeds"] = f"about {size:g} {unit} rows, with a node row on each support line and each loading-nose line"
         return data, comments
     if tab > 0:
         data.update(y_partitions=[tab, L - tab], y_seeds=[rows(tab), rows(L - 2 * tab), rows(tab)])
-        comments["mesh.y_seeds"] = f"about {size:g} mm rows, with a node row on each tab line"
+        comments["mesh.y_seeds"] = f"about {size:g} {unit} rows, with a node row on each tab line"
     else:
         data["ny"] = rows(L)
-        comments["mesh.ny"] = f"about {size:g} mm rows"
+        comments["mesh.ny"] = f"about {size:g} {unit} rows"
     return data, comments
 
 
@@ -1207,10 +1259,11 @@ def probes_data(values: Values) -> dict:
     centre element under the nose and a quarter-span node and element."""
     L, w, tab = values.length, values.width, values.tab_length
     x, y = w / 2, L / 2
+    mm = lambda v: in_stated(v, values.units)  # noqa: E731  the offsets beside a hole and past a tab are fixed in mm
     if values.kind in PLATE_KINDS:
         if values.hole_diameter is not None:
             r = values.hole_diameter / 2
-            return {"nodes": {"centre_top": [x, y + r], "hole_side": [x + r, y]}, "elements": {"hole_side": [x + r + 0.2, y], "far": [x, (y + r) / 2 + y / 2]}}
+            return {"nodes": {"centre_top": [x, y + r], "hole_side": [x + r, y]}, "elements": {"hole_side": [x + r + mm(0.2), y], "far": [x, (y + r) / 2 + y / 2]}}
         return {"nodes": {"centre": [x, y]}, "elements": {"centre": [x, y]}}
     if values.kind in BENDING_KINDS:
         quarter = (values.overhang + y) / 2
@@ -1219,8 +1272,8 @@ def probes_data(values: Values) -> dict:
         r = values.hole_diameter / 2
         far_y = (tab + y) / 2
         return {"nodes": {"centre_top": [x, y + r], "hole_side": [x + r, y], "gauge": [x, far_y]},
-                "elements": {"hole_side": [x + r + 0.2, y], "hole_top": [x, y + r + 0.2], "far": [x, far_y]}}
-    near = min(tab + 1.0, y) if tab > 0 else min(1.0, y)
+                "elements": {"hole_side": [x + r + mm(0.2), y], "hole_top": [x, y + r + mm(0.2)], "far": [x, far_y]}}
+    near = min(tab + mm(1.0), y) if tab > 0 else min(mm(1.0), y)
     return {"nodes": {"centre": [x, y]}, "elements": {"centre": [x, y], "near_grip": [x, near]}}
 
 
@@ -1266,19 +1319,21 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     test_name = TEST_CODES[kind][1]
     sign = -1.0 if kind == "compression" or bending else 1.0  # a push, and the nose moving down onto the coupon, are negative
     layup = "[" + "/".join(f"{a:g}" for a in values.angles) + "]" + ("s" if values.symmetric else "")
+    lab = UNIT_LABEL[values.units]
+    mm, N = lab["length"], lab["force"]
     if plate:
         supports, loads = values.supports or [], values.loads or []
         grip_words = f"{len(supports)} support{'s' if len(supports) != 1 else ''}"
-        load_words = f"{len(loads)} load{'s' if len(loads) != 1 else ''}" + (f", {values.tab_length:g} mm tabs" if values.tab_length else "")
+        load_words = f"{len(loads)} load{'s' if len(loads) != 1 else ''}" + (f", {values.tab_length:g} {mm} tabs" if values.tab_length else "")
     elif bending:
-        grip_words = f"{values.span:g} mm span" + (f", {values.load_span:g} mm loading span" if kind == "four_point_bending" else "")
-        load_words = f"nose{'s' if kind == 'four_point_bending' else ''} pushed down {values.value:g} mm"
+        grip_words = f"{values.span:g} {mm} span" + (f", {values.load_span:g} {mm} loading span" if kind == "four_point_bending" else "")
+        load_words = f"nose{'s' if kind == 'four_point_bending' else ''} pushed down {values.value:g} {mm}"
     else:
-        grip_words = (f"{'coupled' if grips_kind == 'coupling' else 'nodal'} grips on {values.tab_length:g} mm tabs" if values.region == "tabs"
+        grip_words = (f"{'coupled' if grips_kind == 'coupling' else 'nodal'} grips on {values.tab_length:g} {mm} tabs" if values.region == "tabs"
                       else f"{'coupled' if grips_kind == 'coupling' else 'nodal'} grips on the end lines")
-        load_words = (f"{values.value:g} mm {'push' if kind == 'compression' else 'pull'}" if values.control == "displacement"
-                      else f"{values.value:g} N {'compression' if kind == 'compression' else 'tension'}")
-    hole_words = f", {values.hole_diameter:g} mm hole in {values.width:g} mm" if values.hole_diameter is not None else ""
+        load_words = (f"{values.value:g} {mm} {'push' if kind == 'compression' else 'pull'}" if values.control == "displacement"
+                      else f"{values.value:g} {N} {'compression' if kind == 'compression' else 'tension'}")
+    hole_words = f", {values.hole_diameter:g} {mm} hole in {values.width:g} {mm}" if values.hole_diameter is not None else ""
     title = f"{designation.name}, {test_name}: {material_name} {layup}{hole_words}, {grip_words}, {load_words}"
     if plate:
         geometry: dict = {"length": values.length, "width": values.width}
@@ -1295,7 +1350,7 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     if kind == "open_hole_tension":
         geometry["hole_diameter"] = values.hole_diameter
     data: dict = {
-        "title": title, "kind": kind, "units": UNITS,
+        "title": title, "kind": kind, "units": values.units,
         "coupon": {"designation": designation.name, "standard": values.standard, "size_from": values.size_from, "team_model": values.team_model,
                    "test_data": values.test_data},
         "geometry": geometry, "mesh": mesh,
@@ -1341,7 +1396,8 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
                                        else ("no strengths given, so no failure criterion" if not strengths else "none chosen on the form"))
     header = (f"{designation.name}, {test_name}: built from the coupon input form {form_name}, filled in by {values.filled_by} on {values.day}.",
               *([f"Notes from the team: {values.notes}"] if values.notes else []),
-              "Units mm-MPa. Our defaults (element order, plane stress, probes, output requests) are commented where they stand.")
+              f"Units {values.units}" + (f"; the decks are written in {deck_units_of(values.units)}" if deck_units_of(values.units) != values.units else "")
+              + ". Our defaults (element order, plane stress, probes, output requests) are commented where they stand.")
     return data, comments, header
 
 
@@ -1394,13 +1450,13 @@ def render_toml(data: dict, comments: dict[str, str] | None = None, header: tupl
     return "\n".join(out) + "\n"
 
 
-def form_rows_of(message: str) -> list[str]:
-    """The form rows a spec message concerns, by the table.key names it mentions."""
+def form_rows_of(message: str, units: str = UNITS) -> list[str]:
+    """The form rows a spec message concerns, by the table.key names it mentions, labelled in the stated units."""
     rows = []
     for key in re.findall(r"\b(?:geometry|mesh|layup|material|grips|loading|probes|names|coupon|output)\.[A-Za-z0-9_]+", message):
         field_key = ROWS_OF_KEY.get(key) or ROWS_OF_KEY.get(key.rsplit(".", 1)[0])
-        if field_key and FIELDS[field_key].label not in rows:
-            rows.append(FIELDS[field_key].label)
+        if field_key and FIELDS[field_key].label_in(units) not in rows:
+            rows.append(FIELDS[field_key].label_in(units))
     for word, label in (("supports", "Supports"), ("loads", "Loads"), ("regions", "Regions")):  # a plate's lists (ADR-0054)
         if re.search(rf"\b{word}(\[|:)", message) and label not in rows:
             rows.append(label)
@@ -1416,7 +1472,7 @@ def build_specs(values: Values, designation: Designation, form_name: str) -> tup
         try:
             parse_spec(text, f"{stem}.toml")
         except SpecError as exc:
-            rows = form_rows_of(str(exc))
+            rows = form_rows_of(str(exc), values.units)
             raise IntakeError(f"{form_name}: the spec refuses the inputs: {exc}" + (f" (form rows: {', '.join(rows)})" if rows else "")) from None
         texts.append(text)
     return texts[0], texts[1]
@@ -1470,13 +1526,14 @@ def material_words(values: Values) -> str:
 
 
 def size_words(values: Values) -> str:
-    size = f"{values.length:g} mm long, {values.width:g} mm wide"
+    mm = UNIT_LABEL[values.units]["length"]
+    size = f"{values.length:g} {mm} long, {values.width:g} {mm} wide"
     if values.tab_length:
-        size += f", {values.tab_length:g} mm tabs at each end"
+        size += f", {values.tab_length:g} {mm} tabs at each end"
     if values.kind in BENDING_KINDS:
-        size += f", {values.span:g} mm span" + (f", {values.load_span:g} mm loading span" if values.kind == "four_point_bending" else "")
+        size += f", {values.span:g} {mm} span" + (f", {values.load_span:g} {mm} loading span" if values.kind == "four_point_bending" else "")
     if values.hole_diameter is not None:
-        size += f", central hole of {values.hole_diameter:g} mm"
+        size += f", central hole of {values.hole_diameter:g} {mm}"
     return size
 
 
@@ -1489,6 +1546,9 @@ def team_readme(values: Values, designation: Designation, form_name: str, day: s
         f"and `ours/{designation.name}-nodal.toml`.",
         "",
         f"Material: {material_words(values)}. The team's Abaqus model of this coupon: {values.team_model}. Test data: {values.test_data}.",
+        "",
+        f"Units: the coupon is stated in {units_words(values.units)}"
+        + (f"; the decks are written in {units_words(deck_units_of(values.units))}, as every deck we solve is" if deck_units_of(values.units) != values.units else "") + ".",
     ]
     if values.notes:
         lines += ["", f"Notes from the team: {values.notes}"]

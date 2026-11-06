@@ -1,4 +1,5 @@
-"""The units boundary: a deck carries no units; the caller states them; SI inside (ADR-0002, ADR-0003)."""
+"""The units boundary: a coupon is stated in one of four systems, a deck carries no units and is read in one of the two deck
+systems; SI inside (ADR-0002, ADR-0003, ADR-0061)."""
 
 from pathlib import Path
 
@@ -6,14 +7,17 @@ import pytest
 
 from anisotropy_fea.abaqus_reader import parse_deck
 from anisotropy_fea.model import to_si as deck_to_si
-from anisotropy_fea.units import DECK_UNIT_SYSTEMS, from_si, to_si, unit_factors
+from anisotropy_engine.units import INCH, LBF, PSI
+from anisotropy_fea.units import (DECK_UNIT_SYSTEMS, UNIT_LABEL, UNIT_SYSTEMS, deck_unit_factors, deck_units_of, from_si, to_si, unit_factors,
+                                  units_words)
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 
 DECK = paths.CHECK_DECKS / "coupon-1x1-im7-8552.inp"
 
 
-def test_the_two_systems_and_their_factors():
+def test_the_two_deck_systems_and_their_factors():
     assert set(DECK_UNIT_SYSTEMS) == {"mm-MPa", "m-Pa"}
+    assert deck_unit_factors("mm-MPa") == unit_factors("mm-MPa") and deck_unit_factors("m-Pa") == unit_factors("m-Pa")
     assert unit_factors("mm-MPa") == {"length": 1e-3, "stress": 1e6, "force": 1.0, "force_per_length": 1e3, "per_length": 1e3}
     assert unit_factors("m-Pa") == {"length": 1.0, "stress": 1.0, "force": 1.0, "force_per_length": 1.0, "per_length": 1.0}
     assert from_si(461.869e3, "force_per_length", "mm-MPa") == pytest.approx(461.869)  # N/m to N/mm
@@ -28,10 +32,43 @@ def test_scalar_conversions_round_trip():
     assert to_si(3.0, "stress", "m-Pa") == 3.0
 
 
-@pytest.mark.parametrize("bad", [None, "", "in-psi", "MM-MPA", "SI"])
+def test_the_four_stated_systems_use_the_engines_constants():
+    assert list(UNIT_SYSTEMS) == ["mm-MPa", "m-Pa", "in-psi", "in-ksi"] and set(UNIT_LABEL) == set(UNIT_SYSTEMS)
+    assert unit_factors("in-psi") == {"length": INCH, "stress": PSI, "force": LBF, "force_per_length": LBF / INCH, "per_length": 1 / INCH}
+    assert unit_factors("in-ksi")["stress"] == 1e3 * PSI and unit_factors("in-ksi")["length"] == INCH
+    assert to_si(10.0, "length", "in-psi") == pytest.approx(0.254)
+    assert to_si(1.0, "stress", "in-psi") == pytest.approx(6894.757, rel=1e-6) and to_si(1.0, "stress", "in-ksi") == pytest.approx(6.894757e6, rel=1e-6)
+    assert to_si(1.0, "force", "in-psi") == pytest.approx(4.448222, rel=1e-6)
+    assert from_si(to_si(23.5e6, "stress", "in-psi"), "stress", "in-ksi") == pytest.approx(23.5e3)
+    assert from_si(1000.0, "force_per_length", "in-psi") == pytest.approx(1000.0 * INCH / LBF)  # N/m to lbf/in
+    assert UNIT_LABEL["in-psi"] == {"force": "lbf", "length": "in", "stress": "psi", "force_per_length": "lbf/in", "modulus": "Msi", "stiffness": "lbf/in",
+                                    "per_length": "1/in", "moment": "lbf·in/in", "rotation": "rad"}
+    assert UNIT_LABEL["in-ksi"]["stress"] == "ksi"
+    assert units_words("mm-MPa") == "mm, MPa and N" and units_words("in-ksi") == "in, ksi and lbf"
+
+
+def test_a_deck_is_written_in_a_deck_system():
+    assert deck_units_of("mm-MPa") == "mm-MPa" and deck_units_of("m-Pa") == "m-Pa"
+    assert deck_units_of("in-psi") == "mm-MPa" and deck_units_of("in-ksi") == "mm-MPa"
+    with pytest.raises(ValueError, match="units must be stated"):
+        deck_units_of("SI")
+
+
+@pytest.mark.parametrize("bad", [None, "", "MM-MPA", "SI", "in"])
 def test_unknown_or_missing_units_are_refused(bad):
     with pytest.raises(ValueError, match="units must be stated"):
         unit_factors(bad)
+    with pytest.raises(ValueError, match="units must be stated"):
+        deck_unit_factors(bad)
+
+
+@pytest.mark.parametrize("stated", ["in-psi", "in-ksi"])
+def test_a_deck_cannot_be_stated_in_inches(stated):
+    deck = parse_deck(DECK.read_text(encoding="utf-8"))
+    with pytest.raises(ValueError, match="An Abaqus deck carries no units"):
+        deck_unit_factors(stated)
+    with pytest.raises(ValueError, match="An Abaqus deck carries no units"):
+        deck_to_si(deck, stated)
 
 
 def test_deck_conversion_scales_lengths_stresses_and_prescribed_displacements_only():

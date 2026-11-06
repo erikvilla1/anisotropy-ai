@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 
 from .femodel import FEModel
-from .units import from_si
+from .units import deck_units_of, from_si
 from .write_abaqus import PER_LINE, _rows, number
 
 REFERENCE_TEMPERATURE = 293.0  # K, the temperature the constants are stated at; CalculiX needs a value on the second line
@@ -31,7 +31,7 @@ def orientation_name(angle_deg: float) -> str:
 def write_calculix(model: FEModel, units: str | None = None, el_print_coord: bool = True) -> str:
     """The deck text. `el_print_coord` adds COORD to the element print so each integration point carries its z, which is how a
     result is mapped to its ply; it is on by default because every comparison needs it."""
-    units = units or model.spec.units
+    units = units or deck_units_of(model.spec.units)  # a deck is written in a deck system, whatever the coupon is stated in (ADR-0061)
     mesh, spec, material, section = model.mesh, model.spec, model.material, model.section
     if mesh.order != 2:
         raise CalculixWriterError("CalculiX composite shells are S8R only: set mesh.element_order = 2 in the spec")

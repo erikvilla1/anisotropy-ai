@@ -29,7 +29,7 @@ from anisotropy_fea.mesher import MeshError
 from anisotropy_fea.quality import element_quality
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
 from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
-from anisotropy_fea.units import from_si
+from anisotropy_fea.units import deck_units_of, from_si
 from anisotropy_fea.write_abaqus import write_abaqus
 
 from plot_model import plot_model  # noqa: E402  (examples share a folder)
@@ -69,7 +69,7 @@ def main() -> None:
         model = build_model(spec)
     except (SpecError, MeshError) as exc:
         raise SystemExit(f"spec refused: {exc}") from None
-    units = spec.units
+    units = deck_units_of(spec.units)  # the decks, the plots and the summary are in the deck's system; the fields and the explanation in the coupon's (ADR-0061)
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.spec.stem
     deck_path = args.out / f"{stem}-abaqus.inp"
@@ -143,11 +143,11 @@ def main() -> None:
                 report += f"first-ply failure, {criterion}: not available ({exc})\n"
         coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
                   "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
-        data = field_data(deck, solution, units, criteria=tuple(available), quality=element_quality(model.mesh.xy, model.mesh.corners), coupon=coupon)
+        data = field_data(deck, solution, spec.units, criteria=tuple(available), quality=element_quality(model.mesh.xy, model.mesh.corners), coupon=coupon)
         fields_path = args.out / f"{stem}-fields.json"
         fields_path.write_text(json.dumps(data), encoding="utf-8")
         print("written", fields_path)
-        words = explanation(data["summary"], coupon, units, data["labels"])
+        words = explanation(data["summary"], coupon, spec.units, data["labels"])
         explanation_path = args.out / f"{stem}-explanation.json"
         explanation_path.write_text(json.dumps(words, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print("written", explanation_path)

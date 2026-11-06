@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 
 from . import __version__ as package_version
+from .units import deck_units_of
 from .mesher import Mesh2D, gmsh_open_hole_plate, structured_rectangle
 from .spec import (BENDING_KINDS, DEFAULT_NAMES, PLATE_KINDS, CouponSpec, MaterialDefinition, SpecError, coupon_card, edge_regions, full_angles,
                    mesh_counts, node_lines, row_coordinates, spec_material, spec_ply_thickness)
@@ -263,7 +264,7 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
          if spec.kind in BENDING_KINDS else
          f"grips {spec.grips.kind} on the {'end node rows' if spec.grips.region == 'line' else 'whole tab regions'}; "
          f"loading {loading.control} {loading.value:g} " + ("m" if loading.control == "displacement" else "N")),
-        f"units of this deck: {spec.units}",
+        f"units of this deck: {deck_units_of(spec.units)}" + (f" (the coupon is stated in {spec.units})" if deck_units_of(spec.units) != spec.units else ""),
     )
     return FEModel(spec=spec, mesh=mesh, material=material, section=section, orientation_angles=orientation_angles,
                    reference_points=reference_points, couplings=couplings, boundaries=tuple(boundaries), loads=tuple(loads),

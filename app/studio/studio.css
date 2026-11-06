@@ -144,6 +144,8 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .chat-chips button { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; border: 1px solid #313c29; background: #171d13; color: #c9d6bf; font-size: 12px; }
 .chat-chips button:hover { background: #26311f; border-color: #6f8a5e; }
 .chat-inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.chat-units { font-size: 13px; }
+.chat-units label { color: var(--muted); }
 .chat-inline input, .chat-inline select, .chat-rows input, .chat-rows select { background: var(--bg); border: 1px solid #3c433c; border-radius: 6px; color: var(--text); padding: 8px 10px; font-size: 13px; min-width: 0; }
 .chat-inline input:focus, .chat-inline select:focus, .chat-rows input:focus, .chat-rows select:focus { outline: none; border-color: #839a73; }
 .chat-inline input { flex: 1 1 160px; font-family: ui-monospace, monospace; }

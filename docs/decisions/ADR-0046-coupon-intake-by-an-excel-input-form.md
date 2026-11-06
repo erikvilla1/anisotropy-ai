@@ -139,3 +139,13 @@ Option 3.
 **Decision.** Option 2. The Test row offers three-point bending and four-point bending; a block Bending holds Support span (mm), Overhang (mm, default 0) and Loading span (mm, four-point only); for a bending test the tab length is left blank and the grip rows are ignored, since the coupon rests on two support lines; Length must equal the span plus twice the overhang, stated and checked, not derived; the loading type is displacement, the nose's travel, pushed down by the amount given; the mesh is seeded so that a node row falls on each support and nose line; the results are read at the quarter span (a node and an element), the element beside the nose line being left out of the record. The studio's form shows the bending rows for the bending tests and hides the grips and tabs. The sheet Definitions explains the two tests and the spans.
 
 **Evidence.** `fea/tests/test_intake.py` and `test_values_input.py` with the form at 0.4; the public bending coupon `fea/checks/three-point-im7-8552/` and its browser fixtures `tests/fixtures/studio-bending/`, made from a values file of the form's rows.
+
+## Amendment 5, 2026-11-06 (the Units row; form version 0.6)
+
+**Context.** Every row with a unit carried "(mm)", "(MPa)" or "(N)" in its label, so a coupon drawn in inches had to be converted by hand before it was typed (ADR-0061).
+
+**Options.** (1) A form per unit system: four files to keep in step. (2) One form with a Units row, every row with a unit labelled in the stated system, and the check reading each number in that system (chosen).
+
+**Decision.** Option 2. The row Units, first in "The coupon", takes one of mm-MPa, m-Pa, in-psi and in-ksi (the words of `UNIT_SYSTEMS`, matched without regard to case; blank means mm-MPa, the labels' own system); every row with a unit has a label in each system (`Field.label_in`), the check names rows and refusals in the stated system, and a coupon reads back in its stated system (`values_of_spec`). The blank form and the library sheet stay in mm and MPa. A values file states `units` beside its rows. The decks a form's coupon makes are written in `deck_units_of` the stated system (ADR-0061).
+
+**Evidence.** `fea/tests/test_intake.py`, `test_values_input.py` and `test_checks.py` with the form at 0.6 (2026-11-06): the Units row's default, case and refusal; the public coupon restated in in-psi gives the same SI spec and a deck in mm-MPa; refusals name their rows in inches; a coupon reads back in in-psi.

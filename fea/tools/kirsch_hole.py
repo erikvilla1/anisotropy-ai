@@ -35,7 +35,7 @@ from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.membrane import solve_membrane  # noqa: E402
 from anisotropy_fea.recovery import element_ply_states  # noqa: E402
 from anisotropy_fea.spec import CouponSpec, SpecError, full_angles, parse_spec, spec_ply_thickness, to_si, validate_spec  # noqa: E402
-from anisotropy_fea.units import from_si  # noqa: E402
+from anisotropy_fea.units import deck_units_of, from_si  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
 
@@ -83,7 +83,7 @@ def main() -> None:
         raise SystemExit(f"spec refused: {exc}") from None
     if spec.kind != "open_hole_tension" or spec.loading.control != "force" or spec.material.library is not None or spec.material.E1 != spec.material.E2:
         raise SystemExit("the Kirsch form needs an isotropic open_hole_tension spec with explicit constants under force control")
-    units = spec.units
+    units = deck_units_of(spec.units)
     model = build_model(spec)
     g = spec.geometry
     thickness = spec_ply_thickness(spec) * len(full_angles(spec))

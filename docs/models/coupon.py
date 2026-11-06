@@ -79,7 +79,7 @@ from anisotropy_fea.recovery import deck_f12_star, strength_ratios  # noqa: E402
 from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place, gauge_element, gripped_groups, laminate_check,  # noqa: E402
                                    model_facts, solve_record, summarize)
 from anisotropy_fea.spec import BENDING_KINDS, TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
-from anisotropy_fea.units import from_si  # noqa: E402
+from anisotropy_fea.units import deck_units_of, from_si, units_words  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
 CHAPTER_STYLE = "\n".join([
@@ -118,7 +118,8 @@ def sources(coupon: str, root: Path) -> Sources:
 
 def statement(spec, card: dict[str, str]) -> str:
     units = spec.units
-    unit = units.split("-")[0]
+    labels = documents.UNIT_LABEL[units]
+    unit = labels["length"]
     g, loading = spec.geometry, spec.loading
     tab = f"{from_si(g.tab_length, 'length', units):g} {unit}" if g.tab_length else None
     held = f"each end's {tab} tab" if tab and spec.grips and spec.grips.region == "tabs" else "each end's row of nodes"
@@ -131,8 +132,8 @@ def statement(spec, card: dict[str, str]) -> str:
         held_words = "; ".join(f"{s.region} holds " + ", ".join(dof_words[d] for d in s.dofs)
                                + (f" at {from_si(s.value, 'length', units):g} {unit}" if s.value and max(s.dofs) <= 3 else f" at {s.value:g} rad" if s.value else "")
                                for s in spec.supports)
-        load_words = "; ".join((f"a pressure of {from_si(ld.pressure, 'stress', units):g} {units.split('-')[1]} on {ld.region}" if ld.pressure is not None
-                                else f"{from_si(ld.total, 'force', units):g} N along {dof_words[ld.dof]} over {ld.region}") for ld in spec.loads)
+        load_words = "; ".join((f"a pressure of {from_si(ld.pressure, 'stress', units):g} {labels['stress']} on {ld.region}" if ld.pressure is not None
+                                else f"{from_si(ld.total, 'force', units):g} {labels['force']} along {dof_words[ld.dof]} over {ld.region}") for ld in spec.loads)
         return escape(f"The plate {card['Coupon']}: {card['Size']}; layup {card['Layup']}; material {card['Material'].split(' (')[0]}. "
                       f"In the model, {held_words}" + (f", and it carries {load_words}" if load_words else "") + ". The questions our engine answers: what the "
                       "supports carry, the strain and the stress in every ply, and at what share of the loading the first ply fails.")
@@ -140,7 +141,7 @@ def statement(spec, card: dict[str, str]) -> str:
         value = from_si(abs(loading.value), "length", units)
         load = f"the top end is {'pulled' if loading.value > 0 else 'pushed'} {value:g} {unit} along the coupon while the bottom end is held"
     else:
-        load = f"a force of {abs(loading.value):g} N is applied along the coupon at the top end while the bottom end is held"
+        load = f"a force of {from_si(abs(loading.value), 'force', units):g} {labels['force']} is applied along the coupon at the top end while the bottom end is held"
     return escape(f"The {card['Test']} coupon {card['Coupon']}: {card['Size']}; layup {card['Layup']}; material {card['Material'].split(' (')[0]}. "
                   f"In the model, {grips}, and {load}. The questions our engine answers: what force the coupon carries, the strain and the stress in "
                   f"every ply, and at what share of the loading the first ply fails.")
@@ -149,7 +150,12 @@ def statement(spec, card: dict[str, str]) -> str:
 CONVENTIONS = ("Conventions used throughout: x runs across the width and y along the coupon, which is the load axis; plies are listed from "
                "the bottom face up; a ply's angle is measured counterclockwise from x to its material axis 1 (the fibres of a tape; for a woven "
                "fabric, the yarn direction its material record calls 1), so a 0-degree ply has axis 1 across the load and a 90-degree ply along "
-               "it; shear strain is the engineering shear strain; lengths are in {length}, stresses in {stress}, forces in N.")
+               "it; shear strain is the engineering shear strain; lengths are in {length}, stresses in {stress}, forces in {force}.")
+
+
+DECK_UNITS_NOTE = ("The coupon is stated in {stated}, and this document reads it so: the problem, the results and the cover. An Abaqus or CalculiX "
+                   "deck carries no units, and every deck we write, solve and compare is in {deck}, so the decks, the deck chapters (3, 4 and 6), "
+                   "the audit and the files of the package are in {deck}.")
 
 
 OWN_CONSTANTS = ("Rights class {rights}: these values are the team's. They are used in this package only and never enter our material "
@@ -237,7 +243,8 @@ def problem_chapter(spec, card: dict[str, str], c, units: str, figures: Path, sp
     labels = documents.UNIT_LABEL[units]
     return "\n\n".join([
         statement(spec, card),
-        escape(CONVENTIONS.format(length=labels["length"], stress=labels["stress"])),
+        escape(CONVENTIONS.format(length=labels["length"], stress=labels["stress"], force=labels["force"])
+               + (" " + DECK_UNITS_NOTE.format(stated=units_words(units), deck=units_words(deck_units_of(units))) if deck_units_of(units) != units else "")),
         r"\section{The coupon}\label{sec:coupon}",
         documents.kv_table([(escape(label), escape(value)) for label, value in card.items()]),
         rf"\section{{{material_heading(spec)}}}\label{{sec:material}}",
@@ -404,6 +411,7 @@ def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[st
         check = None
     if check is not None:
         summary["reaction"] = from_si(check.kernel_reaction_N, "force", units)
+        summary["reaction_N"] = check.kernel_reaction_N  # in SI, for the chapters in the deck's units
         sense = "tension" if summary["reaction"] > 0 else "compression"
         out += [r"\section{The reaction}",
                 rf"The top grip carries {number(abs(summary['reaction']), 6)} {escape(labels['force'])} in {sense} ($R_y = {documents.mnumber(summary['reaction'], 6)}$ "
@@ -656,16 +664,18 @@ def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, d
     shutil.copy2(paths.deck_path(src.twin, "abaqus"), folder / "2-our-model/calculix")
     shutil.copy2(src.spec, folder / "2-our-model/spec")
     shutil.copy2(src.twin, folder / "2-our-model/spec")
+    deck_units = deck_units_of(spec.units)  # the files of the package are in the deck's system, as the decks are (ADR-0061)
     if material_file(spec) is not None:
-        team.write_material_csv(folder / material_file(spec)[0], lib, spec_material(spec), spec.units)
-    team.write_all_plies(folder / "4-results" / "ours-all-plies.csv", solution, deck, spec.units)
+        team.write_material_csv(folder / material_file(spec)[0], lib, spec_material(spec), deck_units)
+    team.write_all_plies(folder / "4-results" / "ours-all-plies.csv", solution, deck, deck_units)
     contents = package_contents(src, spec, folder)
     width = max(len(path) for path, _ in contents)
     lines = [team.README_MARK, f"{card['Coupon']}, {card['Test']}: our model and its document", "",
              *[f"{label + ':':14} {value}" for label, value in card.items()], "",
              f"Attempt:       {accepted_attempt(src) or 'none named'} (our attempt this package delivers)",
              f"Built {date.today().isoformat()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {documents.git_commit()}).",
-             "Start with the PDF. Numbers in the files are in mm, MPa and N.",
+             f"Start with the PDF. Numbers in the files are in {units_words(deck_units)}"
+             + (f"; the PDF states the coupon in {units_words(spec.units)}, as the team did." if deck_units != spec.units else "."),
              "There is no 1-team-model folder: the team has not built this coupon yet.", "",
              *[f"{path.ljust(width)}  {what}" for path, what in contents]]
     (folder / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
@@ -680,13 +690,14 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     card = dict(coupon_card(spec))
     if not card:
         raise SystemExit(f"{documents.rel(src.spec)} has no [coupon] table: a coupon document names its coupon (ADR-0038)")
-    units = spec.units
+    units = spec.units  # the coupon's own: the problem, the results and the cover are read in it (ADR-0061)
+    deck_units = deck_units_of(units)  # the decks, the record, the verification, the audit and the package files are in the deck's system
     text = write_abaqus(build_model(spec))
     committed = paths.deck_path(src.spec, "abaqus")
     if committed.is_file() and committed.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
         raise SystemExit(f"{documents.rel(committed)} is not what the generator writes from {src.spec.name} today; run fea/tools/regenerate_decks.py first")
     deck_file = committed if committed.is_file() else src.latex / f"{src.spec.stem}-abaqus.inp"
-    deck = to_si(parse_deck(text, source_path=deck_file.name), units)
+    deck = to_si(parse_deck(text, source_path=deck_file.name), deck_units)
     solution = solve_deck(deck)
     record = load_record(src.record)
     rows, problems = comparison_rows(record)
@@ -706,20 +717,20 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     if c is not None:
         c.package = package
     documents.difference_figure(rows, figures / "differences.png")
-    map_drawn = documents.element_map(rows, summaries, element_centroids(rec_solution, units), rec_solution, units, figures / "element-map.png")
+    map_drawn = documents.element_map(rows, summaries, element_centroids(rec_solution, deck_units), rec_solution, deck_units, figures / "element-map.png")
     results, summary = results_chapter(spec, deck, solution, units, figures)
-    abaqus = abaqus_chapter(src, spec, deck, solution, units, committed, c, figures)
+    abaqus = abaqus_chapter(src, spec, deck, solution, deck_units, committed, c, figures)
 
     # the audit (ADR-0043): our tools score the rubric; the chapter and the form show the same rows
     rubric = load_rubric()
     attempt = accepted_attempt(src)
     b1 = next(item for item in rubric.items if item.id == "B1").tolerance.length_m  # the rebuilt deck is held to the model match's tolerance
-    rebuilt = audit.compare_rebuilt(audit.rebuilt_deck(src.team_files), deck, units, b1)
+    rebuilt = audit.compare_rebuilt(audit.rebuilt_deck(src.team_files), deck, deck_units, b1)
     commit = documents.git_commit()
     lib = (f"{spec.material.library}, dataset {spec.material.dataset}" if spec.material.library
            else spec_material(spec).source if spec.material.source else None)  # the audit's B6 row states it
     fpf = summary.get("fpf")  # criterion, factor of the applied loading, ply, angle
-    evidence = audit.gather(test_code=TEST_CODES[spec.kind][0], units=units, card=coupon_card(spec), deck=deck, solution=solution, material=lib,
+    evidence = audit.gather(test_code=TEST_CODES[spec.kind][0], units=deck_units, card=coupon_card(spec), deck=deck, solution=solution, material=lib,
                             guide=audit.guide_counts(abaqus, rebuild.tag), c=c, fpf=fpf, rebuilt=rebuilt, fpf_others=summary.get("fpf_others", ()),
                             fpf_notes=summary.get("fpf_notes", ()))
     scored = score(rubric, evidence)
@@ -746,14 +757,15 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\tableofcontents",
         r"\chapter{The problem}\label{ch:problem}", problem_chapter(spec, card, c, units, figures, src.spec),
         r"\chapter{The physics: how our engine solves it}\label{ch:physics}",
-        physics_chapter(theory, rec_deck, rec_solution, record, rows, units, TEST_CODES[spec.kind][0], tuple(spec.output.fpf_criteria)),
-        r"\chapter{Building the part in our engine}\label{ch:engine}", engine_chapter(src, deck, units, committed),
+        physics_chapter(theory, rec_deck, rec_solution, record, rows, deck_units, TEST_CODES[spec.kind][0], tuple(spec.output.fpf_criteria)),
+        r"\chapter{Building the part in our engine}\label{ch:engine}", engine_chapter(src, deck, deck_units, committed),
         r"\chapter{Building the part in Abaqus/CAE}\label{ch:abaqus}", abaqus,
         r"\chapter{Results from our engine}\label{ch:results}", results,
         r"\chapter{Verification against other solvers}\label{ch:verification}",
-        verification_chapter(src, record, rows, problems, summaries, units, map_drawn, full_tables, c, figures, summary.get("reaction")),
+        verification_chapter(src, record, rows, problems, summaries, deck_units, map_drawn, full_tables, c, figures,
+                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None),
         r"\chapter{What this shows and what it does not}\label{ch:reading}", reading_chapter(src, card, c),
-        r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, audited + compared, form, units, escape, code, team.table, documents.kv_table,
+        r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, audited + compared, form, deck_units, escape, code, team.table, documents.kv_table,
                                                                     team_built=c is not None),
         r"\appendix",
         r"\chapter{How the CalculiX numbers were mapped and judged}\label{sec:method}",
@@ -765,7 +777,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\chapter{How we produced these files}", commands_appendix(src),
     ]
     if documents.truncated(rows, full_tables) and (full_tables or len(rows) <= documents.FULL_TABLE_LIMIT):
-        parts += [r"\chapter{The full CalculiX comparison table}", documents.comparison_table(rows, units)]
+        parts += [r"\chapter{The full CalculiX comparison table}", documents.comparison_table(rows, deck_units)]
     parts.append(r"\end{document}")
     tex = out_dir / f"{src.coupon}.tex"
     tex.write_text(for_the_team("\n\n".join(parts), theory) + "\n", encoding="utf-8")
@@ -775,7 +787,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
 
     def fill_package(folder: Path) -> None:
         fill(folder, src, spec, text, card, c, deck, solution)
-        write_form(folder / form, rubric, scored, audited, units, tables=form_tables(rubric, evidence, scored), files=compared, record=build_record)
+        write_form(folder / form, rubric, scored, audited, deck_units, tables=form_tables(rubric, evidence, scored), files=compared, record=build_record)
 
     team.write_package(package, fill_package)
     result = None

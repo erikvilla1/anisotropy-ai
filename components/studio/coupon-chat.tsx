@@ -6,10 +6,13 @@ import {
   checkSetup, couponValues, fetchExplanation, fetchFields, getJob, listCoupons, POLL_MS, startSolve, StudioError,
   type CheckAnswer, type CouponSummary, type Explanation, type Fields, type JobStatus,
 } from "@/lib/studio-api";
-import { blankForm, buildValues, exampleForm, fieldByKey, formFromValues, libraryOptions, PLATE_TEST, type StudioForm } from "@/lib/studio-form";
 import {
-  COMMON_MATERIALS, couponLines, isBending, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, missingIn, nextStep,
-  parseLayup, readMessage, stepOfKey, TEST_CHOICES, type ChatStep,
+  blankForm, buildValues, exampleForm, fieldByKey, fieldByLabel, formFromValues, libraryOptions, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords,
+  type StudioForm,
+} from "@/lib/studio-form";
+import {
+  applyMessage, COMMON_MATERIALS, couponLines, isBending, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
+  missingIn, nextStep, parseLayup, PUSH_CHIPS, SIZE_CHIPS, stepOfKey, switchUnits, TEST_CHOICES, type ChatStep,
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
@@ -19,7 +22,6 @@ import { JobProgress } from "./job-progress";
 import { ResultsView } from "./results-view";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
-const EXAMPLE_SIZE = { length: "250", width: "25", tab_length: "56", size_from: "the public IM7/8552 example" };
 
 type Entry =
   | { id: number; role: "user"; text: string }
@@ -53,10 +55,12 @@ function today(): string { return new Date().toISOString().slice(0, 10); }
 function remembered(key: string): string { try { return window.localStorage.getItem(key) ?? ""; } catch { return ""; } }
 function remember(key: string, value: string) { try { window.localStorage.setItem(key, value); } catch { /* storage blocked: the name is simply not kept */ } }
 const materialName = (id: string) => libraryOptions.find((m) => m.id === id)?.name ?? id;
+/** An estimate as a row value: four significant figures, written out (680000 psi, not 6.800e+5), so the row reads as typed. */
+const estimated = (value: number) => String(Number(value.toPrecision(4)));
 const libraryEntry = (id: string) => libraryOptions.find((m) => m.id === id);
 
 const QUESTIONS: Record<ChatStep | "advanced" | "reopen", { title: string; text?: string }> = {
-  test: { title: "What are we working out?", text: "Pick a coupon test, or describe the whole coupon in one line, e.g. “open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 1 mm pull”. A laminate without a coupon, the hand-calculation kind, is the first choice." },
+  test: { title: "What are we working out?", text: "Pick a coupon test, or describe the whole coupon in one line, e.g. “open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 1 mm pull”. Numbers are read in the units picked below; the results come back in them. A laminate without a coupon, the hand-calculation kind, is the first choice." },
   material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or give your own." },
   shear: { title: "Out-of-plane shear moduli", text: "The engine needs G13 and G23, which the library does not list. Without measured values, the usual tape estimate is G13 = G12 and G23 = E2 / 3; the choice is noted on the coupon." },
   layup: { title: "What is the layup?", text: "Type it in laminate notation, bottom ply first, or pick one. Angles are measured from x, across the coupon's width: 90° runs along the load, 0° across it." },
@@ -72,6 +76,7 @@ const QUESTIONS: Record<ChatStep | "advanced" | "reopen", { title: string; text?
 function RowsCard({ keys, form, onApply, submit = "Continue", disabled, extra }: {
   keys: string[]; form: StudioForm; onApply: (rows: StudioForm) => void; submit?: string; disabled?: boolean; extra?: ReactNode;
 }) {
+  const units = unitsOf(form);
   const seed = keys.map((k) => `${k}=${form[k] ?? ""}`).join("\n");
   const [draft, setDraft] = useState<StudioForm>(() => Object.fromEntries(keys.map((k) => [k, form[k] ?? ""])));
   useEffect(() => { setDraft(Object.fromEntries(keys.map((k) => [k, form[k] ?? ""]))); }, [seed]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -84,7 +89,7 @@ function RowsCard({ keys, form, onApply, submit = "Continue", disabled, extra }:
           const words = field?.kind === "list" ? field.words : [];
           return (
             <label key={key} htmlFor={id} className={key === "size_from" || key === "own_source" ? "chat-row-wide" : undefined}>
-              <span>{labelOf(key)}{field?.required ? "" : <small> optional</small>}</span>
+              <span>{labelOf(key, units)}{field?.required ? "" : <small> optional</small>}</span>
               {words.length ? (
                 <select id={id} value={draft[key]} disabled={disabled} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}>
                   {field?.required ? null : <option value="">(blank)</option>}
@@ -221,8 +226,22 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
     proceed(next);
   }
 
+  /** The coupon restated in another system (ADR-0061): the rows with a unit are cleared, since a number typed in mm is not one in inches
+   * and the page converts nothing; the engine reads every number in the system picked. */
+  function switchTo(units: string) {
+    if (!UNIT_SYSTEMS.includes(units) || units === unitsOf(formRef.current)) return;
+    const { form: next, cleared } = switchUnits(formRef.current, units);
+    setForm(next); clearRun();
+    add({ role: "user", text: `Units: ${unitWords(units)}` });
+    if (cleared.length) {
+      add({ role: "assistant", kind: "text", title: `Now stated in ${unitWords(units)}`,
+        body: <p>Cleared {cleared.map((key) => labelOf(key, units).replace(/ \(.*\)$/, "")).join(", ")}: give them again in {unitWords(units)}.</p> });
+      proceed(next);
+    }
+  }
+
   function startOver() {
-    const fresh = { ...blankForm(), date: today(), filled_by: formRef.current.filled_by };
+    const fresh = { ...blankForm(unitsOf(formRef.current)), date: today(), filled_by: formRef.current.filled_by };
     setForm(fresh); setChecked(null); setJob(null); setFields(null); setExplanation(null); setOwnMaterial(false); fieldsLoaded.current = null;
     setEntries([]);
     ask("test");
@@ -304,13 +323,14 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
     if (step === "name" && !/\d/.test(text)) { answer(text, { filled_by: text }); return; }
-    const { rows, understood } = readMessage(text);
+    const { rows, understood, note } = applyMessage(formRef.current, text);
     if (!understood.length) {
-      add({ role: "user", text }, { role: "assistant", kind: "text", title: "I could not read a coupon value in that",
-        body: <p>I set up and run coupon tests: try the options above, or a phrase like “open-hole tension”, “250 x 25 mm, 56 mm tabs”, “[0/90]2s”, “AS4/8552” or “10 kN”. Type “full form” for every row.</p> });
+      add({ role: "user", text }, { role: "assistant", kind: "text", title: note ? "Another unit system" : "I could not read a coupon value in that", tone: note ? "problem" : undefined,
+        body: <p>{note ?? `I set up and run coupon tests: try the options above, or a phrase like “open-hole tension”, “250 x 25 mm, 56 mm tabs”, “[0/90]2s”, “AS4/8552” or “10 kN”, or “switch to inches”. Type “full form” for every row.`}</p> });
       return;
     }
-    add({ role: "user", text }, { role: "assistant", kind: "text", title: "Got it", body: <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul> });
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: "Got it", body: <>
+      <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul>{note ? <p className="chat-note">{note}</p> : null}</> });
     const next: StudioForm = { ...formRef.current, ...rows };
     setForm(next); clearRun();
     proceed(next);
@@ -318,10 +338,19 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
 
   function askWidget(step: ChatStep | "advanced" | "reopen", live: boolean): ReactNode {
     if (!live) return null;
+    const units = unitsOf(form);
+    const lab = unitLabels(units);
     switch (step) {
       case "test":
         return (
           <>
+            <p className="chat-inline chat-units">
+              <label htmlFor="chat-units">Stated in</label>
+              <select id="chat-units" aria-label="Units" value={units} onChange={(e) => switchTo(e.target.value)} data-testid="chat-units">
+                {UNIT_SYSTEMS.map((u) => <option key={u} value={u}>{unitWords(u)}</option>)}
+              </select>
+              <span className="chat-note">results in the same units; the Abaqus and CalculiX decks in mm, MPa and N</span>
+            </p>
             <div className="chat-choice-grid">
               {onLaminate ? (
                 <button type="button" className="chat-choice chat-choice-wide" data-testid="laminate-choice" onClick={onLaminate}>
@@ -374,20 +403,20 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
           </>
         );
       case "shear": {
-        const constants = form.library ? libraryConstants(form.library) : { G12: Number(form.own_G12), E2: Number(form.own_E2) };
+        const constants = form.library ? libraryConstants(form.library, units) : { G12: Number(form.own_G12), E2: Number(form.own_E2) };
         const estimate = constants && Number.isFinite(constants.G12) && Number.isFinite(constants.E2) && constants.G12 > 0 && constants.E2 > 0
-          ? { G13: printed(constants.G12), G23: printed(constants.E2 / 3) } : null;
+          ? { G13: estimated(constants.G12), G23: estimated(constants.E2 / 3) } : null;
         return (
           <>
             {estimate ? (
               <Chips>
-                <button type="button" onClick={() => answer(`Tape estimate: G13 = ${estimate.G13} MPa, G23 = ${estimate.G23} MPa`,
+                <button type="button" onClick={() => answer(`Tape estimate: G13 = ${estimate.G13} ${lab.stress}, G23 = ${estimate.G23} ${lab.stress}`,
                   { G13: estimate.G13, G23: estimate.G23, notes: [formRef.current.notes, "G13 = G12 and G23 = E2/3 by the tape estimate (studio chat)."].filter(Boolean).join(" ") })}>
-                  <Sparkles size={14} /> Use the tape estimate: G13 = {estimate.G13}, G23 = {estimate.G23} MPa
+                  <Sparkles size={14} /> Use the tape estimate: G13 = {estimate.G13}, G23 = {estimate.G23} {lab.stress}
                 </button>
               </Chips>
             ) : null}
-            <RowsCard keys={["G13", "G23"]} form={form} submit="Use these values" onApply={(rows) => answer(`G13 = ${rows.G13} MPa, G23 = ${rows.G23} MPa`, rows)} />
+            <RowsCard keys={["G13", "G23"]} form={form} submit="Use these values" onApply={(rows) => answer(`G13 = ${rows.G13} ${lab.stress}, G23 = ${rows.G23} ${lab.stress}`, rows)} />
           </>
         );
       }
@@ -403,7 +432,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
               })}
             </Chips>
             <LayupInput needThickness={needThickness} form={form} onApply={(notation, rows) => answer(notation, rows)} />
-            {!needThickness ? <p className="chat-note">Ply thickness {printed(libraryThickness(form))} mm, from the library.</p> : null}
+            {!needThickness ? <p className="chat-note">Ply thickness {printed(libraryThickness(form))} {lab.length}, from the library.</p> : null}
           </>
         );
       }
@@ -411,13 +440,13 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
         const keys = missingIn("geometry", { ...form, length: "", width: "", size_from: "", tab_length: "", span: "", overhang: "", load_span: "", hole_diameter: "" });
         return (
           <>
-            {!isBending(form) ? (
+            {!isBending(form) && SIZE_CHIPS[units] ? (
               <Chips>
-                <button type="button" onClick={() => answer("250 × 25 mm, 56 mm tabs (the example's size)", EXAMPLE_SIZE)}>
-                  <Layers3 size={14} /> 250 × 25 mm, 56 mm tabs (the example's size)</button>
+                <button type="button" onClick={() => answer(SIZE_CHIPS[units].words, SIZE_CHIPS[units].rows)}>
+                  <Layers3 size={14} /> {SIZE_CHIPS[units].words}</button>
               </Chips>
             ) : null}
-            <RowsCard keys={keys} form={form} onApply={(rows) => answer(keys.filter((k) => k !== "size_from").map((k) => `${labelOf(k).replace(/ \(.*\)$/, "")} ${rows[k]} mm`).join(", "), rows)}
+            <RowsCard keys={keys} form={form} onApply={(rows) => answer(keys.filter((k) => k !== "size_from").map((k) => `${labelOf(k, units).replace(/ \(.*\)$/, "")} ${rows[k]} ${lab.length}`).join(", "), rows)}
               extra={<p className="chat-note">Where the size comes from: a standard (e.g. ASTM D3039), a drawing, or your own design.</p>} />
           </>
         );
@@ -426,21 +455,21 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
         return isBending(form) ? (
           <>
             <Chips>
-              {["1", "2", "5"].map((v) => <button type="button" key={v} onClick={() => answer(`Push the nose ${v} mm`, { control: "displacement", value: v })}>Push {v} mm</button>)}
+              {(PUSH_CHIPS[units] ?? []).map((v) => <button type="button" key={v} onClick={() => answer(`Push the nose ${v} ${lab.length}`, { control: "displacement", value: v })}>Push {v} {lab.length}</button>)}
             </Chips>
-            <RowsCard keys={["value"]} form={form} submit="Use this travel (mm)" onApply={(rows) => answer(`Push the nose ${rows.value} mm`, { control: "displacement", value: rows.value })} />
+            <RowsCard keys={["value"]} form={form} submit={`Use this travel (${lab.length})`} onApply={(rows) => answer(`Push the nose ${rows.value} ${lab.length}`, { control: "displacement", value: rows.value })} />
           </>
         ) : (
           <>
             <p className="chat-note">The bottom grip is held; the top grip {form.test === "unnotched compression" ? "pushes" : "pulls"}.</p>
             <Chips>
-              <button type="button" onClick={() => answer("Displacement of 1 mm", { control: "displacement", value: "1" })}>Displacement 1 mm</button>
-              <button type="button" onClick={() => answer("Displacement of 0.5 mm", { control: "displacement", value: "0.5" })}>Displacement 0.5 mm</button>
-              <button type="button" onClick={() => answer("Force of 10 kN", { control: "force", value: "10000" })}>Force 10 kN</button>
+              {(LOAD_CHIPS[units] ?? []).map((chip) => (
+                <button type="button" key={chip.words} onClick={() => answer(chip.words.replace(/^(\w+) /, "$1 of "), { control: chip.control, value: chip.value })}>{chip.words}</button>
+              ))}
             </Chips>
             <RowsCard keys={["control", "value"]} form={{ ...form, control: form.control || "displacement" }} submit="Use this load"
-              onApply={(rows) => answer(`${rows.control === "force" ? "Force" : "Displacement"} of ${rows.value} ${rows.control === "force" ? "N" : "mm"}`, rows)}
-              extra={<p className="chat-note">Displacement in mm, force in N.</p>} />
+              onApply={(rows) => answer(`${rows.control === "force" ? "Force" : "Displacement"} of ${rows.value} ${rows.control === "force" ? lab.force : lab.length}`, rows)}
+              extra={<p className="chat-note">Displacement in {lab.length}, force in {lab.force}.</p>} />
           </>
         );
       case "name":
@@ -450,7 +479,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
         }} />;
       case "advanced":
         return <RowsCard keys={["element_size", "criteria", "f12_star", ...(isBending(form) ? [] : ["grips", "region"])]} form={form} submit="Apply and check again"
-          onApply={(rows) => answer(`Settings: element size ${rows.element_size} mm, criteria ${rows.criteria}${rows.grips ? `, grips ${rows.grips}` : ""}`, rows)}
+          onApply={(rows) => answer(`Settings: element size ${rows.element_size} ${lab.length}, criteria ${rows.criteria}${rows.grips ? `, grips ${rows.grips}` : ""}`, rows)}
           extra={<p className="chat-note">Grips “coupling” tie each tab to a reference point, as in Abaqus; “nodal” holds every gripped node. Tsai-Wu needs f12* between -1 and 1.</p>} />;
       case "review":
         return null;
@@ -462,7 +491,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
     const blocking = items.filter((i) => i.state === "fail" || i.state === "missing");
     const warnings = items.filter((i) => i.state === "warn");
     const passed = items.filter((i) => i.state === "pass").length;
-    const stepsFor = (rows: string[]) => [...new Set(rows.map((label) => stepOfKey(Object.values(fieldByKey).find((f) => f.label === label)?.key ?? "")))];
+    const stepsFor = (rows: string[]) => [...new Set(rows.map((label) => stepOfKey(fieldByLabel[label]?.key ?? "")))];
     return (
       <div data-testid="chat-check" data-state={result.state}>
         <h4>{result.state === "ready" ? <>Ready to run{result.designation ? <> <code>{result.designation}</code></> : null}</> : `${blocking.length} thing${blocking.length === 1 ? "" : "s"} to fix before running`}</h4>
@@ -598,6 +627,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
 }
 
 function LayupInput({ needThickness, form, onApply }: { needThickness: boolean; form: StudioForm; onApply: (notation: string, rows: StudioForm) => void }) {
+  const length = unitLabels(unitsOf(form)).length;
   const [text, setText] = useState(() => layupNotation(form));
   const [thickness, setThickness] = useState(form.ply_thickness ?? "");
   const [error, setError] = useState("");
@@ -610,7 +640,7 @@ function LayupInput({ needThickness, form, onApply }: { needThickness: boolean; 
       onApply(text.replace(/\s+/g, ""), { ...layupRows(layup), ...(needThickness ? { ply_thickness: thickness.trim() } : { ply_thickness: "" }) });
     }}>
       <input type="text" aria-label="Layup" placeholder="[45/0/-45/90]s" value={text} onChange={(e) => { setText(e.target.value); setError(""); }} autoComplete="off" />
-      {needThickness ? <input type="text" aria-label="Cured ply thickness (mm)" placeholder="ply thickness, mm" inputMode="decimal" value={thickness}
+      {needThickness ? <input type="text" aria-label={`Cured ply thickness (${length})`} placeholder={`ply thickness, ${length}`} inputMode="decimal" value={thickness}
         onChange={(e) => { setThickness(e.target.value); setError(""); }} className="chat-small-input" /> : null}
       <button type="submit" className="chat-primary">Use layup</button>
       {error ? <span className="chat-error" role="alert">{error}</span> : null}

@@ -240,7 +240,9 @@ test("the studio's old addresses go to the chat with their query (ADR-0055 amend
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/studio?material=im7-8552");
-  await expect(page).toHaveURL(/\/chat\/?\?material=im7-8552$/);
+  // The chat reads the material from the query once and then clears the query from the address (readHandoff), so the address
+  // is /chat with or without it by the time it is read; that the chat got the material is the next line.
+  await expect(page).toHaveURL(/\/chat\/?(\?material=im7-8552)?$/);
   await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
   await expect(page.getByTestId("coupon-tool")).toContainText("Coupon test"); // the first question lists the tools
   await page.goto("/studio/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
@@ -314,6 +316,50 @@ test("one typed line fills the coupon and the chat asks only for what is missing
   await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveValue("6"); // the rows carry over to the full form
   await expect(page.getByLabel("Ply 2", { exact: true })).toHaveValue("0");
   expect(calls.checks).toHaveLength(0);
+});
+
+test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/chat");
+  await page.getByTestId("chat-units").selectOption("in-psi");
+  await expect(page.getByTestId("chat-spec")).toContainText("in, psi and lbf");
+  await page.getByRole("button", { name: /^Unnotched tension/ }).click();
+  await page.getByRole("button", { name: "IM7 / 8552", exact: true }).click();
+  const question = page.getByTestId("chat-question");
+  await expect(question).toHaveAttribute("data-step", "shear");
+  await expect(page.getByRole("button", { name: /Use the tape estimate/ })).toContainText("G13 = 680000, G23 = 433300 psi"); // the engine's psi figures
+  await page.getByRole("button", { name: /Use the tape estimate/ }).click();
+  await expect(question).toHaveAttribute("data-step", "layup");
+  await expect(question).toContainText("Ply thickness 0.0072 in, from the library");
+  await page.getByRole("button", { name: /Quasi-isotropic/ }).click();
+  await expect(question).toHaveAttribute("data-step", "geometry");
+  await expect(page.getByLabel("Length, tabs included (in)", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /10 × 1 in, 2.2 in tabs/ }).click();
+  await expect(question).toHaveAttribute("data-step", "loading");
+  await page.getByRole("button", { name: "Force 2000 lbf", exact: true }).click();
+  await expect(question).toHaveAttribute("data-step", "name");
+  await page.getByLabel("Filled in by", { exact: true }).fill("A. Engineer");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  expect(calls.checks).toHaveLength(1);
+  const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
+  expect([sent.units, sent.length, sent.width, sent.tab_length, sent.control, sent.value, sent.G13, sent.G23]).toEqual(["in-psi", 10, 1, 2.2, "force", 2000, 680000, 433300]);
+  expect(Math.abs(Number(sent.element_size) - 2 / 25.4)).toBeLessThan(1e-9); // the engine's 2 mm default, stated in inches by the engine
+  await expect(page.getByTestId("chat-spec")).toContainText("10 × 1 in, 2.2 in tabs");
+  await expect(page.getByTestId("chat-spec")).toContainText("2000 lbf force");
+  // a value in another system is refused, not read as inches
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("pull it 1 mm, in millimetres");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
+  await expect(page.getByText("Another unit system").last()).toBeVisible();
+  expect(calls.checks).toHaveLength(1);
+  // the full form carries the same rows, labelled in inches
+  await page.getByRole("tab", { name: "Full form" }).click();
+  const form = page.getByTestId("studio-form");
+  await expect(form.getByLabel("Units", { exact: true })).toHaveValue("in-psi");
+  await expect(form.getByLabel("Length (in)", { exact: true })).toHaveValue("10");
+  await expect(form.getByLabel("G13 (psi)", { exact: true })).toHaveValue("680000");
+  await expect(form.getByLabel("Length (mm)", { exact: true })).toHaveCount(0);
 });
 
 test("the chat solves a laminate problem with each value in its own unit, and shows the answer in the units picked (ADR-0060)", async ({ page }) => {

@@ -20,6 +20,7 @@ from anisotropy_fea.calculix import parse_dat
 from anisotropy_fea.compare import format_record, load_conventions, reference_quantities, sha256_of
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.spec import load_spec
+from anisotropy_fea.units import deck_units_of
 
 KNOWN_DIFFERENCES = {
     "kernel": "bilinear four-node membrane element, full 2 by 2 integration, membrane only (B = 0), no transverse shear, strain at the element centroid",
@@ -73,7 +74,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)  # a coupon started from its input form has no verification/ yet
     record = {
         "title": f"{spec.title}: CalculiX {args.version} S8R against the kernel",
-        "units": spec.units,
+        "units": deck_units_of(spec.units),  # the record compares decks, so it is in the deck's system (ADR-0061)
         "spec": Path(args.spec).resolve().relative_to(out_dir.resolve(), walk_up=True).as_posix(),
         "deck_kernel": args.deck_kernel.resolve().relative_to(out_dir.resolve(), walk_up=True).as_posix(),
         "deck_reference": args.deck_reference.resolve().relative_to(out_dir.resolve(), walk_up=True).as_posix(),

@@ -24,7 +24,7 @@ from anisotropy_engine.lamina import Lamina, Strengths
 from anisotropy_engine.laminate import Ply
 from anisotropy_engine.library import library_material
 
-from .units import unit_factors
+from .units import UNIT_LABEL, unit_factors
 
 Kind = Literal["unnotched_tension", "open_hole_tension", "compression", "shear_pm45", "three_point_bending", "four_point_bending", "plate"]
 BENDING_KINDS = ("three_point_bending", "four_point_bending")
@@ -228,7 +228,7 @@ class CouponSpec(Record):
     title: str
     coupon: Coupon | None = None  # the identity card; every coupon model has one (ADR-0038)
     kind: Kind
-    units: str  # the unit system of this file and of every deck written from it
+    units: str  # the unit system the coupon is stated in and read in (units.UNIT_SYSTEMS); a deck is written in units.deck_units_of it (ADR-0061)
     geometry: Geometry
     mesh: MeshControls
     layup: Layup
@@ -642,7 +642,7 @@ def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
     c = spec.coupon
     if c is None:
         return []
-    unit, metres = spec.units.split("-")[0], unit_factors(spec.units)["length"]
+    unit, metres = UNIT_LABEL[spec.units]["length"], unit_factors(spec.units)["length"]
     factor = metres if spec.si else 1.0  # the spec's lengths are in SI once `to_si` has run
     length = lambda v: f"{v / factor:g} {unit}"  # noqa: E731
     g = spec.geometry

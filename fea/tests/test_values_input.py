@@ -184,8 +184,19 @@ def test_a_spec_the_form_cannot_state_is_refused(tmp_path):
     with pytest.raises(IntakeError, match="offers all, one criterion or none"):
         values_of_spec(public.model_copy(update={"output": public.output.model_copy(update={"fpf_criteria": ["max_stress", "tsai_wu"]}),
                                                  "material": public.material.model_copy(update={"f12_star": 0.0})}))
-    with pytest.raises(IntakeError, match="the form states a coupon in mm-MPa"):
-        values_of_spec(public.model_copy(update={"units": "m-Pa"}))
+    with pytest.raises(IntakeError, match="the form states a coupon in one of mm-MPa, m-Pa, in-psi, in-ksi"):
+        values_of_spec(public.model_copy(update={"units": "SI"}))
+
+
+def test_a_spec_reads_back_in_the_units_it_is_stated_in():
+    """A spec in any stated system gives the rows in that system, with the Units row set (ADR-0061)."""
+    public = plane_stress(parse_spec(PUBLIC_COUPON))
+    assert values_of_spec(public)["units"] == "mm-MPa" and values_of_spec(public)["length"] == 250.0
+    si = to_si(public)
+    inches = values_of_spec(si.model_copy(update={"units": "in-psi"}))  # the same SI coupon, read back in inches and psi
+    assert inches["units"] == "in-psi" and inches["length"] == pytest.approx(250.0 / 25.4) and inches["width"] == pytest.approx(25.0 / 25.4)
+    assert inches["G13"] == pytest.approx(4688.43e6 / 6894.757293168, rel=1e-9) and inches["value"] == pytest.approx(1.0 / 25.4)
+    assert inches["mesh_partitions"] == pytest.approx([56.0 / 25.4, 110.0 / 25.4, 140.0 / 25.4, 194.0 / 25.4])
 
 
 def test_a_plain_mesh_with_tabs_reads_back_as_seeds(tmp_path):

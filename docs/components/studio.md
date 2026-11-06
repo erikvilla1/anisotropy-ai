@@ -1,4 +1,4 @@
-# Component card: the coupon studio | version 0.4 | updated 2026-11-05
+# Component card: the coupon studio | version 0.5 | updated 2026-11-06
 
 ## Purpose and intended use
 
@@ -10,7 +10,7 @@ Nothing. Every number the page shows is written by the fea package: the setup ch
 
 ## Inputs / outputs
 
-Input: the rows of the coupon input form (ADR-0046), typed, picked from the library, loaded from the public example, or read back from a coupon on the machine (`GET /v1/coupons/{name}/values`). Output: the checklist (twelve items, each passed, warned, failed, missing or pending, with the rows it concerns), the preview of the model (the mesh with the held tab framed in violet and the pulled tab framed in amber with an arrow), the job's stages, the fields (displacement, strains, section forces, every ply's stresses in material axes and its von Mises stress, the failure index and strength ratio by criterion; element values or display averages, deformed or not), the summary (reaction, largest displacement, largest ply stresses, first-ply failure by criterion with the critical element framed in red), the explanation, and links to every file of the job: the package zip, the PDF, the decks, the `.vtu`, the record, the JSON files.
+Input: the rows of the coupon input form (ADR-0046), typed, picked from the library, loaded from the public example, or read back from a coupon on the machine (`GET /v1/coupons/{name}/values`). The rows are stated in the unit system the engineer picks on the test question (mm-MPa, m-Pa, in-psi or in-ksi; ADR-0061): the labels, the chips, the tape estimate and the library figures the page shows in that system are written by the fea package into `lib/coupon-form-definition.json`, and the page converts nothing; the results, the checklist and the PDF come back in the same system, and the decks stay in mm-MPa (or m-Pa when stated so). Output: the checklist (twelve items, each passed, warned, failed, missing or pending, with the rows it concerns), the preview of the model (the mesh with the held tab framed in violet and the pulled tab framed in amber with an arrow), the job's stages, the fields (displacement, strains, section forces, every ply's stresses in material axes and its von Mises stress, the failure index and strength ratio by criterion; element values or display averages, deformed or not), the summary (reaction, largest displacement, largest ply stresses, first-ply failure by criterion with the critical element framed in red), the explanation, and links to every file of the job: the package zip, the PDF, the decks, the `.vtu`, the record, the JSON files.
 
 ## Dependencies and connections
 

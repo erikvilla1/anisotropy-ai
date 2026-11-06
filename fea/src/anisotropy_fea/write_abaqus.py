@@ -16,7 +16,7 @@ shell ("THERE ARE MORE THAN 9 OUTPUT REQUESTS IN A SINGLE TABLE").
 from __future__ import annotations
 
 from .femodel import FEModel
-from .units import from_si
+from .units import deck_units_of, from_si
 
 PER_LINE = 16
 MAX_LINE = 256  # bytes in one line of an Abaqus input file, in the UTF-8 the deck is written in
@@ -56,7 +56,7 @@ def _comment(line: str) -> list[str]:
 
 def write_abaqus(model: FEModel, units: str | None = None) -> str:
     """The deck text."""
-    units = units or model.spec.units
+    units = units or deck_units_of(model.spec.units)  # a deck is written in a deck system, whatever the coupon is stated in (ADR-0061)
     length = lambda v: from_si(v, "length", units)  # noqa: E731
     stress = lambda v: from_si(v, "stress", units)  # noqa: E731
     force = lambda v: from_si(v, "force", units)  # noqa: E731

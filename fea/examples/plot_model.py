@@ -23,7 +23,7 @@ from matplotlib.collections import PolyCollection  # noqa: E402
 
 from anisotropy_fea.femodel import FEModel, build_model  # noqa: E402
 from anisotropy_fea.spec import load_spec  # noqa: E402
-from anisotropy_fea.units import from_si  # noqa: E402
+from anisotropy_fea.units import UNIT_LABEL, from_si  # noqa: E402
 
 INK, MUTED, GRID = "#1C1F22", "#5D636A", "#D9DCE0"
 # categorical fills for element sets, fixed order, muted so the mesh lines stay readable
@@ -47,7 +47,7 @@ def plot_model(model: FEModel, path: Path, units: str | None = None) -> Path:
     mesh = model.mesh
     xy = np.vectorize(lambda v: from_si(v, "length", units))(mesh.xy)
     polys = [xy[nodes] for nodes in mesh.corners]
-    unit = "mm" if units == "mm-MPa" else "m"
+    unit = UNIT_LABEL[units]["length"]
     fig, ax = plt.subplots(figsize=(7, 10), constrained_layout=True)
     fig.patch.set_facecolor("white")
     ax.add_collection(PolyCollection(polys, facecolors="#F6F7F5", edgecolors=GRID, linewidths=0.4))
