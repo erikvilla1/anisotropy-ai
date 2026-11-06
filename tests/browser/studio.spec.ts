@@ -61,8 +61,9 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/services/finite-element-modeling");
-  await page.getByRole("link", { name: "Open the studio", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("From the coupon to its stresses.");
+  await page.getByRole("link", { name: "Open the chat", exact: true }).click();
+  await expect(page).toHaveURL(/\/chat\/?$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Anisotropy chat");
   await expect(page.getByTestId("empty-scene")).toBeVisible();
   await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByRole("button", { name: "Load example" }).click();
@@ -93,7 +94,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("job-progress").locator("li[data-state=done]")).toHaveCount(9); // every stage of a finished job, the last included
   await expect(page.getByTestId("downloads").locator("a[data-key=package]")).toHaveAttribute("href", /\/v1\/coupon-jobs\/0f3a2c9e[^/]*\/files\/package$/);
   await expect(page.getByTestId("downloads").locator("a[data-key=prepomax_results]")).toBeVisible();
-  await expect(page.getByTestId("viewer-link")).toHaveAttribute("href", "/studio/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
+  await expect(page.getByTestId("viewer-link")).toHaveAttribute("href", "/chat/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
   await page.getByLabel("Field", { exact: true }).selectOption("S22");
   await page.getByLabel("Ply", { exact: true }).selectOption("3");
   await expect(page.getByTestId("legend")).toContainText("Ply stress S22 (across the fibres) (ply 3, -45°)");
@@ -112,7 +113,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/studio");
+  await page.goto("/chat");
   await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByRole("button", { name: "Load example" }).click();
   await page.getByLabel("Test", { exact: true }).selectOption(BENDING);
@@ -153,7 +154,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/studio");
+  await page.goto("/chat");
   await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByRole("button", { name: "Load example" }).click();
   await page.getByLabel("Test", { exact: true }).selectOption("plate");
@@ -192,7 +193,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
 test("a blocked setup names its rows and the solve stays off", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/studio");
+  await page.goto("/chat");
   await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByRole("button", { name: "Load example" }).click();
   await page.getByLabel("Length (mm)", { exact: true }).fill("");
@@ -209,8 +210,8 @@ test("a blocked setup names its rows and the solve stays off", async ({ page }) 
 test("a fresh form's choices start blank, not on their first word", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/studio");
-  await page.getByRole("tab", { name: "Full form" }).click(); // the studio opens on the chat (ADR-0055); the rows are on the form tab
+  await page.goto("/chat");
+  await page.getByRole("tab", { name: "Full form" }).click(); // the chat opens on its questions (ADR-0055); the rows are on the form tab
   for (const label of ["Test", "Symmetric", "Loading type"]) await expect(page.getByLabel(label, { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Test", { exact: true }).locator("option:checked")).toHaveText("choose one");
   await page.getByLabel("Test", { exact: true }).selectOption("unnotched tension");
@@ -220,19 +221,31 @@ test("a fresh form's choices start blank, not on their first word", async ({ pag
 test("a coupon reopens into the form and the viewer window reads a job by its address", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/studio");
+  await page.goto("/chat");
   await page.getByRole("tab", { name: "Full form" }).click();
   await page.getByLabel("Reopen a coupon", { exact: true }).selectOption("IM7-UNT-L1");
   await page.getByRole("button", { name: "Reopen", exact: true }).click();
   await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
   await expect(page.getByLabel("Ply 3", { exact: true })).toHaveValue("-45");
   await expect(page.getByLabel("Material code", { exact: true })).toHaveValue("IM7");
-  await page.goto("/studio/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
+  await page.goto("/chat/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("summary")).toContainText("Largest displacement");
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
-  await page.goto("/studio/view");
+  await page.goto("/chat/view");
   await expect(page.getByText("No job in the address")).toBeVisible();
+});
+
+test("the studio's old addresses go to the chat with their query (ADR-0055 amendment 3)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/studio?material=im7-8552");
+  await expect(page).toHaveURL(/\/chat\/?\?material=im7-8552$/);
+  await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
+  await expect(page.getByTestId("coupon-tool")).toContainText("Coupon test"); // the first question lists the tools
+  await page.goto("/studio/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
+  await expect(page).toHaveURL(/\/chat\/view\/?\?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00$/);
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
 });
 
 test("the guided chat asks one thing at a time, checks the setup itself, reads typed changes and runs (ADR-0055)", async ({ page }) => {
@@ -240,7 +253,7 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/studio");
+  await page.goto("/chat");
   const question = page.getByTestId("chat-question");
   await expect(question).toHaveAttribute("data-step", "test");
   await page.getByRole("button", { name: /^Unnotched tension/ }).click();
@@ -289,7 +302,7 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
 test("one typed line fills the coupon and the chat asks only for what is missing (ADR-0055)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
-  await page.goto("/studio");
+  await page.goto("/chat");
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
   await expect(page.getByText("Got it").last()).toBeVisible();
@@ -317,7 +330,7 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
     const body = fixture(problem.report_units === "US" ? "laminate-answer-us" : "laminate-answer");
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
-  await page.goto("/studio");
+  await page.goto("/chat");
   await page.getByTestId("laminate-choice").click();
   const question = page.getByTestId("chat-question");
   await expect(question).toHaveAttribute("data-step", "units");

@@ -91,7 +91,7 @@ test("the Services disclosure lists the five service pages and the contact page 
   await fem.click();
   await expect(page).toHaveURL(/\/services\/finite-element-modeling\/?$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("ply by ply");
-  await expect(page.getByRole("link", { name: "Open the studio", exact: true })).toHaveAttribute("href", /\/studio$/);
+  await expect(page.getByRole("link", { name: "Open the chat", exact: true })).toHaveAttribute("href", /\/chat$/);
   await page.getByRole("link", { name: "Contact us", exact: true }).first().click();
   await expect(page).toHaveURL(/\/contact\/?$/);
   await expect(page.getByRole("link", { name: /erikvilla947@gmail\.com/ })).toHaveAttribute("href", "mailto:erikvilla947@gmail.com");

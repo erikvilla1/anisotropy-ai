@@ -11,6 +11,7 @@ import {
   COMMON_MATERIALS, couponLines, isBending, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, missingIn, nextStep,
   parseLayup, readMessage, stepOfKey, TEST_CHOICES, type ChatStep,
 } from "@/lib/studio-chat";
+import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
 import { handoffKey } from "../home-composer";
 import { PreviewScene } from "./coupon-studio";
@@ -299,7 +300,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
     if (/full form|spreadsheet|all (the )?rows/i.test(text)) { add({ role: "user", text }); onOpenForm(); return; }
-    if (onLaminate && /\b(laminate (response|problem|theory)|abd|classical lamination|hand calc|homework)\b/i.test(text)) { add({ role: "user", text }); onLaminate(); return; }
+    if (onLaminate && toolNamed(text) === "laminate") { add({ role: "user", text }); onLaminate(); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
     if (step === "name" && !/\d/.test(text)) { answer(text, { filled_by: text }); return; }
@@ -324,9 +325,10 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
             <div className="chat-choice-grid">
               {onLaminate ? (
                 <button type="button" className="chat-choice chat-choice-wide" data-testid="laminate-choice" onClick={onLaminate}>
-                  <strong><Calculator size={14} /> Laminate response</strong><span>a stack under loads per unit width, no coupon: the ABD matrices, strains, every ply's stresses and first-ply failure in seconds, in the units you pick</span>
+                  <strong><Calculator size={14} /> {chatTool("laminate").title}</strong><span>{chatTool("laminate").detail}</span>
                 </button>
               ) : null}
+              <p className="chat-choice-head" data-testid="coupon-tool"><strong>{chatTool("coupon").title}</strong> <span>{chatTool("coupon").detail}</span></p>
               {TEST_CHOICES.map((c) => (
                 <button type="button" key={c.test} className="chat-choice" onClick={() => answer(c.title, { test: c.test })}>
                   <strong>{c.title}</strong><span>{c.detail}</span>
@@ -549,7 +551,7 @@ export function CouponChat({ apiBaseUrl, initialForm, onFormChange, onOpenForm, 
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
   const lines = couponLines(form);
-  const viewerLink = job ? `/studio/view?job=${encodeURIComponent(job.job_id)}` : null;
+  const viewerLink = job ? `/chat/view?job=${encodeURIComponent(job.job_id)}` : null;
   return (
     <div className="chat-studio" data-testid="coupon-chat">
       <section className="chat-pane" aria-label="Coupon assistant">

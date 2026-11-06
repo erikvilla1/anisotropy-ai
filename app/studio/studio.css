@@ -136,6 +136,8 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .chat-choice, .chat-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 7px; border: 1px solid #313c29; background: #171d13; color: var(--text); transition: border-color .15s, background .15s; }
 .chat-choice:hover, .chat-list button:hover { border-color: #6f8a5e; background: #1e2718; }
 .chat-choice strong, .chat-list strong { font-size: 13px; }
+.chat-choice-head { grid-column: 1 / -1; margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.chat-choice-head strong { color: var(--text); font-size: 13px; margin-right: 6px; }
 .chat-choice span, .chat-list span { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
 .chat-list { display: grid; gap: 6px; margin-top: 8px; }
 .chat-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
