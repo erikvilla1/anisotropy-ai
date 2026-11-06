@@ -11,7 +11,7 @@
    "id": "units",
    "label": "Units consistent",
    "state": "pass",
-   "message": "every row in mm, MPa and N; the model is written in mm-MPa and forces come out in N",
+   "message": "every row in mm, MPa and N; the results come back in the same units, and the decks are written in mm-MPa",
    "rows": []
   },
   {

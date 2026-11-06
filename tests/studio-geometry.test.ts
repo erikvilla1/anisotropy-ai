@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   boundaryEdges, boundaryOwners, bounds, centroid, deformedHeights, deformedPositions, elementEdges, elementLoop, elementOfTriangle, nodeMeans, plateMesh, quadsToTriangles,
-  meanHeight, setBox, suggestedScale, vertexColors,
+  fieldAttribute, meanHeight, setBox, suggestedScale, vertexColors,
 } from "../lib/studio-geometry";
 
 const preview = JSON.parse(readFileSync("tests/fixtures/studio/preview.json", "utf8"));
@@ -103,4 +103,13 @@ test("a deflection lifts the plate, its edges and its frames (ADR-0053)", () => 
   assert.equal(elementEdges(square.nodes, square.quads, 0.5, heights)[0][0][2], 0.5 - 2);
   assert.equal(meanHeight(heights, [0, 1]), -1.5);
   assert.equal(meanHeight(null, [0, 1]), 0);
+});
+
+test("one float per vertex for the results material, smooth by node or flat by element, a missing value below every real one (ADR-0063)", () => {
+  const unit = plateMesh([[0, 0], [1, 0], [1, 1], [0, 1]], [[0, 1, 2, 3]], 0.1);
+  const smooth = fieldAttribute(unit, "node", [1, 2, null, 4], -9);
+  assert.equal(smooth.length, unit.positions.length / 3);
+  assert.deepEqual([...smooth.slice(0, 4)], [1, 2, -9, 4]);
+  const flat = fieldAttribute(unit, "element", [7], -9);
+  assert.ok(flat.every((v) => v === 7));
 });

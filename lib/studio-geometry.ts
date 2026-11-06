@@ -99,6 +99,15 @@ export function vertexColors(mesh: PlateMesh, by: "node" | "element", colors: nu
   return out;
 }
 
+/** One float per vertex from one value per node (smooth) or per element (flat), for the results material (ADR-0063); a value the
+ * package did not write is `missing`, a float below every real value. */
+export function fieldAttribute(mesh: PlateMesh, by: "node" | "element", values: (number | null)[], missing: number): Float32Array {
+  const source = by === "node" ? mesh.vertexNode : mesh.vertexElement;
+  const out = new Float32Array(source.length);
+  source.forEach((index, i) => { const v = values[index]; out[i] = v === null || v === undefined || !Number.isFinite(v) ? missing : v; });
+  return out;
+}
+
 /** The outline of one element on the top face, as a closed loop of x, y, z, for the critical element's frame; `heights` lifts each node (a deflection). */
 export function elementLoop(nodes: number[][], quad: number[], height: number, heights?: number[] | null): number[][] {
   return quad.map((node) => [nodes[node][0], nodes[node][1], height + (heights ? heights[node] : 0)]);

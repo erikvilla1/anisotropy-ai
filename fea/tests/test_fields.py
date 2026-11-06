@@ -10,7 +10,7 @@ import pytest
 from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.explain import MODE_WORDS, explanation, fact_sheet, numbers_in, result_sentences, setup_sentences
-from anisotropy_fea.fields import MODES, applied_loading, field_data, nodal_averages, rounded
+from anisotropy_fea.fields import MODES, applied_loading, field_data, nodal_averages, per_ply_spans, rounded, span
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_ratios
@@ -88,6 +88,33 @@ def test_the_summary_names_the_extremes(solved, data):
         index = np.asarray(data["element"]["failure"][criterion]["index"])
         assert index.max() == pytest.approx(1 / expected.factor) and data["element"]["failure"][criterion]["worst_ply"][found["element"]] == expected.ply
     assert summary["earliest"] == min(summary["fpf"], key=lambda c: summary["fpf"][c]["factor"])
+
+
+def test_the_ranges_are_the_ends_of_the_arrays_as_written(data):
+    """ADR-0063: every field's [min, max], element values and display averages apart, equals the extremes of the array the viewer reads,
+    so the legend's ends are written here and the browser derives none."""
+    ranges = data["ranges"]
+    assert "legend" in data["ranges_note"]
+    strain = np.asarray(data["element"]["strain"], dtype=float)
+    assert ranges["eps_y"]["element"] == [strain[:, 1].min(), strain[:, 1].max()]
+    averages = np.asarray(data["nodal"]["averages"]["strain"], dtype=float)
+    assert ranges["eps_y"]["nodal"] == [np.nanmin(averages[:, 1]), np.nanmax(averages[:, 1])]
+    magnitude = np.asarray(data["nodal"]["magnitude"], dtype=float)
+    assert ranges["u_mag"]["nodal"] == [magnitude.min(), magnitude.max()]
+    assert "u_z" not in ranges and "M_y" not in ranges and "theta_x" not in ranges  # a membrane solve
+    stress = np.asarray(data["element"]["ply"]["stress_12"], dtype=float)  # (elements, plies, 3)
+    assert len(ranges["S11"]["element"]) == 8 and ranges["S22"]["element"][2] == [stress[:, 2, 1].min(), stress[:, 2, 1].max()]
+    stress_averages = np.asarray(data["nodal"]["averages"]["ply_stress_12"], dtype=float)
+    assert ranges["S12"]["nodal"][5] == [np.nanmin(stress_averages[:, 5, 2]), np.nanmax(stress_averages[:, 5, 2])]
+    mises = np.asarray(data["element"]["ply"]["mises"], dtype=float)
+    assert ranges["mises"]["element"][0] == [mises[:, 0].min(), mises[:, 0].max()]
+    index = np.asarray(data["element"]["failure"]["tsai_hill"]["element_index"], dtype=float)
+    assert ranges["failure_index"]["tsai_hill"]["element"] == [index.min(), index.max()]
+    assert ranges["failure_index"]["tsai_hill"]["element"][1] == pytest.approx(data["summary"]["fpf"]["tsai_hill"]["index"])
+    per_ply = np.asarray(data["element"]["failure"]["tsai_hill"]["index"], dtype=float)  # (elements, plies)
+    assert ranges["failure_index_ply"]["tsai_hill"]["element"][3] == [per_ply[:, 3].min(), per_ply[:, 3].max()]
+    assert span(np.array([np.nan, 2.0, -1.0])) == [-1.0, 2.0] and span(np.array([np.nan])) == [None, None]
+    assert per_ply_spans(np.array([[[1.0, 2.0], [3.0, 4.0]]])) == [[[1.0, 1.0], [2.0, 2.0]], [[3.0, 3.0], [4.0, 4.0]]]  # one element, two plies, two faces
 
 
 def test_the_criteria_asked_for_are_reported_and_a_missing_one_refused(solved):

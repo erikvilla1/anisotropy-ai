@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { angleSlots, CATEGORICAL, colorAt, colorsOf, DIVERGING, hexToRgb, legendTicks, printed, ramp, scaleFor, SEQUENTIAL } from "../lib/studio-colors";
+import { angleSlots, CATEGORICAL, colorAt, colorsOf, DIVERGING, hexToRgb, legendGradient, legendTicks, printed, ramp, scaleFor, SEQUENTIAL } from "../lib/studio-colors";
 
 test("the ramps: one hue dark to light for a magnitude, two hues around a neutral grey for a signed field", () => {
   assert.equal(SEQUENTIAL.length, 7);
@@ -35,12 +35,25 @@ test("colours are flat triples and a missing value is the named grey", () => {
 });
 
 test("legend ticks and printed numbers", () => {
-  assert.deepEqual(legendTicks({ kind: "sequential", min: 0, max: 100, stops: SEQUENTIAL }, 5), [0, 25, 50, 75, 100]);
+  assert.deepEqual(legendTicks({ min: 0, max: 100 }, 5), [0, 25, 50, 75, 100]);
   assert.equal(printed(123.456789), "123.5");
   assert.equal(printed(0.000012345), "1.234e-5");
   assert.equal(printed(2787.75), "2788");
   assert.equal(printed(0), "0");
   assert.equal(printed(null), "–");
+});
+
+test("the scale's ends are the package's range when it wrote one, the values' extremes otherwise (ADR-0063)", () => {
+  const written = scaleFor([0.2, 0.4], false, [0, 1]);
+  assert.deepEqual([written.min, written.max, written.ends, written.source], [0, 1, [0, 1], "package"]);
+  const signed = scaleFor([0.2], false, [-2, 1]);
+  assert.deepEqual([signed.kind, signed.min, signed.max, signed.ends], ["diverging", -2, 2, [-2, 1]]); // symmetric around the grey; the ends as written
+  const fallback = scaleFor([3, null, 7]);
+  assert.deepEqual([fallback.ends, fallback.source], [[3, 7], "values"]);
+  assert.equal(legendTicks(written, 9).length, 9); // one tick per band boundary
+  assert.equal(legendGradient(written, 0), `linear-gradient(to right, ${SEQUENTIAL.join(", ")})`);
+  const banded = legendGradient(written, 4);
+  assert.ok(banded.startsWith("linear-gradient(to right, rgb(") && banded.includes("% 25%") && banded.endsWith(" 75% 100%)"));
 });
 
 test("ply angles take fixed slots in order of first appearance", () => {

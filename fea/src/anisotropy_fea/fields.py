@@ -7,7 +7,9 @@ axes, the ply von Mises stress, and per criterion every ply's strength ratio R a
 and the rotations at the nodes, the curvature, the moments and the transverse shear forces per element, and keeps both faces of every ply
 (`mesh.faces` names them; a membrane solve has one value per ply and `faces` is null). The browser draws them and computes nothing.
 Smooth contours need one value per node, so the mean over the elements that share a node is written here too, under `nodal.averages`,
-and labelled a display average: the element values are the result.
+and labelled a display average: the element values are the result. `ranges` holds the smallest and largest value of every field the
+viewer can show, element values and display averages apart, per ply and face where the field is per ply, so the legend's ends are
+written here and the browser derives none (ADR-0063).
 
 The summary names the applied loading, the reaction that balances it, the largest displacement, the largest ply stresses, and per
 criterion the first ply to fail, with its element, ply, face, mode and place in the words the coupon document uses (`report.fpf_place`).
@@ -45,6 +47,22 @@ def rounded(values: np.ndarray) -> list:
     flat = np.asarray(values, dtype=float).reshape(-1)
     out = [None if not np.isfinite(v) else float(f"{v:.{DIGITS}g}") for v in flat]
     return np.asarray(out, dtype=object).reshape(np.shape(values)).tolist()
+
+
+def span(values: np.ndarray) -> list:
+    """The smallest and largest finite entry of an array, at DIGITS significant digits, so each end equals the array's own extreme as
+    written; [None, None] when no entry is finite (a nodal average at a node no element touches)."""
+    flat = np.asarray(values, dtype=float).reshape(-1)
+    finite = flat[np.isfinite(flat)]
+    return rounded(np.array([finite.min(), finite.max()])) if finite.size else [None, None]
+
+
+def per_ply_spans(values: np.ndarray) -> list:
+    """`span` of each ply's values in an array shaped (count, plies[, faces]): a [min, max] per ply, or per ply and face."""
+    values = np.asarray(values, dtype=float)
+    if values.ndim == 3:
+        return [[span(values[:, k, f]) for f in range(values.shape[2])] for k in range(values.shape[1])]
+    return [span(values[:, k]) for k in range(values.shape[1])]
 
 
 def nodal_averages(connectivity: np.ndarray, node_count: int, element_values: np.ndarray) -> np.ndarray:
@@ -180,6 +198,8 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
 
     failure: dict[str, Any] = {}
     failure_average: dict[str, Any] = {}
+    failure_ranges: dict[str, Any] = {}
+    failure_ply_ranges: dict[str, Any] = {}
     for criterion, found in failures.items():
         ratio = np.stack(found.ratio)  # (ne, plies[, 2]); infinite in an unstressed ply (a rigidly gripped tab, a midplane face), never NaN
         if np.any(np.isnan(ratio)):
@@ -197,7 +217,11 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
             worst = np.argmin(per_ply, axis=1)
             entry["worst_face"] = [FACES[int(np.argmin(ratio[e, k]))] for e, k in enumerate(worst)]
         failure[criterion] = entry
-        failure_average[criterion] = rounded(nodal_averages(corners, n, index.reshape(ne, -1).max(axis=1)))
+        element_index = index.reshape(ne, -1).max(axis=1)
+        index_average = nodal_averages(corners, n, element_index)
+        failure_average[criterion] = rounded(index_average)
+        failure_ranges[criterion] = {"element": span(element_index), "nodal": span(index_average)}
+        failure_ply_ranges[criterion] = {"element": per_ply_spans(index.max(axis=2) if shell else index)}  # the worse face of each ply
 
     # the summary: where the extremes are
     applied = applied_loading(deck, solution)
@@ -245,27 +269,61 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                                      "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
     summary["earliest"] = min(failures, key=lambda c: failures[c].factor) if failures else None
 
+    section_force_out, stress_12_out, mises_out, displacement_out = per_length(section_force), stress(stress_12), stress(mises), length(displacement)
+    strain_average = nodal_averages(corners, n, strain)
+    section_force_average = nodal_averages(corners, n, section_force_out)
+    stress_12_average = nodal_averages(corners, n, stress_12_out)
+    mises_average = nodal_averages(corners, n, mises_out)
     averages: dict[str, Any] = {
-        "strain": rounded(nodal_averages(corners, n, strain)), "section_force": rounded(nodal_averages(corners, n, per_length(section_force))),
-        "ply_stress_12": rounded(nodal_averages(corners, n, stress(stress_12))), "ply_mises": rounded(nodal_averages(corners, n, stress(mises))),
+        "strain": rounded(strain_average), "section_force": rounded(section_force_average),
+        "ply_stress_12": rounded(stress_12_average), "ply_mises": rounded(mises_average),
         "failure_index": failure_average,
     }
     element: dict[str, Any] = {
-        "strain": rounded(strain), "section_force": rounded(per_length(section_force)), "centroids": rounded(length(centroids)),
-        "ply": {"stress_12": rounded(stress(stress_12)), "stress_xy": rounded(stress(stress_xy)), "strain_12": rounded(strain_12), "mises": rounded(stress(mises))},
+        "strain": rounded(strain), "section_force": rounded(section_force_out), "centroids": rounded(length(centroids)),
+        "ply": {"stress_12": rounded(stress_12_out), "stress_xy": rounded(stress(stress_xy)), "strain_12": rounded(strain_12), "mises": rounded(mises_out)},
         "failure": failure, "modes": list(MODES),
     }
-    nodal: dict[str, Any] = {"displacement": rounded(length(displacement)), "magnitude": rounded(length(magnitude)), "reaction": rounded(reaction)}
+    nodal: dict[str, Any] = {"displacement": rounded(displacement_out), "magnitude": rounded(length(magnitude)), "reaction": rounded(reaction)}
+
+    # the ends of every field the viewer can show, as written above: the element values and the display averages apart (ADR-0063)
+    def both(element_values: np.ndarray, average_values: np.ndarray) -> dict[str, list]:
+        return {"element": span(element_values), "nodal": span(average_values)}
+
+    ranges: dict[str, Any] = {"u_mag": {"nodal": span(length(magnitude))}}
+    for i, name in enumerate(("u_x", "u_y", "u_z")[:translations]):
+        ranges[name] = {"nodal": span(displacement_out[:, i])}
+    for i, name in enumerate(("eps_x", "eps_y", "gamma_xy")):
+        ranges[name] = both(strain[:, i], strain_average[:, i])
+    for i, name in enumerate(("N_x", "N_y", "N_xy")):
+        ranges[name] = both(section_force_out[:, i], section_force_average[:, i])
+    for i, name in enumerate(STRESS_NAMES):
+        ranges[name] = {"element": per_ply_spans(stress_12_out[..., i]), "nodal": per_ply_spans(stress_12_average[..., i])}
+    ranges["mises"] = {"element": per_ply_spans(mises_out), "nodal": per_ply_spans(mises_average)}
+    ranges["failure_index"] = failure_ranges
+    ranges["failure_index_ply"] = failure_ply_ranges
+
     if shell:
         curvature = _finite("curvature", solution.curvature)
         moment = _finite("moment", solution.moment)
         shear_force = _finite("shear force", solution.shear_force)
-        element.update({"curvature": rounded(curvature_units(curvature)), "moment": rounded(moment), "shear_force": rounded(per_length(shear_force)),
+        curvature_out, shear_force_out = curvature_units(curvature), per_length(shear_force)
+        curvature_average = nodal_averages(corners, n, curvature_out)
+        moment_average = nodal_averages(corners, n, moment)
+        shear_force_average = nodal_averages(corners, n, shear_force_out)
+        element.update({"curvature": rounded(curvature_out), "moment": rounded(moment), "shear_force": rounded(shear_force_out),
                         "shear_strain": rounded(_finite("shear strain", solution.shear_strain))})
         nodal["rotation"] = rounded(rotation)
         nodal["moment_reaction"] = rounded(solution.reaction[:, 3:5])
-        averages.update({"curvature": rounded(nodal_averages(corners, n, curvature_units(curvature))), "moment": rounded(nodal_averages(corners, n, moment)),
-                         "shear_force": rounded(nodal_averages(corners, n, per_length(shear_force)))})
+        averages.update({"curvature": rounded(curvature_average), "moment": rounded(moment_average), "shear_force": rounded(shear_force_average)})
+        for i, name in enumerate(("theta_x", "theta_y")):
+            ranges[name] = {"nodal": span(rotation[:, i])}
+        for i, name in enumerate(("kappa_x", "kappa_y", "kappa_xy")):
+            ranges[name] = both(curvature_out[:, i], curvature_average[:, i])
+        for i, name in enumerate(("M_x", "M_y", "M_xy")):
+            ranges[name] = both(moment[:, i], moment_average[:, i])
+        for i, name in enumerate(("Q_x", "Q_y")):
+            ranges[name] = both(shear_force_out[:, i], shear_force_average[:, i])
     nodal["averages"] = averages
     nodal["averages_note"] = "display averages: the mean over the elements sharing each node, for smooth contours; the element values are the result"
 
@@ -281,6 +339,9 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                  "translations": translations},
         "nodal": nodal,
         "element": element,
+        "ranges": ranges,
+        "ranges_note": "the smallest and largest value of each field as written here, element values and display averages apart, per ply and face "
+                       "where the field is per ply: the legend's ends",
         "summary": summary,
     }
     if quality is not None:

@@ -33,6 +33,8 @@ export type Preview = {
 export type QualitySummary = { elements: number; acceptable: boolean; measures: Record<string, { word: string; worst: number; element: number; threshold: number; warns: string; over: number }> };
 /** One value per ply (a membrane solve), or one per face of the ply, bottom then top (a shell solve, ADR-0053); `Fields.mesh.faces` says which. */
 export type Faced<T> = T | T[];
+/** The ends of a field as the package wrote them: [min, max], or [null, null] where no value was finite. */
+export type Span = [number | null, number | null];
 export type Extreme = { value: number; element: number; label: string; ply: number; angle: number; xy: number[]; face?: string | null };
 export type FirstPlyFailure = { factor: number; index: number; element: number; label: string; ply: number; angle: number; mode: string; place: string;
   touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null };
@@ -50,6 +52,8 @@ export type Fields = {
     ply: { stress_12: Faced<number[]>[][]; stress_xy: Faced<number[]>[][]; strain_12: Faced<number[]>[][]; mises: Faced<number>[][] };
     failure: Record<string, { ratio: Faced<number | null>[][]; index: Faced<number>[][]; mode: Faced<number>[][]; worst_ply: number[]; worst_face?: string[];
       element_index: number[] }>; modes: string[] };
+  /** Per field (ADR-0063): `element` and `nodal` spans; a list per ply, and per ply and face, for the ply fields; per criterion for the failure index. */
+  ranges?: Record<string, Record<string, unknown>>; ranges_note?: string;
   summary: { max_displacement: { value: number; node: number; label: string; xy: number[]; components: number[]; axis?: string };
     reaction: { set: string; value: number; sense: string; dof?: number }; applied: { control: string; value: number; unit: string; dof?: number; direction?: string; total_force?: number };
     max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number };

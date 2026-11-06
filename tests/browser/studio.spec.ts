@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { printed } from "../../lib/studio-colors";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
 const BENDING = "three-point bending";
@@ -58,6 +59,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
 test("the studio checks a setup, solves it, shows the fields as soon as our engine has run, and lists the files", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error" && /THREE|WebGL|shader/i.test(message.text())) browserErrors.push(message.text()); }); // a shader that fails to compile is logged, not thrown
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/services/finite-element-modeling");
@@ -81,12 +83,19 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   expect(sent.form_version).toBe(fixture("values").form_version);
   await expect(page.getByTestId("preview")).toBeVisible();
   await expect(page.getByTestId("preview")).toContainText("50 elements");
+  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "presentation"); // the model lit, the results unlit (ADR-0063)
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("job-progress")).toBeVisible();
   expect((calls.solves[0] as { run_by: string }).run_by).toBe("A. Engineer");
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("legend")).toContainText("Failure index 1/R, worst ply");
+  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "results"); // coloured on the graphics card, unlit (ADR-0063)
+  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "8");
+  await expect(page.getByTestId("legend")).toHaveAttribute("data-source", "package"); // the legend's ends are the package's
+  const written = fixture("fields").ranges.failure_index.tsai_hill.nodal as [number, number];
+  await expect(page.getByTestId("legend")).toContainText(`from ${printed(written[0])} to ${printed(written[1])} -, the ends the package wrote`);
+  await page.getByTestId("studio-scene").locator("canvas").evaluate((canvas) => { canvas.dataset.kept = "yes"; });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
@@ -102,6 +111,13 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("legend")).toContainText("Ply stress S22 (across the fibres) (ply 3, -45°)");
   await page.getByLabel("Shown as", { exact: true }).selectOption("element");
   await expect(page.getByTestId("legend")).toContainText("element values: the result");
+  await expect(page.getByTestId("studio-scene").locator("canvas")).toHaveAttribute("data-kept", "yes"); // the field switch uploads values; the mesh and the canvas stay
+  const perPly = fixture("fields").ranges.S22.element[2] as [number, number];
+  await expect(page.getByTestId("legend")).toContainText(`from ${printed(perPly[0])} to ${printed(perPly[1])} MPa`);
+  await page.getByLabel("Contours", { exact: true }).selectOption("0");
+  await expect(page.getByTestId("legend")).toHaveAttribute("data-bands", "0");
+  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "0");
+  await page.getByLabel("Contours", { exact: true }).selectOption("8");
   await page.getByTestId("fpf-table").locator("tr[data-criterion=tsai_hill] button").click();
   await expect(page.getByTestId("readout")).toContainText("the critical element");
   await expect(page.getByTestId("readout")).toContainText("tsai hill: ply");
@@ -436,5 +452,23 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
   await expect(page.getByTestId("lam-explanation")).toContainText("Nx = 571 lb/in");
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: ".local/website/screenshots/studio-laminate.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});
+
+test("the model is lit for presentation before a run: the sketch and the package's preview, never the results (ADR-0063)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error" && /THREE|WebGL|shader/i.test(message.text())) browserErrors.push(message.text()); });
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await expect(page.getByTestId("sketch-scene")).toHaveAttribute("data-mode", "presentation");
+  await page.getByTestId("sketch-scene").screenshot({ path: ".local/website/screenshots/studio-sketch-lit.png" });
+  await page.getByTestId("check-button").click();
+  await expect(page.getByTestId("preview")).toBeVisible();
+  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "presentation");
+  await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "");
+  await page.getByTestId("studio-scene").screenshot({ path: ".local/website/screenshots/studio-preview-lit.png" });
   expect(browserErrors).toEqual([]);
 });

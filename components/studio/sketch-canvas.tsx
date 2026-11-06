@@ -6,9 +6,9 @@ import { Edges, Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import type { Sketch } from "@/lib/studio-sketch";
 import { HELD, LOADED } from "@/lib/studio-colors";
+import { PRESENTATION_MATERIAL, PresentationLighting } from "./scene-lighting";
 import { WebGLMissing, webglAvailable } from "./webgl-missing";
 
-const BASE_COLOR = "#5d8f52";
 const EDGE_COLOR = "#8a9486";
 const BOX_COLOR = "#9ba29b";
 const LIFT = 1e-3;
@@ -35,15 +35,13 @@ export function SketchCanvas({ sketch }: { sketch: Sketch }) {
   if (webgl === false) return <WebGLMissing />;
   if (webgl === null) return <div className="studio-scene-loading" role="status">Loading the 3D view…</div>;
   return (
-    <div className="studio-canvas" data-testid="sketch-scene">
-      <Canvas frameloop="demand" dpr={[1, 2]} camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}>
+    <div className="studio-canvas" data-testid="sketch-scene" data-mode="presentation">
+      <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }} camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}>
         <color attach="background" args={["#0c0e0d"]} />
-        <ambientLight intensity={0.85} />
-        <directionalLight position={[size, -size, 2 * size]} intensity={1.1} />
-        <directionalLight position={[-size, size, -size]} intensity={0.3} />
+        <PresentationLighting size={size} centre={centre} floor={-t / 2 - 0.004 * size} />
         <mesh position={[centre[0], centre[1], 0]}>
           <boxGeometry args={[w, l, t]} />
-          <meshStandardMaterial color={BASE_COLOR} metalness={0} roughness={0.85} side={THREE.DoubleSide} />
+          <meshPhysicalMaterial {...PRESENTATION_MATERIAL} side={THREE.DoubleSide} />
           <Edges color={EDGE_COLOR} />
         </mesh>
         {sketch.tabs !== null ? (

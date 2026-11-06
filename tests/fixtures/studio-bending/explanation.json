@@ -77,7 +77,7 @@
  "setup_sentences": [
   "The setup is ready to solve.",
   "Who and which coupon: IM7-3PB-L1, three-point bending; a new coupon: its folder and case page are written when it runs.",
-  "Units consistent: every row in mm, MPa and N; the model is written in mm-MPa and forces come out in N.",
+  "Units consistent: every row in mm, MPa and N; the results come back in the same units, and the decks are written in mm-MPa.",
   "Geometry defined: 60 by 13 mm, 48 mm span with 6 mm overhangs, a node row on each support and nose line.",
   "Material defined: IM7-8552: library im7-8552 / ncamp-im7-8552-2019-rtd-measured-v1 (record 2026-10-10.1; Hexcel 8552 IM7 unidirectional prepreg 190 gsm 35% RC · qualification material property data report · CAM-RP-2009-015 · Rev B · Wichita State University · NIAR / NCAMP · 2019-04-16); rights class open-publisher; strengths given.",
   "Laminate assigned: 8 plies [45/0/-45/90]s, 1.46304 mm thick; the flat shell kernel solves the bending.",

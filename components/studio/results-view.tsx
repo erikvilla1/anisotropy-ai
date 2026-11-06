@@ -3,19 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { DOWNLOADS, explainJob, fileUrl, StudioError, type ExplainAnswer, type Explanation, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
-import { colorsOf, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
+import { legendGradient, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { Scene } from "./scene";
-import type { SceneMarker } from "./scene-canvas";
+import type { SceneField, SceneMarker } from "./scene-canvas";
 
-export function Legend({ scale, label, unit, by }: { scale: Scale; label: string; unit: string; by: "node" | "element" }) {
-  const ticks = legendTicks(scale, 5);
+/** The contour choices: the smooth ramp, or bands with an isoline at every band boundary, each boundary a labelled tick (ADR-0063). */
+export const CONTOURS: [number, string][] = [[0, "smooth"], [5, "5 bands"], [8, "8 bands"], [10, "10 bands"]];
+export const DEFAULT_CONTOURS = 8;
+
+export function Legend({ scale, label, unit, by, bands = 0 }: { scale: Scale; label: string; unit: string; by: "node" | "element"; bands?: number }) {
+  const ticks = legendTicks(scale, bands ? bands + 1 : 5);
   return (
-    <div className="studio-legend" data-testid="legend">
-      <div className="studio-legend-bar" style={{ background: `linear-gradient(to right, ${scale.stops.join(", ")})` }} aria-hidden="true" />
+    <div className="studio-legend" data-testid="legend" data-source={scale.source} data-bands={bands}>
+      <div className="studio-legend-bar" style={{ background: legendGradient(scale, bands) }} aria-hidden="true" />
       <div className="studio-legend-ticks" aria-hidden="true">{ticks.map((t, i) => <span key={i}>{printed(t)}</span>)}</div>
       <p><strong>{label}</strong> ({unit}); {by === "element" ? "element values: the result" : "display averages over the elements sharing a node, for a smooth picture; the element values are the result"}.
-        {scale.kind === "diverging" ? " Grey is zero." : ""} From {printed(scale.min)} to {printed(scale.max)} {unit}.</p>
+        {scale.kind === "diverging" ? " Grey is zero." : ""} The values run from {printed(scale.ends[0])} to {printed(scale.ends[1])} {unit}, {scale.source === "package" ? "the ends the package wrote" : "the smallest and largest shown (this job's fields carry no written ranges)"}.
+        {bands ? ` ${bands} bands of the ramp, a line at every tick; the colours are unlit.` : " The colours are unlit."}</p>
     </div>
   );
 }
@@ -95,6 +100,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
   const [scale, setScale] = useState<number>(() => suggestedScale(fields.mesh.nodes, fields.nodal.magnitude));
   const [deformed, setDeformed] = useState(true);
   const [wireframe, setWireframe] = useState(true);
+  const [contours, setContours] = useState(DEFAULT_CONTOURS);
   const [picked, setPicked] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<number | null>(() => (fields.summary.earliest ? fields.summary.fpf[fields.summary.earliest].element : null));
   const [answer, setAnswer] = useState<ExplainAnswer | null>(null);
@@ -110,8 +116,9 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
   const options = useMemo(() => fieldOptions(fields), [fields]);
   const option = options.find((o) => o.id === choice.id) ?? options[0];
   const values = useMemo(() => valuesFor(fields, choice), [fields, choice]);
-  const colorScale = useMemo(() => scaleFor(values.values, !values.signed), [values]);
-  const colors = useMemo(() => ({ by: values.by, rgb: colorsOf(colorScale, values.values) }), [values, colorScale]);
+  const colorScale = useMemo(() => scaleFor(values.values, !values.signed, values.range), [values]);
+  const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values, scale: { min: colorScale.min, max: colorScale.max, stops: colorScale.stops, bands: contours } }),
+    [values, colorScale, contours]);
   const held: SceneMarker[] = preview ? preview.held.filter((h, i, all) => all.findIndex((x) => x.set === h.set) === i)
     .map((h) => ({ nodes: fields.mesh.node_sets[h.set] ?? preview.mesh.node_sets[h.set] ?? [], label: `held: ${h.set}` })) : [];
   const loaded = preview ? { nodes: fields.mesh.node_sets[preview.loaded.set] ?? preview.mesh.node_sets[preview.loaded.set] ?? [],
@@ -125,10 +132,10 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
   return (
     <div className="studio-results" data-testid="results">
       <div className="studio-scene-block">
-        <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} colors={colors}
+        <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} field={field}
           displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={held} loaded={loaded} highlight={highlight} picked={picked}
           wireframe={wireframe} onPick={setPicked} />
-        <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} />
+        <Legend scale={colorScale} label={values.label} unit={values.unit} by={values.by} bands={contours} />
       </div>
       <div className="studio-controls" data-testid="field-controls">
         <label>Field
@@ -170,6 +177,11 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
         <label><input type="checkbox" checked={deformed} onChange={(e) => setDeformed(e.target.checked)} /> deformed shape, scale
           <input type="number" value={scale} min={0} step="any" onChange={(e) => setScale(Number(e.target.value) || 0)} aria-label="Deformation scale" className="studio-scale" /> ×</label>
         <label><input type="checkbox" checked={wireframe} onChange={(e) => setWireframe(e.target.checked)} /> element edges</label>
+        <label>Contours
+          <select value={contours} onChange={(e) => setContours(Number(e.target.value))} aria-label="Contours">
+            {CONTOURS.map(([bands, word]) => <option key={bands} value={bands}>{word}</option>)}
+          </select>
+        </label>
       </div>
       {readout ? (
         <div className="studio-panel studio-readout" data-testid="readout">

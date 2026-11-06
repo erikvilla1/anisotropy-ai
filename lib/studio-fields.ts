@@ -2,7 +2,8 @@
  * Which field the viewer shows and the values behind it (ADR-0051, faces and bending since ADR-0053): a list of the fields the package
  * wrote, and for the chosen one its values per element (the result) or per node (the display average the package wrote), with its unit
  * and its words. A shell solve carries both faces of every ply, bottom then top, and the deflection, rotations, curvatures, moments and
- * transverse shear forces; a membrane solve carries one value per ply. Nothing is computed here beyond picking arrays the fea package wrote.
+ * transverse shear forces; a membrane solve carries one value per ply. The range of the chosen field is the package's too (ADR-0063).
+ * Nothing is computed here beyond picking arrays the fea package wrote.
  */
 import type { Faced, Fields } from "./studio-api";
 
@@ -11,7 +12,9 @@ export type FieldOption = {
   perPly?: boolean; perFace?: boolean; perCriterion?: boolean; signed: boolean; nodalOnly?: boolean;
 };
 export type FieldChoice = { id: string; ply: number; face?: number; criterion: string; averaged: boolean }; // face: 0 bottom, 1 top, when the package wrote faces
-export type FieldValues = { values: (number | null)[]; by: "node" | "element"; label: string; unit: string; signed: boolean };
+export type FieldValues = { values: (number | null)[]; by: "node" | "element"; label: string; unit: string; signed: boolean;
+  /** The ends the package wrote for what is shown, or null for a job solved before the package wrote ranges. */
+  range: [number, number] | null };
 
 const STRESS = ["S11", "S22", "S12"] as const;
 
@@ -87,8 +90,31 @@ export const DEFAULT_CHOICE = (fields: Fields): FieldChoice => ({
   criterion: fields.summary.earliest ?? Object.keys(fields.element.failure)[0] ?? "", averaged: true,
 });
 
-/** The values of the chosen field: per node when averaged (or nodal by nature), else per element. */
+/** The values of the chosen field: per node when averaged (or nodal by nature), else per element; with the range the package wrote for them. */
 export function valuesFor(fields: Fields, choice: FieldChoice): FieldValues {
+  const picked = pickValues(fields, choice);
+  return { ...picked, range: rangeFor(fields, choice, picked.by) };
+}
+
+/** The ends the package wrote for the chosen field as shown: element values or display averages, the chosen ply and face, the chosen
+ * criterion (ADR-0063). Null when the package wrote none (a job solved before ranges were written) or neither end is finite. */
+export function rangeFor(fields: Fields, choice: FieldChoice, by: "node" | "element"): [number, number] | null {
+  const ranges = fields.ranges;
+  if (!ranges) return null;
+  const option = fieldOptions(fields).find((o) => o.id === choice.id) ?? fieldOptions(fields)[0];
+  const k = Math.min(Math.max(choice.ply, 1), fields.mesh.plies) - 1;
+  const face = Math.min(Math.max(choice.face ?? 0, 0), 1);
+  const criterion = fields.element.failure[choice.criterion] ? choice.criterion : Object.keys(fields.element.failure)[0];
+  const table = option.perCriterion ? (ranges[option.id]?.[criterion] as Record<string, unknown> | undefined) : ranges[option.id];
+  let entry: unknown = table?.[by === "node" ? "nodal" : "element"];
+  if (option.perPly && Array.isArray(entry)) {
+    entry = entry[k];
+    if (option.perFace && hasFaces(fields) && Array.isArray(entry) && Array.isArray(entry[0])) entry = entry[face];
+  }
+  return Array.isArray(entry) && entry.length === 2 && typeof entry[0] === "number" && typeof entry[1] === "number" ? [entry[0], entry[1]] : null;
+}
+
+function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "range"> {
   const option = fieldOptions(fields).find((o) => o.id === choice.id) ?? fieldOptions(fields)[0];
   const k = Math.min(Math.max(choice.ply, 1), fields.mesh.plies) - 1;
   const face = Math.min(Math.max(choice.face ?? 0, 0), 1);
@@ -97,8 +123,8 @@ export function valuesFor(fields: Fields, choice: FieldChoice): FieldValues {
   const plyWord = option.perPly ? ` (ply ${k + 1}, ${fields.mesh.angles[k]}°${faceWord})` : "";
   const critWord = option.perCriterion ? ` by ${criterion.replace("_", " ")}` : "";
   const label = `${option.label}${plyWord}${critWord}`;
-  const nodal = (values: (number | null)[]): FieldValues => ({ values, by: "node", label, unit: option.unit, signed: option.signed });
-  const element = (values: (number | null)[]): FieldValues => ({ values, by: "element", label, unit: option.unit, signed: option.signed });
+  const nodal = (values: (number | null)[]): Omit<FieldValues, "range"> => ({ values, by: "node", label, unit: option.unit, signed: option.signed });
+  const element = (values: (number | null)[]): Omit<FieldValues, "range"> => ({ values, by: "element", label, unit: option.unit, signed: option.signed });
   const n = fields.nodal, e = fields.element;
   const column = (rows: (number | null)[][] | undefined, i: number): (number | null)[] => (rows ?? []).map((row) => row[i]);
   switch (option.id) {
