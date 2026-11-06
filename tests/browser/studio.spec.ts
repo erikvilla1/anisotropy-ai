@@ -400,6 +400,7 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
   await expect(page.getByTestId("laminate-spec")).toContainText("[0/45/-45/90]s, 8 plies, 0.125 mm plies");
   await expect(page.getByTestId("laminate-spec")).toContainText("Nx = 100 N/mm");
   await page.locator("#lam-f12").fill("-0.5");
+  await page.getByTestId("lam-strain-limits").check(); // maximum strain with limits derived from the strengths: a stated choice, sent with the material
   await page.getByTestId("laminate-solve").click();
 
   await expect(page.getByTestId("laminate-answer")).toBeVisible({ timeout: 15_000 });
@@ -408,6 +409,7 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
   expect(sent.material.E1).toEqual({ value: 147, unit: "GPa" }); // as typed: the engine converts, the page never does
   expect(sent.material.E2).toEqual({ value: 10300, unit: "MPa" });
   expect(sent.material.F2t).toEqual({ value: 57, unit: "MPa" });
+  expect(sent.material.strain_limits).toBe("from-strengths");
   expect(sent.layup).toEqual([0, 45, -45, 90, 90, -45, 45, 0]);
   expect(sent.ply_thickness).toEqual({ value: 0.125, unit: "mm" });
   expect(sent.loads.Nx).toEqual({ value: 100, unit: "N/mm" });
@@ -420,6 +422,8 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
   await expect(page.getByTestId("lam-eps-x")).toHaveText("1719");
   await expect(page.getByTestId("lam-fpf")).toContainText("R = 3.207");
   await expect(page.getByTestId("lam-ratio-tsai_wu")).toHaveText("3.207");
+  await expect(page.getByTestId("lam-ratio-max_strain")).toHaveText("3.22"); // the fourth criterion, from the limits the engine derived
+  await expect(page.getByTestId("lam-no-max-strain")).toHaveCount(0);
   await expect(page.getByTestId("lam-fpf-table").locator("tr.studio-earliest")).toHaveAttribute("data-criterion", "tsai_wu");
   await expect(page.getByTestId("lam-ply-table").locator("tr.studio-earliest")).toHaveAttribute("data-ply", "4");
   await expect(page.getByTestId("matrix-A")).toContainText("N/m");

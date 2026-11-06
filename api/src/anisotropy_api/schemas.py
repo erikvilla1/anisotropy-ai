@@ -609,12 +609,16 @@ class OwnMaterial(Contract):
     F2c: Quantity | None = None
     F6: Quantity | None = None
     source: Annotated[str, Field(min_length=1, pattern=r"\S")] | None = Field(default=None, description="Where the numbers come from, when stated")
+    strain_limits: Literal["from-strengths"] | None = Field(
+        default=None, description="Ask for maximum strain with limits derived from the strengths (strength divided by modulus, linear to failure, ADR-0021)")
 
     @model_validator(mode="after")
     def all_five_strengths_or_none(self) -> Self:
         given = [name for name in ("F1t", "F1c", "F2t", "F2c", "F6") if getattr(self, name) is not None]
         if given and len(given) != 5:
             raise ValueError(f"give all five strengths (F1t, F1c, F2t, F2c, F6) or none; got {', '.join(given)}")
+        if self.strain_limits is not None and not given:
+            raise ValueError('strain_limits = "from-strengths" needs all five strengths (F1t, F1c, F2t, F2c, F6)')
         return self
 
 
@@ -623,6 +627,8 @@ class LibraryChoice(Contract):
 
     library: Annotated[str, Field(min_length=1, pattern=r"\S")]
     dataset: Annotated[str, Field(min_length=1, pattern=r"\S")] | None = None
+    strain_limits: Literal["from-strengths"] | None = Field(
+        default=None, description="Ask for maximum strain with limits derived from the dataset's strengths (ADR-0021)")
 
 
 def _problem_material_kind(value) -> str:

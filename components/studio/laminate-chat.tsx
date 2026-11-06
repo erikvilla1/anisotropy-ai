@@ -350,6 +350,9 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
               <label htmlFor="lam-f12" className="lam-field"><span>Tsai-Wu f12* <small>optional, between -1 and 1</small></span>
                 <input id="lam-f12" type="text" inputMode="decimal" autoComplete="off" className="chat-small-input" placeholder="-0.5" value={draft.f12_star}
                   onChange={(e) => setDraft({ ...draftRef.current, f12_star: e.target.value })} /></label>
+              <label className="lam-field lam-check"><input type="checkbox" data-testid="lam-strain-limits" checked={draft.strain_limits}
+                onChange={(e) => setDraft({ ...draftRef.current, strain_limits: e.target.checked })} />
+                <span>Maximum strain too <small>limits derived from the strengths (strength over modulus, linear to failure)</small></span></label>
             </div>
             <div className="chat-actions">
               <button type="button" className="chat-primary" data-testid="laminate-solve" onClick={() => { add({ role: "user", text: "Solve" }); void solve(); }} disabled={solving}><Play size={14} /> Solve</button>

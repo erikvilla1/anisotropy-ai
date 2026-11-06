@@ -12,14 +12,14 @@ Tested, deterministic code computes every number. A language model, once added, 
 
 | Layer | What it does | Status | Where |
 | --- | --- | --- | --- |
-| Website | Product pages (five service pages, a contact page, ADR-0058), materials library, physics references, the coupon studio, chat/CSV previews and the laminate calculator | Static export; calculator calls local API. Chat still uses a local parser | `app/`, `components/`, `lib/`, [calculator card](components/calculator.md) |
+| Website | Product pages (five service pages, a contact page, ADR-0058), materials library, physics references, the coupon studio, chat/CSV previews and the laminate calculator | Static export; the calculator and the chat call the API, which computes every number; the chat's laminate and coupon flows are built (ADR-0055, ADR-0060, ADR-0061) | `app/`, `components/`, `lib/`, [calculator card](components/calculator.md) |
 | Material data | 25 cited property datasets with provenance and a rights class per source (NCAMP, NASA, AGATE, MIL-HDBK-17F, datasheets, textbook values); a monitor that detects source changes; a physics page with a card for every engine equation | Built | `lib/curated-materials.ts`, `lib/source-rights.ts`, `lib/physics*.ts`, `services/material-monitor/` |
 | Engine | Laminate stiffness and compliance; forward, prescribed-curvature and mixed-condition response; temperature change and residual stresses; first-ply failure by maximum stress, maximum strain, Tsai-Hill and Tsai-Wu with fixed and variable loads; engineering constants; plate buckling of simply supported symmetric laminates; plies of several materials and thicknesses | Built, version 0.1 | `engine/`, [engine card](components/engine.md), [constrained analysis](components/prescribed-curvature.md) |
 | Validation cases | Textbook/answer-key references and constructed analytical checks | Built, 32 cases | `engine/validation/` |
 | API | Forward response and prescribed curvature with explicit contracts; the whole case format through `POST /v1/cases/solve`; library materials by id; coupon jobs from an input form or the studio's values to the package (`POST /v1/coupon-jobs`, ADR-0050); the setup check, a running job's files by key and the coupon listing for the studio (ADR-0051) | Local development; FastAPI | `api/`, [component card](components/api.md) |
 | Material loader | Engine, API and calculator read material values from the cited library by dataset id, with the page of every value used | Built (ADR-0020) | `engine/src/anisotropy_engine/library.py`, [note](material-loader-2026-10-10.md) |
 | Run records | Inputs, versions and results stored for every run | Local PostgreSQL 17 from `docker-compose.yml` (ADR-0025); every analysis request, from the calculator included, writes an immutable row with its actor and endpoint, `GET /v1/runs/{id}` reads it and `GET /v1/runs` lists them by actor, endpoint, status and time; the API refuses to start without the database (ADR-0026). Built, local only | `docker-compose.yml`, `api/alembic/`, `api/src/anisotropy_api/records.py`, [evaluation](evaluations/api/2026-10-14-run-records-list.md) |
-| Language model assistant | Drafts inputs from plain language; runs the tested jobs; explains results | Planned, next: its own decision record (ADR-0027, ADR-0048) | |
+| Language model assistant | Explains a setup, a coupon result and a laminate answer from the engine's fact sheet; a number guard withholds any draft whose numbers are not the engine's (ADR-0052) | Built; the template writer always on, Claude behind `ANISOTROPY_ASSISTANT_*`; first live calls recorded 2026-11-06 ([evaluation](evaluations/api/2026-10-28-assistant.md)). Drafting inputs is still planned (ADR-0048) | `api/src/anisotropy_api/assistant.py` |
 | Report generator | Documented report built from a run record | A coupon's document and package are built (ADR-0041, ADR-0043); a report from an API run record is planned | `docs/models/` |
 | Finite element analysis | Coupons in plane: our own laminate membrane kernel on the engine's stiffness; models from a spec or the team's input form (ADR-0030, ADR-0046) with Gmsh meshes for holes; Abaqus and CalculiX decks written from the same model; CalculiX as the reference solver and Abaqus as an optional second one (ADR-0045); first-ply failure; one command from the input form to the package (ADR-0049) | Built, local (ADR-0029) | `fea/`, `docs/models/` |
 
@@ -50,7 +50,7 @@ The planned layers each use the validation evidence differently. None of them is
 | Node.js 24, Next.js 16, React 19 | Website | `package-lock.json` |
 | CalculiX, Gmsh, Tectonic; Abaqus (optional, teaching licence) | Reference solver, hole meshes, the coupon document; a second reference solver | [installing the tools](installation-fea-tools.md), `fea/uv.lock` |
 | GitHub | Code, pull requests, automated tests | |
-| Language model provider | None yet | |
+| Language model provider | Anthropic Claude through the `anthropic` SDK, behind a setting; the template writer without it (ADR-0052) | `api/uv.lock` |
 
 Accounts: the repository is owned by erikvilla1, with cvv-mx-256 as collaborator. [Founder to complete: hosting, domain and other accounts, and who holds each credential.]
 
@@ -63,4 +63,4 @@ Accounts: the repository is owned by erikvilla1, with cvv-mx-256 as collaborator
 - Material values can be typed or taken from the library by dataset id. Typed values are not checked against any source; library values are converted once and cited.
 - Copyrighted references (Daniel and Ishai, CMH-17, course material) are cited by table and page only; the website hosts no copies and shows only the individual values it records (ADR-0018). Public data comes from NCAMP, AGATE, NASA and manufacturer documents.
 - The engine is checked against textbook and course problems, not yet against our own coupon tests. It is not approved for design decisions.
-- The website's chat captures inputs but does not calculate results.
+- The chat solves plain laminates (ADR-0060) and coupon tests (ADR-0051); a temperature change, plate buckling, prescribed curvature and several materials in one stack reach the engine only through `POST /v1/cases/solve`.

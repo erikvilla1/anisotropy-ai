@@ -82,6 +82,7 @@ function homework(): LaminateDraft {
     thickness: { value: "0.125", unit: "mm" },
     loads: loadsWithZeros({ Nx: { value: "100", unit: "N/mm" } }, "SI"),
     f12_star: "-0.5",
+    strain_limits: false,
   };
 }
 
@@ -133,6 +134,17 @@ test("the problem goes to the API with every value as typed and its unit, and no
   assert.deepEqual(sent.material, { library: "im7-8552" });
   assert.equal(sent.ply_thickness, undefined);
   assert.equal(sent.f12_star, undefined);
+  assert.equal("strain_limits" in sent.material, false); // not ticked: nothing is sent, nothing is assumed
+});
+
+test("maximum strain is a stated choice: ticked, it goes with the material; without five strengths it is refused", () => {
+  const ticked = { ...homework(), strain_limits: true };
+  assert.equal(buildProblem(ticked).problem!.material.strain_limits, "from-strengths");
+  const library = { ...homework(), material: { library: "im7-8552" }, thickness: null, strain_limits: true };
+  assert.deepEqual(buildProblem(library).problem!.material, { library: "im7-8552", strain_limits: "from-strengths" });
+  const own = (homework().material as { own: OwnConstants }).own;
+  const bare = { ...homework(), material: { own: { ...own, F1t: "", F1c: "", F2t: "", F2c: "", F6: "" } }, strain_limits: true };
+  assert.deepEqual(buildProblem(bare).errors, ["strain limits: maximum strain needs all five strengths to derive its limits from"]);
 });
 
 test("the card beside the chat states only what is given", () => {
