@@ -50,7 +50,7 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
   );
 }
 
-export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
+export function CouponStudio({ apiBaseUrl, part }: { apiBaseUrl: string; part?: "input" | "output" }) {
   const { form, plate, setForm, setPlate, run: runner } = useProject(); // the rows and the run live in the project (ADR-0062)
   const { checking, checked, job, fields, explanation } = runner;
   const [pickedElement, setPickedElement] = useState<number | null>(null);
@@ -133,9 +133,8 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   }
 
   const busy = checking || (job?.state === "running");
-  const viewerLink = job ? `/chat/view?job=${encodeURIComponent(job.job_id)}` : null;
-  return (
-    <div className="studio-layout">
+  const viewerLink = job ? `/workspace/fea/view?job=${encodeURIComponent(job.job_id)}` : null;
+  const input = (
       <aside className="studio-input">
         {!apiBaseUrl ? <p className="studio-alert">The page was built without the API's address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be checked or solved.</p> : null}
         <div className="studio-actions">
@@ -164,6 +163,8 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
         {message ? <p className="studio-alert" role="alert">{message}</p> : null}
         <p className="studio-status" role="status" data-testid="status">{status}</p>
       </aside>
+  );
+  const output = (
       <section className="studio-output">
         {fields ? (
           <>
@@ -203,6 +204,8 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
           </>
         )}
       </section>
-    </div>
   );
+  if (part === "input") return input;
+  if (part === "output") return output;
+  return <div className="studio-layout">{input}{output}</div>;
 }

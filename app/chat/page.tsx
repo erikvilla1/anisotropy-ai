@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { StudioModes } from "@/components/studio/studio-modes";
+import { RedirectTo } from "@/components/redirect-to";
 import "../studio/studio.css";
 
 export const metadata: Metadata = {
   title: "Chat | Anisotropy",
-  description: "Describe a composite coupon test in plain words; the assistant checks the setup, solves it with the Anisotropy engine and CalculiX, and shows every ply.",
+  description: "The chat is the assistant column of the coupon FEA workspace now.",
 };
 
-/** The site's chat is the coupon assistant (ADR-0055 amendment 1): the studio's guided chat, full screen. */
+/** The chat's address still works: it goes to the coupon FEA workspace with the same query, where the assistant sits beside the model
+ * (ADR-0062; ADR-0055 amendment 3 superseded in part). */
 export default function ChatPage() {
   return (
-    <main id="main" className="studio-page chat-app-page">
-      <h1 className="chat-page-title">Anisotropy chat</h1>
-      <StudioModes apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
+    <main id="main" className="studio-page">
+      <RedirectTo path="/workspace/fea" />
     </main>
   );
 }

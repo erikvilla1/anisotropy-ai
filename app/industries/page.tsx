@@ -21,7 +21,7 @@ const priorities = [
       "Material and layup trade studies",
       "Future wing optimization and repair analysis",
     ],
-    href: "/chat",
+    href: "/workspace/fea",
     action: "Define an aerospace research scope",
     media: { label: "A composite aerostructure or a coupon cut from one", kind: "image" as const },
   },
@@ -166,7 +166,7 @@ export default function Industries() {
             <br />
             material need to do?
           </h2>
-          <Link className="button primary" href="/chat">
+          <Link className="button primary" href="/workspace/fea">
             Define a scope <ArrowUpRight size={17} />
           </Link>
         </div>

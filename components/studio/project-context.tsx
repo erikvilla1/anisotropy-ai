@@ -24,12 +24,13 @@ export type ProjectContextValue = {
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 
-function storage(): Storage | null {
+/** This browser's local storage, or null where it is blocked (a private window, cleared site data). */
+export function browserStorage(): Storage | null {
   try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; }
 }
 
 function initial(): { project: CouponProject; restored: boolean } {
-  const kept = readProjects(storage());
+  const kept = readProjects(browserStorage());
   return kept.length ? { project: kept[0], restored: true } : { project: newProject(), restored: false };
 }
 
@@ -45,7 +46,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const run = useCouponRun(apiBaseUrl);
 
   useEffect(() => {
-    const store = storage();
+    const store = browserStorage();
     writeProjects(upsert(readProjects(store), project), store);
   }, [project]);
 

@@ -374,7 +374,7 @@ export function Workspace({
       setFormat(chosen);
       setScope(reply.scope);
       setMessages([{ prompt, reply }]);
-      if (params.has("prompt")) window.history.replaceState(null, "", "/chat");
+      if (params.has("prompt")) window.history.replaceState(null, "", "/data");
     } else if (record) setScope(initial);
     const material = new URLSearchParams(window.location.search).get(
       "material",

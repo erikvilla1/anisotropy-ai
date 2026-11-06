@@ -110,8 +110,10 @@ function RowsCard({ keys, form, onApply, submit = "Continue", disabled, extra }:
 
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
 
-export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate }: {
+export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }: {
   apiBaseUrl: string; onOpenForm: () => void;
+  /** With the bench, the chat draws the model and the results beside itself; without it (the workspace's assistant column, ADR-0062) the stage does. */
+  bench?: boolean;
   /** Opens the laminate assistant (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
@@ -545,11 +547,9 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate }: {
   }
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
-  const lines = couponLines(form);
-  const viewerLink = job ? `/chat/view?job=${encodeURIComponent(job.job_id)}` : null;
-  return (
-    <div className="chat-studio" data-testid="coupon-chat">
-      <section className="chat-pane" aria-label="Coupon assistant">
+  const viewerLink = job ? `/workspace/fea/view?job=${encodeURIComponent(job.job_id)}` : null;
+  const pane = (
+      <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
         <div className="chat-pane-top">
           <span><span className="status-dot" /> Coupon assistant</span>
           <span>
@@ -572,10 +572,13 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate }: {
           </div>
         </form>
       </section>
+  );
+  if (!bench) return pane;
+  return (
+    <div className="chat-studio">
+      {pane}
       <section className="chat-bench" aria-label="Model and results">
-        <dl className="chat-spec" data-testid="chat-spec">
-          {lines.map(([k, v]) => <div key={k} data-filled={v ? "yes" : "no"}><dt>{k}</dt><dd>{v || "–"}</dd></div>)}
-        </dl>
+        <CouponSpec form={form} />
         {fields ? (
           <>
             {viewerLink ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer">Open the viewer in a new window</a></p> : null}
@@ -589,6 +592,16 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate }: {
         )}
       </section>
     </div>
+  );
+}
+
+/** The coupon in five fields, as stated so far: what the chat's bench shows beside the model, and the workspace's stage above it. */
+export function CouponSpec({ form }: { form: StudioForm }) {
+  const lines = couponLines(form);
+  return (
+    <dl className="chat-spec" data-testid="chat-spec">
+      {lines.map(([k, v]) => <div key={k} data-filled={v ? "yes" : "no"}><dt>{k}</dt><dd>{v || "–"}</dd></div>)}
+    </dl>
   );
 }
 

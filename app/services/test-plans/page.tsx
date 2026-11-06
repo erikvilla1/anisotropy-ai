@@ -55,7 +55,7 @@ export default function TestPlans() {
       access={{
         text: "Describe a coupon in the chat and the checklist judges it at once. The document itself is planned; write to us if you need one now.",
         links: [
-          { label: "Describe a coupon", href: "/chat", primary: true },
+          { label: "Describe a coupon", href: "/workspace/fea", primary: true },
           { label: "Contact us", href: "/contact" },
         ],
       }}

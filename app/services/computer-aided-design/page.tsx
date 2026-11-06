@@ -68,7 +68,7 @@ export default function ComputerAidedDesign() {
       access={{
         text: "The geometry is part of every studio session, open to the invited users of the closed beta. For a CAD file today, write to us.",
         links: [
-          { label: "Open the chat", href: "/chat", primary: true },
+          { label: "Open the workspace", href: "/workspace/fea", primary: true },
           { label: "Contact us", href: "/contact" },
         ],
       }}

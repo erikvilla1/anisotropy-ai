@@ -4,14 +4,14 @@ import "./studio.css";
 
 export const metadata: Metadata = {
   title: "Chat | Anisotropy",
-  description: "The coupon studio is part of the chat now.",
+  description: "The coupon studio is the coupon FEA workspace now.",
 };
 
-/** The studio's address still works: it goes to the chat, the one place to work out anything (ADR-0055 amendment 3). */
+/** The studio's address still works: it goes to the coupon FEA workspace (ADR-0062). */
 export default function StudioPage() {
   return (
     <main id="main" className="studio-page">
-      <RedirectTo path="/chat" />
+      <RedirectTo path="/workspace/fea" />
     </main>
   );
 }

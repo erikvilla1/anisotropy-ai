@@ -79,7 +79,7 @@ export default function FiniteElementModeling() {
       access={{
         text: "The chat runs at anisotropy.dev for the invited users of the closed beta. Sign in with the email on the invite list; a one-time code arrives by mail. Accounts for everyone else are not open yet.",
         links: [
-          { label: "Open the chat", href: "/chat", primary: true },
+          { label: "Open the workspace", href: "/workspace/fea", primary: true },
           { label: "Not invited? Contact us", href: "/contact" },
         ],
       }}

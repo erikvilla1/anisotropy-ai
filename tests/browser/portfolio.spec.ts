@@ -24,7 +24,7 @@ test("overview, the home page's blurbs, and material source document", async ({
 test("the chat keeps a coupon across messages and starts over on request", async ({
   page,
 }) => {
-  await page.goto("/chat");
+  await page.goto("/workspace/fea");
   const box = page.getByRole("textbox", { name: "Message the coupon assistant" });
   await box.fill("Open-hole tension 250 x 36 mm, 6 mm hole");
   await page.getByRole("button", { name: "Send message" }).click();
@@ -88,8 +88,10 @@ test("mobile navigation and workspaces fit the screen", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("link", { name: "Open chat", exact: true }).click();
-  await expect(page).toHaveURL(/\/chat\/?$/);
+  await page.getByRole("link", { name: "Workspace", exact: true }).click();
+  await expect(page).toHaveURL(/\/workspace\/?$/);
+  await page.getByRole("button", { name: /New coupon fea project/i }).click();
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await expect(
     page.getByRole("textbox", { name: "Message the coupon assistant" }),
   ).toBeVisible();
