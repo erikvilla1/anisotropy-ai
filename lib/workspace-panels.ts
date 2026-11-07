@@ -1,6 +1,7 @@
 /** The step panels of the coupon FEA workspace (ADR-0062, part 3): each edits named rows of the one values file (ADR-0046 amendment 3) and
  * shows the checklist items that judge them (the `ITEM_OF_KEY` table of `fea/src/anisotropy_fea/checks.py`, by panel). Every row of the
  * form belongs to exactly one panel; `tests/workspace-panels.test.ts` holds that against the definition. */
+import type { ChatStep } from "./studio-chat";
 import { fieldByKey, fields, PLY_KEYS, sectionsFor, type Checklist, type StudioForm } from "./studio-form";
 
 export type PanelId = "project" | "geometry" | "layup" | "loads" | "mesh" | "validate" | "run" | "outputs" | "advanced";
@@ -41,6 +42,12 @@ export function panelOfKey(key: string): PanelId | null {
 export function panelOfItem(itemId: string): PanelId | null {
   return PANELS.find((p) => p.items.includes(itemId))?.id ?? null;
 }
+
+/** The panel that holds what each step of the assistant's conversation asks for (ADR-0062, part 5): what its suggestions open. */
+export const PANEL_OF_STEP: Record<ChatStep, PanelId> = {
+  test: "project", material: "layup", shear: "layup", layup: "layup", geometry: "geometry", loading: "loads", name: "run", review: "validate",
+};
+export const panelOfStep = (step: ChatStep): PanelId => PANEL_OF_STEP[step];
 
 /** The panel's rows the test shows, in the definition's order (a bending coupon has no tab length; a plate no grips). */
 export function visibleKeys(form: StudioForm, id: PanelId): string[] {

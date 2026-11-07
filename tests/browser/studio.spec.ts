@@ -285,8 +285,9 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   await expect(question).toHaveAttribute("data-step", "loading");
   await page.getByRole("button", { name: "Displacement 1 mm", exact: true }).click();
   await expect(question).toHaveAttribute("data-step", "name");
-  await page.getByTestId("ws-assistant").getByLabel("Filled in by", { exact: true }).fill("A. Engineer");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(question.locator("[data-panel=run]")).toBeVisible(); // the suggestion opens the Run panel; the name can also be typed here
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("A. Engineer");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
   await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
   expect(calls.checks).toHaveLength(1);
   const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
@@ -313,6 +314,32 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: ".local/website/screenshots/studio-chat.png", fullPage: true });
   expect(browserErrors).toEqual([]);
+});
+
+test("a word that names no value sends the engineer to the panel that asks for the next thing, and a row typed there moves the conversation on (ADR-0062)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("coupon");
+  await message.press("Enter");
+  const redirect = page.getByTestId("chat-redirect").last();
+  await expect(redirect).toHaveAttribute("data-panel", "project"); // the test is the next thing to state, a Project row
+  await expect(redirect).toContainText("This is the coupon workspace");
+  await expect(redirect).toContainText("under the Project panel");
+  await page.getByTestId("ws-rail").getByLabel("Test", { exact: true }).selectOption("unnotched tension"); // typed on the panel, not in the chat
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material");
+  await page.getByRole("button", { name: "IM7 / 8552", exact: true }).click();
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear");
+  await page.getByTestId("ws-rail").getByLabel("G13 (MPa)", { exact: true }).fill("4688");
+  await page.getByTestId("ws-rail").getByLabel("G23 (MPa)", { exact: true }).fill("2988");
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "layup");
+  await message.fill("help");
+  await message.press("Enter");
+  await expect(page.getByTestId("chat-redirect").last()).toHaveAttribute("data-panel", "layup");
+  await page.getByTestId("chat-redirect").last().locator("[data-panel=layup]").click();
+  await expect(page.getByTestId("panel-layup")).toHaveAttribute("open", "");
+  expect(calls.checks).toHaveLength(0);
 });
 
 test("one typed line fills the coupon and the chat asks only for what is missing (ADR-0055)", async ({ page }) => {
@@ -347,13 +374,14 @@ test("a coupon stated in inches and psi is read, labelled and sent in those unit
   await expect(question).toContainText("Ply thickness 0.0072 in, from the library");
   await page.getByRole("button", { name: /Quasi-isotropic/ }).click();
   await expect(question).toHaveAttribute("data-step", "geometry");
-  await expect(page.getByLabel("Length, tabs included (in)", { exact: true })).toBeVisible();
+  await expect(question.locator("[data-panel=geometry]")).toBeVisible(); // the size is typed under Geometry, labelled in inches
+  await expect(page.getByTestId("studio-form").getByLabel("Length (in)", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /10 × 1 in, 2.2 in tabs/ }).click();
   await expect(question).toHaveAttribute("data-step", "loading");
   await page.getByRole("button", { name: "Force 2000 lbf", exact: true }).click();
   await expect(question).toHaveAttribute("data-step", "name");
-  await page.getByTestId("ws-assistant").getByLabel("Filled in by", { exact: true }).fill("A. Engineer");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("A. Engineer");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
   await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
   expect(calls.checks).toHaveLength(1);
   const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
@@ -390,6 +418,8 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
   });
   await page.goto("/workspace/fea");
   await page.getByTestId("laminate-choice").click();
+  await expect(page).toHaveURL(/\/workspace\/laminate\/?$/);
+  await expect(page.getByTestId("laminate-rail").getByTestId("panel-units")).toBeVisible();
   const question = page.getByTestId("chat-question");
   await expect(question).toHaveAttribute("data-step", "units");
   await page.locator("button[data-system='SI']").click();
@@ -404,14 +434,14 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
   await message.fill("[0/45/-45/90]s, 0.125 mm plies");
   await message.press("Enter");
   await expect(question).toHaveAttribute("data-step", "loads");
-  await page.locator("#lam-Nx").fill("100");
+  await expect(page.getByTestId("laminate-stack")).toContainText("8 plies"); // the stack is drawn as soon as the layup is given
+  await page.locator("#lam-Nx").fill("100"); // on the Loads panel
   await page.getByLabel("lam-Nx unit", { exact: true }).selectOption("N/mm"); // the system's unit is N/m; the typed value keeps its own
   await page.getByRole("button", { name: "The rest are zero", exact: true }).click();
-  await page.getByRole("button", { name: "Use these loads", exact: true }).click();
-  await expect(question).toHaveAttribute("data-step", "review");
+  await expect(question).toHaveAttribute("data-step", "review"); // the rows typed on the panel moved the conversation on
   await expect(page.getByTestId("laminate-spec")).toContainText("[0/45/-45/90]s, 8 plies, 0.125 mm plies");
   await expect(page.getByTestId("laminate-spec")).toContainText("Nx = 100 N/mm");
-  await page.locator("#lam-f12").fill("-0.5");
+  await page.locator("#lam-f12").fill("-0.5"); // on the Solve panel
   await page.getByTestId("lam-strain-limits").check(); // maximum strain with limits derived from the strengths: a stated choice, sent with the material
   await page.getByTestId("laminate-solve").click();
 

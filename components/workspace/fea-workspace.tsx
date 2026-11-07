@@ -21,14 +21,13 @@ export function FeaWorkspace({ apiBaseUrl }: { apiBaseUrl: string }) {
 
 function FeaColumns({ apiBaseUrl, onLaminate }: { apiBaseUrl: string; onLaminate: () => void }) {
   const { project, form, rename } = useProject();
-  const showForm = () => document.querySelector('[data-testid="ws-rail"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
     <WorkspaceShell
       kind="Coupon FEA"
       title={<input type="text" aria-label="Project name" value={project.name} placeholder={projectTitle(project)} onChange={(e) => rename(e.target.value)} data-testid="project-name" />}
       rail={<FeaRail apiBaseUrl={apiBaseUrl} />}
       stage={<><CouponSpec form={form} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>}
-      assistant={<CouponChat apiBaseUrl={apiBaseUrl} bench={false} onOpenForm={showForm} onLaminate={onLaminate} />}
+      assistant={<CouponChat apiBaseUrl={apiBaseUrl} onLaminate={onLaminate} />}
     />
   );
 }

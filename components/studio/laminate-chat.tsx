@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowUp, Check, Layers3, Play, RotateCcw, Sparkles } from "lucide-react";
-import { solveLaminate, StudioError, type LaminateAnswer } from "@/lib/studio-api";
+import { ArrowLeft, ArrowUp, Check, Layers3, Play, RotateCcw, SlidersHorizontal, Sparkles } from "lucide-react";
 import { libraryOptions } from "@/lib/studio-form";
 import { COMMON_MATERIALS } from "@/lib/studio-chat";
 import {
-  blankDraft, buildProblem, CONSTANT_NAMES, libraryNameOf, libraryThicknessOf, LOAD_NAMES, loadsWithZeros, missingIn, nextStep, printedUnit, problemLines,
-  readConstants, readLayupLine, readLibraryMaterial, readLoads, readSystem, REPORT_SYSTEMS, STRENGTH_NAMES, systemUnit, unitsOf,
-  type ConstantName, type Kind, type LaminateDraft, type LaminateStep, type LoadName, type OwnConstants, type Quantity, type ReportUnits,
+  libraryNameOf, LOAD_NAMES, loadsWithZeros, missingIn, nextStep, printedUnit, problemLines, readConstants, readLayupLine, readLibraryMaterial, readLoads,
+  readSystem, REPORT_SYSTEMS, systemUnit, type LaminateDraft, type LaminateStep, type LoadName, type Quantity, type ReportUnits,
 } from "@/lib/laminate-chat";
-import { LaminateResults } from "./laminate-results";
+import { blankOwn } from "@/components/workspace/panels/laminate-fields";
+import { showPanel } from "@/components/workspace/panels/step-panel";
+import { useLaminate } from "./laminate-context";
 
 type Entry =
   | { id: number; role: "user"; text: string }
@@ -27,6 +27,12 @@ const LAYUP_CHOICES: { notation: string; title: string }[] = [
   { notation: "[0]8", title: "Unidirectional, fibres along x" },
 ];
 
+/** The panel on the left that holds each step's rows (ADR-0062, part 5): what a suggestion opens. */
+const PANEL_OF: Record<LaminateStep, { id: string; title: string }> = {
+  units: { id: "units", title: "Units" }, material: { id: "material", title: "Material" }, layup: { id: "layup", title: "Layup" },
+  loads: { id: "loads", title: "Loads" }, review: { id: "solve", title: "Solve" },
+};
+
 const QUESTIONS: Record<LaminateStep, { title: string; text: string }> = {
   units: { title: "Which units is the problem stated in?", text: "Pick the system. A number typed with its own unit, like 10300 MPa or 0.0049 in, keeps that unit; the engine converts, never this page." },
   material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or type the constants the problem gives, e.g. “E1 147 GPa, E2 10.3, G12 7, nu12 0.27, F1t 2280, F1c 1725, F2t 57, F2c 228, F6 76 MPa”. Without strengths no failure is predicted." },
@@ -35,131 +41,28 @@ const QUESTIONS: Record<LaminateStep, { title: string; text: string }> = {
   review: { title: "Ready to solve", text: "The engine solves the stack by classical lamination theory: the A, B, D matrices, the mid-plane strains and curvatures, every ply's stresses and first-ply failure." },
 };
 
-const blankOwn = (): OwnConstants => ({
-  name: "", source: "", E1: { value: "", unit: "" }, E2: { value: "", unit: "" }, G12: { value: "", unit: "" }, nu12: "",
-  F1t: { value: "", unit: "" }, F1c: { value: "", unit: "" }, F2t: { value: "", unit: "" }, F2c: { value: "", unit: "" }, F6: { value: "", unit: "" },
-});
-const KIND_OF: Record<ConstantName, Kind | null> = { E1: "modulus", E2: "modulus", G12: "modulus", nu12: null, F1t: "stress", F1c: "stress", F2t: "stress", F2c: "stress", F6: "stress" };
-const LABELS: Record<ConstantName, string> = { E1: "E₁", E2: "E₂", G12: "G₁₂", nu12: "ν₁₂", F1t: "F1t", F1c: "F1c", F2t: "F2t", F2c: "F2c", F6: "F6" };
-
-/** One value with its unit menu, the unit list the engine's table gives for the kind. */
-function QuantityField({ id, label, kind, quantity, system, onChange, disabled }: {
-  id: string; label: ReactNode; kind: Kind; quantity: Quantity; system: ReportUnits; onChange: (q: Quantity) => void; disabled?: boolean;
-}) {
-  const unit = quantity.unit || systemUnit(system, kind);
-  return (
-    <label htmlFor={id} className="lam-field">
-      <span>{label}</span>
-      <span className="lam-field-row">
-        <input id={id} type="text" inputMode="decimal" autoComplete="off" value={quantity.value} disabled={disabled} onChange={(e) => onChange({ value: e.target.value, unit })} />
-        <select aria-label={`${typeof label === "string" ? label : id} unit`} value={unit} disabled={disabled} onChange={(e) => onChange({ value: quantity.value, unit: e.target.value })}>
-          {unitsOf(kind).map((u) => <option key={u} value={u}>{printedUnit(u)}</option>)}
-        </select>
-      </span>
-    </label>
-  );
-}
-
-function ConstantsCard({ own, system, onApply }: { own: OwnConstants; system: ReportUnits; onApply: (own: OwnConstants) => void }) {
-  const [draft, setDraft] = useState<OwnConstants>(own);
-  const set = (name: ConstantName, q: Quantity | string) => setDraft({ ...draft, [name]: q });
-  return (
-    <form className="chat-rows lam-card" data-testid="constants-card" onSubmit={(e) => { e.preventDefault(); onApply(draft); }}>
-      <div className="lam-grid3">
-        {CONSTANT_NAMES.map((name) => {
-          const kind = KIND_OF[name];
-          const id = `lam-${name}`;
-          if (kind === null) {
-            return (
-              <label key={name} htmlFor={id} className="lam-field"><span>{LABELS[name]} <small>no unit</small></span>
-                <input id={id} type="text" inputMode="decimal" autoComplete="off" value={draft.nu12 as string} onChange={(e) => set("nu12", e.target.value)} /></label>
-            );
-          }
-          const q = draft[name] as Quantity;
-          return <QuantityField key={name} id={id} label={LABELS[name]} kind={kind} quantity={q} system={system} onChange={(next) => set(name, next)} />;
-        })}
-      </div>
-      <div className="chat-rows-grid">
-        <label htmlFor="lam-name" className="lam-field"><span>Material name</span>
-          <input id="lam-name" type="text" autoComplete="off" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
-        <label htmlFor="lam-source" className="lam-field"><span>Where the numbers come from <small>optional</small></span>
-          <input id="lam-source" type="text" autoComplete="off" value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} /></label>
-      </div>
-      <p className="chat-note">Give all five strengths or none. Each value keeps the unit on its menu.</p>
-      <button type="submit" className="chat-primary">Use these constants</button>
-    </form>
-  );
-}
-
-function LayupCard({ draft, system, onApply }: { draft: LaminateDraft; system: ReportUnits; onApply: (notation: string, thickness: Quantity | null) => void }) {
-  const [text, setText] = useState(draft.layup?.notation ?? "");
-  const recorded = draft.material && "library" in draft.material ? libraryThicknessOf(draft.material.library) : null;
-  const [thickness, setThickness] = useState<Quantity>(draft.thickness ?? { value: "", unit: systemUnit(system, "length") });
-  const [error, setError] = useState("");
-  return (
-    <form className="chat-inline lam-layup" data-testid="layup-card" onSubmit={(e) => {
-      e.preventDefault();
-      const line = readLayupLine(text.trim().startsWith("[") ? text : `[${text}]`, system);
-      if (!line.layup) { setError(line.refused[0] ?? "Write it as [45/0/-45/90]s, [0/90]2s or [±45]2s."); return; }
-      if (recorded === null && !thickness.value.trim()) { setError("Give the ply thickness too."); return; }
-      onApply(line.layup.notation, thickness.value.trim() ? thickness : null);
-    }}>
-      <input type="text" aria-label="Layup" placeholder="[45/0/-45/90]s" value={text} onChange={(e) => { setText(e.target.value); setError(""); }} autoComplete="off" />
-      <QuantityField id="lam-thickness" label={recorded === null ? "Ply thickness" : "Ply thickness (optional)"} kind="length" quantity={thickness} system={system} onChange={(q) => { setThickness(q); setError(""); }} />
-      <button type="submit" className="chat-primary">Use layup</button>
-      {recorded !== null && !thickness.value.trim() ? <span className="chat-note">Ply thickness {Number(recorded.toPrecision(4))} mm, from the library record; type one to use another.</span> : null}
-      {error ? <span className="chat-error" role="alert">{error}</span> : null}
-    </form>
-  );
-}
-
-function LoadsCard({ loads, system, onApply }: { loads: Record<LoadName, Quantity> | null; system: ReportUnits; onApply: (loads: Record<LoadName, Quantity>) => void }) {
-  const blank = (name: LoadName): Quantity => ({ value: "", unit: systemUnit(system, name.startsWith("N") ? "N" : "M") });
-  const [draft, setDraft] = useState<Record<LoadName, Quantity>>(loads ?? (Object.fromEntries(LOAD_NAMES.map((n) => [n, blank(n)])) as Record<LoadName, Quantity>));
-  const [error, setError] = useState("");
-  const blanks = LOAD_NAMES.filter((n) => !draft[n].value.trim());
-  return (
-    <form className="chat-rows lam-card" data-testid="loads-card" onSubmit={(e) => {
-      e.preventDefault();
-      if (blanks.length) { setError(`Give ${blanks.join(", ")} too, or click “the rest are zero”.`); return; }
-      onApply(draft);
-    }}>
-      <div className="lam-grid3">
-        {LOAD_NAMES.map((name) => (
-          <QuantityField key={name} id={`lam-${name}`} label={<>{name[0]}<sub>{name.slice(1)}</sub></>} kind={name.startsWith("N") ? "N" : "M"} quantity={draft[name]} system={system}
-            onChange={(q) => { setDraft({ ...draft, [name]: q }); setError(""); }} />
-        ))}
-      </div>
-      <div className="chat-actions">
-        <button type="submit" className="chat-primary">Use these loads</button>
-        {blanks.length ? <button type="button" className="chat-secondary" onClick={() => { setDraft(loadsWithZeros(Object.fromEntries(LOAD_NAMES.filter((n) => draft[n].value.trim()).map((n) => [n, draft[n]])), system)); setError(""); }}>The rest are zero</button> : null}
-      </div>
-      <p className="chat-note">N are forces per unit width, M moments per unit width. Compression and reversed moments are negative.</p>
-      {error ? <span className="chat-error" role="alert">{error}</span> : null}
-    </form>
-  );
-}
-
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
 
-/** The chat's laminate problems (ADR-0060; ADR-0055 amendment 2): units, material, layup and loads, each value with its own unit,
- * solved by the engine through `POST /v1/laminates/solve`; the answer beside the conversation in the units the engineer picks. */
-export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBack: () => void }) {
-  const [draft, setDraftState] = useState<LaminateDraft>(blankDraft);
+function PanelLink({ step, children }: { step: LaminateStep; children: ReactNode }) {
+  return <button type="button" data-panel={PANEL_OF[step].id} onClick={() => showPanel(PANEL_OF[step].id)}><SlidersHorizontal size={14} /> {children}</button>;
+}
+
+/** The laminate assistant (ADR-0060; ADR-0062, part 5): a conversation beside the panels, on the one draft they share. It offers one-click
+ * choices, reads a typed line, and for anything else names the panel that asks for it; every value goes to the engine as typed. */
+export function LaminateChat({ onBack }: { onBack: () => void }) {
+  const { draft, setDraft: storeDraft, answer, solving, stamp, solve, reset, restored } = useLaminate();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null);
   const [input, setInput] = useState("");
-  const [ownMaterial, setOwnMaterial] = useState(false);
-  const [solving, setSolving] = useState(false);
-  const [answer, setAnswer] = useState<LaminateAnswer | null>(null);
-  const [stamp, setStamp] = useState(0);
-  const [problem, setProblem] = useState("");
   const nextId = useRef(1);
   const body = useRef<HTMLDivElement>(null);
   const draftRef = useRef(draft);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
+  const live = useRef<{ active: number | null; entries: Entry[] }>({ active: null, entries: [] });
+  useEffect(() => { live.current = { active, entries }; }, [active, entries]);
   const started = useRef(false);
 
-  const setDraft = (next: LaminateDraft) => { draftRef.current = next; setDraftState(next); };
+  const setDraft = (next: LaminateDraft) => { draftRef.current = next; storeDraft(next); };
   const add = (...items: NewEntry[]) => {
     const made = items.map((item) => ({ ...item, id: nextId.current++ }) as Entry);
     setEntries((list) => [...list, ...made]);
@@ -170,52 +73,62 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    add({ role: "user", text: "Laminate response" });
-    ask("units");
+    if (draft.system) {
+      add({ role: "assistant", kind: "text", title: restored ? "Picked up where you left off" : "The problem so far", body: <p>Here is what is still needed; the panels on the left hold every row.</p> });
+      ask(nextStep(draft));
+    } else {
+      add({ role: "user", text: "Laminate response" });
+      ask("units");
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight, behavior: "smooth" }); }, [entries, solving]);
 
+  // a row typed on a panel answers the open question: move on to the next one
+  useEffect(() => {
+    const current = live.current.entries.find((e) => e.id === live.current.active);
+    if (!current || current.role !== "assistant" || current.kind !== "ask" || current.step === "review") return;
+    if (missingIn(current.step, draft).length) return;
+    ask(nextStep(draft));
+  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { if (stamp > 0) add({ role: "assistant", kind: "answer", stamp }); }, [stamp]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function proceed(next: LaminateDraft) { ask(nextStep(next)); }
 
-  /** Apply what a click or a card gave, echo it, and move on. */
+  /** Apply what a click gave, echo it, and move on. */
   function answerWith(echo: string, next: LaminateDraft) {
     setDraft(next);
-    setAnswer(null);
     add({ role: "user", text: echo });
     proceed(next);
   }
 
   function startOver() {
-    setDraft(blankDraft()); setAnswer(null); setOwnMaterial(false); setProblem("");
+    reset();
     setEntries([]);
     add({ role: "user", text: "New problem" });
     ask("units");
   }
 
-  async function solve(reportUnits?: ReportUnits) {
-    const built = buildProblem(draftRef.current, reportUnits ?? (answer?.report_units as ReportUnits | undefined));
-    if (built.errors) {
-      add({ role: "assistant", kind: "text", tone: "problem", title: "Something is still missing", body: <ul className="chat-understood">{built.errors.map((e) => <li key={e}>{e}</li>)}</ul> });
-      return;
-    }
-    if (!apiBaseUrl) {
-      add({ role: "assistant", kind: "text", tone: "problem", title: "The engine is not connected",
-        body: <p>This page was built without the API address (NEXT_PUBLIC_ANISOTROPY_API_URL), so I can take the problem down but cannot solve it.</p> });
-      return;
-    }
-    setActive(null); setSolving(true); setProblem("");
-    try {
-      const solved = await solveLaminate(apiBaseUrl, built.problem);
-      setAnswer(solved);
-      if (!reportUnits) { const next = stamp + 1; setStamp(next); add({ role: "assistant", kind: "answer", stamp: next }); }
-    } catch (error) {
-      const message = error instanceof StudioError ? error.message : "The solve failed.";
-      if (reportUnits) setProblem(message);
-      else add({ role: "assistant", kind: "text", tone: "problem", title: "The engine refused the problem", body: <p>{message}</p> });
-    } finally {
-      setSolving(false);
-    }
+  async function solveNow() {
+    setActive(null);
+    add({ role: "user", text: "Solve" });
+    const outcome = await solve();
+    if (outcome.ok) return;
+    if ("errors" in outcome) add({ role: "assistant", kind: "text", tone: "problem", title: "Something is still missing", body: <ul className="chat-understood">{outcome.errors.map((e) => <li key={e}>{e}</li>)}</ul> });
+    else add({ role: "assistant", kind: "text", tone: "problem", title: "The engine refused the problem", body: <p>{outcome.refused}</p> });
+  }
+
+  /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
+  function redirect(text: string) {
+    const step = nextStep(draftRef.current);
+    const where = PANEL_OF[step];
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: "Pick a step on the left, or describe one thing",
+      body: <div data-testid="chat-redirect" data-panel={where.id}>
+        <p>{step === "review" ? "Everything is stated: solve it under Solve, or say “solve”." : `The next thing to state is ${QUESTIONS[step].title.toLowerCase().replace(/\?$/, "")}, under the ${where.title} panel.`} Or
+          type a phrase like “AS4/8552”, “E1 147 GPa, E2 10.3, G12 7, nu12 0.27”, “[0/90]2s, 0.125 mm plies” or “Nx = 100 N/mm, everything else zero”. Type “back” for the coupon tests.</p>
+        <Chips><PanelLink step={step}>Open {where.title}</PanelLink>{step !== "review" ? <button type="button" onClick={() => ask(step)}>Ask me here</button> : null}</Chips>
+      </div> });
   }
 
   function send(value = input) {
@@ -226,15 +139,18 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
     if (/^(back|coupon|coupons|back to coupons)\b/i.test(text)) { add({ role: "user", text }); onBack(); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : nextStep(draftRef.current);
-    if (/^(solve|run|go|solve it)\b/i.test(text) && nextStep(draftRef.current) === "review") { add({ role: "user", text }); void solve(); return; }
-    let next: LaminateDraft = { ...draftRef.current };
+    if (/^(solve|run|go|solve it)\b/i.test(text)) {
+      if (nextStep(draftRef.current) === "review") { void solveNow(); } else redirect(text);
+      return;
+    }
+    const next: LaminateDraft = { ...draftRef.current };
     const understood: string[] = [];
     const refused: string[] = [];
     const named = readSystem(text);
     if (named && (step === "units" || !next.system)) { next.system = named; understood.push(`units: ${REPORT_SYSTEMS.find((s) => s.id === named)?.title}`); }
     const system = next.system;
     if (!system) {
-      add({ role: "user", text }, { role: "assistant", kind: "text", title: "Which units first?", body: <p>Pick the system the problem is stated in, or name it: SI, mm and MPa, US customary or psi.</p> });
+      add({ role: "user", text }, { role: "assistant", kind: "text", title: "Which units first?", body: <><p>Pick the system the problem is stated in, or name it: SI, mm and MPa, US customary or psi.</p><Chips><PanelLink step="units">Open Units</PanelLink></Chips></> });
       return;
     }
     const library = readLibraryMaterial(text);
@@ -246,7 +162,6 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
         const own = next.material && "own" in next.material ? { ...next.material.own } : blankOwn();
         for (const [name, q] of Object.entries(read.constants)) (own as unknown as Record<string, Quantity | string>)[name] = q;
         next.material = { own };
-        setOwnMaterial(true);
         understood.push(...read.understood);
       }
     }
@@ -263,20 +178,20 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
       understood.push(...loads.understood);
     }
     if (!understood.length) {
-      add({ role: "user", text }, { role: "assistant", kind: "text", tone: refused.length ? "problem" : undefined, title: refused.length ? "A unit does not fit" : "I could not read a laminate value in that",
-        body: refused.length ? <ul className="chat-understood">{refused.map((r) => <li key={r}>{r}</li>)}</ul>
-          : <p>Try the options above, or a phrase like “AS4/8552”, “E1 147 GPa, E2 10.3, G12 7, nu12 0.27”, “[0/90]2s, 0.125 mm plies” or “Nx = 100 N/mm, everything else zero”. Type “back” for the coupon tests.</p> });
+      if (refused.length) {
+        add({ role: "user", text }, { role: "assistant", kind: "text", tone: "problem", title: "A unit does not fit", body: <ul className="chat-understood">{refused.map((r) => <li key={r}>{r}</li>)}</ul> });
+      } else redirect(text);
       return;
     }
     add({ role: "user", text }, { role: "assistant", kind: "text", title: "Got it",
       body: <><ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul>
         {refused.length ? <ul className="chat-understood chat-refused">{refused.map((r) => <li key={r}>{r}</li>)}</ul> : null}</> });
-    setDraft(next); setAnswer(null);
+    setDraft(next);
     proceed(next);
   }
 
-  function askWidget(step: LaminateStep, live: boolean): ReactNode {
-    if (!live) return null;
+  function askWidget(step: LaminateStep, isLive: boolean): ReactNode {
+    if (!isLive) return null;
     const system = (draft.system || "SI") as ReportUnits;
     switch (step) {
       case "units":
@@ -293,10 +208,7 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
           </>
         );
       case "material":
-        return ownMaterial ? (
-          <ConstantsCard own={draft.material && "own" in draft.material ? draft.material.own : blankOwn()} system={system}
-            onApply={(own) => answerWith(`My own constants: ${own.name.trim() || "unnamed"}`, { ...draftRef.current, material: { own } })} />
-        ) : (
+        return (
           <>
             <Chips>
               {COMMON_MATERIALS.filter((id) => libraryOptions.some((m) => m.id === id)).map((id) => (
@@ -308,8 +220,8 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
                 <option value="">Another library material…</option>
                 {libraryOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
-              <button type="button" className="chat-link" onClick={() => setOwnMaterial(true)}>Type my own constants</button>
             </div>
+            <Chips><PanelLink step="material">My own constants, under Material</PanelLink></Chips>
           </>
         );
       case "layup":
@@ -323,10 +235,7 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
                 }}><Layers3 size={14} /> {c.title} <code>{c.notation}</code></button>
               ))}
             </Chips>
-            <LayupCard draft={draft} system={system} onApply={(notation, thickness) => {
-              const line = readLayupLine(notation, system);
-              if (line.layup) answerWith(thickness ? `${notation}, ${thickness.value} ${printedUnit(thickness.unit)} plies` : notation, { ...draftRef.current, layup: line.layup, thickness });
-            }} />
+            <Chips><PanelLink step="layup">The layup and the ply thickness, under Layup</PanelLink></Chips>
           </>
         );
       case "loads":
@@ -335,10 +244,8 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
             <Chips>
               <button type="button" onClick={() => answerWith(`Nx = 100 ${printedUnit(systemUnit(system, "N"))}, the rest zero`, { ...draftRef.current, loads: loadsWithZeros({ Nx: { value: "100", unit: systemUnit(system, "N") } }, system) })}>
                 Nx = 100 {printedUnit(systemUnit(system, "N"))} only</button>
+              <PanelLink step="loads">All six loads, under Loads</PanelLink>
             </Chips>
-            <LoadsCard loads={draft.loads} system={system} onApply={(loads) => answerWith(
-              LOAD_NAMES.filter((n) => Number(loads[n].value) !== 0).map((n) => `${n} = ${loads[n].value} ${printedUnit(loads[n].unit)}`).join(", ") || "No load",
-              { ...draftRef.current, loads })} />
           </>
         );
       case "review": {
@@ -346,16 +253,9 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
         return (
           <div className="lam-review" data-testid="laminate-review">
             <dl className="studio-summary">{lines.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v || "–"}</dd></div>)}</dl>
-            <div className="chat-inline">
-              <label htmlFor="lam-f12" className="lam-field"><span>Tsai-Wu f12* <small>optional, between -1 and 1</small></span>
-                <input id="lam-f12" type="text" inputMode="decimal" autoComplete="off" className="chat-small-input" placeholder="-0.5" value={draft.f12_star}
-                  onChange={(e) => setDraft({ ...draftRef.current, f12_star: e.target.value })} /></label>
-              <label className="lam-field lam-check"><input type="checkbox" data-testid="lam-strain-limits" checked={draft.strain_limits}
-                onChange={(e) => setDraft({ ...draftRef.current, strain_limits: e.target.checked })} />
-                <span>Maximum strain too <small>limits derived from the strengths (strength over modulus, linear to failure)</small></span></label>
-            </div>
+            <p className="chat-note">Tsai-Wu&apos;s f12* and maximum strain are options under Solve.</p>
             <div className="chat-actions">
-              <button type="button" className="chat-primary" data-testid="laminate-solve" onClick={() => { add({ role: "user", text: "Solve" }); void solve(); }} disabled={solving}><Play size={14} /> Solve</button>
+              <button type="button" className="chat-primary" data-testid="laminate-solve" onClick={() => void solveNow()} disabled={solving}><Play size={14} /> Solve</button>
               <button type="button" className="chat-secondary" onClick={() => ask("material")}>Change the material</button>
               <button type="button" className="chat-secondary" onClick={() => ask("layup")}>Change the layup</button>
               <button type="button" className="chat-secondary" onClick={() => ask("loads")}>Change the loads</button>
@@ -373,7 +273,7 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
         <h4>Solved</h4>
         {answer.prose.slice(0, 2).map((sentence, i) => <p key={i}>{sentence}</p>)}
         {answer.prose.length > 3 ? <p>{answer.prose[3]}</p> : null}
-        <p className="chat-note">The matrices, every ply's stresses and each criterion are on the right, in the units you pick there.</p>
+        <p className="chat-note">The matrices, every ply&apos;s stresses and each criterion are in the centre, in the units you pick there.</p>
         <Chips>
           <button type="button" onClick={() => ask("loads")}>Change the loads</button>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
@@ -389,8 +289,8 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
     let content: ReactNode;
     if (entry.kind === "ask") {
       const q = QUESTIONS[entry.step];
-      const live = entry.id === active && !solving;
-      content = <div data-step={entry.step} data-testid={live ? "chat-question" : undefined}><h4>{q.title}</h4>{live ? <p>{q.text}</p> : null}{askWidget(entry.step, live)}</div>;
+      const isLive = entry.id === active && !solving;
+      content = <div data-step={entry.step} data-testid={isLive ? "chat-question" : undefined}><h4>{q.title}</h4>{isLive ? <p>{q.text}</p> : null}{askWidget(entry.step, isLive)}</div>;
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
     else content = answerMessage(entry.stamp);
     return (
@@ -401,43 +301,28 @@ export function LaminateChat({ apiBaseUrl, onBack }: { apiBaseUrl: string; onBac
     );
   }
 
-  const lines = problemLines(draft);
   return (
-    <div className="chat-studio" data-testid="laminate-chat">
-      <section className="chat-pane" aria-label="Laminate assistant">
-        <div className="chat-pane-top">
-          <span><span className="status-dot" /> Laminate assistant</span>
-          <span>
-            <button type="button" className="chat-link" onClick={onBack}><ArrowLeft size={13} /> Coupon tests</button>
-            <button type="button" className="icon-button" aria-label="Start a new problem" title="Start a new problem" onClick={startOver}><RotateCcw size={14} /></button>
-          </span>
+    <section className="chat-pane" aria-label="Laminate assistant" data-testid="laminate-chat">
+      <div className="chat-pane-top">
+        <span><span className="status-dot" /> Laminate assistant</span>
+        <span>
+          <button type="button" className="chat-link" onClick={onBack}><ArrowLeft size={13} /> Coupon tests</button>
+          <button type="button" className="icon-button" aria-label="Start a new problem" title="Start a new problem" onClick={startOver}><RotateCcw size={14} /></button>
+        </span>
+      </div>
+      <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
+        {entries.map(render)}
+        {solving ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing">Solving the stack…</p></div></div> : null}
+      </div>
+      <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+        <textarea aria-label="Message the laminate assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
+          placeholder="State the problem or change one thing, e.g. “[0/90]2s, 0.125 mm plies” or “Nx = 100 N/mm, everything else zero”"
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
+        <div className="composer-footer">
+          <span className="chat-note">Enter to send · “solve” · “new problem” · “back”</span>
+          <button className="send-button" type="submit" disabled={!input.trim()} aria-label="Send message"><ArrowUp size={18} /></button>
         </div>
-        <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
-          {entries.map(render)}
-          {solving ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing">Solving the stack…</p></div></div> : null}
-          {problem ? <p className="studio-alert" role="alert">{problem}</p> : null}
-        </div>
-        <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
-          <textarea aria-label="Message the laminate assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
-            placeholder="State the problem or change one thing, e.g. “[0/90]2s, 0.125 mm plies” or “Nx = 100 N/mm, everything else zero”"
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
-          <div className="composer-footer">
-            <span className="chat-note">Enter to send · “solve” · “new problem” · “back”</span>
-            <button className="send-button" type="submit" disabled={!input.trim()} aria-label="Send message"><ArrowUp size={18} /></button>
-          </div>
-        </form>
-      </section>
-      <section className="chat-bench" aria-label="The problem and its answer">
-        <dl className="chat-spec lam-spec" data-testid="laminate-spec">
-          {lines.map(([k, v]) => <div key={k} data-filled={v ? "yes" : "no"}><dt>{k}</dt><dd>{v || "–"}</dd></div>)}
-        </dl>
-        {answer ? <LaminateResults answer={answer} busy={solving} onReport={(system) => void solve(system)} /> : (
-          <div className="studio-empty" data-testid="empty-answer">
-            <h3>The answer appears here</h3>
-            <p>Once the problem is stated, the engine solves it in seconds: the A, B, D matrices, the strains, every ply&apos;s stresses and first-ply failure, in the units you pick.</p>
-          </div>
-        )}
-      </section>
-    </div>
+      </form>
+    </section>
   );
 }

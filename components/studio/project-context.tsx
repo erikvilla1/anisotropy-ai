@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
-import { newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
+import { couponProjects, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
 import type { StudioForm } from "@/lib/studio-form";
 import type { PlateLists } from "@/lib/studio-plate";
 import { useCouponRun, type CouponRun } from "./use-coupon-run";
@@ -30,7 +30,7 @@ export function browserStorage(): Storage | null {
 }
 
 function initial(): { project: CouponProject; restored: boolean } {
-  const kept = readProjects(browserStorage());
+  const kept = couponProjects(readProjects(browserStorage()));
   return kept.length ? { project: kept[0], restored: true } : { project: newProject(), restored: false };
 }
 

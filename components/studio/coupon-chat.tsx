@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { couponValues, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import {
-  blankForm, buildValues, exampleForm, fieldByKey, fieldByLabel, formFromValues, libraryOptions, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords,
-  type StudioForm,
+  blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "@/lib/studio-form";
 import {
   applyMessage, COMMON_MATERIALS, couponLines, isBending, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
@@ -13,18 +12,18 @@ import {
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
+import { panel, panelOfItem, panelOfStep, type PanelId } from "@/lib/workspace-panels";
+import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
-import { PreviewScene } from "./coupon-studio";
 import { useProject } from "./project-context";
 import { JobProgress } from "./job-progress";
-import { ResultsView } from "./results-view";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
 type Entry =
   | { id: number; role: "user"; text: string }
   | { id: number; role: "assistant"; kind: "text"; title?: string; body?: ReactNode; tone?: "problem" }
-  | { id: number; role: "assistant"; kind: "ask"; step: ChatStep | "advanced" | "reopen" }
+  | { id: number; role: "assistant"; kind: "ask"; step: ChatStep | "reopen" }
   | { id: number; role: "assistant"; kind: "check"; answer: CheckAnswer }
   | { id: number; role: "assistant"; kind: "job"; job: string }
   | { id: number; role: "assistant"; kind: "result"; job: string };
@@ -57,64 +56,30 @@ const materialName = (id: string) => libraryOptions.find((m) => m.id === id)?.na
 const estimated = (value: number) => String(Number(value.toPrecision(4)));
 const libraryEntry = (id: string) => libraryOptions.find((m) => m.id === id);
 
-const QUESTIONS: Record<ChatStep | "advanced" | "reopen", { title: string; text?: string }> = {
+const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> = {
   test: { title: "What are we working out?", text: "Pick a coupon test, or describe the whole coupon in one line, e.g. “open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 1 mm pull”. Numbers are read in the units picked below; the results come back in them. A laminate without a coupon, the hand-calculation kind, is the first choice." },
-  material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or give your own." },
+  material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or give your own under Layup and material." },
   shear: { title: "Out-of-plane shear moduli", text: "The engine needs G13 and G23, which the library does not list. Without measured values, the usual tape estimate is G13 = G12 and G23 = E2 / 3; the choice is noted on the coupon." },
   layup: { title: "What is the layup?", text: "Type it in laminate notation, bottom ply first, or pick one. Angles are measured from x, across the coupon's width: 90° runs along the load, 0° across it." },
-  geometry: { title: "Coupon size", text: "The coupon's length runs along the load." },
+  geometry: { title: "Coupon size", text: "The coupon's length runs along the load. Type the rows under Geometry, or describe them here, e.g. “250 x 25 mm, 56 mm tabs”." },
   loading: { title: "How is it loaded?" },
-  name: { title: "Who is running it?", text: "Your name goes in the attempt log and the CalculiX record, and is remembered in this browser. The coupon's name is derived from the material, the test and the layup." },
+  name: { title: "Who is running it?", text: "Type your name here, or give it under Run. It goes in the attempt log and the CalculiX record, and is remembered in this browser. The coupon's name is derived from the material, the test and the layup." },
   review: { title: "Checking the setup" },
-  advanced: { title: "Mesh, failure criteria and grips", text: "These have working defaults; change them only if you need to." },
   reopen: { title: "Reopen a saved coupon", text: "It loads as it was last run; solving it again adds the next attempt." },
 };
 
-/** A small form inside a chat message: the given rows, typed into a draft and applied together. */
-function RowsCard({ keys, form, onApply, submit = "Continue", disabled, extra }: {
-  keys: string[]; form: StudioForm; onApply: (rows: StudioForm) => void; submit?: string; disabled?: boolean; extra?: ReactNode;
-}) {
-  const units = unitsOf(form);
-  const seed = keys.map((k) => `${k}=${form[k] ?? ""}`).join("\n");
-  const [draft, setDraft] = useState<StudioForm>(() => Object.fromEntries(keys.map((k) => [k, form[k] ?? ""])));
-  useEffect(() => { setDraft(Object.fromEntries(keys.map((k) => [k, form[k] ?? ""]))); }, [seed]); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
-    <form className="chat-rows" onSubmit={(e) => { e.preventDefault(); onApply(draft); }}>
-      <div className="chat-rows-grid">
-        {keys.map((key) => {
-          const field = fieldByKey[key];
-          const id = `chat-${key}`;
-          const words = field?.kind === "list" ? field.words : [];
-          return (
-            <label key={key} htmlFor={id} className={key === "size_from" || key === "own_source" ? "chat-row-wide" : undefined}>
-              <span>{labelOf(key, units)}{field?.required ? "" : <small> optional</small>}</span>
-              {words.length ? (
-                <select id={id} value={draft[key]} disabled={disabled} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}>
-                  {field?.required ? null : <option value="">(blank)</option>}
-                  {words.map((w) => <option key={w} value={w}>{w}</option>)}
-                </select>
-              ) : (
-                <input id={id} type="text" value={draft[key]} disabled={disabled} autoComplete="off"
-                  inputMode={field && ["number", "whole", "angle"].includes(field.kind) ? "decimal" : undefined}
-                  onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
-              )}
-            </label>
-          );
-        })}
-      </div>
-      {extra}
-      <button type="submit" className="chat-primary" disabled={disabled}>{submit}</button>
-    </form>
-  );
-}
-
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
 
-export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }: {
-  apiBaseUrl: string; onOpenForm: () => void;
-  /** With the bench, the chat draws the model and the results beside itself; without it (the workspace's assistant column, ADR-0062) the stage does. */
-  bench?: boolean;
-  /** Opens the laminate assistant (ADR-0060): a stack under loads per unit width, no coupon around it. */
+/** A suggestion that opens a panel on the left: the rows live there (ADR-0062, part 5). */
+function PanelLink({ id, children }: { id: PanelId; children: ReactNode }) {
+  return <button type="button" data-panel={id} onClick={() => showPanel(id)}><SlidersHorizontal size={14} /> {children}</button>;
+}
+
+/** The coupon assistant (ADR-0055; ADR-0062, part 5): a conversation beside the panels, on the one project they share. It offers one-click
+ * choices, reads a typed line into the rows, checks and runs the setup, and for anything else names the panel that asks for it. */
+export function CouponChat({ apiBaseUrl, onLaminate }: {
+  apiBaseUrl: string;
+  /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
   const { form, setForm: storeForm, run: runner, restored } = useProject(); // the rows and the run live in the project (ADR-0062)
@@ -123,11 +88,12 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
   const [input, setInput] = useState("");
   const [coupons, setCoupons] = useState<CouponSummary[]>([]);
-  const [ownMaterial, setOwnMaterial] = useState(false);
   const nextId = useRef(1);
   const body = useRef<HTMLDivElement>(null);
   const formRef = useRef(form);
-  useEffect(() => { formRef.current = form; }, [form]); // rows edited on the form tab are the chat's rows too
+  useEffect(() => { formRef.current = form; }, [form]); // rows edited on the panels are the chat's rows too
+  const live = useRef<{ active: number | null; entries: Entry[] }>({ active: null, entries: [] });
+  useEffect(() => { live.current = { active, entries }; }, [active, entries]);
   const started = useRef(false);
 
   const setForm = useCallback((next: StudioForm) => { formRef.current = next; storeForm(next); }, [storeForm]);
@@ -136,7 +102,7 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
     setEntries((list) => [...list, ...made]);
     return made;
   }, []);
-  const ask = useCallback((step: ChatStep | "advanced" | "reopen") => {
+  const ask = useCallback((step: ChatStep | "reopen") => {
     const [entry] = add({ role: "assistant", kind: "ask", step });
     setActive(entry.id);
   }, [add]);
@@ -148,7 +114,7 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
     const start: StudioForm = { ...formRef.current, filled_by: formRef.current.filled_by || name, date: formRef.current.date || today() };
     setForm(start);
     if (start.test) {
-      add({ role: "assistant", kind: "text", title: restored ? "Picked up where you left off" : "Picked up from the full form",
+      add({ role: "assistant", kind: "text", title: restored ? "Picked up where you left off" : "Picked up from the panels",
         body: <p>I have the rows you filled in. Here is what is still needed, then I check the setup.</p> });
       proceed(start);
       return;
@@ -172,6 +138,18 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
 
   useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight, behavior: "smooth" }); }, [entries, checking, fields]);
 
+  // a row typed on a panel answers the open question: move on, and when nothing is missing offer the check
+  useEffect(() => {
+    const current = live.current.entries.find((e) => e.id === live.current.active);
+    if (!current || current.role !== "assistant" || current.kind !== "ask" || current.step === "review" || current.step === "reopen") return;
+    if (missingIn(current.step, form).length) return;
+    const step = nextStep(form);
+    if (step !== "review") { ask(step); return; }
+    setActive(null);
+    add({ role: "assistant", kind: "text", title: "Everything is stated",
+      body: <><p>Check the setup under Validate, or here.</p><Chips><button type="button" onClick={() => void check(formRef.current)}><Check size={14} /> Check setup</button></Chips></> });
+  }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function check(values: StudioForm) {
     setActive(null);
     if (!apiBaseUrl) {
@@ -192,8 +170,8 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
     if (next.test === PLATE_TEST) {
       setActive(null);
       add({ role: "assistant", kind: "text", title: "Plates are set up on the model",
-        body: <><p>A plate is held and loaded by picking its edges and faces on the 3D model, which the full form does today.</p>
-          <Chips><button type="button" onClick={onOpenForm}><TableProperties size={14} /> Open the full form</button></Chips></> });
+        body: <><p>A plate is held and loaded by its regions: pick them under Loads and supports, or click an element on the model once the setup is checked.</p>
+          <Chips><PanelLink id="loads">Open Loads and supports</PanelLink></Chips></> });
       return;
     }
     const step = nextStep(next);
@@ -204,10 +182,10 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
   /** A changed setup leaves the last results behind; a run still going keeps its progress. */
   function clearRun() {
     runner.clearChecked();
-    runner.clearResults(); // a run still going keeps its progress
+    runner.clearResults();
   }
 
-  /** Apply rows from a click or a card, echo what the engineer chose, and move on. */
+  /** Apply rows from a click, echo what the engineer chose, and move on. */
   function answer(echo: string, rows: StudioForm) {
     const next: StudioForm = { ...formRef.current, ...rows };
     if (rows.filled_by) remember(RUN_BY_KEY, rows.filled_by.trim());
@@ -233,7 +211,7 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
 
   function startOver() {
     const fresh = { ...blankForm(unitsOf(formRef.current)), date: today(), filled_by: formRef.current.filled_by };
-    setForm(fresh); runner.reset(); setOwnMaterial(false);
+    setForm(fresh); runner.reset();
     setEntries([]);
     ask("test");
   }
@@ -243,7 +221,7 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
     setForm(next); clearRun();
     add({ role: "user", text: "Start from the IM7/8552 example" },
       { role: "assistant", kind: "text", title: "Loaded the public IM7/8552 example",
-        body: <p>Unnotched tension, 250 × 25 mm with 56 mm tabs, [45/0/-45/90]s, pulled 1 mm. Change anything by typing it, e.g. “make it [0/90]2s”.</p> });
+        body: <p>Unnotched tension, 250 × 25 mm with 56 mm tabs, [45/0/-45/90]s, pulled 1 mm. Change anything by typing it, e.g. “make it [0/90]2s”, or on the panels.</p> });
     proceed(next);
   }
 
@@ -279,6 +257,21 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
     if (runner.loadedJob) add({ role: "assistant", kind: "result", job: runner.loadedJob }); // once per job, when its fields are first read
   }, [runner.loadedJob, add]);
 
+  /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
+  function redirect(text: string) {
+    const step = nextStep(formRef.current);
+    const id = panelOfStep(step);
+    const title = panel(id).title;
+    const named = toolNamed(text) === "coupon";
+    add({ role: "user", text }, { role: "assistant", kind: "text", title: "Pick a step on the left, or describe one thing",
+      body: <div data-testid="chat-redirect" data-panel={id}>
+        <p>{named ? "This is the coupon workspace: a test coupon set up, checked and solved by finite elements. " : ""}
+          {step === "review" ? "Everything is stated: check the setup under Validate, or say “check”." : `The next thing to state is ${QUESTIONS[step].title.toLowerCase().replace(/\?$/, "")}, under the ${title} panel.`} Or
+          type a phrase like “open-hole tension”, “250 x 25 mm, 56 mm tabs”, “[0/90]2s”, “AS4/8552” or “10 kN”, or “switch to inches”.</p>
+        <Chips><PanelLink id={id}>Open {title}</PanelLink>{step !== "review" ? <button type="button" onClick={() => ask(step)}>Ask me here</button> : null}</Chips>
+      </div> });
+  }
+
   function send(value = input) {
     const text = value.trim();
     if (!text) return;
@@ -286,15 +279,15 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
     if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
-    if (/full form|spreadsheet|all (the )?rows/i.test(text)) { add({ role: "user", text }); onOpenForm(); return; }
+    if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) { add({ role: "user", text }); showPanel("advanced"); return; }
     if (onLaminate && toolNamed(text) === "laminate") { add({ role: "user", text }); onLaminate(); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
     if (step === "name" && !/\d/.test(text)) { answer(text, { filled_by: text }); return; }
     const { rows, understood, note } = applyMessage(formRef.current, text);
     if (!understood.length) {
-      add({ role: "user", text }, { role: "assistant", kind: "text", title: note ? "Another unit system" : "I could not read a coupon value in that", tone: note ? "problem" : undefined,
-        body: <p>{note ?? `I set up and run coupon tests: try the options above, or a phrase like “open-hole tension”, “250 x 25 mm, 56 mm tabs”, “[0/90]2s”, “AS4/8552” or “10 kN”, or “switch to inches”. Type “full form” for every row.`}</p> });
+      if (note) add({ role: "user", text }, { role: "assistant", kind: "text", title: "Another unit system", tone: "problem", body: <p>{note}</p> });
+      else redirect(text);
       return;
     }
     add({ role: "user", text }, { role: "assistant", kind: "text", title: "Got it", body: <>
@@ -304,8 +297,8 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
     proceed(next);
   }
 
-  function askWidget(step: ChatStep | "advanced" | "reopen", live: boolean): ReactNode {
-    if (!live) return null;
+  function askWidget(step: ChatStep | "reopen", isLive: boolean): ReactNode {
+    if (!isLive) return null;
     const units = unitsOf(form);
     const lab = unitLabels(units);
     switch (step) {
@@ -335,7 +328,7 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
             <Chips>
               <button type="button" onClick={loadExample}><FlaskConical size={14} /> Start from the IM7/8552 example</button>
               {coupons.length ? <button type="button" onClick={() => ask("reopen")}><RotateCcw size={14} /> Reopen a saved coupon</button> : null}
-              <button type="button" onClick={onOpenForm}><TableProperties size={14} /> Plate, or every row: full form</button>
+              <PanelLink id="project">A plate, or every row: the panels</PanelLink>
             </Chips>
           </>
         );
@@ -350,11 +343,7 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
           </div>
         );
       case "material":
-        return ownMaterial ? (
-          <RowsCard keys={["own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c", "own_F6", "own_source"]} form={form}
-            onApply={(rows) => answer(`My own material: ${rows.own_name || "unnamed"}`, { ...rows, library: "" })}
-            extra={<p className="chat-note">Give all five strengths or none; without them no failure is predicted. Your numbers stay with this coupon and never enter the library.</p>} />
-        ) : (
+        return (
           <>
             <Chips>
               {COMMON_MATERIALS.filter((id) => libraryEntry(id)).map((id) => (
@@ -366,8 +355,8 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
                 <option value="">Another library material…</option>
                 {libraryOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
-              <button type="button" className="chat-link" onClick={() => setOwnMaterial(true)}>Use my own constants</button>
             </div>
+            <Chips><PanelLink id="layup">My own constants, under Layup and material</PanelLink></Chips>
           </>
         );
       case "shear": {
@@ -375,17 +364,15 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
         const estimate = constants && Number.isFinite(constants.G12) && Number.isFinite(constants.E2) && constants.G12 > 0 && constants.E2 > 0
           ? { G13: estimated(constants.G12), G23: estimated(constants.E2 / 3) } : null;
         return (
-          <>
+          <Chips>
             {estimate ? (
-              <Chips>
-                <button type="button" onClick={() => answer(`Tape estimate: G13 = ${estimate.G13} ${lab.stress}, G23 = ${estimate.G23} ${lab.stress}`,
-                  { G13: estimate.G13, G23: estimate.G23, notes: [formRef.current.notes, "G13 = G12 and G23 = E2/3 by the tape estimate (studio chat)."].filter(Boolean).join(" ") })}>
-                  <Sparkles size={14} /> Use the tape estimate: G13 = {estimate.G13}, G23 = {estimate.G23} {lab.stress}
-                </button>
-              </Chips>
+              <button type="button" onClick={() => answer(`Tape estimate: G13 = ${estimate.G13} ${lab.stress}, G23 = ${estimate.G23} ${lab.stress}`,
+                { G13: estimate.G13, G23: estimate.G23, notes: [formRef.current.notes, "G13 = G12 and G23 = E2/3 by the tape estimate (studio chat)."].filter(Boolean).join(" ") })}>
+                <Sparkles size={14} /> Use the tape estimate: G13 = {estimate.G13}, G23 = {estimate.G23} {lab.stress}
+              </button>
             ) : null}
-            <RowsCard keys={["G13", "G23"]} form={form} submit="Use these values" onApply={(rows) => answer(`G13 = ${rows.G13} ${lab.stress}, G23 = ${rows.G23} ${lab.stress}`, rows)} />
-          </>
+            <PanelLink id="layup">Measured values, under Layup and material</PanelLink>
+          </Chips>
         );
       }
       case "layup": {
@@ -401,32 +388,26 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
             </Chips>
             <LayupInput needThickness={needThickness} form={form} onApply={(notation, rows) => answer(notation, rows)} />
             {!needThickness ? <p className="chat-note">Ply thickness {printed(libraryThickness(form))} {lab.length}, from the library.</p> : null}
+            <Chips><PanelLink id="layup">Ply by ply, under Layup and material</PanelLink></Chips>
           </>
         );
       }
-      case "geometry": {
-        const keys = missingIn("geometry", { ...form, length: "", width: "", size_from: "", tab_length: "", span: "", overhang: "", load_span: "", hole_diameter: "" });
+      case "geometry":
         return (
-          <>
+          <Chips>
             {!isBending(form) && SIZE_CHIPS[units] ? (
-              <Chips>
-                <button type="button" onClick={() => answer(SIZE_CHIPS[units].words, SIZE_CHIPS[units].rows)}>
-                  <Layers3 size={14} /> {SIZE_CHIPS[units].words}</button>
-              </Chips>
+              <button type="button" onClick={() => answer(SIZE_CHIPS[units].words, SIZE_CHIPS[units].rows)}>
+                <Layers3 size={14} /> {SIZE_CHIPS[units].words}</button>
             ) : null}
-            <RowsCard keys={keys} form={form} onApply={(rows) => answer(keys.filter((k) => k !== "size_from").map((k) => `${labelOf(k, units).replace(/ \(.*\)$/, "")} ${rows[k]} ${lab.length}`).join(", "), rows)}
-              extra={<p className="chat-note">Where the size comes from: a standard (e.g. ASTM D3039), a drawing, or your own design.</p>} />
-          </>
+            <PanelLink id="geometry">The size, under Geometry</PanelLink>
+          </Chips>
         );
-      }
       case "loading":
         return isBending(form) ? (
-          <>
-            <Chips>
-              {(PUSH_CHIPS[units] ?? []).map((v) => <button type="button" key={v} onClick={() => answer(`Push the nose ${v} ${lab.length}`, { control: "displacement", value: v })}>Push {v} {lab.length}</button>)}
-            </Chips>
-            <RowsCard keys={["value"]} form={form} submit={`Use this travel (${lab.length})`} onApply={(rows) => answer(`Push the nose ${rows.value} ${lab.length}`, { control: "displacement", value: rows.value })} />
-          </>
+          <Chips>
+            {(PUSH_CHIPS[units] ?? []).map((v) => <button type="button" key={v} onClick={() => answer(`Push the nose ${v} ${lab.length}`, { control: "displacement", value: v })}>Push {v} {lab.length}</button>)}
+            <PanelLink id="loads">Another travel, under Loads and supports</PanelLink>
+          </Chips>
         ) : (
           <>
             <p className="chat-note">The bottom grip is held; the top grip {form.test === "unnotched compression" ? "pushes" : "pulls"}.</p>
@@ -434,21 +415,12 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
               {(LOAD_CHIPS[units] ?? []).map((chip) => (
                 <button type="button" key={chip.words} onClick={() => answer(chip.words.replace(/^(\w+) /, "$1 of "), { control: chip.control, value: chip.value })}>{chip.words}</button>
               ))}
+              <PanelLink id="loads">Another load, under Loads and supports</PanelLink>
             </Chips>
-            <RowsCard keys={["control", "value"]} form={{ ...form, control: form.control || "displacement" }} submit="Use this load"
-              onApply={(rows) => answer(`${rows.control === "force" ? "Force" : "Displacement"} of ${rows.value} ${rows.control === "force" ? lab.force : lab.length}`, rows)}
-              extra={<p className="chat-note">Displacement in {lab.length}, force in {lab.force}.</p>} />
           </>
         );
       case "name":
-        return <RowsCard keys={["filled_by"]} form={form} submit="Continue" onApply={(rows) => {
-          const name = rows.filled_by?.trim();
-          if (name) answer(name, { filled_by: name });
-        }} />;
-      case "advanced":
-        return <RowsCard keys={["element_size", "criteria", "f12_star", ...(isBending(form) ? [] : ["grips", "region"])]} form={form} submit="Apply and check again"
-          onApply={(rows) => answer(`Settings: element size ${rows.element_size} ${lab.length}, criteria ${rows.criteria}${rows.grips ? `, grips ${rows.grips}` : ""}`, rows)}
-          extra={<p className="chat-note">Grips “coupling” tie each tab to a reference point, as in Abaqus; “nodal” holds every gripped node. Tsai-Wu needs f12* between -1 and 1.</p>} />;
+        return <Chips><PanelLink id="run">Your name, under Run</PanelLink></Chips>;
       case "review":
         return null;
     }
@@ -467,13 +439,13 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
         {blocking.length ? (
           <ul className="chat-issues">
             {blocking.map((item) => {
-              const steps = stepsFor(item.rows);
-              const step = steps.find((s): s is ChatStep => s !== null);
+              const target = panelOfItem(item.id);
+              const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);
               return (
                 <li key={item.id} data-item={item.id}>
                   <CircleAlert size={14} /> <span><strong>{item.label}:</strong> {item.message}</span>
-                  {latest ? (step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button>
-                    : <button type="button" className="chat-link" onClick={onOpenForm}>Fix in the full form</button>) : null}
+                  {latest ? (target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>Fix under {panel(target).title}</button>
+                    : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null) : null}
                 </li>
               );
             })}
@@ -490,7 +462,7 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
         {latest && result.state === "ready" ? (
           <div className="chat-actions">
             <button type="button" className="chat-primary" onClick={run} disabled={job?.state === "running"} data-testid="chat-run"><Play size={14} /> Run analysis</button>
-            <button type="button" className="chat-secondary" onClick={() => ask("advanced")}><SlidersHorizontal size={14} /> Mesh, criteria, grips</button>
+            <button type="button" className="chat-secondary" onClick={() => showPanel("mesh")}><SlidersHorizontal size={14} /> Mesh, criteria, grips</button>
           </div>
         ) : null}
       </div>
@@ -516,7 +488,7 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
         {earliest ? <p>R is the factor on the applied load at which the first ply fails{earliest.touches_grip ? "; this one sits at a gripped tab edge, so read it as first damage at the grip" : ""}.</p> : null}
         {explanation?.sentences.length ? <p>{explanation.sentences[0]}</p> : null}
         {job?.state === "done" && job.message ? <p className="chat-ok"><Check size={13} /> {job.message}</p> : null}
-        {job?.state === "running" ? <p className="chat-note">CalculiX, the record and the package are still running; the files appear on the right when they are written.</p> : null}
+        {job?.state === "running" ? <p className="chat-note">CalculiX, the record and the package are still running; the files appear under Outputs when they are written.</p> : null}
         <Chips>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("loading")}>Change the load</button>
@@ -532,8 +504,8 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
     let content: ReactNode;
     if (entry.kind === "ask") {
       const q = QUESTIONS[entry.step];
-      const live = entry.id === active && !checking;
-      content = <div data-step={entry.step} data-testid={live ? "chat-question" : undefined}><h4>{q.title}</h4>{live && q.text ? <p>{q.text}</p> : null}{askWidget(entry.step, live)}</div>;
+      const isLive = entry.id === active && !checking;
+      content = <div data-step={entry.step} data-testid={isLive ? "chat-question" : undefined}><h4>{q.title}</h4>{isLive && q.text ? <p>{q.text}</p> : null}{askWidget(entry.step, isLive)}</div>;
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
     else if (entry.kind === "check") content = checkMessage(entry.answer, entry.id === latestCheck && checked === entry.answer);
     else if (entry.kind === "job") content = job?.job_id === entry.job ? <JobProgress job={job} /> : <p className="chat-note">An earlier run.</p>;
@@ -547,55 +519,34 @@ export function CouponChat({ apiBaseUrl, onOpenForm, onLaminate, bench = true }:
   }
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
-  const viewerLink = job ? `/workspace/fea/view?job=${encodeURIComponent(job.job_id)}` : null;
-  const pane = (
-      <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
-        <div className="chat-pane-top">
-          <span><span className="status-dot" /> Coupon assistant</span>
-          <span>
-            <button type="button" className="chat-link" onClick={onOpenForm}><TableProperties size={13} /> Full form</button>
-            <button type="button" className="icon-button" aria-label="Start a new coupon" title="Start a new coupon" onClick={startOver}><RotateCcw size={14} /></button>
-          </span>
-        </div>
-        <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
-          {entries.map((e) => render(e, latestCheck))}
-          {checking ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing">Checking the setup against the run's rules…</p></div></div> : null}
-          {problem ? <p className="studio-alert" role="alert">{problem}</p> : null}
-        </div>
-        <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
-          <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe the coupon or change one thing, e.g. “make it [0/90]2s” or “10 kN”"
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
-          <div className="composer-footer">
-            <span className="chat-note">Enter to send · “start over” · “full form”</span>
-            <button className="send-button" type="submit" disabled={!input.trim()} aria-label="Send message"><ArrowUp size={18} /></button>
-          </div>
-        </form>
-      </section>
-  );
-  if (!bench) return pane;
   return (
-    <div className="chat-studio">
-      {pane}
-      <section className="chat-bench" aria-label="Model and results">
-        <CouponSpec form={form} />
-        {fields ? (
-          <>
-            {viewerLink ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer">Open the viewer in a new window</a></p> : null}
-            <ResultsView fields={fields} explanation={explanation} job={job} apiBase={apiBaseUrl} preview={checked?.preview ?? null} />
-          </>
-        ) : checked?.preview ? <PreviewScene preview={checked.preview} /> : (
-          <div className="studio-empty" data-testid="empty-scene">
-            <h3>The model appears here</h3>
-            <p>Once the setup is complete I check it and draw the mesh, the held end and the load. After the run, every ply's stresses show here in 3D.</p>
-          </div>
-        )}
-      </section>
-    </div>
+    <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
+      <div className="chat-pane-top">
+        <span><span className="status-dot" /> Coupon assistant</span>
+        <span>
+          <button type="button" className="chat-link" onClick={() => showPanel("advanced")}><TableProperties size={13} /> Every row</button>
+          <button type="button" className="icon-button" aria-label="Start a new coupon" title="Start a new coupon" onClick={startOver}><RotateCcw size={14} /></button>
+        </span>
+      </div>
+      <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
+        {entries.map((e) => render(e, latestCheck))}
+        {checking ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing">Checking the setup against the run's rules…</p></div></div> : null}
+        {problem ? <p className="studio-alert" role="alert">{problem}</p> : null}
+      </div>
+      <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+        <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
+          placeholder="Describe the coupon or change one thing, e.g. “make it [0/90]2s” or “10 kN”"
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
+        <div className="composer-footer">
+          <span className="chat-note">Enter to send · “start over” · “check” · “run”</span>
+          <button className="send-button" type="submit" disabled={!input.trim()} aria-label="Send message"><ArrowUp size={18} /></button>
+        </div>
+      </form>
+    </section>
   );
 }
 
-/** The coupon in five fields, as stated so far: what the chat's bench shows beside the model, and the workspace's stage above it. */
+/** The coupon in five fields, as stated so far: the strip above the workspace's stage. */
 export function CouponSpec({ form }: { form: StudioForm }) {
   const lines = couponLines(form);
   return (
