@@ -7,7 +7,7 @@ const BENDING = "three-point bending";
 const API = /https?:\/\/[^/]+\/v1\//;
 
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
-async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number }) {
+async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number }, options: { missFirstFieldsRead?: boolean } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
@@ -53,7 +53,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     }
     if (path.endsWith("/files/fields")) {
       calls.fieldsReads = (calls.fieldsReads ?? 0) + 1;
-      if (calls.fieldsReads === 1) return json(route, { detail: "the container did not answer" }, 503); // the first read misses, as the hosted Worker did live on 2026-11-07; the page tries again
+      if (options.missFirstFieldsRead && calls.fieldsReads === 1) return json(route, { detail: "the container did not answer" }, 503); // the first read misses, as the hosted Worker did live on 2026-11-07; the page tries again
       return json(route, fixture("fields", dir));
     }
     if (path.endsWith("/files/explanation")) return json(route, fixture("explanation", dir));
@@ -67,7 +67,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error" && /THREE|WebGL|shader/i.test(message.text())) browserErrors.push(message.text()); }); // a shader that fails to compile is logged, not thrown
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { missFirstFieldsRead: true }); // the hosted Worker missed one read live on 2026-11-07
   await page.goto("/services/finite-element-modeling");
   await page.getByRole("link", { name: "Open the workspace", exact: true }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
