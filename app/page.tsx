@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
+import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
 import { team } from "@/lib/team";
@@ -44,6 +45,7 @@ export default function Home() {
       <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
         <div className={heroVideo ? "home-hero-media has-video" : "home-hero-media"} aria-hidden="true">
           {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
+          {heroVideo ? <HeroVideoKeeper /> : null}
         </div>
         <div className="home-hero-grid">
           <h1 className="home-hero-title" id="home-hero-title">
