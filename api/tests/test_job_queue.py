@@ -43,9 +43,10 @@ ours = root / coupon / "ours"
 ours.mkdir(parents=True, exist_ok=True)
 (ours / f"{coupon}.toml").write_text("the spec", encoding="utf-8")
 
-def write(stage, held, attempt=None, outputs=None):
+def write(stage, held, attempt=None, outputs=None, result=None):
     progress.write_text(json.dumps({"stage": stage, "done": [], "stages": ["the input", "CalculiX"], "coupon": coupon, "held": held,
-                                    "attempt": None if attempt is None else str(attempt), "outputs": outputs or {}}), encoding="utf-8")
+                                    "attempt": None if attempt is None else str(attempt), "outputs": outputs or {}, "result": result}),
+                        encoding="utf-8")
 
 print("== the input", flush=True)
 write("the input", True)
@@ -65,6 +66,8 @@ fields = attempt / "run" / "fields.json"
 fields.write_text(json.dumps({"attempt": number}), encoding="utf-8")
 write("CalculiX", False, attempt, {"fields": str(fields)})
 print(f"== CalculiX, attempt {number:02d}", flush=True)
+if coupon.startswith("WAIT-RESULT"):  # the result reported, the package still to build (ADR-0064)
+    write("the package", False, attempt, {"fields": str(fields)}, result=f"attempt {number:02d}")
 if coupon.startswith("WAIT"):
     while not (root.parent / f"release-{coupon}").exists():
         time.sleep(0.02)
@@ -203,6 +206,22 @@ def test_a_running_jobs_fields_are_read_through_the_api_from_the_store(queue, mo
     assert fields.status_code == 307 and "/files/fields/fields.json" in fields.headers["location"]
     (tmp_path / "solver-1" / "release-WAIT-D").touch()
     held_until(job, lambda: job.state == "done", "done")
+
+
+def test_a_running_jobs_result_is_read_back_from_its_row_before_the_package(queue, monkeypatch):
+    """ADR-0064: the solver's heartbeat writes the result to the row's message as soon as the tool reports it, so the API's container
+    shows it while the solver still builds the package; the row's message before then is empty."""
+    _, solver, _, _, table, tmp_path = queue
+    job_id = uuid.UUID(queued("WAIT-RESULT"))
+    job = solving(solver, job_id, monkeypatch, until=("running",))
+    held_until(job, lambda: fetch_job(table, job_id).message == "attempt 02", "writing its result to the row")
+    status = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert status["state"] == "running" and status["stage"] == "the package" and status["result"] == status["message"] == "attempt 02"
+    assert status["documents"] == "building"
+    (tmp_path / "solver-1" / "release-WAIT-RESULT").touch()
+    held_until(job, lambda: fetch_job(table, job_id).state == "done", "done on its row")  # the API's container reads the row
+    ended = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert ended["state"] == "done" and ended["result"] == "attempt 02" and ended["documents"] == "written"
 
 
 def test_the_per_job_timeout_stops_the_tool(queue, monkeypatch):

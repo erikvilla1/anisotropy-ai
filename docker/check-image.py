@@ -83,6 +83,7 @@ def main() -> int:
 
     seen: list[str] = []
     deadline = time.monotonic() + args.timeout
+    result_seconds = None
     while job["state"] == "running":
         if time.monotonic() > deadline:
             print(f"the job is still running after {args.timeout:.0f} s; its console tail:")
@@ -98,6 +99,9 @@ def main() -> int:
             if stage not in seen:
                 seen.append(stage)
                 print(f"  {time.monotonic() - t0:6.1f} s  done: {stage}")
+        if result_seconds is None and job.get("result"):  # the result before the drawings and the package (ADR-0064)
+            result_seconds = round(time.monotonic() - t0, 1)
+            print(f"  {result_seconds:6.1f} s  result: {job['result']}")
     elapsed = time.monotonic() - t0
     if job["state"] != "done":
         print(f"the job ended {job['state']}: {job['message']}")
@@ -128,7 +132,7 @@ def main() -> int:
 
     summary = {
         "job_id": job_id, "state": job["state"], "coupon": job["coupon"], "attempt": job["attempt"], "message": job["message"],
-        "job_seconds": round((finished - started).total_seconds(), 1), "wall_seconds": round(elapsed, 1),
+        "job_seconds": round((finished - started).total_seconds(), 1), "wall_seconds": round(elapsed, 1), "result_seconds": result_seconds,
         "document": outputs["document"], "document_bytes": document_path.stat().st_size,
         "fields_bytes": fields_path.stat().st_size, "package_zip_bytes": len(body), "package_pdf": pdfs,
         "peak_memory_bytes": peak_memory_bytes(),

@@ -59,7 +59,8 @@ SILENT_AFTER = dt.timedelta(minutes=2)  # a running job whose solver has written
 QUEUED_AFTER = dt.timedelta(hours=1)  # a job queued this long was lost by the queue or ran out of retries
 SWEEP_EVERY_S = 10.0  # a process looks for lost jobs at most this often, on the requests that read jobs
 SYNC_EVERY_S = 30.0  # the API's container brings its coupons level with the store at most this often, for the list, values and check
-LIVE_KEYS = ("checklist", "preview", "fields", "explanation")  # the files a browser reads while the job still runs
+LIVE_KEYS = ("checklist", "preview", "fields", "explanation", "kernel_summary", "record")  # the files a browser reads while the job still runs:
+# the result's, which the tool reports before it draws and builds the package (ADR-0064)
 # The container's peak memory, one job per solver container: cgroup v2's file, else cgroup v1's (a Docker host still on v1)
 CGROUP_PEAKS = (Path("/sys/fs/cgroup/memory.peak"), Path("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"))
 
@@ -156,9 +157,12 @@ class Job:
     def from_row(cls, row) -> "Job":
         """A job as its row in the jobs table keeps it, for a job that another process ran (ADR-0050 amendment 2)."""
         outcome = None if row.state in ("queued", "running") else {"status": row.state, "message": row.message, "coupon": row.coupon,
-                                                                   "attempt": row.attempt, "outputs": dict(row.outputs)}
+                                                                   "attempt": row.attempt, "outputs": dict(row.outputs),
+                                                                   "documents": "written" if "package" in row.outputs else None}
+        # a running row's message is the result once its solver reported it (`_heartbeat`); the documents are still being made
         snapshot = {"stage": row.stage, "done": list(row.stages_done), "stages": list(row.stages), "outputs": dict(row.outputs), "coupon": row.coupon,
-                    "attempt": row.attempt, "log_tail": list(row.log_tail), "message": row.message}
+                    "attempt": row.attempt, "log_tail": list(row.log_tail), "message": row.message,
+                    "result": row.message if row.state == "running" else None}
         return cls(row.id, row.actor, dict(row.inputs), None, row.started_at, state=row.state, finished_at=row.finished_at, outcome=outcome,
                    run_id=row.run_id, user_email=row.user_email, stored=dict(row.stored), snapshot=snapshot, project_id=getattr(row, "project_id", None))
 
@@ -361,20 +365,19 @@ class CouponJobs:
             state, run_id = "stopped", None
             outcome = {**outcome, "message": f"the job ended ({outcome.get('message')}) but its run record could not be written: {exc}; "
                                              "its result is withheld", "outputs": {}}
-        with self.lock:
-            job.outcome, job.run_id, job.finished_at = outcome, run_id, dt.datetime.now(dt.timezone.utc)
-            job.state = state
-        if self.table is not None:
+        finished_at = dt.datetime.now(dt.timezone.utc)
+        if self.table is not None:  # the row first, then this process's state: whoever sees the job ended here finds its row ended too
             progress = job.progress() or {}
             try:
                 update_job(self.table, job.id, state=state, stage=progress.get("stage"), stages_done=list(progress.get("done", [])),
                            stages=list(progress.get("stages", [])), coupon=outcome.get("coupon"), attempt=outcome.get("attempt"), message=outcome.get("message"),
-                           outputs=dict(outcome.get("outputs") or {}), stored=dict(job.stored), finished_at=job.finished_at, run_id=run_id, log_tail=job.log_tail(),
+                           outputs=dict(outcome.get("outputs") or {}), stored=dict(job.stored), finished_at=finished_at, run_id=run_id, log_tail=job.log_tail(),
                            **row)
             except (SQLAlchemyError, LookupError) as exc:
-                with self.lock:
-                    job.outcome = {**job.outcome, "message": f"{job.outcome.get('message')}; its row in the jobs table could not be updated: "
-                                                             f"{str(exc).splitlines()[0]}"}
+                outcome = {**outcome, "message": f"{outcome.get('message')}; its row in the jobs table could not be updated: {str(exc).splitlines()[0]}"}
+        with self.lock:
+            job.outcome, job.run_id, job.finished_at = outcome, run_id, finished_at
+            job.state = state
 
     def _store(self, job: Job, outcome: dict) -> dict[str, str]:
         """A done job's files into the store: every reported file by key, the package zip, and the coupon's whole folder."""
@@ -550,11 +553,12 @@ class CouponJobs:
         return path.is_file() and (resolved.is_relative_to(REPO.resolve()) or (job.folder is not None and resolved.is_relative_to(job.folder.resolve())))
 
     def _requeue(self, job: Job, reason: str) -> None:
-        """Back to the queue: the row `queued` again with the reason, its coupon let go; the solver's timer sends the job to the queue again."""
-        with self.lock:
-            job.state, job.process = "queued", None
+        """Back to the queue: the row `queued` again with the reason, its coupon let go; the solver's timer sends the job to the queue again.
+        The row first, then this process's state, so whoever sees the job `queued` here finds the row so too."""
         update_job(self.table, job.id, state="queued", coupon=None, attempt=None, stage=None, stages_done=[], stages=[], outputs={}, stored={},
                    message=reason, heartbeat_at=None, log_tail=job.log_tail())
+        with self.lock:
+            job.state, job.process = "queued", None
 
     def _heartbeat(self, job: Job, stop: threading.Event) -> None:
         """Every HEARTBEAT_S while the job runs: the files a browser reads while it runs into the store, and the row's stage, files,
@@ -576,7 +580,7 @@ class CouponJobs:
                     stored = dict(job.stored)
                 update_job(self.table, job.id, heartbeat_at=dt.datetime.now(dt.timezone.utc), stage=progress.get("stage"),
                            stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), attempt=attempt,
-                           outputs=dict(progress.get("outputs") or {}), stored=stored, log_tail=job.log_tail())
+                           outputs=dict(progress.get("outputs") or {}), stored=stored, log_tail=job.log_tail(), message=progress.get("result"))
             except Exception as exc:  # the store or the database for a moment: the next beat tries again
                 print(f"coupon job {job.id}: a heartbeat failed: {str(exc).splitlines()[0]}", flush=True)
 
