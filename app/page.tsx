@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
-import { HeroLens } from "@/components/home/hero-lens";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
 import { team } from "@/lib/team";
@@ -39,16 +38,6 @@ export default function Home() {
             <br />
             Traced to evidence.
           </h1>
-          <figure className="home-hero-lens">
-            <div className="home-hero-lens-frame" aria-hidden="true">
-              <HeroLens />
-            </div>
-            <figcaption>
-              CARBON FIBER
-              <br />
-              <span>The material is the starting point.</span>
-            </figcaption>
-          </figure>
           <div className="home-hero-copy">
             <p>
               We&apos;re bringing composite theory and real test data into one engineering platform, changing how laminates

@@ -17,7 +17,7 @@ async function playApi(page: Page, posts: Posted[]) {
   });
 }
 
-// The calculator's own view: the hero's lens draws the same scene (ADR-0066).
+// The calculator's own view.
 const scene = (page: Page) => {
   const calculator = page.locator("#laminate");
   return calculator.getByTestId("laminate-scene").or(calculator.getByTestId("webgl-missing"));
@@ -31,19 +31,17 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0065)"
   await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Composite analysis/);
 });
 
-test("the hero holds only the headline, the two paragraphs and the stack in a lens (ADR-0066)", async ({ page }) => {
+test("the hero holds only the headline and the two paragraphs (ADR-0066)", async ({ page }) => {
   const posts: Posted[] = [];
   await playApi(page, posts);
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/Composite analysis\.\s*Traced to evidence\./);
   await expect(hero.locator(".home-hero-copy p")).toHaveCount(2);
-  await expect(hero.getByTestId("laminate-scene").or(hero.getByTestId("webgl-missing"))).toBeVisible();
-  await expect(hero.locator(".home-hero-lens-frame")).toHaveAttribute("aria-hidden", "true");
-  // No chat box and no link in the hero: the header's Workspace button is the way in.
+  // No 3D view, chat box or link in the hero: the calculator below draws the stack, and the header's Workspace button is the way in.
+  await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);
   await expect(hero.getByRole("textbox")).toHaveCount(0);
   await expect(hero.getByRole("link")).toHaveCount(0);
-  // The lens only draws: the calculator's one request is the only one.
   await expect.poll(() => posts.length).toBe(1);
   // The header lies over the hero on the home page and stays sticky elsewhere.
   await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
