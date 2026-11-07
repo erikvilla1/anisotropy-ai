@@ -34,6 +34,16 @@ How to take the live numbers, once a service token exists (the walkthrough, "Che
 
 `ANISOTROPY_JOBS_PER_USER_PER_DAY` (off unless set; needs run records on): one running job per person, at most that many a day, UTC, counted in the `jobs` table; 429 with the reason, which the chat shows under "The run could not start". Tests: `api/tests/test_settings.py` (the number, the refusals), `api/tests/test_coupon_jobs_api.py` (a second running job refused naming the first; the fourth job of a day refused by a cap of three; another person not limited; the one-at-a-time 409 unchanged), `api/tests/test_run_records_db.py` (the two counts, by email or by actor). Results in the pull request.
 
+## After the secrets, 2026-11-07, 22:30 UTC
+
+The founder set the four secrets (`versions secret put`, since a preview version sat above the deployed one) and ran the deploy workflow by hand (3 min 21 s, green). Then, through the service token:
+
+- **The per-user limit holds.** `ANISOTROPY_JOBS_PER_USER_PER_DAY` set: a second `POST /api/v1/coupon-jobs` while the first ran answered 429, "a job of the actor studio is still queued (…, started 22:35 UTC); one runs at a time per person, so wait for it to end or open it". Measured.
+- **The model did not write, and the guard's fallback did its job.** `POST /api/v1/coupon-jobs/<id>/explain` answered `writer: template` with the reason "the model answered with an error (404): model: claude-opus-5.5 was not found. Did you mean claude-opus-5-5?": the model secret was typed with a dot. The template's words stood and the page said why, as ADR-0052 intends. The secret is to be set again as `claude-opus-5-5` and the workflow run once more; UNVERIFIED until then.
+- **The live browser test failed on the page, not the job.** The job ran to `done` in 180 s (12 files, 57 of 57 values agreeing), but one read of the fields file through the Worker was not answered ("The API did not answer (the fields)") and the page did not ask again, so the results never showed. Fixed the same evening: `components/studio/use-coupon-run.ts` tries a missed poll or read again after two seconds, up to ten times per job, and the browser stand-in now fails the first read of the fields on purpose (`tests/browser/studio.spec.ts`).
+- **A job nobody polled stalled.** The cap check's job, started by `curl` with no browser polling it, ended `stopped` after 591 s with "the solver running this job stopped answering for 120 s, so it did not finish; start it again". The same coupon had run to `done` in 80 s at 01:47 and in 180 s at 22:29 with the browser polling. Whether the container slept under no traffic, or the run was starved, is not known from here: it needs the Containers dashboard's CPU and memory for 22:35 to 22:45 UTC. UNVERIFIED; the brief's open question (does polling keep the container awake) stays open, now with one data point against it.
+- The coupon `IM7-UNT-L2` is gone from the hosted list: the founder deleted it from the bucket.
+
 ## Gate of stage 5, as the brief states it
 
 Two of the founder's engineers each run a coupon on the live site, and the founder says to open it to more users. Not reached (UNVERIFIED): no engineer's run is recorded yet; the `runs` table on Neon will show them with their `user_email`.
