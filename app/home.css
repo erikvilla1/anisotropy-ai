@@ -480,8 +480,8 @@
   }
 }
 
-/* The hero after PhysicsX's home page (ADR-0066): the material photo full-bleed, only the headline on the left and two short
- * paragraphs on the right of a 12-column grid (32 px gutters and margins, as measured there on 2026-11-07), and a lens above
+/* The hero after PhysicsX's home page (ADR-0066): the material photo full-bleed, only the headline on columns 1 to 6 and two
+ * short paragraphs from column 7 of a 12-column grid (32 px gutters and margins, as measured there on 2026-11-07), and a lens above
  * them holding the 3D stack, its bottom edge just over the headline's first line. The header lies over the hero on this page
  * and scrolls away with it. */
 html:has(.site-header.is-home) {
@@ -541,12 +541,12 @@ html:has(.site-header.is-home) {
   width: 100%;
 }
 .home-hero-title {
-  grid-column: 1 / 8;
+  grid-column: 1 / 7;
   position: relative;
   z-index: 2;
 }
 .home-hero-copy {
-  grid-column: 8 / 13;
+  grid-column: 7 / 13;
   position: relative;
   z-index: 2;
 }
@@ -559,8 +559,9 @@ html:has(.site-header.is-home) {
 .home-hero h1 {
   font-family: var(--font);
   font-weight: 400;
-  font-size: clamp(48px, 5.6vw, 104px);
+  font-size: clamp(48px, 5.2vw, 100px);
   line-height: 1;
+  white-space: nowrap;
   letter-spacing: -0.03em;
   color: #fff;
 }
@@ -621,31 +622,45 @@ html:has(.site-header.is-home) {
   .home-hero-lens {
     position: absolute;
     z-index: 1;
-    left: 37.5%;
-    bottom: calc(50% + min(4.2vw, 78px));
+    left: 28%;
+    bottom: calc(50% + min(3.9vw, 75px));
     width: 20vw;
     flex-direction: column-reverse;
   }
 }
 @media (min-width: 1201px) {
+  /* PhysicsX's header space: 56 px tall, 32 px margins, a 28 px logo, and the links starting on the halfway line, column 7 of
+   * the hero's grid, where the copy starts too, at up to 17 px. Workspace sits in the top-right corner. */
   .site-header.is-home {
-    height: 64px;
+    display: grid;
+    grid-template-columns: calc((100% - 32px) / 2) minmax(0, 1fr) auto;
+    column-gap: 32px;
+    height: 56px;
     padding: 0 32px;
   }
+  .site-header.is-home .wordmark {
+    justify-self: start;
+    gap: 9px;
+    font-size: 21px;
+  }
+  .site-header.is-home .brand-symbol {
+    width: 28px;
+    height: 28px;
+  }
   .site-header.is-home .main-nav {
-    margin-left: auto;
-    font-size: 15px;
-    gap: 22px;
+    font-size: min(17px, 1.1vw);
+    gap: min(20px, 1.3vw);
     white-space: nowrap;
   }
-  .site-header.is-home .header-cta {
-    font-size: 13px;
-    padding: 8px 14px;
-  }
-}
-@media (min-width: 1201px) and (max-width: 1599px) {
   .site-header.is-home .header-version {
     display: none;
+  }
+  .site-header.is-home .header-actions {
+    justify-self: end;
+  }
+  .site-header.is-home .header-cta {
+    font-size: 14px;
+    padding: 7px 12px;
   }
 }
 @media (max-width: 1023px) {
