@@ -254,8 +254,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   useEffect(() => {
-    if (runner.loadedJob) add({ role: "assistant", kind: "result", job: runner.loadedJob }); // once per job, when its fields are first read
-  }, [runner.loadedJob, add]);
+    // once per job, as soon as its fields are read: the entry follows the fields themselves, not the hook's bookkeeping of first reads
+    if (!fields || !job) return;
+    if (!live.current.entries.some((e) => e.role === "assistant" && e.kind === "result" && e.job === job.job_id)) add({ role: "assistant", kind: "result", job: job.job_id });
+  }, [fields, job, add]);
 
   /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
   function redirect(text: string) {
