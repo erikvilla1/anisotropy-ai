@@ -6,6 +6,16 @@ status, reads its progress from the JSON file the tool rewrites after every step
 file the tool writes at the end (`--result`). One job runs at a time: runs share a coupon's folders and its attempt numbers. A
 job's status lives in this process; when it ends, its receipt is one run record (ADR-0026).
 
+With the job queue (ADR-0056 stage 3, amendment 3) the work splits over containers, one role each (`ANISOTROPY_JOB_ROLE`):
+
+- `queue`, the API's own container: a job is filed, not run. Its input goes to the object store, its row to the jobs table as
+  `queued`, and the Worker hands it to the queue. Its status is read back from the row and its files from the store.
+- `solver`, a container of the job's own that the queue's consumer starts: it claims the row, brings the coupons level with the
+  store, and runs the tool with a gate (`--gate`). One job at a time names its coupon, under a database lock; at the gate the job
+  claims its coupon on its row, where a unique index allows one running job per coupon, so two containers never number attempts
+  of one coupon at once. A job whose coupon another job holds goes back to the queue. While it runs, a heartbeat writes its stage,
+  its log and the files made so far to the row and the store.
+
 The studio's setup check, the list of coupons and a coupon's values run `fea/tools/studio_tool.py` the same way, and wait for it.
 """
 
@@ -18,6 +28,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -26,18 +37,31 @@ from pathlib import Path
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .records import fetch_job, insert_job, jobs_started_since, list_jobs, running_job_of, update_job
-from .storage import ObjectStore, store_folder, store_job
+from .records import (claim_coupon, claim_job, fetch_job, insert_job, jobs_started_since, list_jobs, naming_lock, queue_position, running_job_of,
+                      sweep_stale, update_job)
+from .storage import ObjectStore, content_type, input_key, store_file, store_folder, store_job, sync
 
 REPO = Path(__file__).resolve().parents[3]
 FEA = REPO / "fea"
 LOCAL_FEA = REPO / ".local" / "fea"  # where the tool keeps the coupons (fea/src/anisotropy_fea/paths.py)
 RUNNER = FEA / "tools" / "run_coupon.py"
 STUDIO = FEA / "tools" / "studio_tool.py"
-STATES = ("running", "done", "stopped", "refused")
+STATES = ("running", "done", "stopped", "refused")  # what the tool and this process know; the jobs table adds `queued` (migration 0008)
 LOG_TAIL = 40  # lines of the job's console a status shows
 CHECK_TIMEOUT_S = 120.0  # a check is one `uv run` start and a model build; a Gmsh mesh takes longest
 PROGRESS = "progress.json"
+GATE = "gate"  # the file the tool waits for once it has named the coupon (--gate)
+GATE_GO = "go"
+# The job queue (ADR-0056 amendment 3). Every number here is a first choice to be revised from the hosted tier's measurements.
+TICK_S = 0.1  # how often a solver looks at a job held at the gate
+HEARTBEAT_S = 5.0  # how often a solver writes a running job's row: its sign of life, stage, log and the files so far
+SILENT_AFTER = dt.timedelta(minutes=2)  # a running job whose solver has written nothing for this long has lost its container
+QUEUED_AFTER = dt.timedelta(hours=1)  # a job queued this long was lost by the queue or ran out of retries
+SWEEP_EVERY_S = 10.0  # a process looks for lost jobs at most this often, on the requests that read jobs
+SYNC_EVERY_S = 30.0  # the API's container brings its coupons level with the store at most this often, for the list, values and check
+LIVE_KEYS = ("checklist", "preview", "fields", "explanation")  # the files a browser reads while the job still runs
+# The container's peak memory, one job per solver container: cgroup v2's file, else cgroup v1's (a Docker host still on v1)
+CGROUP_PEAKS = (Path("/sys/fs/cgroup/memory.peak"), Path("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"))
 
 
 class JobRefused(RuntimeError):
@@ -101,6 +125,8 @@ class Job:
     stored: dict[str, str] = field(default_factory=dict)  # output key -> where the object store keeps the file (ADR-0050 amendment 2)
     snapshot: dict | None = None  # a job of an earlier process: its row's stage, stages, outputs and log tail, in place of the files
     project_id: uuid.UUID | None = None  # the workspace project it was started for (ADR-0062 part 6)
+    process: subprocess.Popen | None = field(default=None, repr=False, compare=False)  # a solver's running tool
+    stop_reason: str | None = None  # why a solver stopped the tool, when it did (the per-job timeout)
 
     @property
     def log(self) -> Path | None:
@@ -129,10 +155,10 @@ class Job:
     @classmethod
     def from_row(cls, row) -> "Job":
         """A job as its row in the jobs table keeps it, for a job that another process ran (ADR-0050 amendment 2)."""
-        outcome = None if row.state == "running" else {"status": row.state, "message": row.message, "coupon": row.coupon, "attempt": row.attempt,
-                                                         "outputs": dict(row.outputs)}
+        outcome = None if row.state in ("queued", "running") else {"status": row.state, "message": row.message, "coupon": row.coupon,
+                                                                   "attempt": row.attempt, "outputs": dict(row.outputs)}
         snapshot = {"stage": row.stage, "done": list(row.stages_done), "stages": list(row.stages), "outputs": dict(row.outputs), "coupon": row.coupon,
-                    "attempt": row.attempt, "log_tail": list(row.log_tail)}
+                    "attempt": row.attempt, "log_tail": list(row.log_tail), "message": row.message}
         return cls(row.id, row.actor, dict(row.inputs), None, row.started_at, state=row.state, finished_at=row.finished_at, outcome=outcome,
                    run_id=row.run_id, user_email=row.user_email, stored=dict(row.stored), snapshot=snapshot, project_id=getattr(row, "project_id", None))
 
@@ -145,16 +171,24 @@ class CouponJobs:
     command lines without their arguments."""
 
     def __init__(self, command: list[str] | None, recorder: Recorder, root: Path | None = None, studio: list[str] | None = None,
-                 store: ObjectStore | None = None, table: Engine | None = None, local_root: Path | None = None, per_day: int | None = None):
+                 store: ObjectStore | None = None, table: Engine | None = None, local_root: Path | None = None, per_day: int | None = None,
+                 role: str | None = None):
         """`store` is the object store a done job's files go to and `table` the database holding the jobs table (ADR-0050 amendment
         2); None keeps the files on the local disk and the status in this process, as before. `local_root` is where the tool keeps
         the coupons, .local/fea/ by default. `per_day`, with the table, is the hosted tier's per-user limit: one running job per
-        person and at most that many a day (ADR-0056); None means no such limit."""
+        person and at most that many a day (ADR-0056); None means no such limit. `role` is the job queue's (ADR-0056 amendment 3):
+        "queue" files jobs for the queue, "solver" runs the queued job it is given; None runs every job here."""
         self.command, self.recorder, self.root, self.studio = command, recorder, root, studio
         self.store, self.table, self.local_root = store, table, local_root or LOCAL_FEA
         if per_day is not None and table is None:
             raise ValueError("a per-user limit counts jobs in the jobs table, so it needs the table")
-        self.per_day = per_day
+        if role not in (None, "queue", "solver"):
+            raise ValueError(f"no job role {role!r}; 'queue', 'solver' or None")
+        if role is not None and (store is None or table is None):
+            raise ValueError(f"the {role} role passes jobs between containers through the jobs table and the object store, so it needs both")
+        self.per_day, self.role = per_day, role
+        self.synced_at: float | None = None
+        self.swept_at: float | None = None
         self.process = str(uuid.uuid4())
         self.jobs: dict[uuid.UUID, Job] = {}
         self.lock = threading.Lock()
@@ -163,12 +197,39 @@ class CouponJobs:
         """A job of this process, or of an earlier one from the jobs table."""
         job = self.jobs.get(job_id)
         if job is None and self.table is not None:
+            self.sweep()
             row = fetch_job(self.table, job_id)
             job = None if row is None else Job.from_row(row)
+            if row is not None and row.state == "queued" and not row.message:
+                ahead = queue_position(self.table, row.id, row.started_at)
+                job.snapshot["message"] = f"waiting for a free solver; {ahead} job(s) ahead of this one" if ahead else "waiting for a free solver"
         return job
+
+    def sweep(self, force: bool = False) -> int:
+        """With the job queue, stop the jobs nothing will finish (`records.sweep_stale`), at most every SWEEP_EVERY_S unless `force`;
+        0 without the queue."""
+        if self.role is None or (not force and self.swept_at is not None and time.monotonic() - self.swept_at < SWEEP_EVERY_S):
+            return 0
+        self.swept_at = time.monotonic()
+        try:
+            return sweep_stale(self.table, dt.datetime.now(dt.timezone.utc), silent_after=SILENT_AFTER, queued_after=QUEUED_AFTER)
+        except SQLAlchemyError:
+            return 0  # a sweep is housekeeping; the request it rides on goes on
+
+    def refresh(self) -> None:
+        """The API's container under the job queue: its coupons brought level with the store, at most every SYNC_EVERY_S, since the
+        solvers write them; the list, a coupon's values and the setup check read them from this disk."""
+        if self.role != "queue" or (self.synced_at is not None and time.monotonic() - self.synced_at < SYNC_EVERY_S):
+            return
+        try:
+            sync(self.store, self.local_root)
+        except Exception as exc:  # the store's own errors or the disk's: the disk as it is serves, a little behind
+            print(f"the coupons could not be brought level with the store: {str(exc).splitlines()[0]}", flush=True)
+        self.synced_at = time.monotonic()
 
     def listed(self) -> list[Job]:
         """Every job, newest first: this process's, and from the jobs table those of earlier processes."""
+        self.sweep()
         with self.lock:
             jobs = dict(self.jobs)
         if self.table is not None:
@@ -186,11 +247,16 @@ class CouponJobs:
               values: bytes | None = None, user_email: str | None = None, project_id: uuid.UUID | None = None) -> Job:
         """Start a job from a filled-in form (its file name and bytes), the values (the JSON file's bytes) or a coupon's name; refused
         while another runs. `user_email` is the signed-in email, when Access is in front of the API, kept for the job's receipt;
-        `project_id` the workspace project the job is run for, already known to be the requester's (ADR-0062 part 6)."""
-        if self.command is None:
-            raise JobRefused("uv is not on PATH; a coupon job runs fea/tools/run_coupon.py through `uv run --project fea`")
+        `project_id` the workspace project the job is run for, already known to be the requester's (ADR-0062 part 6). With the job
+        queue the job is filed, not run (`_enqueue`)."""
+        if self.role == "solver":
+            raise JobRefused("this container runs the queued jobs it is given; a job starts through the API's own container")
         if sum(x is not None for x in (form, coupon, values)) != 1:
             raise ValueError("a job starts from a form, the values or a coupon: one of the three")
+        if self.role == "queue":
+            return self._enqueue(actor, inputs, options, form=form, coupon=coupon, values=values, user_email=user_email, project_id=project_id)
+        if self.command is None:
+            raise JobRefused("uv is not on PATH; a coupon job runs fea/tools/run_coupon.py through `uv run --project fea`")
         if self.per_day is not None:
             self._within_limits(actor, user_email)
         with self.lock:
@@ -222,13 +288,43 @@ class CouponJobs:
         threading.Thread(target=self._run, args=(job, args), name=f"coupon-job-{job.id}", daemon=True).start()
         return job
 
+    def _enqueue(self, actor: str, inputs: dict, options: list[str], *, form: tuple[str, bytes] | None, coupon: str | None, values: bytes | None,
+                 user_email: str | None, project_id: uuid.UUID | None) -> Job:
+        """The job queue's start (ADR-0056 amendment 3): the per-user limits, the input filed in the store, the row `queued` with the
+        source and the options a solver needs. The Worker hands the job to the queue once the answer says so."""
+        self.sweep()
+        if self.per_day is not None:
+            self._within_limits(actor, user_email)
+        job_id, now = uuid.uuid4(), dt.datetime.now(dt.timezone.utc)
+        source = coupon
+        if coupon is None:
+            name, data = form if form is not None else (f"values-{job_id.hex[:8]}.json", values)
+            folder = self._folder() / str(job_id)
+            folder.mkdir(parents=True)
+            (folder / name).write_bytes(data)
+            source = input_key(str(job_id), name)
+            try:
+                self.store.put(source, folder / name, content_type(folder / name))
+            except Exception as exc:  # boto3's own errors or the disk's: either way the solver could not read the input
+                raise JobRefused(f"the job's input could not be filed in storage, so it was not queued: {str(exc).splitlines()[0]}") from exc
+            finally:
+                shutil.rmtree(folder, ignore_errors=True)
+        try:
+            insert_job(self.table, job_id=job_id, actor=actor, user_email=user_email, inputs=inputs, started_at=now, process=self.process,
+                       project_id=project_id, state="queued", source=source, options=options)
+        except SQLAlchemyError as exc:
+            raise JobRefused(f"the job could not be registered in the jobs table, so it was not queued: {str(exc).splitlines()[0]}") from exc
+        return Job(job_id, actor, inputs, None, now, state="queued", user_email=user_email, project_id=project_id,
+                   snapshot={"stage": None, "done": [], "stages": [], "outputs": {}, "coupon": None, "attempt": None, "log_tail": [],
+                             "message": "waiting for a free solver"})
+
     def _within_limits(self, actor: str, user_email: str | None) -> None:
         """The hosted tier's per-user limits (ADR-0056), from the jobs table: one running job per person, and at most `per_day` jobs
         started since midnight UTC, whatever became of them. Refused with the reason the studio shows."""
         who = user_email or f"the actor {actor}"
         running = running_job_of(self.table, user_email, actor)
         if running is not None:
-            raise JobLimited(f"a job of {who} is still running ({running.id}, started {running.started_at:%H:%M} UTC); one runs at a time per person, "
+            raise JobLimited(f"a job of {who} is still {running.state} ({running.id}, started {running.started_at:%H:%M} UTC); one runs at a time per person, "
                              "so wait for it to end or open it")
         midnight = dt.datetime.now(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         started = jobs_started_since(self.table, user_email, actor, midnight)
@@ -247,6 +343,10 @@ class CouponJobs:
                                                 "the end of its console says why", "coupon": None, "attempt": None, "outputs": {}}
         except (OSError, json.JSONDecodeError) as exc:
             outcome = {"status": "stopped", "message": f"the job could not run: {exc}", "coupon": None, "attempt": None, "outputs": {}}
+        self._finish(job, outcome)
+
+    def _finish(self, job: Job, outcome: dict, **row) -> None:
+        """An ended job: its files to the store when there is one, its receipt, its status here and its row (with `row`'s extra columns)."""
         state = outcome["status"] if outcome.get("status") in STATES[1:] else "stopped"
         if state == "done" and self.store is not None:  # the files outlive this container only in the store (ADR-0050 amendment 2)
             try:
@@ -269,7 +369,8 @@ class CouponJobs:
             try:
                 update_job(self.table, job.id, state=state, stage=progress.get("stage"), stages_done=list(progress.get("done", [])),
                            stages=list(progress.get("stages", [])), coupon=outcome.get("coupon"), attempt=outcome.get("attempt"), message=outcome.get("message"),
-                           outputs=dict(outcome.get("outputs") or {}), stored=dict(job.stored), finished_at=job.finished_at, run_id=run_id, log_tail=job.log_tail())
+                           outputs=dict(outcome.get("outputs") or {}), stored=dict(job.stored), finished_at=job.finished_at, run_id=run_id, log_tail=job.log_tail(),
+                           **row)
             except (SQLAlchemyError, LookupError) as exc:
                 with self.lock:
                     job.outcome = {**job.outcome, "message": f"{job.outcome.get('message')}; its row in the jobs table could not be updated: "
@@ -305,9 +406,10 @@ class CouponJobs:
         return archive
 
     def output_url(self, job: Job, key: str) -> str | None:
-        """A short-lived link to a done job's file in the object store, or None when the file is served from the disk: no store, the job
-        still running, or a file the store does not hold (ADR-0050 amendment 2)."""
-        if self.store is None or job.state != "done" or key not in job.stored:
+        """A short-lived link to a job's file in the object store, or None when the file is served from the disk: no store, a job of
+        this process still running, or a file the store does not hold (ADR-0050 amendment 2). A job read back from its row has no
+        disk here, so its files come from the store while it runs too: with the job queue its solver files them as they are made."""
+        if self.store is None or key not in job.stored or (job.state != "done" and job.folder is not None):
             return None
         return self.store.link(job.stored[key])
 
@@ -318,6 +420,11 @@ class CouponJobs:
             outputs = dict((job.outcome or {}).get("outputs") or (job.progress() or {}).get("outputs") or {})
         if key not in outputs:
             raise KeyError(", ".join(sorted(outputs)) or "no file yet")
+        if job.folder is None and self.store is not None and key in job.stored and key != "package":  # read back from its row: from the store
+            cached = self._folder() / str(job.id) / "stored" / key / Path(job.stored[key]).name
+            if not cached.is_file():
+                self.store.get(job.stored[key], cached)
+            return cached
         if key == "package":
             return self.package_archive(job)
         path = repository_path(outputs[key]).resolve()
@@ -326,6 +433,152 @@ class CouponJobs:
         if not path.is_file():
             raise FileNotFoundError(f"the file {outputs[key]} is no longer there")
         return path
+
+    # --- the solver (the job queue, ADR-0056 amendment 3) ------------------------------------------------------------------
+
+    def take(self, job_id: uuid.UUID) -> Job | None:
+        """A solver's start: the queued job claimed and run in the background. The job as it stands when this solver has it already
+        (running or ended); None when its row is not queued (another solver took it, it ended, or there is none), so a message
+        delivered twice runs the job once."""
+        if self.role != "solver":
+            raise JobRefused("this container does not run queued jobs; ANISOTROPY_JOB_ROLE=solver does")
+        if self.command is None:
+            raise JobRefused("uv is not on PATH; a coupon job runs fea/tools/run_coupon.py through `uv run --project fea`")
+        with self.lock:
+            job = self.jobs.get(job_id)
+            if job is not None and job.state != "queued":
+                return job
+        row = claim_job(self.table, job_id, self.process, dt.datetime.now(dt.timezone.utc))
+        if row is None:
+            return None
+        folder = self._folder() / str(job_id)
+        shutil.rmtree(folder, ignore_errors=True)  # a job sent back to the queue and given to this container again starts afresh
+        folder.mkdir(parents=True)
+        job = Job(row.id, row.actor, dict(row.inputs), folder, row.started_at, user_email=row.user_email, project_id=row.project_id)
+        with self.lock:
+            self.jobs[job.id] = job
+        threading.Thread(target=self._solve, args=(job, row.source, list(row.options)), name=f"coupon-solve-{job.id}", daemon=True).start()
+        return job
+
+    def stop(self, job_id: uuid.UUID, reason: str) -> Job | None:
+        """A solver's running job stopped with the reason (the per-job timeout); its tool is killed and the job ends `stopped`."""
+        with self.lock:
+            job = self.jobs.get(job_id)
+            if job is None or job.state != "running":
+                return job
+            job.stop_reason = reason
+            process = job.process
+        if process is not None and process.poll() is None:
+            process.kill()
+        return job
+
+    def _solve(self, job: Job, source: str, options: list[str]) -> None:
+        beat = threading.Event()
+        beating = threading.Thread(target=self._heartbeat, args=(job, beat), name=f"coupon-heartbeat-{job.id}", daemon=True)
+        beating.start()
+        try:
+            outcome, requeued = self._solve_steps(job, source, options)
+        except Exception as exc:  # the store, the database or the disk failed around the tool: the job ends with the reason
+            if job.process is not None and job.process.poll() is None:
+                job.process.kill()
+            outcome, requeued = {"status": "stopped", "message": f"the solver could not run the job: {str(exc).splitlines()[0]}", "coupon": None,
+                                 "attempt": None, "outputs": {}}, None
+        finally:
+            beat.set()
+            beating.join()  # no beat lands on the row after its last write below
+        if requeued is not None:
+            self._requeue(job, requeued)
+            return
+        if job.stop_reason is not None:
+            outcome = {**outcome, "status": "stopped", "message": job.stop_reason, "outputs": {}}
+        self._finish(job, outcome, peak_memory_bytes=peak_memory(), heartbeat_at=dt.datetime.now(dt.timezone.utc))
+
+    def _solve_steps(self, job: Job, source: str, options: list[str]) -> tuple[dict, str | None]:
+        """Run the tool with the gate; returns the outcome, and the reason when the job goes back to the queue instead."""
+        argument = source
+        if "/" in source:  # an object key: the form or the values as sent, filed by the API's container
+            argument = str(job.folder / Path(source).name)
+            self.store.get(source, Path(argument))
+        shutil.rmtree(self.local_root, ignore_errors=True)  # this container's coupons are the store's, nothing else
+        sync(self.store, self.local_root)  # the bulk of it outside the lock; only what changes meanwhile is fetched under it
+        result, gate = job.folder / "outcome.json", job.folder / GATE
+        args = [*self.command, argument, *options, "--result", str(result), "--progress", str(job.folder / PROGRESS), "--gate", str(gate)]
+        with job.log.open("wb") as log:
+            with naming_lock(self.table):
+                sync(self.store, self.local_root)
+                process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=FEA, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+                with self.lock:
+                    job.process = process
+                waiting = self._at_gate(job, process)
+            if waiting is not None:
+                process.wait()
+                return {}, waiting
+            process.wait()
+        outcome = json.loads(result.read_text(encoding="utf-8")) if result.is_file() else {
+            "status": "stopped", "message": f"{Path(self.command[-1]).name} exited with code {process.returncode} and wrote no outcome; the end of "
+                                            "its console says why", "coupon": None, "attempt": None, "outputs": {}}
+        return outcome, None
+
+    def _at_gate(self, job: Job, process: subprocess.Popen) -> str | None:
+        """Under the naming lock: wait until the tool holds at the gate with its coupon named, or ends first. Claim the coupon on the
+        job's row; with it, file the coupon's folder in the store (its new specs and codes are then what the next job reads) and let
+        the tool go on. When another running job holds the coupon, refuse the tool at the gate and return why the job waits."""
+        while process.poll() is None:
+            progress = job.progress() or {}
+            coupon = progress.get("coupon")
+            if progress.get("held") and coupon:
+                holder = claim_coupon(self.table, job.id, coupon)
+                if holder is not None and self.sweep(force=True):  # the holder's solver may be gone: its row is stopped, and the coupon free
+                    holder = claim_coupon(self.table, job.id, coupon)
+                if holder is not None:
+                    reason = (f"waiting: another job ({holder.id}) is solving the coupon {coupon}; this one runs when it ends, so the two do not "
+                              "number the same attempt")
+                    open_gate(job.folder / GATE, reason)
+                    return reason
+                folder = self.local_root / coupon
+                if folder.is_dir():
+                    store_folder(self.store, folder, coupon)
+                open_gate(job.folder / GATE, GATE_GO)
+                return None
+            time.sleep(TICK_S)
+        return None
+
+    @staticmethod
+    def _servable(job: Job, path: Path) -> bool:
+        """A file the tool reported that may be handed out: it exists, under the repository or the job's folder (as `output_file`)."""
+        resolved = path.resolve()
+        return path.is_file() and (resolved.is_relative_to(REPO.resolve()) or (job.folder is not None and resolved.is_relative_to(job.folder.resolve())))
+
+    def _requeue(self, job: Job, reason: str) -> None:
+        """Back to the queue: the row `queued` again with the reason, its coupon let go; the solver's timer sends the job to the queue again."""
+        with self.lock:
+            job.state, job.process = "queued", None
+        update_job(self.table, job.id, state="queued", coupon=None, attempt=None, stage=None, stages_done=[], stages=[], outputs={}, stored={},
+                   message=reason, heartbeat_at=None, log_tail=job.log_tail())
+
+    def _heartbeat(self, job: Job, stop: threading.Event) -> None:
+        """Every HEARTBEAT_S while the job runs: the files a browser reads while it runs into the store, and the row's stage, files,
+        log and sign of life. A failed beat is tried again at the next."""
+        while not stop.wait(HEARTBEAT_S):
+            try:
+                progress = job.progress() or {}
+                coupon, attempt = progress.get("coupon"), progress.get("attempt")
+                if coupon and attempt:
+                    for key in LIVE_KEYS:
+                        reported = (progress.get("outputs") or {}).get(key)
+                        if reported and key not in job.stored and self._servable(job, repository_path(reported)):
+                            object_key = store_file(self.store, coupon, Path(attempt).name, key, repository_path(reported))
+                            with self.lock:
+                                job.stored[key] = object_key
+                if stop.is_set():
+                    return
+                with self.lock:
+                    stored = dict(job.stored)
+                update_job(self.table, job.id, heartbeat_at=dt.datetime.now(dt.timezone.utc), stage=progress.get("stage"),
+                           stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), attempt=attempt,
+                           outputs=dict(progress.get("outputs") or {}), stored=stored, log_tail=job.log_tail())
+            except Exception as exc:  # the store or the database for a moment: the next beat tries again
+                print(f"coupon job {job.id}: a heartbeat failed: {str(exc).splitlines()[0]}", flush=True)
 
     # --- the studio tool -------------------------------------------------------------------------------------------------
 
@@ -342,6 +595,7 @@ class CouponJobs:
 
     def check(self, values: bytes, timeout_s: float | None = None) -> dict:
         """The setup check of a values file (ADR-0051): the checklist, and the preview when the inputs build a model."""
+        self.refresh()
         folder = Path(tempfile.mkdtemp(prefix="check-", dir=self._folder()))
         try:
             source = folder / "values.json"
@@ -360,6 +614,7 @@ class CouponJobs:
 
     def list_coupons(self, timeout_s: float | None = None) -> list[dict]:
         """Every coupon on this machine, as the studio tool lists them."""
+        self.refresh()
         done = self._studio(["coupons"], timeout_s or CHECK_TIMEOUT_S)
         if done.returncode != 0:
             raise JobRefused("the studio tool failed: " + (done.stderr.strip().splitlines() or ["no message"])[-1])
@@ -367,6 +622,7 @@ class CouponJobs:
 
     def coupon_values(self, name: str, timeout_s: float | None = None) -> dict:
         """A coupon's rows as the values object; UnknownCoupon when there is no coupon of that name."""
+        self.refresh()
         done = self._studio(["values", name], timeout_s or CHECK_TIMEOUT_S)
         if done.returncode != 0:
             message = (done.stderr.strip().splitlines() or ["no message"])[-1]
@@ -374,3 +630,21 @@ class CouponJobs:
                 raise UnknownCoupon(message)
             raise JobRefused("the studio tool failed: " + message)
         return json.loads(done.stdout)
+
+
+def open_gate(gate: Path, word: str) -> None:
+    """The word at the tool's gate, written whole: to a neighbour first, then moved into place, so the tool never reads half of it."""
+    draft = gate.with_name(gate.name + ".draft")
+    draft.write_text(word, encoding="utf-8")
+    os.replace(draft, gate)
+
+
+def peak_memory(paths: tuple[Path, ...] = CGROUP_PEAKS) -> int | None:
+    """The container's peak memory in bytes from the first cgroup file that reads, or None where none does (a machine that is not a
+    container)."""
+    for path in paths:
+        try:
+            return int(path.read_text(encoding="ascii").strip())
+        except (OSError, ValueError):
+            continue
+    return None

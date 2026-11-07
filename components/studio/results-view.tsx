@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DOWNLOADS, explainJob, fileUrl, StudioError, type ExplainAnswer, type Explanation, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
+import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
 import { legendGradient, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
@@ -88,7 +88,7 @@ export function Downloads({ apiBase, job }: { apiBase: string; job: JobStatus })
       <ul className="studio-downloads">
         {available.map(([key, label]) => <li key={key}><a href={fileUrl(apiBase, job.job_id, key)} target="_blank" rel="noreferrer" data-key={key}>{label}</a></li>)}
       </ul>
-      {job.state === "running" ? <p className="studio-muted">More files join the list as the job goes on.</p> : null}
+      {isActive(job.state) ? <p className="studio-muted">More files join the list as the job goes on.</p> : null}
     </div>
   );
 }

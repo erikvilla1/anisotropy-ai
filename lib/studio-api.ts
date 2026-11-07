@@ -6,7 +6,10 @@ import type { Checklist, StudioValues } from "./studio-form";
 
 export const ACTOR = "studio";
 export const POLL_MS = 2000;
-export type JobState = "running" | "done" | "stopped" | "refused";
+/** `queued` with the hosted tier's job queue (ADR-0056 amendment 3): filed, waiting for a free solver; the message says what for. */
+export type JobState = "queued" | "running" | "done" | "stopped" | "refused";
+/** Still going: queued for a solver or running; the page keeps polling. */
+export const isActive = (state: JobState | undefined | null): boolean => state === "queued" || state === "running";
 export type JobStatus = {
   job_id: string; state: JobState; actor: string; started_at: string; finished_at: string | null; coupon: string | null; attempt: string | null;
   message: string | null; stage: string | null; stages_done: string[]; stages: string[]; outputs: Record<string, string>; run_id: string | null;
@@ -188,7 +191,7 @@ export function readProjectRecord(payload: unknown): ProjectRecord {
     throw new StudioError("The API answered a project with an unexpected shape.");
   }
   const jobs = Array.isArray(payload.jobs) ? payload.jobs.filter(isObject).map((j) => ({
-    job_id: String(j.job_id), state: (["running", "done", "stopped", "refused"].includes(String(j.state)) ? j.state : "stopped") as JobState,
+    job_id: String(j.job_id), state: (["queued", "running", "done", "stopped", "refused"].includes(String(j.state)) ? j.state : "stopped") as JobState,
     coupon: text(j.coupon), attempt: text(j.attempt), message: text(j.message), started_at: String(j.started_at), finished_at: text(j.finished_at), run_id: text(j.run_id),
   })) : [];
   return { id: payload.id, kind: payload.kind, name: payload.name, content: payload.content, form_version: text(payload.form_version), units: text(payload.units),

@@ -8,12 +8,15 @@ The layout, under one prefix per coupon:
     coupons/<coupon>/folder/<path under .local/fea/<coupon>/>   the coupon's whole folder, so a new container restores it at
                                                             startup and the coupon list, a coupon's values and the next attempt's
                                                             number are what they were; the latest job's copy wins
+    jobs/<job id>/input/<file name>                         with the job queue, the form or the values as sent, for the solver
+                                                            container that runs the job (ADR-0056 amendment 3)
 
 Without the settings nothing is stored or restored: the files stay where the tool wrote them, as before.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
@@ -21,6 +24,8 @@ from .settings import StorageSettings
 
 COUPONS = "coupons"
 FOLDER = "folder"
+JOBS = "jobs"
+TAGS = ".store-tags.json"  # in the coupons' root: each restored file's object key and the store's tag for it when it was fetched
 LINK_SECONDS = 600  # a download link lives ten minutes: long enough to open, short enough not to be worth passing around
 MEDIA_TYPES = {".json": "application/json", ".txt": "text/plain; charset=utf-8", ".inp": "text/plain; charset=utf-8", ".toml": "text/plain; charset=utf-8",
                ".md": "text/markdown; charset=utf-8", ".tex": "text/plain; charset=utf-8", ".csv": "text/csv; charset=utf-8", ".vtu": "application/xml",
@@ -46,6 +51,8 @@ class ObjectStore(Protocol):
     def get(self, key: str, path: Path) -> None: ...
 
     def keys(self, prefix: str) -> list[str]: ...
+
+    def tags(self, prefix: str) -> dict[str, str]: ...
 
     def link(self, key: str, seconds: int = LINK_SECONDS) -> str: ...
 
@@ -80,6 +87,11 @@ class R2Store:
         pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix)
         return [item["Key"] for page in pages for item in page.get("Contents", [])]
 
+    def tags(self, prefix: str) -> dict[str, str]:
+        """Every key under the prefix with the store's tag for its content (the ETag), which changes when the object does."""
+        pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix)
+        return {item["Key"]: item["ETag"] for page in pages for item in page.get("Contents", [])}
+
     def link(self, key: str, seconds: int = LINK_SECONDS) -> str:
         return self.client.generate_presigned_url("get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=seconds)
 
@@ -100,6 +112,17 @@ def package_key(coupon: str, attempt: str) -> str:
 
 def folder_key(coupon: str, relative: PurePosixPath) -> str:
     return f"{COUPONS}/{coupon}/{FOLDER}/{relative.as_posix()}"
+
+
+def input_key(job_id: str, filename: str) -> str:
+    return f"{JOBS}/{job_id}/input/{filename}"
+
+
+def store_file(store: ObjectStore, coupon: str, attempt: str, key: str, path: Path) -> str:
+    """One reported file by its key, as `store_job` keeps it; returns the object key. For a running job's files (the queue)."""
+    object_key = file_key(coupon, attempt, key, path.name)
+    store.put(object_key, path, content_type(path), disposition(path))
+    return object_key
 
 
 def store_job(store: ObjectStore, coupon: str, attempt: str, outputs: dict[str, Path], package_zip: Path | None) -> dict[str, str]:
@@ -145,4 +168,43 @@ def restore(store: ObjectStore, root: Path) -> tuple[int, int]:
             continue
         store.get(key, target)
         files += 1
+    return files, len(coupons)
+
+
+def _coupon_path(key: str) -> tuple[str, list[str]] | None:
+    """A key under a coupon's folder prefix as (coupon, parts of the path under it), or None for any other key or one that would leave
+    the coupon's folder."""
+    head, found, relative = key.partition(f"/{FOLDER}/")
+    coupon = head.removeprefix(f"{COUPONS}/")
+    parts = relative.split("/") if found else []
+    if not head.startswith(f"{COUPONS}/") or not coupon or "/" in coupon or not parts or any(part in ("", ".", "..") for part in parts):
+        return None
+    return coupon, parts
+
+
+def sync(store: ObjectStore, root: Path) -> tuple[int, int]:
+    """Every coupon's folder under root/<coupon>/ brought level with the store (the job queue, ADR-0056 amendment 3): a file is fetched
+    when the disk lacks it or the store's copy changed since this root last fetched it, judged by the store's tag kept in root/{TAGS};
+    a file the store does not hold is left alone. Returns the number of files fetched and of coupons seen. Where `restore` fills a
+    fresh disk once, this keeps a long-lived container's coupons current while other containers solve them."""
+    marks_path = root / TAGS
+    try:
+        marks = json.loads(marks_path.read_text(encoding="utf-8")) if marks_path.is_file() else {}
+    except (OSError, json.JSONDecodeError):
+        marks = {}
+    files, coupons = 0, set()
+    for key, tag in sorted(store.tags(f"{COUPONS}/").items()):
+        found = _coupon_path(key)
+        if found is None:
+            continue
+        coupon, parts = found
+        coupons.add(coupon)
+        target = root.joinpath(coupon, *parts)
+        if target.is_file() and marks.get(key) == tag:
+            continue
+        store.get(key, target)
+        marks[key] = tag
+        files += 1
+    root.mkdir(parents=True, exist_ok=True)
+    marks_path.write_text(json.dumps(marks, sort_keys=True), encoding="utf-8")
     return files, len(coupons)

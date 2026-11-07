@@ -7,6 +7,8 @@ import importlib.util
 import json
 import re
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -128,6 +130,46 @@ def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):
     assert progress["stage"] == "CalculiX" and progress["done"] == ["the setup check", "the input", "the decks", "the attempt", "our engine"]
     assert set(progress["outputs"]) == {"checklist", "preview"}  # the stand-in engine step wrote nothing; the studio files are there
     assert (folder / "team" / progress["attempt"].rsplit("_", 1)[-1] / "values.json").is_file()  # the values file is filed with the coupon
+
+
+def test_a_gated_run_waits_once_the_coupon_is_named_and_before_its_attempt(tool, tmp_path, monkeypatch):
+    """The hosted tier's solver claims the coupon at the gate (ADR-0056 amendment 3): the run holds with its specs written and no
+    attempt numbered, says so in the progress, and goes on at `go`."""
+    pretend_calculix(tool, monkeypatch)
+    monkeypatch.setattr(tool, "script", lambda step, args, cwd: None)
+    monkeypatch.setattr(tool, "package", lambda name, pdf, theory: (_ for _ in ()).throw(tool.StepFailed("the package: not in this test")))
+    progress_path, gate = tmp_path / "progress.json", tmp_path / "gate"
+    failure: list[BaseException] = []
+
+    def run():
+        try:
+            tool.run(str(public_values(tmp_path)), "A. Engineer", pdf=False, progress=tool.Progress(progress_path), gate=gate)
+        except BaseException as exc:  # noqa: BLE001  (the stand-in package stops the run; that is what is expected below)
+            failure.append(exc)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    deadline = time.monotonic() + 60
+    while not (progress_path.is_file() and json.loads(progress_path.read_text(encoding="utf-8")).get("held")):
+        assert time.monotonic() < deadline and worker.is_alive(), "the run never held at the gate"
+        time.sleep(0.05)
+    held = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert held["coupon"] == DESIGNATION and held["stage"] == "the input" and held["attempt"] is None
+    assert paths.ours(DESIGNATION).joinpath(f"{DESIGNATION}.toml").is_file() and not paths.runs(DESIGNATION).exists()
+    gate.write_text("go", encoding="utf-8")
+    worker.join(60)
+    assert isinstance(failure[0], tool.StepFailed) and "the package" in str(failure[0])
+    after = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert after["held"] is False and after["attempt"].split("/")[-1].startswith("attempt-02")
+
+
+def test_a_gate_that_says_anything_but_go_refuses_the_run_before_its_attempt(tool, tmp_path, monkeypatch):
+    pretend_calculix(tool, monkeypatch)
+    gate = tmp_path / "gate"
+    gate.write_text("another job is solving this coupon", encoding="utf-8")
+    with pytest.raises(tool.Refused, match="another job is solving this coupon"):
+        tool.run(str(public_values(tmp_path)), "A. Engineer", pdf=False, gate=gate)
+    assert not paths.runs(DESIGNATION).exists()
 
 
 def test_a_blocked_setup_is_refused_before_anything_is_written(tool, tmp_path, monkeypatch):

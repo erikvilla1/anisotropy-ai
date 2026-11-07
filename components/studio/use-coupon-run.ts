@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  checkSetup, fetchExplanation, fetchFields, getJob, POLL_MS, startSolve, StudioError,
+  checkSetup, fetchExplanation, fetchFields, getJob, isActive, POLL_MS, startSolve, StudioError,
   type CheckAnswer, type Explanation, type Fields, type JobStatus,
 } from "@/lib/studio-api";
 import type { StudioValues } from "@/lib/studio-form";
@@ -67,7 +67,7 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
   const clearChecked = useCallback(() => setChecked(null), []);
   const clearResults = useCallback(() => {
     setJob((current) => {
-      if (current?.state === "running") return current;
+      if (isActive(current?.state)) return current;
       setFields(null); setExplanation(null); setLoadedJob(null); fieldsLoaded.current = null;
       return null;
     });
@@ -77,7 +77,7 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
   }, []);
 
   useEffect(() => {
-    if (!job || !apiBaseUrl || job.state !== "running") return;
+    if (!job || !apiBaseUrl || !isActive(job.state)) return;
     const timer = window.setTimeout(async () => {
       try { setJob(await getJob(apiBaseUrl, job.job_id)); }
       catch (error) { setProblem(error instanceof StudioError ? error.message : "The job's status could not be read."); }

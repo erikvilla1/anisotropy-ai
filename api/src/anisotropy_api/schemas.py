@@ -494,10 +494,11 @@ class CouponJobRequest(Contract):
 class CouponJobOutput(Contract):
     """A coupon job as it stands (ADR-0050). `outputs` are paths from the repository root, by key: the files made so far while it
     runs (ADR-0051), every file once it is done; `stage` is the step the tool is at and `stages_done` the steps behind it;
-    `run_id` names the job's receipt once it has ended (null while it runs, or when recording is switched off)."""
+    `run_id` names the job's receipt once it has ended (null while it runs, or when recording is switched off). With the job queue
+    (ADR-0056 amendment 3) a job is `queued` until a solver takes it up, its message saying what it waits for."""
 
     job_id: str
-    state: Literal["running", "done", "stopped", "refused"]
+    state: Literal["queued", "running", "done", "stopped", "refused"]
     actor: str
     started_at: str
     finished_at: str | None
@@ -520,7 +521,8 @@ class CouponJobOutput(Contract):
         outputs = outcome.get("outputs") if outcome else progress.get("outputs", {})
         return cls(job_id=str(job.id), state=job.state, actor=job.actor, started_at=job.started_at.isoformat(), user_email=job.user_email,
                    finished_at=None if job.finished_at is None else job.finished_at.isoformat(), coupon=outcome.get("coupon") or progress.get("coupon"),
-                   attempt=outcome.get("attempt") or progress.get("attempt"), message=outcome.get("message"), stage=progress.get("stage"),
+                   attempt=outcome.get("attempt") or progress.get("attempt"), message=outcome.get("message") if outcome else progress.get("message"),
+                   stage=progress.get("stage"),
                    stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), outputs=outputs or {},
                    run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail(),
                    project_id=None if getattr(job, "project_id", None) is None else str(job.project_id))

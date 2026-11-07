@@ -1,5 +1,6 @@
 """An object store in a dictionary: what the tests use in place of R2 (the protocol in api/src/anisotropy_api/storage.py)."""
 
+import hashlib
 from pathlib import Path
 
 
@@ -17,6 +18,9 @@ class MemoryStore:
 
     def keys(self, prefix: str) -> list[str]:
         return sorted(key for key in self.objects if key.startswith(prefix))
+
+    def tags(self, prefix: str) -> dict[str, str]:
+        return {key: hashlib.md5(self.objects[key][0]).hexdigest() for key in self.keys(prefix)}
 
     def link(self, key: str, seconds: int = 600) -> str:
         self.linked.append(key)
