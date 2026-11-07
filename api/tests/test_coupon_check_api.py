@@ -5,6 +5,7 @@ neither the fea environment nor a coupon on the machine; fea/tests/test_studio_t
 import hashlib
 import json
 import sys
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -143,3 +144,26 @@ def test_a_check_is_recorded_by_its_digest(recording):
     assert run["actor"] == "studio" and run["endpoint"] == "/v1/coupon-jobs/check" and run["status"] == "solved"
     assert run["inputs"] == {"values": {"sha256": digest, "form_version": "0.3", "rows": len(VALUES)}}  # never the rows themselves
     assert run["response"]["state"] == "ready" and run["response"]["preview"]["mesh"]["element_count"] == 1200
+
+
+@needs_test_database
+def test_a_check_for_a_project_writes_the_designation_back(empty_runs, monkeypatch, tmp_path):
+    """ADR-0062 part 6: the designation the fea package derived and the check's run go on the project; an unknown project changes nothing."""
+    monkeypatch.setenv(RECORDING_VARIABLE, "on")
+    monkeypatch.setenv(DATABASE_VARIABLE, TEST_URL)
+    stand_in = tmp_path / "studio_stand_in.py"
+    stand_in.write_text(STUDIO_STAND_IN, encoding="utf-8")
+    with TestClient(app, headers={"X-Anisotropy-Actor": "studio"}) as recorded:
+        app.state.coupon_jobs = CouponJobs(None, job_recorder(app), tmp_path / "jobs", studio=[sys.executable, str(stand_in)])
+        pid = str(uuid.uuid4())
+        assert recorded.put(f"/v1/projects/{pid}", json={"kind": "fea", "name": "x", "content": {"form": VALUES}}).status_code == 201
+        checked = recorded.post("/v1/coupon-jobs/check", json={"values": VALUES, "project_id": pid})
+        assert checked.status_code == 200 and checked.json()["designation"] == "IM7-UNT-L1"
+        project = recorded.get(f"/v1/projects/{pid}").json()
+        assert project["designation"] == "IM7-UNT-L1" and project["last_check_run_id"] == checked.json()["run_id"]
+        assert recorded.get(f"/v1/runs/{checked.json()['run_id']}").json()["inputs"]["project_id"] == pid
+        other = recorded.post("/v1/coupon-jobs/check", json={"values": VALUES, "project_id": pid}, headers={"X-Anisotropy-Actor": "test"})
+        assert other.status_code == 200  # another's project: the check answers, the project is untouched
+        assert recorded.get(f"/v1/projects/{pid}").json()["last_check_run_id"] == checked.json()["run_id"]
+        unknown = recorded.post("/v1/coupon-jobs/check", json={"values": VALUES, "project_id": str(uuid.uuid4())})
+        assert unknown.status_code == 200

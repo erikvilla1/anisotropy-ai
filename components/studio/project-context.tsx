@@ -1,9 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
-import { couponProjects, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
+import { couponProjects, isUuid, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
 import type { StudioForm } from "@/lib/studio-form";
 import type { PlateLists } from "@/lib/studio-plate";
+import { useNewestFromServer, useProjectSync } from "./project-sync";
 import { useCouponRun, type CouponRun } from "./use-coupon-run";
 
 /** The project the workspace edits and its run, shared by the chat, the form and the viewer (ADR-0062): the rows live in one place, so
@@ -43,7 +44,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const start = useRef<{ project: CouponProject; restored: boolean } | null>(null);
   if (start.current === null) start.current = initial();
   const [project, dispatch] = useReducer(projectReducer, start.current.project);
-  const run = useCouponRun(apiBaseUrl);
+  const run = useCouponRun(apiBaseUrl, isUuid(project.id) ? project.id : null); // the check and the solve name the project (ADR-0062 part 6)
 
   useEffect(() => {
     const store = browserStorage();
@@ -57,6 +58,9 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const setPlate = useCallback((next: PlateLists) => dispatch({ type: "plate", plate: next }), []);
   const rename = useCallback((name: string) => dispatch({ type: "rename", name }), []);
   const replace = useCallback((next: CouponProject) => dispatch({ type: "replace", project: next }), []);
+  useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
+  useNewestFromServer(apiBaseUrl, "fea", !start.current.restored && project.updated === project.created,
+    (found) => { if (found.kind === "fea") replace(found); });
 
   const value = useMemo<ProjectContextValue>(() => ({
     apiBaseUrl, project, form: project.form, plate: project.plate, restored: start.current?.restored ?? false, setForm, setPlate, rename, replace, run,

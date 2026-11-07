@@ -1,23 +1,43 @@
 import { test, expect } from "@playwright/test";
 
 const API = /\/v1\/.*/;
+const SERVER_PROJECT = {
+  id: "7c1a2b3c-4d5e-4f60-8a7b-9c0d1e2f3a4b", kind: "fea", name: "From the server", actor: "studio", user_email: null, form_version: "0.6", units: "mm-MPa",
+  content: { form: { test: "open-hole tension", length: "250", width: "36" }, plate: { supports: [], loads: [], regions: [] } },
+  designation: null, last_check_run_id: null, created_at: "2026-11-01T10:00:00+00:00", updated_at: "2026-11-01T10:00:00+00:00", jobs: [],
+};
 
-/** The API answers the workspace needs to open: the coupon list only (the setup check and the jobs are the studio scenarios' business). */
-async function quietApi(page: import("@playwright/test").Page) {
+/** The API answers the workspace needs to open: the coupon list, and the project store with one project kept on the server (part 6); the
+ * setup check and the jobs are the studio scenarios' business. `store` holds what the page PUT. */
+async function quietApi(page: import("@playwright/test").Page, store: Record<string, Record<string, unknown>> = {}) {
+  store[SERVER_PROJECT.id] = SERVER_PROJECT;
   await page.route(API, (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path === "/v1/coupons") return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-    return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: "not in this scenario" }) });
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/coupons") return json([]);
+    if (path === "/v1/projects" && request.method() === "GET") return json(Object.values(store).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))));
+    const one = /^\/v1\/projects\/([^/]+)$/.exec(path);
+    if (one && request.method() === "PUT") {
+      const id = one[1], now = new Date().toISOString();
+      const kept = store[id];
+      store[id] = { ...(kept ?? { id, actor: "studio", user_email: null, designation: null, last_check_run_id: null, created_at: now, jobs: [] }), ...(request.postDataJSON() as object), updated_at: now };
+      return json(store[id], kept ? 200 : 201);
+    }
+    if (one && request.method() === "GET") return store[one[1]] ? json(store[one[1]]) : json({ detail: "No project of yours" }, 404);
+    return json({ detail: "not in this scenario" }, 404);
   });
 }
 
-test("the workspace opens on three tiles and the browser's projects, and a new project opens the three-column FEA workspace (ADR-0062)", async ({ page }) => {
-  await quietApi(page);
+test("the workspace opens on three tiles and the projects, the server's among them, and a new project opens the three-column FEA workspace (ADR-0062)", async ({ page }) => {
+  const store: Record<string, Record<string, unknown>> = {};
+  await quietApi(page, store);
   await page.goto("/workspace");
   const tiles = page.getByTestId("workspace-tiles");
   await expect(tiles.locator("[data-workspace]")).toHaveCount(3);
   await expect(tiles.locator("[data-workspace=cad]")).toHaveAttribute("data-status", "planned");
-  await expect(page.getByTestId("workspace-projects")).toContainText("None yet in this browser");
+  await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "server"); // the list is the browser's merged with the server's (part 6)
+  await expect(page.getByTestId("workspace-projects")).toContainText("From the server"); // a project this browser never held
   await page.getByRole("button", { name: /New coupon fea project/i }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   const shell = page.getByTestId("workspace-shell");
@@ -26,6 +46,7 @@ test("the workspace opens on three tiles and the browser's projects, and a new p
   await expect(page.getByTestId("ws-stage").getByTestId("empty-scene")).toBeVisible();
   await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "test");
   await page.getByTestId("project-name").fill("OHT study");
+  await expect.poll(() => Object.values(store).some((p) => p.name === "OHT study" && p.kind === "fea"), { timeout: 10_000 }).toBe(true); // PUT to the server a moment after the change
   await page.getByTestId("assistant-toggle").click();
   await expect(shell).toHaveAttribute("data-assistant", "closed");
   await expect(page.getByTestId("ws-assistant")).toHaveCount(0);
@@ -50,9 +71,11 @@ test("the workspace opens on three tiles and the browser's projects, and a new p
   await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "material");
   await page.getByRole("link", { name: "All projects" }).click();
   const rows = page.getByTestId("workspace-projects").locator("tbody tr");
-  await expect(rows).toHaveCount(2);
+  await expect(rows).toHaveCount(3); // the laminate, the coupon, and the server's
   await expect(rows.first()).toHaveAttribute("data-kind", "laminate");
   await expect(rows.first()).toContainText("ABD check");
+  await expect(rows.nth(2)).toContainText("From the server");
+  await expect.poll(() => Object.values(store).some((p) => p.name === "ABD check" && p.kind === "laminate"), { timeout: 10_000 }).toBe(true);
   await rows.nth(1).getByRole("button", { name: "Open" }).click(); // the coupon project, untouched
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await expect(page.getByTestId("project-name")).toHaveValue("OHT study");

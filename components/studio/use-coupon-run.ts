@@ -30,7 +30,7 @@ export type CouponRun = {
   setProblem(text: string): void;
 };
 
-export function useCouponRun(apiBaseUrl: string): CouponRun {
+export function useCouponRun(apiBaseUrl: string, projectId: string | null = null): CouponRun {
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState<CheckAnswer | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
@@ -48,21 +48,21 @@ export function useCouponRun(apiBaseUrl: string): CouponRun {
     const controller = new AbortController();
     aborts.current.push(controller);
     try {
-      const answer = await checkSetup(apiBaseUrl, values, controller.signal);
+      const answer = await checkSetup(apiBaseUrl, values, controller.signal, projectId);
       setChecked(answer);
       return answer;
     } finally {
       setChecking(false);
     }
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, projectId]);
 
   const solve = useCallback(async (values: StudioValues, runBy: string, replace: boolean) => {
     if (!apiBaseUrl) throw new StudioError("The page was built without the API's address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be checked or solved.");
     setProblem(""); setFields(null); setExplanation(null); fieldsLoaded.current = null;
-    const started = await startSolve(apiBaseUrl, values, runBy, replace);
+    const started = await startSolve(apiBaseUrl, values, runBy, replace, undefined, projectId);
     setJob(started);
     return started;
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, projectId]);
 
   const clearChecked = useCallback(() => setChecked(null), []);
   const clearResults = useCallback(() => {

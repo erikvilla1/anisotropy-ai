@@ -4,6 +4,9 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ## [Unreleased]
 
+### Added
+- The workspace refactor, part 6 of 7 (ADR-0062): projects are kept on the server. Migration 0007 creates the `projects` table (the project as the page states it, under the signed-in email behind Access or the actor locally, with the designation of its last setup check) and `jobs.project_id`; `GET /v1/projects`, `PUT /v1/projects/{id}`, `GET /v1/projects/{id}` with its jobs, `PATCH /v1/projects/{id}`; the setup check and a coupon job take `project_id`, the check writing the derived designation back. The workspace PUTs a project a moment after each change and when the page is left (`components/studio/project-sync.ts`), a browser with no project of a kind picks the newest up from the server, and `/workspace` lists this browser's projects merged with the server's, the later change winning; with run records off the API answers 503 and the browser keeps the project alone, as before.
+
 ### Changed
 - The workspace refactor, part 7 of 7 (ADR-0062): the documents say what is built. The component card `docs/components/studio.md` (0.6) describes the workspace, its panels, its viewer and its limits as they stand; `docs/00_system_overview.md` names the workspace and the viewer's records instead of "part 2 of its plan"; `README.md` lists the workspace routes and the redirects and says what the assistants read; `docs/README.md` points the browser question at ADR-0062 and ADR-0063; the site-map evaluation of 2026-11-05 carries a dated note on the moved links and the retired "Full form" tab.
 

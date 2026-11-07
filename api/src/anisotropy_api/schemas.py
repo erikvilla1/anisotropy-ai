@@ -412,6 +412,7 @@ class PrescribedCurvatureResponse(Contract):
 
 
 FORM_LIMIT_BYTES = 5_000_000  # a filled-in form is tens of kilobytes
+UUID_PATTERN = r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 
 
 VALUES_LIMIT_BYTES = 200_000  # a values object is a few kilobytes
@@ -434,6 +435,8 @@ class CouponJobRequest(Contract):
     replace: bool = False
     pdf: bool = True
     theory: bool = True
+    # The workspace project the job is run for (ADR-0062 part 6): its row lists the job; unknown or not the requester's, it is ignored.
+    project_id: Annotated[str, Field(pattern=UUID_PATTERN)] | None = None
 
     @model_validator(mode="after")
     def one_source(self) -> Self:
@@ -479,7 +482,8 @@ class CouponJobRequest(Contract):
             source = {"values": {"sha256": hashlib.sha256(self.values_bytes()).hexdigest(), "form_version": str(self.values.get("form_version", ""))}}
         else:
             source = {"form": {"name": self.form_name, "sha256": hashlib.sha256(self.form_bytes()).hexdigest()}}
-        return {**source, "run_by": self.run_by, "replace": self.replace, "pdf": self.pdf, "theory": self.theory}
+        return {**source, "run_by": self.run_by, "replace": self.replace, "pdf": self.pdf, "theory": self.theory,
+                **({"project_id": self.project_id} if self.project_id is not None else {})}
 
     def options(self) -> list[str]:
         """The tool's options for this request."""
@@ -507,6 +511,7 @@ class CouponJobOutput(Contract):
     run_id: str | None
     log_tail: list[str]
     user_email: str | None = None  # the signed-in email of the request that started it (ADR-0056); null with Access off
+    project_id: str | None = None  # the workspace project it was started for (ADR-0062 part 6)
 
     @classmethod
     def of(cls, job) -> "CouponJobOutput":
@@ -517,19 +522,23 @@ class CouponJobOutput(Contract):
                    finished_at=None if job.finished_at is None else job.finished_at.isoformat(), coupon=outcome.get("coupon") or progress.get("coupon"),
                    attempt=outcome.get("attempt") or progress.get("attempt"), message=outcome.get("message"), stage=progress.get("stage"),
                    stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), outputs=outputs or {},
-                   run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail())
+                   run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail(),
+                   project_id=None if getattr(job, "project_id", None) is None else str(job.project_id))
 
 
 class CouponCheckReceipt(Contract):
     """What the run record keeps of a check: the values' digest and version, never the rows (the team's own constants stay with the coupon)."""
 
     values: dict[str, str | int]
+    project_id: str | None = None
 
 
 class CouponCheckRequest(Contract):
-    """The studio's setup check (ADR-0051): the form's rows as one JSON object, judged without a run."""
+    """The studio's setup check (ADR-0051): the form's rows as one JSON object, judged without a run; `project_id` names the workspace
+    project to write the derived designation back to (ADR-0062 part 6)."""
 
     values: dict[str, Any]
+    project_id: Annotated[str, Field(pattern=UUID_PATTERN)] | None = None
 
     @model_validator(mode="after")
     def not_empty(self) -> Self:
@@ -545,7 +554,8 @@ class CouponCheckRequest(Contract):
 
     def receipt(self) -> CouponCheckReceipt:
         return CouponCheckReceipt(values={"sha256": hashlib.sha256(self.values_bytes()).hexdigest(),
-                                          "form_version": str(self.values.get("form_version", "")), "rows": len(self.values)})
+                                          "form_version": str(self.values.get("form_version", "")), "rows": len(self.values)},
+                                  **({"project_id": self.project_id} if self.project_id is not None else {}))
 
 
 class CouponCheckResponse(Contract):
@@ -712,6 +722,77 @@ class CouponSummary(Contract):
     attempts: int
     category: str | None
     problem: str | None = None
+
+
+PROJECT_KINDS = ("fea", "laminate")
+
+
+class ProjectInput(Contract):
+    """A workspace project as the page states it (ADR-0062 part 6): its kind, its name, its content as one JSON object (a coupon's rows
+    and a plate's lists, or a laminate problem's draft), and the form version and unit system the content was stated in. The API keeps
+    it; the fea package judges a coupon's rows at check time (ADR-0051). PUT /v1/projects/{id} creates or replaces it."""
+
+    kind: Literal["fea", "laminate"]
+    name: Annotated[str, Field(max_length=200)] = ""
+    content: dict[str, Any]
+    form_version: Annotated[str, Field(max_length=20)] | None = None
+    units: Annotated[str, Field(max_length=20)] | None = None
+
+    @model_validator(mode="after")
+    def not_empty(self) -> Self:
+        if not self.content:
+            raise ValueError("content must hold the project as the page states it; the object is empty")
+        size = len(json.dumps(self.content, ensure_ascii=False).encode("utf-8"))
+        if size > VALUES_LIMIT_BYTES:
+            raise ValueError(f"the content is {size} bytes; a project's rows are far below {VALUES_LIMIT_BYTES}")
+        return self
+
+
+class ProjectRename(Contract):
+    name: Annotated[str, Field(max_length=200)]
+
+
+class ProjectJobOutput(Contract):
+    """A job of a project, as its row stands: enough to list it and open it by its id."""
+
+    job_id: str
+    state: Literal["running", "done", "stopped", "refused"]
+    coupon: str | None
+    attempt: str | None
+    message: str | None
+    started_at: str
+    finished_at: str | None
+    run_id: str | None
+
+    @classmethod
+    def of(cls, row) -> "ProjectJobOutput":
+        return cls(job_id=str(row.id), state=row.state, coupon=row.coupon, attempt=row.attempt, message=row.message, started_at=row.started_at.isoformat(),
+                   finished_at=None if row.finished_at is None else row.finished_at.isoformat(), run_id=None if row.run_id is None else str(row.run_id))
+
+
+class ProjectOutput(Contract):
+    """A project as the API keeps it (ADR-0062 part 6), with its jobs when read by its id."""
+
+    id: str
+    kind: Literal["fea", "laminate"]
+    name: str
+    actor: str
+    user_email: str | None
+    content: dict[str, Any]
+    form_version: str | None
+    units: str | None
+    designation: str | None
+    last_check_run_id: str | None
+    created_at: str
+    updated_at: str
+    jobs: list[ProjectJobOutput] = []
+
+    @classmethod
+    def of(cls, row, jobs=()) -> "ProjectOutput":
+        return cls(id=str(row.id), kind=row.kind, name=row.name, actor=row.actor, user_email=row.user_email, content=dict(row.content),
+                   form_version=row.form_version, units=row.units, designation=row.designation,
+                   last_check_run_id=None if row.last_check_run_id is None else str(row.last_check_run_id),
+                   created_at=row.created_at.isoformat(), updated_at=row.updated_at.isoformat(), jobs=[ProjectJobOutput.of(job) for job in jobs])
 
 
 class CouponValuesOutput(Contract):

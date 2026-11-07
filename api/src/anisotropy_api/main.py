@@ -30,19 +30,21 @@ from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .coupon_jobs import LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
-from .records import ACTORS, STATUSES, check_ready, connect, fetch_run, git_commit, list_runs, record_run, stop_orphans
+from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
+                      owns_project, project_jobs, record_run, stop_orphans, update_project, upsert_project)
 from .settings import allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
-    LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, RunOutput,
-    RunSummary, VerificationResponse,
+    LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
+    ProjectRename, RunOutput, RunSummary, VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
 COUPON_JOBS = "/v1/coupon-jobs"
+PROJECTS = "/v1/projects"
 
 
 def job_recorder(app: FastAPI):
@@ -109,7 +111,7 @@ app.add_middleware(AccessMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(allowed_origins(environment())),
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "PATCH"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor"],
     expose_headers=[RUN_ID_HEADER, "Location"],
     allow_credentials=False,
@@ -331,9 +333,10 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
     jobs = _coupon_jobs(request)
     form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
     values = job_request.values_bytes() if job_request.values is not None else None
+    project_id = _own_project_id(request, actor, job_request.project_id)
     try:
         job = jobs.start(actor, job_request.recorded_inputs(), job_request.options(), form=form, coupon=job_request.coupon, values=values,
-                         user_email=getattr(request.state, "user_email", None))
+                         user_email=getattr(request.state, "user_email", None), project_id=project_id)
     except JobBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except JobRefused as exc:
@@ -362,7 +365,107 @@ def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Reque
         return CouponCheckResponse(run_id=None, state=checklist["state"], designation=checklist.get("designation"), checklist=checklist,
                                    preview=found["preview"])
 
-    return _deliver(request, response, actor, problem.receipt(), compute)
+    body = _deliver(request, response, actor, problem.receipt(), compute)
+    if problem.project_id is not None:
+        _note_check(request, actor, problem.project_id, body)
+    return body
+
+
+# ----------------------------------------------------------------------------------------------- the projects (ADR-0062 part 6)
+
+def _database_error(exc: SQLAlchemyError) -> HTTPException:
+    return HTTPException(status_code=503, detail=f"The run records database did not answer: {str(exc).splitlines()[0]}")
+
+
+def _own_project_id(request: Request, actor: str, project_id: str | None) -> uuid.UUID | None:
+    """The project a check or a job names, when it is the requester's own; None otherwise (unknown, another's, or no records), so a
+    project the browser alone knows never blocks a check or a run."""
+    engine = getattr(request.app.state, "records", None)
+    if engine is None or project_id is None:
+        return None
+    try:
+        row = fetch_project(engine, uuid.UUID(project_id))
+    except SQLAlchemyError:
+        return None
+    return row.id if row is not None and owns_project(row, actor, getattr(request.state, "user_email", None)) else None
+
+
+def _note_check(request: Request, actor: str, project_id: str, body: CouponCheckResponse) -> None:
+    """After a check: the designation the fea package derived and the check's run, written to the project (ADR-0062 part 6). A write
+    that fails is printed, not raised: the check's answer is the engine's and stands."""
+    found = _own_project_id(request, actor, project_id)
+    if found is None:
+        return
+    try:
+        update_project(request.app.state.records, found, designation=body.designation,
+                       last_check_run_id=None if body.run_id is None else uuid.UUID(body.run_id), updated_at=dt.datetime.now(dt.timezone.utc))
+    except (SQLAlchemyError, LookupError) as exc:
+        print(f"the check of project {project_id} was not noted on it: {str(exc).splitlines()[0]}", flush=True)
+
+
+def _requesters_project(request: Request, actor: str, project_id: uuid.UUID):
+    """The project by its id, when it is the requester's; 404 otherwise, so no project is confirmed to a stranger."""
+    engine = _records_engine(request)
+    try:
+        row = fetch_project(engine, project_id)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if row is None or not owns_project(row, actor, getattr(request.state, "user_email", None)):
+        raise HTTPException(status_code=404, detail=f"No project {project_id} of yours")
+    return engine, row
+
+
+@app.get(PROJECTS, response_model=list[ProjectOutput])
+def list_projects_endpoint(actor: Actor, request: Request, limit: Annotated[int, Query(ge=1, le=200)] = 50) -> list[ProjectOutput]:
+    """The requester's workspace projects, the last changed first (ADR-0062 part 6): by signed-in email behind Cloudflare Access, by
+    actor locally. 503 when run records are off: there is no table."""
+    engine = _records_engine(request)
+    try:
+        rows = list_projects(engine, actor=actor, user_email=getattr(request.state, "user_email", None), limit=limit)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return [ProjectOutput.of(row) for row in rows]
+
+
+@app.put(PROJECTS + "/{project_id}", response_model=ProjectOutput)
+def put_project(project_id: uuid.UUID, project: ProjectInput, actor: Actor, request: Request, response: Response) -> ProjectOutput:
+    """The project as the page states it now (ADR-0062 part 6): created with 201 when the id is new, replaced with 200 when it is the
+    requester's own; 404 when it is someone else's, 409 when its kind would change."""
+    engine = _records_engine(request)
+    try:
+        row, created = upsert_project(engine, project_id=project_id, kind=project.kind, name=project.name, actor=actor,
+                                      user_email=getattr(request.state, "user_email", None), content=project.content, form_version=project.form_version,
+                                      units=project.units, now=dt.datetime.now(dt.timezone.utc))
+    except ProjectTaken:
+        raise HTTPException(status_code=404, detail=f"No project {project_id} of yours") from None
+    except KindChanged as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    response.status_code = 201 if created else 200
+    return ProjectOutput.of(row)
+
+
+@app.get(PROJECTS + "/{project_id}", response_model=ProjectOutput)
+def project_detail(project_id: uuid.UUID, actor: Actor, request: Request) -> ProjectOutput:
+    """One project with the jobs started for it, newest first (ADR-0062 part 6)."""
+    engine, row = _requesters_project(request, actor, project_id)
+    try:
+        jobs = project_jobs(engine, row.id)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return ProjectOutput.of(row, jobs)
+
+
+@app.patch(PROJECTS + "/{project_id}", response_model=ProjectOutput)
+def rename_project(project_id: uuid.UUID, change: ProjectRename, actor: Actor, request: Request) -> ProjectOutput:
+    """A project's name (ADR-0062 part 6)."""
+    engine, row = _requesters_project(request, actor, project_id)
+    try:
+        row = update_project(engine, row.id, name=change.name, updated_at=dt.datetime.now(dt.timezone.utc))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return ProjectOutput.of(row)
 
 
 @app.get(COUPON_JOBS, response_model=list[CouponJobOutput])

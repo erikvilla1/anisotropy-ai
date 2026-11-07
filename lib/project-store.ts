@@ -5,7 +5,8 @@
  * projects of both kinds under one key so a reload picks up where the engineer left off, until the server store (part 6) exists. */
 
 import { blankDraft, type LaminateDraft } from "./laminate-chat";
-import { blankForm, type StudioForm } from "./studio-form";
+import type { ProjectRecord, ProjectUpload } from "./studio-api";
+import { blankForm, FORM_VERSION, type StudioForm } from "./studio-form";
 import { emptyPlate, type PlateLists } from "./studio-plate";
 
 export const PROJECTS_KEY = "anisotropy.projects.v1";
@@ -129,4 +130,43 @@ export function writeProjects(list: Project[], storage: StorageLike | null | und
 /** The list with this project first, replacing the one with its id, at most KEPT long. */
 export function upsert(list: Project[], project: Project): Project[] {
   return [project, ...list.filter((p) => p.id !== project.id)].slice(0, KEPT);
+}
+
+// ------------------------------------------------------------------------------------- the server's copy (ADR-0062, part 6)
+
+export const isUuid = (id: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+/** The project as the API keeps it: the page's own object under `content`, with the form version and the unit system it was stated in. */
+export function uploadOf(project: Project): ProjectUpload {
+  if (project.kind === "fea") {
+    return { kind: "fea", name: project.name, content: { form: project.form, plate: project.plate }, form_version: FORM_VERSION, units: project.form.units?.trim() || null };
+  }
+  return { kind: "laminate", name: project.name, content: { draft: project.draft }, form_version: null, units: project.draft.system || null };
+}
+
+const stamp = (iso: string): string => { const t = Date.parse(iso); return Number.isNaN(t) ? iso : new Date(t).toISOString(); };
+
+/** A project read back from the API, or null when its content is not what this page writes. */
+export function projectOfRecord(record: ProjectRecord): Project | null {
+  const content = record.content;
+  const base = { id: record.id, name: record.name, created: stamp(record.created_at), updated: stamp(record.updated_at) };
+  if (record.kind === "fea") {
+    const form = content.form, plate = content.plate as Partial<PlateLists> | undefined;
+    if (!form || typeof form !== "object" || Array.isArray(form)) return null;
+    const rows = Object.fromEntries(Object.entries(form as Record<string, unknown>).filter(([, v]) => typeof v === "string")) as StudioForm;
+    return { ...base, kind: "fea", form: rows, plate: { supports: plate?.supports ?? [], loads: plate?.loads ?? [], regions: plate?.regions ?? [] } };
+  }
+  const draft = content.draft;
+  if (!draft || typeof draft !== "object" || Array.isArray(draft)) return null;
+  return { ...base, kind: "laminate", draft: { ...blankDraft(), ...(draft as Partial<LaminateDraft>) } };
+}
+
+/** This browser's projects and the server's as one list: by id, the later change wins; the last changed first; at most KEPT. */
+export function mergeProjects(local: Project[], remote: Project[]): Project[] {
+  const byId = new Map<string, Project>();
+  for (const project of [...local, ...remote]) {
+    const kept = byId.get(project.id);
+    if (!kept || Date.parse(project.updated) > Date.parse(kept.updated)) byId.set(project.id, project);
+  }
+  return [...byId.values()].sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated)).slice(0, KEPT);
 }

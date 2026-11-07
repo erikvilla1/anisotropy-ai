@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { checkSetup, DOWNLOADS, explainJob, fileUrl, readChecklist, readExplainAnswer, readExplanation, readFields, readJob, readPreview, startSolve, StudioError } from "../lib/studio-api";
+import {
+  checkSetup, DOWNLOADS, explainJob, fileUrl, listProjects, noProjectStore, putProject, readChecklist, readExplainAnswer, readExplanation, readFields, readJob, readPreview,
+  readProjectRecord, startSolve, StudioError,
+} from "../lib/studio-api";
 
 const fixture = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio/${name}.json`, "utf8"));
 
@@ -85,6 +88,37 @@ test("the explain answer carries its writer and reads only a known shape", async
     assert.equal(got.writer, "anthropic");
     assert.equal(calls[0].url, "http://api.test/v1/coupon-jobs/j/explain");
     assert.deepEqual(JSON.parse(calls[0].init.body as string), { kind: "result" });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("the projects are PUT by id with the studio's actor, listed, and a 503 means the API keeps none (ADR-0062, part 6)", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const row = { id: "4f1c2e3d-5a6b-4c7d-8e9f-0a1b2c3d4e5f", kind: "fea", name: "OHT study", actor: "studio", user_email: null, content: { form: { length: "250" }, plate: {} },
+    form_version: "0.6", units: "mm-MPa", designation: "IM7-OHT-L1", last_check_run_id: null, created_at: "2026-11-06T10:00:00+00:00", updated_at: "2026-11-06T10:05:00+00:00",
+    jobs: [{ job_id: "j1", state: "done", coupon: "IM7-OHT-L1", attempt: "attempt-01", message: "ok", started_at: "2026-11-06T10:01:00+00:00", finished_at: "2026-11-06T10:02:00+00:00", run_id: "r1" }] };
+  const answers: [unknown, number][] = [[row, 201], [[row], 200], [{ detail: "Run records are switched off" }, 503]];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    calls.push({ url, init });
+    const [body, status] = answers.shift()!;
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const saved = await putProject("http://api.test", row.id, { kind: "fea", name: "OHT study", content: row.content, form_version: "0.6", units: "mm-MPa" });
+    assert.equal(calls[0].url, `http://api.test/v1/projects/${row.id}`);
+    assert.equal(calls[0].init.method, "PUT");
+    assert.equal((calls[0].init.headers as Record<string, string>)["X-Anisotropy-Actor"], "studio");
+    assert.deepEqual(JSON.parse(calls[0].init.body as string), { kind: "fea", name: "OHT study", content: row.content, form_version: "0.6", units: "mm-MPa" });
+    assert.equal(saved.designation, "IM7-OHT-L1");
+    assert.equal(saved.jobs[0].run_id, "r1");
+    const listed = await listProjects("http://api.test");
+    assert.equal(calls[1].init.method, "GET");
+    assert.equal(listed.length, 1);
+    await assert.rejects(listProjects("http://api.test"), (error: unknown) => noProjectStore(error));
+    assert.throws(() => readProjectRecord({ ...row, kind: "stl" }), /unexpected shape/);
+    assert.throws(() => readProjectRecord({ ...row, content: [] }), /unexpected shape/);
   } finally {
     globalThis.fetch = original;
   }

@@ -9,7 +9,7 @@ The decision is [ADR-0056](../decisions/ADR-0056-the-hosted-tier-runs-on-cloudfl
 | The Worker `anisotropy-studio` | Serves the website's static export (`out/`) and forwards `/api/*` to the container | [`wrangler.jsonc`](../../wrangler.jsonc), [`worker/index.ts`](../../worker/index.ts) |
 | The container `ApiContainer` | The API with CalculiX, Gmsh and Tectonic, one instance, built from the [`Dockerfile`](../../Dockerfile) by `wrangler deploy` | `wrangler.jsonc` (`containers`), [docker/README.md](../../docker/README.md) |
 | Cloudflare Access | Sign-in with an email allow list and one-time PINs, in front of the Worker; adds the token the API checks | Zero Trust dashboard; the API's `ANISOTROPY_ACCESS_*` secrets |
-| Neon PostgreSQL | The run records and the jobs table | the `DATABASE_URL` secret; migrations by the deploy workflow |
+| Neon PostgreSQL | The run records, the jobs table and the projects table (migration 0007, ADR-0062 part 6) | the `DATABASE_URL` secret; migrations by the deploy workflow |
 | R2 | A done job's files, its package and the coupon folders; the coupons are restored from it when the container starts | the `ANISOTROPY_R2_*` secrets; the bucket's CORS policy |
 | GitHub Actions | [`deploy.yml`](../../.github/workflows/deploy.yml): build, migrate, deploy on a green merge to `main`; a preview version per pull request | repository secrets |
 

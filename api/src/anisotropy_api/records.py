@@ -104,8 +104,37 @@ class JobRow(Base):
     run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("runs.id"))
     log_tail: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     process: Mapped[str] = mapped_column(String(36), nullable=False)
+    # The project the job was started for (ADR-0062 part 6, migration 0007); None for a job started without one.
+    project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("projects.id"))
 
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
+
+
+PROJECT_KINDS = ("fea", "laminate")
+
+
+class ProjectRow(Base):
+    """A workspace project (ADR-0062 part 6, migration 0007): the rows of a coupon test or the draft of a laminate problem, as the page
+    states them, under a name the engineer gives. `content` is the page's own object; the fea package judges a coupon's rows at check
+    time as always (ADR-0051), and the designation it derived is written back here with the check's run. The owner is the signed-in
+    email behind Cloudflare Access (ADR-0056), or, locally, the actor. Rows here change; the runs stay the immutable receipts."""
+
+    __tablename__ = "projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    actor: Mapped[str] = mapped_column(String(40), nullable=False)
+    user_email: Mapped[str | None] = mapped_column(String(320))
+    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    form_version: Mapped[str | None] = mapped_column(String(20))
+    units: Mapped[str | None] = mapped_column(String(20))
+    designation: Mapped[str | None] = mapped_column(Text)
+    last_check_run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("runs.id"))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (CheckConstraint(f"kind IN ({_sql_list(PROJECT_KINDS)})", name="projects_kind_known"),)
 
 
 CONNECT_TIMEOUT_S = 5
@@ -126,7 +155,7 @@ def check_ready(engine: Engine) -> None:
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-            for table in (Run.__tablename__, JobRow.__tablename__):
+            for table in (Run.__tablename__, JobRow.__tablename__, ProjectRow.__tablename__):
                 if not inspect(connection).has_table(table):
                     raise RuntimeError(
                         f"The database at {shown} has no '{table}' table. "
@@ -207,11 +236,12 @@ def list_runs(engine: Engine, *, actor: str | None = None, endpoint: str | None 
 
 # ------------------------------------------------------------------------------------------- the jobs table (ADR-0050 amendment 2)
 
-def insert_job(engine: Engine, *, job_id: uuid.UUID, actor: str, user_email: str | None, inputs: dict, started_at: dt.datetime, process: str) -> None:
-    """The row of a job that has just started."""
+def insert_job(engine: Engine, *, job_id: uuid.UUID, actor: str, user_email: str | None, inputs: dict, started_at: dt.datetime, process: str,
+               project_id: uuid.UUID | None = None) -> None:
+    """The row of a job that has just started; `project_id` names the project it was started for, when one was (ADR-0062 part 6)."""
     with Session(engine) as session:
         session.add(JobRow(id=job_id, actor=actor, user_email=user_email, state="running", inputs=inputs, started_at=started_at, process=process,
-                           stages_done=[], stages=[], outputs={}, stored={}, log_tail=[]))
+                           stages_done=[], stages=[], outputs={}, stored={}, log_tail=[], project_id=project_id))
         session.commit()
 
 
@@ -235,6 +265,75 @@ def list_jobs(engine: Engine, limit: int = 50) -> list[JobRow]:
     """The newest jobs first."""
     with Session(engine) as session:
         return list(session.scalars(select(JobRow).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit)))
+
+
+# ------------------------------------------------------------------------------------------- the projects table (ADR-0062 part 6)
+
+class ProjectTaken(Exception):
+    """The project exists and belongs to someone else: answered as if it did not exist, so no project is confirmed to a stranger."""
+
+
+class KindChanged(Exception):
+    """A project's kind never changes: a coupon project does not become a laminate one."""
+
+
+def owns_project(row: ProjectRow, actor: str, user_email: str | None) -> bool:
+    """Behind Access the owner is the signed-in email; locally, with no email, the actor that made it."""
+    if user_email is not None:
+        return row.user_email == user_email
+    return row.user_email is None and row.actor == actor
+
+
+def upsert_project(engine: Engine, *, project_id: uuid.UUID, kind: str, name: str, actor: str, user_email: str | None, content: dict,
+                   form_version: str | None, units: str | None, now: dt.datetime) -> tuple[ProjectRow, bool]:
+    """The project as the page states it now: created when new (True), replaced when it is the requester's own."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.get(ProjectRow, project_id)
+        created = row is None
+        if row is None:
+            row = ProjectRow(id=project_id, kind=kind, actor=actor, user_email=user_email, created_at=now)
+            session.add(row)
+        elif not owns_project(row, actor, user_email):
+            raise ProjectTaken(str(project_id))
+        elif row.kind != kind:
+            raise KindChanged(f"project {project_id} is a {row.kind} project; it does not become a {kind} one")
+        row.name, row.content, row.form_version, row.units, row.updated_at = name, content, form_version, units, now
+        session.commit()
+        return row, created
+
+
+def fetch_project(engine: Engine, project_id: uuid.UUID) -> ProjectRow | None:
+    with Session(engine, expire_on_commit=False) as session:
+        return session.get(ProjectRow, project_id)
+
+
+def list_projects(engine: Engine, *, actor: str, user_email: str | None, limit: int = 50) -> list[ProjectRow]:
+    """The requester's projects, the last changed first: by signed-in email behind Access, by actor locally."""
+    statement = select(ProjectRow).order_by(ProjectRow.updated_at.desc(), ProjectRow.id).limit(limit)
+    if user_email is not None:
+        statement = statement.where(ProjectRow.user_email == user_email)
+    else:
+        statement = statement.where(ProjectRow.user_email.is_(None), ProjectRow.actor == actor)
+    with Session(engine, expire_on_commit=False) as session:
+        return list(session.scalars(statement))
+
+
+def update_project(engine: Engine, project_id: uuid.UUID, **fields) -> ProjectRow:
+    """A few columns of a project moved: its name, or the designation and the run of its last check."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.get(ProjectRow, project_id)
+        if row is None:
+            raise LookupError(f"no row for project {project_id}")
+        for name, value in fields.items():
+            setattr(row, name, value)
+        session.commit()
+        return row
+
+
+def project_jobs(engine: Engine, project_id: uuid.UUID, limit: int = 50) -> list[JobRow]:
+    """The jobs started for a project, newest first."""
+    with Session(engine, expire_on_commit=False) as session:
+        return list(session.scalars(select(JobRow).where(JobRow.project_id == project_id).order_by(JobRow.started_at.desc(), JobRow.id).limit(limit)))
 
 
 def stop_orphans(engine: Engine, reason: str) -> int:

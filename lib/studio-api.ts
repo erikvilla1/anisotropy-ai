@@ -144,16 +144,17 @@ export function readJob(payload: unknown): JobStatus {
   return payload as unknown as JobStatus;
 }
 
-export async function checkSetup(apiBase: string, values: StudioValues, signal?: AbortSignal): Promise<CheckAnswer> {
-  const payload = await call(`${base(apiBase)}/v1/coupon-jobs/check`, { method: "POST", headers, body: JSON.stringify({ values }), signal }, "the setup check");
+export async function checkSetup(apiBase: string, values: StudioValues, signal?: AbortSignal, projectId: string | null = null): Promise<CheckAnswer> {
+  const body = { values, ...(projectId ? { project_id: projectId } : {}) }; // the project the derived designation is written back to (ADR-0062 part 6)
+  const payload = await call(`${base(apiBase)}/v1/coupon-jobs/check`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the setup check");
   if (!isObject(payload)) throw new StudioError("The setup check answered with an unexpected shape.");
   const checklist = readChecklist(payload.checklist);
   const preview = payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview);
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview };
 }
 
-export async function startSolve(apiBase: string, values: StudioValues, runBy: string, replace: boolean, signal?: AbortSignal): Promise<JobStatus> {
-  const body = { values, run_by: runBy, replace };
+export async function startSolve(apiBase: string, values: StudioValues, runBy: string, replace: boolean, signal?: AbortSignal, projectId: string | null = null): Promise<JobStatus> {
+  const body = { values, run_by: runBy, replace, ...(projectId ? { project_id: projectId } : {}) };
   return readJob(await call(`${base(apiBase)}/v1/coupon-jobs`, { method: "POST", headers, body: JSON.stringify(body), signal }, "starting the solve"));
 }
 
@@ -166,6 +167,56 @@ export async function listJobs(apiBase: string, signal?: AbortSignal): Promise<J
   if (!Array.isArray(payload)) throw new StudioError("The job list has an unexpected shape.");
   return payload.map(readJob);
 }
+
+// ------------------------------------------------------------------------------------------ the projects (ADR-0062 part 6)
+
+export type ProjectJobRecord = { job_id: string; state: JobState; coupon: string | null; attempt: string | null; message: string | null; started_at: string;
+  finished_at: string | null; run_id: string | null };
+/** A workspace project as the API keeps it: the page's own object under `content`, the designation its last check derived, its jobs when read by id. */
+export type ProjectRecord = {
+  id: string; kind: "fea" | "laminate"; name: string; content: Record<string, unknown>; form_version: string | null; units: string | null;
+  designation: string | null; last_check_run_id: string | null; created_at: string; updated_at: string; jobs: ProjectJobRecord[];
+};
+export type ProjectUpload = Pick<ProjectRecord, "kind" | "name" | "content" | "form_version" | "units">;
+
+const PROJECTS = "/v1/projects";
+const text = (v: unknown): string | null => (typeof v === "string" ? v : null);
+
+export function readProjectRecord(payload: unknown): ProjectRecord {
+  if (!isObject(payload) || typeof payload.id !== "string" || (payload.kind !== "fea" && payload.kind !== "laminate") || typeof payload.name !== "string"
+    || !isObject(payload.content) || typeof payload.created_at !== "string" || typeof payload.updated_at !== "string") {
+    throw new StudioError("The API answered a project with an unexpected shape.");
+  }
+  const jobs = Array.isArray(payload.jobs) ? payload.jobs.filter(isObject).map((j) => ({
+    job_id: String(j.job_id), state: (["running", "done", "stopped", "refused"].includes(String(j.state)) ? j.state : "stopped") as JobState,
+    coupon: text(j.coupon), attempt: text(j.attempt), message: text(j.message), started_at: String(j.started_at), finished_at: text(j.finished_at), run_id: text(j.run_id),
+  })) : [];
+  return { id: payload.id, kind: payload.kind, name: payload.name, content: payload.content, form_version: text(payload.form_version), units: text(payload.units),
+    designation: text(payload.designation), last_check_run_id: text(payload.last_check_run_id), created_at: payload.created_at, updated_at: payload.updated_at, jobs };
+}
+
+/** The requester's projects on the server, the last changed first; a 503 means the API keeps no projects (run records off). */
+export async function listProjects(apiBase: string, signal?: AbortSignal): Promise<ProjectRecord[]> {
+  const payload = await call(`${base(apiBase)}${PROJECTS}`, { method: "GET", headers, signal }, "the projects");
+  if (!Array.isArray(payload)) throw new StudioError("The API answered the projects with an unexpected shape.");
+  return payload.map(readProjectRecord);
+}
+
+/** The project as the page states it, created or replaced by its id. */
+export async function putProject(apiBase: string, id: string, upload: ProjectUpload, signal?: AbortSignal): Promise<ProjectRecord> {
+  return readProjectRecord(await call(`${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}`, { method: "PUT", headers, body: JSON.stringify(upload), signal }, "saving the project"));
+}
+
+export async function getProject(apiBase: string, id: string, signal?: AbortSignal): Promise<ProjectRecord> {
+  return readProjectRecord(await call(`${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}`, { method: "GET", headers, signal }, "the project"));
+}
+
+export async function renameProject(apiBase: string, id: string, name: string, signal?: AbortSignal): Promise<ProjectRecord> {
+  return readProjectRecord(await call(`${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}`, { method: "PATCH", headers, body: JSON.stringify({ name }), signal }, "renaming the project"));
+}
+
+/** True when the API keeps no projects: run records are switched off there (503). */
+export const noProjectStore = (error: unknown): boolean => error instanceof StudioError && error.status === 503;
 
 export async function listCoupons(apiBase: string, signal?: AbortSignal): Promise<CouponSummary[]> {
   const payload = await call(`${base(apiBase)}/v1/coupons`, { method: "GET", signal }, "the coupons");

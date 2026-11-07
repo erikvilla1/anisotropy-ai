@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FolderOpen, Plus } from "lucide-react";
-import { newLaminateProject, newProject, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
+import { mergeProjects, newLaminateProject, newProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
+import { listProjects, noProjectStore } from "@/lib/studio-api";
 import { browserStorage } from "@/components/studio/project-context";
 import { problemLines } from "@/lib/laminate-chat";
 import { TEST_CHOICES } from "@/lib/studio-chat";
@@ -34,12 +35,33 @@ function materialOf(project: Project): string {
 const KIND_WORD: Record<Project["kind"], string> = { fea: "Coupon FEA", laminate: "Laminate response" };
 const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate" };
 
-/** `/workspace` (ADR-0062): the projects this browser keeps, both kinds, newest first, and one tile per kind of work. Opening a project moves
- * it to the front, which is what its workspace picks up; a new project starts blank. The server store of part 6 replaces the browser's list. */
-export function WorkspaceChooser() {
+type Source = "checking" | "server" | "browser";
+const SOURCE_WORDS: Record<Source, string> = {
+  checking: "Reading the projects kept on the server…",
+  server: "Kept on the server under your sign-in, and in this browser; a project from another machine appears here too.",
+  browser: "Kept in this browser only: this API keeps no projects (run records are off), so clearing the site's data loses them.",
+};
+
+/** `/workspace` (ADR-0062): the projects of both kinds, the last changed first, and one tile per kind of work. The list is this browser's
+ * merged with the server's (part 6): a project kept on another machine appears here, and the later change wins. Opening a project moves
+ * it to the front, which is what its workspace picks up; a new project starts blank. */
+export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
-  useEffect(() => { setProjects(readProjects(browserStorage())); }, []);
+  const [source, setSource] = useState<Source>(apiBaseUrl ? "checking" : "browser");
+  useEffect(() => {
+    const local = readProjects(browserStorage());
+    setProjects(local);
+    if (!apiBaseUrl) return;
+    const controller = new AbortController();
+    listProjects(apiBaseUrl, controller.signal).then((records) => {
+      const merged = mergeProjects(local, records.map(projectOfRecord).filter((p): p is Project => p !== null));
+      writeProjects(merged, browserStorage());
+      setProjects(merged);
+      setSource("server");
+    }).catch((error) => { if (!controller.signal.aborted) setSource("browser"); if (!noProjectStore(error)) console.warn("the projects on the server could not be read", error); });
+    return () => controller.abort("replaced");
+  }, [apiBaseUrl]);
 
   function open(project: Project) {
     const store = browserStorage();
@@ -75,8 +97,9 @@ export function WorkspaceChooser() {
           )
         ))}
       </div>
-      <section className="studio-panel ws-projects" data-testid="workspace-projects">
+      <section className="studio-panel ws-projects" data-testid="workspace-projects" data-source={source}>
         <h3><FolderOpen size={15} /> Your projects</h3>
+        <p className="studio-muted" data-testid="projects-source">{SOURCE_WORDS[source]}</p>
         {projects.length ? (
           <table className="studio-table">
             <thead><tr><th>Project</th><th>Kind</th><th>About</th><th>Material</th><th>Last change</th><th></th></tr></thead>
@@ -93,7 +116,7 @@ export function WorkspaceChooser() {
               ))}
             </tbody>
           </table>
-        ) : <p className="studio-muted">None yet in this browser. Start one from the tiles above; it is kept here until you clear the site&apos;s data.</p>}
+        ) : <p className="studio-muted">None yet. Start one from the tiles above.</p>}
       </section>
     </div>
   );
