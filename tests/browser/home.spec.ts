@@ -19,6 +19,15 @@ async function playApi(page: Page, posts: Posted[]) {
 
 const scene = (page: Page) => page.getByTestId("laminate-scene").or(page.getByTestId("webgl-missing"));
 
+test("the hero opens the page and the laminate calculator follows it (ADR-0065)", async ({ page }) => {
+  await playApi(page, []);
+  await page.goto("/");
+  const order = await page.locator("main > section").evaluateAll((sections) => sections.slice(0, 2).map((section) => section.id));
+  expect(order).toEqual(["overview", "laminate"]);
+  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/understanding/);
+  await expect(page.getByRole("link", { name: /scroll to discover/i })).toHaveAttribute("href", "#laminate");
+});
+
 test("the home page draws the stack, posts it once and shows the engine's description", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

@@ -25,12 +25,12 @@ const news = [
   },
 ];
 
-/** The home page after the audit of 2026-10-31: the laminate calculator up front, the chat block under it, then short
- * blurbs on the mission, the platform, the evidence, the team and what is new. The workflow and the roadmap live on About. */
+/** The home page: the hero with the chat block first, the laminate calculator under it as the demonstration (ADR-0065),
+ * then short blurbs on the mission, the platform, the evidence, the team and what is new. The workflow and the roadmap live
+ * on About. */
 export default function Home() {
   return (
     <main id="main">
-      <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
       <section className="hero" id="overview">
         <div className="hero-image" />
         <div className="hero-grid" />
@@ -63,12 +63,13 @@ export default function Home() {
         </div>
         <div className="hero-bottom">
           <span>01 — THE FIRST CHAPTER</span>
-          <a href="#mission">
+          <a href="#laminate">
             SCROLL TO DISCOVER <ArrowDown size={13} />
           </a>
           <span>BUILT TO BE TESTED.</span>
         </div>
       </section>
+      <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
       <div className="principles-strip">
         <span>
           <span className="status-dot" /> PHYSICS AT THE CORE

@@ -1,4 +1,4 @@
-/* The home page after the audit of 2026-10-31: the laminate calculator up front, then the product blurbs. */
+/* The home page: the hero first, the laminate calculator under it as the demonstration (ADR-0065), then the product blurbs. */
 .hero-laminate {
   position: relative;
   border-bottom: 1px solid var(--line);
