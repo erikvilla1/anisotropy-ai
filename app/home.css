@@ -652,3 +652,63 @@ html:has(.site-header.is-home) {
     font-size: 17px;
   }
 }
+
+/* The demo section on white (ADR-0066 amendment 6): after the dark hero, the calculator sits on a white page, as PhysicsX's sections do.
+ * The section sets the site's colour variables for itself, then corrects the few colours written out for a dark page. The 3D
+ * view stays a dark viewport, since its axes and dust are drawn for a dark ground. */
+.hero-laminate {
+  --bg: #ffffff;
+  --panel: #f6f6f6;
+  --raised: #efefef;
+  --line: #e1e1e1;
+  --text: #111111;
+  --muted: #666666;
+  --accent: #111111;
+  background: #ffffff;
+  color: var(--text);
+}
+.hero-laminate-head p {
+  color: #4d4d4d;
+}
+.hero-laminate-canvas {
+  border-color: #1b1b1b;
+}
+.hero-laminate-results {
+  background: var(--panel);
+}
+.hero-field input,
+.hero-field select {
+  border-color: #cfcfcf;
+}
+.hero-field [aria-invalid="true"] {
+  border-color: #c4532f;
+}
+.hero-properties > div,
+.hero-specs > div {
+  background: #ffffff;
+}
+.hero-stack li.is-hovered {
+  border-color: #bdbdbd;
+  background: #efefef;
+}
+.hero-laminate-legend i {
+  box-shadow: 0 0 0 1px #00000040;
+}
+.hero-laminate .calc-matrix th {
+  background: #f1f1f1;
+}
+.hero-laminate .calc-field-error {
+  color: #b4401f;
+}
+.hero-laminate .calc-alert {
+  border-color: #e2b4a4;
+  color: #8a2f12;
+  background: #fdf1ec;
+}
+.hero-laminate .button.primary {
+  color: #ffffff;
+}
+.hero-laminate .button.primary:hover {
+  background: #333333;
+  border-color: #333333;
+}
