@@ -25,12 +25,12 @@ Docker Desktop must be running: `wrangler deploy` builds the image from the Dock
 npm ci
 npx wrangler login       # a browser window; signs Wrangler into the Cloudflare account
 npm run build:hosted     # the site into out/, calling the API at /api (scripts/build-hosted.ts sets the address; shells differ)
-npx wrangler queues create anisotropy-coupon-jobs        # once: the job queue (ADR-0056 amendment 3)
-npx wrangler queues create anisotropy-coupon-jobs-dead   # once: where a job's message goes after 100 failed deliveries
 npx wrangler deploy      # the Worker, then the image, at https://anisotropy.dev
 ```
 
-The queues must exist before a deploy whose `wrangler.jsonc` names them. For a deploy without the queue, remove the `queues` block and the `SolverContainer` entries: the API then runs one job at a time in its own container, as before.
+Wrangler creates a queue the configuration names when it does not exist: the pull request that added the job queue created `anisotropy-coupon-jobs` this way on 2026-11-07, in its preview step. The dead-letter queue `anisotropy-coupon-jobs-dead` is created when a consumer names it, by Cloudflare's queue configuration page (not yet seen here). `npx wrangler queues list` shows both. For a deploy without the queue, remove the `queues` block and the `SolverContainer` entries: the API then runs one job at a time in its own container, as before.
+
+A pull request's preview step (`wrangler versions upload`) fails while a Durable Object class the configuration names has never been deployed: "Durable Object binding 'SOLVER' references class 'SolverContainer', which is declared in `exports` but not yet provisioned". The first `wrangler deploy` with the class provisions it, and previews work again after it.
 
 Then the secrets, one by one (each asks for the value; nothing goes into the repository):
 
