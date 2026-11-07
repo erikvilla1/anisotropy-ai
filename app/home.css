@@ -578,8 +578,8 @@ html:has(.site-header.is-home) {
   }
   .site-header.is-home .wordmark {
     justify-self: start;
-    gap: 9px;
-    font-size: 21px;
+    gap: 16px;
+    font-size: 27px;
   }
   .site-header.is-home .brand-symbol {
     width: 28px;
