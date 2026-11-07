@@ -9,11 +9,13 @@
  "message": null,
  "stage": "our engine",
  "stages_done": ["the setup check", "the input", "the decks", "the attempt"],
- "stages": ["the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the package", "the outputs"],
+ "stages": ["the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the result", "the drawings", "the package", "the outputs"],
  "outputs": {
   "checklist": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/studio/checklist.json",
   "preview": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-28/run/studio/preview.json"
  },
  "run_id": null,
- "log_tail": ["== the setup check", "== the input", "== the decks", "== the attempt", "== our engine"]
+ "log_tail": ["== the setup check", "== the input", "== the decks", "== the attempt", "== our engine"],
+ "result": null,
+ "documents": null
 }

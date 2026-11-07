@@ -50,9 +50,18 @@ if args.source == "STOPS":
 if args.source == "CRASHES":
     print("Traceback: something broke", flush=True)
     sys.exit(2)
-if args.source == "WAITS":
+if args.source == "RESULT":  # the result reported while the package is still being built (ADR-0064)
+    pathlib.Path(args.progress).write_text(json.dumps({**progress, "stage": "the package", "result": "57 of 57 recorded values agree with CalculiX"}),
+                                           encoding="utf-8")
+if args.source in ("WAITS", "RESULT"):
     while not (result.parent.parent / "release").exists():
         time.sleep(0.05)
+if args.source == "RESULT":
+    result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": progress["attempt"], "outputs": {"fields": str(fields)},
+                                  "message": "57 of 57 recorded values agree with CalculiX; the package not written (the package: Tectonic stopped)",
+                                  "result": "57 of 57 recorded values agree with CalculiX",
+                                  "documents": "the package not written (the package: Tectonic stopped)"}), encoding="utf-8")
+    sys.exit(0)
 package = result.parent / "2026-10-27_IM7-UNT-L1"
 package.mkdir()
 (package / "IM7-UNT-L1.pdf").write_bytes(b"%PDF")
@@ -248,6 +257,34 @@ def test_the_status_shows_the_stage_and_the_files_so_far(jobs):
     package = client.get(f"/v1/coupon-jobs/{job_id}/files/package")
     assert package.status_code == 200 and package.headers["content-type"] == "application/zip"
     assert client.get(f"/v1/coupon-jobs/{job_id}/files/fields").status_code == 200
+
+
+def test_the_result_shows_while_the_package_is_still_being_built(jobs):
+    """ADR-0064: the tool reports the result in its progress before the drawings and the package; the status says it while the job
+    runs, and once it ends keeps the result apart from a document that failed."""
+    job_id = client.post("/v1/coupon-jobs", json={"coupon": "RESULT", "run_by": "A. Engineer"}).json()["job_id"]
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and client.get(f"/v1/coupon-jobs/{job_id}").json()["result"] is None:
+        time.sleep(0.05)
+    running = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert running["state"] == "running" and running["stage"] == "the package" and running["documents"] == "building"
+    assert running["result"] == running["message"] == "57 of 57 recorded values agree with CalculiX"
+    assert client.get(f"/v1/coupon-jobs/{job_id}/files/fields").status_code == 200
+    (jobs.root / "release").touch()
+    done = ended(job_id)
+    assert done["state"] == "done" and done["result"] == "57 of 57 recorded values agree with CalculiX"
+    assert done["documents"] == "the package not written (the package: Tectonic stopped)" and done["message"].endswith(done["documents"])
+
+
+def test_a_job_before_its_result_has_none(jobs):
+    job_id = client.post("/v1/coupon-jobs", json={"coupon": "WAITS", "run_by": "A. Engineer"}).json()["job_id"]
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and client.get(f"/v1/coupon-jobs/{job_id}").json()["stage"] is None:
+        time.sleep(0.05)
+    running = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert running["result"] is None and running["documents"] is None and running["message"] is None
+    (jobs.root / "release").touch()
+    assert ended(job_id)["result"] == ended(job_id)["message"]  # an outcome without a result line: its message is the result
 
 
 def test_jobs_are_listed_newest_first(jobs):

@@ -488,8 +488,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {earliest ? <p>R is the factor on the applied load at which the first ply fails{earliest.touches_grip ? "; this one sits at a gripped tab edge, so read it as first damage at the grip" : ""}.</p> : null}
         {explanation?.sentences.length ? <p>{explanation.sentences[0]}</p> : null}
         {job?.state === "done" && job.message ? <p className="chat-ok"><Check size={13} /> {job.message}</p> : null}
+        {job?.state === "running" && job.result ? <p className="chat-ok" data-testid="chat-result-line"><Check size={13} /> {job.result}</p> : null}
         {job?.state === "queued" ? <p className="chat-note">Queued: {job.message ?? "waiting for a free solver"}. It starts by itself.</p> : null}
-        {job?.state === "running" ? <p className="chat-note">CalculiX, the record and the package are still running; the files appear under Outputs when they are written.</p> : null}
+        {job?.state === "running" && !job.result ? <p className="chat-note">CalculiX and the record are still running; the drawings and the package follow. The files appear under Outputs when they are written.</p> : null}
+        {job?.state === "running" && job.result ? <p className="chat-note">The drawings and the package are still being made; they appear under Outputs when written.</p> : null}
         <Chips>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("loading")}>Change the load</button>

@@ -59,7 +59,8 @@ SILENT_AFTER = dt.timedelta(minutes=2)  # a running job whose solver has written
 QUEUED_AFTER = dt.timedelta(hours=1)  # a job queued this long was lost by the queue or ran out of retries
 SWEEP_EVERY_S = 10.0  # a process looks for lost jobs at most this often, on the requests that read jobs
 SYNC_EVERY_S = 30.0  # the API's container brings its coupons level with the store at most this often, for the list, values and check
-LIVE_KEYS = ("checklist", "preview", "fields", "explanation")  # the files a browser reads while the job still runs
+LIVE_KEYS = ("checklist", "preview", "fields", "explanation", "kernel_summary", "record")  # the files a browser reads while the job still runs:
+# the result's, which the tool reports before it draws and builds the package (ADR-0064)
 CGROUP_PEAK = Path("/sys/fs/cgroup/memory.peak")  # cgroup v2: the container's peak memory, one job per solver container
 
 
@@ -155,9 +156,12 @@ class Job:
     def from_row(cls, row) -> "Job":
         """A job as its row in the jobs table keeps it, for a job that another process ran (ADR-0050 amendment 2)."""
         outcome = None if row.state in ("queued", "running") else {"status": row.state, "message": row.message, "coupon": row.coupon,
-                                                                   "attempt": row.attempt, "outputs": dict(row.outputs)}
+                                                                   "attempt": row.attempt, "outputs": dict(row.outputs),
+                                                                   "documents": "written" if "package" in row.outputs else None}
+        # a running row's message is the result once its solver reported it (`_heartbeat`); the documents are still being made
         snapshot = {"stage": row.stage, "done": list(row.stages_done), "stages": list(row.stages), "outputs": dict(row.outputs), "coupon": row.coupon,
-                    "attempt": row.attempt, "log_tail": list(row.log_tail), "message": row.message}
+                    "attempt": row.attempt, "log_tail": list(row.log_tail), "message": row.message,
+                    "result": row.message if row.state == "running" else None}
         return cls(row.id, row.actor, dict(row.inputs), None, row.started_at, state=row.state, finished_at=row.finished_at, outcome=outcome,
                    run_id=row.run_id, user_email=row.user_email, stored=dict(row.stored), snapshot=snapshot, project_id=getattr(row, "project_id", None))
 
@@ -575,7 +579,7 @@ class CouponJobs:
                     stored = dict(job.stored)
                 update_job(self.table, job.id, heartbeat_at=dt.datetime.now(dt.timezone.utc), stage=progress.get("stage"),
                            stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), attempt=attempt,
-                           outputs=dict(progress.get("outputs") or {}), stored=stored, log_tail=job.log_tail())
+                           outputs=dict(progress.get("outputs") or {}), stored=stored, log_tail=job.log_tail(), message=progress.get("result"))
             except Exception as exc:  # the store or the database for a moment: the next beat tries again
                 print(f"coupon job {job.id}: a heartbeat failed: {str(exc).splitlines()[0]}", flush=True)
 

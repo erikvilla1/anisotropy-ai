@@ -14,6 +14,9 @@ export type JobStatus = {
   job_id: string; state: JobState; actor: string; started_at: string; finished_at: string | null; coupon: string | null; attempt: string | null;
   message: string | null; stage: string | null; stages_done: string[]; stages: string[]; outputs: Record<string, string>; run_id: string | null;
   log_tail: string[];
+  /** The result's one line once the solve and the CalculiX record are done, while the drawings and the package are still made
+   * (ADR-0064); `documents` is then "building", and once the job is done "written" or what is missing and why. */
+  result?: string | null; documents?: string | null;
 };
 export type CheckAnswer = { run_id: string | null; state: "ready" | "blocked"; designation: string | null; checklist: Checklist; preview: Preview | null };
 export type Preview = {
