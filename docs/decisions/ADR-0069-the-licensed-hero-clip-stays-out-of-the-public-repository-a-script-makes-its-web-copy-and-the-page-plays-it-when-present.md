@@ -26,7 +26,7 @@ Option 3.
 - `app/page.tsx` checks at build time whether `public/media/hero.mp4` exists. If it does, the hero plays it muted, looping and inline, over the still and under the same shades. The `<video>` is plain HTML, so the browser sees `muted` before scripts run, which autoplay requires. Visitors who ask for reduced motion get no source, only the poster.
 - If it does not exist, as in every build from the public repository, the hero shows the still photo, as before.
 - The clip is darker footage than the still, so while it plays the hero's shades are lighter (the left at 65 % rather than 95 %, the
-  right at 25 %) and the clip is lifted (`brightness(1.3)`, `contrast(1.05)`). The still keeps its shades. Checked on 2026-11-07
+  right at 25 %) and the clip is lifted (`contrast(1.05)`, and `brightness(1.17)`: 1.3 at first, then 10 % darker at the lead's request). The still keeps its shades. Checked on 2026-11-07
   against a stand-in made from the clip's preview frame: with the still's shades the weave was barely visible, as the lead saw on
   the real clip; with these it reads clearly and the headline stays legible.
 
