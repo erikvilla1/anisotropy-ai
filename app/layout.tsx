@@ -8,6 +8,7 @@ import "./expansion.css";
 import "./research.css";
 import "./provenance.css";
 import { SiteHeader, SiteFooter } from "@/components/site-shell";
+import { PageTransition } from "@/components/page-transition";
 
 export const metadata: Metadata = {
   title: "Anisotropy — From material to understanding",
@@ -30,6 +31,7 @@ export default function RootLayout({
         <SiteHeader />
         {children}
         <SiteFooter />
+        <PageTransition />
       </body>
     </html>
   );
