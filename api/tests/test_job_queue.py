@@ -218,7 +218,7 @@ def test_a_running_jobs_result_is_read_back_from_its_row_before_the_package(queu
     assert status["state"] == "running" and status["stage"] == "the package" and status["result"] == status["message"] == "attempt 02"
     assert status["documents"] == "building"
     (tmp_path / "solver-1" / "release-WAIT-RESULT").touch()
-    held_until(job, lambda: job.state == "done", "done")
+    held_until(job, lambda: fetch_job(table, job_id).state == "done", "done on its row")  # the API's container reads the row
     ended = client.get(f"/v1/coupon-jobs/{job_id}").json()
     assert ended["state"] == "done" and ended["result"] == "attempt 02" and ended["documents"] == "written"
 

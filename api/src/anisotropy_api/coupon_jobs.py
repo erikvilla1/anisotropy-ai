@@ -364,20 +364,19 @@ class CouponJobs:
             state, run_id = "stopped", None
             outcome = {**outcome, "message": f"the job ended ({outcome.get('message')}) but its run record could not be written: {exc}; "
                                              "its result is withheld", "outputs": {}}
-        with self.lock:
-            job.outcome, job.run_id, job.finished_at = outcome, run_id, dt.datetime.now(dt.timezone.utc)
-            job.state = state
-        if self.table is not None:
+        finished_at = dt.datetime.now(dt.timezone.utc)
+        if self.table is not None:  # the row first, then this process's state: whoever sees the job ended here finds its row ended too
             progress = job.progress() or {}
             try:
                 update_job(self.table, job.id, state=state, stage=progress.get("stage"), stages_done=list(progress.get("done", [])),
                            stages=list(progress.get("stages", [])), coupon=outcome.get("coupon"), attempt=outcome.get("attempt"), message=outcome.get("message"),
-                           outputs=dict(outcome.get("outputs") or {}), stored=dict(job.stored), finished_at=job.finished_at, run_id=run_id, log_tail=job.log_tail(),
+                           outputs=dict(outcome.get("outputs") or {}), stored=dict(job.stored), finished_at=finished_at, run_id=run_id, log_tail=job.log_tail(),
                            **row)
             except (SQLAlchemyError, LookupError) as exc:
-                with self.lock:
-                    job.outcome = {**job.outcome, "message": f"{job.outcome.get('message')}; its row in the jobs table could not be updated: "
-                                                             f"{str(exc).splitlines()[0]}"}
+                outcome = {**outcome, "message": f"{outcome.get('message')}; its row in the jobs table could not be updated: {str(exc).splitlines()[0]}"}
+        with self.lock:
+            job.outcome, job.run_id, job.finished_at = outcome, run_id, finished_at
+            job.state = state
 
     def _store(self, job: Job, outcome: dict) -> dict[str, str]:
         """A done job's files into the store: every reported file by key, the package zip, and the coupon's whole folder."""
@@ -553,11 +552,12 @@ class CouponJobs:
         return path.is_file() and (resolved.is_relative_to(REPO.resolve()) or (job.folder is not None and resolved.is_relative_to(job.folder.resolve())))
 
     def _requeue(self, job: Job, reason: str) -> None:
-        """Back to the queue: the row `queued` again with the reason, its coupon let go; the queue's consumer delivers it again later."""
-        with self.lock:
-            job.state, job.process = "queued", None
+        """Back to the queue: the row `queued` again with the reason, its coupon let go; the queue's consumer delivers it again later.
+        The row first, then this process's state, so whoever sees the job `queued` here finds the row so too."""
         update_job(self.table, job.id, state="queued", coupon=None, attempt=None, stage=None, stages_done=[], stages=[], outputs={}, stored={},
                    message=reason, heartbeat_at=None, log_tail=job.log_tail())
+        with self.lock:
+            job.state, job.process = "queued", None
 
     def _heartbeat(self, job: Job, stop: threading.Event) -> None:
         """Every HEARTBEAT_S while the job runs: the files a browser reads while it runs into the store, and the row's stage, files,
