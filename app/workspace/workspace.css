@@ -36,3 +36,28 @@
   .ws-title input { min-width: 0; width: 100%; }
 }
 .ws-stage .chat-spec { margin-bottom: 16px; }
+
+/* The step panels (ADR-0062, part 3): one folding panel per step, its badge the worst of the checklist items that judge its rows. */
+.ws-rail-panels { display: grid; gap: 10px; }
+.ws-panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); min-width: 0; }
+.ws-panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 11px 14px; font-family: var(--heading); font-size: 14px; }
+.ws-panel > summary::-webkit-details-marker { display: none; }
+.ws-panel > summary::before { content: "▸"; color: var(--muted); font-size: 11px; width: 10px; }
+.ws-panel[open] > summary::before { content: "▾"; }
+.ws-panel-note { font-family: var(--font); font-size: 11px; color: var(--muted); }
+.ws-panel > summary .studio-badge { margin-left: auto; }
+.ws-panel-body { padding: 0 14px 14px; }
+.ws-panel-body .studio-plate { border: 0; padding: 0; margin: 0; }
+.ws-panel-body .studio-plate legend { font-size: 13px; padding: 0 0 6px; }
+.ws-panel-body .studio-buttons { margin-top: 6px; margin-bottom: 10px; }
+.ws-panel-body .studio-checklist { margin-top: 4px; }
+.ws-panel-body .studio-run-by { margin-top: 4px; }
+.ws-fix-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; }
+.ws-outputs { margin: 0; }
+.studio-badge-pass { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.studio-badge-warn { color: #e7c77a; border-color: #6b5a2a; }
+.studio-badge-fail, .studio-badge-missing { color: #f6bba9; border-color: #785347; }
+.studio-badge-pending { color: var(--muted); }
+.ws-layup-notation { margin-bottom: 10px; }
+.ws-layup-stack { margin-top: 10px; }
+.ws-rail .hero-laminate-canvas { aspect-ratio: 16 / 10; min-height: 170px; border-radius: 8px; }

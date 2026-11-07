@@ -14,7 +14,7 @@ Input: the rows of the coupon input form (ADR-0046), typed, picked from the libr
 
 ## Dependencies and connections
 
-Next.js (static export), React Three Fiber and drei on three.js (MIT), loaded only in the browser (`next/dynamic` with `ssr: false` inside a client component, as the installed Next.js docs require). The API of ADR-0050 with amendment 1: the check, the job with its stage and files, the coupon listing. The actor is `studio`. Drawing code: `lib/studio-geometry.ts` (the plate with four vertices per element face, its deformed shape, the outline frames), `lib/studio-colors.ts` (one hue for a magnitude, two hues around a neutral grey for a signed field, fixed slots for ply angles), `lib/studio-fields.ts` (which array a field shows), `lib/studio-form.ts` and `lib/studio-api.ts`.
+Next.js (static export), React Three Fiber and drei on three.js (MIT), loaded only in the browser (`next/dynamic` with `ssr: false` inside a client component, as the installed Next.js docs require). The API of ADR-0050 with amendment 1: the check, the job with its stage and files, the coupon listing. The actor is `studio`. Drawing code: `lib/studio-geometry.ts` (the plate with four vertices per element face, its deformed shape, the outline frames), `lib/studio-colors.ts` (one hue for a magnitude, two hues around a neutral grey for a signed field, fixed slots for ply angles; the scale's ends are the ranges the package writes, ADR-0063), `components/studio/field-material.ts` (the unlit shader that colours the results on the graphics card, with bands and isolines) and `components/studio/scene-lighting.tsx` (the lit presentation mode of the model), `lib/studio-fields.ts` (which array a field shows), `lib/studio-form.ts` and `lib/studio-api.ts`.
 
 ## Evaluation
 
@@ -22,7 +22,7 @@ Next.js (static export), React Three Fiber and drei on three.js (MIT), loaded on
 
 ## Out of scope and limits
 
-The founder's machine only (ADR-0027 item 4 brings authentication later); one job at a time (ADR-0050). In-plane coupons only; bending and the general `plate` kind are parts 4 and 5 of the plan. The 3D view needs WebGL; without it the page says so and shows the numbers, the checklist, the summary and the explanation. A job's status is lost when the API stops. The colours carry no number: the legend's ticks and the readout do.
+The founder's machine only (ADR-0027 item 4 brings authentication later); one job at a time (ADR-0050). In-plane coupons only; bending and the general `plate` kind are parts 4 and 5 of the plan. The 3D view needs WebGL; without it the page says so and shows the numbers, the checklist, the summary and the explanation. A job's status is lost when the API stops. The colours carry no number: the legend's ticks and the readout do, and the legend's ends are the package's (ADR-0063).
 
 ## Owner
 

@@ -32,18 +32,31 @@ export function ramp(stops: string[], t: number): RGB {
   return lerp(hexToRgb(stops[i]), hexToRgb(stops[i + 1]), position - i);
 }
 
-export type Scale = { kind: "sequential" | "diverging"; min: number; max: number; stops: string[] };
+export type Scale = {
+  kind: "sequential" | "diverging"; min: number; max: number; stops: string[];
+  /** The field's ends: the range the package wrote, or the smallest and largest value shown when it wrote none. */
+  ends: [number, number]; source: "package" | "values";
+};
 
-/** The scale for a field: diverging when it changes sign, around zero and symmetric; sequential otherwise. */
-export function scaleFor(values: (number | null)[], forceSequential = false): Scale {
-  const finite = values.filter((v): v is number => v !== null && Number.isFinite(v));
-  let min = finite.length ? Math.min(...finite) : 0, max = finite.length ? Math.max(...finite) : 1;
+/** The scale for a field: its ends are the range the package wrote (ADR-0063) or, for a job solved before the package wrote ranges, the
+ * smallest and largest of the values shown (picked, not computed); diverging when it changes sign, around zero and symmetric; sequential otherwise. */
+export function scaleFor(values: (number | null)[], forceSequential = false, range: [number, number] | null = null): Scale {
+  let ends: [number, number];
+  let source: Scale["source"];
+  if (range) { ends = range; source = "package"; }
+  else {
+    let lo = Infinity, hi = -Infinity;
+    for (const v of values) if (v !== null && Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    ends = lo <= hi ? [lo, hi] : [0, 1];
+    source = "values";
+  }
+  let [min, max] = ends;
   if (min === max) { min -= 1; max += 1; }
   if (!forceSequential && min < 0 && max > 0) {
     const bound = Math.max(-min, max);
-    return { kind: "diverging", min: -bound, max: bound, stops: DIVERGING };
+    return { kind: "diverging", min: -bound, max: bound, stops: DIVERGING, ends, source };
   }
-  return { kind: "sequential", min, max, stops: SEQUENTIAL };
+  return { kind: "sequential", min, max, stops: SEQUENTIAL, ends, source };
 }
 
 export function colorAt(scale: Scale, value: number | null): RGB {
@@ -58,9 +71,17 @@ export function colorsOf(scale: Scale, values: (number | null)[]): number[] {
   return out;
 }
 
-/** Legend ticks from min to max, inclusive, rounded to show cleanly. */
-export function legendTicks(scale: Scale, count = 5): number[] {
+/** Legend ticks from min to max, inclusive: one per band boundary when the contours are banded, so every isoline is labelled. */
+export function legendTicks(scale: Pick<Scale, "min" | "max">, count = 5): number[] {
   return Array.from({ length: count }, (_, i) => scale.min + (scale.max - scale.min) * i / (count - 1));
+}
+
+/** The legend's bar: the smooth ramp, or one flat step per band, the colour of the band's centre, as the results material paints it. */
+export function legendGradient(scale: Pick<Scale, "stops">, bands: number): string {
+  if (!bands) return `linear-gradient(to right, ${scale.stops.join(", ")})`;
+  const css = (rgb: RGB) => `rgb(${rgb.map((c) => Math.round(c * 255)).join(" ")})`;
+  const steps = Array.from({ length: bands }, (_, i) => `${css(ramp(scale.stops, (i + 0.5) / bands))} ${(100 * i) / bands}% ${(100 * (i + 1)) / bands}%`);
+  return `linear-gradient(to right, ${steps.join(", ")})`;
 }
 
 /** A number as the legend and the readout print it: four significant digits, no trailing noise. */

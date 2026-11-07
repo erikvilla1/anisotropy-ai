@@ -7,6 +7,7 @@ import type { Fields } from "../lib/studio-api";
 
 const fields: Fields = JSON.parse(readFileSync("tests/fixtures/studio/fields.json", "utf8"));
 const bending: Fields = JSON.parse(readFileSync("tests/fixtures/studio-bending/fields.json", "utf8"));
+const at = (x: unknown, ...path: (string | number)[]): unknown => path.reduce<unknown>((o, k) => (o as Record<string | number, unknown>)[k], x);
 
 test("the options follow what the package wrote", () => {
   const options = fieldOptions(fields);
@@ -36,6 +37,26 @@ test("the values are the package's arrays, per element or per node", () => {
   const magnitude = valuesFor(fields, { id: "u_mag", ply: 1, criterion: "", averaged: false });
   assert.equal(magnitude.by, "node");
   assert.equal(magnitude.values[fields.summary.max_displacement.node], fields.summary.max_displacement.value);
+});
+
+test("the range of the chosen field is the package's, for what is shown (ADR-0063)", () => {
+  const index = valuesFor(fields, { id: "failure_index", ply: 1, criterion: "tsai_hill", averaged: false });
+  assert.deepEqual(index.range, at(fields.ranges, "failure_index", "tsai_hill", "element"));
+  assert.equal(index.range![1], Math.max(...(index.values as number[])));
+  const averaged = valuesFor(fields, { id: "eps_y", ply: 1, criterion: "tsai_hill", averaged: true });
+  assert.deepEqual(averaged.range, at(fields.ranges, "eps_y", "nodal"));
+  const stress = valuesFor(fields, { id: "S22", ply: 3, criterion: "tsai_hill", averaged: false });
+  assert.deepEqual(stress.range, at(fields.ranges, "S22", "element", 2));
+  assert.equal(stress.range![0], Math.min(...(stress.values as number[])));
+  const top = valuesFor(bending, { id: "S11", ply: 2, face: 1, criterion: "tsai_hill", averaged: false });
+  assert.deepEqual(top.range, at(bending.ranges, "S11", "element", 1, 1)); // ply 2, the top face
+  assert.equal(top.range![1], Math.max(...(top.values as number[])));
+  const perPly = valuesFor(bending, { id: "failure_index_ply", ply: 4, face: 0, criterion: "max_stress", averaged: false });
+  assert.deepEqual(perPly.range, at(bending.ranges, "failure_index_ply", "max_stress", "element", 3));
+  assert.equal(perPly.range![1], Math.max(...(perPly.values as number[]))); // the worse face of each ply
+  const w = valuesFor(bending, { id: "u_z", ply: 1, face: 0, criterion: "tsai_hill", averaged: true });
+  assert.deepEqual(w.range, at(bending.ranges, "u_z", "nodal"));
+  assert.equal(valuesFor({ ...fields, ranges: undefined }, { id: "u_mag", ply: 1, criterion: "", averaged: true }).range, null); // a job solved before the ranges were written
 });
 
 test("the readout of the critical element names its ply, ratio and mode", () => {

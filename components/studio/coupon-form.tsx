@@ -1,6 +1,6 @@
 "use client";
 
-import { labelFor, libraryOptions, PLY_KEYS, sectionsFor, shortHelp, unitsOf, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
+import { fieldByKey, labelFor, libraryOptions, PLY_KEYS, sectionsFor, shortHelp, unitsOf, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
 
 type Props = { form: StudioForm; errors: Record<string, string>; disabled: boolean; onChange: (key: string, value: string) => void };
 
@@ -41,6 +41,39 @@ function Field({ field, value, units, error, disabled, onChange }: {
   );
 }
 
+/** The sixteen ply rows, bottom ply first, as one row of small inputs. */
+export function PlyGrid({ form, errors, disabled, onChange }: Props) {
+  const plies = PLY_KEYS.map((key) => fieldByKey[key]);
+  return (
+    <div className="studio-plies" role="group" aria-label="Ply angles, bottom ply first">
+      {plies.map((field, i) => (
+        <div className="studio-ply" key={field.key}>
+          <label htmlFor={`studio-${field.key}`}>{i + 1}</label>
+          <input id={`studio-${field.key}`} name={field.key} type="text" inputMode="decimal" value={form[field.key] ?? ""} disabled={disabled}
+            aria-label={field.label} aria-invalid={Boolean(errors[field.key])} onChange={(e) => onChange(field.key, e.target.value)} autoComplete="off" />
+        </div>
+      ))}
+      {plies.some((f) => errors[f.key]) ? <span className="studio-field-error">{plies.map((f) => errors[f.key]).find(Boolean)}</span>
+        : <span className="studio-hint">{shortHelp(plies[0])}</span>}
+    </div>
+  );
+}
+
+/** Any subset of rows as a grid, in the given order, only those the test shows (a bending coupon has no tab length); nothing when none. */
+export function FieldGrid({ form, keys, errors, disabled, onChange }: Props & { keys: string[] }) {
+  const units = unitsOf(form); // the Units row relabels every row with a unit as it changes (ADR-0061)
+  const visible = new Set(sectionsFor(form).flatMap((section) => section.fields.map((field) => field.key)));
+  const shown = keys.filter((key) => visible.has(key) && fieldByKey[key]).map((key) => fieldByKey[key]);
+  if (!shown.length) return null;
+  return (
+    <div className="studio-field-grid">
+      {shown.map((field) => <Field key={field.key} field={field} value={form[field.key] ?? ""} units={units} error={errors[field.key]} disabled={disabled}
+        onChange={(value) => onChange(field.key, value)} />)}
+    </div>
+  );
+}
+
+/** Every row of the form, section by section: the full form as the Excel form lists it (ADR-0046). */
 export function CouponForm({ form, errors, disabled, onChange }: Props) {
   const units = unitsOf(form); // the Units row relabels every row with a unit as it changes (ADR-0061)
   return (
@@ -51,19 +84,7 @@ export function CouponForm({ form, errors, disabled, onChange }: Props) {
         return (
           <fieldset key={section.title} disabled={disabled}>
             <legend>{section.title}</legend>
-            {plies.length ? (
-              <div className="studio-plies" role="group" aria-label="Ply angles, bottom ply first">
-                {plies.map((field, i) => (
-                  <div className="studio-ply" key={field.key}>
-                    <label htmlFor={`studio-${field.key}`}>{i + 1}</label>
-                    <input id={`studio-${field.key}`} name={field.key} type="text" inputMode="decimal" value={form[field.key] ?? ""} disabled={disabled}
-                      aria-label={field.label} aria-invalid={Boolean(errors[field.key])} onChange={(e) => onChange(field.key, e.target.value)} autoComplete="off" />
-                  </div>
-                ))}
-                {plies.some((f) => errors[f.key]) ? <span className="studio-field-error">{plies.map((f) => errors[f.key]).find(Boolean)}</span>
-                  : <span className="studio-hint">{shortHelp(plies[0])}</span>}
-              </div>
-            ) : null}
+            {plies.length ? <PlyGrid form={form} errors={errors} disabled={disabled} onChange={onChange} /> : null}
             {others.length ? (
               <div className="studio-field-grid">
                 {others.map((field) => <Field key={field.key} field={field} value={form[field.key] ?? ""} units={units} error={errors[field.key]} disabled={disabled}

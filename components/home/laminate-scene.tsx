@@ -13,6 +13,8 @@ export type LaminateSceneProps = {
   hovered: number | null;
   onHover: (index: number | null) => void;
   reducedMotion: boolean;
+  /** The hero's dust and slow turn; off in the workspace's layup editor, where the stack is a control, not a scene (ADR-0062). */
+  decor?: boolean;
 };
 
 const WIDTH = 1.4; // x, along the 0° fiber
@@ -156,13 +158,13 @@ function Dust({ count, active }: { count: number; active: boolean }) {
   );
 }
 
-export function LaminateSceneCanvas({ plies, hovered, onHover, reducedMotion }: LaminateSceneProps) {
+export function LaminateSceneCanvas({ plies, hovered, onHover, reducedMotion, decor = true }: LaminateSceneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [webgl, setWebgl] = useState<boolean | null>(null);
   const [inView, setInView] = useState(true);
   const [visible, setVisible] = useState(true);
   const [coarse, setCoarse] = useState(false);
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(decor);
   useEffect(() => {
     setWebgl(webglAvailable());
     setCoarse(window.matchMedia("(pointer: coarse)").matches);
@@ -176,7 +178,7 @@ export function LaminateSceneCanvas({ plies, hovered, onHover, reducedMotion }: 
     observer.observe(container.current);
     return () => observer.disconnect();
   }, [webgl]);
-  const motion = !reducedMotion && inView && visible;
+  const motion = decor && !reducedMotion && inView && visible;
   const active = motion && (autoRotate || true);
   const dust = coarse ? DUST_PHONE : DUST_DESKTOP;
   if (webgl === false) return <WebGLMissing />;
@@ -194,7 +196,7 @@ export function LaminateSceneCanvas({ plies, hovered, onHover, reducedMotion }: 
         <directionalLight position={[2, -2, 3]} intensity={1.0} />
         <Stack plies={plies} hovered={hovered} onHover={onHover} />
         <Axes />
-        {reducedMotion ? null : <Dust count={dust} active={motion} />}
+        {reducedMotion || !decor ? null : <Dust count={dust} active={motion} />}
         <OrbitControls
           makeDefault
           target={[0, 0, 0]}
