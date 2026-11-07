@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("curated lookup has dated original references, dual units and no classroom fallback", async ({ page }) => {
   await page.goto("/library");
-  await expect(page.getByText("25 materials", { exact: true })).toBeVisible();
+  await expect(page.getByText("26 materials", { exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "English / imperial", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "SI / metric", exact: true })).toBeVisible();
   await expect(page.locator(".cited-properties")).not.toContainText(/Appendix F|School source|identity needed|unverified/i);
@@ -88,7 +88,7 @@ test("carbon qualification exports its complete elastic set and supporting speci
 
 test("IM7 / 8552 offers the NASA 2023 dataset beside the NCAMP record without changing the material count", async ({ page }) => {
   await page.goto("/library");
-  await expect(page.getByText("25 materials", { exact: true })).toBeVisible();
+  await expect(page.getByText("26 materials", { exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Search materials" }).fill("IM7 / 8552");
   await expect(page.getByRole("heading", { name: "IM7 / 8552", exact: true })).toBeVisible();
   await expect(page.locator('[data-property="E1t"]')).toContainText("23.51 Msi");
