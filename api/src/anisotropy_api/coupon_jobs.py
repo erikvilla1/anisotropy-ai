@@ -550,7 +550,7 @@ class CouponJobs:
         return path.is_file() and (resolved.is_relative_to(REPO.resolve()) or (job.folder is not None and resolved.is_relative_to(job.folder.resolve())))
 
     def _requeue(self, job: Job, reason: str) -> None:
-        """Back to the queue: the row `queued` again with the reason, its coupon let go; the queue's consumer delivers it again later."""
+        """Back to the queue: the row `queued` again with the reason, its coupon let go; the solver's timer sends the job to the queue again."""
         with self.lock:
             job.state, job.process = "queued", None
         update_job(self.table, job.id, state="queued", coupon=None, attempt=None, stage=None, stages_done=[], stages=[], outputs={}, stored={},

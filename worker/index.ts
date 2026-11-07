@@ -3,16 +3,17 @@
  * the Worker; the request reaches here with Access's `Cf-Access-Jwt-Assertion` header, which is forwarded untouched so the API can
  * check it (api/src/anisotropy_api/access.py).
  *
- * The job queue (ADR-0056 stage 3, amendment 3): with the `JOB_QUEUE` binding, the API's container files each coupon job and
- * answers with its id in a header; the Worker sends the id to the queue. The queue's consumer, this Worker's `queue` handler, runs
- * each job in a solver container of its own (`SolverContainer`, named by the job's id, from the same image) and stays with it until
- * it ends (worker/solver-queue.ts). Nothing here computes a result (ADR-0001). */
+ * The job queue (ADR-0056 stage 3, amendments 3 and 4): with the `JOB_QUEUE` binding, the API's container files each coupon job and
+ * answers with its id in a header; the Worker sends the id to the queue. The queue's consumer, this Worker's `queue` handler, starts
+ * each job in a solver container of its own (`SolverContainer`, named by the job's id, from the same image) and returns; the solver's
+ * Durable Object watches the job on a timer until it ends (worker/solver-queue.ts). Nothing here computes a result (ADR-0001). */
 
 import { Container, getContainer } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
 
 import { ENQUEUE_HEADER, apiEnvironment, apiPath, isSolverPath, solverEnvironment, type ContainerVariable } from "./routing";
-import { driveJob, jobIdOf, type SolverCall } from "./solver-queue";
+import { POLL_MS, firstWatch, jobIdOf, retryDelay, startJob, watchJob, type SolverCall, type StartVerdict, type Watch,
+         type WatchStep } from "./solver-queue";
 
 type WorkerEnv = Env & Partial<Record<ContainerVariable, string>>;
 
@@ -27,8 +28,13 @@ export class ApiContainer extends Container<WorkerEnv> {
   }
 }
 
-/** One coupon job's container: the same image as the API's, in the role `solver`. The consumer asks it for the job's state every
- * few seconds while the job runs, which keeps it awake; once the job has ended it sleeps after a few idle minutes. */
+/** The solver's timer runs this method (the Container class's `schedule`, kept in the Durable Object's storage). */
+const WATCH = "watch";
+
+/** One coupon job's container: the same image as the API's, in the role `solver`. The consumer starts the job here (`begin`) and
+ * returns; this object's timer then asks the container for the job's state every POLL_MS until it ends (`watch`), which keeps the
+ * container awake, applies the per-job limit and sends a job whose coupon is busy back to the queue. Once the job has ended the
+ * container sleeps after a few idle minutes. */
 export class SolverContainer extends Container<WorkerEnv> {
   defaultPort = 8080;
   sleepAfter = "3m";
@@ -38,24 +44,51 @@ export class SolverContainer extends Container<WorkerEnv> {
     super(ctx, env);
     this.envVars = solverEnvironment(env);
   }
-}
 
-function solverCall(env: WorkerEnv, jobId: string): SolverCall {
-  const solver = getContainer(env.SOLVER, jobId);
-  return async (method, path) => {
-    const answer = await solver.fetch(new Request(`http://solver${path}`, { method }));
-    const text = await answer.text();
-    let body: unknown = null;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = text;
+  private call(): SolverCall {
+    return async (method, path) => {
+      const answer = await this.containerFetch(`http://solver${path}`, { method });
+      const text = await answer.text();
+      let body: unknown = null;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = text;
+      }
+      return { status: answer.status, body };
+    };
+  }
+
+  /** The consumer's call, at the message's `attempts`-th delivery: take the job up in this container and, when it runs, set the
+   * timer that watches it, unless one is set already (a message delivered twice). Returns what the consumer does with the message. */
+  async begin(jobId: string, attempts = 1): Promise<StartVerdict> {
+    const verdict = await startJob({ job_id: jobId }, this.call(), attempts);
+    if (verdict.kind === "ack" && verdict.watch && (await this.listSchedules(WATCH)).length === 0) {
+      await this.schedule<Watch>(POLL_MS / 1000, WATCH, firstWatch(jobId, Date.now()));
     }
-    return { status: answer.status, body };
-  };
-}
+    return verdict;
+  }
 
-const clock = { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) };
+  /** The timer: one look at the job, then the next look, the job sent back to the queue, or the end. A look that throws is
+   * counted as a failed one, so the timer never stops by accident while the job runs. */
+  async watch(watch: Watch): Promise<void> {
+    let step: WatchStep;
+    try {
+      step = await watchJob(watch, this.call(), Date.now());
+    } catch (error) {
+      step = { kind: "again", watch: { ...watch, errors: watch.errors + 1 }, reason: `the look failed: ${String(error)}` };
+    }
+    if (step.kind === "requeue") {
+      try {
+        await this.env.JOB_QUEUE.send({ job_id: watch.jobId }, { delaySeconds: step.delaySeconds });
+      } catch (error) {  // the job stays queued in its row; look again, and send it then
+        step = { kind: "again", watch, reason: `the job could not be queued again (${String(error)})` };
+      }
+    }
+    console.log(`coupon job ${watch.jobId}: ${step.reason}`);
+    if (step.kind === "again") await this.schedule<Watch>(POLL_MS / 1000, WATCH, step.watch);
+  }
+}
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
@@ -85,7 +118,16 @@ export default {
   async queue(batch: MessageBatch<unknown>, env: WorkerEnv): Promise<void> {
     for (const message of batch.messages) {  // one message a batch (max_batch_size 1 in wrangler.jsonc); a loop all the same
       const id = jobIdOf(message.body);
-      const verdict = await driveJob(message.body, id === null ? async () => ({ status: 409, body: null }) : solverCall(env, id), clock);
+      let verdict: StartVerdict;
+      if (id === null) {
+        verdict = { kind: "ack", watch: false, reason: "the message names no coupon job" };
+      } else {
+        try {
+          verdict = await getContainer(env.SOLVER, id).begin(id, message.attempts);
+        } catch (error) {
+          verdict = { kind: "retry", delaySeconds: retryDelay(message.attempts), reason: `the solver's object could not be reached: ${String(error)}` };
+        }
+      }
       console.log(`coupon job ${id ?? "(none)"}: ${verdict.reason}`);
       if (verdict.kind === "retry") message.retry({ delaySeconds: verdict.delaySeconds });
       else message.ack();

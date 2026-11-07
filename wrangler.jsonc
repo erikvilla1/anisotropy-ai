@@ -24,8 +24,9 @@
   },
   // Two containers from one image (Dockerfile: the API with CalculiX, Gmsh and Tectonic). ApiContainer is the API's own, one
   // instance: with the queue below it files coupon jobs and runs none. SolverContainer runs one coupon job each, named by the job's
-  // id (ADR-0056 stage 3, amendment 3); max_instances matches the consumer's max_concurrency, the jobs that run at once. standard-3
-  // is the plan's starting size, to be adjusted from each job's measured peak memory (jobs.peak_memory_bytes).
+  // id (ADR-0056 stage 3, amendments 3 and 4); its max_instances is the jobs that run at once (a job past it waits in the queue, and
+  // a finished job's container keeps its place until it sleeps, 3 minutes later). standard-3 is the plan's starting size, to be
+  // adjusted from each job's measured peak memory (jobs.peak_memory_bytes).
   "containers": [
     {
       "class_name": "ApiContainer",
@@ -51,9 +52,10 @@
     "SolverContainer": { "type": "durable-object", "storage": "sqlite" }
   },
   // The job queue: the Worker sends each filed job's id (the binding turns the API's role to `queue`, worker/routing.ts) and this
-  // Worker consumes them one at a time per invocation, at most ten at once. A job whose coupon another job holds comes back after
-  // 30 s (the consumer's retry); a message that fails 100 times goes to the dead-letter queue. Create both queues once:
-  // `npx wrangler queues create anisotropy-coupon-jobs` and `... anisotropy-coupon-jobs-dead` (docs/walkthroughs/hosted-deploy.md).
+  // Worker consumes them one per invocation: it starts the job in its SolverContainer and returns within seconds, and the solver's
+  // own timer watches the job (worker/solver-queue.ts, amendment 4). A job that could not start (no free solver) comes back 15 s
+  // later, then up to 45 s; one whose coupon another job holds is sent again by the timer, 30 s later. A message that fails 100
+  // times goes to the dead-letter queue. Wrangler creates a missing queue on deploy (docs/walkthroughs/hosted-deploy.md).
   "queues": {
     "producers": [{ "queue": "anisotropy-coupon-jobs", "binding": "JOB_QUEUE" }],
     "consumers": [
