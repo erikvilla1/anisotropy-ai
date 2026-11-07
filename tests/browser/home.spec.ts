@@ -43,10 +43,12 @@ test("the hero holds only the headline and the two paragraphs (ADR-0066)", async
   await expect(hero.getByRole("textbox")).toHaveCount(0);
   await expect(hero.getByRole("link")).toHaveCount(0);
   await expect.poll(() => posts.length).toBe(1);
-  // The header lies over the hero on the home page and stays sticky elsewhere.
+  // The header lies over the hero on the home page; elsewhere it is the same header in the page's flow, 56 px tall (ADR-0066
+  // amendment 8).
   await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
   await page.goto("/about");
-  await expect(page.locator(".site-header")).toHaveCSS("position", "sticky");
+  await expect(page.locator(".site-header")).toHaveCSS("position", "relative");
+  await expect(page.locator(".site-header")).toHaveCSS("height", "56px");
 });
 
 test("the home page draws the stack, posts it once and shows the engine's description", async ({ page }) => {

@@ -8,8 +8,8 @@
     var(--bg);
 }
 /* The section's head is set as PhysicsX sets its white sections (ADR-0066 amendment 7, measured 2026-11-07): a 16 px monospace
- * label with a short tick in the first column, and the statement from column 4, 38/41 px, behind a 1 px rule that sits in the
- * middle of the gutter so the text starts exactly on the column. 88 px above and below, the hero's 32 px margins. */
+ * label with a short tick in the first column, and the heading from column 4, 38/41 px, with its instructions as an 18 px caption,
+ * behind a 1 px rule that sits in the middle of the gutter so the text starts exactly on the column. 88 px above and below, the hero's 32 px margins. */
 .hero-laminate-inner {
   padding: 88px 32px;
 }
@@ -40,19 +40,26 @@
 .hero-laminate-statement {
   grid-column: 4 / 11;
   display: grid;
-  gap: 41px;
+  gap: 16px;
   margin-left: -16px;
   padding-left: 15px;
   border-left: 1px solid currentColor;
 }
-.hero-laminate-statement h2,
-.hero-laminate-statement p {
+.hero-laminate-statement h2 {
   margin: 0;
   font-family: var(--font);
   font-size: 38px;
   font-weight: 400;
   line-height: 41px;
   letter-spacing: -0.01em;
+}
+/* The instructions read as a caption to the heading, at the hero copy's size, not as a second statement. */
+.hero-laminate-statement p {
+  max-width: 36em;
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  color: var(--muted);
 }
 .hero-laminate-grid {
   display: grid;
@@ -62,7 +69,7 @@
 }
 .hero-laminate-view {
   position: sticky;
-  top: 90px;
+  top: 32px;
 }
 .hero-laminate-canvas {
   position: relative;
@@ -482,10 +489,8 @@
   }
   .hero-laminate-statement {
     margin-left: 0;
-    gap: 28px;
   }
-  .hero-laminate-statement h2,
-  .hero-laminate-statement p {
+  .hero-laminate-statement h2 {
     font-size: 30px;
     line-height: 34px;
   }
@@ -503,10 +508,13 @@
   .hero-laminate-inner {
     padding: 64px 20px;
   }
-  .hero-laminate-statement h2,
-  .hero-laminate-statement p {
+  .hero-laminate-statement h2 {
     font-size: 24px;
     line-height: 28px;
+  }
+  .hero-laminate-statement p {
+    font-size: 16px;
+    line-height: 24px;
   }
   .hero-laminate-label {
     font-size: 13px;
@@ -537,31 +545,7 @@
 
 /* The hero after PhysicsX's home page (ADR-0066): the material photo full-bleed, only the headline on columns 1 to 6 and two
  * short paragraphs from column 7 of a 12-column grid (32 px gutters and margins, as measured there on 2026-11-07). The header
- * lies over the hero on this page and scrolls away with it. */
-html:has(.site-header.is-home) {
-  scroll-padding-top: 0;
-}
-.site-header.is-home {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: transparent;
-  border-bottom-color: transparent;
-  backdrop-filter: none;
-}
-.site-header.is-home .main-nav {
-  color: #f4f4f4;
-}
-.site-header.is-home .header-cta {
-  background: transparent;
-  border-color: #efefef73;
-  border-radius: 2px;
-  color: #f4f4f4;
-}
-.site-header.is-home .header-cta:hover {
-  border-color: #efefef;
-}
+ * (app/globals.css) lies over the hero on this page and scrolls away with it. */
 .home-hero {
   position: relative;
   min-height: max(640px, 100svh);
@@ -643,41 +627,6 @@ html:has(.site-header.is-home) {
 }
 .home-hero-copy > p + p {
   margin-top: 16px;
-}
-@media (min-width: 1201px) {
-  /* PhysicsX's header space: 56 px tall, 32 px margins, a 28 px logo, and the links starting on the halfway line, column 7 of
-   * the hero's grid, where the copy starts too, at up to 17 px. Workspace sits in the top-right corner. */
-  .site-header.is-home {
-    display: grid;
-    grid-template-columns: calc((100% - 32px) / 2) minmax(0, 1fr) auto;
-    column-gap: 32px;
-    height: 56px;
-    padding: 0 32px;
-  }
-  .site-header.is-home .wordmark {
-    justify-self: start;
-    gap: 16px;
-    font-size: 27px;
-  }
-  .site-header.is-home .brand-symbol {
-    width: 28px;
-    height: 28px;
-  }
-  .site-header.is-home .main-nav {
-    font-size: min(17px, 1.1vw);
-    gap: min(20px, 1.3vw);
-    white-space: nowrap;
-  }
-  .site-header.is-home .header-version {
-    display: none;
-  }
-  .site-header.is-home .header-actions {
-    justify-self: end;
-  }
-  .site-header.is-home .header-cta {
-    font-size: 14px;
-    padding: 7px 12px;
-  }
 }
 @media (max-width: 1023px) {
   .home-hero {

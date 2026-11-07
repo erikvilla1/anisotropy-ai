@@ -382,7 +382,7 @@
 .topic-list {
   align-self: start;
   position: sticky;
-  top: 110px;
+  top: 32px;
   display: grid;
   border-top: 1px solid var(--line);
 }
