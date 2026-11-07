@@ -108,12 +108,14 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
     <section className="hero-laminate" id="laminate" aria-labelledby="laminate-title">
       <div className="hero-laminate-inner">
         <div className="hero-laminate-head">
-          <span className="eyebrow"><span className="status-dot" /> LAMINATE CALCULATOR / LIVE</span>
-          <h2 id="laminate-title">Your layup, calculated.</h2>
-          <p>
-            Pick a material from the library, type the stacking, and the engine returns what your laminate is and how stiff
-            it is as you type. Add loads to see the first ply to fail.
-          </p>
+          <p className="hero-laminate-label">LAMINATE CALCULATOR / LIVE</p>
+          <div className="hero-laminate-statement">
+            <h2 id="laminate-title">Your layup, calculated.</h2>
+            <p>
+              Pick a material from the library, type the stacking, and the engine returns what your laminate is and how
+              stiff it is as you type. Add loads to see the first ply to fail.
+            </p>
+          </div>
         </div>
         <div className="hero-laminate-grid">
           <div className="hero-laminate-view">

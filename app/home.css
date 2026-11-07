@@ -7,25 +7,52 @@
     radial-gradient(40% 40% at 20% 80%, #191919 0%, transparent 60%),
     var(--bg);
 }
+/* The section's head is set as PhysicsX sets its white sections (ADR-0066 amendment 7, measured 2026-11-07): a 16 px monospace
+ * label with a short tick in the first column, and the statement from column 4, 38/41 px, behind a 1 px rule that sits in the
+ * middle of the gutter so the text starts exactly on the column. 88 px above and below, the hero's 32 px margins. */
 .hero-laminate-inner {
-  max-width: 1440px;
-  margin: auto;
-  padding: 64px 64px 56px;
+  padding: 88px 32px;
 }
 .hero-laminate-head {
-  max-width: 720px;
-  margin-bottom: 36px;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  margin-bottom: 72px;
 }
-.hero-laminate-head h2 {
-  font-size: clamp(34px, 4vw, 56px);
-  letter-spacing: -2px;
-  line-height: 1.1;
-  margin: 18px 0 14px;
+.hero-laminate-label {
+  grid-column: 1 / 4;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
-.hero-laminate-head p {
-  color: #b8b8b8;
-  font-size: 15px;
-  line-height: 1.8;
+.hero-laminate-label::before {
+  content: "";
+  width: 1px;
+  height: 11px;
+  background: currentColor;
+}
+.hero-laminate-statement {
+  grid-column: 4 / 11;
+  display: grid;
+  gap: 41px;
+  margin-left: -16px;
+  padding-left: 15px;
+  border-left: 1px solid currentColor;
+}
+.hero-laminate-statement h2,
+.hero-laminate-statement p {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 41px;
+  letter-spacing: -0.01em;
 }
 .hero-laminate-grid {
   display: grid;
@@ -443,6 +470,26 @@
   max-width: 70ch;
 }
 
+@media (max-width: 1023px) {
+  .hero-laminate-head {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
+    margin-bottom: 48px;
+  }
+  .hero-laminate-label,
+  .hero-laminate-statement {
+    grid-column: 1;
+  }
+  .hero-laminate-statement {
+    margin-left: 0;
+    gap: 28px;
+  }
+  .hero-laminate-statement h2,
+  .hero-laminate-statement p {
+    font-size: 30px;
+    line-height: 34px;
+  }
+}
 @media (max-width: 1200px) {
   .hero-laminate-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -454,7 +501,15 @@
 }
 @media (max-width: 760px) {
   .hero-laminate-inner {
-    padding: 40px 16px 40px;
+    padding: 64px 20px;
+  }
+  .hero-laminate-statement h2,
+  .hero-laminate-statement p {
+    font-size: 24px;
+    line-height: 28px;
+  }
+  .hero-laminate-label {
+    font-size: 13px;
   }
   .hero-laminate-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -666,9 +721,6 @@ html:has(.site-header.is-home) {
   --accent: #111111;
   background: #ffffff;
   color: var(--text);
-}
-.hero-laminate-head p {
-  color: #4d4d4d;
 }
 .hero-laminate-canvas {
   border-color: #1b1b1b;
