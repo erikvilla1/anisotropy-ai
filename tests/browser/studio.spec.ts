@@ -7,8 +7,9 @@ const BENDING = "three-point bending";
 const API = /https?:\/\/[^/]+\/v1\//;
 
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
-async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[] }) {
+async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number }) {
   let polls = 0;
+  calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
   const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   await page.route(API, async (route) => {
@@ -50,7 +51,11 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
       return json(route, { run_id: "run-2", job_id: path.split("/")[3], kind: (request.postDataJSON() as { kind: string }).kind, writer: "template", model: null,
         prose: explanation.sentences, withheld: false, reason: null, facts: explanation.facts });
     }
-    if (path.endsWith("/files/fields")) return json(route, fixture("fields", dir));
+    if (path.endsWith("/files/fields")) {
+      calls.fieldsReads = (calls.fieldsReads ?? 0) + 1;
+      if (calls.fieldsReads === 1) return json(route, { detail: "the container did not answer" }, 503); // the first read misses, as the hosted Worker did live on 2026-11-07; the page tries again
+      return json(route, fixture("fields", dir));
+    }
     if (path.endsWith("/files/explanation")) return json(route, fixture("explanation", dir));
     if (path.endsWith("/files/package")) return route.fulfill({ status: 200, contentType: "application/zip", body: "PK" });
     return json(route, { detail: `no stand-in for ${request.method()} ${path}` }, 404);
@@ -90,6 +95,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("job-progress")).toBeVisible();
   expect((calls.solves[0] as { run_by: string }).run_by).toBe("A. Engineer");
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
+  expect((calls as { fieldsReads?: number }).fieldsReads).toBeGreaterThanOrEqual(2); // the first read of the fields failed and the page read them again
   await expect(page.getByTestId("legend")).toContainText("Failure index 1/R, worst ply");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "results"); // coloured on the graphics card, unlit (ADR-0063)
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "8");
