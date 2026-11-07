@@ -9,6 +9,7 @@ import io
 import json
 import sys
 import time
+import uuid
 import zipfile
 
 import pytest
@@ -278,6 +279,35 @@ def test_a_values_job_and_a_studio_request_have_their_receipts(recording):
     studio = ended(recording.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer"},
                                   headers={"X-Anisotropy-Actor": "studio"}).json()["job_id"], recording)
     assert recording.get(f"/v1/runs/{studio['run_id']}").json()["actor"] == "studio"  # the constraint admits the new actor (migration 0004)
+
+
+@pytest.fixture
+def recording_with_table(empty_runs, monkeypatch, tmp_path):
+    """The API with run records on and its coupon jobs writing the jobs table, as the lifespan sets them up."""
+    monkeypatch.setenv(RECORDING_VARIABLE, "on")
+    monkeypatch.setenv(DATABASE_VARIABLE, TEST_URL)
+    stand_in = tmp_path / "stand_in.py"
+    stand_in.write_text(STAND_IN, encoding="utf-8")
+    with TestClient(app, headers={"X-Anisotropy-Actor": "test"}) as recorded:
+        app.state.coupon_jobs = CouponJobs([sys.executable, str(stand_in)], job_recorder(app), tmp_path / "jobs", table=app.state.records)
+        yield recorded
+
+
+@needs_test_database
+def test_a_job_started_for_a_project_is_listed_with_it(recording_with_table):
+    """ADR-0062 part 6: the job's row names the project, the project's detail lists the job, the receipt keeps the project's id."""
+    recording = recording_with_table
+    pid = str(uuid.uuid4())
+    assert recording.put(f"/v1/projects/{pid}", json={"kind": "fea", "name": "x", "content": {"form": VALUES}}).status_code == 201
+    started = recording.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer", "project_id": pid})
+    assert started.status_code == 202 and started.json()["project_id"] == pid
+    done = ended(started.json()["job_id"], recording)
+    detail = recording.get(f"/v1/projects/{pid}").json()
+    assert [job["job_id"] for job in detail["jobs"]] == [done["job_id"]] and detail["jobs"][0]["state"] == "done" and detail["jobs"][0]["run_id"] == done["run_id"]
+    assert recording.get(f"/v1/runs/{done['run_id']}").json()["inputs"]["project_id"] == pid
+    unknown = recording.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer", "project_id": str(uuid.uuid4())})
+    assert unknown.status_code == 202 and unknown.json()["project_id"] is None  # a project the API does not hold blocks nothing
+    ended(unknown.json()["job_id"], recording)
 
 
 # --------------------------------------------------------------------------------- behind Cloudflare Access (ADR-0056)

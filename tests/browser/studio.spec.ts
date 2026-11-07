@@ -16,6 +16,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     const url = new URL(request.url());
     const path = url.pathname;
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
+    if (path.startsWith("/v1/projects")) return json(route, { detail: "Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read" }, 503); // no project store: the browser keeps the project alone
     if (path === "/v1/coupons/IM7-UNT-L1/values") return json(route, { name: "IM7-UNT-L1", values: fixture("values") });
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());

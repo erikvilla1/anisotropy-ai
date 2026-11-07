@@ -5,6 +5,7 @@ import { buildProblem, type LaminateDraft, type ReportUnits } from "@/lib/lamina
 import { laminateProjects, newLaminateProject, readProjects, reduceLaminate, upsert, writeProjects, type LaminateProject } from "@/lib/project-store";
 import { solveLaminate, StudioError, type LaminateAnswer } from "@/lib/studio-api";
 import { browserStorage } from "./project-context";
+import { useNewestFromServer, useProjectSync } from "./project-sync";
 
 /** What a solve came to: solved, refused by the page's own reading of the draft (a row missing or not a number), or refused by the API. */
 export type SolveOutcome = { ok: true } | { ok: false; errors: string[] } | { ok: false; refused: string };
@@ -61,6 +62,9 @@ export function LaminateProvider({ apiBaseUrl, children }: { apiBaseUrl: string;
   }, []);
   const rename = useCallback((name: string) => setProject((p) => reduceLaminate(p, { type: "rename", name })), []);
   const reset = useCallback(() => { setProject(newLaminateProject()); setAnswer(null); setProblem(""); }, []);
+  useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
+  useNewestFromServer(apiBaseUrl, "laminate", !start.current.restored && project.updated === project.created,
+    (found) => { if (found.kind === "laminate") setProject(found); });
 
   const solve = useCallback(async (reportUnits?: ReportUnits): Promise<SolveOutcome> => {
     const built = buildProblem(projectRef.current.draft, reportUnits ?? (answerRef.current?.report_units as ReportUnits | undefined));

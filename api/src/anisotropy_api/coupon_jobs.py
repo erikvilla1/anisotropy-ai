@@ -96,6 +96,7 @@ class Job:
     user_email: str | None = None  # the signed-in email Cloudflare Access verified for the request that started it (ADR-0056)
     stored: dict[str, str] = field(default_factory=dict)  # output key -> where the object store keeps the file (ADR-0050 amendment 2)
     snapshot: dict | None = None  # a job of an earlier process: its row's stage, stages, outputs and log tail, in place of the files
+    project_id: uuid.UUID | None = None  # the workspace project it was started for (ADR-0062 part 6)
 
     @property
     def log(self) -> Path | None:
@@ -129,7 +130,7 @@ class Job:
         snapshot = {"stage": row.stage, "done": list(row.stages_done), "stages": list(row.stages), "outputs": dict(row.outputs), "coupon": row.coupon,
                     "attempt": row.attempt, "log_tail": list(row.log_tail)}
         return cls(row.id, row.actor, dict(row.inputs), None, row.started_at, state=row.state, finished_at=row.finished_at, outcome=outcome,
-                   run_id=row.run_id, user_email=row.user_email, stored=dict(row.stored), snapshot=snapshot)
+                   run_id=row.run_id, user_email=row.user_email, stored=dict(row.stored), snapshot=snapshot, project_id=getattr(row, "project_id", None))
 
 
 Recorder = Callable[[Job, str, dict], "uuid.UUID | None"]  # writes the receipt of an ended job; None when recording is off
@@ -174,9 +175,10 @@ class CouponJobs:
         return self.root
 
     def start(self, actor: str, inputs: dict, options: list[str], *, form: tuple[str, bytes] | None = None, coupon: str | None = None,
-              values: bytes | None = None, user_email: str | None = None) -> Job:
+              values: bytes | None = None, user_email: str | None = None, project_id: uuid.UUID | None = None) -> Job:
         """Start a job from a filled-in form (its file name and bytes), the values (the JSON file's bytes) or a coupon's name; refused
-        while another runs. `user_email` is the signed-in email, when Access is in front of the API, kept for the job's receipt."""
+        while another runs. `user_email` is the signed-in email, when Access is in front of the API, kept for the job's receipt;
+        `project_id` the workspace project the job is run for, already known to be the requester's (ADR-0062 part 6)."""
         if self.command is None:
             raise JobRefused("uv is not on PATH; a coupon job runs fea/tools/run_coupon.py through `uv run --project fea`")
         if sum(x is not None for x in (form, coupon, values)) != 1:
@@ -186,7 +188,7 @@ class CouponJobs:
             if busy is not None:
                 raise JobBusy(busy.id)
             job_id = uuid.uuid4()
-            job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email)
+            job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email, project_id=project_id)
             job.folder.mkdir(parents=True)
             source = coupon
             if form is not None:
@@ -199,7 +201,8 @@ class CouponJobs:
             self.jobs[job.id] = job
         if self.table is not None:  # the row before the work, so a process that stops mid-job leaves a row to mark stopped
             try:
-                insert_job(self.table, job_id=job.id, actor=actor, user_email=user_email, inputs=inputs, started_at=job.started_at, process=self.process)
+                insert_job(self.table, job_id=job.id, actor=actor, user_email=user_email, inputs=inputs, started_at=job.started_at, process=self.process,
+                           project_id=project_id)
             except SQLAlchemyError as exc:
                 with self.lock:
                     del self.jobs[job.id]

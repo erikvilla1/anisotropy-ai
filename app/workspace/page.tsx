@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function WorkspacePage() {
   return (
     <main id="main" className="studio-page ws-page">
-      <WorkspaceChooser />
+      <WorkspaceChooser apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
     </main>
   );
 }

@@ -205,7 +205,7 @@ def test_migration_0005_undoes_cleanly_when_empty_and_refuses_over_an_email_or_t
 
 import datetime as _dt
 
-from anisotropy_api.records import fetch_job, insert_job, list_jobs, stop_orphans, update_job
+from anisotropy_api.records import fetch_job, insert_job, list_jobs, stop_orphans, update_job, upsert_project
 
 
 def _started(engine, job_id, process="p1", **fields):
@@ -216,7 +216,7 @@ def _started(engine, job_id, process="p1", **fields):
 def test_migration_0006_creates_the_jobs_table_and_refuses_to_drop_it_over_rows(engine):
     assert {column["name"] for column in inspect(engine).get_columns("jobs")} == {
         "id", "actor", "user_email", "state", "stage", "stages_done", "stages", "coupon", "attempt", "message", "inputs", "outputs", "stored",
-        "started_at", "finished_at", "run_id", "log_tail", "process",
+        "started_at", "finished_at", "run_id", "log_tail", "process", "project_id",  # project_id since migration 0007
     }
     assert {index["name"] for index in inspect(engine).get_indexes("jobs")} == {"jobs_started_at_idx", "jobs_state_idx"}
     config = alembic_config(TEST_URL)
@@ -227,6 +227,27 @@ def test_migration_0006_creates_the_jobs_table_and_refuses_to_drop_it_over_rows(
     with pytest.raises(RuntimeError, match="holds 1 job"):
         command.downgrade(config, "0005")
     assert inspect(engine).has_table("jobs")
+
+
+def test_migration_0007_creates_the_projects_table_and_refuses_to_drop_it_over_rows(engine):
+    assert {column["name"] for column in inspect(engine).get_columns("projects")} == {
+        "id", "kind", "name", "actor", "user_email", "content", "form_version", "units", "designation", "last_check_run_id", "created_at", "updated_at",
+    }
+    assert {index["name"] for index in inspect(engine).get_indexes("projects")} == {"projects_owner_idx", "projects_actor_idx"}
+    assert "project_id" in {column["name"] for column in inspect(engine).get_columns("jobs")}
+    config = alembic_config(TEST_URL)
+    command.downgrade(config, "0006")
+    assert not inspect(engine).has_table("projects") and "project_id" not in {column["name"] for column in inspect(engine).get_columns("jobs")}
+    command.upgrade(config, "head")
+    now = _dt.datetime.now(_dt.timezone.utc)
+    row, created = upsert_project(engine, project_id=uuid.uuid4(), kind="fea", name="OHT study", actor="studio", user_email=None, content={"form": {}},
+                                  form_version="0.6", units="mm-MPa", now=now)
+    assert created and row.name == "OHT study" and row.created_at == now
+    with pytest.raises(RuntimeError, match="holds 1 project"):
+        command.downgrade(config, "0006")
+    assert inspect(engine).has_table("projects")
+    with pytest.raises(DBAPIError):
+        upsert_project(engine, project_id=uuid.uuid4(), kind="stl", name="", actor="studio", user_email=None, content={}, form_version=None, units=None, now=now)
 
 
 def test_the_jobs_table_keeps_each_status_and_a_new_process_marks_the_jobs_a_stopped_one_left(engine):
