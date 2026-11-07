@@ -39,6 +39,9 @@ ALLOWED_ORIGINS_VARIABLE = "ANISOTROPY_ALLOWED_ORIGINS"
 # Durable outputs in an object store through the S3 API, R2 in the hosted tier (ADR-0056, ADR-0050 amendment 2): the bucket, the
 # endpoint (https://<account>.r2.cloudflarestorage.com, or a local MinIO) and the key pair. All four or none.
 STORAGE_VARIABLES = ("ANISOTROPY_R2_BUCKET", "ANISOTROPY_R2_ENDPOINT", "ANISOTROPY_R2_ACCESS_KEY_ID", "ANISOTROPY_R2_SECRET_ACCESS_KEY")
+# The per-user limits of the hosted tier (ADR-0056, stage 5): with a number set, a signed-in person (or, without an email, an actor)
+# may have one coupon job running at a time and start at most that many a day (UTC), counted in the jobs table; off unless set.
+JOBS_PER_DAY_VARIABLE = "ANISOTROPY_JOBS_PER_USER_PER_DAY"
 LOCAL_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001")
 
 
@@ -101,6 +104,7 @@ class Settings:
     access: AccessSettings = AccessSettings(None, None)
     allowed_origins: tuple[str, ...] = LOCAL_ORIGINS
     storage: StorageSettings = StorageSettings(None, None, None, None)
+    jobs_per_user_per_day: int | None = None  # None: no per-user limit, as locally
 
 
 def environment() -> Mapping[str, str]:
@@ -128,7 +132,22 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     if url is not None:
         url = sqlalchemy_url(url, DATABASE_VARIABLE)
     return Settings(database_url=url, run_records=switch == "on", assistant=assistant_settings(environ), access=access_settings(environ),
-                    allowed_origins=allowed_origins(environ), storage=storage_settings(environ))
+                    allowed_origins=allowed_origins(environ), storage=storage_settings(environ),
+                    jobs_per_user_per_day=jobs_per_user_per_day(environ, records_on=switch == "on"))
+
+
+def jobs_per_user_per_day(environ: Mapping[str, str], *, records_on: bool) -> int | None:
+    """The daily cap per person, a whole number of at least 1, or None when unset. It counts jobs in the jobs table, so it needs run
+    records on; set with them off, it is refused rather than ignored (ADR-0003)."""
+    raw = environ.get(JOBS_PER_DAY_VARIABLE, "").strip()
+    if not raw:
+        return None
+    if not raw.isdigit() or int(raw) < 1:
+        raise RuntimeError(f"{JOBS_PER_DAY_VARIABLE} must be a whole number of jobs per person per day, at least 1, not {raw!r}; unset it for no limit")
+    if not records_on:
+        raise RuntimeError(f"{JOBS_PER_DAY_VARIABLE} counts a person's jobs in the jobs table, which needs run records on; "
+                           f"unset it, or set {RECORDING_VARIABLE}=on with {DATABASE_VARIABLE}")
+    return int(raw)
 
 
 def storage_settings(environ: Mapping[str, str]) -> StorageSettings:

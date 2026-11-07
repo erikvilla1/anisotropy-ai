@@ -173,3 +173,29 @@ def test_some_but_not_all_store_variables_are_refused_naming_the_missing_one(mis
 def test_an_endpoint_that_is_not_an_address_is_refused(endpoint):
     with pytest.raises(RuntimeError, match="ANISOTROPY_R2_ENDPOINT"):
         load_settings({**OFF, **STORE, "ANISOTROPY_R2_ENDPOINT": endpoint})
+
+
+# ------------------------------------------------------------------------------------- the per-user limits (ADR-0056, stage 5)
+
+from anisotropy_api.settings import JOBS_PER_DAY_VARIABLE
+
+ON = {DATABASE_VARIABLE: "postgresql+psycopg://u:p@h/db"}
+
+
+def test_no_per_user_limit_unless_set():
+    assert load_settings(ON).jobs_per_user_per_day is None and load_settings(OFF).jobs_per_user_per_day is None
+
+
+def test_the_daily_cap_is_a_whole_number_with_records_on():
+    assert load_settings({**ON, JOBS_PER_DAY_VARIABLE: " 20 "}).jobs_per_user_per_day == 20
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "2.5", "many", "1e3"])
+def test_a_cap_that_is_not_a_whole_number_of_jobs_is_refused(value):
+    with pytest.raises(RuntimeError, match=JOBS_PER_DAY_VARIABLE):
+        load_settings({**ON, JOBS_PER_DAY_VARIABLE: value})
+
+
+def test_a_cap_with_records_off_is_refused_not_ignored():
+    with pytest.raises(RuntimeError, match="needs run records on"):
+        load_settings({**OFF, JOBS_PER_DAY_VARIABLE: "5"})

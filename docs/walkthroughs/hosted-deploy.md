@@ -68,6 +68,14 @@ To serve the Worker at another hostname without a moment unguarded (as amendment
 
 `deploy.yml` runs when the Tests workflow finishes green on `main`: it builds the site, applies the migrations to Neon and runs `wrangler deploy`, passing the commit as `ANISOTROPY_GIT_COMMIT` so run records carry it. It needs three repository secrets: `CLOUDFLARE_API_TOKEN` (a token made from the "Edit Cloudflare Workers" template, with the account's Workers, Containers and R2 permissions, and Zone → Workers Routes → Edit on `anisotropy.dev` for the custom domain), `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL` (and `DATABASE_URL_UNPOOLED` when Neon gives one). A pull request uploads a preview version of the Worker without production traffic, without a new container image and, with preview URLs off, without an address of its own. **Run workflow** on the Actions page deploys `main` by hand.
 
+## Limits per person
+
+`ANISOTROPY_JOBS_PER_USER_PER_DAY`, a Worker secret like the others, caps what one signed-in person can run: one job at a time and that many a day (UTC), counted in the jobs table. A request past a limit is refused with 429 and a sentence the studio's chat shows ("a job of you@example.com is still running", "you have started 20 job(s) today, the cap of 20 per person per day"). Unset, there is no cap beyond the one-job-at-a-time rule of the container.
+
+## Checks against the live site
+
+The studio's live browser test can run against the hosted site instead of a local API: `PREVIEW_URL=https://anisotropy.dev npm run test:studio-live`, with `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` set to a Zero Trust service token (Zero Trust → Access controls → Service credentials → Service tokens) that the Access application's policy admits (a policy with the action Service Auth). The API records such a run with no signed-in email, since a service token carries none. The test runs the public example end to end and writes a coupon in the hosted store. The numbers to take from such a run, and from the Cloudflare dashboard, are listed in [the beta checks note](../evaluations/website/2026-11-05-beta-launch-checks.md).
+
 ## Rolling back
 
 `npx wrangler rollback` returns the Worker to its previous version; `npx wrangler versions list` shows them. A deploy that changed the container image rolls the image out with the version; what a rollback does to a running container image was not tested here (UNVERIFIED). The database is never rolled back: migrations only add tables and nullable columns (ADR-0056), so an older API runs against a newer schema.

@@ -399,3 +399,48 @@ def test_a_store_that_fails_stops_the_job_and_withholds_its_result(tmp_path, mon
     stopped = ended(client.post("/v1/coupon-jobs", json=form_request()).json()["job_id"])
     assert stopped["state"] == "stopped" and "could not be copied to storage" in stopped["message"] and "AccessDenied" in stopped["message"]
     assert stopped["outputs"] == {} and client.get(f"/v1/coupon-jobs/{stopped['job_id']}/package").status_code == 409
+
+
+# ------------------------------------------------------------------------------------- the per-user limits (ADR-0056, stage 5)
+
+from anisotropy_api.coupon_jobs import JobLimited
+
+
+def test_a_per_user_limit_needs_the_jobs_table(tmp_path):
+    with pytest.raises(ValueError, match="jobs table"):
+        CouponJobs([sys.executable, "stand-in"], job_recorder(app), tmp_path, per_day=1)
+
+
+@pytest.fixture
+def limited(empty_runs, monkeypatch, tmp_path):
+    """The API with run records on and a cap of three jobs per person per day, its coupon jobs running the stand-in."""
+    monkeypatch.setenv(RECORDING_VARIABLE, "on")
+    monkeypatch.setenv(DATABASE_VARIABLE, TEST_URL)
+    stand_in = tmp_path / "stand_in.py"
+    stand_in.write_text(STAND_IN, encoding="utf-8")
+    with TestClient(app, headers={"X-Anisotropy-Actor": "test"}) as recorded:
+        app.state.coupon_jobs = CouponJobs([sys.executable, str(stand_in)], job_recorder(app), tmp_path / "jobs", table=app.state.records, per_day=3)
+        yield recorded
+
+
+@needs_test_database
+def test_one_running_job_per_person_and_a_daily_cap_are_refused_with_the_reason(limited):
+    through = limited
+    waiting = through.post("/v1/coupon-jobs", json={"coupon": "WAITS", "run_by": "A. Engineer"})
+    assert waiting.status_code == 202
+    again = through.post("/v1/coupon-jobs", json=form_request())
+    assert again.status_code == 429 and "still running" in again.json()["detail"] and waiting.json()["job_id"] in again.json()["detail"]
+    other = through.post("/v1/coupon-jobs", json=form_request(), headers={"X-Anisotropy-Actor": "studio"})  # another person: the global one-at-a-time
+    assert other.status_code == 409  # says so, not the person's limit
+    (app.state.coupon_jobs.root / "release").touch()
+    assert ended(waiting.json()["job_id"], through)["state"] == "done"
+    second = ended(through.post("/v1/coupon-jobs", json=form_request()).json()["job_id"], through)
+    third = ended(through.post("/v1/coupon-jobs", json=form_request()).json()["job_id"], through)
+    assert second["state"] == "done" and third["state"] == "done"
+    capped = through.post("/v1/coupon-jobs", json=form_request())
+    assert capped.status_code == 429 and "cap of 3 per person per day" in capped.json()["detail"] and "started 3 job(s) today" in capped.json()["detail"]
+    assert "the actor test" in capped.json()["detail"]  # no signed-in email here, so the actor stands for the person
+    fourth_person = through.post("/v1/coupon-jobs", json=form_request(), headers={"X-Anisotropy-Actor": "studio"})
+    assert fourth_person.status_code == 202  # the cap is per person
+    assert ended(fourth_person.json()["job_id"], through)["state"] == "done"
+    assert len(through.get("/v1/coupon-jobs").json()) == 4
