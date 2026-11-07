@@ -158,6 +158,21 @@ function Dust({ count, active }: { count: number; active: boolean }) {
   );
 }
 
+/** Keeps the stack's full width in view when the canvas is narrower than 4:3, as the home page's view can be when it fills its row
+ * (ADR-0066 amendment 10): the camera zooms out by the aspect's shortfall. At 4:3 or wider it changes nothing. */
+function FitWidth() {
+  const { camera, size, invalidate } = useThree();
+  useEffect(() => {
+    const perspective = camera as THREE.PerspectiveCamera;
+    const zoom = Math.min(1, size.width / Math.max(size.height, 1) / (4 / 3));
+    if (perspective.zoom === zoom) return;
+    perspective.zoom = zoom;
+    perspective.updateProjectionMatrix();
+    invalidate();
+  }, [camera, size, invalidate]);
+  return null;
+}
+
 export function LaminateSceneCanvas({ plies, hovered, onHover, reducedMotion, decor = true }: LaminateSceneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [webgl, setWebgl] = useState<boolean | null>(null);
@@ -196,6 +211,7 @@ export function LaminateSceneCanvas({ plies, hovered, onHover, reducedMotion, de
         <directionalLight position={[2, -2, 3]} intensity={1.0} />
         <Stack plies={plies} hovered={hovered} onHover={onHover} />
         <Axes />
+        <FitWidth />
         {reducedMotion || !decor ? null : <Dust count={dust} active={motion} />}
         <OrbitControls
           makeDefault

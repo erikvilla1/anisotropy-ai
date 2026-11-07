@@ -18,7 +18,7 @@
   grid-template-columns: repeat(12, minmax(0, 1fr));
   column-gap: 32px;
   align-items: start;
-  margin-bottom: 72px;
+  margin-bottom: 64px;
 }
 .hero-laminate-label {
   grid-column: 1 / 4;
@@ -38,7 +38,7 @@
   background: currentColor;
 }
 .hero-laminate-statement {
-  grid-column: 4 / 11;
+  grid-column: 4 / 10;
   display: grid;
   gap: 16px;
   margin-left: -16px;
@@ -61,15 +61,46 @@
   line-height: 26px;
   color: var(--muted);
 }
+/* The demo on the head's 12 columns (ADR-0066 amendment 10): the inputs under the label (columns 1 to 3), the 3D view under the
+ * statement (4 to 9), so the view starts where the heading's text does, and the plies with the view's caption beside it (10 to 12).
+ * The view fills the row's height, so no column leaves a gap under it. The engine's answer is one band under all three, its parts
+ * on the same columns. Under 1280 px the columns regroup (below). */
 .hero-laminate-grid {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(300px, 3fr) minmax(320px, 4fr);
-  gap: 24px;
-  align-items: start;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 32px;
+  align-items: stretch;
+}
+.hero-laminate-inputs {
+  grid-column: 1 / 4;
+  grid-row: 1;
 }
 .hero-laminate-view {
-  position: sticky;
-  top: 32px;
+  grid-column: 4 / 10;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+}
+.hero-laminate-stack {
+  grid-column: 10 / 13;
+  grid-row: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.hero-laminate-view > .hero-laminate-canvas,
+.hero-laminate-view > .hero-laminate-loading,
+.hero-laminate-view > .studio-webgl-missing {
+  flex: 1 1 0;
+  aspect-ratio: auto;
+  min-height: 420px;
+}
+.hero-laminate-caption {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 .hero-laminate-canvas {
   position: relative;
@@ -100,16 +131,15 @@
   overflow-x: auto;
 }
 .hero-laminate-hover {
-  margin: 12px 0 0;
+  margin: 0;
   min-height: 20px;
   font-size: 13px;
   color: var(--accent);
 }
 .hero-laminate-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-top: 8px;
+  flex-direction: column;
+  gap: 6px;
   font-size: 11px;
   color: var(--muted);
 }
@@ -124,7 +154,7 @@
 .hero-laminate-results {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 22px;
+  padding: 24px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -132,6 +162,41 @@
 }
 .hero-laminate-inputs {
   background: var(--panel);
+  container-type: inline-size;
+}
+/* The answer's band takes the section's columns as its own (subgrid; a plain 12-column grid where subgrid is missing), so its
+ * description sits under the inputs, its matrices under the view and its next step under the plies. */
+.hero-laminate-results {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: subgrid;
+  column-gap: 32px; /* the section's gutter, or the subgrid's tracks shift off the columns above */
+  align-items: start;
+}
+.hero-results-side,
+.hero-results-main,
+.hero-results-end {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.hero-results-side {
+  grid-column: 1 / 4;
+}
+.hero-results-main {
+  grid-column: 4 / 10;
+}
+.hero-results-end {
+  grid-column: 10 / 13;
+}
+.hero-results-end .calc-scope {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
 }
 .hero-laminate-results {
   background: linear-gradient(150deg, #1d1d1d, var(--panel) 35%);
@@ -256,9 +321,9 @@
 }
 .hero-results-head {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 .hero-specs {
   display: grid;
@@ -361,11 +426,74 @@
   align-self: flex-start;
 }
 .hero-empty {
-  min-height: 220px;
+  min-height: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  text-align: left;
+  gap: 16px;
+}
+.hero-empty svg {
+  flex: none;
 }
 .hero-empty p {
-  max-width: 340px;
+  max-width: 440px;
+  margin: 0;
   font-size: 13px;
+}
+/* The plies beside the view: a short label, then one row per ply, top face first. */
+.hero-stack-head {
+  margin: 0 0 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hero-laminate-stack .hero-stack li {
+  grid-template-columns: 10px 22px 1fr auto;
+  gap: 10px;
+  padding: 5px 8px;
+}
+.hero-laminate-stack .hero-stack-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+/* The inputs held compact, so the row stays about as tall as a good view of the stack: the citation and the hints as small print,
+ * the material's constants three to a row where they fit, and, in a narrow column, the layup above the ply thickness. */
+.hero-laminate-inputs {
+  gap: 16px;
+}
+.hero-laminate-inputs .calc-hint,
+.hero-laminate-inputs .calc-field-error {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hero-laminate-inputs .hero-properties > div {
+  padding: 6px 8px;
+}
+@container (min-width: 250px) {
+  .hero-properties {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 340px) {
+  .hero-field-row {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@container (max-width: 260px) {
+  .hero-field-row {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+@container (max-width: 200px) {
+  .hero-field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* The product blurbs under the two heroes. */
@@ -495,13 +623,56 @@
     line-height: 34px;
   }
 }
-@media (max-width: 1200px) {
-  .hero-laminate-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+/* Under 1280 px: the heading stacks; the view runs across the top, the inputs and the plies sit side by side under it, and the
+ * answer runs across the bottom, its description and next step side by side over its matrices. */
+@media (max-width: 1279px) {
+  .hero-laminate-head {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
+    margin-bottom: 48px;
+  }
+  .hero-laminate-label,
+  .hero-laminate-statement {
+    grid-column: 1;
+  }
+  .hero-laminate-statement {
+    margin-left: 0;
   }
   .hero-laminate-view {
     grid-column: 1 / -1;
-    position: static;
+    grid-row: 1;
+  }
+  .hero-laminate-inputs {
+    grid-column: 1 / 8;
+    grid-row: 2;
+  }
+  .hero-laminate-stack {
+    grid-column: 8 / 13;
+    grid-row: 2;
+  }
+  .hero-laminate-results {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hero-results-side {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .hero-results-end {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .hero-results-main {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .hero-laminate-view > .hero-laminate-canvas,
+  .hero-laminate-view > .hero-laminate-loading,
+  .hero-laminate-view > .studio-webgl-missing {
+    flex: none;
+    aspect-ratio: 16 / 10;
+    min-height: 260px;
   }
 }
 @media (max-width: 760px) {
@@ -521,6 +692,17 @@
   }
   .hero-laminate-grid {
     grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .hero-laminate-view,
+  .hero-laminate-inputs,
+  .hero-laminate-stack,
+  .hero-laminate-results {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .hero-laminate-results {
+    display: flex;
   }
   .hero-laminate-inputs,
   .hero-laminate-results {

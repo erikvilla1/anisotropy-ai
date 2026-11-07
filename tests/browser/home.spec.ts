@@ -77,6 +77,22 @@ test("the hero's lens plays our own results with a caption, on wide screens only
   await expect(lens).toBeHidden();
 });
 
+test("the demo sits on its heading's columns, and the engine's answer on the same ones (ADR-0066 amendment 10)", async ({ page }) => {
+  await playApi(page, []);
+  await page.goto("/");
+  await expect(page.getByTestId("abd-grid")).toBeVisible();
+  const left = (selector: string) => page.locator(selector).first().evaluate((el) => Math.round(el.getBoundingClientRect().left));
+  const statementText = await page.locator(".hero-laminate-statement h2").evaluate((el) => Math.round(el.getBoundingClientRect().left));
+  expect(await left(".hero-laminate-inputs")).toBe(await left(".hero-laminate-label"));
+  expect(await left(".hero-laminate-view")).toBe(statementText);
+  expect(await left(".hero-results-main")).toBe(await left(".hero-laminate-view"));
+  expect(await left(".hero-results-end")).toBe(await left(".hero-laminate-stack"));
+  // No column leaves a gap: the view, the inputs and the plies are one row tall.
+  const heights = await page.locator(".hero-laminate-view, .hero-laminate-inputs, .hero-laminate-stack")
+    .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+  expect(new Set(heights).size).toBe(1);
+});
+
 test("the home page draws the stack, posts it once and shows the engine's description", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

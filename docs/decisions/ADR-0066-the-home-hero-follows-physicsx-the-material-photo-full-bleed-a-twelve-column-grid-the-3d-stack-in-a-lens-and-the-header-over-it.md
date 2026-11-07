@@ -132,3 +132,31 @@ Option 4.
 **Context.** Without the lens the lead found the hero "empty/spacious", and asked for animated models of different applications in it.
 
 **Decision.** A lens returns at amendment 3's place: the gutter before the copy, just above the headline's middle. It is no longer the calculator's live stack. It is a recorded loop of three of our public results in the Turbo spectrum, seen through glass over the clip, with a caption per model. ADR-0071 holds the decision and its evidence.
+
+## Amendment 10, 2026-11-07 (the demo on its heading's columns)
+
+**Context.** The lead found the demo section "wasting space", with the heading's ruled statement "not aesthetically arranged in relation to the demo". At 1440 px its three columns did not line up with the heading. They were the view (5 fr, sticky), the inputs with the ply list (3 fr) and the answer (4 fr). The view stood 473 px tall beside 1,023 px of inputs. Without the engine, the answer's panel was mostly empty.
+
+**Decision.** From 1280 px, the demo takes the heading's 12 columns:
+- **Inputs, columns 1 to 3, under the label.** The citation and hints are 12 px. The material's constants sit three to a row where they fit.
+- **The 3D view, columns 4 to 9.** It starts where the heading's text starts, and the statement now spans the same columns.
+- **The ply list, columns 10 to 12,** with the view's hover line and axis key under it.
+
+The view fills the row's height, so no column leaves a gap. When the canvas is narrower than 4:3, the camera zooms out (`FitWidth`) so the stack keeps its width. The answer is one band under the row. It takes the same columns through CSS subgrid: the description under the inputs, the matrices under the view, and "Want to check the math?" with its scope under the plies. Without the engine, the band is one line.
+
+Under 1280 px:
+- the heading stacks;
+- the view runs across the top, with the inputs and the plies side by side under it;
+- the answer runs across the bottom, its description and next step side by side over the matrices.
+
+On phones it is one column.
+
+**Evidence.** Measured in the browser on 2026-11-07, with the local engine and without it:
+- **At 1440 px:** the inputs start at x = 32 under the label; the view and the matrices at x = 384, where the heading's text starts; the plies and the next step at x = 1088. The three columns are each 584 px tall.
+- **Section height at 1440 px:** 1,353 px with the engine (1,407 before) and 1,169 px without it (1,407 before).
+- **At 1870, 1280, 1100 and 900 px and on a phone:** no horizontal scroll and no page errors.
+- **Checks:**
+  - `npm run typecheck` clean.
+  - `npm test`: 168 passed, 1 skipped.
+  - `home.spec.ts`, `calculator.spec.ts` and `workspace.spec.ts` against a build without the hero clip: 18 of 18 passed.
+  - The new alignment test in `home.spec.ts` passed.
