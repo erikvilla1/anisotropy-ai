@@ -1,29 +1,5 @@
 import { test, expect } from "@playwright/test";
 
-test("homepage hands its message once to the coupon assistant (ADR-0055 amendment 1)", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await expect(
-    page.getByRole("button", { name: "Start chat", exact: true }),
-  ).toBeDisabled();
-  const input = page.getByRole("textbox", {
-    name: "Describe your engineering question",
-  });
-  await input.fill("Open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm");
-  await input.press("Shift+Enter");
-  await expect(page).toHaveURL(/\/$/);
-  await input.press("Enter");
-  await expect(page).toHaveURL(/\/chat\/?$/);
-  await expect(page.locator(".chat-user")).toHaveCount(1);
-  await expect(page.getByTestId("chat-spec")).toContainText("open-hole tension");
-  await expect(page.getByTestId("chat-spec")).toContainText("[45/0/-45/90]s, 8 plies");
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear");
-  await page.reload();
-  await expect(page.locator(".chat-user")).toHaveCount(0);
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
-});
-
 test("physics topics group transformations, local recovery and failure functions", async ({
   page,
 }) => {

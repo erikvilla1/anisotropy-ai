@@ -28,19 +28,21 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0065)"
   await page.goto("/");
   const order = await page.locator("main > section").evaluateAll((sections) => sections.slice(0, 2).map((section) => section.id));
   expect(order).toEqual(["overview", "laminate"]);
-  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/understanding/);
-  await expect(page.getByRole("link", { name: /scroll to discover/i })).toHaveAttribute("href", "#laminate");
+  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Composite analysis/);
 });
 
-test("the hero sets the headline, the copy and the chat over the material, with the stack in a lens (ADR-0066)", async ({ page }) => {
+test("the hero holds only the headline, the two paragraphs and the stack in a lens (ADR-0066)", async ({ page }) => {
   const posts: Posted[] = [];
   await playApi(page, posts);
   await page.goto("/");
   const hero = page.locator("#overview");
-  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/From material\s*to understanding\./);
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/Composite analysis\.\s*Traced to evidence\./);
+  await expect(hero.locator(".home-hero-copy p")).toHaveCount(2);
   await expect(hero.getByTestId("laminate-scene").or(hero.getByTestId("webgl-missing"))).toBeVisible();
   await expect(hero.locator(".home-hero-lens-frame")).toHaveAttribute("aria-hidden", "true");
-  await expect(hero.getByRole("textbox", { name: "Describe your engineering question" })).toBeVisible();
+  // No chat box and no link in the hero: the header's Workspace button is the way in.
+  await expect(hero.getByRole("textbox")).toHaveCount(0);
+  await expect(hero.getByRole("link")).toHaveCount(0);
   // The lens only draws: the calculator's one request is the only one.
   await expect.poll(() => posts.length).toBe(1);
   // The header lies over the hero on the home page and stays sticky elsewhere.

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { ArrowDown, ArrowUpRight, MoveUpRight } from "lucide-react";
-import { HomeComposer } from "@/components/home-composer";
+import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { HeroLens } from "@/components/home/hero-lens";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
@@ -26,7 +25,7 @@ const news = [
   },
 ];
 
-/** The home page: the hero with the chat block first, the laminate calculator under it as the demonstration (ADR-0065),
+/** The home page: the hero first, the laminate calculator under it as the demonstration (ADR-0065, ADR-0066),
  * then short blurbs on the mission, the platform, the evidence, the team and what is new. The workflow and the roadmap live
  * on About. */
 export default function Home() {
@@ -35,16 +34,11 @@ export default function Home() {
       <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
         <div className="home-hero-media" />
         <div className="home-hero-grid">
-          <div className="home-hero-title">
-            <span className="eyebrow">
-              <span className="status-dot" /> ENGINEERING INTELLIGENCE, GROUNDED IN EVIDENCE
-            </span>
-            <h1 id="home-hero-title">
-              From material
-              <br />
-              to <span>understanding.</span>
-            </h1>
-          </div>
+          <h1 className="home-hero-title" id="home-hero-title">
+            Composite analysis.
+            <br />
+            Traced to evidence.
+          </h1>
           <figure className="home-hero-lens">
             <div className="home-hero-lens-frame" aria-hidden="true">
               <HeroLens />
@@ -56,21 +50,14 @@ export default function Home() {
             </figcaption>
           </figure>
           <div className="home-hero-copy">
-            <p>A clearer path from composite coupon to confident design.</p>
-            <p>Connecting physics, physical testing, and research—one layer at a time.</p>
-            <HomeComposer />
-            <p className="home-hero-footnote">
-              <span className="home-hero-rule" />
-              COUPONS FIRST. EVIDENCE ALWAYS.
+            <p>
+              We&apos;re bringing composite theory and real test data into one engineering platform, changing how laminates
+              and coupons are set up, analyzed and documented.
+            </p>
+            <p>
+              Spend less time on setup and reports. Spend more time on the structure. Trace every number back to its source.
             </p>
           </div>
-        </div>
-        <div className="home-hero-bottom">
-          <span>01 — THE FIRST CHAPTER</span>
-          <a href="#laminate">
-            SCROLL TO DISCOVER <ArrowDown size={13} />
-          </a>
-          <span>BUILT TO BE TESTED.</span>
         </div>
       </section>
       <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
