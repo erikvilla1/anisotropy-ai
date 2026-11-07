@@ -5,6 +5,16 @@ import { test, expect } from "@playwright/test";
 // Cloudflare Access) it writes one in the hosted tier's store. So it runs only when asked for: STUDIO_LIVE=1 or PREVIEW_URL.
 test.skip(!process.env.STUDIO_LIVE && !process.env.PREVIEW_URL, "set STUDIO_LIVE=1 for the API on this machine, or PREVIEW_URL for the hosted site");
 
+// Against the hosted site, the service token's two headers go on the site's own requests only: a done job's files come from the bucket
+// by a signed link on another origin, and a request there carrying extra headers would need a preflight the bucket does not answer.
+test.beforeEach(async ({ page }) => {
+  const preview = process.env.PREVIEW_URL?.trim();
+  const id = process.env.CF_ACCESS_CLIENT_ID, secret = process.env.CF_ACCESS_CLIENT_SECRET;
+  if (!preview || !id || !secret) return;
+  const origin = new URL(preview).origin;
+  await page.route((url) => url.origin === origin, (route) => route.continue({ headers: { ...route.request().headers(), "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret } }));
+});
+
 test("the example coupon solves end to end from the studio", async ({ page }) => {
   await page.goto("/workspace/fea"); // the rows are the left column of the workspace (ADR-0062)
   await page.getByRole("button", { name: "Load example" }).click();
