@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test("a negative load stays negative so the setup check can refuse it (ADR-0003)", async ({ page }) => {
-  await page.goto("/chat");
+  await page.goto("/workspace/fea");
   await page.getByRole("textbox", { name: "Message the coupon assistant" }).fill("Unnotched tension, apply -20 kN");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.locator(".chat-understood").last()).toContainText("-20000 N force");
@@ -29,7 +29,7 @@ test("navigation routes load directly with research-focused About", async ({
     "documented answer",
   );
   await page.getByRole("link", { name: "Development process streamlining" }).click();
-  await expect(page).toHaveURL(/\/chat\/?$/);
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await page.reload();
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
   expect(errors).toEqual([]);
@@ -65,9 +65,9 @@ test("material filters, empty state, references and scope handoff", async ({
     .getByRole("button", { name: "7781 / E-765", exact: false })
     .click();
   await page.getByRole("link", { name: "Discuss this material" }).click();
-  await expect(page).toHaveURL(/\/chat\/?$/); // not a library material of the engine: the chat asks from the start
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/); // not a library material of the engine: the assistant asks from the start
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
-  await page.goto("/chat?material=im7-8552");
+  await page.goto("/workspace/fea?material=im7-8552");
   await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
 });
 
@@ -91,7 +91,7 @@ test("the Services disclosure lists the five service pages and the contact page 
   await fem.click();
   await expect(page).toHaveURL(/\/services\/finite-element-modeling\/?$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("ply by ply");
-  await expect(page.getByRole("link", { name: "Open the chat", exact: true })).toHaveAttribute("href", /\/chat$/);
+  await expect(page.getByRole("link", { name: "Open the workspace", exact: true })).toHaveAttribute("href", /\/workspace\/fea$/);
   await page.getByRole("link", { name: "Contact us", exact: true }).first().click();
   await expect(page).toHaveURL(/\/contact\/?$/);
   await expect(page.getByRole("link", { name: /erikvilla947@gmail\.com/ })).toHaveAttribute("href", "mailto:erikvilla947@gmail.com");
@@ -125,7 +125,8 @@ test("expanded pages fit phones and tablets with local-only visual assets", asyn
       "/services/finite-element-modeling",
       "/contact",
       "/library",
-      "/chat",
+      "/workspace",
+      "/workspace/fea",
       "/data",
     ]) {
       await page.goto(path);

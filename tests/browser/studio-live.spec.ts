@@ -5,12 +5,9 @@ import { test, expect } from "@playwright/test";
 test.skip(!process.env.STUDIO_LIVE, "set STUDIO_LIVE=1 to run the studio against the real API and CalculiX");
 
 test("the example coupon solves end to end from the studio", async ({ page }) => {
-  await page.goto("/chat");
-  await page.getByRole("tab", { name: "Full form" }).click(); // the chat opens on its questions (ADR-0055 amendment 3); the example lives on the form tab
+  await page.goto("/workspace/fea"); // the rows are the left column of the workspace (ADR-0062)
   await page.getByRole("button", { name: "Load example" }).click();
-  await page.getByLabel("Material code", { exact: true }).fill("IM7");
-  await page.getByLabel("Layup code", { exact: true }).fill("");
-  await page.getByLabel("Filled in by", { exact: true }).fill("Studio live test");
+  await page.getByLabel("Filled in by", { exact: true }).fill("Studio live test"); // the coupon's codes are derived or reused (ADR-0038 amendment 1)
   await page.getByTestId("check-button").click();
   await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "ready", { timeout: 120_000 });
   await page.getByLabel("Run by", { exact: true }).fill("Studio live test");

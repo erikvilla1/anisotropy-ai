@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Workspace } from "@/components/workspace";
+import { Workspace } from "@/components/data-workspace";
 export default function DataPage() {
   return (
     <main id="main" className="inner-page chat-page">
@@ -12,7 +12,7 @@ export default function DataPage() {
             Inspect a sample submission, or check a CSV locally in your browser.
           </p>
         </div>
-        <Link className="text-button" href="/chat">
+        <Link className="text-button" href="/workspace/fea">
           Open the coupon assistant →
         </Link>
       </div>

@@ -11,10 +11,10 @@ export function HomeComposer() {
     const payload = { prompt: prompt.trim() };
     try {
       sessionStorage.setItem(handoffKey, JSON.stringify(payload));
-      router.push("/chat");
+      router.push("/workspace/fea");
     } catch {
       router.push(
-        `/chat?prompt=${encodeURIComponent(payload.prompt)}`,
+        `/workspace/fea?prompt=${encodeURIComponent(payload.prompt)}`,
       );
     }
   }

@@ -235,7 +235,7 @@ export default function Home() {
             <br />
             comes next.
           </h2>
-          <Link className="button primary" href="/chat">
+          <Link className="button primary" href="/workspace/fea">
             Start a conversation <ArrowUpRight size={18} />
           </Link>
         </div>

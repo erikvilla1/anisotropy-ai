@@ -4,14 +4,14 @@ import "../studio.css";
 
 export const metadata: Metadata = {
   title: "Viewer | Anisotropy",
-  description: "The viewer moved under the chat.",
+  description: "The viewer moved under the workspace.",
 };
 
-/** An old viewer link keeps its job: it goes to `/chat/view` with the same query (ADR-0055 amendment 3). */
+/** An old viewer link keeps its job: it goes to `/workspace/fea/view` with the same query (ADR-0062). */
 export default function StudioViewPage() {
   return (
     <main id="main" className="studio-page">
-      <RedirectTo path="/chat/view" />
+      <RedirectTo path="/workspace/fea/view" />
     </main>
   );
 }

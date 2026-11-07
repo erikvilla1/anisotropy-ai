@@ -68,7 +68,7 @@ const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /** The public IM7/8552 example (the stand-in of `fea/tests/public_coupon.py`): a complete, solvable coupon to start from. */
 export const EXAMPLE: StudioForm = {
-  filled_by: "", date: "", notes: "", units: "mm-MPa", test: "unnotched tension", material_code: "IM7", layup_code: "", standard: "none",
+  filled_by: "", date: "", notes: "", units: "mm-MPa", test: "unnotched tension", material_code: "", layup_code: "", standard: "none",
   size_from: "the public IM7/8552 check fea/checks/unnotched-im7-8552/", team_model: "not built yet", test_data: "none",
   length: "250", width: "25", tab_length: "56", ply_1: "45", ply_2: "0", ply_3: "-45", ply_4: "90", symmetric: "yes", ply_thickness: "",
   library: "im7-8552", G13: "4688.43", G23: "3000", criteria: "all", f12_star: "", control: "displacement", value: "1", element_size: "2",

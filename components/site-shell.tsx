@@ -26,7 +26,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
-  if (pathname === "/chat")
+  if (pathname === "/chat" || pathname.startsWith("/workspace"))
     return (
       <header className="site-header chat-site-header">
         <Wordmark />
@@ -56,14 +56,14 @@ export function SiteHeader() {
             </Link>
           ),
         )}
-        <Link className="mobile-chat-cta" href="/chat" onClick={close}>
-          Open chat <ArrowUpRight size={16} />
+        <Link className="mobile-chat-cta" href="/workspace" onClick={close}>
+          Workspace <ArrowUpRight size={16} />
         </Link>
       </nav>
       <div className="header-actions">
         <span className="header-version">RESEARCH PREVIEW / V.01</span>
-        <Link className="button header-cta" href="/chat" onClick={close}>
-          Open chat <ArrowUpRight size={16} />
+        <Link className="button header-cta" href="/workspace" onClick={close}>
+          Workspace <ArrowUpRight size={16} />
         </Link>
         <button
           className="icon-button menu-toggle"
@@ -80,7 +80,7 @@ export function SiteHeader() {
 
 export function SiteFooter() {
   const pathname = usePathname();
-  if (pathname === "/chat") return null;
+  if (pathname === "/chat" || pathname.startsWith("/workspace")) return null;
   return (
     <footer className="site-footer">
       <Wordmark />

@@ -56,7 +56,7 @@ export default function Documentation() {
       access={{
         text: "The package comes with every studio job, so it is available to the invited users of the closed beta. The materials library and the physics cards are open to anyone who can reach the site.",
         links: [
-          { label: "Open the chat", href: "/chat", primary: true },
+          { label: "Open the workspace", href: "/workspace/fea", primary: true },
           { label: "Browse the materials library", href: "/library" },
         ],
       }}

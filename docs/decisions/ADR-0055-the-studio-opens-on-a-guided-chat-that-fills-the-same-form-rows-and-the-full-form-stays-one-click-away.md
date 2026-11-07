@@ -1,6 +1,6 @@
 # ADR-0055: The studio opens on a guided chat that fills the same form rows; the full form stays one click away
 
-- Status: Proposed
+- Status: Proposed; amendment 3's one entry point and its rejection of a page per tool are superseded in part by [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md): the chat becomes the assistant column of a workspace per kind of work, and `/chat` redirects there
 - Date: 2026-10-29
 - Decided by: Founder, 2026-10-29 (the studio "looks very html, the flow feels not smooth, wording can be confusing"; all interaction should happen in the chat interface; ship fast to get feedback from users) | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0004](ADR-0004-sign-and-stacking-conventions.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0052](ADR-0052-the-assistant-explains-from-a-fact-sheet-through-one-provider-interface-with-a-number-guard.md), `lib/studio-chat.ts`, `components/studio/coupon-chat.tsx`, `tests/studio-chat.test.ts`, `tests/browser/studio.spec.ts`

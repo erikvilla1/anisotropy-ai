@@ -1,17 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  checkSetup, couponValues, fetchExplanation, fetchFields, getJob, listCoupons, POLL_MS, startSolve, StudioError,
-  type CheckAnswer, type CouponSummary, type Explanation, type Fields, type JobStatus, type Preview,
-} from "@/lib/studio-api";
-import { blankForm, buildValues, exampleForm, formFromValues, PLATE_TEST, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
-import { emptyPlate, plateFromValues, plateValues, regionOptions, regionsOfElement, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
+import { useCallback, useEffect, useState } from "react";
+import { couponValues, listCoupons, StudioError, type CheckAnswer, type CouponSummary, type Preview } from "@/lib/studio-api";
+import { buildValues, exampleForm, formFromValues, PLATE_TEST, rowErrorsFrom } from "@/lib/studio-form";
+import { plateFromValues, plateValues, regionOptions, regionsOfElement, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
 import { printed } from "@/lib/studio-colors";
 import { CouponForm } from "./coupon-form";
 import { ChecklistPanel } from "./checklist-panel";
 import { JobProgress } from "./job-progress";
 import { PlatePanel } from "./plate-panel";
+import { useProject } from "./project-context";
 import { ResultsView } from "./results-view";
 import { Scene } from "./scene";
 import type { SceneMarker } from "./scene-canvas";
@@ -52,25 +50,17 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
   );
 }
 
-export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBaseUrl: string; initialForm?: StudioForm | null; onFormChange?: (form: StudioForm) => void }) {
-  const [form, setForm] = useState<StudioForm>(() => initialForm ?? blankForm());
-  const [plate, setPlate] = useState<PlateLists>(() => emptyPlate());
+export function CouponStudio({ apiBaseUrl, part }: { apiBaseUrl: string; part?: "input" | "output" }) {
+  const { form, plate, setForm, setPlate, run: runner } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { checking, checked, job, fields, explanation } = runner;
   const [pickedElement, setPickedElement] = useState<number | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runBy, setRunBy] = useState("");
   const [message, setMessage] = useState("");
-  const [checking, setChecking] = useState(false);
-  const [checked, setChecked] = useState<CheckAnswer | null>(null);
-  const [job, setJob] = useState<JobStatus | null>(null);
-  const [fields, setFields] = useState<Fields | null>(null);
-  const [explanation, setExplanation] = useState<Explanation | null>(null);
   const [coupons, setCoupons] = useState<CouponSummary[]>([]);
   const [reopen, setReopen] = useState("");
   const [status, setStatus] = useState("Load the example or fill in the rows, then check the setup.");
-  const fieldsLoaded = useRef<string | null>(null);
-  const aborts = useRef<AbortController[]>([]);
-  useEffect(() => { setRunBy(remembered(RUN_BY_KEY)); return () => aborts.current.forEach((c) => c.abort("unmount")); }, []);
-  useEffect(() => { onFormChange?.(form); }, [form, onFormChange]);
+  useEffect(() => { setRunBy(remembered(RUN_BY_KEY)); }, []);
   useEffect(() => {
     if (!apiBaseUrl) return;
     const controller = new AbortController();
@@ -78,27 +68,25 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
     return () => controller.abort("replaced");
   }, [apiBaseUrl]);
 
+  const { clearChecked } = runner;
   const edit = useCallback((key: string, value: string) => {
     setForm((f) => ({ ...f, [key]: value }));
-    setErrors({}); setChecked(null); setMessage("");
+    setErrors({}); clearChecked(); setMessage("");
     setStatus("Inputs changed. Check the setup again before solving.");
-  }, []);
+  }, [setForm, clearChecked]);
   const editPlate = useCallback((lists: PlateLists) => {
     setPlate(lists);
-    setErrors({}); setChecked(null); setMessage("");
+    setErrors({}); clearChecked(); setMessage("");
     setStatus("Supports or loads changed. Check the setup again before solving.");
-  }, []);
+  }, [setPlate, clearChecked]);
   const isPlate = form.test === PLATE_TEST;
   const values = () => buildValues(form, isPlate ? plateValues(plate) : undefined);
 
   async function check(): Promise<CheckAnswer | null> {
     if (!apiBaseUrl) return null;
-    setChecking(true); setMessage(""); setErrors({});
-    const controller = new AbortController();
-    aborts.current.push(controller);
+    setMessage(""); setErrors({});
     try {
-      const answer = await checkSetup(apiBaseUrl, values(), controller.signal);
-      setChecked(answer);
+      const answer = await runner.check(values());
       setErrors(rowErrorsFrom(answer.checklist));
       setStatus(answer.state === "ready" ? `Setup ready: ${answer.designation ?? "the coupon"} can be solved.` : "The setup is blocked; the items below say what to fix.");
       return answer;
@@ -106,8 +94,6 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
       setMessage(error instanceof StudioError ? error.message : "The setup check failed.");
       setStatus("");
       return null;
-    } finally {
-      setChecking(false);
     }
   }
 
@@ -118,10 +104,9 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
     const name = runBy.trim();
     if (!name) { setMessage("Give your name under Run by: the attempt log and the CalculiX record name who ran it."); return; }
     remember(RUN_BY_KEY, name);
-    setMessage(""); setFields(null); setExplanation(null); fieldsLoaded.current = null;
+    setMessage("");
     try {
-      const started = await startSolve(apiBaseUrl, values(), name, answer.checklist.coupon_exists);
-      setJob(started);
+      await runner.solve(values(), name, answer.checklist.coupon_exists);
       setStatus("Solving. The fields appear as soon as our engine has run.");
     } catch (error) {
       setMessage(error instanceof StudioError ? error.message : "The solve could not start.");
@@ -129,31 +114,10 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
   }
 
   useEffect(() => {
-    if (!job || !apiBaseUrl || job.state !== "running") return;
-    const timer = window.setTimeout(async () => {
-      try { setJob(await getJob(apiBaseUrl, job.job_id)); }
-      catch (error) { setMessage(error instanceof StudioError ? error.message : "The job's status could not be read."); }
-    }, POLL_MS);
-    return () => window.clearTimeout(timer);
-  }, [job, apiBaseUrl]);
-
-  useEffect(() => {
-    if (!job || !apiBaseUrl || !("fields" in job.outputs)) return;
-    const stamp = `${job.job_id}:${job.state}`;
-    if (fieldsLoaded.current === stamp) return;
-    fieldsLoaded.current = stamp;
-    const controller = new AbortController();
-    aborts.current.push(controller);
-    (async () => {
-      try {
-        setFields(await fetchFields(apiBaseUrl, job.job_id, controller.signal));
-        setExplanation("explanation" in job.outputs ? await fetchExplanation(apiBaseUrl, job.job_id, controller.signal) : null);
-        setStatus(job.state === "done" ? `Done: ${job.message ?? "the package is written"}.` : "Our engine has run; CalculiX, the record and the package follow.");
-      } catch (error) {
-        if (!controller.signal.aborted) setMessage(error instanceof StudioError ? error.message : "The fields could not be read.");
-      }
-    })();
-  }, [job, apiBaseUrl]);
+    if (!job || !fields) return;
+    setStatus(job.state === "done" ? `Done: ${job.message ?? "the package is written"}.` : "Our engine has run; CalculiX, the record and the package follow.");
+  }, [job, fields]);
+  useEffect(() => { if (runner.problem) setMessage(runner.problem); }, [runner.problem]);
 
   async function loadCoupon(name: string) {
     if (!apiBaseUrl || !name) return;
@@ -161,7 +125,7 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
       const loaded = await couponValues(apiBaseUrl, name);
       setForm({ ...formFromValues(loaded), filled_by: form.filled_by || runBy, date: today() });
       setPlate(plateFromValues(loaded));
-      setErrors({}); setChecked(null); setMessage(""); setFields(null); setExplanation(null); setJob(null);
+      setErrors({}); setMessage(""); runner.reset();
       setStatus(`Coupon ${name} loaded; change what you need and check the setup. Solving it adds the next attempt.`);
     } catch (error) {
       setMessage(error instanceof StudioError ? error.message : "The coupon could not be read.");
@@ -169,13 +133,12 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
   }
 
   const busy = checking || (job?.state === "running");
-  const viewerLink = job ? `/chat/view?job=${encodeURIComponent(job.job_id)}` : null;
-  return (
-    <div className="studio-layout">
+  const viewerLink = job ? `/workspace/fea/view?job=${encodeURIComponent(job.job_id)}` : null;
+  const input = (
       <aside className="studio-input">
         {!apiBaseUrl ? <p className="studio-alert">The page was built without the API's address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be checked or solved.</p> : null}
         <div className="studio-actions">
-          <button type="button" className="studio-text-button" onClick={() => { setForm(exampleForm(today())); setErrors({}); setChecked(null); setMessage(""); setStatus("The public IM7/8552 example is loaded: 250 by 25 mm with 56 mm tabs, [45/0/-45/90]s, 1 mm pull."); }} disabled={busy}>Load example</button>
+          <button type="button" className="studio-text-button" onClick={() => { setForm(exampleForm(today())); setErrors({}); clearChecked(); setMessage(""); setStatus("The public IM7/8552 example is loaded: 250 by 25 mm with 56 mm tabs, [45/0/-45/90]s, 1 mm pull."); }} disabled={busy}>Load example</button>
           {coupons.length ? (
             <span className="studio-reopen">
               <select value={reopen} onChange={(e) => setReopen(e.target.value)} aria-label="Reopen a coupon" disabled={busy}>
@@ -200,6 +163,8 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
         {message ? <p className="studio-alert" role="alert">{message}</p> : null}
         <p className="studio-status" role="status" data-testid="status">{status}</p>
       </aside>
+  );
+  const output = (
       <section className="studio-output">
         {fields ? (
           <>
@@ -239,6 +204,8 @@ export function CouponStudio({ apiBaseUrl, initialForm, onFormChange }: { apiBas
           </>
         )}
       </section>
-    </div>
   );
+  if (part === "input") return input;
+  if (part === "output") return output;
+  return <div className="studio-layout">{input}{output}</div>;
 }

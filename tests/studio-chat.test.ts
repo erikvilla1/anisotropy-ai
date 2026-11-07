@@ -71,7 +71,7 @@ test("a blocked row leads back to the step that asks for it", () => {
   assert.equal(stepOfKey("own_E1"), "material");
   assert.equal(stepOfKey("G23"), "shear");
   assert.equal(stepOfKey("filled_by"), "name");
-  assert.equal(stepOfKey("material_code"), "name"); // a material run for the first time needs its code (the identity item)
+  assert.equal(stepOfKey("material_code"), null); // the codes are derived (ADR-0038 amendment 1); an override lives on the full form only
   assert.equal(stepOfKey("name_part"), null); // only the full form has the Abaqus names
 });
 

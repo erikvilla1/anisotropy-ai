@@ -22,7 +22,7 @@ test("the five services are unique, ordered as the audit lists them, and each ha
     assert.equal(serviceHref(service), `/services/${service.slug}`);
     assert.ok(service.summary.length > 20, `${service.slug} summary`);
     assert.ok(statusLabel[service.status]);
-    assert.match(service.access.href, /^\/(studio|chat|contact)$/);
+    assert.match(service.access.href, /^\/(workspace(\/[a-z]+)?|contact)$/); // the workspace since ADR-0062
   }
   assert.equal(findService("finite-element-modeling")?.status, "built");
   assert.equal(findService("manufacturing-plans")?.status, "planned");

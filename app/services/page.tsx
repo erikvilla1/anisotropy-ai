@@ -58,7 +58,7 @@ export default function Services() {
           </div>
         </div>
         <div className="service-selectors">
-          <Link href="/chat">
+          <Link href="/workspace/fea">
             <Layers3 size={23} />
             <div>
               <span>TRY THE EXPERIENCE</span>
