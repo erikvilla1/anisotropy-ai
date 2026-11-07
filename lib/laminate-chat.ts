@@ -62,12 +62,14 @@ export type LaminateDraft = {
   thickness: Quantity | null;
   loads: Record<LoadName, Quantity> | null;
   f12_star: string;
+  /** Maximum strain with limits derived from the strengths (strength over modulus, linear to failure, ADR-0021): a stated choice. */
+  strain_limits: boolean;
 };
 export type LaminateStep = "units" | "material" | "layup" | "loads" | "review";
 export const STEP_ORDER: LaminateStep[] = ["units", "material", "layup", "loads", "review"];
 
 export function blankDraft(): LaminateDraft {
-  return { system: "", material: null, layup: null, thickness: null, loads: null, f12_star: "" };
+  return { system: "", material: null, layup: null, thickness: null, loads: null, f12_star: "", strain_limits: false };
 }
 
 export const libraryThicknessOf = (id: string): number | null => libraryOptions.find((m) => m.id === id)?.thickness ?? null;
@@ -216,8 +218,8 @@ export function loadsWithZeros(given: Partial<Record<LoadName, Quantity>>, syste
 export type QuantityJson = { value: number; unit: string };
 export type LaminateProblem = {
   title?: string;
-  material: { library: string } | { name: string; E1: QuantityJson; E2: QuantityJson; G12: QuantityJson; nu12: number; source?: string }
-    & Partial<Record<"F1t" | "F1c" | "F2t" | "F2c" | "F6", QuantityJson>>;
+  material: ({ library: string } | { name: string; E1: QuantityJson; E2: QuantityJson; G12: QuantityJson; nu12: number; source?: string }
+    & Partial<Record<"F1t" | "F1c" | "F2t" | "F2c" | "F6", QuantityJson>>) & { strain_limits?: "from-strengths" };
   layup: number[];
   layup_notation?: string;
   ply_thickness?: QuantityJson;
@@ -246,17 +248,20 @@ export function buildProblem(draft: LaminateDraft, reportUnits?: ReportUnits): {
   if (!draft.system) errors.push("units: pick the system the problem is stated in");
   const system = reportUnits ?? (draft.system || "SI");
   let material: LaminateProblem["material"];
+  const limits = draft.strain_limits ? { strain_limits: "from-strengths" as const } : {};
   if (!draft.material) { errors.push("material: required"); material = { library: "" }; }
-  else if ("library" in draft.material) material = { library: draft.material.library };
+  else if ("library" in draft.material) material = { library: draft.material.library, ...limits };
   else {
     const own = draft.material.own;
     const strengths = STRENGTH_NAMES.filter((k) => filledConstant(own[k]));
     if (strengths.length && strengths.length !== 5) errors.push(`strengths: give all five (F1t, F1c, F2t, F2c, F6) or none; ${strengths.join(", ")} given`);
+    if (draft.strain_limits && strengths.length !== 5) errors.push("strain limits: maximum strain needs all five strengths to derive its limits from");
     material = {
       name: own.name.trim() || "typed in the chat", E1: quantity(own.E1, "E1"), E2: quantity(own.E2, "E2"), G12: quantity(own.G12, "G12"),
       nu12: number(typeof own.nu12 === "string" ? own.nu12 : own.nu12?.value ?? "", "nu12"),
       ...(own.source.trim() ? { source: own.source.trim() } : {}),
       ...(strengths.length === 5 ? Object.fromEntries(STRENGTH_NAMES.map((k) => [k, quantity(own[k], k)])) : {}),
+      ...limits,
     };
   }
   if (!draft.layup) errors.push("layup: required");

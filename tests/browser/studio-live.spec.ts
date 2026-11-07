@@ -6,6 +6,7 @@ test.skip(!process.env.STUDIO_LIVE, "set STUDIO_LIVE=1 to run the studio against
 
 test("the example coupon solves end to end from the studio", async ({ page }) => {
   await page.goto("/chat");
+  await page.getByRole("tab", { name: "Full form" }).click(); // the chat opens on its questions (ADR-0055 amendment 3); the example lives on the form tab
   await page.getByRole("button", { name: "Load example" }).click();
   await page.getByLabel("Material code", { exact: true }).fill("IM7");
   await page.getByLabel("Layup code", { exact: true }).fill("");

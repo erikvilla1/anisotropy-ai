@@ -13,11 +13,16 @@ from alembic.config import Config
 from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine, inspect, text
 
-from anisotropy_api.settings import sqlalchemy_url
+from anisotropy_api.settings import ASSISTANT_PROVIDER_VARIABLE, CREDENTIAL_VARIABLES, sqlalchemy_url
 
 API_DIR = Path(__file__).resolve().parents[1]
 
 load_dotenv(find_dotenv(usecwd=True), override=False)
+# The developer's .env may switch the assistant on (ADR-0052). The tests never call a model: a call costs money, its words are not
+# the template's, and the engine's numbers are what is tested. A test that wants a writer sets it on the app's state or the environment.
+os.environ[ASSISTANT_PROVIDER_VARIABLE] = ""
+for _credential in CREDENTIAL_VARIABLES:
+    os.environ.pop(_credential, None)
 TEST_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
 if TEST_URL:
     TEST_URL = sqlalchemy_url(TEST_URL, "TEST_DATABASE_URL")  # a hosted branch's plain postgresql:// address works too

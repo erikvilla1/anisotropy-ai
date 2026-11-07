@@ -37,6 +37,9 @@ npx wrangler secret put ANISOTROPY_R2_ACCESS_KEY_ID
 npx wrangler secret put ANISOTROPY_R2_SECRET_ACCESS_KEY
 npx wrangler secret put ANISOTROPY_ACCESS_TEAM_DOMAIN   # <team>.cloudflareaccess.com, once the Access application exists
 npx wrangler secret put ANISOTROPY_ACCESS_AUD           # the application's audience tag
+npx wrangler secret put ANISOTROPY_ASSISTANT_PROVIDER   # anthropic; leave all three unset and the template writer explains alone (ADR-0052)
+npx wrangler secret put ANISOTROPY_ASSISTANT_MODEL      # claude-opus-5-5, or claude-sonnet-5-5 at lower cost
+npx wrangler secret put ANTHROPIC_API_KEY               # from console.anthropic.com, with a spend limit set there
 ```
 
 The container reads these at its next start (`worker/routing.ts` lists the names it is given). After the migrations have run once against Neon (`cd api && DATABASE_URL=... uv run alembic upgrade head`, or the deploy workflow), the API is complete: with `DATABASE_URL` set and no `ANISOTROPY_RUN_RECORDS=off`, it refuses to start until the database is reachable and migrated, as locally.

@@ -115,6 +115,24 @@ def test_the_same_problem_reported_in_each_system_is_the_same_answer_converted()
                            "D": "N*mm", "areal_mass": "kg/m^2"}
 
 
+def test_maximum_strain_is_evaluated_only_when_limits_from_the_strengths_are_asked_for():
+    # The choice is stated on the material, as the case format states it (ADR-0021); the engine derives the five limits.
+    typed = solve(homework(material={**homework()["material"], "strain_limits": "from-strengths"}))
+    assert typed["criteria"] == ["max_stress", "max_strain", "tsai_hill", "tsai_wu"]
+    assert typed["case"]["material"]["strain_limits"] == "from-strengths"
+    expected = engine_results({**SI_CASE, "material": {**SI_CASE["material"], "strain_limits": "from-strengths"}})
+    for key in ("fpf_ratio_max_strain", "fpf_ply_max_strain", "fpf_ratio_tsai_wu"):
+        assert typed["results"][key] == pytest.approx(float(expected[key][0]), rel=1e-12), key
+    assert typed["facts"]["max_strain_mode"].endswith("strain") and "maximum strain R = " in typed["prose"][-1]
+    assert number_guard(" ".join(typed["prose"]), typed["facts"]).ok
+    library = solve({**homework(material={"library": "im7-8552", "strain_limits": "from-strengths"}), "ply_thickness": None})
+    assert library["criteria"] == ["max_stress", "max_strain", "tsai_hill", "tsai_wu"] and library["case"]["material"]["strain_limits"] == "from-strengths"
+    without = {k: v for k, v in homework()["material"].items() if not k.startswith("F")}
+    refused = client.post(ENDPOINT, json=homework(material={**without, "strain_limits": "from-strengths"}))
+    assert refused.status_code == 422 and "needs all five strengths" in refused.text
+    assert client.post(ENDPOINT, json=homework(material={**homework()["material"], "strain_limits": "measured"})).status_code == 422
+
+
 def test_a_library_material_brings_its_ply_thickness_strengths_density_and_citation():
     problem = homework(material={"library": "im7-8552"})
     del problem["ply_thickness"]

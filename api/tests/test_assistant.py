@@ -239,14 +239,14 @@ def recording(empty_runs, monkeypatch, tmp_path):
 
 
 @needs_test_database
-def test_an_explanation_is_recorded_with_its_writer(recording):
+def test_an_explanation_is_recorded_with_its_writer(recording, monkeypatch):
     job_id = ended(recording.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer"}).json()["job_id"], recording)["job_id"]
     plain = recording.post(f"/v1/coupon-jobs/{job_id}/explain", json={"kind": "result"}).json()
     run = recording.get(f"/v1/runs/{plain['run_id']}").json()
     digest = hashlib.sha256(json.dumps(FACTS, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     assert run["endpoint"] == f"/v1/coupon-jobs/{job_id}/explain" and run["inputs"] == {"job_id": job_id, "kind": "result", "facts_sha256": digest}
     assert run["llm_provider"] is None and run["llm_model_version"] is None and run["response"]["writer"] == "template"
-    app.state.assistant = ClaudeAssistant("claude-opus-5-5", client=StubClient("The top grip carries 16211 N."))
+    monkeypatch.setattr(app.state, "assistant", ClaudeAssistant("claude-opus-5-5", client=StubClient("The top grip carries 16211 N.")), raising=False)  # restored: a stub left on the app would write every later answer
     drafted = recording.post(f"/v1/coupon-jobs/{job_id}/explain", json={"kind": "result"}).json()
     run = recording.get(f"/v1/runs/{drafted['run_id']}").json()
     assert run["llm_provider"] == "anthropic" and run["llm_model_version"] == "claude-opus-5-5" and run["response"]["prose"] == ["The top grip carries 16211 N."]

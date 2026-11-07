@@ -53,6 +53,7 @@ Which writer when the assistant is off:
 - `cd api && uv run pytest -q tests/test_assistant.py tests/test_settings.py`: the counts are in the evaluation note `docs/evaluations/api/2026-10-28-assistant.md`.
 - The SDK's own types, read on 2026-10-28 (`anthropic` 1.17.0): `fallbacks` takes a list or the literal `"default"`; `output_config`, `betas` and `system` are parameters of `client.beta.messages.create`. The request shape follows the Claude API reference of the same day.
 - A live answer from Claude: no evidence yet (no credential on the founder's machine). UNVERIFIED until the founder sets the three variables and runs a job; the stub tests cover the code path either way.
+- 2026-11-06: three live answers, the laminate problem in SI and in US units and the example coupon's result, all written by `claude-opus-5-5` and none withheld, with their run ids and times in the evaluation note's section "A live model". The hosted site stays UNVERIFIED until its secrets are set.
 
 ## Consequences
 

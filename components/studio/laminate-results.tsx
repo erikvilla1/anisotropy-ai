@@ -125,7 +125,7 @@ export function LaminateResults({ answer, busy, onReport }: { answer: LaminateAn
                     const at = [...forces, ...moments].map((v, i) => ({ name: LOADS[i], v, unit: i < 3 ? u.N : u.M })).filter((item) => item.v !== 0);
                     return (
                       <tr key={criterion} className={criterion === earliest ? "studio-earliest" : undefined} data-criterion={criterion}>
-                        <td>{CRITERION_WORDS[criterion] ?? criterion}{criterion === "tsai_wu" && typeof answer.case.f12_star === "number" ? ` (f12* = ${answer.case.f12_star})` : ""}</td>
+                        <td>{CRITERION_WORDS[criterion] ?? criterion}{criterion === "tsai_wu" && typeof answer.case.f12_star === "number" ? ` (f12* = ${answer.case.f12_star})` : ""}{criterion === "max_strain" ? " (limits from the strengths)" : ""}</td>
                         <td data-testid={`lam-ratio-${criterion}`}>{shown(r[`fpf_ratio_${criterion}`])}</td>
                         <td>{shown(r[`fpf_ply_${criterion}`])} ({shown(f[`${criterion}_angle`])}°){typeof f[`${criterion}_mode`] === "string" && f[`${criterion}_mode`] !== "interactive" ? `, ${f[`${criterion}_mode`]}` : ""}</td>
                         <td>{at.length ? at.map((item) => `${item.name} = ${shown(item.v)} ${printedUnit(item.unit)}`).join(", ") : "–"}</td>
@@ -136,6 +136,7 @@ export function LaminateResults({ answer, busy, onReport }: { answer: LaminateAn
               </table>
             </div>
             {typeof answer.case.f12_star !== "number" ? <p className="studio-muted">Tsai-Wu is not computed without f12*; give it on the review card to add it.</p> : null}
+            {!answer.criteria.includes("max_strain") ? <p className="studio-muted" data-testid="lam-no-max-strain">Maximum strain is not computed without strain limits; tick it on the review card to derive them from the strengths.</p> : null}
           </>
         ) : <p className="studio-muted">{typeof f.F1t === "number" ? "No load was applied, so there is nothing to scale." : "Not evaluated: the material has no strengths."}</p>}
       </section>
@@ -143,7 +144,8 @@ export function LaminateResults({ answer, busy, onReport }: { answer: LaminateAn
       <section className="studio-panel lam-explanation" data-testid="lam-explanation" data-writer={answer.writer}>
         <h3>What this shows</h3>
         {answer.prose.map((sentence, index) => <p key={index}>{sentence}</p>)}
-        <p className="studio-muted">{badge}.{answer.reason ? ` ${answer.withheld ? "The model's draft was withheld: " : "The template's words stand: "}${answer.reason}.` : ""}</p>
+        <p className="studio-muted">{badge}.</p>
+        {answer.reason ? <p className="studio-muted" data-testid="explanation-reason">{answer.withheld ? "The model's draft was withheld: " : "The template's words stand: "}{answer.reason}.</p> : null}
       </section>
       <p className="studio-muted">Engine {answer.engine_version}{answer.run_id ? `, run ${answer.run_id}` : ""}.</p>
     </div>

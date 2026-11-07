@@ -38,10 +38,27 @@ built is in the record's "As built" section; this note holds the runs and their 
 
 ## A live model
 
-No evidence yet. The founder's machine holds no Anthropic credential (checked 2026-10-28: `ANTHROPIC_API_KEY` unset, no `ant` profile), so
-the Claude writer has not answered a real request here: UNVERIFIED. To run it: set `ANISOTROPY_ASSISTANT_PROVIDER=anthropic`,
-`ANISOTROPY_ASSISTANT_MODEL=claude-opus-5-5` and `ANTHROPIC_API_KEY` in `.env`, start the API, solve a coupon in the studio and read the
-explanation panel: it names the writer, and a withheld draft says which numbers the guard refused. Its run record will show the model.
+On 2026-10-28 there was no evidence: the founder's machine held no Anthropic credential, so the Claude writer had not answered a real
+request. On 2026-11-06 the founder put a key in `.env` with `ANISOTROPY_ASSISTANT_PROVIDER=anthropic` and
+`ANISOTROPY_ASSISTANT_MODEL=claude-opus-5-5`, the API was started from `api/` with run records on (migration 0006 applied first), and
+three requests went to the model. Every one came back written by `anthropic`, model `claude-opus-5-5`, nothing withheld, no reason:
+
+| Request | Run id | Time | What the draft did |
+| --- | --- | --- | --- |
+| `POST /v1/laminates/solve`, the homework problem of ADR-0060 (AS4/3501-6 typed, [0/45/-45/90]s, Nx = 100 N/mm), SI | 55e7a478-9ab1-4dc8-a962-d833a07cead0 | 12.0 s | Six sentences; every number the sheet's (Nx written as 100000.0 N/m, the SI reporting unit, not the typed N/mm) |
+| The same problem reported in US units | 4f70b4dc-e21b-41ca-a5bb-6baf969fee89 | 4.1 s | Nine shorter sentences, 571 lb/in, 8.438 Msi, R = 3.207 |
+| `POST /v1/coupon-jobs/{id}/explain`, kind `result`, the IM7/8552 example coupon solved by `STUDIO_LIVE=1 npm run test:studio-live` (job aee06c6d-6980-40d8-b137-35ed9a527941, passed in 1.4 min) | dc8c67a4-ee84-47cf-8533-2d63b14a632c | 8.3 s | Eight sentences; names the grip-edge element and reads both criteria as first damage at the grip |
+
+The run record of the first call, read back with `GET /v1/runs/{id}`, carries `llm_provider = anthropic` and
+`llm_model_version = claude-opus-5-5`, with the commit of `main` at 924d5ff. The coupon draft copies the fact sheet's numbers at full
+precision ("16211.196890295483 N", "1.0000000000000002 mm"), because the coupon sheet prints the floats as computed and the guard
+accepts a number only as the sheet writes it; the laminate sheet rounds its facts to four figures first (`printed`), and its drafts read
+as an engineer would write them. Rounding the coupon sheet the same way is the next change for this writer, in the fea package, not here.
+
+Two things the live run exposed, fixed in the same pull request: the API test session loaded the developer's `.env`, so four tests that
+start the app's lifespan called the real model and failed on its words (`conftest.py` now forces the provider off and drops the
+credential), and `test_an_explanation_is_recorded_with_its_writer` left a stub writer on the app that wrote every later answer of the
+session (restored by `monkeypatch`). The hosted site has not had the three secrets yet: UNVERIFIED there until the founder sets them.
 
 ## Not done here
 

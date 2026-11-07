@@ -50,6 +50,8 @@ def case_of(problem: LaminateProblem) -> dict[str, Any]:
         if own.F1t is not None:
             for name in STRENGTH_NAMES:
                 material[name] = _converted(getattr(own, name), "stress", system, f"material.{name}")
+    if problem.material.strain_limits is not None:  # a stated choice, not a value: maximum strain with limits from the strengths (ADR-0021)
+        material["strain_limits"] = problem.material.strain_limits
     laminate: dict[str, Any] = {"layup": [float(angle) for angle in problem.layup]}
     if problem.ply_thickness is not None:
         laminate["ply_thickness"] = _converted(problem.ply_thickness, "length", system, "ply_thickness")
