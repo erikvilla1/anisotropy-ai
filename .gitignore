@@ -75,3 +75,7 @@ docs/.obsidian/
 # Wrangler keeps its local state and dry-run bundles here (ADR-0056); `npm run typecheck:worker` regenerates the runtime types.
 .wrangler/
 worker-configuration.d.ts
+
+# Licensed media (the hero clip, ADR-0069): its licence forbids a standalone downloadable copy, so it never enters this public
+# repository. scripts/hero-video.sh writes the web copy here from the original kept in .local/.
+/public/media/

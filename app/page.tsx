@@ -1,9 +1,20 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
 import { team } from "@/lib/team";
 import "./home.css";
+
+/** The hero clip's web copy (ADR-0069), written by scripts/hero-video.sh into the git-ignored public/media. A build without it,
+ * such as one from the public repository, shows the still photo instead. */
+const heroVideo = existsSync(join(process.cwd(), "public", "media", "hero.mp4"));
+// Plain HTML so the browser sees "muted" before React runs, which autoplay requires; visitors who ask for reduced motion get no
+// source, so the poster frame stays.
+const heroVideoHtml =
+  '<video autoplay muted loop playsinline preload="auto" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
+  '<source src="/media/hero.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)"></video>';
 
 /** What shipped lately, in words a visitor can check against the changelog; no number without a record behind it. */
 const news = [
@@ -31,7 +42,9 @@ export default function Home() {
   return (
     <main id="main">
       <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
-        <div className="home-hero-media" />
+        <div className="home-hero-media" aria-hidden="true">
+          {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
+        </div>
         <div className="home-hero-grid">
           <h1 className="home-hero-title" id="home-hero-title">
             Composite analysis.
