@@ -223,6 +223,12 @@ img {
   font-weight: 600;
   white-space: nowrap;
 }
+/* The name in capitals, as PhysicsX sets its own (ADR-0066 amendment 4). Only the look changes: the text stays "Anisotropy"
+ * for page titles, links and screen readers. Capitals take open tracking where the mixed-case name was tight. */
+.wordmark > span {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .wordmark svg {
   color: var(--accent);
 }
@@ -235,11 +241,14 @@ img {
   font-size: 11px;
   color: #bababa;
 }
+/* PhysicsX's hover, measured on 2026-11-07: a link fades to 60 % in 0.15 s, so the page shows through it as if pressed in
+ * (ADR-0066 amendment 4). The Services chevron and the dropdown's entries do the same. */
 .main-nav a {
-  transition: color 0.2s;
+  transition: opacity 0.15s;
 }
-.main-nav a:hover {
-  color: var(--accent);
+.main-nav a:hover,
+.nav-disclosure-button:hover {
+  opacity: 0.6;
 }
 .header-actions {
   display: flex;
@@ -2125,9 +2134,8 @@ img {
   background: transparent;
   color: #bababa;
   cursor: pointer;
-  transition: color 0.2s, background 0.2s, transform 0.2s;
+  transition: opacity 0.15s, color 0.2s, background 0.2s, transform 0.2s;
 }
-.nav-disclosure-button:hover,
 .nav-disclosure-button:focus-visible,
 .nav-disclosure.open .nav-disclosure-button {
   color: var(--accent);
@@ -2165,7 +2173,6 @@ img {
   color: #d8d8d8;
   white-space: nowrap;
 }
-.nav-sublist li a:hover,
 .nav-sublist li a:focus-visible,
 .nav-sublist li a[aria-current="page"] {
   color: var(--accent);
