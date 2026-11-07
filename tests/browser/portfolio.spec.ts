@@ -36,7 +36,12 @@ test("the chat keeps a coupon across messages and starts over on request", async
   await expect(page.getByTestId("chat-spec")).toContainText("AS4");
   await box.fill("hello");
   await box.press("Enter");
-  await expect(page.getByText("I could not read a coupon value in that")).toBeVisible();
+  // A message that names no value is sent to the panel holding the next thing to state (ADR-0062 part 5);
+  // the library lists no G13 or G23 for AS4/8552, so that is the shear moduli, on the layup and material panel.
+  await expect(page.getByText("Pick a step on the left, or describe one thing")).toBeVisible();
+  const redirect = page.getByTestId("chat-redirect").last();
+  await expect(redirect).toHaveAttribute("data-panel", "layup");
+  await expect(redirect).toContainText("The next thing to state is out-of-plane shear moduli, under the Layup and material panel.");
   await page.getByRole("button", { name: "Start a new coupon" }).click();
   await expect(page.locator(".chat-user")).toHaveCount(0);
   await expect(page.getByTestId("chat-spec")).not.toContainText("250");
