@@ -54,7 +54,7 @@ export function CouponVisual({
           <path d={outline} />
         </clipPath>
       </defs>
-      <g stroke="#344035" strokeWidth=".5" opacity=".5">
+      <g stroke="#3c3c3c" strokeWidth=".5" opacity=".5">
         {Array.from({ length: 12 }, (_, i) => (
           <path key={i} d={`M${i * 65} 40V320`} />
         ))}
@@ -66,13 +66,13 @@ export function CouponVisual({
         <path
           d={outline}
           transform="translate(0 8)"
-          fill="#344236"
-          stroke="#63715e"
+          fill="#3e3e3e"
+          stroke="#6c6c6c"
         />
         <path
           d={outline}
-          fill={mode === "geometry" ? "#95b39f" : `url(#${id}-field)`}
-          stroke="#b8ccab"
+          fill={mode === "geometry" ? "#aaaaaa" : `url(#${id}-field)`}
+          stroke="#c4c4c4"
           strokeWidth="1.2"
         />
         <path d={outline} fill={`url(#${id}-mesh)`} />
@@ -92,16 +92,16 @@ export function CouponVisual({
             </text>
           </g>
         )}
-        <g stroke="#b7c8ad" fill="none">
+        <g stroke="#c1c1c1" fill="none">
           <path d="M25 170H65M635 170H679M25 170l8 -5m-8 5 8 5M679 170l-8 -5m8 5 -8 5" />
         </g>
       </g>
-      <text x="30" y="336" fill="#819078" fontSize="9" letterSpacing="1.5">
+      <text x="30" y="336" fill="#8a8a8a" fontSize="9" letterSpacing="1.5">
         {mode === "geometry"
           ? "PARAMETRIC GEOMETRY CONCEPT"
           : "QUALITATIVE FIELD ILLUSTRATION"}
       </text>
-      <text x="670" y="336" textAnchor="end" fill="#819078" fontSize="9">
+      <text x="670" y="336" textAnchor="end" fill="#8a8a8a" fontSize="9">
         ILLUSTRATION / NOT ANALYSIS
       </text>
     </svg>

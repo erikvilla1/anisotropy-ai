@@ -124,9 +124,9 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
                 : "Hover a ply to read its angle. Drag to turn the stack."}
             </p>
             <div className="hero-laminate-legend">
-              <span><i style={{ background: "#c1deb5" }} /> x, along the 0° fiber</span>
-              <span><i style={{ background: "#8fbb80" }} /> y, across</span>
-              <span><i style={{ background: "#eef0e9" }} /> z, through the thickness (not to scale)</span>
+              <span><i style={{ background: "#d4d4d4" }} /> x, along the 0° fiber</span>
+              <span><i style={{ background: "#acacac" }} /> y, across</span>
+              <span><i style={{ background: "#efefef" }} /> z, through the thickness (not to scale)</span>
             </div>
           </div>
           <form className="hero-laminate-inputs" onSubmit={(event) => event.preventDefault()} aria-label="Laminate inputs">

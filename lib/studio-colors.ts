@@ -7,7 +7,7 @@
 
 export type RGB = [number, number, number]; // 0..1
 
-/** One hue, the site's accent green, from the dark surface to near white: for |u|, stresses as magnitudes, the failure index. */
+/** One hue, green (the site's accent until ADR-0067), from the dark surface to near white: for |u|, stresses as magnitudes, the failure index. */
 export const SEQUENTIAL = ["#10170f", "#1f3a1c", "#376330", "#5d8f52", "#8fbb80", "#c1deb5", "#eef5e8"];
 /** Two hues with a neutral grey at the midpoint: cool for negative, warm for positive. */
 export const DIVERGING = ["#2a78d6", "#5d95dd", "#8eb0e0", "#9ba29b", "#e0a07c", "#df7a4c", "#d95926"];

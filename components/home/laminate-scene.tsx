@@ -72,7 +72,7 @@ function PlySlab({ ply, index, z, height, highlighted, onHover }: {
       onPointerOut={() => onHover(null)}
     >
       <boxGeometry args={[WIDTH, DEPTH, height]} />
-      <Edges color={highlighted ? "#eef0e9" : "#232a21"} />
+      <Edges color={highlighted ? "#efefef" : "#282828"} />
     </mesh>
   );
 }
@@ -103,9 +103,9 @@ function Axes() {
   const origin: [number, number, number] = [-WIDTH / 2 - 0.12, -DEPTH / 2 - 0.12, -STACK_HEIGHT / 2];
   const length = 0.34;
   const axes: { to: [number, number, number]; color: string }[] = [
-    { to: [origin[0] + length, origin[1], origin[2]], color: "#c1deb5" },
-    { to: [origin[0], origin[1] + length, origin[2]], color: "#8fbb80" },
-    { to: [origin[0], origin[1], origin[2] + length], color: "#eef0e9" },
+    { to: [origin[0] + length, origin[1], origin[2]], color: "#d4d4d4" },
+    { to: [origin[0], origin[1] + length, origin[2]], color: "#acacac" },
+    { to: [origin[0], origin[1], origin[2] + length], color: "#efefef" },
   ];
   return (
     <group>
@@ -153,7 +153,7 @@ function Dust({ count, active }: { count: number; active: boolean }) {
   });
   return (
     <points ref={points} geometry={geometry}>
-      <pointsMaterial color="#c1deb5" size={0.012} sizeAttenuation transparent opacity={0.55} depthWrite={false} />
+      <pointsMaterial color="#d4d4d4" size={0.012} sizeAttenuation transparent opacity={0.55} depthWrite={false} />
     </points>
   );
 }

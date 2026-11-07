@@ -9,8 +9,8 @@ import { HELD, LOADED } from "@/lib/studio-colors";
 import { PRESENTATION_MATERIAL, PresentationLighting } from "./scene-lighting";
 import { WebGLMissing, webglAvailable } from "./webgl-missing";
 
-const EDGE_COLOR = "#8a9486";
-const BOX_COLOR = "#9ba29b";
+const EDGE_COLOR = "#909090";
+const BOX_COLOR = "#a0a0a0";
 const LIFT = 1e-3;
 
 type P = [number, number, number];
@@ -37,7 +37,7 @@ export function SketchCanvas({ sketch }: { sketch: Sketch }) {
   return (
     <div className="studio-canvas" data-testid="sketch-scene" data-mode="presentation">
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }} camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}>
-        <color attach="background" args={["#0c0e0d"]} />
+        <color attach="background" args={["#0d0d0d"]} />
         <PresentationLighting size={size} centre={centre} floor={-t / 2 - 0.004 * size} />
         <mesh position={[centre[0], centre[1], 0]}>
           <boxGeometry args={[w, l, t]} />

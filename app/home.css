@@ -3,8 +3,8 @@
   position: relative;
   border-bottom: 1px solid var(--line);
   background:
-    radial-gradient(60% 50% at 70% 20%, #1a2417 0%, transparent 60%),
-    radial-gradient(40% 40% at 20% 80%, #141b12 0%, transparent 60%),
+    radial-gradient(60% 50% at 70% 20%, #212121 0%, transparent 60%),
+    radial-gradient(40% 40% at 20% 80%, #191919 0%, transparent 60%),
     var(--bg);
 }
 .hero-laminate-inner {
@@ -23,7 +23,7 @@
   margin: 18px 0 14px;
 }
 .hero-laminate-head p {
-  color: #b4bab3;
+  color: #b8b8b8;
   font-size: 15px;
   line-height: 1.8;
 }
@@ -45,7 +45,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
-  background: linear-gradient(160deg, #10150f, #0c0e0d 70%);
+  background: linear-gradient(160deg, #131313, #0d0d0d 70%);
   touch-action: pan-y;
 }
 .hero-laminate-canvas canvas {
@@ -100,7 +100,7 @@
   background: var(--panel);
 }
 .hero-laminate-results {
-  background: linear-gradient(150deg, #182017, var(--panel) 35%);
+  background: linear-gradient(150deg, #1d1d1d, var(--panel) 35%);
   transition: opacity 0.2s;
 }
 .hero-laminate-results.is-stale {
@@ -120,7 +120,7 @@
   width: 100%;
   min-width: 0;
   background: var(--bg);
-  border: 1px solid #3c433c;
+  border: 1px solid #414141;
   border-radius: 4px;
   color: var(--text);
   padding: 10px 12px;
@@ -146,7 +146,7 @@
   margin: 0;
 }
 .hero-properties > div {
-  background: #10170f;
+  background: #151515;
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 8px 8px;
@@ -206,8 +206,8 @@
   cursor: default;
 }
 .hero-stack li.is-hovered {
-  border-color: #4d5a46;
-  background: #161c15;
+  border-color: #555555;
+  background: #1a1a1a;
 }
 .hero-stack-swatch {
   width: 14px;
@@ -233,7 +233,7 @@
   margin: 0;
 }
 .hero-specs > div {
-  background: #10170f;
+  background: #151515;
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 10px 12px;
@@ -496,16 +496,16 @@ html:has(.site-header.is-home) {
   backdrop-filter: none;
 }
 .site-header.is-home .main-nav {
-  color: #f4f5f0;
+  color: #f4f4f4;
 }
 .site-header.is-home .header-cta {
   background: transparent;
-  border-color: #eef0e973;
+  border-color: #efefef73;
   border-radius: 2px;
-  color: #f4f5f0;
+  color: #f4f4f4;
 }
 .site-header.is-home .header-cta:hover {
-  border-color: #eef0e9;
+  border-color: #efefef;
 }
 .home-hero {
   position: relative;
@@ -516,16 +516,16 @@ html:has(.site-header.is-home) {
   padding: 104px 32px;
   overflow: hidden;
   isolation: isolate;
-  background: #070807;
+  background: #080808;
 }
 .home-hero-media {
   position: absolute;
   inset: 0;
   z-index: -2;
   background-image:
-    linear-gradient(90deg, #070807f2 0%, #070807cc 34%, #07080799 66%, #070807b3 100%),
+    linear-gradient(90deg, #080808f2 0%, #080808cc 34%, #08080899 66%, #080808b3 100%),
     linear-gradient(0deg, var(--bg) 0%, transparent 26%),
-    linear-gradient(180deg, #070807b3 0%, transparent 22%),
+    linear-gradient(180deg, #080808b3 0%, transparent 22%),
     url("/assets/images/carbon-weave.jpg");
   background-size: cover;
   background-position: center, center, center, 68% center;
@@ -561,7 +561,7 @@ html:has(.site-header.is-home) {
   max-width: 440px;
   font-size: 18px;
   line-height: 24px;
-  color: #f4f5f0;
+  color: #f4f4f4;
 }
 .home-hero-copy > p + p {
   margin-top: 16px;

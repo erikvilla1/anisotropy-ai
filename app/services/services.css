@@ -45,7 +45,7 @@
 }
 .service-status-built {
   color: var(--accent);
-  border-color: #3e4b34;
+  border-color: #464646;
 }
 .service-status-planned {
   color: #d9c58a;

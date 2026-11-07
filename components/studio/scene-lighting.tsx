@@ -14,8 +14,8 @@ export function PresentationLighting({ size, centre, floor }: { size: number; ce
       <Environment resolution={256} frames={1}>
         <Lightformer form="rect" intensity={2.6} color="#f4f2ea" position={[2, -3, 7]} scale={[7, 7, 1]} />
         <Lightformer form="rect" intensity={1.1} color="#dfe8f5" position={[-6, 4, 4]} scale={[5, 3, 1]} />
-        <Lightformer form="rect" intensity={0.7} color="#e8efe4" position={[5, 6, 2]} scale={[4, 3, 1]} />
-        <Lightformer form="circle" intensity={0.35} color="#9aa29a" position={[0, 0, -7]} scale={6} />
+        <Lightformer form="rect" intensity={0.7} color="#ececec" position={[5, 6, 2]} scale={[4, 3, 1]} />
+        <Lightformer form="circle" intensity={0.35} color="#9f9f9f" position={[0, 0, -7]} scale={6} />
       </Environment>
       <directionalLight position={[size, -size, 2 * size]} intensity={0.45} />
       <group position={[centre[0], centre[1], floor]} rotation={[Math.PI / 2, 0, 0]}>
@@ -26,4 +26,4 @@ export function PresentationLighting({ size, centre, floor }: { size: number; ce
 }
 
 /** The material of the model in presentation mode: a cured composite's clearcoat over a matte base. */
-export const PRESENTATION_MATERIAL = { color: "#5d8f52", metalness: 0, roughness: 0.55, clearcoat: 0.9, clearcoatRoughness: 0.3 } as const;
+export const PRESENTATION_MATERIAL = { color: "#808080", metalness: 0, roughness: 0.55, clearcoat: 0.9, clearcoatRoughness: 0.3 } as const;
