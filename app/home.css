@@ -543,6 +543,17 @@ html:has(.site-header.is-home) {
     linear-gradient(0deg, var(--bg) 0%, transparent 26%),
     linear-gradient(180deg, #080808b3 0%, transparent 22%);
 }
+/* The clip is already dark footage, so it takes lighter shades than the bright still, and a lift of its own; the left keeps
+ * enough shade for the headline, the bottom still fades into the page. */
+.home-hero-media.has-video::after {
+  background-image:
+    linear-gradient(90deg, #080808a6 0%, #08080873 36%, #08080826 68%, #08080840 100%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 22%),
+    linear-gradient(180deg, #08080880 0%, transparent 16%);
+}
+.home-hero-video video {
+  filter: brightness(1.3) contrast(1.05);
+}
 .home-hero-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));

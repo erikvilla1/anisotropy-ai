@@ -42,7 +42,7 @@ export default function Home() {
   return (
     <main id="main">
       <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
-        <div className="home-hero-media" aria-hidden="true">
+        <div className={heroVideo ? "home-hero-media has-video" : "home-hero-media"} aria-hidden="true">
           {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
         </div>
         <div className="home-hero-grid">
