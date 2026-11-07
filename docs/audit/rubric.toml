@@ -250,7 +250,7 @@ check = "Equilibrium"
 acceptance = "All reactions sum to minus the applied loads (to zero when the grips are displaced), within the tolerance of the reaction at the loaded grip"
 method = "auto"
 required = true
-source = ["results.MembraneSolution.total_reaction"]
+source = ["results.MembraneSolution.total_reaction", "results.ShellSolution.total_reaction"]
 tolerance = { relative = 1e-6 }
 
 [[item]]

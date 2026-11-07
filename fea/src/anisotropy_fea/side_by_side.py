@@ -21,7 +21,7 @@ from .equivalence import DeckEquivalence
 from .mesh import KernelError
 from .model import Deck
 from .recovery import element_ply_states, ply_mises
-from .results import MembraneSolution
+from .results import MembraneSolution, ShellSolution, Solution
 from .units import from_si, to_si
 
 COMPONENT = {"S11": 0, "S22": 1, "S12": 2}
@@ -62,16 +62,17 @@ class Agreement:
         return abs(self.worst.difference) / self.largest if self.worst is not None and self.largest > 0 else 0.0
 
 
-def ply_values(solution: MembraneSolution, units: str) -> dict[str, np.ndarray]:
-    """Quantity -> (elements, plies) array in the stated stress unit: S11, S22, S12 in material axes and Mises."""
+def ply_values(solution: Solution, units: str) -> dict[str, np.ndarray]:
+    """Quantity -> array in the stated stress unit: S11, S22, S12 in material axes and Mises. The array is (elements, plies) for a
+    membrane solution and (elements, plies, 2) for a shell solution, the bottom face then the top face of every ply (recovery.FACES)."""
     field = element_ply_states(solution)
     plies = {len(s) for s in field.stress_12}
     if len(plies) != 1:
         raise KernelError("side-by-side values need one ply count over the mesh (one section)")
     stress = np.stack(field.stress_12)
-    mises = np.stack(ply_mises(field))[:, :, 0]
+    mises = np.stack(ply_mises(field))[..., 0]
     convert = lambda a: from_si(a, "stress", units)  # noqa: E731
-    return {"S11": convert(stress[:, :, 0]), "S22": convert(stress[:, :, 1]), "S12": convert(stress[:, :, 2]), "Mises": convert(mises)}
+    return {"S11": convert(stress[..., 0]), "S22": convert(stress[..., 1]), "S12": convert(stress[..., 2]), "Mises": convert(mises)}
 
 
 def element_centroid(solution: MembraneSolution, index: int) -> np.ndarray:
@@ -80,7 +81,11 @@ def element_centroid(solution: MembraneSolution, index: int) -> np.ndarray:
 
 
 def pair_reports(reports: list[FieldReport], reference: Deck, solution: MembraneSolution, equivalence: DeckEquivalence, units: str) -> list[PairedValue]:
-    """Every value of every report beside our kernel's value for the same element, layer and quantity."""
+    """Every value of every report beside our kernel's value for the same element, layer and quantity. A shell solution is refused: its
+    plies have two faces, and matching them to the report's section points is not built."""
+    if isinstance(solution, ShellSolution):
+        raise KernelError("a side by side with the team's field reports is built for a membrane solution only; this coupon was solved as a "
+                          "shell, whose plies have a bottom and a top face, and matching them to the reports' section points is not built yet")
     values = ply_values(solution, units)
     plies = next(iter(values.values())).shape[1]
     position = {key: i for i, key in enumerate(solution.mesh.element_keys)}

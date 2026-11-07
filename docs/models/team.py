@@ -61,7 +61,7 @@ from anisotropy_fea.equivalence import DeckEquivalence, deck_equivalence  # noqa
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.membrane import solve_membrane  # noqa: E402
 from anisotropy_fea.model import expanded_layers, to_si  # noqa: E402
-from anisotropy_fea.recovery import deck_f12_star, strength_ratios  # noqa: E402
+from anisotropy_fea.recovery import FACES, deck_f12_star, strength_ratios  # noqa: E402
 from anisotropy_fea.report import laminate_check  # noqa: E402
 from anisotropy_fea.side_by_side import Agreement, PairedValue, agreement, kernel_difference, pair_reports, ply_values  # noqa: E402
 from anisotropy_fea.spec import coupon_card, load_spec, spec_material  # noqa: E402
@@ -727,20 +727,27 @@ def write_material_csv(path: Path, lib, material, units: str) -> None:
 
 def write_all_plies(path: Path, solution, deck, units: str, inverse: dict | None = None) -> None:
     """Our S11, S22, S12 and Mises for every ply of every element, with the team's element numbers where a comparison maps them
-    (`inverse`: our element key -> (instance, team label)); blank otherwise."""
+    (`inverse`: our element key -> (instance, team label)); blank otherwise. A shell solution has two rows per ply, its bottom face
+    then its top face, and a face column says which; a membrane solution has one row per ply and no face column."""
     length_unit, stress_unit, _ = UNITS[units]
     values = ply_values(solution, units)
+    shell = values["S11"].ndim == 3
     mesh = solution.mesh
     angles = [layer.angle_deg for layer in expanded_layers(next(iter(deck.parts.values())).sections[0])]
+    quantities = ("S11", "S22", "S12", "Mises")
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(["team element", "our element", f"x ({length_unit})", f"y ({length_unit})", "ply (1 = bottom)", "angle (deg)",
-                         f"S11 ({stress_unit})", f"S22 ({stress_unit})", f"S12 ({stress_unit})", f"Mises ({stress_unit})"])
+        writer.writerow(["team element", "our element", f"x ({length_unit})", f"y ({length_unit})", "ply (1 = bottom)", *(["face"] if shell else []),
+                         "angle (deg)", f"S11 ({stress_unit})", f"S22 ({stress_unit})", f"S12 ({stress_unit})", f"Mises ({stress_unit})"])
         for index, key in enumerate(mesh.element_keys):
             x, y = from_si(mesh.xy[mesh.connectivity[index, :4]].mean(axis=0), "length", units)
             team = (inverse or {}).get(key, (None, ""))[1]
             for k, angle in enumerate(angles):
-                writer.writerow([team, key[1], f"{x:.9g}", f"{y:.9g}", k + 1, f"{angle:g}"] + [f"{values[q][index, k]:.9g}" for q in ("S11", "S22", "S12", "Mises")])
+                if shell:
+                    for f, face in enumerate(FACES):
+                        writer.writerow([team, key[1], f"{x:.9g}", f"{y:.9g}", k + 1, face, f"{angle:g}"] + [f"{values[q][index, k, f]:.9g}" for q in quantities])
+                else:
+                    writer.writerow([team, key[1], f"{x:.9g}", f"{y:.9g}", k + 1, f"{angle:g}"] + [f"{values[q][index, k]:.9g}" for q in quantities])
 
 
 def package_folder(documents: Path, name: str) -> Path:
