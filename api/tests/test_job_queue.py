@@ -99,13 +99,14 @@ def queue(tmp_path, monkeypatch, empty_runs):
 
 
 def solving(solver: CouponJobs, job_id: uuid.UUID, monkeypatch, *, until=("done", "stopped", "refused", "queued")):
-    """Take the job in the solver (its stand-in reads its own coupons root) and wait until it reaches a state in `until`."""
+    """Take the job in the solver (its stand-in reads its own coupons root) and wait until it reaches a state in `until`, both in
+    the solver and on its row: the solver sets the job's state a moment before it writes the row, so the row can lag behind."""
     monkeypatch.setenv("STAND_IN_ROOT", str(solver.local_root))
     job = solver.take(job_id)
     assert job is not None, f"the solver did not take {job_id}"
     deadline = time.monotonic() + 30
-    while job.state not in until:
-        assert time.monotonic() < deadline, f"coupon job {job_id} is {job.state} after 30 s"
+    while job.state not in until or fetch_job(solver.table, job_id).state != job.state:
+        assert time.monotonic() < deadline, f"coupon job {job_id} is {job.state}, its row {fetch_job(solver.table, job_id).state}, after 30 s"
         time.sleep(0.02)
     return job
 
@@ -210,7 +211,7 @@ def test_the_per_job_timeout_stops_the_tool(queue, monkeypatch):
     job = solving(solver, job_id, monkeypatch, until=("running",))
     held_until(job, lambda: (job.progress() or {}).get("stage") == "CalculiX", "past the gate")
     solver.stop(job_id, "the job ran longer than 12 minutes, the per-job limit")
-    held_until(job, lambda: job.state == "stopped", "stopped")
+    held_until(job, lambda: job.state == "stopped" and fetch_job(table, job_id).state == "stopped", "stopped, here and on its row")
     row = fetch_job(table, job_id)
     assert row.state == "stopped" and row.message == "the job ran longer than 12 minutes, the per-job limit" and row.coupon is None
 
