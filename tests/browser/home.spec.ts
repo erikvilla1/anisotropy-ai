@@ -28,7 +28,7 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0065)"
   await page.goto("/");
   const order = await page.locator("main > section").evaluateAll((sections) => sections.slice(0, 2).map((section) => section.id));
   expect(order).toEqual(["overview", "laminate"]);
-  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Composite analysis/);
+  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Composites/);
 });
 
 test("the hero holds only the headline and the two paragraphs (ADR-0066)", async ({ page }) => {
@@ -36,7 +36,7 @@ test("the hero holds only the headline and the two paragraphs (ADR-0066)", async
   await playApi(page, posts);
   await page.goto("/");
   const hero = page.locator("#overview");
-  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/Composite analysis\.\s*Traced to evidence\./);
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/Composites\.\s*Calculated\./);
   await expect(hero.locator(".home-hero-copy p")).toHaveCount(2);
   // No 3D view, chat box or link in the hero: the calculator below draws the stack, and the header's Workspace button is the way in.
   await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);

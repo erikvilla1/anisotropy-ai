@@ -47,9 +47,9 @@ export default function Home() {
         </div>
         <div className="home-hero-grid">
           <h1 className="home-hero-title" id="home-hero-title">
-            Composite analysis.
+            Composites.
             <br />
-            Traced to evidence.
+            Calculated.
           </h1>
           <div className="home-hero-copy">
             <p>

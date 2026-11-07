@@ -9,7 +9,7 @@ test("overview, the home page's blurbs, and material source document", async ({
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Traced to evidence",
+    "Calculated",
   );
   // The lab imagery carousel and its lightbox left the home page (audit of 2026-10-31, item 6).
   await expect(page.getByRole("button", { name: "Next research image" })).toHaveCount(0);
