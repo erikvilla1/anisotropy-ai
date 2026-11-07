@@ -245,3 +245,12 @@ def test_the_roles_keep_to_their_own_routes(queue, monkeypatch):
     assert client.post(f"/v1/solver/jobs/{job_id}").status_code == 200  # this solver's job as it stands, not run twice
     assert client.post(f"/v1/solver/jobs/{uuid.uuid4()}").status_code == 409  # not queued: the consumer lets the message go
     assert client.get(f"/v1/solver/jobs/{uuid.uuid4()}").status_code == 404
+
+
+def test_peak_memory_reads_cgroup_v2_then_v1_and_is_none_outside_a_container(tmp_path):
+    v2, v1 = tmp_path / "memory.peak", tmp_path / "memory.max_usage_in_bytes"
+    assert coupon_jobs.peak_memory((v2, v1)) is None  # neither file: not a container
+    v1.write_text("432361472\n", encoding="ascii")
+    assert coupon_jobs.peak_memory((v2, v1)) == 432361472  # a Docker host still on cgroup v1
+    v2.write_text("299454464\n", encoding="ascii")
+    assert coupon_jobs.peak_memory((v2, v1)) == 299454464  # cgroup v2 first

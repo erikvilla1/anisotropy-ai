@@ -60,7 +60,8 @@ QUEUED_AFTER = dt.timedelta(hours=1)  # a job queued this long was lost by the q
 SWEEP_EVERY_S = 10.0  # a process looks for lost jobs at most this often, on the requests that read jobs
 SYNC_EVERY_S = 30.0  # the API's container brings its coupons level with the store at most this often, for the list, values and check
 LIVE_KEYS = ("checklist", "preview", "fields", "explanation")  # the files a browser reads while the job still runs
-CGROUP_PEAK = Path("/sys/fs/cgroup/memory.peak")  # cgroup v2: the container's peak memory, one job per solver container
+# The container's peak memory, one job per solver container: cgroup v2's file, else cgroup v1's (a Docker host still on v1)
+CGROUP_PEAKS = (Path("/sys/fs/cgroup/memory.peak"), Path("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"))
 
 
 class JobRefused(RuntimeError):
@@ -638,9 +639,12 @@ def open_gate(gate: Path, word: str) -> None:
     os.replace(draft, gate)
 
 
-def peak_memory(path: Path = CGROUP_PEAK) -> int | None:
-    """The container's peak memory in bytes from cgroup v2, or None where there is no such file (a machine that is not a container)."""
-    try:
-        return int(path.read_text(encoding="ascii").strip())
-    except (OSError, ValueError):
-        return None
+def peak_memory(paths: tuple[Path, ...] = CGROUP_PEAKS) -> int | None:
+    """The container's peak memory in bytes from the first cgroup file that reads, or None where none does (a machine that is not a
+    container)."""
+    for path in paths:
+        try:
+            return int(path.read_text(encoding="ascii").strip())
+        except (OSError, ValueError):
+            continue
+    return None
