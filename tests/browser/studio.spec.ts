@@ -94,7 +94,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("job-progress")).toBeVisible();
   expect((calls.solves[0] as { run_by: string }).run_by).toBe("A. Engineer");
-  await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }) // the first results render compiles the shaders, slow on CI's software GL, and the missed read adds a poll interval;
   expect((calls as { fieldsReads?: number }).fieldsReads).toBeGreaterThanOrEqual(2); // the first read of the fields failed and the page read them again
   await expect(page.getByTestId("legend")).toContainText("Failure index 1/R, worst ply");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "results"); // coloured on the graphics card, unlit (ADR-0063)
@@ -313,7 +313,7 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   await expect(page.getByTestId("chat-spec")).toContainText("[0/90/0/90]s, 8 plies");
 
   await page.getByTestId("chat-run").click();
-  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 }) // the first results render compiles the shaders, slow on CI's software GL, and the missed read adds a poll interval;
   expect((calls.solves[0] as { run_by: string }).run_by).toBe("A. Engineer");
   await expect(page.getByTestId("chat-reaction")).toContainText("N");
   await expect(page.getByTestId("results")).toBeVisible();
