@@ -1,6 +1,6 @@
 # Anisotropy
 
-A research-focused composites website with a materials library, educational physics references, a guided engineering chat preview and a laminate calculator. Built with Next.js, React, and TypeScript. The calculator uses the local Python API; the other pages run without a backend. No AI API keys are required.
+A research-focused composites website with a materials library, educational physics references, a coupon FEA workspace and a laminate workspace with an assistant beside their panels, and a laminate calculator. Built with Next.js, React, and TypeScript. The calculator uses the local Python API; the other pages run without a backend. No AI API keys are required.
 
 ## Getting started
 
@@ -46,7 +46,7 @@ The [local API and chunk 1 walkthrough](api/README.md) exposes one-material lami
 
 | Route | Contents |
 | --- | --- |
-| `/` | The laminate calculator with its 3D stack, the chat entry, and the mission, platform, evidence, team and news blurbs |
+| `/` | The laminate calculator with its 3D stack, the workspace entry, and the mission, platform, evidence, team and news blurbs |
 | `/about` | What we are building, the workflow, the roadmap, the lab loop and the team |
 | `/industries` | Aerospace and research/education priorities; potential industries; media slots per card |
 | `/services` | The five services, one card each, from `lib/services.ts` (ADR-0058) |
@@ -54,8 +54,12 @@ The [local API and chunk 1 walkthrough](api/README.md) exposes one-material lami
 | `/contact` | The address to write to |
 | `/library` | Material records and physics references |
 | `/sources` | Textbook citations, recorded property values and unit conversions |
-| `/chat` | The chat: laminate response in the units you pick (ADR-0060) and the coupon studio, a coupon test stated in the units you pick (ADR-0061), set up, checked, solved and viewed (ADR-0051), from one first question (ADR-0055) |
-| `/studio` | Redirects to `/chat` (ADR-0055 amendment 3) |
+| `/workspace` | The front door (ADR-0062): a tile per kind of work and the projects this browser keeps |
+| `/workspace/fea` | The coupon FEA workspace: one panel per step, the sketch, the model and the fields in the centre (ADR-0063), the coupon assistant beside them; a coupon test stated in the units you pick (ADR-0061), set up, checked, solved and viewed (ADR-0051) |
+| `/workspace/fea/view` | The viewer window of one job, by `?job=<id>` |
+| `/workspace/laminate` | The laminate workspace: the problem's panels, the stack and the engine's answer in the units you pick (ADR-0060), the laminate assistant beside them |
+| `/workspace/cad` | A placeholder: what is planned for geometry from a CAD file |
+| `/chat`, `/chat/view`, `/studio`, `/studio/view` | Redirect to the workspace with their query (ADR-0062; ADR-0058 amendment 1) |
 | `/data` | Local CSV inspection and submission preview (not in the header) |
 | `/calculator` | Editable laminate form with engine stiffness, strains and curvatures (not in the header) |
 
@@ -73,7 +77,7 @@ On `/data`, load the example or import a CSV. Preview checks cover required fiel
 
 ## Preview limitations
 
-The conversation uses a local intent parser, not a live language model. It captures supported inputs and requests missing information; it does not compute engineering results. Unknown fields stay empty. Reloading clears the conversation and uploaded CSV data. The homepage briefly uses sessionStorage to carry a prompt into chat; a query-string fallback is used if storage is unavailable.
+The assistants read typed messages with fixed patterns, not a live language model; a message that names no value is answered with the panel that asks for the next thing. They do not compute engineering results: the engine and the fea package do, through the API, and the explanation of a result may be rephrased by a language model behind a setting, every number checked against the engine's (ADR-0052). Reloading keeps the project (this browser's storage) but clears the conversation and uploaded CSV data. The homepage briefly uses sessionStorage to carry a prompt into the workspace; a query-string fallback is used if storage is unavailable.
 
 Example CSV values and field illustrations are synthetic. The separate `/calculator` performs stiffness/deformation analysis through the Python API using explicit inputs; its example uses cited material properties and constructed loads. CAD generation, optimization, failure prediction and training are not offered by the website. LaTeX downloads are uncompiled outlines containing the current chat inputs and pending-result sections. The physics library contains 29 cited formula cards rendered with KaTeX. Numerical reference checks reproduce selected textbook examples; they are not a production analysis solver.
 
