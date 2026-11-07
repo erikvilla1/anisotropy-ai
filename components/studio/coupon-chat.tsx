@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { couponValues, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
+import { couponValues, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import {
   blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "@/lib/studio-form";
@@ -461,7 +461,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         </details>
         {latest && result.state === "ready" ? (
           <div className="chat-actions">
-            <button type="button" className="chat-primary" onClick={run} disabled={job?.state === "running"} data-testid="chat-run"><Play size={14} /> Run analysis</button>
+            <button type="button" className="chat-primary" onClick={run} disabled={isActive(job?.state)} data-testid="chat-run"><Play size={14} /> Run analysis</button>
             <button type="button" className="chat-secondary" onClick={() => showPanel("mesh")}><SlidersHorizontal size={14} /> Mesh, criteria, grips</button>
           </div>
         ) : null}
@@ -488,6 +488,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {earliest ? <p>R is the factor on the applied load at which the first ply fails{earliest.touches_grip ? "; this one sits at a gripped tab edge, so read it as first damage at the grip" : ""}.</p> : null}
         {explanation?.sentences.length ? <p>{explanation.sentences[0]}</p> : null}
         {job?.state === "done" && job.message ? <p className="chat-ok"><Check size={13} /> {job.message}</p> : null}
+        {job?.state === "queued" ? <p className="chat-note">Queued: {job.message ?? "waiting for a free solver"}. It starts by itself.</p> : null}
         {job?.state === "running" ? <p className="chat-note">CalculiX, the record and the package are still running; the files appear under Outputs when they are written.</p> : null}
         <Chips>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>

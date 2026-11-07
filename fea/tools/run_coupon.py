@@ -15,7 +15,8 @@ failing items named, before anything is written.
 Options: --machine (default: the operating system and the CalculiX version found), --replace (with an input: rewrite the specs of a
 coupon that has them), --no-pdf (the package without its PDF, where Tectonic is missing), --no-theory, --result <file> (the outcome
 as JSON, for the API's coupon jobs), --progress <file> (the stage reached and the files made so far, rewritten after every step, for
-the studio).
+the studio), --gate <file> (once the coupon is named and its specs are written, wait for this file before the attempt: `go` goes on,
+any other text refuses the run with that text; the hosted tier's solver claims the coupon there, ADR-0056 amendment 3).
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ import os
 import platform
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -53,6 +55,9 @@ COUPON_DOCUMENT = "anisotropy_models_coupon"  # docs/models/coupon.py, loaded un
 INPUT_SUFFIXES = (".xlsx", VALUES_SUFFIX)
 STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the package", "the outputs")
 STUDIO = "studio"  # the attempt's run/studio/: the checklist and the preview the studio showed before the run
+GATE_GO = "go"  # the word at the gate that lets a held run go on
+GATE_POLL_S = 0.1
+GATE_WAIT_S = 600.0  # a held run that hears nothing in this long is refused: whatever was to answer has gone
 
 
 class Refused(ValueError):
@@ -86,6 +91,7 @@ class Progress:
         self.outputs: dict[str, Path] = {}
         self.coupon: str | None = None
         self.attempt: Path | None = None
+        self.held = False  # waiting at the gate (--gate)
 
     def start(self, stage: str) -> None:
         if self.stage is not None:
@@ -102,7 +108,7 @@ class Progress:
         if self.path is None:
             return
         data = {"stage": self.stage, "done": list(self.done), "stages": list(STAGES), "outputs": {key: rel(p) for key, p in self.outputs.items()},
-                "coupon": self.coupon, "attempt": None if self.attempt is None else rel(self.attempt)}
+                "coupon": self.coupon, "attempt": None if self.attempt is None else rel(self.attempt), "held": self.held}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -139,6 +145,26 @@ def check_setup(source: str):
         failing = [f"{item.label}: {item.message}" for item in checklist.items if item.state in ("fail", "missing")]
         raise Refused("the setup check blocks the run: " + "; ".join(failing) + "; nothing was written")
     return checklist, model, quality
+
+
+def wait_at_gate(gate: Path | None, progress: Progress) -> None:
+    """With a gate file: the coupon is named and its specs are written, and no attempt is numbered yet. The progress says `held`, and
+    the run waits until the file appears: `go` goes on; any other text refuses the run with that text. The hosted tier's solver
+    claims the coupon here, so two jobs never number attempts of one coupon at once (ADR-0056 amendment 3)."""
+    if gate is None:
+        return
+    progress.held = True
+    progress.write()
+    deadline = time.monotonic() + GATE_WAIT_S
+    while not gate.is_file():
+        if time.monotonic() > deadline:
+            raise Refused(f"no word at the gate {gate.name} in {GATE_WAIT_S:g} s; the run was not continued")
+        time.sleep(GATE_POLL_S)
+    word = gate.read_text(encoding="utf-8").strip()
+    progress.held = False
+    progress.write()
+    if word != GATE_GO:
+        raise Refused(word or "the gate refused the run")
 
 
 def script(step: str, args: list[str], cwd: Path) -> None:
@@ -199,8 +225,9 @@ def write_studio(out: Path, checklist, model, quality) -> dict[str, Path]:
 
 
 def run(source: str, run_by: str, machine: str | None = None, replace: bool = False, pdf: bool = True, theory: bool = True,
-        progress: Progress | None = None) -> Outcome:
-    """Every step for one coupon, from a filled-in form (.xlsx), a values file (.json) or the name of a coupon that has its specs."""
+        progress: Progress | None = None, gate: Path | None = None) -> Outcome:
+    """Every step for one coupon, from a filled-in form (.xlsx), a values file (.json) or the name of a coupon that has its specs.
+    With `gate`, the run waits there once the coupon is named, before the decks and the attempt (`wait_at_gate`)."""
     progress = progress or Progress(None)
     day = date.today().isoformat()
     version = calculix()
@@ -218,6 +245,7 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         name = source
     progress.coupon = name
     check_coupon(name)
+    wait_at_gate(gate, progress)
     folder = paths.local_test(name)
     spec, twin = paths.ours(name) / f"{name}.toml", paths.ours(name) / f"{name}-nodal.toml"
     if model is None:  # a coupon run on its specs: the preview of the model as the specs stand
@@ -321,10 +349,12 @@ def main() -> None:
     parser.add_argument("--no-theory", action="store_true", help="leave the equations and code of Chapter 2 out of the document")
     parser.add_argument("--result", type=Path, default=None, help="also write the outcome to this JSON file (the API's coupon jobs read it)")
     parser.add_argument("--progress", type=Path, default=None, help="rewrite this JSON file after every step: the stage and the files so far")
+    parser.add_argument("--gate", type=Path, default=None, help="once the coupon is named, wait for this file before the attempt: 'go' goes on, other text refuses")
     args = parser.parse_args()
     progress = Progress(args.progress)
     try:
-        done = run(args.source, args.run_by, args.machine, args.replace, pdf=not args.no_pdf, theory=not args.no_theory, progress=progress)
+        done = run(args.source, args.run_by, args.machine, args.replace, pdf=not args.no_pdf, theory=not args.no_theory, progress=progress,
+                   gate=args.gate)
     except StepFailed as exc:
         write_result(args.result, "stopped", f"stopped at {exc}", exc.coupon, exc.attempt, progress.outputs)
         sys.exit(f"run_coupon: stopped at {exc}; the step's own message is above")

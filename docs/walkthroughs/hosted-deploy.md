@@ -7,7 +7,9 @@ The decision is [ADR-0056](../decisions/ADR-0056-the-hosted-tier-runs-on-cloudfl
 | Piece | What it is | Where it is configured |
 | --- | --- | --- |
 | The Worker `anisotropy-studio` | Serves the website's static export (`out/`) and forwards `/api/*` to the container | [`wrangler.jsonc`](../../wrangler.jsonc), [`worker/index.ts`](../../worker/index.ts) |
-| The container `ApiContainer` | The API with CalculiX, Gmsh and Tectonic, one instance, built from the [`Dockerfile`](../../Dockerfile) by `wrangler deploy` | `wrangler.jsonc` (`containers`), [docker/README.md](../../docker/README.md) |
+| The container `ApiContainer` | The API with CalculiX, Gmsh and Tectonic, one instance, built from the [`Dockerfile`](../../Dockerfile) by `wrangler deploy`; with the queue it files coupon jobs and runs none | `wrangler.jsonc` (`containers`), [docker/README.md](../../docker/README.md) |
+| The containers `SolverContainer` | The same image in the role `solver`: one per coupon job, named by the job's id, at most ten at once (ADR-0056 amendment 3) | `wrangler.jsonc` (`containers`), [`worker/solver-queue.ts`](../../worker/solver-queue.ts) |
+| The queues `anisotropy-coupon-jobs` and `anisotropy-coupon-jobs-dead` | One message per coupon job, consumed by the Worker; a message that fails 100 times goes to the second | `wrangler.jsonc` (`queues`); created once by hand, below |
 | Cloudflare Access | Sign-in with an email allow list and one-time PINs, in front of the Worker; adds the token the API checks | Zero Trust dashboard; the API's `ANISOTROPY_ACCESS_*` secrets |
 | Neon PostgreSQL | The run records, the jobs table and the projects table (migration 0007, ADR-0062 part 6) | the `DATABASE_URL` secret; migrations by the deploy workflow |
 | R2 | A done job's files, its package and the coupon folders; the coupons are restored from it when the container starts | the `ANISOTROPY_R2_*` secrets; the bucket's CORS policy |
@@ -23,8 +25,12 @@ Docker Desktop must be running: `wrangler deploy` builds the image from the Dock
 npm ci
 npx wrangler login       # a browser window; signs Wrangler into the Cloudflare account
 npm run build:hosted     # the site into out/, calling the API at /api (scripts/build-hosted.ts sets the address; shells differ)
+npx wrangler queues create anisotropy-coupon-jobs        # once: the job queue (ADR-0056 amendment 3)
+npx wrangler queues create anisotropy-coupon-jobs-dead   # once: where a job's message goes after 100 failed deliveries
 npx wrangler deploy      # the Worker, then the image, at https://anisotropy.dev
 ```
+
+The queues must exist before a deploy whose `wrangler.jsonc` names them. For a deploy without the queue, remove the `queues` block and the `SolverContainer` entries: the API then runs one job at a time in its own container, as before.
 
 Then the secrets, one by one (each asks for the value; nothing goes into the repository):
 
@@ -70,7 +76,15 @@ To serve the Worker at another hostname without a moment unguarded (as amendment
 
 ## Limits per person
 
-`ANISOTROPY_JOBS_PER_USER_PER_DAY`, a Worker secret like the others, caps what one signed-in person can run: one job at a time and that many a day (UTC), counted in the jobs table. A request past a limit is refused with 429 and a sentence the studio's chat shows ("a job of you@example.com is still running", "you have started 20 job(s) today, the cap of 20 per person per day"). Unset, there is no cap beyond the one-job-at-a-time rule of the container.
+`ANISOTROPY_JOBS_PER_USER_PER_DAY`, a Worker secret like the others, caps what one signed-in person can run: one job at a time and that many a day (UTC), counted in the jobs table. A request past a limit is refused with 429 and a sentence the studio's chat shows ("a job of you@example.com is still running", "you have started 20 job(s) today, the cap of 20 per person per day"). Unset, there is no cap. With the queue, a person's queued job counts as their one job; without it, the container's one-job-at-a-time rule applies to everybody.
+
+## Many jobs at once: the queue
+
+With the `queues` block in `wrangler.jsonc`, the Worker gives the API's container the role `queue`: `POST /api/v1/coupon-jobs` answers `queued` at once, the job's input goes to R2 and its id to the queue, and the Worker's consumer starts a `SolverContainer` for it. Up to ten run at once (`max_concurrency` and `max_instances`, raise both together); the rest wait in the queue, and the studio says "waiting for a free solver; N job(s) ahead". Two jobs on the same coupon never run together: the second goes back to the queue and runs when the first has ended. A job stops at 12 minutes. What to watch:
+
+- `npx wrangler queues info anisotropy-coupon-jobs` for the backlog; the dead-letter queue should stay empty.
+- Each job's container peak memory is in the jobs table: `SELECT coupon, finished_at - started_at AS took, peak_memory_bytes FROM jobs WHERE peak_memory_bytes IS NOT NULL ORDER BY started_at DESC LIMIT 20;`. If the largest stays far below standard-3's 8 GiB, a smaller instance type for `SolverContainer` saves money; if it nears it, a larger one.
+- A job whose solver went silent for 2 minutes, or that sat queued for an hour, is marked `stopped` with the reason; start it again.
 
 ## Checks against the live site
 
@@ -82,4 +96,4 @@ The studio's live browser test can run against the hosted site instead of a loca
 
 ## What was and was not verified
 
-Verified on 2026-10-30: the Worker bundles and type-checks, its path rewriting has unit tests, `wrangler deploy --dry-run` accepts the configuration, and the site builds with `/api` as its API address. Verified on 2026-11-02: the deploy workflow's run from `main` (migrations, image, Worker); `app.anisotropy.dev` (the address until amendment 2) sends a visitor without a session to the Access sign-in, and the `workers.dev` address answers 404; sign-in with the emailed PIN; `/api/healthz` answers `{"status":"ok"}` from the container, which starts serving only after its database check and the restore from the bucket. On 2026-11-03, after the cookie fix (#111), the founder reported that the studio works, signed in. Not yet verified: the move to `anisotropy.dev` (amendment 2); the files in R2, the ten-minute links through the bucket's CORS policy and the signed-in email on the record, each checked on its own.
+Verified on 2026-10-30: the Worker bundles and type-checks, its path rewriting has unit tests, `wrangler deploy --dry-run` accepts the configuration, and the site builds with `/api` as its API address. Verified on 2026-11-02: the deploy workflow's run from `main` (migrations, image, Worker); `app.anisotropy.dev` (the address until amendment 2) sends a visitor without a session to the Access sign-in, and the `workers.dev` address answers 404; sign-in with the emailed PIN; `/api/healthz` answers `{"status":"ok"}` from the container, which starts serving only after its database check and the restore from the bucket. On 2026-11-03, after the cookie fix (#111), the founder reported that the studio works, signed in. Not yet verified: the move to `anisotropy.dev` (amendment 2); the files in R2, the ten-minute links through the bucket's CORS policy and the signed-in email on the record, each checked on its own. The job queue (2026-11-07) is tested locally only (ADR-0056 amendment 3, Evidence): the queues' creation, the consumer reaching ten at once, ten jobs submitted together all finishing, and a solver's cold start on Cloudflare are UNVERIFIED until its first deploy.

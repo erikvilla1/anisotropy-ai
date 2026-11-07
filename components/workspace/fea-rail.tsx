@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { couponValues, DOWNLOADS, fileUrl, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
+import { couponValues, DOWNLOADS, fileUrl, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import { buildValues, exampleForm, formFromValues, PLATE_TEST, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
 import { plateFromValues, plateValues, type PlateLists } from "@/lib/studio-plate";
 import { MATERIAL_KEYS, panel, panelOfItem, panelState, visibleKeys, type PanelId } from "@/lib/workspace-panels";
@@ -105,7 +105,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
     setStatus("The public IM7/8552 example is loaded: 250 by 25 mm with 56 mm tabs, [45/0/-45/90]s, 1 mm pull.");
   }
 
-  const busy = checking || job?.state === "running";
+  const busy = checking || isActive(job?.state);
   const checklist = checked?.checklist ?? null;
   const state = (id: PanelId) => panelState(id, checklist);
   const grid = (id: PanelId, keys = visibleKeys(form, id)) => <FieldGrid form={form} keys={keys} errors={errors} disabled={busy} onChange={edit} />;
@@ -178,7 +178,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
         <div className="studio-buttons">
           <button type="button" className="studio-button studio-button-primary" onClick={solve} disabled={busy || !apiBaseUrl || (checked !== null && checked.state !== "ready")} data-testid="solve-button">Run analysis</button>
         </div>
-        {job ? <p className="studio-hint">{job.state === "running" ? `Running: ${job.stage ?? "starting"}.` : job.state === "done" ? "Done. The results are in the centre, the files under Outputs." : `${job.state}: ${job.message ?? ""}`}</p> : null}
+        {job ? <p className="studio-hint">{job.state === "queued" ? `Queued: ${job.message ?? "waiting for a free solver"}.` : job.state === "running" ? `Running: ${job.stage ?? "starting"}.` : job.state === "done" ? "Done. The results are in the centre, the files under Outputs." : `${job.state}: ${job.message ?? ""}`}</p> : null}
       </StepPanel>
 
       <StepPanel id="outputs" title="Outputs">
