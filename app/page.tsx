@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowDown, ArrowUpRight, MoveUpRight } from "lucide-react";
 import { HomeComposer } from "@/components/home-composer";
+import { HeroLens } from "@/components/home/hero-lens";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
 import { team } from "@/lib/team";
@@ -31,37 +32,40 @@ const news = [
 export default function Home() {
   return (
     <main id="main">
-      <section className="hero" id="overview">
-        <div className="hero-image" />
-        <div className="hero-grid" />
-        <div className="hero-content">
-          <span className="eyebrow">
-            <span className="status-dot" /> ENGINEERING INTELLIGENCE, GROUNDED IN EVIDENCE
-          </span>
-          <h1>
-            From material
-            <br />
-            to <span>understanding.</span>
-          </h1>
-          <p>
-            A clearer path from composite coupon to confident design.
-            <br className="desktop-break" /> Connecting physics, physical testing, and research—one layer at a time.
-          </p>
-          <HomeComposer />
-          <div className="hero-footnote">
-            <span className="hero-line" />
-            <span>COUPONS FIRST. EVIDENCE ALWAYS.</span>
+      <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
+        <div className="home-hero-media" />
+        <div className="home-hero-grid">
+          <div className="home-hero-title">
+            <span className="eyebrow">
+              <span className="status-dot" /> ENGINEERING INTELLIGENCE, GROUNDED IN EVIDENCE
+            </span>
+            <h1 id="home-hero-title">
+              From material
+              <br />
+              to <span>understanding.</span>
+            </h1>
+          </div>
+          <figure className="home-hero-lens">
+            <div className="home-hero-lens-frame" aria-hidden="true">
+              <HeroLens />
+            </div>
+            <figcaption>
+              CARBON FIBER
+              <br />
+              <span>The material is the starting point.</span>
+            </figcaption>
+          </figure>
+          <div className="home-hero-copy">
+            <p>A clearer path from composite coupon to confident design.</p>
+            <p>Connecting physics, physical testing, and research—one layer at a time.</p>
+            <HomeComposer />
+            <p className="home-hero-footnote">
+              <span className="home-hero-rule" />
+              COUPONS FIRST. EVIDENCE ALWAYS.
+            </p>
           </div>
         </div>
-        <div className="hero-annotation">
-          <span className="annotation-cross">+</span>
-          <span>
-            CARBON FIBER
-            <br />
-            <span className="muted">The material is the starting point.</span>
-          </span>
-        </div>
-        <div className="hero-bottom">
+        <div className="home-hero-bottom">
           <span>01 — THE FIRST CHAPTER</span>
           <a href="#laminate">
             SCROLL TO DISCOVER <ArrowDown size={13} />

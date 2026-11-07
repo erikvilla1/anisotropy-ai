@@ -17,7 +17,11 @@ async function playApi(page: Page, posts: Posted[]) {
   });
 }
 
-const scene = (page: Page) => page.getByTestId("laminate-scene").or(page.getByTestId("webgl-missing"));
+// The calculator's own view: the hero's lens draws the same scene (ADR-0066).
+const scene = (page: Page) => {
+  const calculator = page.locator("#laminate");
+  return calculator.getByTestId("laminate-scene").or(calculator.getByTestId("webgl-missing"));
+};
 
 test("the hero opens the page and the laminate calculator follows it (ADR-0065)", async ({ page }) => {
   await playApi(page, []);
@@ -26,6 +30,23 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0065)"
   expect(order).toEqual(["overview", "laminate"]);
   await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/understanding/);
   await expect(page.getByRole("link", { name: /scroll to discover/i })).toHaveAttribute("href", "#laminate");
+});
+
+test("the hero sets the headline, the copy and the chat over the material, with the stack in a lens (ADR-0066)", async ({ page }) => {
+  const posts: Posted[] = [];
+  await playApi(page, posts);
+  await page.goto("/");
+  const hero = page.locator("#overview");
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/From material\s*to understanding\./);
+  await expect(hero.getByTestId("laminate-scene").or(hero.getByTestId("webgl-missing"))).toBeVisible();
+  await expect(hero.locator(".home-hero-lens-frame")).toHaveAttribute("aria-hidden", "true");
+  await expect(hero.getByRole("textbox", { name: "Describe your engineering question" })).toBeVisible();
+  // The lens only draws: the calculator's one request is the only one.
+  await expect.poll(() => posts.length).toBe(1);
+  // The header lies over the hero on the home page and stays sticky elsewhere.
+  await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
+  await page.goto("/about");
+  await expect(page.locator(".site-header")).toHaveCSS("position", "sticky");
 });
 
 test("the home page draws the stack, posts it once and shows the engine's description", async ({ page }) => {

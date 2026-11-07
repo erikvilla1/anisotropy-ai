@@ -35,8 +35,9 @@ export function SiteHeader() {
         </Link>
       </header>
     );
+  // On the home page the header lies over the hero and scrolls away with it (ADR-0066); elsewhere it stays sticky.
   return (
-    <header className="site-header">
+    <header className={pathname === "/" ? "site-header is-home" : "site-header"}>
       <Wordmark onClick={close} />
       <nav
         className={`main-nav ${open ? "open" : ""}`}
