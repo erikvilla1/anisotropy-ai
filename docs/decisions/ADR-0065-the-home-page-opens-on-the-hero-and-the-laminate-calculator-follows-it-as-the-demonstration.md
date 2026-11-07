@@ -26,7 +26,8 @@ Option 2. `app/page.tsx` renders the hero (`#overview`) first and the calculator
 ## Why (evidence)
 
 - The UI/UX lead's request of 2026-11-07, quoted above, and a screenshot of the PhysicsX hero shared the same day (kept outside the repository). It opens on a full-bleed picture with the headline "Engineering. Reengineered."
-- Cursor's home page: no evidence yet. The session's network did not reach cursor.com or www.physicsx.ai.
+- cursor.com, loaded on 2026-11-07 at 1440 by 900: the `h1` "Cursor is your coding agent for building ambitious software." and two buttons, then a framed product window, the demonstration, starting about 350 px from the top; then customer logos and feature sections.
+- www.physicsx.ai, loaded the same day: the `h1` "Engineering. Reengineered.", then the `h2`s "Build beyond", "Platform", "More than faster simulation.", "Impact", "About us", "Careers", "Customer story", "What's New" and "Talk to an engineer". Its images come from a host this session could not reach, so the shared screenshot is the visual evidence.
 - Checks of 2026-11-07: `npm run typecheck` clean; `npm test` 166 tests, 165 passed, 1 skipped. Against the built site, `home.spec.ts` 6 passed, including the new order test. `portfolio`, `research` and `expansion` had 3 failures, and the same 3 fail on `main` without this change: two expect the old chat at `/chat` (ADR-0058 amendment 1 moved it), and one is the physics search count.
 - Screenshots at 1440 and 390 px wide: the hero first, the calculator second, no horizontal scroll.
 
