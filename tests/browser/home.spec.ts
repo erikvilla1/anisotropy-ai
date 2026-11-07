@@ -31,7 +31,7 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0065)"
   await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Composites/);
 });
 
-test("the hero holds only the headline and the two paragraphs (ADR-0066)", async ({ page }) => {
+test("the hero's words are only the headline and the two paragraphs (ADR-0066)", async ({ page }) => {
   const posts: Posted[] = [];
   await playApi(page, posts);
   await page.goto("/");
@@ -49,6 +49,32 @@ test("the hero holds only the headline and the two paragraphs (ADR-0066)", async
   await page.goto("/about");
   await expect(page.locator(".site-header")).toHaveCSS("position", "relative");
   await expect(page.locator(".site-header")).toHaveCSS("height", "56px");
+});
+
+test("the hero's lens plays our own results with a caption, on wide screens only (ADR-0071)", async ({ page }) => {
+  await playApi(page, []);
+  await page.goto("/");
+  const lens = page.locator("#overview .home-hero-lens");
+  await expect(lens).toBeVisible();
+  await expect(lens).toHaveAttribute("aria-hidden", "true");
+  // The committed recording, offered only to wide screens that have not asked for reduced motion.
+  const source = lens.locator("video source");
+  await expect(source).toHaveAttribute("src", "/assets/hero-lens/lens.mp4");
+  await expect(source).toHaveAttribute("media", "(min-width: 1024px) and (prefers-reduced-motion: no-preference)");
+  expect((await page.request.get("/assets/hero-lens/lens.mp4")).status()).toBe(200);
+  // The caption names a model of the loop, and never a result value.
+  await expect(lens.locator(".home-hero-lens-caption b")).toHaveText(/^(UNNOTCHED TENSION|THREE-POINT BENDING|PLATE UNDER PRESSURE)$/);
+  // The headline stays above the lens.
+  const order = await page.evaluate(() => {
+    const title = document.querySelector(".home-hero-title")!.getBoundingClientRect();
+    const glass = document.querySelector(".home-hero-lens-glass")!.getBoundingClientRect();
+    const x = (Math.max(title.left, glass.left) + Math.min(title.right, glass.right)) / 2;
+    const y = (Math.max(title.top, glass.top) + Math.min(title.bottom, glass.bottom)) / 2;
+    return document.elementFromPoint(x, y)?.closest(".home-hero-title") !== null;
+  });
+  expect(order).toBe(true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(lens).toBeHidden();
 });
 
 test("the home page draws the stack, posts it once and shows the engine's description", async ({ page }) => {
