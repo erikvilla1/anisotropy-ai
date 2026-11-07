@@ -135,7 +135,16 @@ def main() -> None:
         solution = solved(deck)
         if args.drawings == "with":
             draw_solution(deck, solution, units, args.out / stem)
-        if model.bending:
+        if model.plate:  # first: a plate under pressure or out-of-plane loads is solved as a bending shell too, and has no nose
+            components = 3 if model.bending else 2
+            parts = []
+            for name in model.support_sets:
+                rf = solution.reaction_of(deck.nsets[name])[:components]
+                parts.append(f"{name} [" + ", ".join(f"{from_si(v, 'force', units):.6g}" for v in rf) + "] N")
+            report += (f"\nkernel solve ({'flat shell' if model.bending else 'membrane'}): reactions at the supports {'; '.join(parts)}; "
+                       f"sum of reactions {np.round(solution.total_reaction[:components], 6).tolist()} N (balances the applied loads); "
+                       f"largest free-dof residual {solution.free_residual:.3g} N\n")
+        elif model.bending:
             # the nose carries the force the coupon resists; the supports share it
             reaction_set = model.nose_sets[0]
             rf = solution.reaction_of(deck.nsets[reaction_set])[:3]
@@ -147,15 +156,6 @@ def main() -> None:
             report += (f"\nkernel solve (flat shell): reaction at {reaction_set} = [{components}] N "
                        f"(x, y, z); supports along z: {supports}; largest deflection w = {from_si(w[at], 'length', units):.6g} at node {at + 1}; "
                        f"equilibrium residual {residual:.3g} N; largest free-dof residual {solution.free_residual:.3g} N\n")
-        elif model.plate:
-            components = 3 if model.bending else 2
-            parts = []
-            for name in model.support_sets:
-                rf = solution.reaction_of(deck.nsets[name])[:components]
-                parts.append(f"{name} [" + ", ".join(f"{from_si(v, 'force', units):.6g}" for v in rf) + "] N")
-            report += (f"\nkernel solve ({'flat shell' if model.bending else 'membrane'}): reactions at the supports {'; '.join(parts)}; "
-                       f"sum of reactions {np.round(solution.total_reaction[:components], 6).tolist()} N (balances the applied loads); "
-                       f"largest free-dof residual {solution.free_residual:.3g} N\n")
         else:
             # under displacement control the moving grip carries the reaction; under force control the fixed grip does
             moving = spec.loading.control == "displacement"

@@ -47,7 +47,7 @@ RUN_ID_HEADER = "X-Anisotropy-Run-Id"
 # drops the header, so a browser never sees it.
 ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
-SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only the queue's consumer reaches
+SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only its Durable Object reaches (worker/index.ts)
 PROJECTS = "/v1/projects"
 
 
@@ -362,7 +362,7 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
 
 
 def _solver_jobs(request: Request) -> CouponJobs:
-    """The jobs of a solver container; 404 anywhere else, as if the route did not exist, since only the queue's consumer reaches it."""
+    """The jobs of a solver container; 404 anywhere else, as if the route did not exist, since only the solver's Durable Object reaches it."""
     jobs = _coupon_jobs(request)
     if jobs.role != "solver":
         raise HTTPException(status_code=404, detail="Not Found")
@@ -405,7 +405,7 @@ def solver_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
 
 @app.post(SOLVER_JOBS + "/{job_id}/stop", response_model=CouponJobOutput)
 def stop_solver_job(job_id: uuid.UUID, request: Request, reason: Annotated[str, Query(min_length=1, max_length=300)]) -> CouponJobOutput:
-    """The per-job timeout: the tool is killed and the job ends `stopped` with the reason the consumer gives."""
+    """The per-job timeout: the tool is killed and the job ends `stopped` with the reason the solver's timer gives (ADR-0056 amendment 4)."""
     jobs = _solver_jobs(request)
     job = jobs.stop(job_id, reason)
     if job is None:

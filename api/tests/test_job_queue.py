@@ -102,13 +102,14 @@ def queue(tmp_path, monkeypatch, empty_runs):
 
 
 def solving(solver: CouponJobs, job_id: uuid.UUID, monkeypatch, *, until=("done", "stopped", "refused", "queued")):
-    """Take the job in the solver (its stand-in reads its own coupons root) and wait until it reaches a state in `until`."""
+    """Take the job in the solver (its stand-in reads its own coupons root) and wait until it reaches a state in `until`, both in
+    the solver and on its row: the solver sets the job's state a moment before it writes the row, so the row can lag behind."""
     monkeypatch.setenv("STAND_IN_ROOT", str(solver.local_root))
     job = solver.take(job_id)
     assert job is not None, f"the solver did not take {job_id}"
     deadline = time.monotonic() + 30
-    while job.state not in until:
-        assert time.monotonic() < deadline, f"coupon job {job_id} is {job.state} after 30 s"
+    while job.state not in until or fetch_job(solver.table, job_id).state != job.state:
+        assert time.monotonic() < deadline, f"coupon job {job_id} is {job.state}, its row {fetch_job(solver.table, job_id).state}, after 30 s"
         time.sleep(0.02)
     return job
 
@@ -229,7 +230,7 @@ def test_the_per_job_timeout_stops_the_tool(queue, monkeypatch):
     job = solving(solver, job_id, monkeypatch, until=("running",))
     held_until(job, lambda: (job.progress() or {}).get("stage") == "CalculiX", "past the gate")
     solver.stop(job_id, "the job ran longer than 12 minutes, the per-job limit")
-    held_until(job, lambda: job.state == "stopped", "stopped")
+    held_until(job, lambda: job.state == "stopped" and fetch_job(table, job_id).state == "stopped", "stopped, here and on its row")
     row = fetch_job(table, job_id)
     assert row.state == "stopped" and row.message == "the job ran longer than 12 minutes, the per-job limit" and row.coupon is None
 
@@ -264,3 +265,12 @@ def test_the_roles_keep_to_their_own_routes(queue, monkeypatch):
     assert client.post(f"/v1/solver/jobs/{job_id}").status_code == 200  # this solver's job as it stands, not run twice
     assert client.post(f"/v1/solver/jobs/{uuid.uuid4()}").status_code == 409  # not queued: the consumer lets the message go
     assert client.get(f"/v1/solver/jobs/{uuid.uuid4()}").status_code == 404
+
+
+def test_peak_memory_reads_cgroup_v2_then_v1_and_is_none_outside_a_container(tmp_path):
+    v2, v1 = tmp_path / "memory.peak", tmp_path / "memory.max_usage_in_bytes"
+    assert coupon_jobs.peak_memory((v2, v1)) is None  # neither file: not a container
+    v1.write_text("432361472\n", encoding="ascii")
+    assert coupon_jobs.peak_memory((v2, v1)) == 432361472  # a Docker host still on cgroup v1
+    v2.write_text("299454464\n", encoding="ascii")
+    assert coupon_jobs.peak_memory((v2, v1)) == 299454464  # cgroup v2 first

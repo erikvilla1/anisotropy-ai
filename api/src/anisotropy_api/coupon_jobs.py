@@ -61,7 +61,8 @@ SWEEP_EVERY_S = 10.0  # a process looks for lost jobs at most this often, on the
 SYNC_EVERY_S = 30.0  # the API's container brings its coupons level with the store at most this often, for the list, values and check
 LIVE_KEYS = ("checklist", "preview", "fields", "explanation", "kernel_summary", "record")  # the files a browser reads while the job still runs:
 # the result's, which the tool reports before it draws and builds the package (ADR-0064)
-CGROUP_PEAK = Path("/sys/fs/cgroup/memory.peak")  # cgroup v2: the container's peak memory, one job per solver container
+# The container's peak memory, one job per solver container: cgroup v2's file, else cgroup v1's (a Docker host still on v1)
+CGROUP_PEAKS = (Path("/sys/fs/cgroup/memory.peak"), Path("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"))
 
 
 class JobRefused(RuntimeError):
@@ -552,7 +553,7 @@ class CouponJobs:
         return path.is_file() and (resolved.is_relative_to(REPO.resolve()) or (job.folder is not None and resolved.is_relative_to(job.folder.resolve())))
 
     def _requeue(self, job: Job, reason: str) -> None:
-        """Back to the queue: the row `queued` again with the reason, its coupon let go; the queue's consumer delivers it again later.
+        """Back to the queue: the row `queued` again with the reason, its coupon let go; the solver's timer sends the job to the queue again.
         The row first, then this process's state, so whoever sees the job `queued` here finds the row so too."""
         update_job(self.table, job.id, state="queued", coupon=None, attempt=None, stage=None, stages_done=[], stages=[], outputs={}, stored={},
                    message=reason, heartbeat_at=None, log_tail=job.log_tail())
@@ -642,9 +643,12 @@ def open_gate(gate: Path, word: str) -> None:
     os.replace(draft, gate)
 
 
-def peak_memory(path: Path = CGROUP_PEAK) -> int | None:
-    """The container's peak memory in bytes from cgroup v2, or None where there is no such file (a machine that is not a container)."""
-    try:
-        return int(path.read_text(encoding="ascii").strip())
-    except (OSError, ValueError):
-        return None
+def peak_memory(paths: tuple[Path, ...] = CGROUP_PEAKS) -> int | None:
+    """The container's peak memory in bytes from the first cgroup file that reads, or None where none does (a machine that is not a
+    container)."""
+    for path in paths:
+        try:
+            return int(path.read_text(encoding="ascii").strip())
+        except (OSError, ValueError):
+            continue
+    return None

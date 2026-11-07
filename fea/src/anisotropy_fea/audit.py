@@ -35,9 +35,10 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, ValidationErro
 from . import paths
 from .equivalence import DeckEquivalence, EquivalenceItem
 from .mesh import KernelError
-from .model import Deck, NodeKey, all_boundaries, expanded_layers, resolve_nodes
+from .model import Deck, NodeKey, all_boundaries, expanded_layers, resolve_elements, resolve_nodes
 from .report import GaugeElement, LaminateCheck, gauge_element, gripped_groups, laminate_check
-from .results import MembraneSolution
+from .results import ShellSolution, Solution
+from .shell import pressure_loads
 from .side_by_side import PairedValue, agreement, ply_values
 from .forms import FONT, fit_rows, labelled as _labelled, lines_of, listing, one_font, printable, protect, text_of as _text  # noqa: F401  the house style of the forms
 from .spec import TEST_CODES
@@ -182,7 +183,7 @@ class Evidence:
     units: str  # "mm-MPa" or "m-Pa"
     card: tuple[tuple[str, str], ...]  # spec.coupon_card
     our_deck: Deck  # SI
-    solution: MembraneSolution  # our kernel on our deck
+    solution: Solution  # our kernel on our deck: a membrane, or a flat shell for a bending coupon or a plate
     material: str | None = None  # the library record the spec names, in words
     team_deck: Deck | None = None  # SI
     team_deck_sha256: str | None = None  # compare.sha256_of; on the form's Record sheet
@@ -484,7 +485,9 @@ def _node_text(mesh, index: int) -> str:
 
 def _displacement(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
     """C4: our displacements and the strain at the gauge centre, for the team to set its own beside."""
-    mesh, u = ev.solution.mesh, from_si(ev.solution.displacement, "length", ev.units)
+    shell = isinstance(ev.solution, ShellSolution)
+    components = 3 if shell else 2  # translations: u and v, and w for a shell (its dofs 4 and 5 are rotations)
+    mesh, u = ev.solution.mesh, from_si(ev.solution.displacement[:, :components], "length", ev.units)
     probe = _gauge_node(ev, facts)
     if probe is not None:
         k, name = probe
@@ -492,16 +495,24 @@ def _displacement(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, 
         scale = float(np.max(np.abs(u))) or 1.0
         shown = lambda v: f"{(0.0 if abs(v) <= 1e-9 * scale else v):.4g} {facts.length_unit}"  # noqa: E731  roundoff as 0
         lines = [f"Displacement at {_node_text(mesh, k)}, the {name} probe at ({x:.4g}, {y:.4g}) {facts.length_unit}, on the deck the team "
-                 f"builds (Chapter 5): U1 {shown(u[k, 0])}, U2 {shown(u[k, 1])}"]
+                 f"builds (Chapter 5): " + ", ".join(f"U{j + 1} {shown(u[k, j])}" for j in range(components))]
     else:
-        i1, i2 = int(np.argmax(np.abs(u[:, 0]))), int(np.argmax(np.abs(u[:, 1])))
-        lines = [f"Largest displacement: U1 {u[i1, 0]:.4g} {facts.length_unit} at {_node_text(mesh, i1)}; U2 {u[i2, 1]:.4g} {facts.length_unit} "
-                 f"at {_node_text(mesh, i2)}"]
+        largest = [int(np.argmax(np.abs(u[:, j]))) for j in range(components)]
+        lines = ["Largest displacement: " + "; ".join(f"U{j + 1} {u[i, j]:.4g} {facts.length_unit} at {_node_text(mesh, i)}" for j, i in enumerate(largest))]
     if facts.gauge is not None:
         eps = ev.solution.strain[facts.gauge.index]
         lines.append(f"Strain at element {facts.gauge.name}, {gauge_text(facts.gauge, facts.units)}: eps_x {eps[0]:.4g}, eps_y {eps[1]:.4g}, "
-                     f"gamma_xy {eps[2]:.4g}")
+                     f"gamma_xy {eps[2]:.4g}" + (" (the midplane strain)" if shell else ""))
+        if shell:
+            lines.append(_curvature_text(ev, facts))
     return None, Found(team=(TEAM_BLANK,), ours=tuple(lines))
+
+
+def _curvature_text(ev: Evidence, facts: _Facts) -> str:
+    """The shell's curvature at the gauge element, in one per the stated length unit."""
+    kappa = from_si(ev.solution.curvature[facts.gauge.index], "per_length", ev.units)
+    return (f"Curvature at element {facts.gauge.name}: kappa_x {kappa[0]:.4g}, kappa_y {kappa[1]:.4g}, kappa_xy {kappa[2]:.4g} "
+            f"{UNIT_LABEL[ev.units]['per_length']}")
 
 
 def _gauge_node(ev: Evidence, facts: _Facts) -> tuple[int, str] | None:
@@ -580,21 +591,37 @@ def _laminate(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Foun
 
 
 def _equilibrium(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
-    deck = ev.our_deck
-    applied = np.zeros(2)
+    """The force balance: every reaction plus every applied load sums to zero. A membrane solution carries the forces on dofs 1 and 2;
+    a shell solution carries dofs 1 to 5, of which 1 to 3 are forces and 4 and 5 moments, whose sum depends on the point taken, so only
+    the forces are balanced. The applied loads are the concentrated loads on the force dofs and the consistent nodal forces of every
+    pressure, as the shell kernel assembles them."""
+    deck, solution = ev.our_deck, ev.solution
+    shell = isinstance(solution, ShellSolution)
+    forces = 3 if shell else 2
+    applied = np.zeros(forces)
     for step in deck.steps:
         for load in step.cloads:
-            if load.dof in (1, 2):
+            if load.dof <= forces:
                 applied[load.dof - 1] += load.value * len(resolve_nodes(deck, load.target, load.line))
-    residual = ev.solution.total_reaction + applied
-    scale = abs(facts.reaction_N) if facts.reaction_N is not None else float(np.abs(ev.solution.reaction).sum(axis=0).max()) / 2
+        for dload in step.dloads:
+            for key in resolve_elements(deck, dload.target, dload.line):
+                applied[2] += float(pressure_loads(solution.mesh.xy[solution.mesh.connectivity[solution.mesh.element(key)]], dload.value).sum())
+    total = solution.total_reaction[:forces]
+    residual = total + applied
+    if facts.reaction_N is not None and not shell:
+        scale, against = abs(facts.reaction_N), "reaction"
+    else:  # no gripped group, or a shell, whose load path is out of the plane: half the summed magnitude of the nodal reactions
+        scale, against = float(np.abs(solution.reaction[:, :forces]).sum(axis=0).max()) / 2, "scale (half the summed magnitude of the nodal reactions)"
     if scale == 0.0:
         return "Not checked", Found(difference=("No reaction to compare the sum with",))
     share = float(np.max(np.abs(residual))) / scale
     return (("Pass" if share <= item.tolerance.relative else "Fail"),
-            Found(ours=(f"Reactions sum to ({ev.solution.total_reaction[0]:.3g}, {ev.solution.total_reaction[1]:.3g}) N",
-                        f"Applied loads ({applied[0]:.3g}, {applied[1]:.3g}) N"),
-                  difference=(f"Residual {share:.2g} of the {scale:.6g} N reaction; tolerance {item.tolerance.relative:g}",)))
+            Found(ours=(f"Reactions sum to {_vector(total)} N", f"Applied loads {_vector(applied)} N"),
+                  difference=(f"Residual {share:.2g} of the {scale:.6g} N {against}; tolerance {item.tolerance.relative:g}",)))
+
+
+def _vector(values: np.ndarray) -> str:
+    return "(" + ", ".join(f"{float(v):.3g}" for v in values) + ")"
 
 
 def _not_built(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
@@ -666,11 +693,15 @@ def _auditor_evidence(item: Item, ev: Evidence, facts: _Facts) -> Found:
             if share <= 1e-9:
                 coupling += ("Shear strain the model does show comes from the grips' hold on the width, largest at the tab corners"
                              + (", and from the hole, around which the stress turns" if facts.gauge is not None and facts.gauge.centre_in_hole else ""),)
+        shell = isinstance(ev.solution, ShellSolution)
         gauge = ()
         if facts.gauge is not None:
             eps = ev.solution.strain[facts.gauge.index]
-            gauge = (f"At element {facts.gauge.name}, {gauge_text(facts.gauge, ev.units)}: gamma_xy = {eps[2]:.4g}, eps_y = {eps[1]:.4g}",)
-        return Found(ours=(f"Layup {_layup_text(facts.angles, full=True)}", *coupling, *gauge, "Our engine's model is a membrane, so it shows no bending"))
+            gauge = (f"At element {facts.gauge.name}, {gauge_text(facts.gauge, ev.units)}: gamma_xy = {eps[2]:.4g}, eps_y = {eps[1]:.4g}"
+                     + (" (the midplane strain)" if shell else ""), *((_curvature_text(ev, facts),) if shell else ()))
+        model = ("Our engine's model is a flat shell: it bends, with first-order transverse shear" if shell else
+                 "Our engine's model is a membrane, so it shows no bending")
+        return Found(ours=(f"Layup {_layup_text(facts.angles, full=True)}", *coupling, *gauge, model))
     if item.id == "E3":
         return Found() if ev.guide is None else Found(ours=(f"The guide lists {ev.guide[0]} open item(s) at its end and tags {ev.guide[1]} value(s) ASSUMED",))
     if item.id == "E4":
