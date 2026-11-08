@@ -66,6 +66,8 @@ export type Fields = {
   summary: { max_displacement: { value: number; node: number; label: string; xy: number[]; components: number[]; axis?: string };
     reaction: { set: string; value: number; sense: string; dof?: number }; applied: { control: string; value: number; unit: string; dof?: number; direction?: string; total_force?: number };
     max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number;
+    /** The same over the gauge section alone (the Gauge elements that touch no gripped node): what a test is compared with. Absent on older jobs. */
+    fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null;
     /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */
     calculix?: CalculixBeside | null };
   quality?: QualitySummary;

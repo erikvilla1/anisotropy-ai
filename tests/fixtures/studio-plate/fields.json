@@ -43081,7 +43081,9 @@
   "fpf": {},
   "equilibrium_residual": 2.0477841644606087e-11,
   "free_residual": 1.5678291998000304e-11,
-  "earliest": null
+  "earliest": null,
+  "fpf_gauge": {},
+  "earliest_gauge": null
  },
  "quality": {
   "elements": 256,

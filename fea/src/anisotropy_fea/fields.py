@@ -13,11 +13,14 @@ written here and the browser derives none (ADR-0063).
 
 The summary names the applied loading, the reaction that balances it, the largest displacement, the largest ply stresses, and per
 criterion the first ply to fail, with its element, ply, face, mode and place in the words the coupon document uses (`report.fpf_place`).
+It also names, per criterion, the first ply to fail in the gauge section alone (`gauge_failures`: the deck's `Gauge` elements that touch
+no gripped node), the number a test is compared with, away from the clamped edge of a tab.
 Every number comes from the solve; a non-finite one is refused.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 import numpy as np
@@ -151,6 +154,48 @@ def applied_loading(deck: Deck, solution: Solution) -> dict[str, Any]:
     return {"control": "force", "value": total, "dof": 2, "set": "the top grip", "nodes": sorted(top), "direction": "along the coupon"}
 
 
+def gauge_elements(deck: Deck, solution: Solution) -> list[int]:
+    """The mesh indices of the gauge section's elements that touch no gripped node: the deck's `Gauge` set less the row along each tab
+    line, whose nodes the grips hold. Empty for a deck without that set or without grips (a plate, a bending coupon)."""
+    mesh = solution.mesh
+    keys = deck.elsets.get("Gauge")
+    if not keys:
+        return []
+    try:
+        bottom, top = gripped_groups(deck, solution)
+    except KernelError:
+        return []
+    gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
+    inside = []
+    for key in keys:
+        e = mesh.element(key)
+        if not gripped & set(mesh.connectivity[e, :4].tolist()):
+            inside.append(e)
+    return inside
+
+
+def gauge_failures(deck: Deck, solution: Solution, failures: dict[str, FailureField], shell: bool) -> dict[str, FailureField]:
+    """Per criterion, the first ply to fail among the gauge elements alone (`gauge_elements`), as a FailureField with that element, ply,
+    face and mode; a criterion whose gauge plies are all unstressed (an infinite ratio) is left out."""
+    inside = gauge_elements(deck, solution)
+    out: dict[str, FailureField] = {}
+    for criterion, found in failures.items():
+        if not inside:
+            continue
+        per_ply = np.stack([ply_ratio_per_ply(found.ratio[e]) for e in inside])  # (inside, plies)
+        if not np.isfinite(per_ply).any():
+            continue
+        i, k = (int(v) for v in np.unravel_index(int(np.argmin(per_ply)), per_ply.shape))
+        e = inside[i]
+        if shell:
+            face_index = int(np.argmin(np.asarray(found.ratio[e])[k]))
+            face, mode = FACES[face_index], found.mode[e][k][face_index]
+        else:
+            face, mode = None, found.mode[e][k]
+        out[criterion] = dataclasses.replace(found, factor=float(per_ply[i, k]), element=solution.mesh.element_keys[e], ply=k + 1, governing_mode=mode, face=face)
+    return out
+
+
 def failures_of(deck: Deck, solution: Solution, field: PlyField, criteria: tuple[str, ...] | None = None) -> dict[str, FailureField]:
     """The strength ratios by every criterion the deck allows, or by the criteria named (each must be computable)."""
     f12_star = deck_f12_star(deck)
@@ -268,6 +313,16 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                                      "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
                                      "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
     summary["earliest"] = min(failures, key=lambda c: failures[c].factor) if failures else None
+    # the same, over the gauge section alone: the number a test is compared with, away from the clamped edge of a gripped tab
+    summary["fpf_gauge"] = {}
+    for criterion, found in gauge_failures(deck, solution, failures, shell).items():
+        e = mesh.element_keys.index(found.element)
+        place, touches_grip, tied = fpf_place(deck, solution, found, units)
+        summary["fpf_gauge"][criterion] = {"factor": float(found.factor), "index": 1.0 / float(found.factor), "element": int(e),
+                                           "label": element_name(found.element), "ply": int(found.ply), "angle": float(angles[found.ply - 1]),
+                                           "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
+                                           "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
+    summary["earliest_gauge"] = min(summary["fpf_gauge"], key=lambda c: summary["fpf_gauge"][c]["factor"]) if summary["fpf_gauge"] else None
 
     section_force_out, stress_12_out, mises_out, displacement_out = per_length(section_force), stress(stress_12), stress(mises), length(displacement)
     strain_average = nodal_averages(corners, n, strain)

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type Extreme, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
+import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
+  type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
 import { legendGradient, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
@@ -89,24 +90,41 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
         Both peak where a gripped tab ends, a clamped edge whose stress grows as the mesh is refined; the gauge section is where the two agree.</p>
       <h4>First-ply failure</h4>
       {Object.keys(s.fpf).length === 0 ? <p className="studio-muted">No failure criterion was asked for.</p> : (
-        <table className="studio-table" data-testid="fpf-table">
-          <thead><tr><th>Criterion</th><th>Factor R</th><th>Index 1/R</th><th>Ply</th><th>Mode</th><th>Where</th><th></th></tr></thead>
-          <tbody>
-            {Object.entries(s.fpf).sort(([, a], [, b]) => a.factor - b.factor).map(([criterion, f]) => (
-              <tr key={criterion} data-criterion={criterion} className={criterion === s.earliest ? "studio-earliest" : undefined}>
-                <td>{criterion.replace("_", " ")}{criterion === s.earliest ? " (earliest)" : ""}</td>
-                <td data-testid={`fpf-factor-${criterion}`}>{printed(f.factor)}</td><td>{printed(f.index)}</td>
-                <td>{f.ply} ({f.angle}°){f.face ? `, ${f.face} face` : ""}{f.tied_plies.length > 1 ? `, tied ${f.tied_plies.join(", ")}` : ""}</td>
-                <td>{f.mode}</td><td>element {f.label.split(".").pop()}, {f.place}</td>
-                <td><button type="button" className="studio-text-button" onClick={() => onShow(f.element, f.ply, criterion, f.face)}>show</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <FailureTable fpf={s.fpf} earliest={s.earliest} testId="fpf-table" factorPrefix="fpf-factor" onShow={onShow} />
       )}
       <p className="studio-muted">R is the factor on the applied loading at which the first ply fails; the failure index is 1/R. Below 1, the loading of the model is past first-ply failure.
         {s.earliest && s.fpf[s.earliest]?.touches_grip ? " The critical element touches a gripped tab: the clamped edge, not the gauge section, where the stress is not expected to settle as the mesh is refined." : ""}</p>
+      {s.fpf_gauge && Object.keys(s.fpf_gauge).length ? (
+        <>
+          <h4>First-ply failure in the gauge section</h4>
+          <FailureTable fpf={s.fpf_gauge} earliest={s.earliest_gauge ?? null} testId="fpf-gauge-table" factorPrefix="fpf-gauge-factor" onShow={onShow} />
+          <p className="studio-muted">The same criteria over the gauge section alone, the elements away from the gripped tabs&apos; clamped edge: the factor a test coupon, which breaks in its gauge
+            section, is compared with.</p>
+        </>
+      ) : null}
     </div>
+  );
+}
+
+function FailureTable({ fpf, earliest, testId, factorPrefix, onShow }: {
+  fpf: Record<string, FirstPlyFailure>; earliest: string | null; testId: string; factorPrefix: string;
+  onShow: (element: number, ply: number, criterion: string, face?: string | null) => void;
+}) {
+  return (
+    <table className="studio-table" data-testid={testId}>
+      <thead><tr><th>Criterion</th><th>Factor R</th><th>Index 1/R</th><th>Ply</th><th>Mode</th><th>Where</th><th></th></tr></thead>
+      <tbody>
+        {Object.entries(fpf).sort(([, a], [, b]) => a.factor - b.factor).map(([criterion, f]) => (
+          <tr key={criterion} data-criterion={criterion} className={criterion === earliest ? "studio-earliest" : undefined}>
+            <td>{criterion.replace("_", " ")}{criterion === earliest ? " (earliest)" : ""}</td>
+            <td data-testid={`${factorPrefix}-${criterion}`}>{printed(f.factor)}</td><td>{printed(f.index)}</td>
+            <td>{f.ply} ({f.angle}°){f.face ? `, ${f.face} face` : ""}{f.tied_plies.length > 1 ? `, tied ${f.tied_plies.join(", ")}` : ""}</td>
+            <td>{f.mode}</td><td>element {f.label.split(".").pop()}, {f.place}</td>
+            <td><button type="button" className="studio-text-button" onClick={() => onShow(f.element, f.ply, criterion, f.face)}>show</button></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

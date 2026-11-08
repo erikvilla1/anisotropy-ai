@@ -188,3 +188,15 @@ def test_the_setup_sentences_follow_the_checklist():
     ready = setup_sentences({"items": [item for item in checklist["items"] if item["state"] in ("pass", "warn")]})
     assert ready[0] == "The setup is ready to solve, with 1 warning."
     assert numbers_in("ply 3 (-45 degrees) at element 16, 2.1e+03 MPa, f12") == ["3", "-45", "16", "2.1e+03"]
+
+
+def test_the_gauge_sections_first_ply_failure_sits_away_from_the_tabs(data):
+    public_fields = data
+    # the grip-edge factor is the model's smallest; the gauge section's is what a test coupon, which breaks in its gauge, is compared with
+    summary = public_fields["summary"]
+    assert set(summary["fpf_gauge"]) == set(summary["fpf"]) and summary["earliest_gauge"] in summary["fpf_gauge"]
+    for criterion, grip in summary["fpf"].items():
+        gauge = summary["fpf_gauge"][criterion]
+        assert gauge["factor"] >= grip["factor"] - 1e-9 and gauge["touches_grip"] is False and gauge["place"].endswith("from the nearer tab line")
+        assert gauge["index"] == pytest.approx(1.0 / gauge["factor"]) and gauge["mode"] and 1 <= gauge["ply"] <= public_fields["mesh"]["plies"]
+        assert gauge["element"] in public_fields["mesh"]["element_sets"]["Gauge"]
