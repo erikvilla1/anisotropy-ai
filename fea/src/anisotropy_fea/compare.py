@@ -82,7 +82,7 @@ def validate_record(record: dict) -> None:
     for field in RECORD_FIELDS:
         if field not in record:
             raise RecordError(f"record needs {field!r}")
-    unknown = set(record) - set(RECORD_FIELDS) - {"known_differences", "_dir"}
+    unknown = set(record) - set(RECORD_FIELDS) - {"known_differences", "frd", "_dir"}  # [frd]: what a viewer shows of the .frd (ADR-0030 amendment 6)
     if unknown:
         raise RecordError(f"record has unknown keys {sorted(unknown)}")
     solver = record["solver"]
@@ -295,6 +295,8 @@ def format_record(record: dict) -> str:
     lines += ["", "[solver]"] + [f"{k} = {value(v)}" for k, v in record["solver"].items()]
     if record.get("known_differences"):
         lines += ["", "[known_differences]"] + [f"{k} = {value(v)}" for k, v in record["known_differences"].items()]
+    if record.get("frd"):
+        lines += ["", "[frd]"] + [f"{k} = {value(v)}" for k, v in record["frd"].items()]
     expected = record["expected"]
     lines += ["", "[expected]", f"tolerance = {value(expected['tolerance'])}"]
     if "floor" in expected:

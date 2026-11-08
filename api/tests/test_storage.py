@@ -125,3 +125,24 @@ def test_the_live_store_round_trips_and_its_link_serves_the_file(tmp_path):
     with urllib.request.urlopen(client.link(key, seconds=60), timeout=30) as response:
         assert response.status == 200 and response.headers.get("Content-Type", "").startswith("application/json")
         assert response.read() == source.read_bytes()
+
+
+def test_the_folder_copy_leaves_the_big_run_files_out(tmp_path):
+    # the frd, dat, vtu, fields, PDF, LaTeX and package folders are filed by the job's keys and read by no later job (ADR-0056 amendment 6)
+    from anisotropy_api.storage import kept_in_folder, store_folder
+
+    folder = tmp_path / "IM7-UNT-L1"
+    kept = ["README.md", "ours/IM7-UNT-L1.toml", "ours/decks/IM7-UNT-L1-abaqus.inp", "ours/verification/IM7-UNT-L1-calculix.toml",
+            "ours/runs/attempt-02_2026-11-08/run/kernel/summary.txt", "ours/runs/attempt-02_2026-11-08/run/studio/checklist.json",
+            "ours/runs/attempt-02_2026-11-08/run/calculix/IM7-UNT-L1-nodal-ccx.inp", "team/2026-11-08/values.json"]
+    left = ["ours/runs/attempt-02_2026-11-08/run/calculix/IM7-UNT-L1-nodal-ccx.frd", "ours/runs/attempt-02_2026-11-08/run/calculix/IM7-UNT-L1-nodal-ccx.dat",
+            "ours/runs/attempt-02_2026-11-08/run/kernel/IM7-UNT-L1.vtu", "ours/runs/attempt-02_2026-11-08/run/kernel/IM7-UNT-L1-fields.json",
+            "documents/2026-11-08_IM7-UNT-L1/IM7-UNT-L1.pdf", "documents/2026-11-08_IM7-UNT-L1/README.md", "ours/latex/IM7-UNT-L1.tex"]
+    for relative in kept + left:
+        path = folder / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+    assert all(kept_in_folder(Path(r).parts) for r in kept) and not any(kept_in_folder(Path(r).parts) for r in left)
+    store = MemoryStore()
+    assert store_folder(store, folder, "IM7-UNT-L1") == len(kept)
+    assert sorted(store.objects) == sorted(f"coupons/IM7-UNT-L1/folder/{r}" for r in kept)

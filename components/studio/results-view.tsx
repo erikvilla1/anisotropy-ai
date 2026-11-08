@@ -25,22 +25,57 @@ export function Legend({ scale, label, unit, by, bands = 0 }: { scale: Scale; la
   );
 }
 
+const xyz = (p: number[] | undefined) => (p && p.length === 3 ? ` (${p.map((v) => printed(v)).join(", ")})` : "");
+
 export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
-  const s = fields.summary, lab = fields.labels;
+  const s = fields.summary, lab = fields.labels, cx = s.calculix ?? null;
+  const peaks = Object.entries(s.max_ply).filter(([name]) => name !== "mises");  // the ply von Mises row is gone: a viewer's von Mises is another quantity (ADR-0030 amendment 6)
   return (
     <div className="studio-panel" data-testid="summary">
       <h3>Summary</h3>
       <dl className="studio-summary">
         <div><dt>Applied</dt><dd>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}{s.applied.direction ? `, ${s.applied.direction}` : ""}</dd></div>
-        <div><dt>Reaction at {s.reaction.set}</dt><dd data-testid="summary-reaction">{printed(Math.abs(s.reaction.value))} {lab.force} ({s.reaction.sense})</dd></div>
+        <div><dt>Reaction at {s.reaction.set}</dt><dd data-testid="summary-reaction">{printed(Math.abs(s.reaction.value))} {lab.force} ({s.reaction.sense})
+          {cx?.reaction ? <span data-testid="summary-reaction-calculix">; CalculiX&apos;s twin {printed(Math.abs(cx.reaction.calculix))} {lab.force}, ours {cx.reaction.difference} from it</span> : null}</dd></div>
         <div><dt>Largest displacement</dt><dd>{printed(s.max_displacement.value)} {lab.length} at node {s.max_displacement.label.split(".").pop()}
           {s.max_displacement.axis === "z" ? " (the deflection w)" : ""}</dd></div>
-        {Object.entries(s.max_ply).map(([name, m]) => (
-          <div key={name}><dt>Largest ply {name === "mises" ? "von Mises" : name}</dt>
+      </dl>
+      {cx && cx.gauge.length ? (
+        <>
+          <h4>Gauge section, where the two solvers agree</h4>
+          <table className="studio-table" data-testid="gauge-table">
+            <thead><tr><th>Ply</th><th>S11 ours / CalculiX</th><th>S22 ours / CalculiX</th><th>S12 ours / CalculiX</th></tr></thead>
+            <tbody>
+              {cx.gauge.map((g) => (
+                <tr key={g.ply} data-ply={g.ply}><td>{g.ply} ({fields.mesh.angles[g.ply - 1]}°)</td>
+                  {[0, 1, 2].map((i) => <td key={i}>{g.ours[i] === null ? "–" : printed(g.ours[i] as number)} / {g.calculix[i] === null ? "–" : printed(g.calculix[i] as number)}{g.agrees[i] === false ? " ✕" : ""}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="studio-muted">Ply stresses in each ply&apos;s fibre axes ({lab.stress}) at the centre element {cx.gauge_element?.split(".").pop()}: ours at the centroid, CalculiX&apos;s
+            averaged over its integration points (the record {cx.record}, {cx.agree} values within {printed(100 * cx.tolerance)} %). A ✕ marks a value outside the tolerance.</p>
+        </>
+      ) : null}
+      <h4>Peaks at the tab line</h4>
+      <dl className="studio-summary">
+        {peaks.map(([name, m]) => (
+          <div key={name}><dt>Largest ply {name}, ours</dt>
             <dd>{printed(m.value)} {lab.stress} in ply {m.ply} ({m.angle}°){m.face ? `, ${m.face} face,` : ""} at element {m.label.split(".").pop()}
               <button type="button" className="studio-text-button" onClick={() => onShow(m.element, m.ply, s.earliest ?? "", m.face)}>show</button></dd></div>
         ))}
+        {cx?.frd ? (
+          <>
+            <div data-testid="summary-frd-mises"><dt>von Mises, CalculiX in PrePoMax</dt><dd>{printed(cx.frd.mises_max)} {lab.stress} at node {cx.frd.mises_max_node}{xyz(cx.frd.mises_max_xyz)}</dd></div>
+            <div><dt>SYY along the coupon, CalculiX in PrePoMax</dt><dd>{printed(cx.frd.syy_max)} {lab.stress} at node {cx.frd.syy_max_node}{xyz(cx.frd.syy_max_xyz as number[] | undefined)}</dd></div>
+            <div><dt>SXX across the width, CalculiX in PrePoMax</dt><dd>{printed(cx.frd.sxx_min)} to {printed(cx.frd.sxx_max)} {lab.stress}</dd></div>
+            {typeof cx.frd.gauge_mises_max === "number" ? <div><dt>In the gauge section, CalculiX in PrePoMax</dt><dd>von Mises {printed(cx.frd.gauge_mises_max)}, SYY {printed(cx.frd.gauge_syy_max as number)} {lab.stress}</dd></div> : null}
+          </>
+        ) : null}
       </dl>
+      <p className="studio-muted">Ours are each ply&apos;s stresses in its fibre axes at element centroids. CalculiX&apos;s are what PrePoMax shows of the `.frd`: global axes
+        (its S11 is SXX, across the width), one brick per ply, values extrapolated to the nodes, a three-dimensional von Mises. Both peak where a gripped
+        tab ends, a clamped edge whose stress grows as the mesh is refined; the gauge section is where the two solvers agree.</p>
       <h4>First-ply failure</h4>
       {Object.keys(s.fpf).length === 0 ? <p className="studio-muted">No failure criterion was asked for.</p> : (
         <table className="studio-table" data-testid="fpf-table">

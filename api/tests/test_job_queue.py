@@ -42,21 +42,31 @@ source = pathlib.Path(args.source)
 coupon = json.loads(source.read_text(encoding="utf-8"))["coupon"] if source.suffix == ".json" else args.source
 ours = root / coupon / "ours"
 ours.mkdir(parents=True, exist_ok=True)
-(ours / f"{coupon}.toml").write_text("the spec", encoding="utf-8")
 
-def write(stage, held, attempt=None, outputs=None):
+def write(stage, held, attempt=None, outputs=None, result=None):
     progress.write_text(json.dumps({"stage": stage, "done": [], "stages": ["the input", "CalculiX"], "coupon": coupon, "held": held,
-                                    "attempt": None if attempt is None else str(attempt), "outputs": outputs or {}}), encoding="utf-8")
+                                    "attempt": None if attempt is None else str(attempt), "outputs": outputs or {}, "result": result}),
+                        encoding="utf-8")
 
-print("== the input", flush=True)
-write("the input", True)
 gate = pathlib.Path(args.gate)
-while not gate.is_file():
-    time.sleep(0.02)
-word = gate.read_text(encoding="utf-8")
-if word != "go":
-    result.write_text(json.dumps({"status": "refused", "message": word, "coupon": None, "attempt": None, "outputs": {}}), encoding="utf-8")
-    sys.exit(1)
+
+def hold(stage, named):
+    """The tool's two holds (ADR-0056 amendment 6): before the coupon is named, and once it is; the word is read once each time."""
+    progress.write_text(json.dumps({"stage": stage, "done": [], "stages": ["the input", "CalculiX"], "coupon": coupon if named else None, "held": True,
+                                    "attempt": None, "outputs": {}, "result": None}), encoding="utf-8")
+    while not gate.is_file():
+        time.sleep(0.02)
+    word = gate.read_text(encoding="utf-8")
+    gate.unlink()
+    if word != "go":
+        result.write_text(json.dumps({"status": "refused", "message": word, "coupon": None, "attempt": None, "outputs": {}}), encoding="utf-8")
+        sys.exit(1)
+
+print("== the setup check", flush=True)
+hold("the setup check", False)
+print("== the input", flush=True)
+(ours / f"{coupon}.toml").write_text("the spec", encoding="utf-8")
+hold("the input", True)
 runs = ours / "runs"
 runs.mkdir(exist_ok=True)
 number = max([int(d.name[8:10]) for d in runs.iterdir()] or [1]) + 1
@@ -66,6 +76,8 @@ fields = attempt / "run" / "fields.json"
 fields.write_text(json.dumps({"attempt": number}), encoding="utf-8")
 write("CalculiX", False, attempt, {"fields": str(fields)})
 print(f"== CalculiX, attempt {number:02d}", flush=True)
+if coupon.startswith("WAIT-RESULT"):  # the result reported, the package still to build (ADR-0064)
+    write("the package", False, attempt, {"fields": str(fields)}, result=f"attempt {number:02d}")
 if coupon.startswith("WAIT"):
     while not (root.parent / f"release-{coupon}").exists():
         time.sleep(0.02)
@@ -161,6 +173,24 @@ def test_a_solver_runs_the_queued_job_and_the_api_reads_it_back_from_the_row_and
     assert CouponJobs(solver.command, solver.recorder, solver.root, store=store, table=table, role="solver").take(uuid.UUID(job_id)) is None
 
 
+def test_a_solver_that_runs_a_job_is_busy_for_the_next_and_its_row_carries_the_timings(queue, monkeypatch):
+    _, solver, _, _, table, tmp_path = queue
+    a, b = uuid.UUID(queued("WAIT-E")), uuid.UUID(queued("PLAIN-F"))
+    job_a = solving(solver, a, monkeypatch, until=("running",))
+    held_until(job_a, lambda: (job_a.progress() or {}).get("stage") == "CalculiX", "past the gate")
+    with pytest.raises(coupon_jobs.SolverBusy, match=f"this solver runs coupon job {a}"):  # one job at a time on one container's disk
+        solver.take(b)
+    assert fetch_job(table, b).state == "queued"  # not claimed: the pool's next solver takes it
+    (tmp_path / solver.local_root.parent.name / "release-WAIT-E").touch()
+    held_until(job_a, lambda: job_a.state == "done", "done")
+    row = fetch_job(table, a)
+    assert row.claimed_at is not None and row.claimed_at >= row.started_at
+    assert {"restore_s", "lock_wait_s", "gate_s", "upload_s"} <= set(row.timings) and all(isinstance(v, (int, float)) for v in row.timings.values())
+    assert client.get(f"/v1/coupon-jobs/{a}").json()["timings"] == row.timings
+    job_b = solving(solver, b, monkeypatch)  # the solver is free again
+    assert job_b.state == "done"
+
+
 def test_jobs_on_two_coupons_run_at_once_in_two_solvers(queue, monkeypatch):
     _, first, second, _, table, tmp_path = queue
     a, b = uuid.UUID(queued("WAIT-A")), uuid.UUID(queued("WAIT-B"))
@@ -204,6 +234,22 @@ def test_a_running_jobs_fields_are_read_through_the_api_from_the_store(queue, mo
     assert fields.status_code == 307 and "/files/fields/fields.json" in fields.headers["location"]
     (tmp_path / "solver-1" / "release-WAIT-D").touch()
     held_until(job, lambda: job.state == "done", "done")
+
+
+def test_a_running_jobs_result_is_read_back_from_its_row_before_the_package(queue, monkeypatch):
+    """ADR-0064: the solver's heartbeat writes the result to the row's message as soon as the tool reports it, so the API's container
+    shows it while the solver still builds the package; the row's message before then is empty."""
+    _, solver, _, _, table, tmp_path = queue
+    job_id = uuid.UUID(queued("WAIT-RESULT"))
+    job = solving(solver, job_id, monkeypatch, until=("running",))
+    held_until(job, lambda: fetch_job(table, job_id).message == "attempt 02", "writing its result to the row")
+    status = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert status["state"] == "running" and status["stage"] == "the package" and status["result"] == status["message"] == "attempt 02"
+    assert status["documents"] == "building"
+    (tmp_path / "solver-1" / "release-WAIT-RESULT").touch()
+    held_until(job, lambda: fetch_job(table, job_id).state == "done", "done on its row")  # the API's container reads the row
+    ended = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert ended["state"] == "done" and ended["result"] == "attempt 02" and ended["documents"] == "written"
 
 
 def test_the_per_job_timeout_stops_the_tool(queue, monkeypatch):
@@ -316,7 +362,8 @@ def test_the_roles_keep_to_their_own_routes(queue, monkeypatch):
 
 def test_peak_memory_reads_cgroup_v2_then_v1_and_is_none_outside_a_container(tmp_path):
     v2, v1 = tmp_path / "memory.peak", tmp_path / "memory.max_usage_in_bytes"
-    assert coupon_jobs.peak_memory((v2, v1)) is None  # neither file: not a container
+    outside = coupon_jobs.peak_memory((v2, v1))  # neither file: not a container; on Linux the children's peak resident set stands in
+    assert outside is None or (sys.platform.startswith("linux") and isinstance(outside, int))
     v1.write_text("432361472\n", encoding="ascii")
     assert coupon_jobs.peak_memory((v2, v1)) == 432361472  # a Docker host still on cgroup v1
     v2.write_text("299454464\n", encoding="ascii")

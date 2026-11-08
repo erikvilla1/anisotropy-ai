@@ -10,7 +10,7 @@ from anisotropy_engine.response import ply_surfaces
 from anisotropy_engine.rotation import stress_transformation
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.model import section_plies
-from anisotropy_fea.calculix import ENV_VARIABLE, CalculixError, find_ccx, parse_dat, run_calculix
+from anisotropy_fea.calculix import ENV_VARIABLE, KNOWN_FATALS, CalculixError, diagnose, find_ccx, parse_dat, run_calculix
 from anisotropy_fea.compare import layer_values, load_conventions
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.membrane import solve_membrane
@@ -243,3 +243,14 @@ def test_plane_stress_removes_the_through_thickness_coupling_of_calculix_composi
     else:
         assert szz_ratio < 0.005
         assert top == pytest.approx(ours, rel=0.02)  # 4686 against 4724 N on the coarse 2 by 8 mesh: S8R against Q4
+
+
+def test_a_known_fatal_text_gets_our_words():
+    # SPOOLES's ordering failure prints no *ERROR paragraph; CalculiX 2.21 (the image) and 2.22 (PrePoMax's build) both printed it on
+    # 2026-11-08 for a 4000-element, 6-ply coupon (55,733 equations), whatever G13 and G23; PaStiX solved the same deck (ADR-0030 amendment 5)
+    console = " Factoring the system of equations using the symmetric spooles solver\n Using up to 1 cpu(s) for spooles.\n\n\n" \
+              " fatal error in GPart_makeYCmap(0x5c4f2d4590d0,0x5c4f22420d30)\n bad input\n\n YVmapIV\n IV : integer vector object :  size = 0, maxsize = 0, owned = 0\n"
+    words = diagnose(console)
+    assert words is not None and words.startswith("the SPOOLES solver stopped while ordering the equations") and "a coarser mesh solves" in words
+    assert diagnose(" Job finished\n") is None
+    assert [marker for marker, _ in KNOWN_FATALS] == ["GPart_makeYCmap"]
