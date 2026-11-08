@@ -19,6 +19,7 @@ GAUGE_GROUP = "ply_stress_local"
 REACTION_SET = "Grip-Top"
 FRD_STRESSES = ("mises_max", "sxx_max", "sxx_min", "syy_max", "syy_min", "sxy_max_abs", "gauge_mises_max", "gauge_syy_max", "gauge_sxx_max_abs")
 FRD_LENGTHS = ("gauge_from", "gauge_to")
+PLY_STRESSES = ("s1_max", "s2_max", "t12_max_abs", "gauge_s1_max")
 
 
 def convert(value, kind: str, from_units: str, to_units: str):
@@ -64,5 +65,9 @@ def calculix_summary(record_path: Path, units: str) -> dict:
         for key in list(converted):
             if key.endswith("_xyz"):
                 converted[key] = [convert(v, "length", record_units, units) for v in converted[key]]
+        if converted.get("plies"):  # each ply's peaks in its fibre axes (ADR-0066): the stresses and the positions convert, the nodes and angles do not
+            converted["plies"] = [{k: ([convert(v, "length", record_units, units) for v in x] if k.endswith("_xyz") else
+                                       convert(x, "stress", record_units, units) if k in PLY_STRESSES else x) for k, x in ply.items()}
+                                  for ply in converted["plies"]]
         out["frd"] = converted
     return out

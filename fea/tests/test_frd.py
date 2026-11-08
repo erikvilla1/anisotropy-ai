@@ -122,3 +122,100 @@ def test_the_calculix_summary_reads_the_public_record_in_the_fields_units():
     inches = calculix_summary(record, "in-psi")
     assert inches["reaction"]["calculix"] == pytest.approx(16102.21 / 4.4482216152605, rel=1e-6)  # N to lbf
     assert inches["gauge"][1]["calculix"][0] == pytest.approx(1180.85 / 6.894757293168e-3, rel=1e-4)  # MPa to psi
+
+
+# Two bricks of one element in a two-ply laminate (0.5 mm plies, so the interfaces are at -0.5, 0 and 0.5), the plies unconnected: nodes 1-4
+# belong to the bottom brick (z from -0.5 to 0), nodes 5-8 to the top one. The bottom ply is a stated 0-degree ply (fibres along y, so its
+# sigma_1 is SYY), the top a stated 90-degree ply (fibres along x). The stress block gives every node the same global state but node 4.
+PLIES = """    1C
+    2C                             8                                     1
+ -1         1 0.00000E+00 0.00000E+00-5.00000E-01
+ -1         2 2.50000E+01 0.00000E+00-5.00000E-01
+ -1         3 0.00000E+00 1.00000E+02 0.00000E+00
+ -1         4 2.50000E+01 1.00000E+02 0.00000E+00
+ -1         5 0.00000E+00 0.00000E+00 0.00000E+00
+ -1         6 2.50000E+01 0.00000E+00 0.00000E+00
+ -1         7 0.00000E+00 1.00000E+02 5.00000E-01
+ -1         8 2.50000E+01 1.00000E+02 5.00000E-01
+ -3
+    3C                             2                                     1
+ -1      1001    4    0    1
+ -2         1         2         3         4
+ -1      1002    4    0    1
+ -2         5         6         7         8
+ -3
+    1PSTEP                         1           1           1
+  100CL  101 1.000000000           8                     0    1           1
+ -4  STRESS      6    1
+ -5  SXX         1    4    1    1
+ -5  SYY         1    4    2    2
+ -5  SZZ         1    4    3    3
+ -5  SXY         1    4    1    2
+ -5  SYZ         1    4    2    3
+ -5  SZX         1    4    3    1
+ -1         1 1.00000E+01 4.00000E+02 0.00000E+00 3.00000E+01 0.00000E+00 0.00000E+00
+ -1         2 1.00000E+01 4.00000E+02 0.00000E+00 3.00000E+01 0.00000E+00 0.00000E+00
+ -1         3 1.00000E+01 4.00000E+02 0.00000E+00 3.00000E+01 0.00000E+00 0.00000E+00
+ -1         4 1.00000E+01 6.00000E+02 0.00000E+00-5.00000E+01 0.00000E+00 0.00000E+00
+ -1         5 1.00000E+01 4.00000E+02 0.00000E+00 3.00000E+01 0.00000E+00 0.00000E+00
+ -1         6 1.00000E+01 4.00000E+02 0.00000E+00 3.00000E+01 0.00000E+00 0.00000E+00
+ -1         7 1.00000E+01 4.00000E+02 0.00000E+00 3.00000E+01 0.00000E+00 0.00000E+00
+ -1         8 1.00000E+01 4.00000E+02 0.00000E+00 3.00000E+01 0.00000E+00 0.00000E+00
+ -3
+ 9999
+"""
+
+
+def test_the_bricks_are_read_and_their_nodes_belong_to_one_ply_each(tmp_path):
+    from anisotropy_fea.frd import FrdPly, ply_of_nodes
+
+    path = tmp_path / "plies.frd"
+    path.write_text(PLIES, encoding="utf-8")
+    frd = read_frd(path)
+    assert frd.elements == {1001: (1, 2, 3, 4), 1002: (5, 6, 7, 8)}
+    plies = [FrdPly(0.0, 90.0, 0.5), FrdPly(90.0, 0.0, 0.5)]
+    assert ply_of_nodes(frd, plies) == {1: 0, 2: 0, 3: 0, 4: 0, 5: 1, 6: 1, 7: 1, 8: 1}
+    tiny = tmp_path / "tiny.frd"
+    tiny.write_text(TINY, encoding="utf-8")
+    assert read_frd(tiny).elements == {1: (1, 2, 3, 4)}  # the older fixture's one shell element is read too
+
+
+def test_each_ply_peaks_in_its_own_fibre_axes(tmp_path):
+    from anisotropy_fea.frd import FrdPly, frd_ply_peaks
+
+    path = tmp_path / "plies.frd"
+    path.write_text(PLIES, encoding="utf-8")
+    plies = [FrdPly(0.0, 90.0, 0.5), FrdPly(90.0, 0.0, 0.5)]
+    bottom, top = frd_ply_peaks(read_frd(path), plies, gauge=(10.0, 90.0))
+    # the 0-degree ply's fibres run along y: sigma_1 is SYY, sigma_2 is SXX, tau_12 is -SXY; node 4 holds its peaks
+    assert bottom["ply"] == 1 and bottom["angle"] == 0.0 and bottom["fibre"] == 90.0 and bottom["nodes"] == 4
+    assert bottom["s1_max"] == 600.0 and bottom["s1_max_node"] == 4 and bottom["s1_max_xyz"] == [25.0, 100.0, 0.0]
+    assert bottom["s2_max"] == 10.0 and bottom["t12_max_abs"] == 50.0 and bottom["t12_max_abs_node"] == 4
+    assert "gauge_s1_max" not in bottom  # node 4 sits at y = 100, outside the gauge rows; the other nodes sit at y = 0 or y = 100 too
+    # the 90-degree ply's fibres run along x: sigma_1 is SXX
+    assert top["ply"] == 2 and top["s1_max"] == 10.0 and top["s2_max"] == 400.0 and top["t12_max_abs"] == 30.0 and top["nodes"] == 4
+    wide = frd_ply_peaks(read_frd(path), plies, gauge=(-1.0, 101.0))
+    assert wide[0]["gauge_s1_max"] == 600.0 and wide[0]["gauge_s1_max_node"] == 4 and wide[1]["gauge_s1_max"] == 10.0
+
+
+def test_the_record_writes_the_ply_peaks_as_inline_tables_and_the_summary_converts_them(tmp_path):
+    import tomllib
+
+    from anisotropy_fea.compare import format_record, load_record
+    from anisotropy_fea.calculix_summary import calculix_summary
+
+    public = Path(__file__).resolve().parents[1] / "checks" / "unnotched-im7-8552" / "records" / "unnotched-im7-8552-nodal-calculix.toml"
+    record = load_record(public)
+    for key in ("spec", "deck_kernel", "deck_reference"):  # the copy lives in tmp_path, so the paths the record states relative to itself become absolute
+        record[key] = str((public.parent / record[key]).resolve())
+    record["solver"]["conventions"] = str((public.parent / record["solver"]["conventions"]).resolve())
+    record["frd"] = {"nodes": 8, "axes": AXES, "layers": "test", "mises_max": 1.0, "mises_max_node": 4, "mises_max_xyz": [25.0, 100.0, 0.0],
+                     "plies": [{"ply": 1, "angle": 0.0, "fibre": 90.0, "nodes": 4, "s1_max": 600.0, "s1_max_node": 4, "s1_max_xyz": [25.0, 100.0, 0.0]}]}
+    text = format_record(record)
+    assert '\nplies = [{ply = 1, angle = 0.0, fibre = 90.0, nodes = 4, s1_max = 600.0, s1_max_node = 4, s1_max_xyz = [25.0, 100.0, 0.0]}]\n' in text
+    assert tomllib.loads(text)["frd"]["plies"][0]["s1_max"] == 600.0
+    path = tmp_path / "record.toml"
+    path.write_text(text, encoding="utf-8")
+    inches = calculix_summary(path, "in-psi")["frd"]["plies"][0]
+    assert inches["s1_max"] == pytest.approx(600.0 / 6.894757293168e-3, rel=1e-6) and inches["s1_max_node"] == 4 and inches["angle"] == 0.0
+    assert inches["s1_max_xyz"][0] == pytest.approx(25.0 / 25.4, rel=1e-9)
