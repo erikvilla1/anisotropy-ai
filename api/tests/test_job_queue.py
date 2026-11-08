@@ -4,6 +4,7 @@ one per coupon; a job whose coupon another job holds goes back to the queue and 
 files are read through the API's container from the store; a lost job is swept. A stand-in plays the tool with its gate, so these
 tests need neither CalculiX nor the fea environment; fea/tests/test_run_coupon.py tests the tool's gate itself."""
 
+import datetime as dt
 import json
 import sys
 import time
@@ -235,9 +236,74 @@ def test_the_per_job_timeout_stops_the_tool(queue, monkeypatch):
     assert row.state == "stopped" and row.message == "the job ran longer than 12 minutes, the per-job limit" and row.coupon is None
 
 
-def test_a_job_whose_solver_went_silent_is_swept_and_its_coupon_freed(queue, monkeypatch):
-    import datetime as dt
+class SlowFolderStore(MemoryStore):
+    """A store whose uploads of the coupon's folder take a while, as the hosted bucket's can once the folder has grown."""
 
+    def __init__(self):
+        super().__init__()
+        self.slow_since: float | None = None
+
+    def put(self, key, path, content_type, disposition=None):
+        if "/folder/" in key:
+            self.slow_since = self.slow_since or time.monotonic()
+            time.sleep(0.3)
+        super().put(key, path, content_type, disposition)
+
+
+class RefusingLiveStore(MemoryStore):
+    """A store that refuses a running job's files while `refusing`, as a bucket that is slow or gone for a while would."""
+
+    def __init__(self):
+        super().__init__()
+        self.refusing = True
+        self.refused = 0
+
+    def put(self, key, path, content_type, disposition=None):
+        if self.refusing and "/files/" in key:
+            self.refused += 1
+            raise OSError("the bucket did not answer")
+        super().put(key, path, content_type, disposition)
+
+
+def test_the_heartbeat_goes_on_through_the_finishs_uploads(queue, monkeypatch):
+    """The sweep stops a running job silent for two minutes; the uploads at a job's end must not be such a silence (ADR-0056 amendment 5)."""
+    front, _, _, _, table, tmp_path = queue
+    store = SlowFolderStore()
+    solver = CouponJobs(front.command, front.recorder, tmp_path / "slow" / "jobs", store=store, table=table, local_root=tmp_path / "slow" / "coupons",
+                        role="solver")
+    beats: list[float] = []
+    real = coupon_jobs.update_job
+
+    def spied(engine, job_id, **fields):
+        if "state" not in fields:  # a heartbeat; the end writes the state
+            beats.append(time.monotonic())
+        return real(engine, job_id, **fields)
+
+    monkeypatch.setattr(coupon_jobs, "update_job", spied)
+    job = solving(solver, uuid.UUID(queued("IM7-UNT-L1")), monkeypatch)
+    assert job.state == "done" and store.slow_since is not None
+    assert any(t > store.slow_since + 0.3 for t in beats), "no beat landed while the coupon's folder was uploading"
+    assert fetch_job(table, job.id).heartbeat_at >= fetch_job(table, job.id).finished_at - dt.timedelta(seconds=1)  # the last sign of life goes with the end
+
+
+def test_a_bucket_that_refuses_the_running_files_does_not_silence_the_heartbeat(queue, monkeypatch):
+    front, _, _, _, table, tmp_path = queue
+    store = RefusingLiveStore()
+    solver = CouponJobs(front.command, front.recorder, tmp_path / "refusing" / "jobs", store=store, table=table,
+                        local_root=tmp_path / "refusing" / "coupons", role="solver")
+    job_id = uuid.UUID(queued("WAIT-F"))
+    job = solving(solver, job_id, monkeypatch, until=("running",))
+    held_until(job, lambda: store.refused >= 2, "asked the bucket twice for the fields")
+    first = fetch_job(table, job_id).heartbeat_at
+    held_until(job, lambda: fetch_job(table, job_id).heartbeat_at > first, "a later beat while the bucket refuses")
+    assert fetch_job(table, job_id).stored == {} and fetch_job(table, job_id).stage == "CalculiX"
+    store.refusing = False
+    held_until(job, lambda: "fields" in (fetch_job(table, job_id).stored or {}), "the fields filed once the bucket answered")
+    (tmp_path / "refusing" / "release-WAIT-F").touch()
+    held_until(job, lambda: job.state == "done", "done")
+
+
+def test_a_job_whose_solver_went_silent_is_swept_and_its_coupon_freed(queue, monkeypatch):
     front, solver, _, _, table, _ = queue
     lost, after = uuid.UUID(queued("IM7-OHT-L1")), uuid.UUID(queued("IM7-OHT-L1"))
     update_job(table, lost, state="running", coupon="IM7-OHT-L1", heartbeat_at=dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5))

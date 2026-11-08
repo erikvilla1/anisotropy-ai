@@ -3,6 +3,7 @@ elements sharing a node, the summary's extremes are the arrays' extremes, the fi
 explanation's sentences quote the facts and nothing else. On the public IM7/8552 check decks, nothing under .local/."""
 
 import json
+import math
 
 import numpy as np
 import pytest
@@ -146,6 +147,18 @@ def test_every_number_in_a_sentence_is_a_fact(data):
     assert "The largest displacement is" in sentences[1] and "S11 =" in sentences[2] and "von Mises" in sentences[2]
     assert any("criterion at the applied loading" in s for s in sentences) and sentences[-1].startswith("The earliest of the criteria is")
     assert any(MODE_WORDS[facts[f"{c}_mode"]] in s for c in facts["criteria"] for s in sentences)
+
+
+def test_a_float_fact_holds_the_digits_the_sentences_print(data):
+    """ADR-0052 amendment 1: a writer that copies a number from the sheet copies the sentences' four significant figures."""
+    facts = fact_sheet(data["summary"], data["coupon"], UNITS, data["labels"])
+    floats = {key: value for key, value in facts.items() if isinstance(value, float)}
+    assert {"reaction", "max_displacement", "max_S11", "max_S11_angle"} <= set(floats)
+    for key, value in floats.items():
+        assert value == float(f"{value:.4g}"), (key, value)  # no digit beyond the fourth
+    exact = abs(float(data["summary"]["reaction"]["value"]))  # the engine's value, as the summary keeps it
+    assert f"{facts['reaction']:.4g}" == f"{exact:.4g}"  # the same four digits the sentence prints
+    assert abs(facts["reaction"] - exact) <= 0.5 * 10 ** (math.floor(math.log10(exact)) - 3)  # within half a unit of the fourth digit
 
 
 def test_the_limiting_ply_is_named_with_its_place_and_mode(data):

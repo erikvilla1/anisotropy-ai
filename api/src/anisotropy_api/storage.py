@@ -16,6 +16,7 @@ Without the settings nothing is stored or restored: the files stay where the too
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path, PurePosixPath
 from typing import Protocol
@@ -71,7 +72,8 @@ class R2Store:
         self.client = boto3.client("s3", endpoint_url=settings.endpoint, aws_access_key_id=settings.access_key_id,
                                    aws_secret_access_key=settings.secret_access_key, region_name="auto",
                                    config=Config(signature_version="s3v4", s3={"addressing_style": "path"}, request_checksum_calculation="when_required",
-                                                 response_checksum_validation="when_required", retries={"max_attempts": 3, "mode": "standard"}))
+                                                 response_checksum_validation="when_required", retries={"max_attempts": 3, "mode": "standard"},
+                                                 connect_timeout=10, read_timeout=30))  # a bucket that does not answer gives a try up within a minute (ADR-0056 amendment 5)
 
     def put(self, key: str, path: Path, content_type: str, disposition: str | None = None) -> None:
         extra = {"ContentType": content_type}
@@ -142,11 +144,16 @@ def store_job(store: ObjectStore, coupon: str, attempt: str, outputs: dict[str, 
 
 
 def store_folder(store: ObjectStore, folder: Path, coupon: str) -> int:
-    """Upload the coupon's whole folder (specs, decks, runs, verification, documents, the case page) under its `folder/` prefix;
-    returns the number of files."""
+    """Upload the coupon's whole folder (specs, decks, runs, verification, documents, the case page) under its `folder/` prefix, apart
+    from a file the store holds unchanged: its tag is the content's MD5 for an object put in one piece, as these are (ADR-0056
+    amendment 5, so the upload at a job's end does not grow with the coupon's attempts). Returns the number of files uploaded."""
+    held = store.tags(f"{COUPONS}/{coupon}/{FOLDER}/")
     count = 0
     for path in sorted(p for p in folder.rglob("*") if p.is_file()):
-        store.put(folder_key(coupon, PurePosixPath(path.relative_to(folder).as_posix())), path, content_type(path))
+        key = folder_key(coupon, PurePosixPath(path.relative_to(folder).as_posix()))
+        if held.get(key, "").strip('"') == hashlib.md5(path.read_bytes()).hexdigest():
+            continue
+        store.put(key, path, content_type(path))
         count += 1
     return count
 

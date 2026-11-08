@@ -53,6 +53,25 @@ def test_a_jobs_files_go_by_key_and_the_zip_stands_for_the_package_folder(tmp_pa
     assert store.objects[stored["package"]] == (b"PK\x03\x04", "application/zip", 'attachment; filename="2026-10-30_IM7-UNT-L1.zip"')
 
 
+def test_a_folder_uploaded_again_sends_only_what_changed(tmp_path):
+    """The upload at a job's end (ADR-0056 amendment 5): a file the store holds unchanged, by its tag, is not sent again."""
+    folder = tmp_path / "fea" / "IM7-UNT-L1"
+    (folder / "ours").mkdir(parents=True)
+    (folder / "README.md").write_text("# IM7-UNT-L1\n", encoding="utf-8")
+    (folder / "ours" / "IM7-UNT-L1.toml").write_text("[coupon]\n", encoding="utf-8")
+    store = MemoryStore()
+    assert storage.store_folder(store, folder, "IM7-UNT-L1") == 2
+    assert storage.store_folder(store, folder, "IM7-UNT-L1") == 0  # nothing changed, nothing sent
+    (folder / "README.md").write_bytes(b"# IM7-UNT-L1\n\n| 02 |\n")  # bytes: the store compares content, not the platform's line ends
+    (folder / "ours" / "runs").mkdir()
+    (folder / "ours" / "runs" / "attempt-02.txt").write_text("ok\n", encoding="utf-8")
+    assert storage.store_folder(store, folder, "IM7-UNT-L1") == 2  # the changed file and the new one
+    assert store.objects["coupons/IM7-UNT-L1/folder/README.md"][0] == b"# IM7-UNT-L1\n\n| 02 |\n"
+    store.objects["coupons/IM7-UNT-L1/folder/README.md"] = (b"other", "text/markdown", None)  # a quoted tag, as R2 returns it, reads the same
+    store.tags = lambda prefix, _tags=store.tags: {key: f'"{tag}"' for key, tag in _tags(prefix).items()}
+    assert storage.store_folder(store, folder, "IM7-UNT-L1") == 1
+
+
 def test_the_coupon_folder_round_trips_and_a_restore_fills_only_what_the_disk_lacks(tmp_path):
     folder = tmp_path / "fea" / "IM7-UNT-L1"
     (folder / "ours" / "runs" / "attempt-01").mkdir(parents=True)

@@ -13,8 +13,9 @@ With the job queue (ADR-0056 stage 3, amendment 3) the work splits over containe
 - `solver`, a container of the job's own that the queue's consumer starts: it claims the row, brings the coupons level with the
   store, and runs the tool with a gate (`--gate`). One job at a time names its coupon, under a database lock; at the gate the job
   claims its coupon on its row, where a unique index allows one running job per coupon, so two containers never number attempts
-  of one coupon at once. A job whose coupon another job holds goes back to the queue. While it runs, a heartbeat writes its stage,
-  its log and the files made so far to the row and the store.
+  of one coupon at once. A job whose coupon another job holds goes back to the queue. While it runs, and until its row's last
+  write, a heartbeat writes its stage, its log and its sign of life to the row; a thread of its own files the files made so far in
+  the store (ADR-0056 amendment 5).
 
 The studio's setup check, the list of coupons and a coupon's values run `fea/tools/studio_tool.py` the same way, and wait for it.
 """
@@ -54,7 +55,7 @@ GATE = "gate"  # the file the tool waits for once it has named the coupon (--gat
 GATE_GO = "go"
 # The job queue (ADR-0056 amendment 3). Every number here is a first choice to be revised from the hosted tier's measurements.
 TICK_S = 0.1  # how often a solver looks at a job held at the gate
-HEARTBEAT_S = 5.0  # how often a solver writes a running job's row: its sign of life, stage, log and the files so far
+HEARTBEAT_S = 5.0  # how often a solver writes a running job's row (its sign of life, stage, log, where its files are) and files its running files
 SILENT_AFTER = dt.timedelta(minutes=2)  # a running job whose solver has written nothing for this long has lost its container
 QUEUED_AFTER = dt.timedelta(hours=1)  # a job queued this long was lost by the queue or ran out of retries
 SWEEP_EVERY_S = 10.0  # a process looks for lost jobs at most this often, on the requests that read jobs
@@ -349,8 +350,9 @@ class CouponJobs:
             outcome = {"status": "stopped", "message": f"the job could not run: {exc}", "coupon": None, "attempt": None, "outputs": {}}
         self._finish(job, outcome)
 
-    def _finish(self, job: Job, outcome: dict, **row) -> None:
-        """An ended job: its files to the store when there is one, its receipt, its status here and its row (with `row`'s extra columns)."""
+    def _finish(self, job: Job, outcome: dict, before_row: Callable[[], None] | None = None, **row) -> None:
+        """An ended job: its files to the store when there is one, its receipt, its status here and its row (with `row`'s extra columns).
+        `before_row` runs right before the row's write: a solver ends its heartbeat there, and the write carries the last sign of life."""
         state = outcome["status"] if outcome.get("status") in STATES[1:] else "stopped"
         if state == "done" and self.store is not None:  # the files outlive this container only in the store (ADR-0050 amendment 2)
             try:
@@ -366,6 +368,9 @@ class CouponJobs:
             outcome = {**outcome, "message": f"the job ended ({outcome.get('message')}) but its run record could not be written: {exc}; "
                                              "its result is withheld", "outputs": {}}
         finished_at = dt.datetime.now(dt.timezone.utc)
+        if before_row is not None:
+            before_row()
+            row = {**row, "heartbeat_at": dt.datetime.now(dt.timezone.utc)}
         if self.table is not None:  # the row first, then this process's state: whoever sees the job ended here finds its row ended too
             progress = job.progress() or {}
             try:
@@ -476,25 +481,36 @@ class CouponJobs:
         return job
 
     def _solve(self, job: Job, source: str, options: list[str]) -> None:
+        """A solver's job: the heartbeat from here to the row's last write, the finish's uploads included, and the running job's files
+        on a thread of their own (ADR-0056 amendment 5), so neither a slow bucket nor the end of the job silences the row."""
         beat = threading.Event()
         beating = threading.Thread(target=self._heartbeat, args=(job, beat), name=f"coupon-heartbeat-{job.id}", daemon=True)
+        filing = threading.Thread(target=self._live_files, args=(job, beat), name=f"coupon-live-files-{job.id}", daemon=True)
         beating.start()
-        try:
-            outcome, requeued = self._solve_steps(job, source, options)
-        except Exception as exc:  # the store, the database or the disk failed around the tool: the job ends with the reason
-            if job.process is not None and job.process.poll() is None:
-                job.process.kill()
-            outcome, requeued = {"status": "stopped", "message": f"the solver could not run the job: {str(exc).splitlines()[0]}", "coupon": None,
-                                 "attempt": None, "outputs": {}}, None
-        finally:
+        filing.start()
+
+        def last_beat() -> None:
+            """The heartbeat's end, right before the row's last write, so no beat lands after it; the filing thread ends on its own."""
             beat.set()
-            beating.join()  # no beat lands on the row after its last write below
-        if requeued is not None:
-            self._requeue(job, requeued)
-            return
-        if job.stop_reason is not None:
-            outcome = {**outcome, "status": "stopped", "message": job.stop_reason, "outputs": {}}
-        self._finish(job, outcome, peak_memory_bytes=peak_memory(), heartbeat_at=dt.datetime.now(dt.timezone.utc))
+            beating.join()
+
+        try:
+            try:
+                outcome, requeued = self._solve_steps(job, source, options)
+            except Exception as exc:  # the store, the database or the disk failed around the tool: the job ends with the reason
+                if job.process is not None and job.process.poll() is None:
+                    job.process.kill()
+                outcome, requeued = {"status": "stopped", "message": f"the solver could not run the job: {str(exc).splitlines()[0]}", "coupon": None,
+                                     "attempt": None, "outputs": {}}, None
+            if requeued is not None:
+                last_beat()
+                self._requeue(job, requeued)
+                return
+            if job.stop_reason is not None:
+                outcome = {**outcome, "status": "stopped", "message": job.stop_reason, "outputs": {}}
+            self._finish(job, outcome, last_beat, peak_memory_bytes=peak_memory())
+        finally:
+            last_beat()  # whatever happened above, the threads end
 
     def _solve_steps(self, job: Job, source: str, options: list[str]) -> tuple[dict, str | None]:
         """Run the tool with the gate; returns the outcome, and the reason when the job goes back to the queue instead."""
@@ -561,28 +577,42 @@ class CouponJobs:
             job.state, job.process = "queued", None
 
     def _heartbeat(self, job: Job, stop: threading.Event) -> None:
-        """Every HEARTBEAT_S while the job runs: the files a browser reads while it runs into the store, and the row's stage, files,
-        log and sign of life. A failed beat is tried again at the next."""
+        """Every HEARTBEAT_S from the claim to the row's last write, the finish's uploads included: the row's sign of life, stage, files,
+        log and where the store keeps the files so far. The write alone, nothing else, so that a slow bucket never delays the sign of
+        life (`_live_files` uploads). A failed beat is tried again at the next; one that takes longer than a beat is reported on the
+        console, since the sweep stops a job silent for SILENT_AFTER (ADR-0056 amendment 5)."""
+        while not stop.wait(HEARTBEAT_S):
+            started = time.monotonic()
+            try:
+                progress = job.progress() or {}
+                with self.lock:
+                    stored = dict(job.stored)
+                update_job(self.table, job.id, heartbeat_at=dt.datetime.now(dt.timezone.utc), stage=progress.get("stage"),
+                           stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), attempt=progress.get("attempt"),
+                           outputs=dict(progress.get("outputs") or {}), stored=stored, log_tail=job.log_tail(), message=progress.get("result"))
+            except Exception as exc:  # the database for a moment: the next beat tries again
+                print(f"coupon job {job.id}: a heartbeat failed: {str(exc).splitlines()[0]}", flush=True)
+            took = time.monotonic() - started
+            if took > HEARTBEAT_S:
+                print(f"coupon job {job.id}: a heartbeat took {took:.1f} s", flush=True)
+
+    def _live_files(self, job: Job, stop: threading.Event) -> None:
+        """Every HEARTBEAT_S while the job runs: the files a browser reads while it runs (LIVE_KEYS) into the store as the tool reports
+        them, each once, apart from the heartbeat (ADR-0056 amendment 5). A failed upload is tried again at the next look."""
         while not stop.wait(HEARTBEAT_S):
             try:
                 progress = job.progress() or {}
                 coupon, attempt = progress.get("coupon"), progress.get("attempt")
-                if coupon and attempt:
-                    for key in LIVE_KEYS:
-                        reported = (progress.get("outputs") or {}).get(key)
-                        if reported and key not in job.stored and self._servable(job, repository_path(reported)):
-                            object_key = store_file(self.store, coupon, Path(attempt).name, key, repository_path(reported))
-                            with self.lock:
-                                job.stored[key] = object_key
-                if stop.is_set():
-                    return
-                with self.lock:
-                    stored = dict(job.stored)
-                update_job(self.table, job.id, heartbeat_at=dt.datetime.now(dt.timezone.utc), stage=progress.get("stage"),
-                           stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), attempt=attempt,
-                           outputs=dict(progress.get("outputs") or {}), stored=stored, log_tail=job.log_tail(), message=progress.get("result"))
-            except Exception as exc:  # the store or the database for a moment: the next beat tries again
-                print(f"coupon job {job.id}: a heartbeat failed: {str(exc).splitlines()[0]}", flush=True)
+                if not (coupon and attempt):
+                    continue
+                for key in LIVE_KEYS:
+                    reported = (progress.get("outputs") or {}).get(key)
+                    if reported and key not in job.stored and self._servable(job, repository_path(reported)):
+                        object_key = store_file(self.store, coupon, Path(attempt).name, key, repository_path(reported))
+                        with self.lock:
+                            job.stored[key] = object_key
+            except Exception as exc:  # the store for a moment: the next look tries again
+                print(f"coupon job {job.id}: a running job's file could not be filed: {str(exc).splitlines()[0]}", flush=True)
 
     # --- the studio tool -------------------------------------------------------------------------------------------------
 
