@@ -31,6 +31,8 @@ from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
 STATES = ("pass", "warn", "fail", "missing", "pending")
 SEVERITY = {"pass": 0, "warn": 1, "fail": 2, "missing": 2}
+SPOOLES_LAYER_BRICKS = 18000  # measured, not a stated limit: 17850 layer bricks (41496 equations) solved, 24000 (55733) failed in SPOOLES, 2026-11-08
+TRANSVERSE_SHEAR_RATIO = 4.0  # G13 or G23 outside G12/4 .. 4 G12 is noted; a tape's G13 is about G12 and its G23 about G12/2 to G12 (MIL-HDBK-17-3F)
 ITEMS = (  # in the order the studio lists them: id, label
     ("identity", "Who and which coupon"),
     ("units", "Units consistent"),
@@ -261,6 +263,14 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             notes.note("units", "pass", f"every row in {units_words(units)}; the results come back in the same units"
                        + (f"; the Abaqus and CalculiX decks are written in {units_words(deck_units)}, as every deck we solve is" if deck_units != units
                           else f", and the decks are written in {units}"))
+        # transverse shear: our membrane never uses G13 and G23, CalculiX's brick does, so a value far from G12 parts the two solvers
+        low, high = material.G12 / TRANSVERSE_SHEAR_RATIO, material.G12 * TRANSVERSE_SHEAR_RATIO
+        odd = [name for name, value in (("G13", material.G13), ("G23", material.G23)) if not low <= value <= high]
+        if odd:
+            shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in odd)
+            notes.note("material", "warn", f"{shown} against G12 = {from_si(material.G12, 'stress', units):g} {lab['stress']}: a transverse shear modulus "
+                       "this far from G12 is unusual for a tape; our membrane does not use it, CalculiX's brick does, so the two will part (on 2026-11-08 a "
+                       "coupon with 100 MPa put CalculiX's reaction 4.6 % from ours, 0.8 % with 4500 MPa)", tuple(row(name) for name in odd))
         # geometry
         size = f"{length(g.length):g} by {length(g.width):g} {lab['length']}"
         if g.tab_length:
@@ -273,8 +283,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         notes.note("geometry", "pass", size)
         # material
         has_strengths = material.strengths is not None
-        notes.note("material", "pass", f"{material.name}: {material.source}; rights class {material.rights}; "
-                   + ("strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
+        if not odd:
+            notes.note("material", "pass", f"{material.name}: {material.source}; rights class {material.rights}; "
+                       + ("strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
         # laminate
         angles = full_angles(spec)
         thickness = length(sum(p.thickness_m for p in plies))
@@ -350,8 +361,14 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         quality = element_quality(mesh.xy, mesh.corners)
         summary = quality_summary(quality)
         counts = f"{mesh.element_count} elements, {mesh.node_count} nodes ({mesh.mesher} mesh, order {mesh.order})"
-        notes.note("mesh", "pass" if summary["acceptable"] else "warn", f"{counts}; {quality_words(summary)}"
-                   + ("" if summary["acceptable"] else "; a mesh past a threshold still solves, but read the results near those elements with care"))
+        bricks = mesh.element_count * len(plies)  # CalculiX expands the S8R twin to one brick per element and ply (ADR-0030)
+        if bricks > SPOOLES_LAYER_BRICKS:
+            notes.note("mesh", "fail", f"{counts}; the CalculiX twin would be {bricks} layer bricks ({mesh.element_count} elements by {len(plies)} plies), past "
+                       f"the {SPOOLES_LAYER_BRICKS} the image's SPOOLES solver is known to order (it failed at 24000 on 2026-11-08, whatever the material); "
+                       "coarsen the mesh or use fewer plies (fea/checks/calculix-conventions.toml)", (row("element_size"), row("mesh_nx")))
+        else:
+            notes.note("mesh", "pass" if summary["acceptable"] else "warn", f"{counts}; {quality_words(summary)}"
+                       + ("" if summary["acceptable"] else "; a mesh past a threshold still solves, but read the results near those elements with care"))
         if spec.mesh.mesher == "gmsh":
             version = gmsh()
             notes.note("mesh", "pass" if version else "fail", f"Gmsh {version} meshes the hole" if version else

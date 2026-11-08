@@ -111,6 +111,19 @@ def pretend_calculix(tool, monkeypatch) -> None:
     monkeypatch.setattr(tool, "setup_checklist", functools.partial(checks.setup_checklist, ccx=lambda: Path("ccx")))
 
 
+def test_a_failing_script_leaves_its_last_words_in_the_message(tool, tmp_path, capsys):
+    failing = tmp_path / "fails.py"
+    failing.write_text("import sys\nprint('written the deck')\nprint('CalculiX failed on job (exit 255): the SPOOLES solver stopped while ordering')\nsys.exit(1)\n",
+                       encoding="utf-8")
+    with pytest.raises(tool.StepFailed) as caught:
+        tool.script("CalculiX", [str(failing)], tmp_path)
+    assert str(caught.value) == "CalculiX: fails.py exited with code 1: CalculiX failed on job (exit 255): the SPOOLES solver stopped while ordering"
+    assert "written the deck" in capsys.readouterr().out  # the script's lines still reach the console as they come
+    passing = tmp_path / "passes.py"
+    passing.write_text("print('fine')\n", encoding="utf-8")
+    tool.script("our engine", [str(passing)], tmp_path)
+
+
 def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):
     pretend_calculix(tool, monkeypatch)
 

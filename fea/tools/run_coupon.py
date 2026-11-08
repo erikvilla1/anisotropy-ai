@@ -168,10 +168,20 @@ def wait_at_gate(gate: Path | None, progress: Progress) -> None:
 
 
 def script(step: str, args: list[str], cwd: Path) -> None:
-    """One of our scripts under this Python, its output straight to the console; a nonzero exit stops the run at `step`."""
-    done = subprocess.run([sys.executable, *args], cwd=cwd, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, check=False)
-    if done.returncode:
-        raise StepFailed(f"{step}: {Path(args[0]).name} exited with code {done.returncode}")
+    """One of our scripts under this Python, its output echoed to the console line by line; a nonzero exit stops the run at `step`,
+    and the message carries the script's own last words, so the job's message says what happened, not only the exit code."""
+    process = subprocess.Popen([sys.executable, *args], cwd=cwd, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+    last = ""
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="", flush=True)
+        if line.strip():
+            last = line.strip()
+    process.wait()
+    if process.returncode:
+        words = f": {last[:300]}" if last else ""
+        raise StepFailed(f"{step}: {Path(args[0]).name} exited with code {process.returncode}{words}")
 
 
 def package(name: str, pdf: bool, theory: bool) -> Path:
@@ -273,7 +283,8 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
          {"kernel_summary": out / "kernel" / "summary.txt", "kernel_vtu": out / "kernel" / f"{name}.vtu", "fields": out / "kernel" / f"{name}-fields.json",
           "explanation": out / "kernel" / f"{name}-explanation.json"}),
         ("CalculiX", [str(paths.FEA / "examples/run_calculix.py"), str(twin), "--out", str(out / "calculix")],
-         {"prepomax_deck": out / "calculix" / f"{name}-nodal-ccx.inp", "prepomax_results": out / "calculix" / f"{name}-nodal-ccx.frd"}),
+         {"prepomax_deck": out / "calculix" / f"{name}-nodal-ccx.inp", "prepomax_results": out / "calculix" / f"{name}-nodal-ccx.frd",
+          "calculix_console": out / "calculix" / f"{name}-nodal-ccx.log", "calculix_status": out / "calculix" / f"{name}-nodal-ccx.sta"}),
         ("the CalculiX record", [str(paths.FEA / "tools/record_from_dat.py"), str(twin), str(out / "calculix" / f"{name}-nodal-ccx.dat"),
                                  "--version", version, "--run-by", run_by, "--machine", machine, "--tolerance", str(TOLERANCE), "--floor", str(FLOOR),
                                  "--node-probes", *nodes, "--element-probes", *elements, "--notes", notes, "--out", str(record)],
@@ -284,8 +295,10 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     try:
         for step, args, made in steps:
             progress.start(step)
-            script(step, args, paths.FEA)
-            progress.made(**made)
+            try:
+                script(step, args, paths.FEA)
+            finally:
+                progress.made(**made)  # what the step wrote stays reported, a failed step's deck and console included
         progress.start("the package")
         delivered = package(name, pdf, theory)
         progress.made(package=delivered)
@@ -318,6 +331,7 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     add_row(folder, [f"{number:02d}", day, what, result, "package written" if pdf else "package written without its PDF", evidence])
     refresh_page(folder)
     outputs = {key: path for key, _, path in opens}
+    progress.outputs = {key: path for key, path in progress.outputs.items() if key in outputs or key in ("checklist", "preview")}  # the console and status files are kept only for a run that failed
     progress.made(**outputs)
     print(f"\nDone: attempt {number:02d} of {name}; its row is in {rel(folder / 'README.md')}. {result}.")
     for _, label, path in opens:

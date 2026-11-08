@@ -41,3 +41,16 @@ pressure_direction = "along the element normal (+z for counterclockwise nodes): 
 # a set of shell nodes do not hold every force that balances the load (the expanded nodes of the shell's knots carry the rest; the cause is
 # UNVERIFIED). A reaction total read from a shell node set is read with that in mind; the kernel's reactions balance the load to roundoff.
 shell_set_totals = "may under-report (1.666667 N printed of 2 N applied on the detection plate)"
+
+# The equation solvers. Ubuntu 24.04's calculix-ccx 2.21 (the hosted image) links SPOOLES and the iterative solver only: *STATIC, SOLVER=PASTIX
+# and SOLVER=PARDISO answer "*ERROR in linstatic: the PASTIX/PARDISO library is not linked" (run in the image, 2026-11-08). PrePoMax v2.6.0's
+# ccx 2.22 on Windows runs PaStiX by default and SPOOLES on request. SPOOLES stopped with "fatal error in GPart_makeYCmap ... bad input" on a
+# 4000-element S8R unnotched coupon of 6 plies (24,000 layer bricks, 55,733 equations) in both builds, with G13 = G23 = 100 MPa and with
+# 4,500 MPa alike; it ordered the same coupon at 2975 elements (17,850 bricks, 41,496 equations), 2250 and 1000, and the public coupon
+# (1500 by 8 = 12,000). PaStiX solved the 4000-element deck in 1.4 s. The iterative solver (SOLVER=ITERATIVE CHOLESKY) ended with the two
+# grips' totals 4 % apart (109,566 N against 105,083 N), so it is not a fallback. The setup check refuses a twin past the measured bound
+# (anisotropy_fea.checks.SPOOLES_LAYER_BRICKS); the failure's text is diagnosed in anisotropy_fea.calculix.KNOWN_FATALS.
+image_solvers = ["SPOOLES", "ITERATIVE"]
+spooles_layer_bricks_solved = 17850
+spooles_layer_bricks_failed = 24000
+spooles_fatal_text = "fatal error in GPart_makeYCmap ... bad input"

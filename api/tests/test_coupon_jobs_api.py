@@ -44,8 +44,10 @@ progress = {"stage": "our engine", "done": ["the setup check", "the input", "the
             "outputs": {"fields": str(fields), "outside": str(outside)}, "coupon": "IM7-UNT-L1", "attempt": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-27"}
 pathlib.Path(args.progress).write_text(json.dumps(progress), encoding="utf-8")
 if args.source == "STOPS":
+    console = result.parent / "STOPS-nodal-ccx.log"
+    console.write_text(" fatal error in GPart_makeYCmap\n bad input\n", encoding="utf-8")
     result.write_text(json.dumps({"status": "stopped", "message": "stopped at CalculiX: run_calculix.py exited with code 1",
-                                  "coupon": "STOPS", "attempt": ".local/fea/STOPS/ours/runs/attempt-02_2026-10-27", "outputs": {}}))
+                                  "coupon": "STOPS", "attempt": ".local/fea/STOPS/ours/runs/attempt-02_2026-10-27", "outputs": {"calculix_console": str(console)}}))
     sys.exit(1)
 if args.source == "CRASHES":
     print("Traceback: something broke", flush=True)
@@ -118,7 +120,8 @@ def test_one_job_runs_at_a_time(jobs):
 def test_a_stopped_run_says_where_and_has_no_package(jobs):
     job_id = client.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"]
     body = ended(job_id)
-    assert body["state"] == "stopped" and body["message"] == "stopped at CalculiX: run_calculix.py exited with code 1" and body["outputs"] == {}
+    assert body["state"] == "stopped" and body["message"] == "stopped at CalculiX: run_calculix.py exited with code 1"
+    assert list(body["outputs"]) == ["calculix_console"]  # a stopped run keeps the files it made, the solver's console among them
     package = client.get(f"/v1/coupon-jobs/{job_id}/package")
     assert package.status_code == 409 and "stopped at CalculiX" in package.json()["detail"]
 
@@ -392,6 +395,18 @@ def test_while_a_job_runs_its_files_come_from_the_disk(tmp_path, monkeypatch):
     assert fields.status_code == 200 and fields.json() == {"summary": {"reaction": {"value": 1.0}}}  # served from the disk, no link yet
     (registry.root / "release").touch()
     assert ended(started["job_id"])["state"] == "done"
+
+
+def test_a_stopped_runs_files_go_to_the_store_too(tmp_path, monkeypatch):
+    # the deck, the console and the status file of a run CalculiX stopped outlive the solver's container, so the fault can be read (ADR-0030 amendment 5)
+    store = MemoryStore()
+    registry = storing_registry(tmp_path, store, monkeypatch)
+    stopped = ended(client.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"])
+    assert stopped["state"] == "stopped" and list(stopped["outputs"]) == ["calculix_console"]
+    key = "coupons/STOPS/attempt-02_2026-10-27/files/calculix_console/STOPS-nodal-ccx.log"
+    assert key in store.objects and registry.get(_uuid.UUID(stopped["job_id"])).stored == {"calculix_console": key}
+    console = client.get(f"/v1/coupon-jobs/{stopped['job_id']}/files/calculix_console", follow_redirects=False)
+    assert console.status_code == 307 and console.headers["location"] == f"https://store.test/{key}?expires=600"
 
 
 def test_a_store_that_fails_stops_the_job_and_withholds_its_result(tmp_path, monkeypatch):

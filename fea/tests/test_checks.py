@@ -161,6 +161,27 @@ def test_a_modulus_in_the_wrong_unit_warns(tmp_path):
     assert items["units"].rows == ("Own material: E1 (MPa)", "Own material: E2 (MPa)", "Own material: G12 (MPa)") and checked.state == "ready"
 
 
+def test_a_twin_too_large_for_spooles_fails_the_mesh(tmp_path):
+    # 2026-11-08: a 4000-element, 6-ply coupon (24,000 layer bricks) stopped SPOOLES in both CalculiX 2.21 and 2.22; 2975 by 6 solved.
+    # The public coupon's mesh with 24 elements across instead of 12: 2400 elements by 8 plies = 19,200 bricks, past the measured 18,000
+    checked, model, _ = checklist(tmp_path, PUBLIC_FILL, mesh_nx=24)
+    items = by_id(checked)
+    assert checked.state == "blocked" and model is not None and items["mesh"].state == "fail"  # the model builds; the twin is what SPOOLES cannot order
+    assert "layer bricks" in items["mesh"].message and "SPOOLES" in items["mesh"].message and "coarsen the mesh" in items["mesh"].message
+    assert items["mesh"].rows == ("Element size (mm)", "Your Abaqus mesh: elements across the width")
+    fine, _, _ = checklist(tmp_path, PUBLIC_FILL)  # 1200 by 8 = 9600 bricks, within what SPOOLES ordered
+    assert by_id(fine)["mesh"].state == "pass"
+
+
+def test_a_transverse_shear_modulus_far_from_g12_warns(tmp_path):
+    # the form that stopped on 2026-11-08 gave G13 = G23 = 100 MPa (G12 about 4,900 MPa): CalculiX's brick uses them, our membrane does not
+    checked, _, _ = checklist(tmp_path, PUBLIC_FILL, G13=100.0, G23=100.0)
+    items = by_id(checked)
+    assert checked.state == "ready" and items["material"].state == "warn"
+    assert items["material"].message.startswith("G13 = 100 MPa, G23 = 100 MPa against G12 = ") and "our membrane does not use it" in items["material"].message
+    assert items["material"].rows == ("G13 (MPa)", "G23 (MPa)")
+
+
 def test_constants_the_engine_refuses_fail_the_material(tmp_path):
     checked, model, _ = checklist(tmp_path, PUBLIC_FILL, **{**own_constants(), "own_E1": 162.0})  # E1 alone in GPa: nu12^2 < E1/E2 no longer holds
     items = by_id(checked)
