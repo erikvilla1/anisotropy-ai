@@ -5,7 +5,11 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 ## [Unreleased]
 
 ### Fixed
+<<<<<<< HEAD
 - A hosted coupon job is no longer stopped as silent while its solver still works (ADR-0056 amendment 5): the solver's heartbeat writes the row alone, from the claim to the row's last write, the end's uploads included; the running job's files go to the bucket on a thread of their own; every database connection carries TCP keepalives and a 30 s user timeout, and the bucket client 10 s to connect and 30 s to read per try; the coupon folder's upload at a job's end sends only the files that changed.
+=======
+- The coupon fact sheet keeps each measured value at the four significant figures the sentences print, so a model that copies the sheet no longer writes a number such as 16211.1968902878 N (ADR-0052 amendment 1, `fea/src/anisotropy_fea/explain.py`); the browser fixtures' explanation files carry the same digits.
+>>>>>>> origin/main
 - The workspace asks again for a job's status or its fields when one answer is missed (two seconds later, up to ten times per job; `components/studio/use-coupon-run.ts`): on the hosted site one read of the fields through the Worker went unanswered and the page stayed without results while the job was done. The browser stand-in fails the first read on purpose. The live site's findings of the evening are in `docs/evaluations/website/2026-11-05-beta-launch-checks.md`.
 
 ### Added
