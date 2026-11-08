@@ -10,7 +10,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from anisotropy_api.main import app
-from anisotropy_api.records import ACTORS, Run, check_ready, connect
+from anisotropy_api.records import ACTORS, CONNECT_TIMEOUT_S, KEEPALIVE, Run, check_ready, connect
 from anisotropy_api.settings import DATABASE_VARIABLE, RECORDING_VARIABLE
 from conftest import TEST_URL, alembic_config, needs_test_database
 
@@ -141,6 +141,19 @@ def test_check_ready_needs_the_table(engine):
             check_ready(engine)
     finally:
         command.upgrade(alembic_config(TEST_URL), "head")
+
+
+def test_the_pool_connects_with_the_keepalive_parameters(engine):
+    """libpq takes the keepalive parameters (ADR-0056 amendment 5) and the pool's connections carry them."""
+    pool = connect(TEST_URL)
+    try:
+        with pool.connect() as connection:
+            assert connection.execute(text("SELECT 1")).scalar() == 1
+            parameters = connection.connection.dbapi_connection.info.get_parameters()
+        assert parameters.get("connect_timeout") == str(CONNECT_TIMEOUT_S)
+        assert {key: parameters.get(key) for key in KEEPALIVE} == {key: str(value) for key, value in KEEPALIVE.items()}
+    finally:
+        pool.dispose()
 
 
 def test_check_ready_names_an_unreachable_server_without_the_password():
