@@ -144693,7 +144693,9 @@
   },
   "equilibrium_residual": 2.2039259306438908e-11,
   "free_residual": 2.6707525080382766e-12,
-  "earliest": "tsai_hill"
+  "earliest": "tsai_hill",
+  "fpf_gauge": {},
+  "earliest_gauge": null
  },
  "quality": {
   "elements": 180,

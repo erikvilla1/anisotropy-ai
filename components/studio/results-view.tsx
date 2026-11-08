@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type Fields, type JobStatus, type Preview } from "@/lib/studio-api";
+import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
+  type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
 import { legendGradient, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
@@ -26,17 +27,22 @@ export function Legend({ scale, label, unit, by, bands = 0 }: { scale: Scale; la
 }
 
 const xyz = (p: number[] | undefined) => (p && p.length === 3 ? ` (${p.map((v) => printed(v)).join(", ")})` : "");
+/** The ply stress components as the fields name them (the team's CAE names), said with their symbols. */
+const COMPONENT: Record<string, string> = { S11: "σ₁ along the fibres", S22: "σ₂ across the fibres", S12: "τ₁₂ in-plane shear" };
 
 export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
   const s = fields.summary, lab = fields.labels, cx = s.calculix ?? null;
-  const peaks = Object.entries(s.max_ply).filter(([name]) => name !== "mises");  // the ply von Mises row is gone: a viewer's von Mises is another quantity (ADR-0030 amendment 6)
+  const fibre = s.max_ply.S11;
+  const others = Object.entries(s.max_ply).filter(([name]) => name !== "mises" && name !== "S11");  // the ply von Mises row is gone: a viewer's von Mises is another quantity (ADR-0030 amendment 6)
+  const place = (m: Extreme) => <>in ply {m.ply} ({m.angle}°){m.face ? `, ${m.face} face,` : ""} at element {m.label.split(".").pop()}</>;
   return (
     <div className="studio-panel" data-testid="summary">
       <h3>Summary</h3>
+      <p className="studio-muted" data-testid="summary-who">Result: Anisotropy. Check: CalculiX, run on the same coupon; its results are the <code>.frd</code> under Files, which PrePoMax opens.</p>
       <dl className="studio-summary">
         <div><dt>Applied</dt><dd>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}{s.applied.direction ? `, ${s.applied.direction}` : ""}</dd></div>
         <div><dt>Reaction at {s.reaction.set}</dt><dd data-testid="summary-reaction">{printed(Math.abs(s.reaction.value))} {lab.force} ({s.reaction.sense})
-          {cx?.reaction ? <span data-testid="summary-reaction-calculix">; CalculiX&apos;s twin {printed(Math.abs(cx.reaction.calculix))} {lab.force}, ours {cx.reaction.difference} from it</span> : null}</dd></div>
+          {cx?.reaction ? <span data-testid="summary-reaction-calculix">; CalculiX {printed(Math.abs(cx.reaction.calculix))} {lab.force}, Anisotropy {cx.reaction.difference} from it</span> : null}</dd></div>
         <div><dt>Largest displacement</dt><dd>{printed(s.max_displacement.value)} {lab.length} at node {s.max_displacement.label.split(".").pop()}
           {s.max_displacement.axis === "z" ? " (the deflection w)" : ""}</dd></div>
       </dl>
@@ -44,7 +50,7 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
         <>
           <h4>Gauge section, where the two solvers agree</h4>
           <table className="studio-table" data-testid="gauge-table">
-            <thead><tr><th>Ply</th><th>S11 ours / CalculiX</th><th>S22 ours / CalculiX</th><th>S12 ours / CalculiX</th></tr></thead>
+            <thead><tr><th>Ply</th><th>σ₁ along the fibres</th><th>σ₂ across the fibres</th><th>τ₁₂ shear</th></tr></thead>
             <tbody>
               {cx.gauge.map((g) => (
                 <tr key={g.ply} data-ply={g.ply}><td>{g.ply} ({fields.mesh.angles[g.ply - 1]}°)</td>
@@ -53,49 +59,72 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
               ))}
             </tbody>
           </table>
-          <p className="studio-muted">Ply stresses in each ply&apos;s fibre axes ({lab.stress}) at the centre element {cx.gauge_element?.split(".").pop()}: ours at the centroid, CalculiX&apos;s
-            averaged over its integration points (the record {cx.record}, {cx.agree} values within {printed(100 * cx.tolerance)} %). A ✕ marks a value outside the tolerance.</p>
+          <p className="studio-muted">Each cell is Anisotropy / CalculiX, in {lab.stress}, at the centre element {cx.gauge_element?.split(".").pop()}: Anisotropy at the element&apos;s centroid, CalculiX
+            averaged over its integration points. The record {cx.record} holds {cx.agree} values within {printed(100 * cx.tolerance)} %; a ✕ marks one outside.</p>
         </>
       ) : null}
       <h4>Peaks at the tab line</h4>
       <dl className="studio-summary">
-        {peaks.map(([name, m]) => (
-          <div key={name}><dt>Largest ply {name}, ours</dt>
-            <dd>{printed(m.value)} {lab.stress} in ply {m.ply} ({m.angle}°){m.face ? `, ${m.face} face,` : ""} at element {m.label.split(".").pop()}
+        {fibre ? (
+          <div data-testid="summary-fibre-peak"><dt>Largest σ₁ along the fibres</dt>
+            <dd>{printed(fibre.value)} {lab.stress} {place(fibre)}
+              <button type="button" className="studio-text-button" onClick={() => onShow(fibre.element, fibre.ply, s.earliest ?? "", fibre.face)}>show</button>
+              {cx?.frd ? <span data-testid="summary-fibre-calculix">; CalculiX puts σyy = {printed(cx.frd.syy_max)} {lab.stress} at the corner node {cx.frd.syy_max_node}{xyz(cx.frd.syy_max_xyz as number[] | undefined)}: a clamped
+                edge, so the element&apos;s average and the corner node differ, and both grow as the mesh is refined</span> : null}</dd></div>
+        ) : null}
+        {others.map(([name, m]) => (
+          <div key={name}><dt>Largest {COMPONENT[name] ?? name}</dt>
+            <dd>{printed(m.value)} {lab.stress} {place(m)}
               <button type="button" className="studio-text-button" onClick={() => onShow(m.element, m.ply, s.earliest ?? "", m.face)}>show</button></dd></div>
         ))}
         {cx?.frd ? (
           <>
-            <div data-testid="summary-frd-mises"><dt>von Mises, CalculiX in PrePoMax</dt><dd>{printed(cx.frd.mises_max)} {lab.stress} at node {cx.frd.mises_max_node}{xyz(cx.frd.mises_max_xyz)}</dd></div>
-            <div><dt>SYY along the coupon, CalculiX in PrePoMax</dt><dd>{printed(cx.frd.syy_max)} {lab.stress} at node {cx.frd.syy_max_node}{xyz(cx.frd.syy_max_xyz as number[] | undefined)}</dd></div>
-            <div><dt>SXX across the width, CalculiX in PrePoMax</dt><dd>{printed(cx.frd.sxx_min)} to {printed(cx.frd.sxx_max)} {lab.stress}</dd></div>
-            {typeof cx.frd.gauge_mises_max === "number" ? <div><dt>In the gauge section, CalculiX in PrePoMax</dt><dd>von Mises {printed(cx.frd.gauge_mises_max)}, SYY {printed(cx.frd.gauge_syy_max as number)} {lab.stress}</dd></div> : null}
+            <div data-testid="summary-frd-mises"><dt>Largest von Mises, CalculiX</dt><dd>{printed(cx.frd.mises_max)} {lab.stress} at node {cx.frd.mises_max_node}{xyz(cx.frd.mises_max_xyz)}</dd></div>
+            <div><dt>Transverse stress at the grips, CalculiX</dt><dd>σxx from {printed(cx.frd.sxx_min)} to {printed(cx.frd.sxx_max)} {lab.stress} (PrePoMax labels it S11)</dd></div>
+            {typeof cx.frd.gauge_mises_max === "number" ? <div><dt>Gauge section, CalculiX</dt><dd>largest σyy {printed(cx.frd.gauge_syy_max as number)}, von Mises {printed(cx.frd.gauge_mises_max)} {lab.stress}</dd></div> : null}
           </>
         ) : null}
       </dl>
-      <p className="studio-muted">Ours are each ply&apos;s stresses in its fibre axes at element centroids. CalculiX&apos;s are what PrePoMax shows of the `.frd`: global axes
-        (its S11 is SXX, across the width), one brick per ply, values extrapolated to the nodes, a three-dimensional von Mises. Both peak where a gripped
-        tab ends, a clamped edge whose stress grows as the mesh is refined; the gauge section is where the two solvers agree.</p>
+      <p className="studio-muted">Anisotropy&apos;s values are each ply&apos;s stresses in its own fibre axes (σ₁, σ₂, τ₁₂) at element centroids. CalculiX&apos;s are what PrePoMax shows of
+        the <code>.frd</code>: the global axes (σxx across the width, σyy along the coupon), one brick per ply, values extrapolated to the nodes, a three-dimensional von Mises.
+        Both peak where a gripped tab ends, a clamped edge whose stress grows as the mesh is refined; the gauge section is where the two agree.</p>
       <h4>First-ply failure</h4>
       {Object.keys(s.fpf).length === 0 ? <p className="studio-muted">No failure criterion was asked for.</p> : (
-        <table className="studio-table" data-testid="fpf-table">
-          <thead><tr><th>Criterion</th><th>Factor R</th><th>Index 1/R</th><th>Ply</th><th>Mode</th><th>Where</th><th></th></tr></thead>
-          <tbody>
-            {Object.entries(s.fpf).sort(([, a], [, b]) => a.factor - b.factor).map(([criterion, f]) => (
-              <tr key={criterion} data-criterion={criterion} className={criterion === s.earliest ? "studio-earliest" : undefined}>
-                <td>{criterion.replace("_", " ")}{criterion === s.earliest ? " (earliest)" : ""}</td>
-                <td data-testid={`fpf-factor-${criterion}`}>{printed(f.factor)}</td><td>{printed(f.index)}</td>
-                <td>{f.ply} ({f.angle}°){f.face ? `, ${f.face} face` : ""}{f.tied_plies.length > 1 ? `, tied ${f.tied_plies.join(", ")}` : ""}</td>
-                <td>{f.mode}</td><td>element {f.label.split(".").pop()}, {f.place}</td>
-                <td><button type="button" className="studio-text-button" onClick={() => onShow(f.element, f.ply, criterion, f.face)}>show</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <FailureTable fpf={s.fpf} earliest={s.earliest} testId="fpf-table" factorPrefix="fpf-factor" onShow={onShow} />
       )}
       <p className="studio-muted">R is the factor on the applied loading at which the first ply fails; the failure index is 1/R. Below 1, the loading of the model is past first-ply failure.
-        {s.earliest && s.fpf[s.earliest]?.touches_grip ? " The critical element touches a gripped tab, where the stress is not expected to settle as the mesh is refined." : ""}</p>
+        {s.earliest && s.fpf[s.earliest]?.touches_grip ? " The critical element touches a gripped tab: the clamped edge, not the gauge section, where the stress is not expected to settle as the mesh is refined." : ""}</p>
+      {s.fpf_gauge && Object.keys(s.fpf_gauge).length ? (
+        <>
+          <h4>First-ply failure in the gauge section</h4>
+          <FailureTable fpf={s.fpf_gauge} earliest={s.earliest_gauge ?? null} testId="fpf-gauge-table" factorPrefix="fpf-gauge-factor" onShow={onShow} />
+          <p className="studio-muted">The same criteria over the gauge section alone, the elements away from the gripped tabs&apos; clamped edge: the factor a test coupon, which breaks in its gauge
+            section, is compared with.</p>
+        </>
+      ) : null}
     </div>
+  );
+}
+
+function FailureTable({ fpf, earliest, testId, factorPrefix, onShow }: {
+  fpf: Record<string, FirstPlyFailure>; earliest: string | null; testId: string; factorPrefix: string;
+  onShow: (element: number, ply: number, criterion: string, face?: string | null) => void;
+}) {
+  return (
+    <table className="studio-table" data-testid={testId}>
+      <thead><tr><th>Criterion</th><th>Factor R</th><th>Index 1/R</th><th>Ply</th><th>Mode</th><th>Where</th><th></th></tr></thead>
+      <tbody>
+        {Object.entries(fpf).sort(([, a], [, b]) => a.factor - b.factor).map(([criterion, f]) => (
+          <tr key={criterion} data-criterion={criterion} className={criterion === earliest ? "studio-earliest" : undefined}>
+            <td>{criterion.replace("_", " ")}{criterion === earliest ? " (earliest)" : ""}</td>
+            <td data-testid={`${factorPrefix}-${criterion}`}>{printed(f.factor)}</td><td>{printed(f.index)}</td>
+            <td>{f.ply} ({f.angle}°){f.face ? `, ${f.face} face` : ""}{f.tied_plies.length > 1 ? `, tied ${f.tied_plies.join(", ")}` : ""}</td>
+            <td>{f.mode}</td><td>element {f.label.split(".").pop()}, {f.place}</td>
+            <td><button type="button" className="studio-text-button" onClick={() => onShow(f.element, f.ply, criterion, f.face)}>show</button></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

@@ -105,6 +105,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByTestId("studio-scene").locator("canvas").evaluate((canvas) => { canvas.dataset.kept = "yes"; });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
+  await expect(page.getByTestId("fpf-gauge-factor-tsai_hill")).toHaveText("1.032");  // the gauge section's own first-ply failure, away from the clamped edge
   await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "template", { timeout: 15_000 }); // the API answered the explain call
   // the result before the documents (ADR-0064): the agreement line while the job still draws and builds the package

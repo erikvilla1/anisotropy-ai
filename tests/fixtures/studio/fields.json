@@ -80522,7 +80522,50 @@
   },
   "equilibrium_residual": 1.5988916857168078e-09,
   "free_residual": 6.912159733474255e-11,
-  "earliest": "tsai_hill"
+  "earliest": "tsai_hill",
+  "fpf_gauge": {
+   "max_stress": {
+    "factor": 1.0570203423711104,
+    "index": 0.9460555865526653,
+    "element": 182,
+    "label": "Strip-1.183",
+    "ply": 4,
+    "angle": 90.0,
+    "face": null,
+    "mode": "transverse tension",
+    "place": "12 mm from the nearer tab line",
+    "touches_grip": false,
+    "tied_plies": [
+     4,
+     5
+    ],
+    "xy": [
+     12.5,
+     181.6785714
+    ]
+   },
+   "tsai_hill": {
+    "factor": 1.0320569813947693,
+    "index": 0.9689387485645937,
+    "element": 182,
+    "label": "Strip-1.183",
+    "ply": 4,
+    "angle": 90.0,
+    "face": null,
+    "mode": "interactive",
+    "place": "12 mm from the nearer tab line",
+    "touches_grip": false,
+    "tied_plies": [
+     4,
+     5
+    ],
+    "xy": [
+     12.5,
+     181.6785714
+    ]
+   }
+  },
+  "earliest_gauge": "tsai_hill"
  },
  "quality": {
   "elements": 250,
