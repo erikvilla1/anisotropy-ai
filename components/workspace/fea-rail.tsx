@@ -187,7 +187,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
             {available.map(([key, label]) => <li key={key}><a href={fileUrl(apiBaseUrl, job.job_id, key)} target="_blank" rel="noreferrer">{label}</a></li>)}
             <li><a href={`/workspace/fea/view?job=${encodeURIComponent(job.job_id)}`} target="_blank" rel="noreferrer">The viewer in a new window</a></li>
           </ul>
-        ) : <p className="studio-hint">The package, the decks, the record and the PDF appear here as the run writes them.</p>}
+        ) : <p className="studio-hint">The package, its PDF, the decks and the CalculiX results appear here as the run writes them.</p>}
       </StepPanel>
 
       <StepPanel id="advanced" title="Advanced: every other row" open={false} note="names, codes, the Abaqus names">

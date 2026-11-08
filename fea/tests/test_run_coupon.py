@@ -62,6 +62,8 @@ def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
     assert progress["stage"] == "the outputs" and progress["done"] == list(tool.STAGES[:-1]) and progress["coupon"] == DESIGNATION
     assert set(progress["outputs"]) == set(outcome.outputs) and progress["attempt"].endswith(attempt.name)
+    assert progress["result"] == outcome.result and outcome.documents == "written"  # the result was reported before the documents (ADR-0064)
+    assert all((out / "kernel" / f"{DESIGNATION}{suffix}").is_file() for suffix in ("-model.png", "-solved.png", ".vtu"))  # drawn after it
     fields = json.loads((out / "kernel" / f"{DESIGNATION}-fields.json").read_text(encoding="utf-8"))
     assert fields["summary"]["reaction"]["value"] > 0 and json.loads((out / "studio" / "checklist.json").read_text(encoding="utf-8"))["state"] == "ready"
     assert attempt.parent == paths.runs(DESIGNATION) and attempt.name.startswith("attempt-02_")  # row 01 is the form's reading
@@ -171,7 +173,7 @@ def test_a_gated_run_waits_once_the_coupon_is_named_and_before_its_attempt(tool,
     assert paths.ours(DESIGNATION).joinpath(f"{DESIGNATION}.toml").is_file() and not paths.runs(DESIGNATION).exists()
     gate.write_text("go", encoding="utf-8")
     worker.join(60)
-    assert isinstance(failure[0], tool.StepFailed) and "the package" in str(failure[0])
+    assert isinstance(failure[0], tool.StepFailed) and "the result" in str(failure[0])  # the stand-in steps wrote nothing
     after = json.loads(progress_path.read_text(encoding="utf-8"))
     assert after["held"] is False and after["attempt"].split("/")[-1].startswith("attempt-02")
 
@@ -212,3 +214,58 @@ def test_the_record_is_made_as_the_case_page_says(tool, tmp_path, kind, probes):
     record_command = next(c for c in next_commands(tmp_path / DESIGNATION, DESIGNATION, kind) if "record_from_dat.py" in c)
     assert f"--tolerance {tool.TOLERANCE} --floor {tool.FLOOR}" in record_command and probes in record_command
     assert set(tool.LEFT_OUT) == {"open_hole_tension", None}
+
+
+def stand_in_steps(tool, monkeypatch, seen: dict) -> None:
+    """Every script step writes the files its step names, and the package fails: what the run must report, and when."""
+    def script(step, args, cwd):
+        out = Path(args[args.index("--out") + 1])
+        name = Path(args[1]).stem.removesuffix("-nodal")
+        files = {"our engine": ["summary.txt", f"{name}-fields.json", f"{name}-explanation.json"],
+                 "CalculiX": [f"{name}-nodal-ccx.inp", f"{name}-nodal-ccx.frd"], "the drawings": [f"{name}.vtu"]}.get(step)
+        targets = [out / f for f in files] if files else [out]
+        for target in targets:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("stand-in", encoding="utf-8")
+        seen.setdefault("steps", []).append(step)
+
+    def package(name, pdf, theory):
+        seen["result when the package started"] = json.loads(seen["progress"].read_text(encoding="utf-8"))["result"]
+        raise tool.StepFailed("the package: Tectonic stopped")
+
+    monkeypatch.setattr(tool, "script", script)
+    monkeypatch.setattr(tool, "package", package)
+    monkeypatch.setattr(tool, "outcome_line", lambda folder: "57 of 57 recorded values agree with CalculiX")
+    monkeypatch.setattr(tool, "refresh_page", lambda folder: None)  # the stand-in record is no record the case page can read
+
+
+def test_the_result_is_reported_before_the_documents_and_a_failed_package_leaves_it_standing(tool, tmp_path, monkeypatch):
+    """ADR-0064: the progress says the result once the solve and the record are done, before the drawings and the package; a package
+    that fails after it is reported on the row and in the outcome, and the run ends done."""
+    pretend_calculix(tool, monkeypatch)
+    seen = {"progress": tmp_path / "progress.json"}
+    stand_in_steps(tool, monkeypatch, seen)
+    outcome = tool.run(str(public_values(tmp_path)), "A. Engineer", pdf=True, progress=tool.Progress(seen["progress"]))
+    assert seen["steps"] == ["our engine", "CalculiX", "the CalculiX record", "the drawings"]
+    assert seen["result when the package started"] == "57 of 57 recorded values agree with CalculiX"
+    assert outcome.result == "57 of 57 recorded values agree with CalculiX" and outcome.result_at is not None
+    assert outcome.documents.startswith("the package not written (the package: Tectonic stopped)")
+    assert {"fields", "explanation", "record", "kernel_summary", "kernel_vtu"} <= set(outcome.outputs) and "package" not in outcome.outputs
+    row = next(line for line in (paths.LOCAL / DESIGNATION / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 02 |"))
+    assert "57 of 57 recorded values agree with CalculiX" in row and "the package not written" in row and "stopped at" not in row
+    progress = json.loads(seen["progress"].read_text(encoding="utf-8"))
+    assert progress["stage"] == "the outputs" and progress["done"] == list(tool.STAGES[:-1])
+
+
+def test_the_outcome_file_keeps_the_result_apart_from_a_missing_document(tool, tmp_path, monkeypatch):
+    """What the API's coupon jobs read once the run ends (ADR-0050, ADR-0064): done, the result, and what is missing."""
+    pretend_calculix(tool, monkeypatch)
+    seen = {"progress": tmp_path / "progress.json"}
+    stand_in_steps(tool, monkeypatch, seen)
+    result = tmp_path / "outcome.json"
+    monkeypatch.setattr("sys.argv", ["run_coupon.py", str(public_values(tmp_path)), "--run-by", "A. Engineer", "--result", str(result),
+                                     "--progress", str(seen["progress"])])
+    tool.main()
+    outcome = json.loads(result.read_text(encoding="utf-8"))
+    assert outcome["status"] == "done" and outcome["result"] == "57 of 57 recorded values agree with CalculiX"
+    assert outcome["documents"].startswith("the package not written") and outcome["message"] == f"{outcome['result']}; {outcome['documents']}"
