@@ -80565,7 +80565,389 @@
     ]
    }
   },
-  "earliest_gauge": "tsai_hill"
+  "earliest_gauge": "tsai_hill",
+  "ply_peaks": [
+   {
+    "ply": 1,
+    "angle": 45.0,
+    "S11": {
+     "value": 707.5741160535283,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S22": {
+     "value": 44.140583619145424,
+     "element": 194,
+     "label": "Coupon-1.195",
+     "xy": [
+      22.500000000000004,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S12": {
+     "value": -45.86112822501163,
+     "element": 177,
+     "label": "Coupon-1.178",
+     "xy": [
+      12.5,
+      176.75
+     ],
+     "face": null,
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 2,
+    "angle": 0.0,
+    "S11": {
+     "value": 1202.8205641663149,
+     "element": 177,
+     "label": "Coupon-1.178",
+     "xy": [
+      12.5,
+      176.75
+     ],
+     "face": null,
+     "touches_grip": false
+    },
+    "S22": {
+     "value": 13.156921380468894,
+     "element": 192,
+     "label": "Coupon-1.193",
+     "xy": [
+      12.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S12": {
+     "value": 11.461628885777195,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    }
+   },
+   {
+    "ply": 3,
+    "angle": -45.0,
+    "S11": {
+     "value": 707.5741160535226,
+     "element": 194,
+     "label": "Coupon-1.195",
+     "xy": [
+      22.500000000000004,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S22": {
+     "value": 44.14058361914578,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S12": {
+     "value": 45.86112822501163,
+     "element": 177,
+     "label": "Coupon-1.178",
+     "xy": [
+      12.5,
+      176.75
+     ],
+     "face": null,
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 4,
+    "angle": 90.0,
+    "S11": {
+     "value": -364.8374000192415,
+     "element": 172,
+     "label": "Coupon-1.173",
+     "xy": [
+      12.5,
+      171.8214286
+     ],
+     "face": null,
+     "touches_grip": false
+    },
+    "S22": {
+     "value": 62.33378038379942,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S12": {
+     "value": -11.46162888577719,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    }
+   },
+   {
+    "ply": 5,
+    "angle": 90.0,
+    "S11": {
+     "value": -364.8374000192415,
+     "element": 172,
+     "label": "Coupon-1.173",
+     "xy": [
+      12.5,
+      171.8214286
+     ],
+     "face": null,
+     "touches_grip": false
+    },
+    "S22": {
+     "value": 62.33378038379942,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S12": {
+     "value": -11.46162888577719,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    }
+   },
+   {
+    "ply": 6,
+    "angle": -45.0,
+    "S11": {
+     "value": 707.5741160535226,
+     "element": 194,
+     "label": "Coupon-1.195",
+     "xy": [
+      22.500000000000004,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S22": {
+     "value": 44.14058361914578,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S12": {
+     "value": 45.86112822501163,
+     "element": 177,
+     "label": "Coupon-1.178",
+     "xy": [
+      12.5,
+      176.75
+     ],
+     "face": null,
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 7,
+    "angle": 0.0,
+    "S11": {
+     "value": 1202.8205641663149,
+     "element": 177,
+     "label": "Coupon-1.178",
+     "xy": [
+      12.5,
+      176.75
+     ],
+     "face": null,
+     "touches_grip": false
+    },
+    "S22": {
+     "value": 13.156921380468894,
+     "element": 192,
+     "label": "Coupon-1.193",
+     "xy": [
+      12.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S12": {
+     "value": 11.461628885777195,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    }
+   },
+   {
+    "ply": 8,
+    "angle": 45.0,
+    "S11": {
+     "value": 707.5741160535283,
+     "element": 190,
+     "label": "Coupon-1.191",
+     "xy": [
+      2.5,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S22": {
+     "value": 44.140583619145424,
+     "element": 194,
+     "label": "Coupon-1.195",
+     "xy": [
+      22.500000000000004,
+      191.5357143
+     ],
+     "face": null,
+     "touches_grip": true
+    },
+    "S12": {
+     "value": -45.86112822501163,
+     "element": 177,
+     "label": "Coupon-1.178",
+     "xy": [
+      12.5,
+      176.75
+     ],
+     "face": null,
+     "touches_grip": false
+    }
+   }
+  ],
+  "clt": {
+   "Ny": 648.8815550609538,
+   "width": 25.0,
+   "strain": [
+    -0.0022972499333877177,
+    0.00728885112668559,
+    -1.0769909724205028e-18
+   ],
+   "plies": [
+    {
+     "ply": 1,
+     "angle": 45.0,
+     "stress_12": [
+      413.91313858468357,
+      29.60279745326072,
+      -44.94381133055463
+     ]
+    },
+    {
+     "ply": 2,
+     "angle": 0.0,
+     "stress_12": [
+      1181.50891180225,
+      0.05432125604801273,
+      1.075146328352902e-14
+     ]
+    },
+    {
+     "ply": 3,
+     "angle": -45.0,
+     "stress_12": [
+      413.91313858468334,
+      29.60279745326078,
+      44.94381133055468
+     ]
+    },
+    {
+     "ply": 4,
+     "angle": 90.0,
+     "stress_12": [
+      -353.682634632883,
+      59.15127365047349,
+      -5.089008463455832e-15
+     ]
+    },
+    {
+     "ply": 5,
+     "angle": 90.0,
+     "stress_12": [
+      -353.68263463288304,
+      59.15127365047349,
+      -5.0097957877915494e-15
+     ]
+    },
+    {
+     "ply": 6,
+     "angle": -45.0,
+     "stress_12": [
+      413.9131385846834,
+      29.60279745326081,
+      44.94381133055465
+     ]
+    },
+    {
+     "ply": 7,
+     "angle": 0.0,
+     "stress_12": [
+      1181.5089118022504,
+      0.05432125604800845,
+      1.0355399905207614e-14
+     ]
+    },
+    {
+     "ply": 8,
+     "angle": 45.0,
+     "stress_12": [
+      413.9131385846837,
+      29.602797453260763,
+      -44.94381133055468
+     ]
+    }
+   ],
+   "note": "classical laminate theory: the reaction over the width as N_y, N_x = N_xy = 0, each ply at its middle"
+  }
  },
  "quality": {
   "elements": 250,

@@ -53,6 +53,12 @@ def calculix_summary(record_path: Path, units: str) -> dict:
             entry["agrees"][r.component] = r.agrees
         out["gauge_element"] = element
         out["gauge"] = [plies[k] for k in sorted(plies)]
+        strain = [r for r in rows if r.group == "strain" and r.name == element]
+        if strain:  # the gauge element's mean strain, ours and CalculiX's, a unitless row of the validation table (ADR-0066)
+            entry = {"ours": [None, None, None], "calculix": [None, None, None], "agrees": [None, None, None]}
+            for r in strain:
+                entry["ours"][r.component], entry["calculix"][r.component], entry["agrees"][r.component] = r.kernel, r.reference, r.agrees
+            out["gauge_strain"] = entry
     frd = record.get("frd")
     if frd:
         converted = dict(frd)

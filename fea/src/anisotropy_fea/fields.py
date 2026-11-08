@@ -26,6 +26,7 @@ from typing import Any
 import numpy as np
 
 from anisotropy_engine.failure import CRITERIA
+from anisotropy_engine.response import Loads, midplane_response, ply_surfaces
 
 from .cases import element_name
 from .mesh import KernelError
@@ -174,6 +175,42 @@ def gauge_elements(deck: Deck, solution: Solution) -> list[int]:
     return inside
 
 
+def elements_touching_grips(deck: Deck, solution: Solution) -> set[int]:
+    """The mesh indices of the elements with a gripped node: the row along each tab line, the clamped edge (ADR-0066). Empty for a deck
+    without grips (a plate, a bending coupon)."""
+    mesh = solution.mesh
+    try:
+        bottom, top = gripped_groups(deck, solution)
+    except KernelError:
+        return set()
+    gripped = {i for i in (*bottom, *top) if mesh.node_keys[i][0] is not None}
+    return {e for e in range(mesh.element_count) if gripped & set(mesh.connectivity[e, :4].tolist())}
+
+
+def classical_laminate_check(solution: Solution, applied: dict[str, Any], reaction_si: float, angles: np.ndarray, units: str) -> dict[str, Any] | None:
+    """Classical laminate theory for a gripped coupon pulled or pushed along its length (ADR-0066): the reaction over the width as N_y with
+    N_x = N_xy = 0 (free edges), the mid-plane strain from the laminate's ABD and every ply's stresses in its fibre axes at its middle, so
+    the engineer's hand check sits beside the two solvers in the fields' units. None for another loading (a plate, a bending coupon) or
+    a mesh of more than one laminate; the same column the Summary leaves empty."""
+    mesh = solution.mesh
+    if applied.get("dof") != 2 or applied.get("set") != "the top grip" or len(mesh.sections) != 1:
+        return None
+    section = mesh.sections[0]
+    width = float(mesh.xy[:, 0].max() - mesh.xy[:, 0].min())
+    if width <= 0.0:
+        return None
+    eps0, kappa = midplane_response(section.plies, Loads(Ny=reaction_si / width))
+    surfaces = ply_surfaces(section.plies, eps0, kappa)
+    per_ply = []
+    for k in range(len(section.plies)):
+        bottom, top = surfaces[2 * k], surfaces[2 * k + 1]
+        middle = (np.asarray(bottom.stress_12) + np.asarray(top.stress_12)) / 2.0
+        per_ply.append({"ply": k + 1, "angle": float(angles[k]), "stress_12": from_si(middle, "stress", units).tolist()})
+    return {"Ny": float(from_si(reaction_si / width, "force_per_length", units)), "width": float(from_si(width, "length", units)),
+            "strain": [float(eps0[0]), float(eps0[1]), float(eps0[2])], "plies": per_ply,
+            "note": "classical laminate theory: the reaction over the width as N_y, N_x = N_xy = 0, each ply at its middle"}
+
+
 def gauge_failures(deck: Deck, solution: Solution, failures: dict[str, FailureField], shell: bool) -> dict[str, FailureField]:
     """Per criterion, the first ply to fail among the gauge elements alone (`gauge_elements`), as a FailureField with that element, ply,
     face and mode; a criterion whose gauge plies are all unstressed (an infinite ratio) is left out."""
@@ -305,6 +342,21 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
         summary["max_ply"][name] = {"value": float(stress(component.reshape(-1)[flat])), **place_of(flat, component)}
     flat = int(np.argmax(mises))
     summary["max_ply"]["mises"] = {"value": float(stress(mises.reshape(-1)[flat])), **place_of(flat, mises)}
+    # every ply's own peaks at the element centroids (ADR-0066): the stress concentration an engineer compares across solvers ply by ply,
+    # each marked when its element touches a gripped node, the clamped edge where the value grows with the mesh
+    gripped = elements_touching_grips(deck, solution)
+    summary["ply_peaks"] = []
+    for k in range(plies):
+        peak: dict[str, Any] = {"ply": k + 1, "angle": float(angles[k])}
+        for i, name in enumerate(STRESS_NAMES):
+            component = stress_12[:, k, ..., i]  # (ne,) or (ne, 2) for a shell state
+            flat = int(np.argmax(np.abs(component)))
+            where = np.unravel_index(flat, component.shape)
+            e = int(where[0])
+            peak[name] = {"value": float(stress(component.reshape(-1)[flat])), "element": e, "label": element_name(mesh.element_keys[e]),
+                          "xy": length(centroids[e]).tolist(), "face": FACES[int(where[1])] if shell else None, "touches_grip": e in gripped}
+        summary["ply_peaks"].append(peak)
+    summary["clt"] = classical_laminate_check(solution, applied, reaction_value, angles, units)
     for criterion, found in failures.items():
         e = mesh.element_keys.index(found.element)
         place, touches_grip, tied = fpf_place(deck, solution, found, units)

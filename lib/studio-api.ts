@@ -69,16 +69,27 @@ export type Fields = {
     /** The same over the gauge section alone (the Gauge elements that touch no gripped node): what a test is compared with. Absent on older jobs. */
     fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null;
     /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */
-    calculix?: CalculixBeside | null };
+    calculix?: CalculixBeside | null;
+    /** Every ply's own peaks at the element centroids, each marked when its element touches a gripped node (ADR-0066); absent on older jobs. */
+    ply_peaks?: PlyPeak[];
+    /** Classical laminate theory for a gripped coupon: the reaction over the width as N_y, every ply at its middle (ADR-0066); null when it does not apply. */
+    clt?: CltCheck | null };
   quality?: QualitySummary;
 };
+export type PlyPeak = { ply: number; angle: number } & Record<"S11" | "S22" | "S12", { value: number; element: number; label: string; xy: number[]; face: string | null; touches_grip: boolean }>;
+export type CltCheck = { Ny: number; width: number; strain: number[]; plies: { ply: number; angle: number; stress_12: number[] }[]; note: string };
+/** One ply's peaks in its own fibre axes read from the `.frd`'s bricks: nodal, extrapolated, as a viewer would show them per ply (ADR-0066). */
+export type FrdPly = { ply: number; angle: number; fibre: number; nodes: number; s1_max?: number; s1_max_node?: number; s1_max_xyz?: number[]; s2_max?: number; s2_max_node?: number;
+  t12_max_abs?: number; t12_max_abs_node?: number; gauge_s1_max?: number; gauge_s1_max_node?: number };
 export type CalculixBeside = {
   record: string; units: string; tolerance: number; agree: string;
   reaction: { calculix: number; ours: number; difference: string; agrees: boolean } | null;
   gauge_element: string | null;
   gauge: { ply: number; ours: (number | null)[]; calculix: (number | null)[]; agrees: (boolean | null)[] }[];
+  /** The gauge element's mean strain [eps_x, eps_y, gamma_xy], ours and CalculiX's (ADR-0066); absent on a record without the strain group. */
+  gauge_strain?: { ours: (number | null)[]; calculix: (number | null)[]; agrees: (boolean | null)[] };
   frd: (Record<string, unknown> & { nodes: number; mises_max: number; mises_max_node: number; mises_max_xyz: number[]; syy_max: number; syy_max_node: number;
-    sxx_max: number; sxx_min: number; gauge_mises_max?: number; gauge_syy_max?: number; gauge_from?: number; gauge_to?: number }) | null;
+    sxx_max: number; sxx_min: number; gauge_mises_max?: number; gauge_syy_max?: number; gauge_from?: number; gauge_to?: number; plies?: FrdPly[] }) | null;
 };
 export type Explanation = { writer: string; facts: Record<string, unknown>; sentences: string[]; setup_sentences: string[] };
 export type CouponSummary = { name: string; designation: string | null; kind: string; test: string; title: string; layup: string; status: string | null;
