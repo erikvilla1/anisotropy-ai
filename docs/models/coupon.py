@@ -72,6 +72,7 @@ from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric
 from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
+from anisotropy_fea.fields import field_data  # noqa: E402
 from anisotropy_fea.kernel import solve_deck  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import to_si  # noqa: E402
@@ -476,8 +477,108 @@ def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[st
 
 # --------------------------------------------------------------------------------------------- chapter 6, verification
 
-def verification_chapter(src: Sources, record: dict, rows, problems, summaries, units: str, map_drawn: bool, full_tables: bool, c, figures: Path,
-                         coupled_reaction: float | None = None) -> str:
+DASH = "--"
+CLT_NOTE = (r"\textbf{Laminate theory}: the reaction over the width as $N_y$ with $N_x = N_{xy} = 0$ (free edges), the mid-plane strain from the "
+            r"laminate's stiffness, each ply at its middle. ")
+
+
+def validation_section(deck, solution, record: dict, rows, c, units: str) -> str:
+    """The validation table and the peaks table of the page, printed from the same engine summary the page reads (ADR-0066): one row per
+    quantity of the validation set, one column per source, and the clamped-edge peaks apart, in their own table, named for what they are."""
+    labels = documents.UNIT_LABEL[units]
+    try:
+        check = laminate_check(deck, solution)
+    except KernelError as exc:
+        return "No validation table for this model: " + escape(str(exc)) + "."
+    summary = field_data(deck, solution, units)["summary"]
+    clt, peaks = summary.get("clt"), summary.get("ply_peaks", [])
+    gauge = check.gauge
+    element = gauge.name.rsplit(".", 1)[-1]
+    angles = check.angles_deg
+    solver_name = {"calculix": "CalculiX", "abaqus": "Abaqus"}.get(record["solver"]["name"], record["solver"]["name"])
+
+    def ref(group: str, component: int, ply: int | None = None) -> str:
+        for r in rows:
+            if r.group == group and r.name == gauge.name and r.component == component and r.ply == ply:
+                return number(r.reference, 5)
+        return DASH
+
+    reactions = [r for r in rows if r.group == "rf" and r.component == 1]
+    kernel_reaction = from_si(check.kernel_reaction_N, "force", units)
+    same_grip = min(reactions, key=lambda r: abs(r.kernel - kernel_reaction)) if reactions else None
+
+    # the team's Abaqus fields, when the coupon has them: the gauge element's centroid at the layers the team exported
+    team_element = None
+    if c is not None and c.reports:
+        team_element = c.team_element_near((from_si(gauge.xy[0], "length", units), from_si(gauge.xy[1], "length", units)))
+
+    def abaqus(component: int, ply: int) -> str:
+        if team_element is None:
+            return DASH
+        try:
+            return number(c.value(("S11", "S22", "S12")[component], team_element, ply).reference, 5)
+        except KeyError:
+            return DASH
+
+    table = [rf"Reaction $R_y$ at the moving grip & {escape(labels['force'])} & "
+             rf"{number(clt['Ny'] * clt['width'], 5) if clt else DASH} & {number(kernel_reaction, 5)} & "
+             rf"{number(same_grip.reference, 5) if same_grip is not None else DASH} & {DASH} \\"]
+    for i, name in enumerate(("eps_x", "eps_y", "gamma_xy")):
+        table.append(rf"{documents.MATH[name]} at element {escape(element)} & -- & {number(clt['strain'][i], 5) if clt else DASH} & "
+                     rf"{number(float(check.kernel_strain[i]), 5)} & {ref('strain', i)} & {DASH} \\")
+    for k, angle in enumerate(angles):
+        for i, name in enumerate(("sigma_1", "sigma_2", "tau_12")):
+            theory = number(clt["plies"][k]["stress_12"][i], 5) if clt else DASH
+            table.append(rf"Ply {k + 1} ({angle:g}°) {documents.MATH[name]} & {escape(labels['stress'])} & {theory} & "
+                         rf"{number(from_si(float(check.kernel_ply_stress_12[k, i]), 'stress', units), 5)} & {ref('ply_stress_local', i, k + 1)} & "
+                         rf"{abaqus(i, k + 1)} \\")
+    hint = (rf"To find a ply's cell in a viewer: in PrePoMax, open the part of ply $k$ (the $k$-th layer of bricks from the bottom) and read "
+            rf"the global component along the pull (S22 for a 0° ply, S11 for a 90° ply; a ±45° ply needs the rotation) at element {escape(element)}; "
+            r"in Abaqus/CAE, Layer $k$, section point MID, averaging off.")
+    out = [r"\section{The validation table}\label{sec:validation}",
+           rf"One table, the same quantity in every column, at the places where the solvers are expected to agree: the reaction, and the "
+           rf"strain and every ply's stress in its own fibre axes at our element {escape(element)}, {escape(gauge_text(gauge, units))}. "
+           r"Plies are counted from the bottom face and angles from the coupon's length axis. How each column's value is taken: " + CLT_NOTE
+           + rf"\textbf{{Anisotropy}}: the element centroid. \textbf{{{escape(solver_name)}}}: the average of the ply's integration points at "
+           r"the same element, as the record compares it. \textbf{Abaqus}: the element centroid, section point at the ply's middle, filled where "
+           r"the coupon's folder holds the exported fields; -- otherwise. " + hint,
+           documents.long_table(["Quantity", "Unit", "Laminate theory", "Anisotropy", escape(solver_name), "Abaqus"], table, r"Ylrrrr", r"\footnotesize")]
+    if not peaks:
+        return "\n\n".join(out)
+    frd_plies = {int(p["ply"]): p for p in (record.get("frd") or {}).get("plies", []) if isinstance(p, dict)}
+    rows_out = []
+    at_grip = False
+    for peak in peaks:
+        k = int(peak["ply"])
+        for i, (name, key) in enumerate((("sigma_1", "s1_max"), ("sigma_2", "s2_max"), ("tau_12", "t12_max_abs"))):
+            ours = peak[("S11", "S22", "S12")[i]]
+            at_grip = at_grip or ours["touches_grip"]
+            x, y = ours["xy"]
+            where = f"element {ours['label'].rsplit('.', 1)[-1]} ({x:.4g}, {y:.4g})" + (", touches a grip" if ours["touches_grip"] else "")
+            frd = frd_plies.get(k)
+            if frd and key in frd:
+                xyz = frd.get(f"{key}_xyz")
+                place = f" ({', '.join(f'{v:.4g}' for v in xyz)})" if xyz else ""
+                viewer = rf"{number(float(frd[key]), 5)} at node {frd.get(f'{key}_node', '?')}{escape(place)}"
+            else:
+                viewer = DASH
+            rows_out.append(rf"{k} ({peak['angle']:g}°) & {documents.MATH[name]} & {number(ours['value'], 5)}, {escape(where)} & {viewer} & {DASH} \\")
+    title = "Stress concentration at the clamped edge: not a validation value" if at_grip else "Peaks, per ply"
+    out += [rf"\section{{{title}}}\label{{sec:peaks}}",
+            rf"Each ply's largest $\sigma_1$, $\sigma_2$ and $|\tau_{{12}}|$ in its own fibre axes over the whole coupon, {escape(labels['stress'])}. "
+            + (r"The peaks sit where the rigid tab meets the coupon, a stress concentration that grows as the mesh is refined, so the solvers are not "
+               r"expected to agree there and the numbers are not compared. " if at_grip else "")
+            + rf"The Anisotropy column is the element centroid. The {escape(solver_name)} column is what a viewer shows: the nodal value, extrapolated from the "
+            r"integration points, so a corner node of the tab line reads above the centroid of the same element; its node and position (x, y, z) are "
+            r"named so the engineer who opens the \texttt{.frd} in PrePoMax finds it, where S11 is the global $\sigma_{xx}$ across the width and S22 "
+            r"the global $\sigma_{yy}$ along the coupon. Von Mises is not a laminate quantity and is not reported.",
+            documents.long_table(["Ply (angle)", "Comp.", "Anisotropy, centroid", escape(solver_name) + ", corner node", "Abaqus"], rows_out,
+                                 r">{\raggedright\arraybackslash}p{1.6cm}l>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}p{3.6cm}r", r"\footnotesize")]
+    return "\n\n".join(out)
+
+
+def verification_chapter(src: Sources, deck, solution, record: dict, rows, problems, summaries, units: str, map_drawn: bool, full_tables: bool, c,
+                         figures: Path, coupled_reaction: float | None = None) -> str:
     solver = record["solver"]
     twin = next((r.kernel for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
     same = ""
@@ -497,6 +598,8 @@ def verification_chapter(src: Sources, record: dict, rows, problems, summaries, 
            + (escape(f"; the spec's {' and '.join(missing)} {'is' if len(missing) == 1 else 'are'} not compared") if missing else "")
            + r". Elsewhere Chapter~\ref{ch:results} is our engine's alone." + escape(same) + r" The record and the solver's conventions file are kept with us; this "
            r"chapter and Appendix~\ref{app:record} print them.",
+           validation_section(deck, solution, record, rows, c, units),
+           r"\section{CalculiX: every group of compared numbers}",
            documents.summary_section(record, rows, problems, summaries, units, METHOD),
            r"To see it yourself in PrePoMax 2.6: File, Import the CalculiX deck from the package (\texttt{2-our-model/calculix/}), run it, then File, "
            r"Open results (.frd).",
@@ -764,7 +867,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\chapter{Building the part in Abaqus/CAE}\label{ch:abaqus}", abaqus,
         r"\chapter{Results from our engine}\label{ch:results}", results,
         r"\chapter{Verification against other solvers}\label{ch:verification}",
-        verification_chapter(src, record, rows, problems, summaries, deck_units, map_drawn, full_tables, c, figures,
+        verification_chapter(src, deck, solution, record, rows, problems, summaries, deck_units, map_drawn, full_tables, c, figures,
                              from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None),
         r"\chapter{What this shows and what it does not}\label{ch:reading}", reading_chapter(src, card, c),
         r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, audited + compared, form, deck_units, escape, code, team.table, documents.kv_table,

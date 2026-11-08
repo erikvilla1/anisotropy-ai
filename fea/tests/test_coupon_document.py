@@ -188,6 +188,13 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
         assert rf"\label{{{label}}}" in tex, label
     assert r"Figure~\ref{fig:solution}" in tex and r"Figure~\ref{fig:differences}" in tex
     assert "The kernel's values are read at element" in tex and "the centre probe" in tex
+    # the page's two tables, printed from the same engine summary (ADR-0066): the validation set with a column per source, the peaks apart
+    assert r"\section{The validation table}\label{sec:validation}" in tex and r"\textbf{Laminate theory}" in tex
+    validation = tex[tex.index(r"\label{sec:validation}"):tex.index(r"\label{sec:peaks}")]
+    assert r"Ply 2 (0°) $\sigma_1$ & MPa & 1180.8 & 1180.8 & " in validation  # laminate theory and the kernel agree to the digit at the centre
+    assert validation.count("& --") >= 3 * 8 + 4  # no Abaqus fields for the public coupon: its column is empty
+    assert r"\section{Stress concentration at the clamped edge: not a validation value}\label{sec:peaks}" in tex
+    assert "touches a grip" in tex and "Von Mises is not a laminate quantity" in tex
     assert r"\evidence{MANUAL" not in tex  # the guide for the team is Abaqus/CAE only: no PrePoMax tags, not even in the legend
     assert "The full CalculiX comparison table" not in tex  # every group of 69 values is printed in Chapter 6 already
     assert r"of the larger of its CalculiX value and 2\% of its group's largest value" in tex  # the floor rule, said as the record applies it
@@ -233,6 +240,11 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     for label in ("sec:models", "sec:results", "sec:material", "sec:files", "sec:rebuild", "sec:summary", "sec:reading", "sec:open", "ch:audit"):
         assert rf"\label{{{label}}}" in tex, label
     assert "IM7-UNT-L9" in tex and "What the team built" in tex and "Step by step in Abaqus/CAE" in tex
+    validation = tex[tex.index(r"\label{sec:validation}"):tex.index(r"\label{sec:peaks}")]
+    ply_1 = [line for line in validation.splitlines() if line.startswith(r"Ply 1 (")]
+    ends = [line.rstrip(r" \\").rsplit("& ", 1)[-1] for line in ply_1]  # the Abaqus cells of ply 1: the team's S11 and S22 fill them, the fixture has no S12
+    assert len(ends) == 3 and ends[0] != "--" and ends[1] != "--" and ends[2] == "--"
+    assert all(line.rstrip(r" \\").endswith("--") for line in validation.splitlines() if line.startswith(r"Ply 2 ("))  # layers the team did not export stay empty
     assert "PrePoMax 2.6}" not in tex  # the Abaqus chapter writes the Abaqus/CAE steps only
     assert package == tmp_path / "documents" / f"{TODAY}_grips"
     expected = ["README.txt", f"{package.name}-audit.xlsx", "1-team-model/coupon-2x8-grips-im7-8552.inp", "2-our-model/abaqus/grips-coupon-abaqus.inp",
