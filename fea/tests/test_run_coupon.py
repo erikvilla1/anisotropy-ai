@@ -151,12 +151,19 @@ def test_a_gated_run_waits_once_the_coupon_is_named_and_before_its_attempt(tool,
 
     worker = threading.Thread(target=run)
     worker.start()
+    def read_progress() -> dict:
+        """The progress file as it stands, or {} while the tool is halfway through writing it (the write is not atomic)."""
+        try:
+            return json.loads(progress_path.read_text(encoding="utf-8")) if progress_path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
     def held_progress(what: str) -> dict:
         deadline = time.monotonic() + 60
-        while not (progress_path.is_file() and json.loads(progress_path.read_text(encoding="utf-8")).get("held")):
+        while not read_progress().get("held"):
             assert time.monotonic() < deadline and worker.is_alive(), f"the run never held {what}"
             time.sleep(0.05)
-        return json.loads(progress_path.read_text(encoding="utf-8"))
+        return read_progress()
 
     first = held_progress("before the naming")  # the first hold: nothing named, nothing written (ADR-0056 amendment 6)
     assert first["coupon"] is None and first["stage"] == "the setup check" and first["attempt"] is None and not paths.LOCAL.exists()
