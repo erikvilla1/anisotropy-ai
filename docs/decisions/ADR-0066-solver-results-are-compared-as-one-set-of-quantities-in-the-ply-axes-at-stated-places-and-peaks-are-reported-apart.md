@@ -1,8 +1,8 @@
 # ADR-0066: Solver results are compared as one set of quantities, in the ply axes, at stated places, and peaks are reported apart
 
-- Status: Proposed
+- Status: Accepted (2026-11-08: the founder agreed to the record and asked for the stack #153 to #155 to be merged; the quantities, the page and the package tables are as written here)
 - Date: 2026-11-08
-- Decided by: Founder, 2026-11-08 (direction: "why is everything different ... plan on how to fix this"); the quantities and the page are proposed here | Drafted by: Claude Code
+- Decided by: Founder, 2026-11-08 (direction: "why is everything different ... plan on how to fix this"; "i agree with the record") | Drafted by: Claude Code
 - Related: [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) amendment 6 (the `.frd` read beside ours), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md) (`equivalence`, `side_by_side`), [ADR-0045](ADR-0045-abaqus-without-the-gui-odbaccess-reports-and-an-optional-second-reference.md) (`tools/abaqus_extract_fields.py`, `tools/run_abaqus.py`), [ADR-0065](ADR-0065-coupon-ply-angles-are-counted-from-the-coupons-length-axis.md), [ADR-0004](ADR-0004-sign-and-stacking-conventions.md); `fea/src/anisotropy_fea/frd.py`, `fea/src/anisotropy_fea/calculix_summary.py`, `fea/src/anisotropy_fea/compare.py`, `components/studio/results-view.tsx`, `docs/abaqus-export-recipe.md`
 
 ## Context
