@@ -17,8 +17,11 @@ the values in 12 columns each; ` -3` closes a block.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Sequence
+
+from anisotropy_engine.rotation import stress_transformation
 
 STRESS_COMPONENTS = ("SXX", "SYY", "SZZ", "SXY", "SYZ", "SZX")  # the order CalculiX writes the STRESS block
 AXES = "global"
@@ -36,10 +39,21 @@ class Frd:
     nodes: dict[int, tuple[float, float, float]]
     stress: dict[int, tuple[float, ...]]  # node -> (SXX, SYY, SZZ, SXY, SYZ, SZX)
     displacement: dict[int, tuple[float, ...]]  # node -> (D1, D2, D3)
+    elements: dict[int, tuple[int, ...]] = field(default_factory=dict)  # brick -> its nodes, as the `3C` block lists them (ADR-0066)
 
     @property
     def node_count(self) -> int:
         return len(self.nodes)
+
+
+@dataclass(frozen=True)
+class FrdPly:
+    """One ply as the `.frd`'s bricks are assigned to it: the stated angle (for the label), the fibre angle from global x (the rotation,
+    ADR-0065) and the thickness in the file's units, listed from the bottom face up (ADR-0004)."""
+
+    angle_deg: float
+    fibre_deg: float
+    thickness: float
 
 
 def read_frd(path: Path | str) -> Frd:
@@ -47,6 +61,7 @@ def read_frd(path: Path | str) -> Frd:
     nodes: dict[int, tuple[float, float, float]] = {}
     stress: dict[int, tuple[float, ...]] = {}
     displacement: dict[int, tuple[float, ...]] = {}
+    elements: dict[int, tuple[int, ...]] = {}
     block: str | None = None
     with Path(path).open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
@@ -62,7 +77,18 @@ def read_frd(path: Path | str) -> Frd:
             if line.startswith(" -3"):
                 block = None
                 continue
-            if not line.startswith(" -1") or block in (None, "elements"):
+            if block == "elements":  # ` -1` opens a brick (its number in 10 columns), the ` -2` lines list its nodes, 10 columns each
+                try:
+                    if line.startswith(" -1"):
+                        element = int(line[3:13])
+                        elements[element] = ()
+                    elif line.startswith(" -2"):
+                        text = line.rstrip("\n")
+                        elements[element] += tuple(int(text[3 + 10 * i:13 + 10 * i]) for i in range((len(text) - 3) // 10))
+                except (ValueError, NameError) as exc:
+                    raise FrdError(f"{Path(path).name}: cannot read the element line {line.rstrip()!r}") from None
+                continue
+            if not line.startswith(" -1") or block is None:
                 continue
             try:
                 node = int(line[3:13])
@@ -78,7 +104,7 @@ def read_frd(path: Path | str) -> Frd:
         raise FrdError(f"{Path(path).name}: no node block (`    2C`); is this a CalculiX .frd?")
     if not stress:
         raise FrdError(f"{Path(path).name}: no STRESS block; the deck asked for no *EL FILE S")
-    return Frd(nodes=nodes, stress=stress, displacement=displacement)
+    return Frd(nodes=nodes, stress=stress, displacement=displacement, elements=elements)
 
 
 def von_mises(s: tuple[float, ...]) -> float:
@@ -125,4 +151,63 @@ def frd_peaks(frd: Frd, gauge: tuple[float, float] | None = None, digits: int = 
             out.update(at(node, frd.stress[node][1], "gauge_syy_max"))
             node = max(inside, key=lambda n: abs(frd.stress[n][0]))
             out.update(at(node, frd.stress[node][0], "gauge_sxx_max_abs"))
+    return out
+
+
+def ply_of_nodes(frd: Frd, plies: Sequence[FrdPly]) -> dict[int, int]:
+    """Which ply each node belongs to, 0 for the bottom ply. The expanded model is one brick per element and ply, the plies unconnected,
+    so a node sits in the bricks of one ply only; the ply is read from the mean z of the brick's nodes against the laminate's ply
+    interfaces, the laminate's middle at z = 0 (CalculiX puts the shell's reference surface there). A file without an element block
+    gives an empty map (ADR-0066)."""
+    thickness = sum(p.thickness for p in plies)
+    tops = []
+    z = -thickness / 2.0
+    for p in plies:
+        z += p.thickness
+        tops.append(z)
+    out: dict[int, int] = {}
+    for nodes in frd.elements.values():
+        known = [frd.nodes[n][2] for n in nodes if n in frd.nodes]
+        if not known:
+            continue
+        mid = sum(known) / len(known)
+        ply = next((k for k, top in enumerate(tops) if mid < top), len(plies) - 1)
+        for n in nodes:
+            out.setdefault(n, ply)
+    return out
+
+
+def frd_ply_peaks(frd: Frd, plies: Sequence[FrdPly], gauge: tuple[float, float] | None = None, digits: int = 5) -> list[dict]:
+    """Each ply's peaks in its own fibre axes, the quantity the page's Summary reads (ADR-0066): the nodal global state of the ply's
+    bricks rotated by the ply's fibre angle, then the largest sigma_1 and sigma_2 and the largest |tau_12|, each with its node and
+    position, and with `gauge` = (y_from, y_to) the largest sigma_1 over the ply's nodes between those rows. A nodal value is
+    extrapolated from the integration points, so a peak here sits above the same ply's centroid value; the gauge values match."""
+
+    def rounded(v: float) -> float:
+        return float(f"{v:.{digits}g}")
+
+    ply_of = ply_of_nodes(frd, plies)
+    out = []
+    for k, ply in enumerate(plies):
+        rotation = stress_transformation(ply.fibre_deg)
+        local: dict[int, tuple[float, float, float]] = {}
+        for node, s in frd.stress.items():
+            if ply_of.get(node) != k:
+                continue
+            s1, s2, t12 = rotation @ (s[0], s[1], s[3])
+            local[node] = (float(s1), float(s2), float(t12))
+        entry: dict = {"ply": k + 1, "angle": ply.angle_deg, "fibre": ply.fibre_deg, "nodes": len(local)}
+        if not local:
+            out.append(entry)
+            continue
+        for name, pick in (("s1_max", lambda n: local[n][0]), ("s2_max", lambda n: local[n][1]), ("t12_max_abs", lambda n: abs(local[n][2]))):
+            node = max(local, key=pick)
+            index = {"s1_max": 0, "s2_max": 1, "t12_max_abs": 2}[name]
+            entry[name], entry[f"{name}_node"], entry[f"{name}_xyz"] = rounded(local[node][index]), node, _place(frd, node)
+        if gauge is not None:
+            inside = [n for n in local if n in frd.nodes and gauge[0] < frd.nodes[n][1] < gauge[1]]
+            if inside:
+                node = max(inside, key=lambda n: local[n][0])
+                entry["gauge_s1_max"], entry["gauge_s1_max_node"] = rounded(local[node][0]), node
+        out.append(entry)
     return out

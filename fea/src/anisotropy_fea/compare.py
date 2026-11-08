@@ -289,6 +289,8 @@ def format_record(record: dict) -> str:
             return repr(float(v)) if isinstance(v, float) else str(v)
         if isinstance(v, list):
             return "[" + ", ".join(value(x) for x in v) + "]"
+        if isinstance(v, dict):  # an inline table, for the [frd] block's per-ply peaks (ADR-0066)
+            return "{" + ", ".join(f"{k} = {value(x)}" for k, x in v.items()) + "}"
         return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
     lines = [f"{key} = {value(record[key])}" for key in ("title", "units", "spec", "deck_kernel", "deck_reference", "deck_kernel_sha256", "deck_reference_sha256")]

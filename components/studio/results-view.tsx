@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
+import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
 import { legendGradient, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
@@ -32,9 +32,6 @@ const COMPONENT: Record<string, string> = { S11: "σ₁ along the fibres", S22: 
 
 export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
   const s = fields.summary, lab = fields.labels, cx = s.calculix ?? null;
-  const fibre = s.max_ply.S11;
-  const others = Object.entries(s.max_ply).filter(([name]) => name !== "mises" && name !== "S11");  // the ply von Mises row is gone: a viewer's von Mises is another quantity (ADR-0030 amendment 6)
-  const place = (m: Extreme) => <>in ply {m.ply} ({m.angle}°){m.face ? `, ${m.face} face,` : ""} at element {m.label.split(".").pop()}</>;
   return (
     <div className="studio-panel" data-testid="summary">
       <h3>Summary</h3>
@@ -46,6 +43,125 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
         <div><dt>Largest displacement</dt><dd>{printed(s.max_displacement.value)} {lab.length} at node {s.max_displacement.label.split(".").pop()}
           {s.max_displacement.axis === "z" ? " (the deflection w)" : ""}</dd></div>
       </dl>
+      {s.ply_peaks ? (
+        <>
+          <ValidationTable s={s} cx={cx} lab={lab} />
+          <PeaksTable s={s} cx={cx} lab={lab} criterion={s.earliest ?? ""} onShow={onShow} />
+        </>
+      ) : <OlderPeaks fields={fields} onShow={onShow} />}
+      <h4>First-ply failure</h4>
+      {Object.keys(s.fpf).length === 0 ? <p className="studio-muted">No failure criterion was asked for.</p> : (
+        <FailureTable fpf={s.fpf} earliest={s.earliest} testId="fpf-table" factorPrefix="fpf-factor" onShow={onShow} />
+      )}
+      <p className="studio-muted">R is the factor on the applied loading at which the first ply fails; the failure index is 1/R. Below 1, the loading of the model is past first-ply failure.
+        {s.earliest && s.fpf[s.earliest]?.touches_grip ? " The critical element touches a gripped tab: the clamped edge, not the gauge section, where the stress is not expected to settle as the mesh is refined." : ""}</p>
+      {s.fpf_gauge && Object.keys(s.fpf_gauge).length ? (
+        <>
+          <h4>First-ply failure in the gauge section</h4>
+          <FailureTable fpf={s.fpf_gauge} earliest={s.earliest_gauge ?? null} testId="fpf-gauge-table" factorPrefix="fpf-gauge-factor" onShow={onShow} />
+          <p className="studio-muted">The same criteria over the gauge section alone, the elements away from the gripped tabs&apos; clamped edge: the factor a test coupon, which breaks in its gauge
+            section, is compared with.</p>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+const DASH = "–";
+const three = (v: (number | null | undefined)[] | undefined, marks?: (boolean | null)[]) =>
+  v ? v.map((x, i) => `${x === null || x === undefined ? DASH : printed(x)}${marks && marks[i] === false ? " ✕" : ""}`).join(" / ") : DASH;
+
+/** The validation table (ADR-0066): one row per quantity, one column per source, every cell the same quantity read the same way: the
+ *  reaction, the gauge-centre strain and every ply's σ₁ / σ₂ / τ₁₂ in its fibre axes at the gauge-centre element. */
+function ValidationTable({ s, cx, lab }: { s: Fields["summary"]; cx: CalculixBeside | null; lab: Fields["labels"] }) {
+  const clt = s.clt ?? null;
+  const gaugeElement = cx?.gauge_element?.split(".").pop();
+  const plies = Math.max(clt?.plies.length ?? 0, cx?.gauge.length ?? 0);
+  if (!clt && !cx) return null;
+  return (
+    <>
+      <h4>Validation: the same quantity in every column</h4>
+      <table className="studio-table" data-testid="validation-table">
+        <thead>
+          <tr><th>Quantity</th><th>Laminate theory</th><th>Anisotropy</th><th>CalculiX</th><th>Abaqus</th></tr>
+          <tr className="studio-muted">
+            <th />
+            <th>{clt ? `N_y = reaction / width (${printed(clt.Ny)} ${lab.force}/${lab.length}), N_x = N_xy = 0, each ply at its middle` : "not for this loading"}</th>
+            <th>element centroid{gaugeElement ? `, element ${gaugeElement}` : ""}</th>
+            <th>{cx ? `integration-point average${gaugeElement ? `, element ${gaugeElement}` : ""}` : "no twin was run"}</th>
+            <th>its field reports, when uploaded</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-row="reaction"><td>Reaction force, {lab.force}</td><td>input</td><td>{printed(Math.abs(s.reaction.value))}</td>
+            <td>{cx?.reaction ? `${printed(Math.abs(cx.reaction.calculix))} (${cx.reaction.difference})` : DASH}</td><td>{DASH}</td></tr>
+          <tr data-row="strain"><td>Gauge centre εx / εy / γxy</td><td>{three(clt?.strain)}</td><td>{three(cx?.gauge_strain?.ours)}</td>
+            <td>{three(cx?.gauge_strain?.calculix, cx?.gauge_strain?.agrees)}</td><td>{DASH}</td></tr>
+          {Array.from({ length: plies }, (_, k) => {
+            const c = clt?.plies[k], g = cx?.gauge[k];
+            const angle = c?.angle ?? (g ? s.ply_peaks?.[k]?.angle : undefined);
+            return (
+              <tr key={k} data-ply={k + 1}><td>Ply {k + 1}{angle !== undefined ? ` (${angle}°)` : ""}: σ₁ / σ₂ / τ₁₂, {lab.stress}</td>
+                <td>{three(c?.stress_12)}</td><td>{three(g?.ours)}</td><td>{three(g?.calculix, g?.agrees)}</td><td>{DASH}</td></tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="studio-muted">Each ply&apos;s stresses are in its own fibre axes (σ₁ along the fibres, σ₂ across, τ₁₂ in-plane shear), plies counted from the bottom face, angles from the
+        coupon&apos;s length axis. {cx ? <>The record {cx.record} holds {cx.agree} values within {printed(100 * cx.tolerance)} %; a ✕ marks one outside.</> : null}
+        {" "}Abaqus fills its column when the job&apos;s field reports (<code>tools/abaqus_extract_fields.py</code>) are uploaded.</p>
+    </>
+  );
+}
+
+/** The stress concentration at the clamped edge (ADR-0066): every ply's peak in every column, apart from the validation table because the
+ *  free-edge corner where a gripped tab ends is singular: each number grows as the mesh is refined and depends on where it is read. */
+function PeaksTable({ s, cx, lab, criterion, onShow }: { s: Fields["summary"]; cx: CalculixBeside | null; lab: Fields["labels"]; criterion: string;
+  onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
+  const peaks = s.ply_peaks ?? [];
+  const frdPlies = cx?.frd?.plies ?? null;
+  const clamped = peaks.some((p) => p.S11.touches_grip);
+  return (
+    <details className="studio-details" data-testid="peaks">
+      <summary><h4>{clamped ? "Stress concentration at the clamped edge" : "Peaks over the model"}: not a validation value</h4></summary>
+      <table className="studio-table" data-testid="peaks-table">
+        <thead>
+          <tr><th>Ply</th><th>Anisotropy, element centroid</th><th>CalculiX, brick corner node</th><th>Abaqus</th></tr>
+          <tr className="studio-muted"><th /><th>σ₁ / σ₂ / τ₁₂, {lab.stress}, the largest of each over the elements</th>
+            <th>the same, extrapolated to the nodes of the ply&apos;s bricks</th><th>its field reports, when uploaded</th></tr>
+        </thead>
+        <tbody>
+          {peaks.map((p, k) => {
+            const f = frdPlies?.[k];
+            return (
+              <tr key={p.ply} data-ply={p.ply}>
+                <td>{p.ply} ({p.angle}°)</td>
+                <td>{three([p.S11.value, p.S22.value, p.S12.value])} at element {p.S11.label.split(".").pop()}{p.S11.face ? `, ${p.S11.face} face` : ""}{p.S11.touches_grip ? ", clamped edge" : ""}
+                  {" "}<button type="button" className="studio-text-button" onClick={() => onShow(p.S11.element, p.ply, criterion, p.S11.face)}>show</button></td>
+                <td>{f && typeof f.s1_max === "number" ? <>{three([f.s1_max, f.s2_max, f.t12_max_abs])} at node {f.s1_max_node}{xyz(f.s1_max_xyz)}</> : DASH}</td>
+                <td>{DASH}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="studio-muted">{clamped ? "Where a gripped tab ends at a free edge the elastic solution is singular: the value there grows as the mesh is refined and depends on where it is read, so no two columns are expected to agree. " : ""}
+        Anisotropy reads the element centroid; CalculiX&apos;s <code>.frd</code> holds one brick per element and ply with values extrapolated to the corner nodes, so its peak sits above the centroid of the same ply.
+        {cx?.frd ? <> What PrePoMax shows of that file is in the global axes: its S11 is σxx across the width ({printed(cx.frd.sxx_min)} to {printed(cx.frd.sxx_max)} {lab.stress}), its S22 is σyy along the coupon
+          (largest {printed(cx.frd.syy_max)} {lab.stress} at node {cx.frd.syy_max_node}) and its von Mises is the three-dimensional invariant (largest {printed(cx.frd.mises_max)} {lab.stress} at node {cx.frd.mises_max_node}{xyz(cx.frd.mises_max_xyz)}),
+          none of them a composite quantity; open the ply&apos;s part and read S22 for a 0° ply&apos;s σ₁.</> : null}</p>
+    </details>
+  );
+}
+
+/** The Summary of a job solved before ADR-0066: the largest of each component over all plies, and CalculiX's viewer numbers beside them. */
+function OlderPeaks({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
+  const s = fields.summary, lab = fields.labels, cx = s.calculix ?? null;
+  const fibre = s.max_ply.S11;
+  const others = Object.entries(s.max_ply).filter(([name]) => name !== "mises" && name !== "S11");  // the ply von Mises row is gone: a viewer's von Mises is another quantity (ADR-0030 amendment 6)
+  const place = (m: Extreme) => <>in ply {m.ply} ({m.angle}°){m.face ? `, ${m.face} face,` : ""} at element {m.label.split(".").pop()}</>;
+  return (
+    <>
       {cx && cx.gauge.length ? (
         <>
           <h4>Gauge section, where the two solvers agree</h4>
@@ -88,21 +204,7 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
       <p className="studio-muted">Anisotropy&apos;s values are each ply&apos;s stresses in its own fibre axes (σ₁, σ₂, τ₁₂) at element centroids. CalculiX&apos;s are what PrePoMax shows of
         the <code>.frd</code>: the global axes (σxx across the width, σyy along the coupon), one brick per ply, values extrapolated to the nodes, a three-dimensional von Mises.
         Both peak where a gripped tab ends, a clamped edge whose stress grows as the mesh is refined; the gauge section is where the two agree.</p>
-      <h4>First-ply failure</h4>
-      {Object.keys(s.fpf).length === 0 ? <p className="studio-muted">No failure criterion was asked for.</p> : (
-        <FailureTable fpf={s.fpf} earliest={s.earliest} testId="fpf-table" factorPrefix="fpf-factor" onShow={onShow} />
-      )}
-      <p className="studio-muted">R is the factor on the applied loading at which the first ply fails; the failure index is 1/R. Below 1, the loading of the model is past first-ply failure.
-        {s.earliest && s.fpf[s.earliest]?.touches_grip ? " The critical element touches a gripped tab: the clamped edge, not the gauge section, where the stress is not expected to settle as the mesh is refined." : ""}</p>
-      {s.fpf_gauge && Object.keys(s.fpf_gauge).length ? (
-        <>
-          <h4>First-ply failure in the gauge section</h4>
-          <FailureTable fpf={s.fpf_gauge} earliest={s.earliest_gauge ?? null} testId="fpf-gauge-table" factorPrefix="fpf-gauge-factor" onShow={onShow} />
-          <p className="studio-muted">The same criteria over the gauge section alone, the elements away from the gripped tabs&apos; clamped edge: the factor a test coupon, which breaks in its gauge
-            section, is compared with.</p>
-        </>
-      ) : null}
-    </div>
+    </>
   );
 }
 

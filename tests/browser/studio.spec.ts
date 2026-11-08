@@ -104,6 +104,11 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("legend")).toContainText(`from ${printed(written[0])} to ${printed(written[1])} -, the ends the package wrote`);
   await page.getByTestId("studio-scene").locator("canvas").evaluate((canvas) => { canvas.dataset.kept = "yes"; });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
+  // the validation table (ADR-0066): laminate theory beside Anisotropy, one row per ply in the fibre axes; the peaks apart, per ply, collapsed
+  await expect(page.getByTestId("validation-table")).toContainText("Laminate theory");
+  await expect(page.getByTestId("validation-table").locator("tr[data-ply='2']")).toContainText("Ply 2 (0°)");
+  await expect(page.getByTestId("peaks")).toContainText("Stress concentration at the clamped edge: not a validation value");
+  await expect(page.getByTestId("peaks-table").locator("tr[data-ply='2']")).toContainText("at element 178"); // the 0° ply's largest σ₁, named by its element
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("fpf-gauge-factor-tsai_hill")).toHaveText("1.032");  // the gauge section's own first-ply failure, away from the clamped edge
   await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
