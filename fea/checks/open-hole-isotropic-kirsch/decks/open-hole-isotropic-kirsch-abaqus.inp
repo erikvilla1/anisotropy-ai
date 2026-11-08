@@ -14472,31 +14472,39 @@ SF
 *El Print, elset=Probe-hole_side, position=CENTROIDAL
 SE
 *El Print, elset=Probe-hole_side, position=CENTROIDAL
+2
 S
 *El Print, elset=Probe-hole_side, position=CENTROIDAL
+2
 E
 *El Print, elset=Probe-hole_top, position=CENTROIDAL
 SF
 *El Print, elset=Probe-hole_top, position=CENTROIDAL
 SE
 *El Print, elset=Probe-hole_top, position=CENTROIDAL
+2
 S
 *El Print, elset=Probe-hole_top, position=CENTROIDAL
+2
 E
 *El Print, elset=Probe-ring_side, position=CENTROIDAL
 SF
 *El Print, elset=Probe-ring_side, position=CENTROIDAL
 SE
 *El Print, elset=Probe-ring_side, position=CENTROIDAL
+2
 S
 *El Print, elset=Probe-ring_side, position=CENTROIDAL
+2
 E
 *El Print, elset=Probe-far_side, position=CENTROIDAL
 SF
 *El Print, elset=Probe-far_side, position=CENTROIDAL
 SE
 *El Print, elset=Probe-far_side, position=CENTROIDAL
+2
 S
 *El Print, elset=Probe-far_side, position=CENTROIDAL
+2
 E
 *End Step

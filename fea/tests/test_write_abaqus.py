@@ -129,8 +129,32 @@ def test_every_abaqus_deck_keeps_the_input_rules_abaqus_standard_enforces(spec_p
     needs_mesher(spec_path)
     lines = write_abaqus(build_model(load_spec(spec_path))).splitlines()
     assert max(line_bytes(line) for line in lines) <= MAX_LINE
-    tables = [lines[i + 1] for i, line in enumerate(lines) if line.lower().startswith("*el print")]
+    tables = [variables_line(lines, i) for i, line in enumerate(lines) if line.lower().startswith("*el print")]
     assert tables and all("," not in variables for variables in tables)
+
+
+def variables_line(lines: list[str], i: int) -> str:
+    """The variables of the `*El Print` at line i: its first data line unless that lists section points (integers only)."""
+    first = lines[i + 1]
+    return lines[i + 2] if all(part.strip().isdigit() for part in first.split(",")) else first
+
+
+@pytest.mark.parametrize("spec_path", SPECS, ids=[p.stem for p in SPECS])
+def test_the_stress_and_strain_tables_of_a_membrane_coupon_list_every_layers_middle_section_point(spec_path):
+    """Abaqus printed section points 1 and 24 alone for the 8-layer coupon run on 2026-11-08, so the validation table had plies 1 and 8
+    only (ADR-0066): the writer lists the middle of every layer (point 3k - 1 at 3 Simpson points per layer) on the S and E tables of a
+    membrane coupon, and leaves a bending coupon's tables at Abaqus's default, the faces."""
+    needs_mesher(spec_path)
+    model = build_model(load_spec(spec_path))
+    lines = write_abaqus(model).splitlines()
+    expected = ", ".join(str(3 * k + 2) for k in range(len(model.section.plies)))
+    for i, line in enumerate(lines):
+        if not line.lower().startswith("*el print"):
+            continue
+        if model.bending or lines[i + 1] in ("SF", "SE"):
+            assert lines[i + 1] in ("SF", "SE", "S", "E"), f"{spec_path.name}: line {i + 1}"
+        else:
+            assert lines[i + 1] == expected and lines[i + 2] in ("S", "E"), f"{spec_path.name}: line {i + 1}"
 
 
 def test_a_long_heading_comment_is_wrapped_at_spaces_by_bytes_and_nothing_else_changes():
@@ -216,3 +240,31 @@ def test_a_names_table_gives_the_deck_its_names_and_our_names_otherwise():
 
 def read_deck_text(text: str):
     return parse_deck(text)
+
+
+def test_regenerating_a_deck_that_changed_in_its_output_requests_alone_refreshes_the_records_digest(tmp_path, monkeypatch):
+    """tools/regenerate_decks.py --refresh-digests: a record names the deck the kernel read by its digest, and a change to the deck's
+    print requests changes no solver's numbers, so the digest is rewritten and the record stands; any other change asks for a new run."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("regenerate_decks", paths.FEA / "tools" / "regenerate_decks.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    before = "*Heading\nA\n*Node\n1, 0., 0.\n*Step\n*El Print, elset=Probe-centre, position=CENTROIDAL\nS\n*End Step\n"
+    after = before.replace("*El Print, elset=Probe-centre, position=CENTROIDAL\nS\n", "*El Print, elset=Probe-centre, position=CENTROIDAL\n2, 5\nS\n")
+    assert tool.without_output_requests(before) == tool.without_output_requests(after) == "*Heading\nA\n*Node\n1, 0., 0.\n*Step\n*End Step"
+    deck = tmp_path / "decks" / "x-abaqus.inp"
+    deck.parent.mkdir()
+    deck.write_text(after, encoding="utf-8")
+    record = tmp_path / "records" / "x-calculix.toml"
+    record.parent.mkdir()
+    record.write_text(f'title = "x"\ndeck_kernel = "../decks/x-abaqus.inp"\ndeck_reference = "../decks/x-ccx.inp"\n'
+                      f'deck_kernel_sha256 = "{"0" * 64}"\ndeck_reference_sha256 = "{"1" * 64}"\n', encoding="utf-8")
+    monkeypatch.setattr(tool.paths, "all_records", lambda: [record])
+    lines = tool.refresh_digests({deck.resolve(): before})
+    assert len(lines) == 1 and lines[0].startswith("refreshed") and "output requests only" in lines[0]
+    assert f'deck_kernel_sha256 = "{tool.sha256_of(deck)}"' in record.read_text(encoding="utf-8") and '"1" * 64' not in record.read_text(encoding="utf-8")
+    deck.write_text(after.replace("1, 0., 0.", "1, 0., 1."), encoding="utf-8")  # a node moved: the solvers' numbers change
+    lines = tool.refresh_digests({deck.resolve(): before})
+    assert len(lines) == 1 and lines[0].startswith("needs run") and "beyond its output requests" in lines[0]
+
