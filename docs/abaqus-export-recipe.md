@@ -49,13 +49,13 @@ SF, SE
 S, E
 ```
 
-Open questions for you to settle on your machine (each is UNVERIFIED by us):
+Open questions, and what the run of 2026-11-08 (Abaqus/Standard 2025, S4R, our deck `AS48552-UNT-L1-abaqus.inp` run from the command line) settled:
 
-1. Section points: for a composite layup, which section points does `*El Print` write by default, and how is the list of section points given (we believe the first data line of `*El Print` can list them)? We need `S` and `E` for every ply, or at least for plies 1, 2, 3 and the top ply, and we need to know which section point belongs to which ply.
-2. Axes: are `S11`, `S22`, `S12` at a layer's section point in that ply's material axes (what we expect) or in the section orientation? A 45 degree ply under axial tension answers this at a glance.
-3. Shear strain: is `E12` the tensor shear strain or the engineering shear strain (twice the tensor value)? Our engine uses engineering shear (ADR-0004).
-4. `*Fail Stress`: if you add strengths so Abaqus reports `MSTRS`, `TSAIH` and `TSAIW`, are `Xc` and `Yc` entered as negative numbers or as magnitudes?
-5. The reaction: `RF` at the loaded reference node with `totals=YES`; we will compare the sum.
+1. Section points: **settled.** With no section-point list, `*El Print` of a composite writes two section points only, the bottom of ply 1 and the top of the last ply (points 1 and 24 for 8 layers at 3 Simpson points each). The middle of layer k is section point 3k − 1 (2, 5, 8, 11, 14, 17, 20, 23), and the list goes on the first data line of `*El Print`, before the variable. Our writer lists them on the `S` and `E` tables of every membrane coupon since 2026-11-08 (`fea/src/anisotropy_fea/write_abaqus.py`), so every ply's centroid stress is printed. Verified on 2026-11-08: the regenerated `AS48552-UNT-L1` deck printed `S` and `E` at section points 2, 5, 8, 11, 14, 17, 20 and 23 for both probe elements, one row per ply, bottom first.
+2. Axes: **settled.** `S11`, `S22`, `S12` at a layer's section point are in that ply's material axes: the 45° ply of the gauge element read 170.0 / 15.22 / −23.00 MPa, the fibre-axis values our engine gives (170.1 / 15.2 / −23.0), not the section orientation's.
+3. Shear strain: **settled.** `E12` is the engineering shear strain, twice the tensor value: 0.004767 for the 45° ply, which is ε_y − ε_x of the laminate. Our engine uses the same (ADR-0004).
+4. `*Fail Stress`: if you add strengths so Abaqus reports `MSTRS`, `TSAIH` and `TSAIW`, are `Xc` and `Yc` entered as negative numbers or as magnitudes? Still UNVERIFIED.
+5. The reaction: **settled.** `RF2` at the loaded reference node with `totals=YES` is the coupon's force (4705.40 N against our 4706.78 N, 0.03 %); the `TOTAL` line is the one node.
 
 ## Route 2: field reports from Abaqus/CAE
 

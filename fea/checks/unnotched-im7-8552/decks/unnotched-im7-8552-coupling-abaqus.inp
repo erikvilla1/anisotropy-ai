@@ -2870,15 +2870,19 @@ SF
 *El Print, elset=Probe-centre, position=CENTROIDAL
 SE
 *El Print, elset=Probe-centre, position=CENTROIDAL
+2, 5, 8, 11, 14, 17, 20, 23
 S
 *El Print, elset=Probe-centre, position=CENTROIDAL
+2, 5, 8, 11, 14, 17, 20, 23
 E
 *El Print, elset=Probe-near_grip, position=CENTROIDAL
 SF
 *El Print, elset=Probe-near_grip, position=CENTROIDAL
 SE
 *El Print, elset=Probe-near_grip, position=CENTROIDAL
+2, 5, 8, 11, 14, 17, 20, 23
 S
 *El Print, elset=Probe-near_grip, position=CENTROIDAL
+2, 5, 8, 11, 14, 17, 20, 23
 E
 *End Step
