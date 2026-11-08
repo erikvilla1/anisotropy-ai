@@ -39,6 +39,7 @@ from pathlib import Path
 from anisotropy_fea import __version__, paths
 from anisotropy_fea.attempts import AttemptError, attempt_number, attempts, start_attempt
 from anisotropy_fea.calculix import CalculixError, ccx_version, find_ccx
+from anisotropy_fea.calculix_summary import calculix_summary
 from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, record_summary, rel, signed
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.femodel import build_model
@@ -192,10 +193,20 @@ def wait_at_gate(gate: Path | None, progress: Progress) -> None:
 
 
 def script(step: str, args: list[str], cwd: Path) -> None:
-    """One of our scripts under this Python, its output straight to the console; a nonzero exit stops the run at `step`."""
-    done = subprocess.run([sys.executable, *args], cwd=cwd, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, check=False)
-    if done.returncode:
-        raise StepFailed(f"{step}: {Path(args[0]).name} exited with code {done.returncode}")
+    """One of our scripts under this Python, its output echoed to the console line by line; a nonzero exit stops the run at `step`,
+    and the message carries the script's own last words, so the job's message says what happened, not only the exit code."""
+    process = subprocess.Popen([sys.executable, *args], cwd=cwd, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+    last = ""
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="", flush=True)
+        if line.strip():
+            last = line.strip()
+    process.wait()
+    if process.returncode:
+        words = f": {last[:300]}" if last else ""
+        raise StepFailed(f"{step}: {Path(args[0]).name} exited with code {process.returncode}{words}")
 
 
 def package(name: str, pdf: bool, theory: bool) -> Path:
@@ -212,6 +223,18 @@ def package(name: str, pdf: bool, theory: bool) -> Path:
     except SystemExit as exc:  # the document code stops with a message, as a script does
         raise StepFailed(f"the package: {exc}") from None
     return folder
+
+
+def beside(fields_path: Path, record: Path) -> None:
+    """CalculiX's reaction, gauge ply stresses and .frd peaks written into the fields file's summary as `calculix`, so the page shows
+    them beside ours from the one file it reads (ADR-0030 amendment 6)."""
+    try:
+        data = json.loads(fields_path.read_text(encoding="utf-8"))
+        data["summary"]["calculix"] = calculix_summary(record, data["units"])
+        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        print(f"written    {rel(fields_path)} (CalculiX's numbers beside ours)")
+    except (OSError, ValueError, KeyError) as exc:  # the page then shows ours alone, and says nothing of CalculiX's; the record itself stands
+        print(f"CalculiX's numbers were not written beside ours in {rel(fields_path)}: {str(exc).splitlines()[0]}")
 
 
 def add_row(folder: Path, cells: list[str]) -> None:
@@ -299,7 +322,8 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
          {"kernel_summary": out / "kernel" / "summary.txt", "fields": out / "kernel" / f"{name}-fields.json",
           "explanation": out / "kernel" / f"{name}-explanation.json"}),
         ("CalculiX", [str(paths.FEA / "examples/run_calculix.py"), str(twin), "--out", str(out / "calculix")],
-         {"prepomax_deck": out / "calculix" / f"{name}-nodal-ccx.inp", "prepomax_results": out / "calculix" / f"{name}-nodal-ccx.frd"}),
+         {"prepomax_deck": out / "calculix" / f"{name}-nodal-ccx.inp", "prepomax_results": out / "calculix" / f"{name}-nodal-ccx.frd",
+          "calculix_console": out / "calculix" / f"{name}-nodal-ccx.log", "calculix_status": out / "calculix" / f"{name}-nodal-ccx.sta"}),
         ("the CalculiX record", [str(paths.FEA / "tools/record_from_dat.py"), str(twin), str(out / "calculix" / f"{name}-nodal-ccx.dat"),
                                  "--version", version, "--run-by", run_by, "--machine", machine, "--tolerance", str(TOLERANCE), "--floor", str(FLOOR),
                                  "--node-probes", *nodes, "--element-probes", *elements, "--notes", notes, "--out", str(record)],
@@ -319,8 +343,12 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     try:
         for step, args, made in steps:
             progress.start(step)
-            script(step, args, paths.FEA)
-            progress.made(**made)
+            try:
+                script(step, args, paths.FEA)
+                if step == "the CalculiX record":
+                    beside(out / "kernel" / f"{name}-fields.json", record)  # CalculiX's numbers into the fields the result shows (ADR-0030 amendment 6)
+            finally:
+                progress.made(**made)  # what the step wrote stays reported, a failed step's deck and console included
         progress.start("the result")
         missing = [path for _, _, path in answer if not path.exists()]
         if missing:
@@ -340,6 +368,7 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     refresh_page(folder)
     opens = [(key, label, path) for key, label, path in opens if path.exists()] + answer
     outputs = {key: path for key, _, path in opens}
+    progress.outputs = {key: path for key, path in progress.outputs.items() if key in outputs or key in ("checklist", "preview")}  # the console and status files are kept only for a run that failed
     progress.made(**outputs)
     print(f"\nDone: attempt {number:02d} of {name}; its row is in {rel(folder / 'README.md')}. {result}.")
     if documents != "written":

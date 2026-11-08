@@ -65,8 +65,18 @@ export type Fields = {
   ranges?: Record<string, Record<string, unknown>>; ranges_note?: string;
   summary: { max_displacement: { value: number; node: number; label: string; xy: number[]; components: number[]; axis?: string };
     reaction: { set: string; value: number; sense: string; dof?: number }; applied: { control: string; value: number; unit: string; dof?: number; direction?: string; total_force?: number };
-    max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number };
+    max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number;
+    /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */
+    calculix?: CalculixBeside | null };
   quality?: QualitySummary;
+};
+export type CalculixBeside = {
+  record: string; units: string; tolerance: number; agree: string;
+  reaction: { calculix: number; ours: number; difference: string; agrees: boolean } | null;
+  gauge_element: string | null;
+  gauge: { ply: number; ours: (number | null)[]; calculix: (number | null)[]; agrees: (boolean | null)[] }[];
+  frd: (Record<string, unknown> & { nodes: number; mises_max: number; mises_max_node: number; mises_max_xyz: number[]; syy_max: number; syy_max_node: number;
+    sxx_max: number; sxx_min: number; gauge_mises_max?: number; gauge_syy_max?: number; gauge_from?: number; gauge_to?: number }) | null;
 };
 export type Explanation = { writer: string; facts: Record<string, unknown>; sentences: string[]; setup_sentences: string[] };
 export type CouponSummary = { name: string; designation: string | null; kind: string; test: string; title: string; layup: string; status: string | null;
@@ -271,12 +281,14 @@ export async function explainJob(apiBase: string, jobId: string, kind: "setup" |
   return readExplainAnswer(payload);
 }
 
-/** The downloadable files of a job, in the order the page lists them, with the words of fea/tools/run_coupon.py. */
+/** The files of a job the page offers for download, in the order it lists them: the package, its PDF and the decks; the `.frd` stays so
+ * the CalculiX twin can be checked in PrePoMax. The other outputs (the fields, the explanation, the record, the summary, the `.vtu`,
+ * the setup check, the preview) remain job outputs the viewer and the explanation read; they are not offered as files (the founder,
+ * 2026-11-08: "don't need JSON files"). */
 export const DOWNLOADS: [string, string][] = [
   ["package", "The package for the team (zip)"], ["document", "The document (PDF)"], ["abaqus_deck", "Our Abaqus deck (.inp)"],
-  ["prepomax_deck", "The CalculiX twin for PrePoMax (.inp)"], ["prepomax_results", "Its results for PrePoMax (.frd)"],
-  ["kernel_summary", "Our engine's summary (text)"], ["kernel_vtu", "Every ply's stresses for ParaView (.vtu)"], ["fields", "Every field (JSON)"],
-  ["explanation", "The explanation (JSON)"], ["record", "The CalculiX record (TOML)"], ["checklist", "The setup check (JSON)"], ["preview", "The preview (JSON)"],
+  ["prepomax_deck", "The CalculiX twin for PrePoMax (.inp)"],
+  ["prepomax_results", "CalculiX's results for PrePoMax (.frd): global axes, one brick per ply, nodal grips"],
 ];
 
 // ----------------------------------------------------------------------------------------------- laminate problems (ADR-0060)

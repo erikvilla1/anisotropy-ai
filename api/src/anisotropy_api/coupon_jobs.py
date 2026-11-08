@@ -367,15 +367,20 @@ class CouponJobs:
         """An ended job: its files to the store when there is one, its receipt, its status here and its row (with `row`'s extra columns).
         `before_row` runs right before the row's write: a solver ends its heartbeat there, and the write carries the last sign of life."""
         state = outcome["status"] if outcome.get("status") in STATES[1:] else "stopped"
-        if state == "done" and self.store is not None:  # the files outlive this container only in the store (ADR-0050 amendment 2)
+        if state in ("done", "stopped") and self.store is not None and outcome.get("coupon") and outcome.get("attempt"):
+            # the files outlive this container only in the store (ADR-0050 amendment 2); a stopped run's deck, console and status files too, so the
+            # fault can be read later (ADR-0030 amendment 3)
             uploading = time.monotonic()
             try:
                 job.stored = self._store(job, outcome)
                 job.timings["upload_s"] = round(time.monotonic() - uploading, 1)
             except Exception as exc:  # boto3 raises its own families, the disk OSError: either way the files are not durable
-                state = "stopped"
-                outcome = {**outcome, "status": "stopped", "message": f"the job ended ({outcome.get('message')}) but its files could not be copied "
-                                                                      f"to storage: {str(exc).splitlines()[0]}; its result is withheld", "outputs": {}}
+                if state == "done":
+                    state = "stopped"
+                    outcome = {**outcome, "status": "stopped", "message": f"the job ended ({outcome.get('message')}) but its files could not be copied "
+                                                                          f"to storage: {str(exc).splitlines()[0]}; its result is withheld", "outputs": {}}
+                else:
+                    print(f"coupon job {job.id}: the stopped run's files could not be copied to storage: {str(exc).splitlines()[0]}", flush=True)
         try:
             run_id = self.recorder(job, state, outcome)
         except RecordingFailed as exc:  # no result without its receipt (ADR-0026)
@@ -400,7 +405,7 @@ class CouponJobs:
             job.state = state
 
     def _store(self, job: Job, outcome: dict) -> dict[str, str]:
-        """A done job's files into the store: every reported file by key, the package zip, and the coupon's whole folder."""
+        """An ended job's files into the store: every reported file by key, the package zip when there is one, and the coupon's folder."""
         coupon, attempt = outcome["coupon"], Path(outcome["attempt"]).name
         outputs = {key: repository_path(path) for key, path in (outcome.get("outputs") or {}).items()}
         outputs = {key: path for key, path in outputs.items()  # the same rule as output_file: under the repository or the job's folder
@@ -430,9 +435,10 @@ class CouponJobs:
 
     def output_url(self, job: Job, key: str) -> str | None:
         """A short-lived link to a job's file in the object store, or None when the file is served from the disk: no store, a job of
-        this process still running, or a file the store does not hold (ADR-0050 amendment 2). A job read back from its row has no
+        this process still running, or a file the store does not hold (ADR-0050 amendment 2); an ended job's stored files, a stopped
+        run's deck and console among them, come from the store. A job read back from its row has no
         disk here, so its files come from the store while it runs too: with the job queue its solver files them as they are made."""
-        if self.store is None or key not in job.stored or (job.state != "done" and job.folder is not None):
+        if self.store is None or key not in job.stored or (job.state not in ("done", "stopped") and job.folder is not None):
             return None
         return self.store.link(job.stored[key])
 
