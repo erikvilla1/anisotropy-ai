@@ -5,6 +5,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 ## [Unreleased]
 
 ### Fixed
+- The coupon fact sheet keeps each measured value at the four significant figures the sentences print, so a model that copies the sheet no longer writes a number such as 16211.1968902878 N (ADR-0052 amendment 1, `fea/src/anisotropy_fea/explain.py`); the browser fixtures' explanation files carry the same digits.
 - The workspace asks again for a job's status or its fields when one answer is missed (two seconds later, up to ten times per job; `components/studio/use-coupon-run.ts`): on the hosted site one read of the fields through the Worker went unanswered and the page stayed without results while the job was done. The browser stand-in fails the first read on purpose. The live site's findings of the evening are in `docs/evaluations/website/2026-11-05-beta-launch-checks.md`.
 
 ### Added
