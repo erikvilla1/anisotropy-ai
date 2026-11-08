@@ -24,3 +24,24 @@ def test_the_report_prints_through_a_cp1252_pipe(tmp_path):
     result = subprocess.run([sys.executable, str(SCRIPT), str(spec), "--out", str(tmp_path / "out"), "--no-solve"], capture_output=True, env=env)
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
     assert "10⁻⁶" in result.stdout.decode("utf-8")
+
+
+def test_the_drawings_can_wait_until_after_the_result(tmp_path):
+    """ADR-0064: `--drawings without` writes the result's files and no picture; `--drawings only` then draws the deck that run wrote
+    and leaves the result's files as they were."""
+    spec, out = paths.spec_path("unnotched-im7-8552-nodal"), tmp_path / "kernel"
+    drawings = [out / f"{spec.stem}{suffix}" for suffix in ("-model.png", "-solved.png", ".vtu")]
+    first = subprocess.run([sys.executable, str(SCRIPT), str(spec), "--out", str(out), "--drawings", "without"], capture_output=True)
+    assert first.returncode == 0, first.stderr.decode("utf-8", errors="replace")
+    results = {path: path.read_bytes() for path in (out / "summary.txt", out / f"{spec.stem}-fields.json", out / f"{spec.stem}-explanation.json")}
+    assert not any(path.exists() for path in drawings)
+    second = subprocess.run([sys.executable, str(SCRIPT), str(spec), "--out", str(out), "--drawings", "only"], capture_output=True)
+    assert second.returncode == 0, second.stderr.decode("utf-8", errors="replace")
+    assert all(path.is_file() for path in drawings)
+    assert all(path.read_bytes() == data for path, data in results.items())
+
+
+def test_drawing_only_needs_the_deck_an_earlier_run_wrote(tmp_path):
+    spec = paths.spec_path("unnotched-im7-8552-nodal")
+    done = subprocess.run([sys.executable, str(SCRIPT), str(spec), "--out", str(tmp_path), "--drawings", "only"], capture_output=True)
+    assert done.returncode != 0 and b"draws the deck an earlier run wrote" in done.stderr
