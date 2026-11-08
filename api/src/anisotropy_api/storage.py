@@ -143,6 +143,22 @@ def store_job(store: ObjectStore, coupon: str, attempt: str, outputs: dict[str, 
     return stored
 
 
+# What the coupon folder's copy in the store leaves out (ADR-0056 amendment 6): the big files a run makes, which the job's own keys
+# already hold (`store_job`) and no later job reads: CalculiX's results and scratch files, the ParaView and fields files, the PDF, the
+# LaTeX and the package folders. The specs, decks, records, case page, team files, the attempt folders' small files stay, so the next
+# solver numbers attempts and builds packages as before.
+SKIPPED_SUFFIXES = (".frd", ".dat", ".12d", ".cvg", ".sta", ".vtu", "-fields.json", ".pdf", ".tex", ".log")
+SKIPPED_FOLDERS = (("documents",), ("ours", "latex"))
+
+
+def kept_in_folder(parts: tuple[str, ...] | list[str]) -> bool:
+    """Whether a file at this path under a coupon's folder belongs in the store's copy of the folder."""
+    parts = tuple(parts)
+    if any(parts[:len(skipped)] == skipped for skipped in SKIPPED_FOLDERS):
+        return False
+    return not parts[-1].endswith(SKIPPED_SUFFIXES)
+
+
 def store_folder(store: ObjectStore, folder: Path, coupon: str) -> int:
     """Upload the coupon's whole folder (specs, decks, runs, verification, documents, the case page) under its `folder/` prefix, apart
     from a file the store holds unchanged: its tag is the content's MD5 for an object put in one piece, as these are (ADR-0056
@@ -150,6 +166,8 @@ def store_folder(store: ObjectStore, folder: Path, coupon: str) -> int:
     held = store.tags(f"{COUPONS}/{coupon}/{FOLDER}/")
     count = 0
     for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+        if not kept_in_folder(path.relative_to(folder).parts):
+            continue
         key = folder_key(coupon, PurePosixPath(path.relative_to(folder).as_posix()))
         if held.get(key, "").strip('"') == hashlib.md5(path.read_bytes()).hexdigest():
             continue
@@ -170,6 +188,8 @@ def restore(store: ObjectStore, root: Path) -> tuple[int, int]:
         if not coupon or "/" in coupon or not parts or any(part in ("", ".", "..") for part in parts):
             continue
         coupons.add(coupon)
+        if not kept_in_folder(parts):  # a copy filed before the folder's scope was narrowed
+            continue
         target = root.joinpath(coupon, *parts)
         if target.is_file():
             continue
@@ -206,6 +226,8 @@ def sync(store: ObjectStore, root: Path) -> tuple[int, int]:
             continue
         coupon, parts = found
         coupons.add(coupon)
+        if not kept_in_folder(parts):  # a copy filed before the folder's scope was narrowed
+            continue
         target = root.joinpath(coupon, *parts)
         if target.is_file() and marks.get(key) == tag:
             continue

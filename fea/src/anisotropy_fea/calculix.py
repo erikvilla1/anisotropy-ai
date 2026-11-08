@@ -80,7 +80,7 @@ def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: 
     target = workdir / f"{job}.inp"
     if target.resolve() != deck_path.resolve():
         shutil.copyfile(deck_path, target)
-    env = {**os.environ, "OMP_NUM_THREADS": str(threads)}
+    env = {**os.environ, "OMP_NUM_THREADS": str(threads), "CCX_NPROC_EQUATION_SOLVER": str(threads)}  # the assembly and the solver alike
     start = time.perf_counter()
     try:
         done = subprocess.run([str(solver), "-i", job], cwd=workdir, capture_output=True, text=True, timeout=timeout_s, env=env, check=False)

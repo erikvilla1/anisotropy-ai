@@ -17,6 +17,9 @@ export type JobStatus = {
   /** The result's one line once the solve and the CalculiX record are done, while the drawings and the package are still made
    * (ADR-0064); `documents` is then "building", and once the job is done "written" or what is missing and why. */
   result?: string | null; documents?: string | null;
+  /** When a solver took the queued job up, and the seconds of each of the tool's stages and of the solver's phases around it
+   * (restore_s, lock_wait_s, gate_s, upload_s), as far as the job got (ADR-0056 amendment 6). */
+  claimed_at?: string | null; timings?: Record<string, number>;
 };
 export type CheckAnswer = { run_id: string | null; state: "ready" | "blocked"; designation: string | null; checklist: Checklist; preview: Preview | null };
 export type Preview = {

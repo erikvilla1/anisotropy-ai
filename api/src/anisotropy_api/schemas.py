@@ -517,6 +517,8 @@ class CouponJobOutput(Contract):
     project_id: str | None = None  # the workspace project it was started for (ADR-0062 part 6)
     result: str | None = None
     documents: str | None = None
+    claimed_at: str | None = None  # when a solver took the queued job up (ADR-0056 amendment 6)
+    timings: dict[str, float] = {}  # the seconds of each stage of the tool and of the solver's phases around it, as far as the job got
 
     @classmethod
     def of(cls, job) -> "CouponJobOutput":
@@ -536,7 +538,9 @@ class CouponJobOutput(Contract):
                    stage=progress.get("stage"),
                    stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), outputs=outputs or {},
                    run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail(),
-                   project_id=None if getattr(job, "project_id", None) is None else str(job.project_id))
+                   project_id=None if getattr(job, "project_id", None) is None else str(job.project_id),
+                   claimed_at=None if getattr(job, "claimed_at", None) is None else job.claimed_at.isoformat(),
+                   timings=job.all_timings() if hasattr(job, "all_timings") else {})
 
 
 class CouponCheckReceipt(Contract):
