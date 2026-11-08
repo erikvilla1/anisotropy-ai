@@ -39,6 +39,7 @@ from pathlib import Path
 from anisotropy_fea import __version__, paths
 from anisotropy_fea.attempts import AttemptError, attempt_number, attempts, start_attempt
 from anisotropy_fea.calculix import CalculixError, ccx_version, find_ccx
+from anisotropy_fea.calculix_summary import calculix_summary
 from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, record_summary, rel, signed
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.femodel import build_model
@@ -208,6 +209,18 @@ def package(name: str, pdf: bool, theory: bool) -> Path:
     return folder
 
 
+def beside(fields_path: Path, record: Path) -> None:
+    """CalculiX's reaction, gauge ply stresses and .frd peaks written into the fields file's summary as `calculix`, so the page shows
+    them beside ours from the one file it reads (ADR-0030 amendment 6)."""
+    try:
+        data = json.loads(fields_path.read_text(encoding="utf-8"))
+        data["summary"]["calculix"] = calculix_summary(record, data["units"])
+        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        print(f"written    {rel(fields_path)} (CalculiX's numbers beside ours)")
+    except (OSError, ValueError, KeyError) as exc:  # the page then shows ours alone, and says nothing of CalculiX's; the record itself stands
+        print(f"CalculiX's numbers were not written beside ours in {rel(fields_path)}: {str(exc).splitlines()[0]}")
+
+
 def add_row(folder: Path, cells: list[str]) -> None:
     """The attempt's row, after the last row of the case page's attempt log."""
     readme = folder / "README.md"
@@ -314,6 +327,8 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
             progress.start(step)
             try:
                 script(step, args, paths.FEA)
+                if step == "the CalculiX record":
+                    beside(out / "kernel" / f"{name}-fields.json", record)  # CalculiX's numbers into the fields the result shows (ADR-0030 amendment 6)
             finally:
                 progress.made(**made)  # what the step wrote stays reported, a failed step's deck and console included
         progress.start("the result")

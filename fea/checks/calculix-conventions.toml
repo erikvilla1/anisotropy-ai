@@ -56,3 +56,11 @@ image_solvers = ["SPOOLES", "ITERATIVE"]
 spooles_layer_bricks_solved = 17850  # the same coupon's structured mesh; the open-hole Gmsh mesh solved at about 25,000
 spooles_layer_bricks_failed = 24000  # one structured 40 by 100 mesh of 6 plies, 55,733 equations
 spooles_fatal_text = "fatal error in GPart_makeYCmap ... bad input"
+
+# The .frd (what PrePoMax and ParaView show), read by anisotropy_fea.frd since ADR-0030 amendment 6: the stresses are in the GLOBAL axes
+# whatever the layers' *ORIENTATION (a viewer's "S11" is sigma_xx, across the width of a coupon whose length runs along y), one twenty-node
+# brick per element and ply (a composite shell of 8 plies shows as 8 unconnected layers, 17 z levels), values extrapolated from the
+# integration points to the nodes. Seen on the public IM7/8552 coupon, 2026-11-08: 89,504 nodes, von Mises 1580.4 MPa at node 68861
+# (25, 57, 0), the free edge at the bottom tab line, where our engine's largest ply S11 is 1322 MPa at an element centroid.
+frd_axes = "global"
+frd_layers = "one brick per element and ply, nodal values extrapolated"
