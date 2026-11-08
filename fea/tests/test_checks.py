@@ -161,6 +161,30 @@ def test_a_modulus_in_the_wrong_unit_warns(tmp_path):
     assert items["units"].rows == ("Own material: E1 (MPa)", "Own material: E2 (MPa)", "Own material: G12 (MPa)") and checked.state == "ready"
 
 
+def test_a_structured_twin_past_where_spooles_failed_warns(tmp_path):
+    # 2026-11-08: a 4000-element, 6-ply structured coupon (24,000 layer bricks, 55,733 equations) stopped SPOOLES in CalculiX 2.21 and 2.22; 2975 by 6
+    # solved, and so did the open-hole check's mesh of about 25,000 bricks (50,162 equations), so the count is a warning, not a refusal.
+    # The public coupon's mesh with 24 elements across instead of 12: 24 by 120 = 2880 elements by 8 plies = 23,040 bricks
+    checked, model, _ = checklist(tmp_path, PUBLIC_FILL, mesh_nx=24)
+    items = by_id(checked)
+    assert checked.state == "ready" and model is not None and items["mesh"].state == "warn"
+    assert "23040 layer bricks" in items["mesh"].message and "SPOOLES" in items["mesh"].message and "a coarser mesh solves" in items["mesh"].message
+    assert items["mesh"].rows == ("Element size (mm)", "Your Abaqus mesh: elements across the width")
+    fine, _, _ = checklist(tmp_path, PUBLIC_FILL)  # 1200 by 8 = 9600 bricks, within what SPOOLES ordered
+    assert by_id(fine)["mesh"].state == "pass" and "SPOOLES" not in by_id(fine)["mesh"].message
+    hole, _, _ = checklist(tmp_path, OHT_FILL)  # a Gmsh mesh: no such warning, SPOOLES ordered the open-hole check's
+    assert "SPOOLES" not in by_id(hole)["mesh"].message
+
+
+def test_a_transverse_shear_modulus_far_from_g12_warns(tmp_path):
+    # the form that stopped on 2026-11-08 gave G13 = G23 = 100 MPa (G12 about 4,900 MPa): CalculiX's brick uses them, our membrane does not
+    checked, _, _ = checklist(tmp_path, PUBLIC_FILL, G13=100.0, G23=100.0)
+    items = by_id(checked)
+    assert checked.state == "ready" and items["material"].state == "warn"
+    assert items["material"].message.startswith("G13 = 100 MPa, G23 = 100 MPa against G12 = ") and "our membrane does not use it" in items["material"].message
+    assert items["material"].rows == ("G13 (MPa)", "G23 (MPa)")
+
+
 def test_constants_the_engine_refuses_fail_the_material(tmp_path):
     checked, model, _ = checklist(tmp_path, PUBLIC_FILL, **{**own_constants(), "own_E1": 162.0})  # E1 alone in GPa: nu12^2 < E1/E2 no longer holds
     items = by_id(checked)
