@@ -114,11 +114,11 @@ def test_the_calculix_summary_reads_the_public_record_in_the_fields_units():
     record = Path(__file__).resolve().parents[1] / "checks" / "unnotched-im7-8552" / "records" / "unnotched-im7-8552-nodal-calculix.toml"
     beside = calculix_summary(record, "mm-MPa")
     assert beside["record"] == record.name and beside["units"] == "mm-MPa" and beside["tolerance"] == 0.03 and beside["frd"] is None
-    assert beside["reaction"]["calculix"] == pytest.approx(16162.16) and beside["reaction"]["ours"] == pytest.approx(16212, rel=1e-3)
-    assert beside["reaction"]["difference"].startswith("+0.3") and beside["reaction"]["agrees"] is True
+    assert beside["reaction"]["calculix"] == pytest.approx(16102.21) and beside["reaction"]["ours"] == pytest.approx(16212, rel=1e-3)
+    assert beside["reaction"]["difference"].startswith("+0.6") and beside["reaction"]["agrees"] is True
     assert beside["gauge_element"] == "Coupon-1.626" and [g["ply"] for g in beside["gauge"]] == [1, 2, 3, 4, 5, 6, 7, 8]
-    ply4 = beside["gauge"][3]
-    assert ply4["calculix"][0] == pytest.approx(1180.67, abs=0.01) and ply4["ours"][0] == pytest.approx(1180.67, rel=2e-3) and all(ply4["agrees"])
+    ply2 = beside["gauge"][1]  # the stated 0-degree ply, fibres along the pull (ADR-0065), carries the fibre stress
+    assert ply2["calculix"][0] == pytest.approx(1180.85, abs=0.01) and ply2["ours"][0] == pytest.approx(1180.85, rel=2e-3) and all(ply2["agrees"])
     inches = calculix_summary(record, "in-psi")
-    assert inches["reaction"]["calculix"] == pytest.approx(16162.16 / 4.4482216152605, rel=1e-6)  # N to lbf
-    assert inches["gauge"][3]["calculix"][0] == pytest.approx(1180.67 / 6.894757293168e-3, rel=1e-4)  # MPa to psi
+    assert inches["reaction"]["calculix"] == pytest.approx(16102.21 / 4.4482216152605, rel=1e-6)  # N to lbf
+    assert inches["gauge"][1]["calculix"][0] == pytest.approx(1180.85 / 6.894757293168e-3, rel=1e-4)  # MPa to psi
