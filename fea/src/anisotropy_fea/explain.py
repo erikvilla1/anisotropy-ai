@@ -1,7 +1,9 @@
 """The explanation the studio shows beside a result, written from the solve's summary by a template (ADR-0051).
 
 Every number in a sentence is in the fact sheet first, and the sentence quotes it: the fact sheet is what a later assistant may
-rephrase and what its guard checks against (ADR-0048, ADR-0052). The template never computes: it reads `fields.field_data`'s
+rephrase and what its guard checks against (ADR-0048, ADR-0052). The sheet holds each measured value at the precision the sentences
+print, DIGITS significant figures, so a fact and its mention agree digit for digit and a writer that copies the sheet copies a
+printable number (ADR-0052 amendment 1). The template never computes: it reads `fields.field_data`'s
 summary and says, in the words the coupon document uses, what the coupon carries, where it moves most, which ply is stressed
 most, and by each criterion whether the laminate exceeds it and which ply limits it, on which face when the coupon bends
 (ADR-0053), where, and why.
@@ -9,6 +11,7 @@ most, and by each criterion whether the laminate exceeds it and which ply limits
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -32,31 +35,39 @@ def number(value: float) -> str:
     return f"{value:.{DIGITS}g}"
 
 
+def printed(value: float) -> float:
+    """A measured value as the sheet keeps it: DIGITS significant figures, the same digits `number` prints (ADR-0052 amendment 1).
+    Zero and a value that is not finite pass through."""
+    if value == 0 or not math.isfinite(value):
+        return value
+    return float(f"{value:.{DIGITS - 1}e}")
+
+
 def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labels: dict[str, str]) -> dict[str, Any]:
     """Every number and word the sentences may use, flat, by name."""
     facts: dict[str, Any] = {
         "designation": coupon.get("designation") or "the coupon", "test": coupon.get("test") or "", "layup": coupon.get("layup") or "",
         "units": units, "length_unit": labels["length"], "force_unit": labels["force"], "stress_unit": labels["stress"],
-        "control": summary["applied"]["control"], "applied": abs(float(summary["applied"]["value"])), "applied_unit": summary["applied"]["unit"],
+        "control": summary["applied"]["control"], "applied": printed(abs(float(summary["applied"]["value"]))), "applied_unit": summary["applied"]["unit"],
         "applied_direction": summary["applied"].get("direction", "along the coupon"),
-        "reaction": abs(float(summary["reaction"]["value"])), "sense": summary["reaction"]["sense"], "reaction_set": summary["reaction"].get("set", "the top grip"),
-        "max_displacement": float(summary["max_displacement"]["value"]), "max_displacement_node": summary["max_displacement"]["label"].rsplit(".", 1)[-1],
-        "max_displacement_x": float(summary["max_displacement"]["xy"][0]), "max_displacement_y": float(summary["max_displacement"]["xy"][1]),
+        "reaction": printed(abs(float(summary["reaction"]["value"]))), "sense": summary["reaction"]["sense"], "reaction_set": summary["reaction"].get("set", "the top grip"),
+        "max_displacement": printed(float(summary["max_displacement"]["value"])), "max_displacement_node": summary["max_displacement"]["label"].rsplit(".", 1)[-1],
+        "max_displacement_x": printed(float(summary["max_displacement"]["xy"][0])), "max_displacement_y": printed(float(summary["max_displacement"]["xy"][1])),
         "max_displacement_axis": summary["max_displacement"].get("axis", "y"),
     }
     for name, m in summary["max_ply"].items():
-        facts[f"max_{name}"] = float(m["value"])
+        facts[f"max_{name}"] = printed(float(m["value"]))
         facts[f"max_{name}_ply"] = int(m["ply"])
-        facts[f"max_{name}_angle"] = float(m["angle"])
+        facts[f"max_{name}_angle"] = printed(float(m["angle"]))
         facts[f"max_{name}_element"] = m["label"].rsplit(".", 1)[-1]
         facts[f"max_{name}_face"] = m.get("face")
     facts["criteria"] = list(summary["fpf"])
     facts["earliest"] = summary.get("earliest")
     for criterion, f in summary["fpf"].items():
-        facts[f"{criterion}_factor"] = float(f["factor"])
-        facts[f"{criterion}_index"] = float(f["index"])
+        facts[f"{criterion}_factor"] = printed(float(f["factor"]))
+        facts[f"{criterion}_index"] = printed(float(f["index"]))
         facts[f"{criterion}_ply"] = int(f["ply"])
-        facts[f"{criterion}_angle"] = float(f["angle"])
+        facts[f"{criterion}_angle"] = printed(float(f["angle"]))
         facts[f"{criterion}_face"] = f.get("face")
         facts[f"{criterion}_element"] = f["label"].rsplit(".", 1)[-1]
         facts[f"{criterion}_mode"] = f["mode"]
