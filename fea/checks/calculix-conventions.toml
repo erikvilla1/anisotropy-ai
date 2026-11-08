@@ -41,3 +41,11 @@ pressure_direction = "along the element normal (+z for counterclockwise nodes): 
 # a set of shell nodes do not hold every force that balances the load (the expanded nodes of the shell's knots carry the rest; the cause is
 # UNVERIFIED). A reaction total read from a shell node set is read with that in mind; the kernel's reactions balance the load to roundoff.
 shell_set_totals = "may under-report (1.666667 N printed of 2 N applied on the detection plate)"
+
+# The .frd (what PrePoMax and ParaView show), read by anisotropy_fea.frd since ADR-0030 amendment 6: the stresses are in the GLOBAL axes
+# whatever the layers' *ORIENTATION (a viewer's "S11" is sigma_xx, across the width of a coupon whose length runs along y), one twenty-node
+# brick per element and ply (a composite shell of 8 plies shows as 8 unconnected layers, 17 z levels), values extrapolated from the
+# integration points to the nodes. Seen on the public IM7/8552 coupon, 2026-11-08: 89,504 nodes, von Mises 1580.4 MPa at node 68861
+# (25, 57, 0), the free edge at the bottom tab line, where our engine's largest ply S11 is 1322 MPa at an element centroid.
+frd_axes = "global"
+frd_layers = "one brick per element and ply, nodal values extrapolated"
