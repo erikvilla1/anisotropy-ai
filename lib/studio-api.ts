@@ -265,12 +265,14 @@ export async function explainJob(apiBase: string, jobId: string, kind: "setup" |
   return readExplainAnswer(payload);
 }
 
-/** The downloadable files of a job, in the order the page lists them, with the words of fea/tools/run_coupon.py. */
+/** The files of a job the page offers for download, in the order it lists them: the package, its PDF and the decks; the `.frd` stays so
+ * the CalculiX twin can be checked in PrePoMax. The other outputs (the fields, the explanation, the record, the summary, the `.vtu`,
+ * the setup check, the preview) remain job outputs the viewer and the explanation read; they are not offered as files (the founder,
+ * 2026-11-08: "don't need JSON files"). */
 export const DOWNLOADS: [string, string][] = [
   ["package", "The package for the team (zip)"], ["document", "The document (PDF)"], ["abaqus_deck", "Our Abaqus deck (.inp)"],
-  ["prepomax_deck", "The CalculiX twin for PrePoMax (.inp)"], ["prepomax_results", "Its results for PrePoMax (.frd)"],
-  ["kernel_summary", "Our engine's summary (text)"], ["kernel_vtu", "Every ply's stresses for ParaView (.vtu)"], ["fields", "Every field (JSON)"],
-  ["explanation", "The explanation (JSON)"], ["record", "The CalculiX record (TOML)"], ["checklist", "The setup check (JSON)"], ["preview", "The preview (JSON)"],
+  ["prepomax_deck", "The CalculiX twin for PrePoMax (.inp)"],
+  ["prepomax_results", "CalculiX's results for PrePoMax (.frd): global axes, one brick per ply, nodal grips"],
 ];
 
 // ----------------------------------------------------------------------------------------------- laminate problems (ADR-0060)
