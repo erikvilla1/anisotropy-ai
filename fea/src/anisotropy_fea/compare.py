@@ -243,7 +243,7 @@ def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
     if u:
         expected["w" if bending else "u"] = u
     plies = model.section.plies
-    angles = [p.angle_deg for p in plies]
+    angles = [p.fibre_deg for p in plies]  # the rotation from global xy to the ply's 1-2 axes is by the fibre angle from x, not the stated one (ADR-0065)
     strain, stress_local, strain_local = {}, {}, {}
     for name, index in model.probe_elements.items():
         if element_probes is not None and name not in element_probes:

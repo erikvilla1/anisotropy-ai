@@ -42,7 +42,7 @@ The subset is exactly what the team's Abaqus/CAE coupon decks use. Anything else
 | `*Node` | `label, x, y[, z]` in a part or in the assembly (reference points) | `nset=`, non-rectangular `system=`; any `z != 0` (the membrane is flat) |
 | `*Element, type=` | `S4`, `S4R`, `S4R5`; `label, n1, n2, n3, n4`; `elset=` | every other type |
 | `*Nset`, `*Elset` | `instance=`, `internal`, `generate`; multi-line lists; a repeated name is one set | `unsorted` |
-| `*Orientation` | the global axes `1,0,0, 0,1,0` with rotation `3, 0.` or none | any other axes, rotation, `system=`, `definition=` |
+| `*Orientation` | any right-handed frame in the plate's plane: a unit `a` with `a_z = 0`, `b` = z cross `a`, an optional rotation `3, angle`; the angle from x to local 1 becomes the section's rotation (ADR-0065) | an `a` out of the plane or not of unit length, a `b` other than z cross `a`, a rotation about axis 1 or 2, `system=`, `definition=` |
 | `*Shell Section` | `composite` with layer lines `t, nip, material, angle[, name]` and `symmetric`; or `material=` with `t[, nip]` | `offset`, `nodal thickness`, `*Shell General Section`, `*Membrane Section`, `*Solid Section` |
 | `*Material` / `*Elastic` | `type=LAMINA` with `E1, E2, nu12, G12, G13, G23`; isotropic `E, nu` | other types, temperature or field dependence |
 | `*Fail Stress` | one line `Xt, Xc, Yt, Yc, S[, f*[, sigma_biax]]`, stored as written | several lines |

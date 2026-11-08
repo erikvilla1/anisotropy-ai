@@ -285,7 +285,7 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   await expect(question).toHaveAttribute("data-step", "shear");
   await page.getByRole("button", { name: /Use the tape estimate/ }).click();
   await expect(question).toHaveAttribute("data-step", "layup");
-  await expect(question).toContainText("90° runs along the load");
+  await expect(question).toContainText("0° runs along the load");
   await page.getByRole("button", { name: /Quasi-isotropic/ }).click();
   await expect(question).toHaveAttribute("data-step", "geometry");
   await page.getByRole("button", { name: /250 × 25 mm, 56 mm tabs/ }).click();

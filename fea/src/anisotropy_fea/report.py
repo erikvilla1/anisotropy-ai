@@ -220,7 +220,8 @@ class LaminateCheck:
     (force control). The laminate is the mesh's one section. Values in SI.
     """
 
-    plies: list[Ply]
+    plies: list[Ply]  # the engine plies, their angles the fibre angles from x
+    angles_deg: tuple[float, ...]  # the angles the deck states, bottom-first: what a table prints beside each ply (ADR-0065)
     A: np.ndarray  # (3, 3) N/m
     thickness_m: float
     constants: EngineeringConstants
@@ -373,7 +374,7 @@ def laminate_check(deck: Deck, solution: MembraneSolution) -> LaminateCheck:
     e = gauge.index
     field = element_ply_states(solution)
     reaction = float(solution.reaction[list(top)].sum(axis=0)[1])
-    return LaminateCheck(plies=plies, A=A, thickness_m=thickness, constants=engineering_constants(plies), width_m=width,
+    return LaminateCheck(plies=plies, angles_deg=mesh.sections[0].angles_deg, A=A, thickness_m=thickness, constants=engineering_constants(plies), width_m=width,
                          free_length_m=free_length, control=control, applied=applied, strain=strain, section_force=section_force,
                          ply_stress_12=ply_stress, ply_strain_12=ply_strain, gauge=gauge,
                          kernel_strain=solution.strain[e], kernel_section_force=solution.section_force[e],

@@ -148,9 +148,11 @@ def statement(spec, card: dict[str, str]) -> str:
 
 
 CONVENTIONS = ("Conventions used throughout: x runs across the width and y along the coupon, which is the load axis; plies are listed from "
-               "the bottom face up; a ply's angle is measured counterclockwise from x to its material axis 1 (the fibres of a tape; for a woven "
-               "fabric, the yarn direction its material record calls 1), so a 0-degree ply has axis 1 across the load and a 90-degree ply along "
-               "it; shear strain is the engineering shear strain; lengths are in {length}, stresses in {stress}, forces in {force}.")
+               "the bottom face up; a ply's angle is counted from the coupon's length axis y, positive counterclockwise, to its material axis 1 "
+               "(the fibres of a tape; for a woven fabric, the yarn direction its material record calls 1), so a 0-degree ply has its fibres along "
+               "the load and a 90-degree ply across the width (ADR-0065); the deck carries this as a layup orientation whose local direction 1 "
+               "is global y, and our engine, which counts from x, sees each ply at its stated angle plus 90 degrees; shear strain is the "
+               "engineering shear strain; lengths are in {length}, stresses in {stress}, forces in {force}.")
 
 
 DECK_UNITS_NOTE = ("The coupon is stated in {stated}, and this document reads it so: the problem, the results and the cover. An Abaqus or CalculiX "

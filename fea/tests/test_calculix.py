@@ -123,7 +123,8 @@ def test_calculix_runs_the_small_coupon_in_equilibrium_and_the_conventions_hold(
     for k, ply in enumerate(plies):
         engine = engine_plies[k].stress_xy / 1e6
         assert layers[k] == pytest.approx(engine, abs=0.03 * scale), f"ply {k + 1} ({ply.angle_deg} deg): first line is the bottom ply and orientations are honoured"
-        assert stress_transformation(ply.angle_deg) @ layers[k] == pytest.approx(engine_plies[k].stress_12 / 1e6, abs=0.03 * scale)
+        # global xy to the ply's 1-2 axes by the fibre angle from x, the stated angle plus 90 (ADR-0065)
+        assert stress_transformation(ply.fibre_deg) @ layers[k] == pytest.approx(engine_plies[k].stress_12 / 1e6, abs=0.03 * scale)
     # the coarse 2 by 8 mesh with 20 mm tabs: the element types agree on the axial strain within a few percent; the transverse
     # strain, a Poisson effect constrained by the nearby rigid tabs, differs more (12 % seen) and is not a conventions matter
     field = element_ply_states(solution)

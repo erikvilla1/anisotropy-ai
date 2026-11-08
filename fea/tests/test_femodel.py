@@ -27,7 +27,9 @@ def test_nodal_grips_on_the_tabs():
                                 BoundaryDefinition("Grip-Top", 2, 2, pytest.approx(1e-3)))
     assert model.loads == () and model.reference_points == () and model.couplings == ()
     assert [p.angle_deg for p in model.section.plies] == [45, 0, -45, 90, 90, -45, 0, 45] and len(model.section.listed) == 4
-    assert model.orientation_angles == (-45.0, 0.0, 45.0, 90.0)
+    assert [p.fibre_deg for p in model.section.plies] == [-45, 90, 45, 0, 0, 45, 90, -45]  # the stated angles plus 90, from x (ADR-0065)
+    assert model.orientation_angles == (-45.0, 0.0, 45.0, 90.0) and model.orientation_fibres == (45.0, 90.0, -45.0, 0.0)
+    assert any("from the length axis (fibres from x: [-45.0, 90.0, 45.0, 0.0, 0.0, 45.0, 90.0, -45.0])" in line for line in model.heading)
     assert model.probe_nodes["centre"] == mesh.nearest_node((0.0125, 0.125)) and "Probe-centre" in model.node_sets and "Probe-near_grip" in model.element_sets
     assert any("rights class open-publisher" in line for line in model.heading) and any("page 30" in line for line in model.heading)
 

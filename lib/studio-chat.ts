@@ -26,7 +26,7 @@ export const LAYUP_CHOICES: { notation: string; title: string }[] = [
   { notation: "[45/0/-45/90]s", title: "Quasi-isotropic" },
   { notation: "[0/90]2s", title: "Cross-ply" },
   { notation: "[45/-45]2s", title: "±45 (shear)" },
-  { notation: "[90]8", title: "Unidirectional, fibres along the load" },
+  { notation: "[0]8", title: "Unidirectional, fibres along the load" },
 ];
 
 /** The library materials offered first; the rest are one menu away. */

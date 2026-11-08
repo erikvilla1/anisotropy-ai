@@ -171,7 +171,10 @@ def test_the_scores_say_why(grips):
     assert c2.team[-1] == "S12: not in the reports, left blank, for the team to fill in" and c2.ours[-1].startswith("S12: largest ")
     assert " in the band over all plies, at our element " in c2.ours[-1] and c2.difference[-1].startswith("S12: not compared; the Result waits until the team has verified S12")
     assert "unbalanced (2 plies at +30, 1 at -30)" not in found["B3"].text  # the full laminate counts both halves
-    assert found["B3"].ours[1] == "Balance: unbalanced (4 plies at +30, 2 at -30), symmetric" and found["B3"].difference == ("Layup, bottom first: the same", "Balance: the same")
+    # our spec states [90/-60/60/-60/90]s from the length axis, the team's deck [0/30/-30/30/0]s from x: the balance is judged on the fibres from x (ADR-0065)
+    assert found["B3"].ours[1] == "Balance: unbalanced (4 plies at +30, 2 at -30), symmetric (fibre directions from x)" and found["B3"].ours[1] == found["B3"].team[1]
+    assert found["B3"].difference == ("Layup, bottom first: the same", "Balance: the same")
+    assert found["B3"].ours[0].endswith("from the length axis (Ori-1, local 1 along y)") and found["B3"].team[0].endswith("from x (Ori-1, local 1 along x)")
     assert found["C7"].team == ("left blank, for the team to fill in",) and "ply 1 (0 deg) by maximum stress, at 0.5 of the applied loading" in found["C7"].ours[0]
     # D5 states the laminate's shear coupling from its stiffness: this IM7 layup, 4 plies at +30 and 2 at -30, has it
     coupling = next(line for line in found["D5"].ours if line.startswith("In-plane shear coupling of the laminate, from our engine's stiffness: A16 = "))
@@ -323,7 +326,9 @@ def test_the_form_computes_the_rule_counts_the_rows_and_shows_the_numbers_behind
         "Reaction at the loaded grip (N)"]
     checks = [t.check for t in tables.tables]  # every table says how to redo its numbers from the package's files or in Abaqus
     assert all(c.startswith("How to check: ") for c in checks) and len(checks) == 5
-    assert "4-results/team-vs-ours.csv" in checks[0] and "LE11, LE22 and LE12 at the integration point of element" in checks[1] and "Ply-1 (0 deg)" in checks[1]
+    # Ply-1 is stated 90 degrees from the length axis, so its fibres run along x and its material axes are the coupon's (ADR-0065)
+    assert "4-results/team-vs-ours.csv" in checks[0] and "LE11, LE22 and LE12 at the integration point of element" in checks[1]
+    assert "Ply-1 (90 deg), whose material axes coincide with the coupon's x and y" in checks[1]
     assert "S11, S22 and S12 at element" in checks[3] and "reaction force RF2 at the top reference point" in checks[4]
     shown = [results.cell(r, 1).value for r in range(1, results.max_row + 1) if str(results.cell(r, 1).value).startswith("How to check: ")]
     assert shown == checks and all(results.cell(r, 1).font.i for r in range(1, results.max_row + 1) if str(results.cell(r, 1).value).startswith("How to check"))

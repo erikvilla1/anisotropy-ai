@@ -3,15 +3,15 @@ units = "mm-MPa"
 spec = "../plate-pressure-isotropic.toml"
 deck_kernel = "../decks/plate-pressure-isotropic-abaqus.inp"
 deck_reference = "../decks/plate-pressure-isotropic-ccx.inp"
-deck_kernel_sha256 = "ab764d5c2c516ae7e24c376461bc05771948c7ada24b677abd3a522f9d7148bd"
-deck_reference_sha256 = "dd03f1b5783ce5dd28b0de5f240996a43caa662d7bbad4d7f277ac896127cd64"
+deck_kernel_sha256 = "f76a9762057647fcbb69fa8bf5250a5d54d1f8c1063cdcedfef067e31d6450ca"
+deck_reference_sha256 = "364d61d9f1984952711571aae8eb3a667191f4d7ec1981faebc78f6381dfd9e3"
 
 [solver]
 name = "calculix"
 version = "2.22"
 element_type = "S8R"
 run_by = "Claude Code for Erik Villa"
-run_date = "2026-10-28"
+run_date = "2026-11-07"
 machine = "founder Windows 11, PrePoMax v2.6.0 bundle"
 source = "dat"
 conventions = "../../calculix-conventions.toml"
@@ -29,9 +29,9 @@ floor = 0.02
 "Coupon-1.145" = [0.6339994]
 
 [expected.ply_stress_local."Coupon-1.137"]
-"1:bottom" = [-28.478205255666314, -28.478205255666314, 0.14227554610702475]
-"1:top" = [28.478205255666314, 28.478205255666314, -0.14227554610702475]
+"1:bottom" = [-28.478205255666314, -28.478205255666314, -0.14227554610702475]
+"1:top" = [28.478205255666314, 28.478205255666314, 0.14227554610702475]
 
 [expected.ply_strain_local."Coupon-1.137"]
-"1:bottom" = [-0.00028478205255666304, -0.00028478205255666304, 5.284520123141897e-06]
-"1:top" = [0.00028478205255666304, 0.00028478205255666304, -5.284520123141897e-06]
+"1:bottom" = [-0.00028478205255666304, -0.00028478205255666304, -5.284520123141897e-06]
+"1:top" = [0.00028478205255666304, 0.00028478205255666304, 5.284520123141897e-06]

@@ -31,7 +31,7 @@ class PlyField:
     """Per element, per ply (bottom first): strain and stress in laminate (xy) and material (12) axes, SI. In a membrane state each
     array is (plies, 3); in a shell state it is (plies, 2, 3), the bottom face then the top face of every ply, and `faces` says so."""
 
-    angles_deg: list[np.ndarray]  # element -> (plies,)
+    angles_deg: list[np.ndarray]  # element -> (plies,): the angles the deck states, for the labels; the 1-2 state is in the fibre axes (ADR-0065)
     strain_xy: list[np.ndarray]  # element -> (plies, 3) or (plies, 2, 3)
     stress_xy: list[np.ndarray]  # Pa
     strain_12: list[np.ndarray]
@@ -66,18 +66,18 @@ def element_ply_states(solution: Solution) -> PlyField:
     shell = isinstance(solution, ShellSolution)
     angles, strain_xy, stress_xy, strain_12, stress_12 = [], [], [], [], []
     for e in range(mesh.element_count):
-        plies = mesh.sections[mesh.element_section[e]].plies
+        section = mesh.sections[mesh.element_section[e]]
+        plies = section.plies
+        angles.append(np.array(section.angles_deg, dtype=float))  # the stated angles; the engine rotates by the plies' own fibre angles
         if shell:
             surfaces = ply_surfaces(plies, solution.strain[e], solution.curvature[e])
             pairs = [surfaces[2 * k: 2 * k + 2] for k in range(len(plies))]
-            angles.append(np.array([pair[0].angle_deg for pair in pairs]))
             strain_xy.append(np.array([[s.strain_xy for s in pair] for pair in pairs]))
             stress_xy.append(np.array([[s.stress_xy for s in pair] for pair in pairs]))
             strain_12.append(np.array([[s.strain_12 for s in pair] for pair in pairs]))
             stress_12.append(np.array([[s.stress_12 for s in pair] for pair in pairs]))
         else:
             bottoms = ply_surfaces(plies, solution.strain[e], ZERO)[0::2]  # one face per ply; the top face is identical
-            angles.append(np.array([surface.angle_deg for surface in bottoms]))
             strain_xy.append(np.array([surface.strain_xy for surface in bottoms]))
             stress_xy.append(np.array([surface.stress_xy for surface in bottoms]))
             strain_12.append(np.array([surface.strain_12 for surface in bottoms]))

@@ -51,11 +51,11 @@ def recording(empty_runs, monkeypatch):
 @needs_test_database
 def test_a_project_is_created_replaced_listed_and_renamed(recording):
     pid = str(uuid.uuid4())
-    made = recording.put(f"/v1/projects/{pid}", json=body(form_version="0.6", units="mm-MPa"))
+    made = recording.put(f"/v1/projects/{pid}", json=body(form_version="0.7", units="mm-MPa"))
     assert made.status_code == 201
     row = made.json()
     assert row["id"] == pid and row["kind"] == "fea" and row["name"] == "OHT study" and row["content"] == COUPON and row["actor"] == "studio"
-    assert row["user_email"] is None and row["form_version"] == "0.6" and row["units"] == "mm-MPa" and row["designation"] is None and row["jobs"] == []
+    assert row["user_email"] is None and row["form_version"] == "0.7" and row["units"] == "mm-MPa" and row["designation"] is None and row["jobs"] == []
     again = recording.put(f"/v1/projects/{pid}", json=body(name="OHT study, wider", content={**COUPON, "form": {**COUPON["form"], "width": "36"}}))
     assert again.status_code == 200 and again.json()["name"] == "OHT study, wider" and again.json()["content"]["form"]["width"] == "36"
     assert again.json()["created_at"] == row["created_at"] and again.json()["updated_at"] >= row["updated_at"]

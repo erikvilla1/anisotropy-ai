@@ -640,7 +640,7 @@ def clt_section(deck, solution, record: dict, rows: list[ComparisonRow], units: 
     for k, ply in enumerate(check.plies):
         for i, name in enumerate(("sigma_1", "sigma_2", "tau_12")):
             clt, kernel = from_si(float(theory[k, i]), "stress", units), from_si(float(check.kernel_ply_stress_12[k, i]), "stress", units)
-            ply_rows.append(rf"{k + 1} & {ply.angle_deg:g} & {MATH[name]} & {number(clt)} & {number(kernel)} & {diff(clt, kernel)} & {ref('ply_stress_local', i, k + 1)} \\")
+            ply_rows.append(rf"{k + 1} & {check.angles_deg[k]:g} & {MATH[name]} & {number(clt)} & {number(kernel)} & {diff(clt, kernel)} & {ref('ply_stress_local', i, k + 1)} \\")
     out.append(rf"\textbf{{Ply stresses in material axes}} at element {escape(gauge.name)}, {escape(labels['stress'])} (bottom ply first; "
                r"a difference marked -- is a component whose laminate-theory value is zero):")
     out.append(long_table(["Ply", "Angle (deg)", "Comp.", "Laminate theory", "Kernel", "Difference", escape(solver_name)], ply_rows,

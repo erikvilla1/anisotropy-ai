@@ -34,6 +34,26 @@ EDGE_REGIONS = ("Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right")  # the pla
 AREA_REGIONS = ("Face",)  # every element; Tab-Bottom and Tab-Top join when there are tabs; a [[regions]] box is an area too
 RESERVED_REGIONS = (*EDGE_REGIONS, "Hole", *AREA_REGIONS, "Tab-Bottom", "Tab-Top", "Gauge", "Grip-Bottom", "Grip-Top")
 LINE_TOLERANCE = 1e-9  # relative to the length: a node row must sit on a tab or support line within this
+# A coupon's ply angles are counted from its length axis, global y (ADR-0065): the load axis in tension and compression, the span in
+# bending, the length of a plate. The engine counts from the laminate x axis (ADR-0004), so a stated angle has its fibre this far past x.
+LENGTH_AXIS_ROTATION_DEG = 90.0
+ANGLES_FROM_HINT = ("layup.angles_from = \"length\" is required (ADR-0065): a coupon's ply angles are counted from its length axis, the direction it "
+                    "is pulled; a spec written before the convention is rewritten by fea/tools/migrate_angles.py, which keeps its physical laminate")
+
+
+def normalised_angle(angle_deg: float) -> float:
+    """The same fibre direction in (-90, 90]: a fibre has no arrow, so 180 degrees is 0 and -90 is 90."""
+    angle = math.fmod(angle_deg, 180.0)
+    if angle <= -90.0:
+        angle += 180.0
+    elif angle > 90.0:
+        angle -= 180.0
+    return 0.0 if angle == 0.0 else angle  # no negative zero
+
+
+def fibre_angle(stated_deg: float) -> float:
+    """The engine's angle, from the laminate x axis (ADR-0004), of a ply stated from the coupon's length axis (ADR-0065)."""
+    return normalised_angle(stated_deg + LENGTH_AXIS_ROTATION_DEG)
 
 
 class SpecError(ValueError):
@@ -75,7 +95,8 @@ class MeshControls(Record):
 
 
 class Layup(Record):
-    angles: list[float]  # bottom-first (ADR-0004); the lower half when symmetric
+    angles: list[float]  # bottom-first (ADR-0004); the lower half when symmetric; counted from the axis `angles_from` names
+    angles_from: Literal["length"]  # the coupon's length axis, global y (ADR-0065); required, so an older spec is refused, never reinterpreted
     symmetric: bool
     ply_thickness: PositiveFloat | Literal["library"]
 
@@ -260,6 +281,8 @@ def parse_spec(text: str, source_path: str | None = None) -> CouponSpec:
         raise SpecError(f"spec: {', '.join(loader_keys)} {'is' if len(loader_keys) == 1 else 'are'} set by the loader, not written in a file")
     data["source_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
     data["source_path"] = source_path
+    if isinstance(data.get("layup"), dict) and "angles_from" not in data["layup"]:
+        raise SpecError(f"spec: {ANGLES_FROM_HINT}")
     try:
         spec = CouponSpec(**data)
     except ValidationError as exc:
@@ -455,8 +478,14 @@ def validate_spec(spec: CouponSpec) -> None:
 
 
 def full_angles(spec: CouponSpec) -> list[float]:
+    """The stated angles of every ply, bottom-first, the symmetric half mirrored: what the coupon's labels print (ADR-0065)."""
     angles = list(spec.layup.angles)
     return angles + angles[::-1] if spec.layup.symmetric else angles
+
+
+def fibre_angles(spec: CouponSpec) -> list[float]:
+    """The engine's angle of every ply, bottom-first: the stated angle turned from the length axis to the x axis (ADR-0065, ADR-0004)."""
+    return [fibre_angle(angle) for angle in full_angles(spec)]
 
 
 def mesh_counts(spec: CouponSpec) -> tuple[int, int]:
@@ -676,7 +705,7 @@ def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
 
 
 def spec_plies(spec: CouponSpec) -> list[Ply]:
-    """The engine plies, bottom-first, symmetric layups expanded, SI."""
+    """The engine plies, bottom-first, symmetric layups expanded, SI; each ply's angle is its fibre angle from x (ADR-0065)."""
     material = spec_material(spec).lamina
     thickness = spec_ply_thickness(spec)
-    return [Ply(material=material, angle_deg=angle, thickness_m=thickness) for angle in full_angles(spec)]
+    return [Ply(material=material, angle_deg=angle, thickness_m=thickness) for angle in fibre_angles(spec)]

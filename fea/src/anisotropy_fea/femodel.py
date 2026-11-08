@@ -20,8 +20,8 @@ import numpy as np
 from . import __version__ as package_version
 from .units import deck_units_of
 from .mesher import Mesh2D, gmsh_open_hole_plate, structured_rectangle
-from .spec import (BENDING_KINDS, DEFAULT_NAMES, PLATE_KINDS, CouponSpec, MaterialDefinition, SpecError, coupon_card, edge_regions, full_angles,
-                   mesh_counts, node_lines, row_coordinates, spec_material, spec_ply_thickness)
+from .spec import (BENDING_KINDS, DEFAULT_NAMES, PLATE_KINDS, CouponSpec, MaterialDefinition, SpecError, coupon_card, edge_regions, fibre_angle,
+                   fibre_angles, full_angles, mesh_counts, node_lines, row_coordinates, spec_material, spec_ply_thickness)
 
 STEP_NAME = "Step-1"
 CARD_IN_HEADING = ("Coupon", "Test", "Standard", "Size from", "Team's model", "Test data")  # the rest of the card is in the heading already
@@ -30,9 +30,10 @@ CARD_IN_HEADING = ("Coupon", "Test", "Standard", "Size from", "Team's model", "T
 @dataclass(frozen=True)
 class PlyDefinition:
     thickness_m: float
-    angle_deg: float
+    angle_deg: float  # as the coupon states it, from the length axis (ADR-0065): what a deck's layer line and every label carry
     material: str
     name: str
+    fibre_deg: float  # the engine's angle from global x (ADR-0004), the stated angle plus 90 brought into (-90, 90]: the physics
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,8 @@ class FEModel:
     mesh: Mesh2D
     material: MaterialDefinition
     section: SectionDefinition
-    orientation_angles: tuple[float, ...]  # distinct ply angles, for solvers that orient per ply
+    orientation_angles: tuple[float, ...]  # the distinct stated ply angles, for solvers that orient per ply: each names one orientation
+    orientation_fibres: tuple[float, ...]  # the fibre angle from global x of each entry of orientation_angles: what the orientation's axes are
     reference_points: tuple[ReferencePoint, ...]
     couplings: tuple[CouplingDefinition, ...]
     boundaries: tuple[BoundaryDefinition, ...]
@@ -190,11 +192,13 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
     material = spec_material(spec)
     thickness = spec_ply_thickness(spec)
     angles = full_angles(spec)
+    fibres = fibre_angles(spec)
     names = spec.names.model_dump() if spec.names is not None else DEFAULT_NAMES
-    plies = tuple(PlyDefinition(thickness, angle, material.name, f"Ply-{k}") for k, angle in enumerate(angles, start=1))
+    plies = tuple(PlyDefinition(thickness, angle, material.name, f"Ply-{k}", fibre) for k, (angle, fibre) in enumerate(zip(angles, fibres), start=1))
     listed = plies[: len(spec.layup.angles)] if spec.layup.symmetric else plies
     section = SectionDefinition(elset=names["section_set"], layup=names["layup"], plies=plies, symmetric=spec.layup.symmetric, listed=listed)
     orientation_angles = tuple(sorted(set(angles)))
+    orientation_fibres = tuple(fibre_angle(angle) for angle in orientation_angles)
     probe_nodes = {name: mesh.nearest_node(point) for name, point in spec.probes.nodes.items()}
     probe_elements = {name: mesh.nearest_element(point) for name, point in spec.probes.elements.items()}
 
@@ -251,7 +255,8 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
         f"kind {spec.kind}; length {g.length:g} m, width {g.width:g} m" + (f", tabs {g.tab_length:g} m" if g.tab_length else "")
         + (f", central hole of diameter {g.hole_diameter:g} m" if g.hole_diameter else ""),
         f"mesh {mesh.mesher}, {mesh.element_count} elements of order {mesh.order}, {mesh.node_count} nodes",
-        f"layup bottom-first {angles}" + (" (listed as the symmetric half)" if spec.layup.symmetric else "") + f", ply thickness {thickness:g} m",
+        f"layup bottom-first {angles}" + (" (listed as the symmetric half)" if spec.layup.symmetric else "")
+        + f" from the length axis (fibres from x: {fibres}), ply thickness {thickness:g} m",
         f"material {material.name}: {material.source}; rights class {material.rights}",
         *[f"  {line}" for line in material.citation_lines],
         f"out-of-plane constants: G13 {material.G13:g}, G23 {material.G23:g}, E3 {material.E3:g}, nu13 {material.nu13:g}, nu23 {material.nu23:g} (SI; "
@@ -266,7 +271,7 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
          f"loading {loading.control} {loading.value:g} " + ("m" if loading.control == "displacement" else "N")),
         f"units of this deck: {deck_units_of(spec.units)}" + (f" (the coupon is stated in {spec.units})" if deck_units_of(spec.units) != spec.units else ""),
     )
-    return FEModel(spec=spec, mesh=mesh, material=material, section=section, orientation_angles=orientation_angles,
+    return FEModel(spec=spec, mesh=mesh, material=material, section=section, orientation_angles=orientation_angles, orientation_fibres=orientation_fibres,
                    reference_points=reference_points, couplings=couplings, boundaries=tuple(boundaries), loads=tuple(loads),
                    probe_nodes=probe_nodes, probe_elements=probe_elements, heading=heading, instance=names["instance"], part=names["part"], pins=pins,
                    pressures=tuple(pressures))
