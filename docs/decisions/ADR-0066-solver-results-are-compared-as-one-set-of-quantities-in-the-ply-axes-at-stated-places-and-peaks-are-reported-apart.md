@@ -1,6 +1,6 @@
 # ADR-0066: Solver results are compared as one set of quantities, in the ply axes, at stated places, and peaks are reported apart
 
-- Status: Accepted (2026-11-08: the founder agreed to the record and asked for the stack #153 to #155 to be merged; the quantities, the page and the package tables are as written here)
+- Status: Accepted (2026-11-08: the founder agreed to the record and asked for the stack #153 to #155 to be merged; the quantities, the page and the package tables are as written here; amendment 1 (2026-11-08) takes the Abaqus column off the page's tables and keeps Abaqus as a command-line check)
 - Date: 2026-11-08
 - Decided by: Founder, 2026-11-08 (direction: "why is everything different ... plan on how to fix this"; "i agree with the record") | Drafted by: Claude Code
 - Related: [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) amendment 6 (the `.frd` read beside ours), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md) (`equivalence`, `side_by_side`), [ADR-0045](ADR-0045-abaqus-without-the-gui-odbaccess-reports-and-an-optional-second-reference.md) (`tools/abaqus_extract_fields.py`, `tools/run_abaqus.py`), [ADR-0065](ADR-0065-coupon-ply-angles-are-counted-from-the-coupons-length-axis.md), [ADR-0004](ADR-0004-sign-and-stacking-conventions.md); `fea/src/anisotropy_fea/frd.py`, `fea/src/anisotropy_fea/calculix_summary.py`, `fea/src/anisotropy_fea/compare.py`, `components/studio/results-view.tsx`, `docs/abaqus-export-recipe.md`
@@ -83,3 +83,28 @@ The runs of 2026-11-08, in a cloud container, `apt` CalculiX 2.21, `anisotropy_f
 - An engineer with PrePoMax or Abaqus/CAE open beside the page cannot find a cell's value in their viewer with the cell's hint within a minute.
 - The validation table's Anisotropy and CalculiX columns disagree by more than the record's tolerance in the gauge rows on a public check coupon, which would mean a solver or a rotation is wrong, not the presentation.
 - The team asks again why the page and their viewer differ after the table is live.
+
+## Amendment 1, 2026-11-08 (the Abaqus column leaves the page; an Abaqus run is read on the command line; decided by the founder)
+
+**Context.** The tables shipped the same evening with the Abaqus column empty: no Abaqus is reachable from the hosted solvers (the install is the
+founder's Windows machine under a teaching licence, ADR-0045), so the column could only fill from files a person brings. A drop zone for the run's
+`.dat` was started, then an agent on the founder's machine was proposed to make it automatic. The founder stopped both: "we want it to be easy for the
+user, should be automatic"; then "don't put abaqus in table, open source calculix is enough".
+
+**Decision.** The page's validation table has three columns, Laminate theory | Anisotropy | CalculiX, and the peaks table two; the coupon document prints an
+Abaqus column only where the team's exported fields fill it (a team coupon with a comparison manifest), never an empty one. CalculiX stays the one
+reference the site runs. An Abaqus run of our own deck, when the founder makes one, is read by `fea/tools/abaqus_beside.py`: `anisotropy_fea.abaqus_dat`
+parses the `.dat`'s printed tables (the layout read from `AS48552-UNT-L1-abaqus-plies.dat`, Abaqus 2025), `anisotropy_fea.abaqus_summary` puts the reaction
+(the `RF` TOTAL at the moving grip's reference node), the gauge strain (`SE2, SE1, -SE3`: the layup's axis 1 runs along the coupon, so the section strains
+turn by a quarter) and every ply's σ₁ σ₂ τ₁₂ at the middle section point of each layer beside the kernel's on the same deck, with the record's tolerance
+and floor; a `.dat` that prints the faces (an older deck) is refused with the points it printed. The `.dat` reader replaces nothing: the CSV field reports of
+`tools/abaqus_extract_fields.py` remain the route for a team's model and for whole-field comparisons (`side_by_side`).
+
+**Evidence.** On the founder's second run of 2026-11-08 the tool read 28 of 28 values within 3 %: reaction 4705 against 4706.8 N (+0.04 %), ply 2 (0°) σ₁
+479.1 against 479.2 MPa, every ±45° and 90° ply's three components alike; the first run, without the section-point list, is refused as printing points 1
+and 24 only. The validation record for the coupon stays the comparison note in the project files, since the coupon is a hosted job and not a folder under
+`.local` (ADR-0042).
+
+**Consequences.** "The page depends on the Abaqus fields being exported" above no longer holds: the page depends on CalculiX alone. The Summary's footnote
+says where the Abaqus check lives. No API endpoint and no agent were added.
+

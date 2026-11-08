@@ -192,7 +192,9 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     assert r"\section{The validation table}\label{sec:validation}" in tex and r"\textbf{Laminate theory}" in tex
     validation = tex[tex.index(r"\label{sec:validation}"):tex.index(r"\label{sec:peaks}")]
     assert r"Ply 2 (0°) $\sigma_1$ & MPa & 1180.8 & 1180.8 & " in validation  # laminate theory and the kernel agree to the digit at the centre
-    assert validation.count("& --") >= 3 * 8 + 4  # no Abaqus fields for the public coupon: its column is empty
+    header = next(line for line in validation.splitlines() if line.startswith(r"\textbf{Quantity}"))
+    assert "Abaqus" not in header and header.count("&") == 4  # no team fields for the public coupon: no Abaqus column (the founder, 2026-11-08)
+    assert all(line.count("&") == 4 for line in validation.splitlines() if line.startswith("Ply "))
     assert r"\section{Stress concentration at the clamped edge: not a validation value}\label{sec:peaks}" in tex
     assert "touches a grip" in tex and "Von Mises is not a laminate quantity" in tex
     assert r"\evidence{MANUAL" not in tex  # the guide for the team is Abaqus/CAE only: no PrePoMax tags, not even in the legend

@@ -57,6 +57,18 @@ Open questions, and what the run of 2026-11-08 (Abaqus/Standard 2025, S4R, our d
 4. `*Fail Stress`: if you add strengths so Abaqus reports `MSTRS`, `TSAIH` and `TSAIW`, are `Xc` and `Yc` entered as negative numbers or as magnitudes? Still UNVERIFIED.
 5. The reaction: **settled.** `RF2` at the loaded reference node with `totals=YES` is the coupon's force (4705.40 N against our 4706.78 N, 0.03 %); the `TOTAL` line is the one node.
 
+### Reading the `.dat` beside ours (2026-11-08)
+
+```
+uv run python tools/abaqus_beside.py <coupon>-abaqus.inp <coupon>-abaqus.dat [--units mm-MPa] [--json abaqus.json]
+```
+
+prints the validation table's rows, Abaqus against our kernel on the same deck at the gauge element: the reaction (the `RF` TOTAL of the moving grip's
+reference node), the gauge strain from `SE` (the layup's axis 1 runs along the coupon, so `SE1` is ε_y, `SE2` is ε_x and `SE3` is −γ_xy) and every ply's
+σ₁ σ₂ τ₁₂ from the `S` rows at each layer's middle section point, each marked when outside the record's tolerance (3 %, floor 2 % of the group's largest).
+The deck must be the current one, which lists the middle points; a `.dat` that prints points 1 and 24 only is refused with that message. The site's
+table does not show this column (ADR-0066 amendment 1): CalculiX is the reference the site runs, and this tool is the Abaqus check made by hand.
+
 ## Route 2: field reports from Abaqus/CAE
 
 Request `S`, `E`, `SF`, `SE` as field output with "Output at shell section points: all plies" for the layup, run, then Report > Field Output at the element centroid for the probe element set and at nodes for `U` and `RF`, saved as `.rpt`. Tell us how the report labels the assembly-level reference nodes.
