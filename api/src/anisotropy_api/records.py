@@ -147,15 +147,19 @@ class ProjectRow(Base):
 
 
 CONNECT_TIMEOUT_S = 5
+# TCP keepalives and the user timeout, libpq's own parameters: a connection whose network went away under it (a container's can,
+# ADR-0056 amendment 5) fails within about half a minute instead of waiting for an answer that never comes. A system without one of
+# them ignores it.
+KEEPALIVE = {"keepalives": 1, "keepalives_idle": 15, "keepalives_interval": 5, "keepalives_count": 3, "tcp_user_timeout": 30_000}
 
 
 def connect(database_url: str) -> Engine:
     """A connection pool for the API process.
 
     `pool_pre_ping` drops connections the server closed; the connect timeout makes an unreachable
-    server a startup error within seconds instead of a long wait.
+    server a startup error within seconds instead of a long wait; KEEPALIVE bounds a wait on a dead connection.
     """
-    return create_engine(database_url, pool_pre_ping=True, connect_args={"connect_timeout": CONNECT_TIMEOUT_S})
+    return create_engine(database_url, pool_pre_ping=True, connect_args={"connect_timeout": CONNECT_TIMEOUT_S, **KEEPALIVE})
 
 
 def check_ready(engine: Engine) -> None:
