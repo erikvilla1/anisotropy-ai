@@ -44,7 +44,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     }
     if (/^\/v1\/coupon-jobs\/[^/]+$/.test(path)) {
       polls += 1;
-      return json(route, polls < 2 ? fixture("job-running") : polls < 4 ? fixture("job-engine-done") : fixture("job-done"));
+      return json(route, polls < 2 ? fixture("job-running") : polls < 4 ? fixture("job-engine-done") : polls < 8 ? fixture("job-result-in") : fixture("job-done"));
     }
     if (path.endsWith("/explain") && request.method() === "POST") {
       const explanation = fixture("explanation", dir);
@@ -107,9 +107,12 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "template", { timeout: 15_000 }); // the API answered the explain call
+  // the result before the documents (ADR-0064): the agreement line while the job still draws and builds the package
+  await expect(page.getByTestId("job-progress")).toContainText("The result is in; the drawings and the package are still being made", { timeout: 15_000 });
+  await expect(page.getByTestId("job-message")).toContainText("57 of 57 recorded values agree");
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
   await expect(page.getByTestId("job-message")).toContainText("57 of 57 recorded values agree");
-  await expect(page.getByTestId("job-progress").locator("li[data-state=done]")).toHaveCount(9); // every stage of a finished job, the last included
+  await expect(page.getByTestId("job-progress").locator("li[data-state=done]")).toHaveCount(11); // every stage of a finished job, the last included
   await expect(page.getByTestId("downloads").locator("a[data-key=package]")).toHaveAttribute("href", /\/v1\/coupon-jobs\/0f3a2c9e[^/]*\/files\/package$/);
   await expect(page.getByTestId("downloads").locator("a[data-key=prepomax_results]")).toBeVisible();
   await expect(page.getByTestId("viewer-link")).toHaveAttribute("href", "/workspace/fea/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");

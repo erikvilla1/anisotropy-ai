@@ -53,6 +53,7 @@ How the setup is checked and the result explained:
 
 ## As built (2026-10-28)
 
+- 2026-11-08: the Files panel lists the package, its PDF and the three deck or result files only (`lib/studio-api.ts` `DOWNLOADS`); the JSON files, the record, the summary and the `.vtu` stay outputs the page reads but does not offer. The founder's request after the first two-user session.
 - Part 5, the plate kind (ADR-0054): the form's plate test with its supports, loads and boxes panel, the grips and loading rows hidden; the preview's loads and regions, and the regions an element belongs to when clicked, each with hold and load buttons; the browser fixtures of the public pressure plate under `tests/fixtures/studio-plate/`.
 - Part 4, plate bending (ADR-0053): the form's bending rows, the checklist's support and nose items, the preview's support frames and the nose arrow along z, the fields with the deflection, the rotations, the moments, the shear forces and both faces of every ply, and the explanation naming the failing face; the browser fixtures of the public three-point bending coupon under `tests/fixtures/studio-bending/`.
 

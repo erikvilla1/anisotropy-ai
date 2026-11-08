@@ -31,6 +31,8 @@ from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
 STATES = ("pass", "warn", "fail", "missing", "pending")
 SEVERITY = {"pass": 0, "warn": 1, "fail": 2, "missing": 2}
+SPOOLES_LAYER_BRICKS = 18000  # a structured mesh past this many layer bricks is where SPOOLES has failed (24000; 17850 solved), 2026-11-08; no rule, a warning
+TRANSVERSE_SHEAR_RATIO = 4.0  # G13 or G23 outside G12/4 .. 4 G12 is noted; a tape's G13 is about G12 and its G23 about G12/2 to G12 (MIL-HDBK-17-3F)
 ITEMS = (  # in the order the studio lists them: id, label
     ("identity", "Who and which coupon"),
     ("units", "Units consistent"),
@@ -261,6 +263,14 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             notes.note("units", "pass", f"every row in {units_words(units)}; the results come back in the same units"
                        + (f"; the Abaqus and CalculiX decks are written in {units_words(deck_units)}, as every deck we solve is" if deck_units != units
                           else f", and the decks are written in {units}"))
+        # transverse shear: our membrane never uses G13 and G23, CalculiX's brick does, so a value far from G12 parts the two solvers
+        low, high = material.G12 / TRANSVERSE_SHEAR_RATIO, material.G12 * TRANSVERSE_SHEAR_RATIO
+        odd = [name for name, value in (("G13", material.G13), ("G23", material.G23)) if not low <= value <= high]
+        if odd:
+            shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in odd)
+            notes.note("material", "warn", f"{shown} against G12 = {from_si(material.G12, 'stress', units):g} {lab['stress']}: a transverse shear modulus "
+                       "this far from G12 is unusual for a tape; our membrane does not use it, CalculiX's brick does, so the two will part (on 2026-11-08 a "
+                       "coupon with 100 MPa put CalculiX's reaction 4.6 % from ours, 0.8 % with 4500 MPa)", tuple(row(name) for name in odd))
         # geometry
         size = f"{length(g.length):g} by {length(g.width):g} {lab['length']}"
         if g.tab_length:
@@ -273,8 +283,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         notes.note("geometry", "pass", size)
         # material
         has_strengths = material.strengths is not None
-        notes.note("material", "pass", f"{material.name}: {material.source}; rights class {material.rights}; "
-                   + ("strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
+        if not odd:
+            notes.note("material", "pass", f"{material.name}: {material.source}; rights class {material.rights}; "
+                       + ("strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
         # laminate
         angles = full_angles(spec)
         thickness = length(sum(p.thickness_m for p in plies))
@@ -352,6 +363,13 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         counts = f"{mesh.element_count} elements, {mesh.node_count} nodes ({mesh.mesher} mesh, order {mesh.order})"
         notes.note("mesh", "pass" if summary["acceptable"] else "warn", f"{counts}; {quality_words(summary)}"
                    + ("" if summary["acceptable"] else "; a mesh past a threshold still solves, but read the results near those elements with care"))
+        bricks = mesh.element_count * len(plies)  # CalculiX expands the S8R twin to one brick per element and ply (ADR-0030)
+        if spec.mesh.mesher == "structured" and bricks > SPOOLES_LAYER_BRICKS:
+            # SPOOLES, the image's only direct solver, stopped on one structured mesh of 24,000 layer bricks (55,733 equations) and ordered 17,850 on the
+            # same coupon and an open-hole mesh of about 25,000; the count is where it has failed, not a rule (ADR-0030 amendment 5)
+            notes.note("mesh", "warn", f"the CalculiX twin would be {bricks} layer bricks ({mesh.element_count} elements by {len(plies)} plies); the image's SPOOLES solver "
+                       f"stopped on a structured mesh of 24000 (2026-11-08, whatever the material) and ordered {SPOOLES_LAYER_BRICKS - 150} on the same coupon, so this run may stop in "
+                       "CalculiX; if it does, a coarser mesh solves (fea/checks/calculix-conventions.toml)", (row("element_size"), row("mesh_nx")))
         if spec.mesh.mesher == "gmsh":
             version = gmsh()
             notes.note("mesh", "pass" if version else "fail", f"Gmsh {version} meshes the hole" if version else
