@@ -161,16 +161,19 @@ def test_a_modulus_in_the_wrong_unit_warns(tmp_path):
     assert items["units"].rows == ("Own material: E1 (MPa)", "Own material: E2 (MPa)", "Own material: G12 (MPa)") and checked.state == "ready"
 
 
-def test_a_twin_too_large_for_spooles_fails_the_mesh(tmp_path):
-    # 2026-11-08: a 4000-element, 6-ply coupon (24,000 layer bricks) stopped SPOOLES in both CalculiX 2.21 and 2.22; 2975 by 6 solved.
-    # The public coupon's mesh with 24 elements across instead of 12: 2400 elements by 8 plies = 19,200 bricks, past the measured 18,000
+def test_a_structured_twin_past_where_spooles_failed_warns(tmp_path):
+    # 2026-11-08: a 4000-element, 6-ply structured coupon (24,000 layer bricks, 55,733 equations) stopped SPOOLES in CalculiX 2.21 and 2.22; 2975 by 6
+    # solved, and so did the open-hole check's mesh of about 25,000 bricks (50,162 equations), so the count is a warning, not a refusal.
+    # The public coupon's mesh with 24 elements across instead of 12: 24 by 120 = 2880 elements by 8 plies = 23,040 bricks
     checked, model, _ = checklist(tmp_path, PUBLIC_FILL, mesh_nx=24)
     items = by_id(checked)
-    assert checked.state == "blocked" and model is not None and items["mesh"].state == "fail"  # the model builds; the twin is what SPOOLES cannot order
-    assert "layer bricks" in items["mesh"].message and "SPOOLES" in items["mesh"].message and "coarsen the mesh" in items["mesh"].message
+    assert checked.state == "ready" and model is not None and items["mesh"].state == "warn"
+    assert "23040 layer bricks" in items["mesh"].message and "SPOOLES" in items["mesh"].message and "a coarser mesh solves" in items["mesh"].message
     assert items["mesh"].rows == ("Element size (mm)", "Your Abaqus mesh: elements across the width")
     fine, _, _ = checklist(tmp_path, PUBLIC_FILL)  # 1200 by 8 = 9600 bricks, within what SPOOLES ordered
-    assert by_id(fine)["mesh"].state == "pass"
+    assert by_id(fine)["mesh"].state == "pass" and "SPOOLES" not in by_id(fine)["mesh"].message
+    hole, _, _ = checklist(tmp_path, OHT_FILL)  # a Gmsh mesh: no such warning, SPOOLES ordered the open-hole check's
+    assert "SPOOLES" not in by_id(hole)["mesh"].message
 
 
 def test_a_transverse_shear_modulus_far_from_g12_warns(tmp_path):

@@ -46,11 +46,13 @@ shell_set_totals = "may under-report (1.666667 N printed of 2 N applied on the d
 # and SOLVER=PARDISO answer "*ERROR in linstatic: the PASTIX/PARDISO library is not linked" (run in the image, 2026-11-08). PrePoMax v2.6.0's
 # ccx 2.22 on Windows runs PaStiX by default and SPOOLES on request. SPOOLES stopped with "fatal error in GPart_makeYCmap ... bad input" on a
 # 4000-element S8R unnotched coupon of 6 plies (24,000 layer bricks, 55,733 equations) in both builds, with G13 = G23 = 100 MPa and with
-# 4,500 MPa alike; it ordered the same coupon at 2975 elements (17,850 bricks, 41,496 equations), 2250 and 1000, and the public coupon
-# (1500 by 8 = 12,000). PaStiX solved the 4000-element deck in 1.4 s. The iterative solver (SOLVER=ITERATIVE CHOLESKY) ended with the two
-# grips' totals 4 % apart (109,566 N against 105,083 N), so it is not a fallback. The setup check refuses a twin past the measured bound
+# 4,500 MPa alike; it ordered the same coupon at 2975 elements (17,850 bricks, 41,496 equations), 2250 and 1000, at 40 by 50 elements (12,000
+# bricks, 27,643 equations), the public coupon (1500 by 8 = 12,000), the open-hole check's Gmsh mesh (50,162 equations, about 25,000 bricks,
+# 12 s) and the three-point check (4,263 equations). So the failure is not a size rule: one structured 40 by 100 mesh stops it. PaStiX solved
+# the 4000-element deck in 1.4 s. The iterative solver (SOLVER=ITERATIVE CHOLESKY) ended with the two grips' totals 4 % apart (109,566 N
+# against 105,083 N), so it is not a fallback. The setup check warns on a structured twin past the count where SPOOLES failed
 # (anisotropy_fea.checks.SPOOLES_LAYER_BRICKS); the failure's text is diagnosed in anisotropy_fea.calculix.KNOWN_FATALS.
 image_solvers = ["SPOOLES", "ITERATIVE"]
-spooles_layer_bricks_solved = 17850
-spooles_layer_bricks_failed = 24000
+spooles_layer_bricks_solved = 17850  # the same coupon's structured mesh; the open-hole Gmsh mesh solved at about 25,000
+spooles_layer_bricks_failed = 24000  # one structured 40 by 100 mesh of 6 plies, 55,733 equations
 spooles_fatal_text = "fatal error in GPart_makeYCmap ... bad input"
