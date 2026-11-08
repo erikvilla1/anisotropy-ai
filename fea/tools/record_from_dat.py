@@ -19,7 +19,7 @@ from anisotropy_fea import paths
 from anisotropy_fea.calculix import parse_dat
 from anisotropy_fea.compare import format_record, load_conventions, reference_quantities, sha256_of
 from anisotropy_fea.femodel import build_model
-from anisotropy_fea.frd import FrdError, frd_peaks, read_frd
+from anisotropy_fea.frd import FrdError, FrdPly, frd_peaks, frd_ply_peaks, read_frd
 from anisotropy_fea.spec import load_spec
 from anisotropy_fea.units import deck_units_of, from_si
 
@@ -89,7 +89,11 @@ def main() -> None:
     frd_path = args.dat.with_suffix(".frd") if args.frd is None else (None if str(args.frd).lower() == "none" else args.frd)
     if frd_path is not None and frd_path.is_file():
         try:
-            frd = frd_peaks(read_frd(frd_path), gauge_rows(spec))
+            frd_file = read_frd(frd_path)
+            frd = frd_peaks(frd_file, gauge_rows(spec))
+            # each ply's peaks in its own fibre axes beside the viewer's global ones (ADR-0066); the thicknesses in the file's units
+            plies = [FrdPly(p.angle_deg, p.fibre_deg, from_si(p.thickness_m, "length", deck_units_of(spec.units))) for p in model.section.plies]
+            frd["plies"] = frd_ply_peaks(frd_file, plies, gauge_rows(spec))
         except FrdError as exc:
             print(f"the .frd was not read, so the record has no [frd] block: {exc}")
     out_dir = args.out.parent

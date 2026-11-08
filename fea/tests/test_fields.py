@@ -200,3 +200,41 @@ def test_the_gauge_sections_first_ply_failure_sits_away_from_the_tabs(data):
         assert gauge["factor"] >= grip["factor"] - 1e-9 and gauge["touches_grip"] is False and gauge["place"].endswith("from the nearer tab line")
         assert gauge["index"] == pytest.approx(1.0 / gauge["factor"]) and gauge["mode"] and 1 <= gauge["ply"] <= public_fields["mesh"]["plies"]
         assert gauge["element"] in public_fields["mesh"]["element_sets"]["Gauge"]
+
+
+def test_every_ply_has_its_own_peaks_and_the_clamped_edge_is_marked(solved, data):
+    # ADR-0066: one entry per ply, each component's largest magnitude over the elements, the element named, the grip row marked
+    deck, solution = solved
+    summary = data["summary"]
+    stress = np.asarray(data["element"]["ply"]["stress_12"])  # (ne, plies, 3)
+    peaks = summary["ply_peaks"]
+    assert [p["ply"] for p in peaks] == list(range(1, stress.shape[1] + 1)) and [p["angle"] for p in peaks] == [45.0, 0.0, -45.0, 90.0, 90.0, -45.0, 0.0, 45.0]
+    for k, p in enumerate(peaks):
+        for i, name in enumerate(("S11", "S22", "S12")):
+            e = p[name]["element"]
+            assert abs(p[name]["value"]) == pytest.approx(np.abs(stress[:, k, i]).max()) and p[name]["value"] == pytest.approx(stress[e, k, i])
+            assert p[name]["label"] == f"Coupon-1.{solution.mesh.element_keys[e][1]}" and p[name]["face"] is None
+    fibre = peaks[1]["S11"]  # the stated 0-degree ply carries the largest fibre stress, at the tab line (ADR-0065)
+    assert fibre["value"] == pytest.approx(summary["max_ply"]["S11"]["value"]) and fibre["element"] == summary["max_ply"]["S11"]["element"] and fibre["touches_grip"] is True
+    assert peaks[3]["S11"]["touches_grip"] is False  # the 90-degree ply's largest |sigma_1| is a compression in the gauge section
+
+
+def test_classical_laminate_theory_sits_beside_the_gauge_centre(solved, data):
+    # ADR-0066: N_y = reaction / width, N_x = N_xy = 0, each ply at its middle; on a straight coupon it equals the kernel's gauge-centre element
+    from anisotropy_fea.fields import classical_laminate_check
+
+    deck, solution = solved
+    summary = data["summary"]
+    clt = summary["clt"]
+    assert clt["width"] == pytest.approx(25.0) and clt["Ny"] == pytest.approx(summary["reaction"]["value"] / 25.0)
+    assert clt["strain"][1] > 0 > clt["strain"][0] and abs(clt["strain"][2]) < 1e-12  # a quasi-isotropic laminate under a pull: no shear coupling
+    centre = solution.mesh.element(deck.elsets["Probe-centre"][0])
+    stress = np.asarray(data["element"]["ply"]["stress_12"])[centre]  # (plies, 3), MPa
+    assert [p["ply"] for p in clt["plies"]] == list(range(1, 9)) and clt["plies"][1]["angle"] == 0.0
+    for p in clt["plies"]:
+        assert np.allclose(p["stress_12"], stress[p["ply"] - 1], rtol=1e-3, atol=0.5)
+    assert clt["plies"][1]["stress_12"][0] == pytest.approx(1180.76, abs=0.05)  # the fibre stress of the 0-degree ply, as the public record's CalculiX value within 0.01 %
+    # another loading (a plate's pressure, a bending coupon's push) has no laminate-theory column
+    applied = applied_loading(deck, solution)
+    assert classical_laminate_check(solution, {**applied, "dof": 3}, 1.0, np.zeros(8), UNITS) is None
+    assert classical_laminate_check(solution, {**applied, "set": "the supports"}, 1.0, np.zeros(8), UNITS) is None
