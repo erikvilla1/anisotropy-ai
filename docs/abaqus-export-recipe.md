@@ -2,6 +2,27 @@
 
 Written for: the team member who builds the Abaqus coupon models (ADR-0029). Our solver reads your `.inp` and solves on your mesh; to compare, we need the numbers Abaqus computed. Today your job writes only `PRESELECT` field output to the `.odb`, and the `.dat` has no result tables, so there is nothing to compare yet. Either route below works; the first needs no Abaqus/CAE steps.
 
+## Reading a composite result the way the page reads it (ADR-0066, 2026-11-08)
+
+The page's validation table and the `.frd` in PrePoMax and a layer in Abaqus/CAE are one result read three ways, and the three only agree when the same ply, the same axes and the same point are read. What the page prints, and how to see the same number in each viewer:
+
+| On the page | In Abaqus/CAE | In PrePoMax (the CalculiX `.frd`) |
+| --- | --- | --- |
+| Ply k, counted from the bottom face; its angle from the coupon's length axis | `Layer = k` (CAE counts layers from the bottom, SNEG side) | the k-th part of the expanded model: one layer of bricks per ply, the lowest z first |
+| σ₁, σ₂, τ₁₂ in the ply's fibre axes | `S11`, `S22`, `S12` at a composite section point are in the layer's material axes already | the file is in the **global** axes: `S11` is σxx across the width, `S22` is σyy along the coupon; for a 0° ply (fibres along the pull) σ₁ = `S22`, for a 90° ply σ₁ = `S11`; a ±45° ply needs the rotation, which the page does for you |
+| the element centroid, the ply's middle | `*El Print, position=CENTROIDAL` with a section point per layer, or in the viewer: section point **MID** of the layer, Result Options → Averaging off, Quantity to plot: Discontinuities off | the nodal values, extrapolated from the integration points: a corner node of the tab line reads above the centroid of the same element (on `AS48552-UNT-L1`: 633 against 537 MPa for the 0° ply) |
+| no von Mises | `S, Mises` of a layer is the plane-stress invariant of that layer's state | `Mises` is the three-dimensional invariant of the brick's state; neither is a laminate quantity |
+| the reaction force | `RF2` at the reference point of the moving grip (`*Node Print, nset=RF-Top, totals=YES`) | `*NODE PRINT, NSET=Grip-Top, TOTALS=YES` in the `.dat` |
+
+Two things our own deck already does so the numbers can be read back: `*El Print, position=CENTROIDAL` of `S` at the probe elements writes every layer's centroid stress into the `.dat`, and `*Node Print` the reaction. **Abaqus/CAE drops both when a deck is imported and the job is re-exported** (`Job-1.inp` of 2026-11-08 kept only `*Output, field, variable=PRESELECT`, whose `.odb` holds the outer section points alone, `SNEG` of layer 1 and `SPOS` of the top layer). So run the deck as written, from the command line:
+
+```
+abaqus job=<coupon>-abaqus input=<coupon>-abaqus.inp interactive
+abaqus python fea/tools/abaqus_extract_fields.py <coupon>-abaqus.odb --out <folder> --layer-point middle
+```
+
+The first fills the `.dat` with the reaction and every ply's centroid stresses at the probe elements, the validation table's Abaqus column; the second writes the field reports the peaks column reads. Both files go beside the coupon's run under `.local/fea/<coupon>/ours/runs/<attempt>/run/abaqus/` (ADR-0045).
+
 ## Route 1: print tables into the `.dat` (preferred)
 
 Add named sets for the probe points, then print requests inside the step. Everything in this block is our understanding of the Abaqus keywords and is UNVERIFIED by us: please check the job runs and that the tables appear, and tell us what you had to change.
