@@ -83,33 +83,32 @@ function ValidationTable({ s, cx, lab }: { s: Fields["summary"]; cx: CalculixBes
       <h4>Validation: the same quantity in every column</h4>
       <table className="studio-table" data-testid="validation-table">
         <thead>
-          <tr><th>Quantity</th><th>Laminate theory</th><th>Anisotropy</th><th>CalculiX</th><th>Abaqus</th></tr>
+          <tr><th>Quantity</th><th>Laminate theory</th><th>Anisotropy</th><th>CalculiX</th></tr>
           <tr className="studio-muted">
             <th />
             <th>{clt ? `N_y = reaction / width (${printed(clt.Ny)} ${lab.force}/${lab.length}), N_x = N_xy = 0, each ply at its middle` : "not for this loading"}</th>
             <th>element centroid{gaugeElement ? `, element ${gaugeElement}` : ""}</th>
             <th>{cx ? `integration-point average${gaugeElement ? `, element ${gaugeElement}` : ""}` : "no twin was run"}</th>
-            <th>its field reports, when uploaded</th>
           </tr>
         </thead>
         <tbody>
           <tr data-row="reaction"><td>Reaction force, {lab.force}</td><td>input</td><td>{printed(Math.abs(s.reaction.value))}</td>
-            <td>{cx?.reaction ? `${printed(Math.abs(cx.reaction.calculix))} (${cx.reaction.difference})` : DASH}</td><td>{DASH}</td></tr>
+            <td>{cx?.reaction ? `${printed(Math.abs(cx.reaction.calculix))} (${cx.reaction.difference})` : DASH}</td></tr>
           <tr data-row="strain"><td>Gauge centre εx / εy / γxy</td><td>{three(clt?.strain)}</td><td>{three(cx?.gauge_strain?.ours)}</td>
-            <td>{three(cx?.gauge_strain?.calculix, cx?.gauge_strain?.agrees)}</td><td>{DASH}</td></tr>
+            <td>{three(cx?.gauge_strain?.calculix, cx?.gauge_strain?.agrees)}</td></tr>
           {Array.from({ length: plies }, (_, k) => {
             const c = clt?.plies[k], g = cx?.gauge[k];
             const angle = c?.angle ?? (g ? s.ply_peaks?.[k]?.angle : undefined);
             return (
               <tr key={k} data-ply={k + 1}><td>Ply {k + 1}{angle !== undefined ? ` (${angle}°)` : ""}: σ₁ / σ₂ / τ₁₂, {lab.stress}</td>
-                <td>{three(c?.stress_12)}</td><td>{three(g?.ours)}</td><td>{three(g?.calculix, g?.agrees)}</td><td>{DASH}</td></tr>
+                <td>{three(c?.stress_12)}</td><td>{three(g?.ours)}</td><td>{three(g?.calculix, g?.agrees)}</td></tr>
             );
           })}
         </tbody>
       </table>
       <p className="studio-muted">Each ply&apos;s stresses are in its own fibre axes (σ₁ along the fibres, σ₂ across, τ₁₂ in-plane shear), plies counted from the bottom face, angles from the
         coupon&apos;s length axis. {cx ? <>The record {cx.record} holds {cx.agree} values within {printed(100 * cx.tolerance)} %; a ✕ marks one outside.</> : null}
-        {" "}Abaqus fills its column when the job&apos;s field reports (<code>tools/abaqus_extract_fields.py</code>) are uploaded.</p>
+        {" "}CalculiX, the open-source solver, is the check; the same table read from an Abaqus run of the deck is a command-line tool (<code>tools/abaqus_beside.py</code>), not a column here (the founder, 2026-11-08).</p>
     </>
   );
 }
@@ -126,9 +125,9 @@ function PeaksTable({ s, cx, lab, criterion, onShow }: { s: Fields["summary"]; c
       <summary><h4>{clamped ? "Stress concentration at the clamped edge" : "Peaks over the model"}: not a validation value</h4></summary>
       <table className="studio-table" data-testid="peaks-table">
         <thead>
-          <tr><th>Ply</th><th>Anisotropy, element centroid</th><th>CalculiX, brick corner node</th><th>Abaqus</th></tr>
+          <tr><th>Ply</th><th>Anisotropy, element centroid</th><th>CalculiX, brick corner node</th></tr>
           <tr className="studio-muted"><th /><th>σ₁ / σ₂ / τ₁₂, {lab.stress}, the largest of each over the elements</th>
-            <th>the same, extrapolated to the nodes of the ply&apos;s bricks</th><th>its field reports, when uploaded</th></tr>
+            <th>the same, extrapolated to the nodes of the ply&apos;s bricks</th></tr>
         </thead>
         <tbody>
           {peaks.map((p, k) => {
@@ -139,7 +138,6 @@ function PeaksTable({ s, cx, lab, criterion, onShow }: { s: Fields["summary"]; c
                 <td>{three([p.S11.value, p.S22.value, p.S12.value])} at element {p.S11.label.split(".").pop()}{p.S11.face ? `, ${p.S11.face} face` : ""}{p.S11.touches_grip ? ", clamped edge" : ""}
                   {" "}<button type="button" className="studio-text-button" onClick={() => onShow(p.S11.element, p.ply, criterion, p.S11.face)}>show</button></td>
                 <td>{f && typeof f.s1_max === "number" ? <>{three([f.s1_max, f.s2_max, f.t12_max_abs])} at node {f.s1_max_node}{xyz(f.s1_max_xyz)}</> : DASH}</td>
-                <td>{DASH}</td>
               </tr>
             );
           })}

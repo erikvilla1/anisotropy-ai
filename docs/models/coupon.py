@@ -512,26 +512,30 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
     if c is not None and c.reports:
         team_element = c.team_element_near((from_si(gauge.xy[0], "length", units), from_si(gauge.xy[1], "length", units)))
 
+    # The Abaqus column is printed only when the team's fields fill it; the page's table has none (the founder, 2026-11-08: "open source
+    # calculix is enough"), and an Abaqus run of our own deck is read by tools/abaqus_beside.py instead (ADR-0066 amendment 1)
+    with_abaqus = team_element is not None
+
     def abaqus(component: int, ply: int) -> str:
-        if team_element is None:
-            return DASH
         try:
             return number(c.value(("S11", "S22", "S12")[component], team_element, ply).reference, 5)
         except KeyError:
             return DASH
 
-    table = [rf"Reaction $R_y$ at the moving grip & {escape(labels['force'])} & "
-             rf"{number(clt['Ny'] * clt['width'], 5) if clt else DASH} & {number(kernel_reaction, 5)} & "
-             rf"{number(same_grip.reference, 5) if same_grip is not None else DASH} & {DASH} \\"]
+    def row(cells: list[str], abaqus_cell: str) -> str:
+        return " & ".join(cells + ([abaqus_cell] if with_abaqus else [])) + r" \\"
+
+    table = [row([r"Reaction $R_y$ at the moving grip", escape(labels["force"]), number(clt["Ny"] * clt["width"], 5) if clt else DASH,
+                  number(kernel_reaction, 5), number(same_grip.reference, 5) if same_grip is not None else DASH], DASH)]
     for i, name in enumerate(("eps_x", "eps_y", "gamma_xy")):
-        table.append(rf"{documents.MATH[name]} at element {escape(element)} & -- & {number(clt['strain'][i], 5) if clt else DASH} & "
-                     rf"{number(float(check.kernel_strain[i]), 5)} & {ref('strain', i)} & {DASH} \\")
+        table.append(row([rf"{documents.MATH[name]} at element {escape(element)}", "--", number(clt["strain"][i], 5) if clt else DASH,
+                          number(float(check.kernel_strain[i]), 5), ref("strain", i)], DASH))
     for k, angle in enumerate(angles):
         for i, name in enumerate(("sigma_1", "sigma_2", "tau_12")):
             theory = number(clt["plies"][k]["stress_12"][i], 5) if clt else DASH
-            table.append(rf"Ply {k + 1} ({angle:g}°) {documents.MATH[name]} & {escape(labels['stress'])} & {theory} & "
-                         rf"{number(from_si(float(check.kernel_ply_stress_12[k, i]), 'stress', units), 5)} & {ref('ply_stress_local', i, k + 1)} & "
-                         rf"{abaqus(i, k + 1)} \\")
+            table.append(row([rf"Ply {k + 1} ({angle:g}°) {documents.MATH[name]}", escape(labels["stress"]), theory,
+                              number(from_si(float(check.kernel_ply_stress_12[k, i]), "stress", units), 5), ref("ply_stress_local", i, k + 1)],
+                             abaqus(i, k + 1) if with_abaqus else DASH))
     hint = (rf"To find a ply's cell in a viewer: in PrePoMax, open the part of ply $k$ (the $k$-th layer of bricks from the bottom) and read "
             rf"the global component along the pull (S22 for a 0° ply, S11 for a 90° ply; a ±45° ply needs the rotation) at element {escape(element)}; "
             r"in Abaqus/CAE, Layer $k$, section point MID, averaging off.")
@@ -540,9 +544,12 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
            rf"strain and every ply's stress in its own fibre axes at our element {escape(element)}, {escape(gauge_text(gauge, units))}. "
            r"Plies are counted from the bottom face and angles from the coupon's length axis. How each column's value is taken: " + CLT_NOTE
            + rf"\textbf{{Anisotropy}}: the element centroid. \textbf{{{escape(solver_name)}}}: the average of the ply's integration points at "
-           r"the same element, as the record compares it. \textbf{Abaqus}: the element centroid, section point at the ply's middle, filled where "
-           r"the coupon's folder holds the exported fields; -- otherwise. " + hint,
-           documents.long_table(["Quantity", "Unit", "Laminate theory", "Anisotropy", escape(solver_name), "Abaqus"], table, r"Ylrrrr", r"\footnotesize")]
+           r"the same element, as the record compares it. "
+           + (r"\textbf{Abaqus}: the element centroid, section point at the ply's middle, from the fields the team exported; -- for a layer "
+              r"the team did not export. " if with_abaqus else "")
+           + hint,
+           documents.long_table(["Quantity", "Unit", "Laminate theory", "Anisotropy", escape(solver_name)] + (["Abaqus"] if with_abaqus else []), table,
+                                r"Ylrrrr" if with_abaqus else r"Ylrrr", r"\footnotesize")]
     if not peaks:
         return "\n\n".join(out)
     frd_plies = {int(p["ply"]): p for p in (record.get("frd") or {}).get("plies", []) if isinstance(p, dict)}
