@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.spatial import cKDTree
 
-from .model import Deck, ElementKey, NodeKey, all_boundaries, coupled_nodes, expanded_layers, reference_node, resolve_nodes
+from .model import Deck, ElementKey, NodeKey, all_boundaries, coupled_nodes, expanded_layers, fibre_angles, reference_node, resolve_nodes
 from .units import from_si, unit_factors
 
 RELATIVE = 1e-9  # material constants, thicknesses and prescribed values count as equal within this relative difference
@@ -98,6 +98,18 @@ def _layer_text(layers) -> str:
     return "/".join(f"{layer.angle_deg:g}" for layer in layers)
 
 
+def _axis_words(part, section) -> str:
+    """The axis a section's layer angles are counted from, in words: from x without an orientation, from the length axis (y) when the
+    orientation's local 1 is +y, otherwise the rotation from x (ADR-0065)."""
+    if section.orientation is None:
+        return "from x (global axes)"
+    if _close(section.rotation_deg, 90.0):
+        return f"from the length axis ({section.orientation}, local 1 along y)"
+    if _close(section.rotation_deg, 0.0) or section.rotation_deg == 0.0:
+        return f"from x ({section.orientation}, local 1 along x)"
+    return f"from {section.rotation_deg:g} deg past x ({section.orientation})"
+
+
 def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) -> DeckEquivalence:
     """Compare two SI decks of one part and one instance each; `tolerance` (m) is the largest node offset that counts as the same position.
 
@@ -164,8 +176,12 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
         + (", listed as the symmetric half" if ref_section.symmetric else ""),
         f"composite shell on {'all' if covers(our_part, our_section) else 'some'} elements" + (", listed as the symmetric half" if our_section.symmetric else ""),
         covers(ref_part, ref_section) and covers(our_part, our_section))
-    same_angles = len(ref_layers) == len(our_layers) and all(_close(a.angle_deg, b.angle_deg) for a, b in zip(ref_layers, our_layers))
-    add("Layup, bottom first", f"[{_layer_text(ref_layers)}], {len(ref_layers)} plies", f"[{_layer_text(our_layers)}], {len(our_layers)} plies", same_angles)
+    # The layups are judged by the fibre direction of each ply from global x, the stated angle plus the section's rotation (ADR-0065): two decks
+    # that count their angles from different axes are the same model when their fibres run the same way. Each deck is shown as it states itself.
+    ref_fibres, our_fibres = fibre_angles(ref_section), fibre_angles(our_section)
+    same_angles = len(ref_fibres) == len(our_fibres) and all(_close(a, b) for a, b in zip(ref_fibres, our_fibres))
+    add("Layup, bottom first", f"[{_layer_text(ref_layers)}], {len(ref_layers)} plies, {_axis_words(ref_part, ref_section)}",
+        f"[{_layer_text(our_layers)}], {len(our_layers)} plies, {_axis_words(our_part, our_section)}", same_angles)
     same_thickness = len(ref_layers) == len(our_layers) and all(_close(a.thickness, b.thickness) for a, b in zip(ref_layers, our_layers))
     add("Ply thickness", ", ".join(sorted({length(layer.thickness) for layer in ref_layers})),
         ", ".join(sorted({length(layer.thickness) for layer in our_layers})), same_thickness)
@@ -175,9 +191,8 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
     ref_ori = ref_part.orientations.get(ref_section.orientation) if ref_section.orientation else None
     our_ori = our_part.orientations.get(our_section.orientation) if our_section.orientation else None
     ori_text = lambda o: "global axes (none)" if o is None else f"a = {list(o.a)}, b = {list(o.b)}, {o.rotation_deg:g} deg about {o.rotation_axis}"  # noqa: E731
-    same_ori = (ref_ori is None and our_ori is None) or (ref_ori is not None and our_ori is not None and ref_ori.a == our_ori.a and ref_ori.b == our_ori.b
-                                                         and ref_ori.rotation_axis == our_ori.rotation_axis and _close(ref_ori.rotation_deg, our_ori.rotation_deg))
-    add("Shell orientation", ori_text(ref_ori), ori_text(our_ori), same_ori)
+    # Listed, not judged: the orientation is the axis the layer angles are counted from, and the layup row above already judges the fibres.
+    add("Shell orientation", ori_text(ref_ori), ori_text(our_ori), None)
 
     ref_materials = {layer.material for layer in ref_layers}
     our_materials = {layer.material for layer in our_layers}

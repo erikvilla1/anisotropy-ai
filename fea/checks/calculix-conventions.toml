@@ -4,6 +4,9 @@
 
 calculix_version = "2.22"
 detected_on = "2026-10-15"
+# The detection deck of 2026-10-15 predates ADR-0065 and counted its ply angles from global x: its [45/0/-45/90]s layers were fibres at 45, 0, -45
+# and 90 degrees from x. The conventions it detected (layer order, point order, axes, shear strain) do not depend on where the angles are counted
+# from; a deck written since states its angles from the coupon's length axis and names each *ORIENTATION by that stated angle.
 detected_by = "Claude Code on the founder's machine, PrePoMax v2.6.0 bundle (C:/Tools/PrePoMax v2.6.0/Solver/ccx_dynamic.exe)"
 
 # *SHELL SECTION, COMPOSITE: the first layer line is the bottom ply (most negative z along the shell normal).

@@ -35,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, ValidationErro
 from . import paths
 from .equivalence import DeckEquivalence, EquivalenceItem
 from .mesh import KernelError
-from .model import Deck, NodeKey, all_boundaries, expanded_layers, resolve_elements, resolve_nodes
+from .model import Deck, NodeKey, all_boundaries, expanded_layers, fibre_angles, resolve_elements, resolve_nodes
 from .report import GaugeElement, LaminateCheck, gauge_element, gripped_groups, laminate_check
 from .results import ShellSolution, Solution
 from .shell import pressure_loads
@@ -275,7 +275,13 @@ def _layup_text(angles: tuple[float, ...], full: bool = False) -> str:
 
 
 def _deck_angles(deck: Deck) -> tuple[float, ...]:
+    """The layer angles as the deck states them, bottom-first: what the deck's own labels print (ADR-0065)."""
     return tuple(layer.angle_deg for layer in expanded_layers(next(iter(deck.parts.values())).sections[0]))
+
+
+def _deck_fibres(deck: Deck) -> tuple[float, ...]:
+    """The fibre direction of every ply from global x, the stated angle plus the section's rotation: the frame two decks share."""
+    return tuple(fibre_angles(next(iter(deck.parts.values())).sections[0]))
 
 
 def _node_where(deck: Deck, key: NodeKey, units: str, length_unit: str) -> str:
@@ -358,14 +364,16 @@ def _model_match(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, F
             label = i.item if item.id != "B5" else _short(i.item) + (" (" + i.item.split(" (")[1] if " (" in i.item else "")
             team.append(f"{label}: {i.team}")
             ours.append(f"{label}: {i.ours}")
-            difference.append(f"{_short(i.item)}: {'the same' if i.same else 'differs'}")
+            difference.append(f"{_short(i.item)}: {'listed, not judged' if i.same is None else 'the same' if i.same else 'differs'}")
     differ = [i for i in group if i.same is False]
     result = "Fail" if differ else "Pass"
     if item.id == "B3":
-        team_angles = _deck_angles(ev.team_deck)
-        team.append(f"Balance: {_layup_text(team_angles)}")
-        ours.append(f"Balance: {_layup_text(facts.angles)}")
-        difference.append("Balance: the same" if _layup_text(team_angles) == _layup_text(facts.angles) else "Balance: differs")
+        # Balance is judged on the fibre directions from global x, the one frame both decks share (ADR-0065): the team's deck may count its
+        # angles from x and ours from the length axis, and the same laminate would otherwise read "4 at +30" against "4 at -60".
+        team_fibres, our_fibres = _deck_fibres(ev.team_deck), _deck_fibres(ev.our_deck)
+        team.append(f"Balance: {_layup_text(team_fibres)} (fibre directions from x)")
+        ours.append(f"Balance: {_layup_text(our_fibres)} (fibre directions from x)")
+        difference.append("Balance: the same" if _layup_text(team_fibres) == _layup_text(our_fibres) else "Balance: differs")
     if item.id == "B5" and differ:
         difference.append("Largest relative difference: " + _largest_material_difference(ev.team_deck, ev.our_deck))
     if item.id == "B8":  # the founder's request: the team's boundary conditions and loads and ours, in full, side by side
@@ -896,8 +904,10 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
                        f"the {from_si(check.free_length_m, 'length', ev.units):.4g} {length_unit} free length)")
         else:
             applied = f"N_y = {check.applied / check.width_m * per_length:.6g} N/{length_unit} (the {check.applied:.6g} N load over the {width:g} {length_unit} width)"
-        ply0 = next((f"Ply-{k + 1}" for k, ply in enumerate(check.plies) if ply.angle_deg % 180 == 0), None)
-        where = (f"section point of {ply0} (0 deg), whose axes are the coupon's" if ply0
+        # The ply whose fibres run along global x, the engine's zero, has its material axes on the coupon's x and y; it is the stated 90-degree ply
+        # under ADR-0065, so the label prints the stated angle beside the name.
+        ply0 = next((f"Ply-{k + 1} ({check.angles_deg[k]:g} deg)" for k, ply in enumerate(check.plies) if ply.angle_deg % 180 == 0), None)
+        where = (f"section point of {ply0}, whose material axes coincide with the coupon's x and y" if ply0
                  else "any ply, remembering that Abaqus reports them in the ply's own axes")
         team_element = next((p.reference_element for p in ev.paired if str(p.our_element) == label), None)
         tables.append(Table(f"Strains at element {check.gauge.name}, {at}: laminate theory with free lateral edges against our engine",
@@ -924,7 +934,7 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
         for k, ply in enumerate(check.plies):
             theory = [float(v) for v in from_si(check.ply_stress_12[k], "stress", ev.units)]
             ours = [float(v) for v in from_si(check.kernel_ply_stress_12[k], "stress", ev.units)]
-            ply_rows.append((k + 1, ply.angle_deg, theory[0], ours[0], theory[1], ours[1], theory[2], ours[2]))
+            ply_rows.append((k + 1, check.angles_deg[k], theory[0], ours[0], theory[1], ours[1], theory[2], ours[2]))
         tables.append(Table(f"Ply stresses at element {check.gauge.name} in material axes ({stress_unit}): laminate theory against our engine",
                             ("Ply (1 = bottom)", "Angle (deg)", "S11 theory", "S11 ours", "S22 theory", "S22 ours", "S12 theory", "S12 ours"), tuple(ply_rows),
                             f"The largest difference is {_pct(stress_distance)} of the largest theory value (rubric row D1).",

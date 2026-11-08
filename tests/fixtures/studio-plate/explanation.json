@@ -30,7 +30,7 @@
   "max_S22_angle": 0.0,
   "max_S22_element": "137",
   "max_S22_face": "bottom",
-  "max_S12": -18.75,
+  "max_S12": 18.75,
   "max_S12_ply": 1,
   "max_S12_angle": 0.0,
   "max_S12_element": "241",
@@ -46,7 +46,7 @@
  "sentences": [
   "NOM-PLT-L1, plate, under a pressure of 0.01 MPa on the whole plate, along its normal: the supports carries 100 N, holding the plate down.",
   "The largest displacement is 0.6333 mm at node 145 (50, 50 mm), mostly out of the plane (the deflection w).",
-  "The largest ply stresses in material axes are S11 = -28.47 MPa in ply 1 (0 degrees) on its bottom face at element 137, S22 = -28.47 MPa in ply 1 (0 degrees) on its bottom face at element 137, S12 = -18.75 MPa in ply 1 (0 degrees) on its bottom face at element 241; the largest ply von Mises stress is 32.48 MPa in ply 1 (0 degrees) on its bottom face at element 241.",
+  "The largest ply stresses in material axes are S11 = -28.47 MPa in ply 1 (0 degrees) on its bottom face at element 137, S22 = -28.47 MPa in ply 1 (0 degrees) on its bottom face at element 137, S12 = 18.75 MPa in ply 1 (0 degrees) on its bottom face at element 241; the largest ply von Mises stress is 32.48 MPa in ply 1 (0 degrees) on its bottom face at element 241.",
   "No failure criterion was asked for, so first-ply failure is not reported."
  ],
  "setup_sentences": [

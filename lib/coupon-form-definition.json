@@ -1,5 +1,5 @@
 {
- "form_version": "0.6",
+ "form_version": "0.7",
  "fea_version": "0.1.0",
  "units": "mm-MPa",
  "row_units": {
@@ -424,7 +424,7 @@
      "key": "ply_1",
      "label": "Ply 1 (bottom)",
      "kind": "angle",
-     "help": "the fibre angle of the bottom ply in degrees, measured from x, which runs across the width: 0 = fibres across the coupon, 90 = fibres along the pull, 45 and -45 diagonal. Then one ply per row upward; leave the rest blank",
+     "help": "the fibre angle of the bottom ply in degrees, measured from the coupon's length, the direction it is pulled: 0 = fibres along the pull, 90 = fibres across the width, 45 and -45 diagonal. Then one ply per row upward; leave the rest blank",
      "required": false,
      "default": null,
      "words": [],
@@ -1128,7 +1128,7 @@
  "how_to": [
   "What this form is for. You describe one coupon test; from it we build the model in our engine, solve it, and send back a package: the document, our Abaqus deck of the same coupon, and the audit form on which you compare your Abaqus results with ours.",
   "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. The Units row says which units every number is in: mm, MPa and N unless you pick another system (m-Pa, in-psi or in-ksi); the results come back in the same units, and our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick. Every row says what it means beside it; the sheet Definitions explains each term with an example.",
-  "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured from x, as in your Abaqus models: 0 = fibres across the coupon, 90 = fibres along the pull.",
+  "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured from the coupon's length, the direction it is pulled, as ASTM D3039 counts them: 0 = fibres along the pull, 90 = fibres across the width. Our Abaqus deck carries this as a layup orientation whose direction 1 is global y, so its layer lines show the angles as you wrote them.",
   "Layup: one ply per row, bottom ply first, angles in degrees. With Symmetric = yes, the plies you list are the lower half and are mirrored.",
   "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one.",
   "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give its interaction term f12*; or pick one criterion, or none.",
@@ -1219,8 +1219,8 @@
     },
     {
      "term": "Ply angle",
-     "meaning": "The direction of a ply's fibres, in degrees, measured from x (across the width), positive counterclockwise when you look down on the coupon. 0 = fibres across the coupon, 90 = fibres along the pull, 45 and -45 diagonal. This is how your Abaqus models are set up: the coupon drawn along y, the layup in the global axes.",
-     "example": "If you think of 0 as the direction of the pull, add 90 to every angle: 0, 45, -45, 90 becomes 90, -45, 45, 0."
+     "meaning": "The direction of a ply's fibres, in degrees, measured from the coupon's length, the direction it is pulled, positive counterclockwise when you look down on the coupon. 0 = fibres along the pull, 90 = fibres across the width, 45 and -45 diagonal. Our Abaqus deck sets the layup's direction 1 along global y, so its layer lines carry these angles as written.",
+     "example": "If your own Abaqus model counts its angles from x, across the width, in the global axes, subtract 90 from every angle: 90, -45, 45, 0 becomes 0, 45, -45, 90."
     },
     {
      "term": "Bottom ply first",

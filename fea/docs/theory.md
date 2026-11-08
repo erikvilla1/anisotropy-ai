@@ -4,7 +4,7 @@ Every equation the finite element layer uses, and the function that computes it 
 
 ## Conventions
 
-- The laminate x axis is the deck's global x axis: the only orientation our deck reader accepts is the global one, so ply angles are measured from global x, counterclockwise, as in ADR-0004.
+- The laminate x axis is the deck's global x axis, and the engine's ply angle is counted from it, counterclockwise, as in ADR-0004. A coupon states its ply angles from its length axis, global y (ADR-0065): the load axis in tension and compression, the span in bending, the length of a plate, so a stated 0-degree ply has its fibres along the pull. A spec's `fibre_angles` are therefore its stated angles plus 90 degrees, brought into (-90, 90]; the deck we write carries the stated angles on its layer lines under an `*Orientation` whose local direction 1 is +y. Our deck reader accepts any right-handed frame in the plate's plane (a unit `a` in the x-y plane, `b` the normal crossed with `a`, a rotation about axis 3 only) and records the angle from global x to local 1 as the section's `rotation_deg`; the engine ply of a layer is at the layer angle plus that rotation (`model.fibre_angles`), and every label prints the layer angle as the deck states it (`Section.angles_deg`). A deck without an orientation counts from x, as the hand-made check decks do.
 - In the membrane kernel (Sections 1 to 7) each node has two degrees of freedom, $`u`$ along x and $`v`$ along y, Abaqus dofs 1 and 2; there are no out-of-plane or rotational degrees of freedom. The flat shell kernel (Section 8) adds $`w`$ along z and the rotations $`\theta_x`$, $`\theta_y`$ about the x and y axes, Abaqus dofs 3 to 5; the drilling rotation, dof 6, is never carried.
 - Strain is the membrane (midplane) strain $`\boldsymbol{\varepsilon} = [\varepsilon_x, \varepsilon_y, \gamma_{xy}]^T`$ with engineering shear; the shell adds the curvature $`\boldsymbol{\kappa}`$ and the transverse shear strain $`\boldsymbol{\gamma} = [\gamma_{xz}, \gamma_{yz}]^T`$, engineering too.
 - Section forces are resultants per unit width, $`\mathbf{N} = [N_x, N_y, N_{xy}]^T`$ in N/m, what Abaqus reports as SF; the shell adds the moments $`\mathbf{M}`$ in N (Abaqus SM) and the transverse shear forces $`\mathbf{Q}`$ in N/m.
@@ -287,7 +287,7 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 
 ## Not modeled yet
 
-- Rotated laminate axes (an `*Orientation` other than the global axes)
+- An `*Orientation` out of the plate's plane, rotated about axis 1 or 2, or with `b` not the normal crossed with `a` (in-plane right-handed frames are read since ADR-0065)
 - Triangles, higher-order shells, solids, membranes (M3D4)
 - Distributed loads other than a uniform pressure per element (surface tractions, gravity, line loads by `*Dload`); thermal strain
 - Interlaminar stresses from equilibrium (the transverse shear stress is uniform through the thickness in the shell's law, Whitney Eq. 10.22, and is not reported per ply)

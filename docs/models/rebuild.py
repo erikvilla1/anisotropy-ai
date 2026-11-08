@@ -129,6 +129,38 @@ def keyword_box(h: Helpers, title: str, text: str) -> str:
             + "\n" + r"\begin{plainfile}" + "\n" + h.listing_text(text) + "\n" + r"\end{plainfile}")
 
 
+def section_rotation_deg(section) -> float:
+    """The angle from global x to the section's local direction 1, from its orientation's a axis and rotation about axis 3; 0 without one."""
+    if section.orientation_axes is None:
+        return 0.0
+    a = section.orientation_axes[0]
+    extra = section.orientation_rotation[1] if section.orientation_rotation else 0.0
+    return math.degrees(math.atan2(a[1], a[0])) + extra
+
+
+def orientation_words(section) -> str:
+    """What the layup's local direction 1 is and what a 0-degree ply therefore means (ADR-0065)."""
+    rotation = section_rotation_deg(section)
+    if abs(rotation - 90.0) < 1e-9:
+        return "Local direction 1 is global y, ALONG the coupon's length: a 0-degree ply has its fibres along the load, as the coupon states its angles (ADR-0065)"
+    if abs(rotation) < 1e-9:
+        return "Local direction 1 is global x, ACROSS the width: a 0-degree ply of this deck has its fibres across the load"
+    return f"Local direction 1 lies {rotation:g} degrees past global x: a ply's fibres lie at its listed angle plus {rotation:g} degrees from x"
+
+
+def layup_csys_words(section) -> str:
+    """The Abaqus/CAE layup orientation step for the section's local direction 1 (ADR-0065)."""
+    rotation = section_rotation_deg(section)
+    if abs(rotation - 90.0) < 1e-9:
+        return ("Layup orientation: Definition Coordinate system, CSys a datum CSys with its X along global Y and its Y along global -X (axis 3 along "
+                "global Z), Additional rotation None, Normal direction Axis 3; this is the deck's *Orientation with a = (0, 1, 0) and b = (-1, 0, 0). "
+                "Region: the whole part (all faces).")
+    if abs(rotation) < 1e-9:
+        return "Layup orientation: Definition Coordinate system, CSys Global (axis 1 along global x), Additional rotation None, Normal direction Axis 3. Region: the whole part (all faces)."
+    return (f"Layup orientation: Definition Coordinate system, CSys a datum CSys turned {rotation:g} degrees about global Z from the global axes, "
+            "Additional rotation None, Normal direction Axis 3. Region: the whole part (all faces).")
+
+
 def gui_steps(h: Helpers, tool: str, steps: list[str], tag_name: str) -> str:
     if tool not in h.tools:
         return ""
@@ -377,7 +409,7 @@ def render(ctx: Context, h: Helpers) -> str:
             ("Element type", e("conventional shell (*Shell Section, composite); continuum shell is NOT used") + " " + tag("INP")),
             ("Symmetric flag", (e("yes: the listed plies are the lower half, mirrored above the midplane") if section.symmetric else e("no: every ply is listed")) + " " + tag("INP")),
             ("Region", e(f"element set {section.elset}, {section.elements} elements") + " " + tag("INP")),
-            ("Orientation", e(f"{section.orientation or 'none'}: {axes}. Local direction 1 is global x, ACROSS the width; a 0-degree ply has its material axis 1 across the load") + " " + tag("INP")),
+            ("Orientation", e(f"{section.orientation or 'none'}: {axes}. " + orientation_words(section)) + " " + tag("INP")),
             ("Integration points per ply", e(str(section.expanded[0].integration_points)) + " " + tag("INP")),
             ("Section integration", e(section.section_integration or "default (Simpson)") + " " + (tag("INP") if section.section_integration else tag("ASSUMED"))),
         ]))
@@ -400,9 +432,9 @@ def render(ctx: Context, h: Helpers) -> str:
         out.append(gui_steps(h, "Abaqus/CAE", [
             e(f"Property module > Composite Layup Manager > Create. Name {section.layup_name or 'Layup-1'}, Initial ply count {len(section.listed)}, Element type Conventional Shell."),
             e("Section tab: Section integration Simpson (the deck writes no override), Thickness integration points as the table, Poisson definition Default, Temperature Gradient, Density off; Offset Middle surface, Thickness Specify (per ply)."),
-            e(f"Plies tab: one row per listed ply with Material, Thickness {length(section.listed[0].thickness_m):g}, CSys <Layup>, Rotation angle = the ply angle, Integration points {section.listed[0].integration_points}; "
+            e(f"Plies tab: one row per listed ply with Material, Thickness {length(section.listed[0].thickness_m):g}, CSys <Layup>, Rotation angle = the ply angle as the table states it, Integration points {section.listed[0].integration_points}; "
               + ("tick the option that makes the calculated section symmetric. " if section.symmetric else "leave symmetric unticked. ")),
-            e("Layup orientation: Definition Coordinate system, CSys Global (axis 1 along global x), Additional rotation None, Normal direction Axis 3. Region: the whole part (all faces)."),
+            e(layup_csys_words(section)),
         ], "CAE-CHECK"))
         out.append(gui_steps(h, "PrePoMax 2.6", [
             e("Property > Section > Create offers Solid, Shell (one material, one thickness, offset), Membrane, Point mass and Distributed mass sections: no composite layup dialog. ") + tag("MANUAL p.31"),

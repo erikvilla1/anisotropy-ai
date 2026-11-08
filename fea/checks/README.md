@@ -7,10 +7,10 @@ The proofs that the finite element layer reads and solves what it claims (ADR-00
 <!-- generated: benchmarks -->
 | Benchmark | What | Reference | Result |
 | --- | --- | --- | --- |
-| `open-hole-im7-8552/records/open-hole-im7-8552-calculix` | Open-hole tension coupon, IM7/8552 [45/0/-45/90]s, 6 mm hole in 36 mm, nodal grips, 1 mm pull | CalculiX 2.22 S8R | 57 of 57 agree; reaction +0.33 % |
+| `open-hole-im7-8552/records/open-hole-im7-8552-calculix` | Open-hole tension coupon, IM7/8552 [45/0/-45/90]s, 6 mm hole in 36 mm, nodal grips, 1 mm pull | CalculiX 2.22 S8R | 55 of 55 agree; reaction +0.62 % |
 | `plate-pressure-isotropic/records/plate-pressure-isotropic-calculix` | NOM-PLT-L1, plate: a 100 mm square isotropic plate, simply supported on four edges, under a uniform pressure toward +z | CalculiX 2.22 S8R | 13 of 13 agree |
-| `three-point-im7-8552/records/three-point-im7-8552-calculix` | IM7-3PB-L1, three-point bending: IM7/8552 [45/0/-45/90]s, 48 mm span, nose pushed down 1 mm | CalculiX 2.22 S8R | 100 of 100 agree |
-| `unnotched-im7-8552/records/unnotched-im7-8552-nodal-calculix` | Unnotched tension coupon, IM7/8552 [45/0/-45/90]s, nodal grips, 1 mm pull | CalculiX 2.22 S8R | 59 of 59 agree; reaction +0.31 % |
+| `three-point-im7-8552/records/three-point-im7-8552-calculix` | IM7-3PB-L1, three-point bending: IM7/8552 [45/0/-45/90]s, 48 mm span, nose pushed down 1 mm | CalculiX 2.22 S8R | 94 of 94 agree |
+| `unnotched-im7-8552/records/unnotched-im7-8552-nodal-calculix` | Unnotched tension coupon, IM7/8552 [45/0/-45/90]s, nodal grips, 1 mm pull | CalculiX 2.22 S8R | 59 of 59 agree; reaction +0.68 % |
 | `cases/bend-1x1-im7-engine-equality` | One unsymmetric IM7/8552 [0/30/-30/90] element under a prescribed uniform curvature: the flat shell reproduces the engine, B included | the engine's laminate theory, recomputed live | checked by `tests/test_fe_validation_cases.py` |
 | `cases/isotropic-simple-shear` | One isotropic element in simple shear, top edge moved 0.1 mm: gamma_xy = 0.01, Nxy = G h gamma_xy, no normal stress | a closed form, by hand; the source is in the case | checked by `tests/test_fe_validation_cases.py` |
 | `cases/isotropic-uniaxial-plane-stress` | One isotropic element, 1 % axial strain with free lateral edges: eps_x = -nu eps_y, Ny = E h eps_y | a closed form, by hand; the source is in the case | checked by `tests/test_fe_validation_cases.py` |

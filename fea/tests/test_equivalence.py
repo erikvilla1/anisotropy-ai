@@ -22,6 +22,8 @@ TOLERANCE = 1e-8  # m, 0.01 micrometre
 
 # The grips fixture (a coupon deck in the structure Abaqus/CAE writes: a part and its instance, CAE-style sets, a reference node
 # listed in its own coupled set) written as a spec our generator builds: 25 by 100 mm, 2 by 8 S4R, couplings on the end rows, 0.8 mm pull.
+# The fixture counts its [0/30/-30/30/0]s from global x; the spec counts from the length axis (ADR-0065), so it states the same fibres
+# as [90/-60/60/-60/90]s, and the equivalence judges the fibres, not the numbers written.
 FIXTURE_SPEC = """
 title = "The grips fixture as a spec"
 kind = "unnotched_tension"
@@ -36,7 +38,8 @@ element_order = 1
 nx = 2
 ny = 8
 [layup]
-angles = [0, 30, -30, 30, 0]
+angles = [90, -60, 60, -60, 90]
+angles_from = "length"
 symmetric = true
 ply_thickness = 0.18288
 [material]
@@ -86,6 +89,10 @@ def test_a_hand_built_deck_in_the_teams_structure_and_our_generated_deck_are_the
     assert len(eq.element_map) == 16 and eq.largest_node_offset == 0.0
     listed = {i.item: i for i in eq.items if i.same is None}
     assert listed["Part / instance names"].team == "Strip / Strip-1" and listed["Part / instance names"].ours == "Coupon / Coupon-1"
+    layup = next(i for i in eq.items if i.item == "Layup, bottom first")
+    assert layup.same and layup.team == "[0/30/-30/30/0/0/30/-30/30/0], 10 plies, from x (Ori-1, local 1 along x)"
+    assert layup.ours == "[90/-60/60/-60/90/90/-60/60/-60/90], 10 plies, from the length axis (Ori-1, local 1 along y)"
+    assert listed["Shell orientation"].team == "a = [1.0, 0.0, 0.0], b = [0.0, 1.0, 0.0], 0 deg about 3"  # listed, not judged
     couplings = [i for i in eq.items if i.item.startswith("Coupling")]
     assert len(couplings) == 2 and all(i.same and "drives 3 nodes" in i.team for i in couplings)  # the listed reference node is dropped on both sides
 
@@ -129,7 +136,7 @@ def test_names_read_same_when_they_match_and_are_only_listed_when_they_differ():
     renamed = text.replace("IM7-8552-Lamina", "MY-FABRIC").replace("Strip", "Plate")
     eq = deck_equivalence(deck_of(text), deck_of(renamed), TOLERANCE, "mm-MPa")
     listed = {i.item: i for i in eq.items if i.same is None}
-    assert eq.same_model and set(listed) == {"Part / instance names", "Material names", "Strengths (*Fail Stress)"}  # strengths are always listed
+    assert eq.same_model and set(listed) == {"Part / instance names", "Material names", "Strengths (*Fail Stress)", "Shell orientation"}  # always listed
     assert listed["Material names"].ours == "MY-FABRIC" and listed["Part / instance names"].ours == "Plate / Plate-1"
 
 

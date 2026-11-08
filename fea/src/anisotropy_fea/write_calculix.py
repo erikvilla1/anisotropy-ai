@@ -63,8 +63,10 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
     out.append(", ".join(number(stress(v)) for v in (material.E1, material.E2, material.E3)) + f", {number(material.nu12)}, {number(material.nu13)}, "
                f"{number(material.nu23)}, " + ", ".join(number(stress(v)) for v in (material.G12, material.G13)))
     out.append(f"{number(stress(material.G23))}, {number(REFERENCE_TEMPERATURE)}")
-    for angle in model.orientation_angles:
-        c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    out.append("** Each *ORIENTATION is named by the ply angle the coupon states, counted from its length axis (y, ADR-0065); its axes are the fibre "
+               "direction from global x, the stated angle plus 90 degrees.")
+    for angle, fibre in zip(model.orientation_angles, model.orientation_fibres):
+        c, s = math.cos(math.radians(fibre)), math.sin(math.radians(fibre))
         out.append(f"*ORIENTATION, NAME={orientation_name(angle)}")
         out.append(f"{number(c)}, {number(s)}, 0., {number(-s)}, {number(c)}, 0.")
     out.append(f"*SHELL SECTION, ELSET={section.elset}, COMPOSITE")

@@ -16,7 +16,7 @@ from anisotropy_fea.mesh import mesh_from_deck
 from anisotropy_fea.model import section_plies, validate_deck
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.mesher import gmsh_available
-from anisotropy_fea.spec import load_spec, parse_spec, to_si
+from anisotropy_fea.spec import load_spec, parse_spec, spec_plies, to_si
 from anisotropy_fea.write_abaqus import MAX_LINE, _comment, line_bytes, number, write_abaqus
 
 NODAL = paths.spec_path("unnotched-im7-8552-nodal").read_text(encoding="utf-8")
@@ -35,7 +35,8 @@ def test_the_deck_is_deterministic_and_round_trips_through_our_reader(tmp_path):
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     assert len(digest) == 64
     assert "*Element, type=S4R" in text and "*Shell Section, elset=All, composite, orientation=Ori-1, layup=Layup-1, symmetric" in text
-    assert "0.18288, 3, IM7-8552, 45., Ply-1" in text
+    assert "*Orientation, name=Ori-1\n0., 1., 0., -1., 0., 0.\n3, 0.\n" in text  # local 1 along +y, the coupon's length axis (ADR-0065)
+    assert "0.18288, 3, IM7-8552, 45., Ply-1" in text  # the layer lines carry the angles as the coupon states them
     assert "*Fail Stress\n2558.506536, -1731.480399, 64.05229525, -285.7187422, 91.14869142, 0." in text
     assert "*Node Print, nset=Grip-Top, totals=YES\nRF" in text and "*El Print, elset=Probe-near_grip, position=CENTROIDAL" in text
     assert "** rights class open-publisher" in "\n".join(line for line in text.splitlines() if line.startswith("**")) or "rights class open-publisher" in text
@@ -48,8 +49,11 @@ def test_the_deck_is_deterministic_and_round_trips_through_our_reader(tmp_path):
     assert mesh.node_count == model.mesh.node_count and mesh.element_count == model.mesh.element_count
     assert mesh.xy == pytest.approx(model.mesh.xy, abs=1e-12)
     assert mesh.connectivity.tolist() == model.mesh.connectivity().tolist()
-    plies = section_plies(read.parts["Coupon"].sections[0], read.materials)
-    assert [p.angle_deg for p in plies] == [45, 0, -45, 90, 90, -45, 0, 45] and plies[0].material.strengths.F1c == pytest.approx(1731.4804e6, rel=1e-7)
+    section = read.parts["Coupon"].sections[0]
+    plies = section_plies(section, read.materials)
+    assert section.rotation_deg == 90.0 and [layer.angle_deg for layer in section.layers] == [45, 0, -45, 90]
+    assert [p.angle_deg for p in plies] == [-45, 90, 45, 0, 0, 45, 90, -45] and plies[0].material.strengths.F1c == pytest.approx(1731.4804e6, rel=1e-7)
+    assert [p.angle_deg for p in plies] == [p.angle_deg for p in spec_plies(spec)]  # the deck read back gives the spec's own engine plies
 
 
 def test_nodal_and_coupled_grips_give_the_same_solution(tmp_path):

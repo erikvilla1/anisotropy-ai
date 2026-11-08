@@ -75,8 +75,10 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
         out.append(f"{index}, " + ", ".join(str(int(n) + 1) for n in nodes))
     out.append(f"*Elset, elset={model.section.elset}, generate")
     out.append(f"1, {mesh.element_count}, 1")
+    # The layup's local direction 1 is global +y, the coupon's length axis, so the layer lines carry the angles as the coupon states them
+    # (ADR-0065): a = (0, 1, 0), b = z cross a = (-1, 0, 0), a right-handed frame with axis 3 along +z, and no extra rotation.
     out.append("*Orientation, name=Ori-1")
-    out.append("1., 0., 0., 0., 1., 0.")
+    out.append("0., 1., 0., -1., 0., 0.")
     out.append("3, 0.")
     section = model.section
     out.append(f"*Shell Section, elset={section.elset}, composite, orientation=Ori-1, layup={section.layup}" + (", symmetric" if section.symmetric else ""))

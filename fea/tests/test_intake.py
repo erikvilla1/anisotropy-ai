@@ -95,7 +95,7 @@ def test_every_row_says_what_it_means(blank):
         if f.label not in later_plies:
             assert sheet.cell(rows[f.label], 3).value, f"the row {f.label!r} has no explanation beside it"
     ply = sheet.cell(rows["Ply 1 (bottom)"], 3).value
-    assert "measured from x" in ply and "90 = fibres along the pull" in ply  # the direction an engineer asks about first
+    assert "measured from the coupon's length" in ply and "0 = fibres along the pull" in ply  # the direction an engineer asks about first (ADR-0065)
 
 
 def test_the_definitions_answer_the_first_questions(blank):

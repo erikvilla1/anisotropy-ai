@@ -70,8 +70,8 @@ from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
 escape, code, inline, number = manual.escape, manual.code, manual.inline, manual.number
 UNITS = {"mm-MPa": ("mm", "MPa", "N"), "m-Pa": ("m", "Pa", "N")}
-QUANTITY_TITLE = {"S11": "S11, the ply stress along material direction 1 (across the width for these 0-degree plies)",
-                  "S22": "S22, the ply stress along material direction 2 (along the pull for these 0-degree plies)",
+QUANTITY_TITLE = {"S11": "S11, the ply stress along material direction 1 (the fibres: along the pull for these 0-degree plies)",
+                  "S22": "S22, the ply stress along material direction 2 (across the width for these 0-degree plies)",
                   "S12": "S12, the in-plane shear stress of the ply", "Mises": "The von Mises stress of the ply"}
 SIGN_FLOOR = 1e-6  # a value below this share of the largest magnitude does not decide whether a map is one-signed (the rigid tabs carry roundoff)
 INK, MUTED, GRID, EMPTY = "#1C1F22", "#5D636A", "#D9DCE0", "#F6F7F5"
@@ -535,9 +535,9 @@ def results_section(c: Comparison, figures: Path) -> str:
     layer = m.map_layer
     parts = [
         rf"The team exported {', '.join(c.quantities)} from Abaqus at every element centroid for layers {', '.join(map(str, c.layers()))} "
-        r"(the outer plies; Abaqus numbers layers from the bottom). For these 0-degree plies a ply's material axes are the global axes, "
-        r"direction 1 along x, across the width, and direction 2 along the loading axis y, so the comparison holds whether Abaqus reports S11 "
-        r"and S22 in the ply's axes or in the layup's; which of the two it uses shows only in the 45-degree plies, not exported (UNVERIFIED, "
+        r"(the outer plies; Abaqus numbers layers from the bottom). These 0-degree plies have their fibres along the pull (ADR-0065: a coupon's "
+        r"angles are counted from its length axis, y), so a ply's material direction 1 is the layup's own direction 1 and the comparison holds "
+        r"whether Abaqus reports S11 and S22 in the ply's axes or in the layup's; which of the two it uses shows only in the 45-degree plies, not exported (UNVERIFIED, "
         r"Section~\ref{sec:open}). Our kernel gives the same quantities at "
         rf"the same centroids. Differences are ours minus the team's. Layers 1 and 10 carry the same values in both, so tables show layer {layer}.",
         r"\subsection{Stress at named points}",

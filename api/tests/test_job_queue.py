@@ -144,10 +144,10 @@ def queued(coupon: str | None = None, values: dict | None = None) -> str:
 
 def test_the_api_container_files_a_job_for_the_queue_and_runs_nothing(queue):
     front, _, _, store, table, _ = queue
-    job_id = queued(values={"coupon": "IM7-UNT-L1", "form_version": "0.6"})
+    job_id = queued(values={"coupon": "IM7-UNT-L1", "form_version": "0.7"})
     row = fetch_job(table, uuid.UUID(job_id))
     assert row.state == "queued" and row.source == input_key(job_id, f"values-{uuid.UUID(job_id).hex[:8]}.json") and row.source in store.objects
-    assert json.loads(store.objects[row.source][0]) == {"coupon": "IM7-UNT-L1", "form_version": "0.6"}  # the values as the tool reads them
+    assert json.loads(store.objects[row.source][0]) == {"coupon": "IM7-UNT-L1", "form_version": "0.7"}  # the values as the tool reads them
     assert row.options == ["--run-by", "A. Engineer", "--no-pdf"] and front.jobs == {}  # nothing runs in the API's container
     status = client.get(f"/v1/coupon-jobs/{job_id}").json()
     assert status["state"] == "queued" and status["message"] == "waiting for a free solver"

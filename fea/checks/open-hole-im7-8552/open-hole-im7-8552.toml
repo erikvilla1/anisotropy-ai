@@ -23,6 +23,7 @@ growth = 1.2          # radial element growth away from the hole
 
 [layup]
 angles = [45, 0, -45, 90]
+angles_from = "length"  # counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)
 symmetric = true
 ply_thickness = "library"
 

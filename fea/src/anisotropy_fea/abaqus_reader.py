@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -153,8 +154,16 @@ class _PartBuilder:
             nsets={name: np.asarray(values, dtype=int) for name, values in self.nsets.items()},
             elsets={name: np.asarray(values, dtype=int) for name, values in self.elsets.items()},
             orientations=dict(self.orientations),
-            sections=tuple(self.sections),
+            sections=tuple(section.model_copy(update={"rotation_deg": self.rotation_of(section)}) for section in self.sections),
         )
+
+    def rotation_of(self, section: ShellSection) -> float:
+        """The angle from global x to the section's local direction 1 (ADR-0065): the a axis of its *Orientation turned by the rotation about
+        axis 3; 0 without an orientation. An orientation the part never defines is left at 0 here and refused by validate_deck."""
+        orientation = self.orientations.get(section.orientation) if section.orientation is not None else None
+        if orientation is None:
+            return 0.0
+        return float(math.degrees(math.atan2(orientation.a[1], orientation.a[0])) + orientation.rotation_deg)
 
 
 @dataclass
@@ -420,11 +429,21 @@ class _Parser:
             axis = self._int(second[0], second_line, "rotation axis")
             angle = self._float(second[1], second_line, "rotation angle")
         a, b = tuple(values[:3]), tuple(values[3:6])
-        if (max(abs(a[i] - GLOBAL_AXES[0][i]) for i in range(3)) > AXES_TOLERANCE
-                or max(abs(b[i] - GLOBAL_AXES[1][i]) for i in range(3)) > AXES_TOLERANCE or angle != 0.0):
-            raise DeckError(f"line {block.line}: *Orientation {block.params['name']!r} is not the global axes with zero rotation; "
-                            "anisotropy_fea 0.1 reads laminate axes aligned with x and y only (a rotated layup is a planned extension)")
         name = block.params["name"] or ""
+        # Any right-handed frame in the plate's plane is read (ADR-0065): a unit a in the x-y plane, b = z cross a, and a rotation about
+        # axis 3 only. The angle from global x to a, plus that rotation, becomes the section's rotation_deg in _PartBuilder.build. The
+        # global axes GLOBAL_AXES with no rotation are the frame of a deck whose layer angles are counted from x.
+        if abs(a[2]) > AXES_TOLERANCE:
+            raise DeckError(f"line {first_line}: *Orientation {name!r} has its a axis out of the plate's plane (a_z = {a[2]:g}); the laminate axes lie in the x-y plane")
+        if abs(math.hypot(a[0], a[1]) - 1.0) > AXES_TOLERANCE:
+            raise DeckError(f"line {first_line}: *Orientation {name!r} has an a axis of length {math.hypot(a[0], a[1]):.12g}; write a unit vector")
+        z_cross_a = (-a[1], a[0], 0.0)
+        if max(abs(b[i] - z_cross_a[i]) for i in range(3)) > AXES_TOLERANCE:
+            raise DeckError(f"line {first_line}: *Orientation {name!r} has b = {list(b)}, which is not z cross a = {[round(v, 12) for v in z_cross_a]}; "
+                            "the laminate frame is right-handed with axis 3 along the plate normal +z")
+        if axis != 3:
+            raise DeckError(f"line {block.data_lines[-1]}: *Orientation {name!r} rotates about axis {axis}; only a rotation about axis 3, the plate normal, "
+                            "keeps the layup in the plane")
         self.part.orientations[name] = Orientation(name=name, a=a, b=b, rotation_axis=axis, rotation_deg=angle, line=block.line)  # type: ignore[arg-type]
 
     def shell_section_(self, block: KeywordBlock) -> None:
@@ -482,6 +501,7 @@ class _Parser:
             layup_name=block.params.get("layup"),
             symmetric=self._flag(block, "symmetric"),
             layers=tuple(layers),
+            rotation_deg=0.0,  # the orientation may follow the section in the file; _PartBuilder.build sets the rotation once the part is complete
             section_integration=block.params.get("section integration"),
             line=block.line,
         ))

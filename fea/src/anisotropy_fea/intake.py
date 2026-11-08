@@ -35,7 +35,7 @@ from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQU
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
 from .units import from_si as value_from_si, to_si as value_to_si
 
-FORM_VERSION = "0.6"
+FORM_VERSION = "0.7"  # 0.7: the ply rows count their angles from the coupon's length axis (ADR-0065); a 0.6 file is refused, never reinterpreted
 INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD = "Coupon", "How to fill it in", "Definitions", "Library materials", "Record"
 UNITS = "mm-MPa"  # the system the rows are in unless the Units row says another, the one the labels are written in, and the library sheet's
 TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45", "three_point_bending", "four_point_bending", "plate")  # as the form lists them
@@ -154,8 +154,8 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
     )),
     ("Layup, bottom ply first", tuple(
         Field(f"ply_{i}", f"Ply {i}" + (" (bottom)" if i == 1 else ""), "angle",
-              "the fibre angle of the bottom ply in degrees, measured from x, which runs across the width: 0 = fibres across the coupon, "
-              "90 = fibres along the pull, 45 and -45 diagonal. Then one ply per row upward; leave the rest blank" if i == 1
+              "the fibre angle of the bottom ply in degrees, measured from the coupon's length, the direction it is pulled: 0 = fibres along the pull, "
+              "90 = fibres across the width, 45 and -45 diagonal. Then one ply per row upward; leave the rest blank" if i == 1
               else "the next ply up" if i == 2 else "")
         for i in range(1, PLIES + 1)) + (
         Field("symmetric", "Symmetric", "list", "yes: the plies listed are the lower half and are mirrored, so 0, 45, -45, 90 becomes 8 plies; "
@@ -250,7 +250,8 @@ HOW_TO = (
     "our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick. "
     "Every row says what it means beside it; the sheet Definitions explains each term with an example.",
     "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured "
-    "from x, as in your Abaqus models: 0 = fibres across the coupon, 90 = fibres along the pull.",
+    "from the coupon's length, the direction it is pulled, as ASTM D3039 counts them: 0 = fibres along the pull, 90 = fibres across the width. "
+    "Our Abaqus deck carries this as a layup orientation whose direction 1 is global y, so its layer lines show the angles as you wrote them.",
     "Layup: one ply per row, bottom ply first, angles in degrees. With Symmetric = yes, the plies you list are the lower half and are mirrored.",
     "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed "
     "in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions "
@@ -304,10 +305,11 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
     )),
     ("Layup and plies", (
         ("Ply", "One layer of the laminate: fibres in resin, all at one angle.", ""),
-        ("Ply angle", "The direction of a ply's fibres, in degrees, measured from x (across the width), positive counterclockwise when you look "
-         "down on the coupon. 0 = fibres across the coupon, 90 = fibres along the pull, 45 and -45 diagonal. This is how your Abaqus models are "
-         "set up: the coupon drawn along y, the layup in the global axes.",
-         "If you think of 0 as the direction of the pull, add 90 to every angle: 0, 45, -45, 90 becomes 90, -45, 45, 0."),
+        ("Ply angle", "The direction of a ply's fibres, in degrees, measured from the coupon's length, the direction it is pulled, positive "
+         "counterclockwise when you look down on the coupon. 0 = fibres along the pull, 90 = fibres across the width, 45 and -45 diagonal. "
+         "Our Abaqus deck sets the layup's direction 1 along global y, so its layer lines carry these angles as written.",
+         "If your own Abaqus model counts its angles from x, across the width, in the global axes, subtract 90 from every angle: 90, -45, 45, 0 "
+         "becomes 0, 45, -45, 90."),
         ("Bottom ply first", "List the plies from the bottom face up, in the order you would lay them on the tool.", ""),
         ("Symmetric", "The stack is mirrored about its middle. With Symmetric = yes, list only the lower half.",
          "0, 45, -45, 90 with yes is 8 plies: 0, 45, -45, 90, 90, -45, 45, 0."),
@@ -1371,7 +1373,7 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
         "coupon": {"designation": designation.name, "standard": values.standard, "size_from": values.size_from, "team_model": values.team_model,
                    "test_data": values.test_data},
         "geometry": geometry, "mesh": mesh,
-        "layup": {"angles": [int(a) if float(a).is_integer() else a for a in values.angles], "symmetric": values.symmetric,
+        "layup": {"angles": [int(a) if float(a).is_integer() else a for a in values.angles], "angles_from": "length", "symmetric": values.symmetric,
                   "ply_thickness": values.ply_thickness if values.ply_thickness is not None else "library"},
         "material": material,
         **({} if bending or plate else {"grips": {"kind": grips_kind, "region": values.region}}),
@@ -1400,6 +1402,7 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
                       "abaqus": {"field_preselect": True, "node_print": True, "el_print": True},
                       "calculix": {"node_print": True, "el_print": True, "frd": True, "el_print_global": True}}
     comments["layup.angles"] = "bottom ply first; the lower half when symmetric"
+    comments["layup.angles_from"] = "counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)"
     comments["layup.ply_thickness"] = "from the library record" if values.ply_thickness is None else "as given on the form"
     if not bending and not plate:
         comments["grips.kind"] = ("a reference point at each end drives the whole tab, as in the team's decks" if grips_kind == "coupling"
