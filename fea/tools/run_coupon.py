@@ -101,13 +101,25 @@ class Progress:
         self.attempt: Path | None = None
         self.held = False  # waiting at the gate (--gate)
         self.result: str | None = None  # the result's one line, once the solve and the record are done (ADR-0064)
+        self.timings: dict[str, float] = {}  # the seconds each finished stage took, the evidence of where a job's time goes (ADR-0056 amendment 6)
+        self._since: float | None = None
 
     def start(self, stage: str) -> None:
+        now = time.monotonic()
         if self.stage is not None:
             self.done.append(self.stage)
+            self.timings[self.stage] = round(now - (self._since if self._since is not None else now), 1)
+        self._since = now
         self.stage = stage
-        print(f"\n== {stage}", flush=True)
+        took = f" ({self.timings[self.done[-1]]:.1f} s for {self.done[-1]})" if self.done else ""
+        print(f"\n== {stage}{took}", flush=True)
         self.write()
+
+    def finish(self) -> None:
+        """The last stage's time, once the run has ended one way or the other."""
+        if self.stage is not None and self._since is not None and self.stage not in self.timings:
+            self.timings[self.stage] = round(time.monotonic() - self._since, 1)
+            self.write()
 
     def made(self, **outputs: Path) -> None:
         self.outputs.update({key: path for key, path in outputs.items() if path.exists()})
@@ -117,7 +129,8 @@ class Progress:
         if self.path is None:
             return
         data = {"stage": self.stage, "done": list(self.done), "stages": list(STAGES), "outputs": {key: rel(p) for key, p in self.outputs.items()},
-                "coupon": self.coupon, "attempt": None if self.attempt is None else rel(self.attempt), "held": self.held, "result": self.result}
+                "coupon": self.coupon, "attempt": None if self.attempt is None else rel(self.attempt), "held": self.held, "result": self.result,
+                "timings": dict(self.timings)}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -157,9 +170,11 @@ def check_setup(source: str):
 
 
 def wait_at_gate(gate: Path | None, progress: Progress) -> None:
-    """With a gate file: the coupon is named and its specs are written, and no attempt is numbered yet. The progress says `held`, and
-    the run waits until the file appears: `go` goes on; any other text refuses the run with that text. The hosted tier's solver
-    claims the coupon here, so two jobs never number attempts of one coupon at once (ADR-0056 amendment 3)."""
+    """With a gate file, the run holds twice: once before the coupon is named (the progress says `held` with no coupon), so the hosted
+    tier's solver can bring its coupons level with the store under its naming lock before the naming reads them, and once when the
+    coupon is named and its specs are written, before any attempt is numbered (ADR-0056 amendments 3 and 6). Each time the run waits
+    until the file appears and reads it once: `go` goes on; any other text refuses the run with that text. The solver claims the
+    coupon at the second hold, so two jobs never number attempts of one coupon at once."""
     if gate is None:
         return
     progress.held = True
@@ -170,6 +185,7 @@ def wait_at_gate(gate: Path | None, progress: Progress) -> None:
             raise Refused(f"no word at the gate {gate.name} in {GATE_WAIT_S:g} s; the run was not continued")
         time.sleep(GATE_POLL_S)
     word = gate.read_text(encoding="utf-8").strip()
+    gate.unlink(missing_ok=True)  # read once: the next hold waits for a fresh word
     progress.held = False
     progress.write()
     if word != GATE_GO:
@@ -267,12 +283,14 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     if source.lower().endswith(INPUT_SUFFIXES):
         progress.start("the setup check")
         checklist, model, quality = check_setup(source)
+        wait_at_gate(gate, progress)  # the first hold: the solver syncs its coupons under the naming lock before the naming reads them
         progress.start("the input")
         intake = convert(source, root=paths.LOCAL, day=day, replace=replace)
         for path in intake.written:
             print(f"written    {rel(path)}")
         name = intake.designation.name
     else:
+        wait_at_gate(gate, progress)  # the first hold, before the coupon's folder is read
         name = source
     progress.coupon = name
     check_coupon(name)
@@ -432,11 +450,15 @@ def main() -> None:
         done = run(args.source, args.run_by, args.machine, args.replace, pdf=not args.no_pdf, theory=not args.no_theory, progress=progress,
                    gate=args.gate)
     except StepFailed as exc:
+        progress.finish()
         write_result(args.result, "stopped", f"stopped at {exc}", exc.coupon, exc.attempt, progress.outputs)
         sys.exit(f"run_coupon: stopped at {exc}; the step's own message is above")
     except (Refused, IntakeError, AttemptError, CasePageError, CalculixError) as exc:
+        progress.finish()
         write_result(args.result, "refused", str(exc))
         sys.exit(f"run_coupon: {exc}")
+    progress.finish()
+    print("timings: " + ", ".join(f"{stage} {seconds:.1f} s" for stage, seconds in progress.timings.items()), flush=True)
     message = done.result if done.documents == "written" else f"{done.result}; {done.documents}"
     write_result(args.result, "done", message, done.coupon, done.attempt, done.outputs, done.documents, done.result)
 

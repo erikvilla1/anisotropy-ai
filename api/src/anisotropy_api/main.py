@@ -29,7 +29,8 @@ from .access import AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
-from .coupon_jobs import LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
+from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
+                          studio_command)
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
                       owns_project, project_jobs, record_run, stop_orphans, update_project, upsert_project)
 from .settings import allowed_origins, environment, load_settings
@@ -380,6 +381,8 @@ def solve_queued_job(job_id: uuid.UUID, request: Request, response: Response) ->
         running_here = already is not None and already.state != "queued"
     try:
         job = jobs.take(job_id)
+    except SolverBusy as exc:  # 423: the consumer tries the pool's next solver (ADR-0056 amendment 6)
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
     except JobRefused as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except SQLAlchemyError as exc:

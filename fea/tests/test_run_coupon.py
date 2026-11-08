@@ -164,11 +164,28 @@ def test_a_gated_run_waits_once_the_coupon_is_named_and_before_its_attempt(tool,
 
     worker = threading.Thread(target=run)
     worker.start()
+    def read_progress() -> dict:
+        """The progress file as it stands, or {} while the tool is halfway through writing it (the write is not atomic)."""
+        try:
+            return json.loads(progress_path.read_text(encoding="utf-8")) if progress_path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def held_progress(what: str) -> dict:
+        deadline = time.monotonic() + 60
+        while not read_progress().get("held"):
+            assert time.monotonic() < deadline and worker.is_alive(), f"the run never held {what}"
+            time.sleep(0.05)
+        return read_progress()
+
+    first = held_progress("before the naming")  # the first hold: nothing named, nothing written (ADR-0056 amendment 6)
+    assert first["coupon"] is None and first["stage"] == "the setup check" and first["attempt"] is None and not paths.LOCAL.exists()
+    gate.write_text("go", encoding="utf-8")
     deadline = time.monotonic() + 60
-    while not (progress_path.is_file() and json.loads(progress_path.read_text(encoding="utf-8")).get("held")):
-        assert time.monotonic() < deadline and worker.is_alive(), "the run never held at the gate"
+    while gate.is_file():  # the word is read once and the file removed, so the second hold waits for a fresh word
+        assert time.monotonic() < deadline and worker.is_alive(), "the first word at the gate was never read"
         time.sleep(0.05)
-    held = json.loads(progress_path.read_text(encoding="utf-8"))
+    held = held_progress("at the gate")
     assert held["coupon"] == DESIGNATION and held["stage"] == "the input" and held["attempt"] is None
     assert paths.ours(DESIGNATION).joinpath(f"{DESIGNATION}.toml").is_file() and not paths.runs(DESIGNATION).exists()
     gate.write_text("go", encoding="utf-8")
@@ -176,6 +193,8 @@ def test_a_gated_run_waits_once_the_coupon_is_named_and_before_its_attempt(tool,
     assert isinstance(failure[0], tool.StepFailed) and "the result" in str(failure[0])  # the stand-in steps wrote nothing
     after = json.loads(progress_path.read_text(encoding="utf-8"))
     assert after["held"] is False and after["attempt"].split("/")[-1].startswith("attempt-02")
+    assert {"the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record"} <= set(after["timings"])
+    assert all(isinstance(v, float) and v >= 0 for v in after["timings"].values())  # each finished stage's seconds (ADR-0056 amendment 6)
 
 
 def test_a_gate_that_says_anything_but_go_refuses_the_run_before_its_attempt(tool, tmp_path, monkeypatch):
@@ -184,7 +203,7 @@ def test_a_gate_that_says_anything_but_go_refuses_the_run_before_its_attempt(too
     gate.write_text("another job is solving this coupon", encoding="utf-8")
     with pytest.raises(tool.Refused, match="another job is solving this coupon"):
         tool.run(str(public_values(tmp_path)), "A. Engineer", pdf=False, gate=gate)
-    assert not paths.runs(DESIGNATION).exists()
+    assert not paths.LOCAL.exists() and not gate.is_file()  # refused at the first hold, before anything is named or written; the word read once
 
 
 def test_a_blocked_setup_is_refused_before_anything_is_written(tool, tmp_path, monkeypatch):

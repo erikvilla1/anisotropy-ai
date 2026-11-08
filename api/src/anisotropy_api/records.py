@@ -115,6 +115,10 @@ class JobRow(Base):
     options: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     heartbeat_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     peak_memory_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    # Where a job's time goes (ADR-0056 amendment 6, migration 0009): when its solver took it up, and the seconds of each of the tool's
+    # stages and of the solver's own phases (restore_s, lock_wait_s, gate_s, upload_s).
+    claimed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    timings: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
 
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 
