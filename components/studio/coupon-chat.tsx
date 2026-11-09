@@ -330,7 +330,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             <Chips>
               <button type="button" onClick={loadExample}><FlaskConical size={14} /> Start from the IM7/8552 example</button>
               {coupons.length ? <button type="button" onClick={() => ask("reopen")}><RotateCcw size={14} /> Reopen a saved coupon</button> : null}
-              <PanelLink id="project">A plate, or every row: the panels</PanelLink>
+              <PanelLink id="test">A plate, or every row: the panels</PanelLink>
             </Chips>
           </>
         );

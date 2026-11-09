@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { couponValues, DOWNLOADS, fileUrl, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import { buildValues, exampleForm, formFromValues, PLATE_TEST, rowErrorsFrom, withStandard, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateFromValues, plateValues, type PlateLists } from "@/lib/studio-plate";
-import { MATERIAL_KEYS, panel, panelOfItem, panelState, visibleKeys, type PanelId } from "@/lib/workspace-panels";
+import { MATERIAL_KEYS, NEEDS_TEST, panel, panelOfItem, panelState, stepNumber, visibleKeys, type PanelId } from "@/lib/workspace-panels";
 import { ChecklistPanel } from "@/components/studio/checklist-panel";
 import { FieldGrid } from "@/components/studio/coupon-form";
 import { remember, remembered, RUN_BY_KEY, today } from "@/components/studio/local";
@@ -13,10 +13,13 @@ import { StandardCard } from "@/components/studio/standard-card";
 import { useProject } from "@/components/studio/project-context";
 import { LayupEditor } from "./panels/layup-editor";
 import { StandardSize } from "./panels/standard-size";
+import { SetupLine, StepStandard } from "./panels/step-standard";
 import { showPanel, StepPanel } from "./panels/step-panel";
+import { TestStep } from "./panels/test-step";
 
 /** The left column of the coupon FEA workspace (ADR-0062, part 3): one panel per step, each editing named rows of the one values file
- * (`lib/workspace-panels.ts`), the checklist under Validate, the run under Run, the files under Outputs. The rows, the check and the
+ * (`lib/workspace-panels.ts`), the checklist under Validate, the run under Run, the files under Outputs. The first step asks what test the
+ * coupon is and which standard it follows; the steps after it wait for the test, and each shows what the standard asks of it (amendment 1). The rows, the check and the
  * job live in the project store; this column keeps only what belongs to the page: the row errors, the name, the messages. */
 export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
   const { form, plate, setForm, setPlate, run: runner } = useProject();
@@ -118,6 +121,9 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
   const checklist = checked?.checklist ?? null;
   const state = (id: PanelId) => panelState(id, checklist);
   const grid = (id: PanelId, keys = visibleKeys(form, id)) => <FieldGrid form={form} keys={keys} errors={errors} disabled={busy} onChange={edit} />;
+  /** A step whose rows depend on the test waits for the first step's answer, and says so, instead of showing rows that may not apply. */
+  const waiting = (id: PanelId) => (!form.test && NEEDS_TEST.includes(id)
+    ? <p className="studio-hint" data-testid={`waiting-${id}`}>Pick the test under step 1 first: what this step asks for depends on it.</p> : null);
   const failing = checklist?.items.filter((item) => item.state === "fail" || item.state === "missing") ?? [];
   const available = job ? DOWNLOADS.filter(([key]) => key in job.outputs) : [];
 
@@ -125,7 +131,8 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
     <div className="studio-form ws-rail-panels" data-testid="studio-form">
       {!apiBaseUrl ? <p className="studio-alert">The page was built without the API&apos;s address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be checked or solved.</p> : null}
 
-      <StepPanel id="project" title="Project" state={state("project")}>
+      <div className="ws-rail-head">
+        <SetupLine form={form} />
         <div className="studio-actions">
           <button type="button" className="studio-text-button" onClick={loadExample} disabled={busy}>Load example</button>
           {coupons.length ? (
@@ -138,29 +145,56 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
             </span>
           ) : null}
         </div>
-        {grid("project")}
+      </div>
+
+      <StepPanel id="test" step={stepNumber("test")} title="Test and standard" state={state("test")}>
+        <TestStep form={form} disabled={busy} onChange={edit} />
+        {grid("test", visibleKeys(form, "test").filter((key) => key === "specimen"))}
         <StandardCard form={form} checklist={checklist} />
+      </StepPanel>
+
+      <StepPanel id="project" step={stepNumber("project")} title="Project" state={state("project")}>
+        {grid("project")}
         {checklist?.designation ? <p className="studio-hint">Coupon {checklist.designation}{checklist.coupon_exists ? `, ${checklist.attempts} attempt${checklist.attempts === 1 ? "" : "s"} so far` : ", new"}: the name is derived from the material, the test and the layup.</p> : null}
       </StepPanel>
 
-      <StepPanel id="geometry" title="Geometry" state={state("geometry")}>
-        <StandardSize form={form} disabled={busy} onRows={editSize} />
-        {grid("geometry")}
-        {isPlate ? <p className="studio-hint">A plate&apos;s regions, the boxes you draw, are listed under Loads and supports.</p> : null}
+      <StepPanel id="geometry" step={stepNumber("geometry")} title="Geometry" state={state("geometry")}>
+        {waiting("geometry") ?? (
+          <>
+            <StandardSize form={form} disabled={busy} onRows={editSize} />
+            {grid("geometry")}
+            <StepStandard form={form} id="geometry" checklist={checklist} />
+            {isPlate ? <p className="studio-hint">A plate&apos;s regions, the boxes you draw, are listed under Loads and supports.</p> : null}
+          </>
+        )}
       </StepPanel>
 
-      <StepPanel id="layup" title="Layup and material" state={state("layup")}>
-        <LayupEditor form={form} errors={errors} disabled={busy} onChange={edit} onRows={editRows} />
-        {grid("layup", visibleKeys(form, "layup").filter((key) => MATERIAL_KEYS.includes(key)))}
+      <StepPanel id="layup" step={stepNumber("layup")} title="Layup and material" state={state("layup")}>
+        {waiting("layup") ?? (
+          <>
+            <LayupEditor form={form} errors={errors} disabled={busy} onChange={edit} onRows={editRows} />
+            {grid("layup", visibleKeys(form, "layup").filter((key) => MATERIAL_KEYS.includes(key)))}
+            <StepStandard form={form} id="layup" checklist={checklist} />
+          </>
+        )}
       </StepPanel>
 
-      <StepPanel id="loads" title="Loads and supports" state={state("loads")}>
-        {isPlate ? <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} /> : grid("loads")}
+      <StepPanel id="loads" step={stepNumber("loads")} title="Loads and supports" state={state("loads")}>
+        {waiting("loads") ?? (
+          <>
+            {isPlate ? <PlatePanel form={form} lists={plate} errors={errors} disabled={busy} onChange={editPlate} /> : grid("loads")}
+            <StepStandard form={form} id="loads" checklist={checklist} />
+          </>
+        )}
       </StepPanel>
 
-      <StepPanel id="mesh" title="Mesh" state={state("mesh")}>
-        {grid("mesh")}
-        {checked?.preview ? <p className="studio-hint">{checked.preview.mesh.element_count} elements, {checked.preview.mesh.node_count} nodes, {checked.preview.mesh.mesher} mesher.</p> : null}
+      <StepPanel id="mesh" step={stepNumber("mesh")} title="Mesh" state={state("mesh")}>
+        {waiting("mesh") ?? (
+          <>
+            {grid("mesh")}
+            {checked?.preview ? <p className="studio-hint">{checked.preview.mesh.element_count} elements, {checked.preview.mesh.node_count} nodes, {checked.preview.mesh.mesher} mesher.</p> : null}
+          </>
+        )}
       </StepPanel>
 
       <StepPanel id="validate" title="Validate" state={checklist ? (checklist.state === "ready" ? "pass" : "fail") : "none"}>

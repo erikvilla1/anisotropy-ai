@@ -88,6 +88,15 @@ export const standardOf = (form: StudioForm): StandardProfile | null => STANDARD
 /** The standards that cover a test, as the Standard row offers them. */
 export const standardsFor = (test: string): StandardProfile[] => STANDARDS.filter((p) => p.tests.includes(test));
 
+/** What each test is, in the words of the Test row's own help as the engine writes it ("unnotched tension (a plain strip pulled)"), for the
+ * first step's choices (ADR-0062 amendment 1); a test the help does not describe gets an empty string, which `tests/workspace-panels.test.ts`
+ * refuses. */
+export function testDescription(test: string): string {
+  const help = fieldByKey.test?.help ?? "";
+  const escaped = test.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return help.match(new RegExp(`(?:^|[:,] |or )${escaped} \\(([^)]*)\\)`))?.[1] ?? "";
+}
+
 /** The words a list row offers on this form (ADR-0072): the Standard row "none" and the standards of the test picked (every one before a
  * test is picked), the Specimen row the specimens of the standard picked; every other row its own words. The check still refuses a word
  * that does not belong. */
