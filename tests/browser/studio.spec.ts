@@ -23,6 +23,10 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
       calls.checks.push(request.postDataJSON());
       const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
       dir = values.test === BENDING ? "studio-bending" : values.test === "plate" ? "studio-plate" : "studio";
+      if (values.standard === "ASTM D3039/D3039M-17") { // the public coupon under D3039, judged by the package (ADR-0072)
+        return json(route, { run_id: "run-5", state: "ready", designation: "IM7-UNT-L1", checklist: fixture("checklist", "studio-standards"),
+          preview: fixture("preview", "studio-standards") });
+      }
       if (dir === "studio-bending") {
         return json(route, { run_id: "run-3", state: "ready", designation: "IM7-3PB-L1", checklist: fixture("checklist", dir), preview: fixture("preview", dir) });
       }
@@ -237,6 +241,45 @@ test("a blocked setup names its rows and the solve stays off", async ({ page }) 
   expect(calls.solves).toHaveLength(0);
   await page.getByLabel("Length (mm)", { exact: true }).fill("250");
   await expect(page.getByTestId("solve-button")).toBeEnabled(); // inputs changed: the check must run again, and it will before a solve
+});
+
+test("a standard is offered by its test, fills its size, and the check judges the specimen clause by clause (ADR-0072)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  const standard = page.getByLabel("Standard", { exact: true });
+  await expect(standard.locator("option")).toHaveText(["none", "ASTM D3039/D3039M-17"]); // C1869 is open-hole tension: not offered here
+  await expect(page.getByTestId("standard-card")).toContainText("No standard picked");
+  await standard.selectOption("ASTM D3039/D3039M-17");
+  await expect(page.getByTestId("standard-card")).toContainText("Tensile properties of polymer matrix composites");
+  await page.getByRole("button", { name: "Use 0° unidirectional" }).click();
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("15");
+  await expect(page.getByLabel("Tab bevel angle (deg)", { exact: true })).toHaveValue("7");
+  await page.getByRole("button", { name: "Use balanced and symmetric" }).click();
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("25");
+  await expect(page.getByLabel("Tab bevel angle (deg)", { exact: true })).toHaveValue(""); // Table 2 grips this class through emery cloth
+  await expect(page.getByLabel("Tab length (mm)", { exact: true })).toHaveValue("56"); // it gives no grip length, so the typed one stays
+  await page.getByLabel("Strain measurement", { exact: true }).selectOption("extensometer");
+  await page.getByLabel("Strain measurement length (mm)", { exact: true }).fill("25");
+  await page.getByTestId("check-button").click();
+  await expect(page.getByTestId("checklist").locator("li[data-item=standard]")).toHaveAttribute("data-state", "pass");
+  await expect(page.getByTestId("standard-summary")).toContainText("5 of 5 requirements a model can meet are met");
+  await expect(page.getByTestId("standard-card").locator("[data-requirement=t2-thickness]")).toHaveAttribute("data-state", "advisory");
+  await expect(page.getByTestId("standard-card").locator("[data-requirement=min-length]")).toContainText("at least 187 mm");
+  const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
+  expect([sent.standard, sent.strain_device, sent.strain_length, sent.width]).toEqual(["ASTM D3039/D3039M-17", "extensometer", 25, 25]);
+  await page.getByLabel("Test", { exact: true }).selectOption("open-hole tension"); // another test clears a standard that does not cover it
+  await expect(standard).toHaveValue("none");
+  await expect(page.getByTestId("status")).toContainText("the Standard row is back to none");
+  await expect(standard.locator("option")).toHaveText(["none", "ASTM C1869-18(2023)"]);
+  await standard.selectOption("ASTM C1869-18(2023)");
+  await expect(page.getByLabel("Specimen", { exact: true }).locator("option")).toHaveText(["(blank)", "A", "B", "other"]);
+  await page.getByRole("button", { name: /Use Specimen B/ }).click();
+  await expect(page.getByLabel("Specimen", { exact: true })).toHaveValue("B");
+  await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveValue("3");
+  await expect(page.getByTestId("sketch")).toContainText("10 by 60 mm, 15 mm tabs, a 3 mm hole");
+  await expect(page.getByTestId("sketch")).toContainText("Sized for ASTM C1869-18(2023), Specimen B");
 });
 
 test("a fresh form's choices start blank, not on their first word", async ({ page }) => {

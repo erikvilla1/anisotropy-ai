@@ -80,6 +80,12 @@ On the website side:
   - the tab and strain rows are hidden for bending and a plate;
   - the chat writes the listed designation.
 
+Part 2, the studio (2026-11-08):
+- `lib/studio-form.ts`: `wordsFor`, `withTest`, `withStandard`, `mergeRows`, `presetsOf`, `presetRows`.
+- `components/studio/standard-card.tsx`, `requirement-table.tsx` (a list, to fit the rail) and `components/workspace/panels/standard-size.tsx`.
+- The checklist item opens the judged requirements; the sketch draws bonded tabs and the strain measurement (`lib/studio-sketch.ts`, `components/studio/sketch-canvas.tsx`). The hole stays an outline on the sketch, not a cut.
+- Evidence: `tests/studio-standards.test.ts` (6 passed), `npm test` 174 passed and 1 skipped, `npm run test:studio` 16 passed with the new scenario, `tests/browser/expansion.spec.ts` 6 passed; screenshots in `.local/website/screenshots/standards-*.png`.
+
 ## Why (evidence)
 
 - **The public IM7/8552 coupon under D3039:**

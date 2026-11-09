@@ -23,7 +23,7 @@ export default function FiniteElementModeling() {
       exists={[
         {
           title: "Six test kinds and a plate",
-          text: "Unnotched tension and compression, open-hole tension, in-plane shear, three- and four-point bending, in the proportions of ASTM D3039, D6641, D5766, D3518 and D7264; and a plate held and loaded on regions you name.",
+          text: "Unnotched tension and compression, open-hole tension, in-plane shear, three- and four-point bending, in the proportions of ASTM D3039, D6641, D5766, D3518 and D7264, the tension coupon checked clause by clause against ASTM D3039/D3039M when you pick it, the open hole against ASTM C1869 for ceramic composites; and a plate held and loaded on regions you name.",
         },
         {
           title: "A checklist before any run",
