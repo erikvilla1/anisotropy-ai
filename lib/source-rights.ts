@@ -58,3 +58,19 @@ export const handbookReferences = [
     rightsEvidence: "Copyrighted textbook; no redistribution permission recorded (ADR-0010). Individual values cited by table and printed page.",
     url: "https://global.oup.com/academic/product/engineering-mechanics-of-composite-materials-9780195150971" },
 ];
+
+/** The test standards a coupon may follow (ADR-0072): licensed references under ADR-0018 amendment 1. The fea package holds individual values
+ * from them, each with its clause and in our words, and judges a specimen against them; their text, tables, figures and PDFs are never in
+ * this repository. Every standard the form definition offers must be listed here (tests/source-rights.test.ts). */
+export const testStandardReferences = [
+  { designation: "ASTM D3039/D3039M-17", title: "Standard Test Method for Tensile Properties of Polymer Matrix Composite Materials",
+    publisher: "ASTM International", rights: "licensed-reference" as const,
+    rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
+      + "with their clause only; readers consult their own copy. The publisher lists D3039/D3039M-17(2025), a reapproval, as active.",
+    url: "https://store.astm.org/d3039_d3039m-17r25.html" },
+  { designation: "ASTM C1869-18(2023)", title: "Standard Test Method for Open-Hole Tensile Strength of Fiber-Reinforced Advanced Ceramic Composites",
+    publisher: "ASTM International", rights: "licensed-reference" as const,
+    rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
+      + "with their clause only; readers consult their own copy.",
+    url: "https://store.astm.org/c1869-18.html" },
+];

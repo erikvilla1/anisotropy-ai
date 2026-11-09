@@ -9,7 +9,7 @@ import {
 const fixture = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio/${name}.json`, "utf8"));
 
 test("the readers accept the package's files and refuse other shapes", () => {
-  assert.equal(readChecklist(fixture("checklist")).items.length, 12);
+  assert.equal(readChecklist(fixture("checklist")).items.length, 13); // the twelve of ADR-0051 and the Test standard (ADR-0072)
   assert.equal(readPreview(fixture("preview")).mesh.element_count, 250);
   const fields = readFields(fixture("fields"));
   const bending = readFields(JSON.parse(readFileSync("tests/fixtures/studio-bending/fields.json", "utf8")));

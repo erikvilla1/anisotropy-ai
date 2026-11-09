@@ -24,7 +24,7 @@ from .spec import (BENDING_KINDS, DEFAULT_NAMES, PLATE_KINDS, CouponSpec, Materi
                    fibre_angles, full_angles, mesh_counts, node_lines, row_coordinates, spec_material, spec_ply_thickness)
 
 STEP_NAME = "Step-1"
-CARD_IN_HEADING = ("Coupon", "Test", "Standard", "Size from", "Team's model", "Test data")  # the rest of the card is in the heading already
+CARD_IN_HEADING = ("Coupon", "Test", "Standard", "Specimen", "Tabs", "Strain measurement", "Size from", "Team's model", "Test data")  # the rest of the card is in the heading already
 
 
 @dataclass(frozen=True)

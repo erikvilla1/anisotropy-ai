@@ -8,8 +8,12 @@ export type PanelId = "project" | "geometry" | "layup" | "loads" | "mesh" | "val
 export type Panel = { id: PanelId; title: string; keys: string[]; items: string[] };
 
 export const PANELS: readonly Panel[] = [
-  { id: "project", title: "Project", keys: ["units", "test", "standard", "size_from", "notes"], items: ["identity", "units"] },
-  { id: "geometry", title: "Geometry", keys: ["length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span"], items: ["geometry"] },
+  { id: "project", title: "Project", keys: ["units", "test", "standard", "specimen", "size_from", "notes"], items: ["identity", "units", "standard"] },
+  {
+    id: "geometry", title: "Geometry", items: ["geometry"],
+    keys: ["length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span", "tab_thickness", "tab_bevel", "tab_material", "strain_device",
+      "strain_length"],
+  },
   {
     id: "layup", title: "Layup and material", items: ["laminate", "material", "criterion"],
     keys: [...PLY_KEYS, "symmetric", "ply_thickness", "library", "own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c",

@@ -268,6 +268,30 @@ At every element's centroid the membrane strain, the curvature and the transvers
 
 <!-- code: element_states -->
 
+## 9. The quantities of a test standard (`test_quantities.py`)
+
+A coupon that names a test standard, or states a strain measurement, gets the numbers the standard reduces a test to (ADR-0072), each from the solved model by the standard's own formula. The cross-section the standards divide by disregards a hole, computed by `gross_area`, and through the hole of an open-hole coupon it is the net section, computed by `net_area`:
+
+```math
+A = w\,h \quad\text{(D3039 §11.2.2, C1869 Eq. 2)}, \qquad A_{\mathrm{NS}} = (w - D)\,h \quad\text{(C1869 Eq. 5)} ,
+```
+
+with $`h`$ the plies times the ply thickness. The stress is the force the coupon carries along its length over that area, computed by `engineering_stress` (D3039 Eq. 6, C1869 Eq. 1); the force is the moving grip's reaction under a displacement and the applied total under a force. The strain measurement is modelled by two nodes on the coupon's centre line at its two ends, $`y = L/2 \mp L_g/2`$, where the form's mesh puts a node row; its strain is their change of distance over their distance, computed by `extensometer_strain` (D3039 Eq. 7):
+
+```math
+\varepsilon = \frac{v_{\mathrm{top}} - v_{\mathrm{bottom}}}{y_{\mathrm{top}} - y_{\mathrm{bottom}}} .
+```
+
+The chord modulus between the strains $`\varepsilon_1 = 1000`$ and $`\varepsilon_2 = 3000`$ microstrain (D3039 Table 3, Eq. 8) is computed by `chord_modulus`. The model is linear, so the stress at a strain is the solved stress scaled by the ratio of the strains, and the chord equals $`\sigma/\varepsilon`$ whatever the range; the stresses and forces at the two ends are reported for the laboratory's load range. Poisson's ratio is minus the transverse strain over the longitudinal one, computed by `poisson_ratio` (D3039 Eq. 9), the transverse strain from the edge nodes across the width at mid-length; an open-hole coupon has none, its mid-length section being the hole's:
+
+```math
+E^{\mathrm{chord}} = \frac{\sigma(\varepsilon_2) - \sigma(\varepsilon_1)}{\varepsilon_2 - \varepsilon_1}, \qquad \nu = -\frac{\varepsilon_t}{\varepsilon_l} .
+```
+
+Both are set beside the laminate's $`E_y`$ and $`\nu_{yx}`$ from the engine's ABD, where the coupon's length is $`y`$ (ADR-0065). The first-ply-failure factor of Section 7 scales the force, the stresses and the strain to the load at which the first ply fails; that stress on the gross and the net area is a first-ply-failure stress, never the ultimate strength the standards take at a test's maximum force (D3039 Eq. 5, C1869 Eq. 3 and 4), which a linear model does not reach. The block, in the stated units, is computed by `method_summary`.
+
+<!-- code: gross_area, net_area, engineering_stress, extensometer_strain, chord_modulus, poisson_ratio, method_summary -->
+
 ## Checks
 
 Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
@@ -284,6 +308,9 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - Engine equality under bending (validation case `bend-1x1-im7-engine-equality`): one unsymmetric IM7/8552 [0/30/-30/90] element under a prescribed uniform curvature reproduces the engine's $`\mathbf{N} = \mathbf{B}\boldsymbol{\kappa}`$, $`\mathbf{M} = \mathbf{D}\boldsymbol{\kappa}`$, both faces of every ply and the first-ply-failure factor, ply, face and mode to a relative 1e-12 (`test_shell_solve.py`).
 - The shell reproduces the membrane on a symmetric in-plane deck, and through a kinematic coupling on the gripped coupon, to 1e-12 and 1e-10; the dispatch sends the in-plane decks to the membrane and a bending, pressure or unsymmetric deck to the shell; a plate free to move out of its plane and a load on the drilling rotation are refused by name; an unsymmetric layup under tension is refused by the membrane and solved, bending, by the shell (`test_shell_solve.py`).
 - Closed forms (cases `plate-ss-isotropic-uniform-pressure-navier`, `plate-ss-isotropic-thin-no-locking`, `plate-ss-cross-ply-sinusoidal-navier`, `strip-cantilever-tip-load-timoshenko`): the simply supported isotropic square plate under uniform pressure reproduces Whitney's Navier series with transverse shear deformation within 0.5 % on 16 by 16 elements, and does so unchanged when the plate is a thousand times thinner than wide, where a displacement-based bilinear element would lock; the simply supported IM7/8552 [0/90]s plate under a sinusoidal pressure reproduces the one-term solution, both faces of every ply included, within 1 % on 32 by 32 elements; the cantilever strip with $`\nu = 0`$ reproduces the Timoshenko beam's tip deflection, shear part included, within 0.02 % and its tip rotation, root moment and shear force to 1e-9 (`test_fe_validation_cases.py`; the closed forms themselves are checked in `test_plate_closed_forms.py` against the tabulated 0.00406 coefficient, the Kirchhoff limit and the plate equation).
+
+- The quantities of a test standard: the formulas reproduce hand values; on the public IM7/8552 coupon under ASTM D3039 the extensometer's chord modulus and Poisson's ratio meet the laminate's $`E_y`$ and $`
+u_{yx}`$ from the engine within a relative 1e-4, the open hole's net area and ratios follow its geometry, and the stated units convert the area and the modulus (`test_test_quantities.py`).
 
 ## Not modeled yet
 

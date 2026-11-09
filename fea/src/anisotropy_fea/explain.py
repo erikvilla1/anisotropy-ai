@@ -78,6 +78,30 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
         facts[f"{criterion}_place"] = f["place"]
         facts[f"{criterion}_tied"] = [int(p) for p in f["tied_plies"] if int(p) != int(f["ply"])]
         facts[f"{criterion}_touches_grip"] = bool(f["touches_grip"])
+    method = summary.get("test_method")
+    if method:  # the quantities of the test standard, as the standard computes them from a test (ADR-0072)
+        u = method["units"]
+        facts.update(standard=method["designation"] or "", area_unit=u["area"], modulus_unit=u["modulus"],
+                     tm_width=printed(method["width"]), tm_thickness=printed(method["thickness"]), tm_area=printed(method["area"]),
+                     tm_force=printed(abs(method["force"])), tm_stress=printed(abs(method["stress"])))
+        if method.get("hole"):
+            h = method["hole"]
+            facts.update(tm_net_area=printed(h["net_area"]), tm_net_stress=printed(abs(h["net_stress"])), tm_width_to_hole=printed(h["width_to_hole"]),
+                         tm_hole_to_thickness=printed(h["hole_to_thickness"]))
+        lt = method.get("laminate_theory") or {}
+        if method.get("strain"):
+            s = method["strain"]
+            facts.update(tm_device=s["device"], tm_gauge_length=printed(s["modelled_length"]), tm_strain=printed(abs(s["value"]) * 1e6),
+                         tm_chord_from=printed(s["chord"]["from"] * 1e6), tm_chord_to=printed(s["chord"]["to"] * 1e6),
+                         tm_modulus=printed(s["chord"]["modulus"]), tm_modulus_theory=printed(lt.get("modulus", 0.0)))
+            if s.get("poisson") is not None:
+                facts.update(tm_poisson=printed(s["poisson"]), tm_poisson_theory=printed(lt.get("poisson", 0.0)))
+        earliest = method.get("earliest")
+        if earliest:
+            first = method["fpf"][earliest]
+            facts.update(tm_fpf_criterion=earliest, tm_fpf_basis=method["fpf_basis"], tm_fpf_stress=printed(abs(first["stress"])))
+            if "net_stress" in first:
+                facts["tm_fpf_net_stress"] = printed(abs(first["net_stress"]))
     return facts
 
 
@@ -122,6 +146,32 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
         out.append(text)
     if len(ordered) > 1:
         out.append(f"The earliest of the criteria is {CRITERION.get(ordered[0], ordered[0])}.")
+    return out + method_sentences(facts)
+
+
+def method_sentences(facts: dict[str, Any]) -> list[str]:
+    """The test standard's quantities, as the standard computes them from a test, every number from the facts (ADR-0072); none without them."""
+    if "tm_area" not in facts:
+        return []
+    L, S = facts["length_unit"], facts["stress_unit"]
+    out = [f"{'As ' + facts['standard'] + ' reduces a test' if facts['standard'] else 'As a test is reduced'}: the gross area is {number(facts['tm_area'])} {facts['area_unit']} ({number(facts['tm_width'])} by "
+           f"{number(facts['tm_thickness'])} {L}), so the force along the coupon, {number(facts['tm_force'])} {facts['force_unit']}, is a stress of "
+           f"{number(facts['tm_stress'])} {S}."]
+    if "tm_net_area" in facts:
+        out.append(f"Through the hole the net area is {number(facts['tm_net_area'])} {facts['area_unit']}, a net stress of {number(facts['tm_net_stress'])} {S}; "
+                   f"the width is {number(facts['tm_width_to_hole'])} hole diameters and the hole {number(facts['tm_hole_to_thickness'])} thicknesses.")
+    if "tm_strain" in facts:
+        text = (f"The {facts['tm_device']} over {number(facts['tm_gauge_length'])} {L} reads {number(facts['tm_strain'])} microstrain, so the chord modulus "
+                f"between {number(facts['tm_chord_from'])} and {number(facts['tm_chord_to'])} microstrain is {number(facts['tm_modulus'])} {facts['modulus_unit']} "
+                f"(laminate theory gives {number(facts['tm_modulus_theory'])} {facts['modulus_unit']})")
+        if "tm_poisson" in facts:
+            text += f", and Poisson's ratio is {number(facts['tm_poisson'])} (laminate theory: {number(facts['tm_poisson_theory'])})"
+        out.append(text + "; a linear model gives the same chord over any range.")
+    if "tm_fpf_stress" in facts:
+        net = f" ({number(facts['tm_fpf_net_stress'])} {S} on the net area)" if "tm_fpf_net_stress" in facts else ""
+        out.append(f"By {CRITERION.get(facts['tm_fpf_criterion'], facts['tm_fpf_criterion'])} in {facts['tm_fpf_basis']}, the first ply fails at a gross stress "
+                   f"of {number(facts['tm_fpf_stress'])} {S}{net}: a first-ply-failure stress, not the ultimate strength the standard takes at the "
+                   "maximum force of a test, which a linear model cannot give.")
     return out
 
 

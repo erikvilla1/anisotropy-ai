@@ -82,6 +82,9 @@ from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place
                                    model_facts, solve_record, summarize)
 from anisotropy_fea.spec import BENDING_KINDS, TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
 from anisotropy_fea.units import deck_units_of, from_si, units_words  # noqa: E402
+from anisotropy_fea.calculix_summary import calculix_test_method, extensometer_of  # noqa: E402
+from anisotropy_fea.standards.conformance import conformance  # noqa: E402
+from anisotropy_fea.test_quantities import method_inputs  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
 CHAPTER_STYLE = "\n".join([
@@ -387,7 +390,7 @@ def abaqus_chapter(src: Sources, spec, deck, solution, units: str, committed: Pa
 
 # --------------------------------------------------------------------------------------------- chapter 5, our results
 
-def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[str, dict]:
+def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: dict | None = None) -> tuple[str, dict]:
     labels = documents.UNIT_LABEL[units]
     documents.plot_deck_module.plot_solution(deck, solution, units, figures / "solution.png", title=f"Our engine's solution, units {units}")
     bending = spec.kind in BENDING_KINDS
@@ -473,7 +476,100 @@ def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[st
                    if at_grip else ""),
                 documents.long_table(["Criterion", "Factor", "Loading at failure", "Ply (angle)", f"Element (x, y in {escape(labels['length'])}), where", "Mode"],
                                      rows, r">{\raggedright\arraybackslash}p{2.1cm}rr>{\raggedright\arraybackslash}p{2cm}Y>{\raggedright\arraybackslash}p{1.9cm}")]
+    method = test_method_section(spec, deck, solution, units, calculix)
+    if method is not None:
+        out.append(method[0])
+        summary["test_method"] = method[1]
     return "\n\n".join(out), summary
+
+
+VERDICT_WORDS = {"met": "met", "deviation": "deviation", "advisory": "not followed", "note": "note", "na": "does not apply"}
+
+
+def calculix_method(src, record: dict, rows, units: str) -> dict | None:
+    """CalculiX's chord modulus at the twin's strain-measurement nodes, from the record (ADR-0072); None without a strain measurement or
+    when the record does not hold those nodes."""
+    found = extensometer_of(load_spec(src.twin))
+    return calculix_test_method(rows, record["units"], units, *found) if found is not None else None
+
+
+def three(value: float) -> str:
+    """A number at three significant figures as prose prints it, without an exponent: 2230, not 2.23e+03 (the standards report three)."""
+    return f"{float(f'{value:.3g}'):g}"
+
+
+def test_method_section(spec, deck, solution, units: str, calculix: dict | None) -> tuple[str, dict] | None:
+    """The section on the test standard (ADR-0072): the specimen judged against the standard's clauses, the procedure's clauses left to the
+    laboratory, and the quantities the standard reduces a test to, at three significant figures as the standards report them. None for a
+    coupon that names no standard and states no strain measurement."""
+    inputs = method_inputs(spec)
+    if inputs is None:
+        return None
+    summary = field_data(deck, solution, units, criteria=tuple(spec.output.fpf_criteria), method=inputs)["summary"]
+    tm = summary.get("test_method")
+    if tm is None:
+        return None
+    u = tm["units"]
+    judged = conformance(spec)
+    out = [rf"\section{{The test method{': ' + escape(tm['designation']) if tm['designation'] else ''}}}\label{{sec:test-method}}"]
+    if judged is not None:
+        words = judged.words()
+        out.append(escape(f"{judged.profile.designation} covers the {judged.profile.title.lower()}. {words[:1].upper()}{words[1:]}. Each requirement carries its clause, in our words: read the clause in your own copy of the standard. A "
+                          "deviation is reported and does not stop the run, and the model is never said to conform: the test is the laboratory's."))
+        rows = [rf"{escape(j.requirement.clause)} & {escape(j.requirement.text)} & {escape(j.value)} & {escape(j.limit)} & {escape(VERDICT_WORDS[j.state])} \\"
+                for j in judged.judged if j.state != "lab"]
+        out.append(documents.long_table(["Clause", "Requirement", "This coupon", "The clause asks", "Verdict"], rows,
+                                        r">{\raggedright\arraybackslash}p{1.6cm}Y>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{3.1cm}"
+                                        r">{\raggedright\arraybackslash}p{1.5cm}"))
+        lab = [j.requirement for j in judged.judged if j.state == "lab"]
+        out.append(r"The clauses of the procedure, for the laboratory's report:" + "\n" + r"\begin{itemize}" + "\n"
+                   + "\n".join(rf"\item {escape(r.clause)}: {escape(r.text)}" for r in lab) + "\n" + r"\end{itemize}")
+    q = []
+
+    def row(name: str, value, unit: str, how: str) -> None:
+        q.append(rf"{escape(name)} & {number(value, 3)} & {escape(unit)} & {escape(how)} \\")
+
+    row("Gross area A", tm["area"], u["area"], f"width {three(tm['width'])} times thickness {three(tm['thickness'])} (D3039 §11.2.2, C1869 Eq 2)")
+    row("Force along the coupon P", abs(tm["force"]), u["force"], "the moving grip's reaction, or the applied force")
+    row("Stress P/A", abs(tm["stress"]), u["stress"], "D3039 Eq 6, C1869 Eq 1")
+    if tm.get("hole"):
+        h = tm["hole"]
+        row("Net area through the hole", h["net_area"], u["area"], "(width less the hole) times thickness (C1869 Eq 5)")
+        row("Net stress", abs(h["net_stress"]), u["stress"], "P over the net area")
+        row("Width over hole diameter", h["width_to_hole"], "-", "C1869 Eq 7")
+        row("Hole diameter over thickness", h["hole_to_thickness"], "-", "C1869 Eq 8")
+    s = tm.get("strain")
+    lt = tm["laminate_theory"]
+    if s:
+        row(f"Strain over the {s['device']}", abs(s["value"]) * 1e6, "microstrain", f"two nodes {three(s['modelled_length'])} {u['length']} apart on the centre line (D3039 Eq 7)")
+        row("Stress at 1000 microstrain", abs(s["chord"]["stress_from"]), u["stress"], f"force {three(abs(s['chord']['force_from']))} {u['force']}")
+        row("Stress at 3000 microstrain", abs(s["chord"]["stress_to"]), u["stress"], f"force {three(abs(s['chord']['force_to']))} {u['force']}")
+        row("Chord modulus, 1000 to 3000 microstrain", s["chord"]["modulus"], u["modulus"], "D3039 Table 3, Eq 8; a linear model gives the same chord over any range")
+        if calculix:
+            row("Chord modulus, CalculiX", calculix["calculix"]["modulus"], u["modulus"],
+                f"its reaction and its displacements at the same two nodes; ours on the twin {three(calculix['ours']['modulus'])}, {calculix['difference']}")
+        row("Laminate modulus along the pull", lt["modulus"], u["modulus"], "classical laminate theory, the engine's ABD")
+        if s.get("poisson") is not None:
+            row("Poisson's ratio", s["poisson"], "-", "minus the strain across the width over the strain along it, at mid-length (D3039 Eq 9)")
+            row("Laminate Poisson's ratio", lt["poisson"], "-", "classical laminate theory")
+    earliest = tm.get("earliest")
+    if earliest:
+        first = tm["fpf"][earliest]
+        basis = tm["fpf_basis"]
+        row(f"First-ply-failure stress, gross ({CRITERION.get(earliest, earliest)})", abs(first["stress"]), u["stress"], f"over {basis}, {first.get('place') or ''}")
+        if "net_stress" in first:
+            row("First-ply-failure stress, net", abs(first["net_stress"]), u["stress"], "the same load over the net area")
+        if "strain" in first:
+            row("Strain at first-ply failure", abs(first["strain"]) * 1e6, "microstrain", "over the strain measurement")
+    out.append(r"The quantities the standard reduces a test to, from our engine's solution at three significant figures (the standards report three):")
+    out.append(documents.long_table(["Quantity", "Value", "Unit", "How"], q, r">{\raggedright\arraybackslash}p{4.2cm}rlY"))
+    notes = [r"A first-ply-failure stress is the load at which the first ply fails by the criterion, over the area: not the ultimate strength the "
+             r"standard takes at the maximum force of a test, which a linear model cannot give."]
+    if tm.get("note_b"):
+        notes.append(r"The first ply fails below 6000 microstrain, where D3039's Table 3 note B moves the chord range to 25 to 50\% of the ultimate; "
+                     r"a linear model gives no ultimate, so the 1000 to 3000 microstrain chord above stands.")
+    out.append(" ".join(notes))
+    return "\n\n".join(out), tm
 
 
 # --------------------------------------------------------------------------------------------- chapter 6, verification
@@ -804,6 +900,12 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
                      + (r", so the loading of this model is past first-ply failure" if factor < 1 else "") + "." + others
                      + r" No other solver has checked first-ply failure")
         verdict.append(text + ".")
+    if summary.get("test_method", {}).get("designation"):
+        tm = summary["test_method"]
+        s = tm.get("strain")
+        verdict.append(rf"\textbf{{Test method.}} Checked against {escape(tm['designation'])} (Section~\ref{{sec:test-method}}): the stress on the gross "
+                       rf"area is {number(abs(tm['stress']), 3)} {escape(tm['units']['stress'])}"
+                       + (rf", the chord modulus {number(s['chord']['modulus'], 3)} {escape(tm['units']['modulus'])}" if s else "") + ".")
     agreeing = sum(r.agrees for r in rows)
     expected = record["expected"]
     verdict.append(rf"\textbf{{Verified against CalculiX}} {escape(str(solver['version']))} ({escape(solver['element_type'])}) at "
@@ -930,7 +1032,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         c.package = package
     documents.difference_figure(rows, figures / "differences.png")
     map_drawn = documents.element_map(rows, summaries, element_centroids(rec_solution, deck_units), rec_solution, deck_units, figures / "element-map.png")
-    results, summary = results_chapter(spec, deck, solution, units, figures)
+    results, summary = results_chapter(spec, deck, solution, units, figures, calculix_method(src, record, rows, units))
     abaqus = abaqus_chapter(src, spec, deck, solution, deck_units, committed, c, figures)
 
     # the audit (ADR-0043): our tools score the rubric; the chapter and the form show the same rows

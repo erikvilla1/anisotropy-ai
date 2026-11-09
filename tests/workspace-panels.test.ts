@@ -34,7 +34,11 @@ test("every step of the assistant's conversation names the panel that holds its 
 
 test("a panel shows only the rows its test uses, in the definition's order", () => {
   const tension = { ...blankForm(), test: "unnotched tension" };
-  assert.deepEqual(visibleKeys(tension, "geometry"), ["length", "width", "tab_length"]);
+  assert.deepEqual(visibleKeys(tension, "geometry"), [
+    "length", "width", "tab_length", "tab_thickness", "tab_bevel", "tab_material", "strain_device", "strain_length",
+  ]);
+  assert.deepEqual(visibleKeys(tension, "project"), ["notes", "units", "test", "standard", "size_from"]); // no Specimen row without a standard that names them
+  assert.ok(visibleKeys({ ...tension, test: "open-hole tension", standard: "ASTM C1869-18(2023)" }, "project").includes("specimen"));
   assert.deepEqual(visibleKeys(tension, "loads"), ["control", "value", "grips", "region"]);
   const bending = { ...blankForm(), test: "four-point bending" };
   assert.deepEqual(visibleKeys(bending, "geometry"), ["length", "width", "span", "overhang", "load_span"]);

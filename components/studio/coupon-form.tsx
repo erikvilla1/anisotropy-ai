@@ -1,11 +1,11 @@
 "use client";
 
-import { fieldByKey, labelFor, libraryOptions, PLY_KEYS, sectionsFor, shortHelp, unitsOf, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
+import { fieldByKey, labelFor, libraryOptions, PLY_KEYS, sectionsFor, shortHelp, unitsOf, wordsFor, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
 
 type Props = { form: StudioForm; errors: Record<string, string>; disabled: boolean; onChange: (key: string, value: string) => void };
 
-function Field({ field, value, units, error, disabled, onChange }: {
-  field: FieldDefinition; value: string; units: string; error?: string; disabled: boolean; onChange: (value: string) => void;
+function Field({ field, value, units, error, disabled, onChange, words = field.words }: {
+  field: FieldDefinition; value: string; units: string; error?: string; disabled: boolean; onChange: (value: string) => void; words?: string[];
 }) {
   const id = `studio-${field.key}`;
   const describedBy = error ? `${id}-error` : `${id}-hint`;
@@ -18,11 +18,12 @@ function Field({ field, value, units, error, disabled, onChange }: {
         {libraryOptions.map((m) => <option key={m.id} value={m.id}>{m.id}: {m.name}</option>)}
       </select>
     );
-  } else if (field.kind === "list" && field.words.length) {
+  } else if (field.kind === "list" && words.length) {
+    const blank = field.key !== "standard"; // the Standard row's "none" is its blank (ADR-0072); every other list keeps its blank choice
     control = (
       <select id={id} value={value} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={describedBy} onChange={(e) => onChange(e.target.value)}>
-        <option value="">{field.required ? "choose one" : "(blank)"}</option>
-        {field.words.map((word) => <option key={word} value={word}>{word}</option>)}
+        {blank ? <option value="">{field.required ? "choose one" : "(blank)"}</option> : null}
+        {words.map((word) => <option key={word} value={word}>{word}</option>)}
       </select>
     );
   } else {
@@ -68,7 +69,7 @@ export function FieldGrid({ form, keys, errors, disabled, onChange }: Props & { 
   return (
     <div className="studio-field-grid">
       {shown.map((field) => <Field key={field.key} field={field} value={form[field.key] ?? ""} units={units} error={errors[field.key]} disabled={disabled}
-        onChange={(value) => onChange(field.key, value)} />)}
+        words={wordsFor(field, form)} onChange={(value) => onChange(field.key, value)} />)}
     </div>
   );
 }

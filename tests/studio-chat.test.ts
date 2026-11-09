@@ -47,7 +47,9 @@ test("forces convert kN to the form's N, tabs, spans and standards are read, and
   assert.equal(readMessage("no tabs").rows.tab_length, "0");
   assert.equal(readMessage("three-point bending, span 48").rows.span, "48");
   assert.equal(readMessage("three-point bending").rows.test, "three-point bending");
-  assert.equal(readMessage("per ASTM D3039").rows.standard, "ASTM D3039");
+  assert.equal(readMessage("per ASTM D3039").rows.standard, "ASTM D3039/D3039M-17"); // the designation the Standard list holds (ADR-0072)
+  assert.deepEqual([readMessage("open hole per C1869").rows.test, readMessage("open hole per C1869").rows.standard], ["open-hole tension", "ASTM C1869-18(2023)"]);
+  assert.equal(readMessage("ASTM D5766 open hole").rows.standard, undefined); // a standard we do not check leaves the row alone
   assert.equal(readMessage("AS4/8552S PW").rows.library, "as4-8552s-pw");
   assert.equal(readMessage("AS4/8552").rows.library, "as4-8552");
   assert.deepEqual(readMessage("hello there"), { rows: {}, understood: [] });

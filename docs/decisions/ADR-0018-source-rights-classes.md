@@ -44,3 +44,13 @@ Adding a source means stating its rights class and evidence, or the tests fail. 
 ## How we will know it was wrong
 
 Revisit if counsel advises that recorded values from a licensed reference must not be shown (flip `showValues` for that class), if a publisher objects, or if a customer's licensed data must be computed on without ever being stored by us.
+
+## Amendment 1, 2026-11-08 (ASTM test standards are licensed references; individual values with their clause)
+
+**Context.** The coupon form now names the test standard a specimen follows and checks it against the standard's requirements ([ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md)). The standards (ASTM D3039/D3039M-17, C1869-18(2023), D4018-23) are copyrighted and sold by ASTM; the team reads copies licensed to UC San Diego, each stamped "No further reproductions authorized". The repository is public.
+
+**Options.** (1) Keep the profiles out of git and send them to the hosted solver as a deploy secret: safest, but the public tests could check only a made-up profile. (2) Build the mechanism with a made-up profile and enter real values after a legal review. (3) Hold the standards as licensed references: individual values, each with its clause or table, in our own words, never the standard's text, tables, figures or PDFs (chosen by the founder).
+
+**Decision.** Option 3, the founder's choice on 2026-11-08 ("Public repo, cited by clause"). A test standard is a licensed reference: `fea/src/anisotropy_fea/standards/` holds individual values with their clause, the requirement texts are our words, and `lib/source-rights.ts` lists every offered standard under `testStandardReferences` with its rights evidence and the publisher's page; `tests/source-rights.test.ts` fails when the form offers a standard without that entry. The licensed copies stay under `.local/sources/astm/`.
+
+**Evidence.** The copies' stamps (read 2026-11-08). The publisher's pages: https://store.astm.org/d3039_d3039m-17r25.html and https://store.astm.org/c1869-18.html. Legal review of the "individual values" position for a paid standard: no evidence yet (risk R-25).

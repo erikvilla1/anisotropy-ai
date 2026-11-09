@@ -75,7 +75,9 @@ export type Fields = {
     /** Classical laminate theory for a gripped coupon: the reaction over the width as N_y, every ply at its middle (ADR-0066); null when it does not apply. */
     clt?: CltCheck | null;
     /** The mesh convergence study (ADR-0068): the kernel on the spec's mesh and its refinements, the validation quantities and the peaks on each; absent on older jobs. */
-    convergence?: Convergence | null };
+    convergence?: Convergence | null;
+    /** The quantities the coupon's test standard reduces a test to (ADR-0072); absent without a standard or a strain measurement, and on older jobs. */
+    test_method?: TestMethod };
   quality?: QualitySummary;
 };
 export type PlyPeak = { ply: number; angle: number } & Record<"S11" | "S22" | "S12", { value: number; element: number; label: string; xy: number[]; face: string | null; touches_grip: boolean }>;
@@ -90,6 +92,17 @@ export type Convergence = { studied: boolean; reason?: string; units: string | n
   changes?: { reaction: (number | null)[]; gauge_strain: ((number | null)[] | null)[]; plies: { ply: number; stress_12: ((number | null)[] | null)[] }[];
     peaks: { ply: number; s1: (number | null)[] }[]; fpf: Record<string, (number | null)[]>; fpf_gauge: Record<string, (number | null)[]> };
   settled?: Record<"reaction" | "gauge_strain" | "plies" | "peaks" | "fpf" | "fpf_gauge", boolean> };
+/** A test standard's quantities from the solved coupon (ADR-0072), every number in the stated units, written by the package. */
+export type TestMethod = {
+  designation: string | null; width: number; thickness: number; area: number; force: number; stress: number;
+  units: { length: string; area: string; force: string; stress: string; modulus: string };
+  hole: { diameter: number; net_area: number; net_stress: number; width_to_hole: number; hole_to_thickness: number } | null;
+  laminate_theory: { modulus: number; poisson: number; note: string };
+  strain: { device: string; gauge_length: number; modelled_length: number; nodes: string[]; x: number[]; value: number; microstrain: number; poisson: number | null;
+    chord: { from: number; to: number; stress_from: number; stress_to: number; force_from: number; force_to: number; modulus: number } } | null;
+  fpf: Record<string, { factor: number; force: number; stress: number; net_stress?: number; strain?: number; microstrain?: number; place: string | null }>;
+  fpf_basis: string; earliest: string | null; note_b: boolean;
+};
 export type CltCheck = { Ny: number; width: number; strain: number[]; plies: { ply: number; angle: number; stress_12: number[] }[]; note: string };
 /** One ply's peaks in its own fibre axes read from the `.frd`'s bricks: nodal, extrapolated, as a viewer would show them per ply (ADR-0066). */
 export type FrdPly = { ply: number; angle: number; fibre: number; nodes: number; s1_max?: number; s1_max_node?: number; s1_max_xyz?: number[]; s2_max?: number; s2_max_node?: number;
@@ -101,6 +114,8 @@ export type CalculixBeside = {
   gauge: { ply: number; ours: (number | null)[]; calculix: (number | null)[]; agrees: (boolean | null)[] }[];
   /** The gauge element's mean strain [eps_x, eps_y, gamma_xy], ours and CalculiX's (ADR-0066); absent on a record without the strain group. */
   gauge_strain?: { ours: (number | null)[]; calculix: (number | null)[]; agrees: (boolean | null)[] };
+  /** CalculiX's strain at the strain measurement and its chord modulus, beside ours on the same twin (ADR-0072); absent without one. */
+  test_method?: { calculix: { strain: number; modulus: number }; ours: { strain: number; modulus: number }; agrees: boolean; difference: string; nodes: string[] } | null;
   frd: (Record<string, unknown> & { nodes: number; mises_max: number; mises_max_node: number; mises_max_xyz: number[]; syy_max: number; syy_max_node: number;
     sxx_max: number; sxx_min: number; gauge_mises_max?: number; gauge_syy_max?: number; gauge_from?: number; gauge_to?: number; plies?: FrdPly[] }) | null;
 };

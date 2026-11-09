@@ -49,6 +49,7 @@
   "Who and which coupon: NOM-PLT-L1, plate; a new coupon: its folder and case page are written when it runs.",
   "Units consistent: every row in mm, MPa and N; the results come back in the same units, and the decks are written in mm-MPa.",
   "Geometry defined: 100 by 100 mm.",
+  "Test standard: no standard picked: the size comes from the public check fea/checks/plate-pressure-isotropic/.",
   "Material defined: Nominal-Alloy: the team's own constants: nominal isotropic values of the validation case plate-ss-isotropic-uniform-pressure-navier, not a cited material; rights class user-supplied; no strengths, so no failure criterion can be reported.",
   "Laminate assigned: 1 plies [0], 1 mm thick; symmetric; the flat shell kernel solves it.",
   "Constraints defined: Edge-Left (17 nodes) holds z, the tilt about x; Edge-Right (17 nodes) holds z, the tilt about x; Edge-Bottom (17 nodes) holds z, the tilt about y; Edge-Top (17 nodes) holds z, the tilt about y; Corner-Origin (1 nodes) holds x, y; Corner-X (1 nodes) holds y; no rigid-body motion is left.",

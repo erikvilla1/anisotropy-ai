@@ -78,6 +78,7 @@
   "Who and which coupon: IM7-UNT-L1, unnotched tension; a new coupon: its folder and case page are written when it runs.",
   "Units consistent: every row in mm, MPa and N; the results come back in the same units, and the decks are written in mm-MPa.",
   "Geometry defined: 250 by 25 mm, 56 mm tabs with a node row on each tab line.",
+  "Test standard: no standard picked: the size comes from the public IM7/8552 check fea/checks/unnotched-im7-8552/.",
   "Material defined: IM7-8552-Lamina: library im7-8552 / ncamp-im7-8552-2019-rtd-measured-v1 (record 2026-10-10.1; Hexcel 8552 IM7 unidirectional prepreg 190 gsm 35% RC · qualification material property data report · CAM-RP-2009-015 · Rev B · Wichita State University · NIAR / NCAMP · 2019-04-16); rights class open-publisher; strengths given.",
   "Laminate assigned: 8 plies [45/0/-45/90]s, 1.46304 mm thick; symmetric, so B = 0 and the membrane model applies.",
   "Constraints defined: bottom grip held in every direction (72 nodes), top grip held across the width (72 nodes), through a reference point at each end; no rigid-body motion is left.",
