@@ -1357,6 +1357,18 @@ def mesh_data(values: Values) -> tuple[dict, dict[str, str]]:
         data.update(y_partitions=lines, y_seeds=[rows(b - a) for a, b in zip(edges, edges[1:])])
         comments["mesh.y_seeds"] = f"about {size:g} {unit} rows, with a node row on each support line and each loading-nose line"
         return data, comments
+    if values.strain_length is not None:  # a node row at each end of the strain measurement, centred on the coupon (ADR-0072)
+        half = values.strain_length / 2
+        lines = sorted({y for y in (tab, L / 2 - half, L / 2 + half, L - tab) if 0.0 < y < L})
+        edges = [0.0, *lines, L]
+        seeds = [rows(b - a) for a, b in zip(edges, edges[1:])]
+        middle = edges.index(L / 2 - half)  # the gauge length's segment: an even count puts a node row at mid-length, for Poisson's ratio
+        seeds[middle] += seeds[middle] % 2
+        data["nx"] += data["nx"] % 2  # an even count across puts a node column on the centre line, where the measurement sits
+        data.update(y_partitions=lines, y_seeds=seeds)
+        comments["mesh.y_seeds"] = (f"about {size:g} {unit} rows, with a node row on each tab line and at each end of the "
+                                    f"{values.strain_length:g} {unit} {values.strain_device}")
+        return data, comments
     if tab > 0:
         data.update(y_partitions=[tab, L - tab], y_seeds=[rows(tab), rows(L - 2 * tab), rows(tab)])
         comments["mesh.y_seeds"] = f"about {size:g} {unit} rows, with a node row on each tab line"
@@ -1394,10 +1406,18 @@ def probes_data(values: Values) -> dict:
     if values.kind == "open_hole_tension":
         r = values.hole_diameter / 2
         far_y = (tab + y) / 2
-        return {"nodes": {"centre_top": [x, y + r], "hole_side": [x + r, y], "gauge": [x, far_y]},
+        return {"nodes": {"centre_top": [x, y + r], "hole_side": [x + r, y], "gauge": [x, far_y], **strain_probes(values)},
                 "elements": {"hole_side": [x + r + mm(0.2), y], "hole_top": [x, y + r + mm(0.2)], "far": [x, far_y]}}
     near = min(tab + mm(1.0), y) if tab > 0 else min(mm(1.0), y)
-    return {"nodes": {"centre": [x, y]}, "elements": {"centre": [x, y], "near_grip": [x, near]}}
+    return {"nodes": {"centre": [x, y], **strain_probes(values)}, "elements": {"centre": [x, y], "near_grip": [x, near]}}
+
+
+def strain_probes(values: Values) -> dict[str, list[float]]:
+    """The two nodes at the ends of the strain measurement, on the centre line around mid-length (ADR-0072); none without one."""
+    if values.strain_length is None:
+        return {}
+    x, y, half = values.width / 2, values.length / 2, values.strain_length / 2
+    return {"extensometer_bottom": [x, y - half], "extensometer_top": [x, y + half]}
 
 
 def gauge_probes(kind: str) -> tuple[tuple[str, ...], tuple[str, ...]]:

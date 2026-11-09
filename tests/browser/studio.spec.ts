@@ -24,6 +24,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
       const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
       dir = values.test === BENDING ? "studio-bending" : values.test === "plate" ? "studio-plate" : "studio";
       if (values.standard === "ASTM D3039/D3039M-17") { // the public coupon under D3039, judged by the package (ADR-0072)
+        dir = "studio-standards";
         return json(route, { run_id: "run-5", state: "ready", designation: "IM7-UNT-L1", checklist: fixture("checklist", "studio-standards"),
           preview: fixture("preview", "studio-standards") });
       }
@@ -113,6 +114,13 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("validation-table").locator("tr[data-ply='2']")).toContainText("Ply 2 (0°)");
   await expect(page.getByTestId("peaks")).toContainText("Stress concentration at the clamped edge: not a validation value");
   await expect(page.getByTestId("peaks-table").locator("tr[data-ply='2']")).toContainText("at element 178"); // the 0° ply's largest σ₁, named by its element
+  // the mesh convergence study (ADR-0068): the kernel at 1x, 2x and 4x; the reaction settles, the 0° ply's clamped-edge peak keeps growing
+  await expect(page.getByTestId("convergence")).toContainText("Mesh convergence: what settles as the mesh is refined");
+  await expect(page.getByTestId("convergence-table")).toContainText("4,000 elements");
+  await expect(page.getByTestId("convergence-table").locator("tr[data-row='reaction']")).toContainText("−0.024 %, settled");
+  await expect(page.getByTestId("convergence-table").locator("tr[data-row='peak'][data-ply='2']")).toContainText("+11.4 %, still moving");
+  await expect(page.getByTestId("convergence-words")).toContainText("the reaction, the gauge-centre strain and every ply's gauge stresses moved by less than 1 %");
+  await expect(page.getByTestId("convergence-words")).toContainText("The clamped-edge peaks, the first-ply-failure factor over the mesh and the factor over the gauge section still moved");
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("fpf-gauge-factor-tsai_hill")).toHaveText("1.032");  // the gauge section's own first-ply failure, away from the clamped edge
   await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
@@ -174,6 +182,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("summary-reaction")).toContainText("pressing the coupon down");
   await expect(page.getByTestId("summary")).toContainText("the deflection w");
+  await expect(page.getByTestId("convergence-not-studied")).toContainText("three point bending is a later step");  // ADR-0068: a bending coupon says so
   await expect(page.getByTestId("fpf-table")).toContainText("bottom face");
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (z)");
@@ -280,6 +289,28 @@ test("a standard is offered by its test, fills its size, and the check judges th
   await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveValue("3");
   await expect(page.getByTestId("sketch")).toContainText("10 by 60 mm, 15 mm tabs, a 3 mm hole");
   await expect(page.getByTestId("sketch")).toContainText("Sized for ASTM C1869-18(2023), Specimen B");
+});
+
+test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await page.getByLabel("Standard", { exact: true }).selectOption("ASTM D3039/D3039M-17");
+  await page.getByLabel("Strain measurement", { exact: true }).selectOption("extensometer");
+  await page.getByLabel("Strain measurement length (mm)", { exact: true }).fill("25");
+  await page.getByTestId("check-button").click();
+  await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "ready");
+  await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
+  await page.getByTestId("solve-button").click();
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 });
+  const tm = fixture("fields", "studio-standards").summary.test_method;
+  const card = page.getByTestId("test-method");
+  await expect(card).toContainText("As ASTM D3039/D3039M-17 reduces a test");
+  await expect(card).toContainText(`${Number(tm.strain.chord.modulus.toPrecision(3))} GPa`); // the package's chord modulus, at three figures
+  await expect(card).toContainText(`laminate theory ${Number(tm.laminate_theory.modulus.toPrecision(3))} GPa`);
+  await expect(card).toContainText("not the ultimate strength");
+  await expect(page.getByTestId("explanation")).toContainText("chord modulus between 1000 and 3000 microstrain");
 });
 
 test("a fresh form's choices start blank, not on their first word", async ({ page }) => {

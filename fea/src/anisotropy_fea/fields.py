@@ -35,6 +35,7 @@ from .quality import QualityField, quality_summary
 from .recovery import FACES, FailureField, PlyField, deck_f12_star, element_ply_states, ply_mises, ply_ratio_per_ply, strength_ratios
 from .report import fpf_place, gripped_groups
 from .results import ShellSolution, Solution
+from .test_quantities import MethodInputs, method_summary
 from .units import UNIT_LABEL, from_si
 
 MODES = ("longitudinal tension", "longitudinal compression", "transverse tension", "transverse compression", "in-plane shear", "interactive",
@@ -247,9 +248,10 @@ def failures_of(deck: Deck, solution: Solution, field: PlyField, criteria: tuple
 
 
 def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, ...] | None = None, quality: QualityField | None = None,
-               coupon: dict[str, Any] | None = None) -> dict[str, Any]:
+               coupon: dict[str, Any] | None = None, method: MethodInputs | None = None) -> dict[str, Any]:
     """The solved deck as the viewer reads it. `criteria` names the first-ply-failure criteria to report (default: every one the deck
-    allows); `coupon` is the identity the preview carries, passed through."""
+    allows); `coupon` is the identity the preview carries, passed through; `method`, from `test_quantities.method_inputs(spec)`, adds the
+    test-method quantities as `summary["test_method"]` (ADR-0072) for a coupon that names a standard or states a strain measurement."""
     mesh = solution.mesh
     shell = isinstance(solution, ShellSolution)
     n, ne = mesh.node_count, mesh.element_count
@@ -375,6 +377,13 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                                            "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
                                            "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
     summary["earliest_gauge"] = min(summary["fpf_gauge"], key=lambda c: summary["fpf_gauge"][c]["factor"]) if summary["fpf_gauge"] else None
+    if method is not None and applied["dof"] == 2 and len(mesh.sections) == 1:
+        # the force along the coupon: the moving grip's reaction under a displacement, the applied total under a force (ADR-0072)
+        force = reaction_value if applied["set"] == "the top grip" else float(applied["value"])
+        probes = {name[len("Probe-"):]: mesh.node(keys[0]) for name, keys in deck.nsets.items() if name.startswith("Probe-") and len(keys) == 1}
+        basis, found = ("the gauge section", summary["fpf_gauge"]) if summary["fpf_gauge"] else ("the whole coupon", summary["fpf"])
+        summary["test_method"] = method_summary(method, mesh.xy, displacement, probes, force, mesh.sections[0].plies, found, basis, units,
+                                                [node_name(k) for k in mesh.node_keys])
 
     section_force_out, stress_12_out, mises_out, displacement_out = per_length(section_force), stress(stress_12), stress(mises), length(displacement)
     strain_average = nodal_averages(corners, n, strain)

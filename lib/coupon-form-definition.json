@@ -11,6 +11,7 @@
   "mm-MPa": {
    "words": "mm, MPa and N",
    "labels": {
+    "area": "mm²",
     "force": "N",
     "length": "mm",
     "stress": "MPa",
@@ -25,6 +26,7 @@
   "m-Pa": {
    "words": "m, Pa and N",
    "labels": {
+    "area": "m²",
     "force": "N",
     "length": "m",
     "stress": "Pa",
@@ -39,6 +41,7 @@
   "in-psi": {
    "words": "in, psi and lbf",
    "labels": {
+    "area": "in²",
     "force": "lbf",
     "length": "in",
     "stress": "psi",
@@ -53,6 +56,7 @@
   "in-ksi": {
    "words": "in, ksi and lbf",
    "labels": {
+    "area": "in²",
     "force": "lbf",
     "length": "in",
     "stress": "ksi",
@@ -2684,14 +2688,14 @@
       "id": "bending",
       "clause": "§11.6.1",
       "level": "lab",
-      "text": "Bending is checked with back-to-back transducers on at least one specimen per sample at 2000 µε; above 3 % the strains of both faces are averaged.",
+      "text": "Bending is checked with back-to-back transducers on at least one specimen per sample at 2000 microstrain; above 3 % the strains of both faces are averaged.",
       "rows": []
      },
      {
       "id": "alignment",
       "clause": "§7.2.5",
       "level": "lab",
-      "text": "The load train's alignment is checked; good practice keeps bending to 3 to 5 % above 1000 µε.",
+      "text": "The load train's alignment is checked; good practice keeps bending to 3 to 5 % above 1000 microstrain.",
       "rows": []
      },
      {
