@@ -1,4 +1,4 @@
-"""The array forms a finite element kernel calls once per section (ADR-0069) give exactly what the per-ply functions give, row by row:
+"""The array forms a finite element kernel calls once per section (ADR-0073) give exactly what the per-ply functions give, row by row:
 the same ratio to the last bit and the same governing mode."""
 
 import math

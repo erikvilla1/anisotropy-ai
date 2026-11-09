@@ -57,7 +57,7 @@ class Mesh:
 
     @cached_property
     def _element_index(self) -> dict[ElementKey, int]:
-        """Element key -> its first position, built once: a gauge set of thousands of elements is looked up in one pass (ADR-0069)."""
+        """Element key -> its first position, built once: a gauge set of thousands of elements is looked up in one pass (ADR-0073)."""
         index: dict[ElementKey, int] = {}
         for e, key in enumerate(self.element_keys):
             index.setdefault(key, e)

@@ -133,7 +133,7 @@ def constraint_map(deck: Deck, mesh: Mesh) -> DofMap:
 
 
 def strain_displacement_all(mesh: Mesh, points, prefix: bool) -> tuple[np.ndarray, np.ndarray]:
-    """`strain_displacement` for every element at each natural point at once (ADR-0069): B (points, ne, 3, 8) and det J (points, ne),
+    """`strain_displacement` for every element at each natural point at once (ADR-0073): B (points, ne, 3, 8) and det J (points, ne),
     the same operations as one call per element and point. The first element, and in it the first point, with det J <= 0 is refused
     as one call would refuse it; `prefix` names the element as `assemble` does."""
     xy = mesh.xy[mesh.connectivity]  # (ne, 4, 2)
@@ -173,7 +173,7 @@ def element_A(mesh: Mesh) -> np.ndarray:
 
 def assemble(mesh: Mesh, dofmap: DofMap) -> csr_matrix:
     """The reduced global stiffness: every element's k scattered through the dof map. Every element's k is formed at once, the same sum
-    over Gauss points as `element_stiffness` (ADR-0069)."""
+    over Gauss points as `element_stiffness` (ADR-0073)."""
     B, det = strain_displacement_all(mesh, GAUSS_POINTS, prefix=True)
     A = element_A(mesh)
     k = np.zeros((mesh.element_count, 8, 8))
@@ -230,7 +230,7 @@ def solve_membrane(deck: Deck, mesh: Mesh | None = None) -> MembraneSolution:
 
 def element_strains(mesh: Mesh, displacement: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Membrane strain eps = B u_e at each element's centroid (ne, 3) and at its four Gauss points (ne, 4, 3), every element at once
-    (ADR-0069)."""
+    (ADR-0073)."""
     points = [(0.0, 0.0), *[(float(xi), float(eta)) for xi, eta in GAUSS_POINTS]]
     B, _ = strain_displacement_all(mesh, points, prefix=False)
     u = displacement[mesh.connectivity].reshape(mesh.element_count, 8, 1)  # u1, v1, ..., u4, v4 per element

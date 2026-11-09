@@ -61,7 +61,7 @@ def ply_ratio_per_ply(ratio: np.ndarray) -> np.ndarray:
 def element_ply_states(solution: Solution) -> PlyField:
     """Each element's centroid strain pushed through its plies: with zero curvature for a membrane state, one face per ply; with the
     element's curvature for a shell state, both faces of every ply. The engine takes every element of a section in one call
-    (`ply_surface_arrays`, ADR-0069), the same numbers as one `ply_surfaces` call per element."""
+    (`ply_surface_arrays`, ADR-0073), the same numbers as one `ply_surfaces` call per element."""
     mesh = solution.mesh
     shell = isinstance(solution, ShellSolution)
     count = mesh.element_count

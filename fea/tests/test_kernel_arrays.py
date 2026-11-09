@@ -1,4 +1,4 @@
-"""The kernel forms every element at once (ADR-0069): the stiffness, the strains, the section forces and every ply's strength ratio come out
+"""The kernel forms every element at once (ADR-0073): the stiffness, the strains, the section forces and every ply's strength ratio come out
 exactly as one call per element and ply gives them, to the last bit, and a clockwise element is still named."""
 
 import dataclasses

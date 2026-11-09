@@ -1,4 +1,4 @@
-# ADR-0069: The kernel and the failure checks form every element at once in NumPy, with the same numbers to the last bit, instead of one Python call per element and ply
+# ADR-0073: The kernel and the failure checks form every element at once in NumPy, with the same numbers to the last bit, instead of one Python call per element and ply
 
 - Status: Proposed (the founder chose "Speed up the kernel first" on 2026-11-09; the record is drafted with it)
 - Date: 2026-11-09

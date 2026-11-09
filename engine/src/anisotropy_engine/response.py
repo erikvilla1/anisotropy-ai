@@ -170,7 +170,7 @@ def ply_surfaces(plies: list[Ply], eps0: np.ndarray, kappa: np.ndarray) -> list[
 
 
 def ply_surface_arrays(plies: list[Ply], eps0: np.ndarray, kappa: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """`ply_surfaces` for n mid-plane states at once (ADR-0069): eps0 and kappa are (n, 3), and the result is strain_xy, stress_xy,
+    """`ply_surfaces` for n mid-plane states at once (ADR-0073): eps0 and kappa are (n, 3), and the result is strain_xy, stress_xy,
     strain_12 and stress_12, each (n, plies, 2, 3), the bottom then the top face of every ply, bottom ply first. The same matrices and
     the same operations as `ply_surfaces`, row by row, so a finite element kernel gets every element's plies in one call."""
     eps0 = np.asarray(eps0, dtype=float)

@@ -344,7 +344,7 @@ def _tsai_wu_ratios(v: np.ndarray, st: Strengths, f12_star: float) -> np.ndarray
 
 def scaled_strength_ratios(criterion: str, material: Lamina, stress_12: np.ndarray, f12_star: float | None) -> tuple[np.ndarray, list[str]]:
     """`face_strength_ratio` with nothing held, for n ply states of one material at once: the same equations, operation by operation,
-    so a finite element kernel can check every element's plies without a Python call per ply (ADR-0069). `stress_12` is (n, 3),
+    so a finite element kernel can check every element's plies without a Python call per ply (ADR-0073). `stress_12` is (n, 3),
     [sigma1, sigma2, tau12] per row; the result is each row's ratio and governing mode."""
     stress = _finite_states(stress_12, "variable_12")
     if criterion == "max_stress":
