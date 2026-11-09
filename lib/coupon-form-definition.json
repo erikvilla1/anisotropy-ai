@@ -136,7 +136,7 @@
      "key": "test",
      "label": "Test",
      "kind": "list",
-     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines) or plate (a laminate held and loaded on regions you name, stated from the studio); see Definitions, Tests",
+     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines) or plate (a laminate held and loaded on regions you name, stated from the studio) or fibre tow tension (a resin-impregnated carbon fibre tow under ASTM D4018, stated and calculated from the studio, with no model); see Definitions, Tests",
      "required": true,
      "default": null,
      "words": [
@@ -146,7 +146,8 @@
       "in-plane shear",
       "three-point bending",
       "four-point bending",
-      "plate"
+      "plate",
+      "fibre tow tension"
      ],
      "at_least": null,
      "above": null,
@@ -186,7 +187,8 @@
      "words": [
       "none",
       "ASTM D3039/D3039M-17",
-      "ASTM C1869-18(2023)"
+      "ASTM C1869-18(2023)",
+      "ASTM D4018-23"
      ],
      "at_least": null,
      "above": null,
@@ -3052,7 +3054,768 @@
       "rows": []
      }
     ]
+   },
+   {
+    "id": "astm-d4018",
+    "designation": "ASTM D4018-23",
+    "title": "Tensile properties of continuous-filament carbon and graphite fibre tows",
+    "organisation": "ASTM International",
+    "catalog_url": "https://store.astm.org/d4018-23.html",
+    "edition_note": "read from the D4018-23 copy licensed to UC San Diego",
+    "systems": "SI only (§1.5)",
+    "rights": "licensed-reference",
+    "tests": [
+     "fibre tow tension"
+    ],
+    "aliases": [
+     "d4018"
+    ],
+    "needs": [],
+    "variant_words": [],
+    "variants": [],
+    "classes": [],
+    "requirements": [
+     {
+      "id": "scope-fibre",
+      "clause": "§1.1",
+      "level": "scope",
+      "text": "A continuous-filament carbon or graphite yarn, roving or tow, impregnated with resin and consolidated before it is pulled.",
+      "rows": [
+       "fibre_type"
+      ]
+     },
+     {
+      "id": "gauge",
+      "clause": "§8.3, §11.3.1",
+      "level": "mandatory",
+      "text": "A gauge length of 150 mm ± 5 mm between the tabs, or between the grips of an untabbed specimen.",
+      "rows": [
+       "tow_gauge_length",
+       "tow_tabs"
+      ]
+     },
+     {
+      "id": "strength-count",
+      "clause": "§8.3, §11.3",
+      "level": "mandatory",
+      "text": "At least four valid specimens tested for strength.",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "modulus-count",
+      "clause": "§8.3, §11.3",
+      "level": "mandatory",
+      "text": "At least four valid specimens tested for modulus, the same four as for strength or another four.",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "bundles",
+      "clause": "§8.3",
+      "level": "mandatory",
+      "text": "Several fibre bundles combined into one specimen only for a tow of 3000 filaments or fewer, the bundles combined before impregnation.",
+      "rows": [
+       "bundles",
+       "filaments"
+      ]
+     },
+     {
+      "id": "resin-strain",
+      "clause": "§4.5",
+      "level": "mandatory",
+      "text": "A consolidated resin able to strain at least twice as far as the fibre.",
+      "rows": [
+       "resin_strain",
+       "failure_strain"
+      ]
+     },
+     {
+      "id": "chord",
+      "clause": "Table 2, §11.3.11",
+      "level": "mandatory",
+      "text": "The forces for the chord modulus read at the strains Table 2 gives for the product's typical strain at failure.",
+      "rows": [
+       "chord_lower",
+       "chord_upper",
+       "failure_strain"
+      ]
+     },
+     {
+      "id": "mul-length",
+      "clause": "§8.1, §11.1.1",
+      "level": "mandatory",
+      "text": "A mass-per-unit-length specimen of sized fibre at least 1 m long.",
+      "rows": [
+       "mul_length"
+      ]
+     },
+     {
+      "id": "speed",
+      "clause": "§11.3.2",
+      "level": "mandatory",
+      "text": "A testing machine speed of at most 250 mm/min.",
+      "rows": [
+       "speed"
+      ]
+     },
+     {
+      "id": "resin-content",
+      "clause": "§6.1.1, §10.3.2",
+      "level": "recommended",
+      "text": "A uniform impregnation, typically 35 % to 60 % resin by weight.",
+      "rows": [
+       "mul_impregnated",
+       "resin_content"
+      ]
+     },
+     {
+      "id": "density-sample",
+      "clause": "§4.3, §10.2",
+      "level": "recommended",
+      "text": "The density measured on desized or unsized fibre.",
+      "rows": [
+       "density_sample"
+      ]
+     },
+     {
+      "id": "density-correction",
+      "clause": "§12.2.2",
+      "level": "note",
+      "text": "A sized fibre's density is corrected for its sizing by k_c, found from ten paired tests; no correction is needed when sized and desized results differ by less than 1.0 %.",
+      "rows": [
+       "density_sample",
+       "density_correction"
+      ]
+     },
+     {
+      "id": "failure-codes",
+      "clause": "§11.4, Fig. 1",
+      "level": "recommended",
+      "text": "Each specimen's failure recorded by its type, area and location.",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "grip-failures",
+      "clause": "§11.5",
+      "level": "note",
+      "text": "When a significant fraction of the failures lies within one specimen width of a tab or grip, re-examine the tabs, their adhesive, the grips, their pressure and their alignment.",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "machine",
+      "clause": "§6.1.4",
+      "level": "lab",
+      "text": "A testing machine verified to ASTM E4 at the largest expected force, its force recorded together with the extensometer's elongation.",
+      "rows": []
+     },
+     {
+      "id": "extensometer",
+      "clause": "§6.1.4.3",
+      "level": "lab",
+      "text": "An extensometer and recorder of ASTM E83 Class B-2.",
+      "rows": []
+     },
+     {
+      "id": "measuring",
+      "clause": "§6.1.4.4, §6.1.4.6",
+      "level": "lab",
+      "text": "Masses on an analytical balance to ±0.0002 g; lengths to ±2 mm.",
+      "rows": []
+     },
+     {
+      "id": "density-method",
+      "clause": "§11.2",
+      "level": "lab",
+      "text": "The density by ASTM D3800 Method A (Archimedes) or by D70 or D5550 (pycnometer).",
+      "rows": []
+     },
+     {
+      "id": "conditioning",
+      "clause": "§9",
+      "level": "lab",
+      "text": "Conditioning and the test atmosphere by the fibre's moisture adsorption: no conditioning below 0.5 % by weight at 23 °C and 90 % relative humidity, 24 h at 23 °C and 50 % relative humidity above it.",
+      "rows": []
+     },
+     {
+      "id": "consolidation",
+      "clause": "§6.1.2, §6.1.4.8, §10.3.2.1",
+      "level": "lab",
+      "text": "The impregnated strand held under tension while it consolidates, and cured in an oven held within ±10 °C.",
+      "rows": []
+     },
+     {
+      "id": "preload",
+      "clause": "§11.3.6, Table 1",
+      "level": "lab",
+      "text": "A preload no larger than Table 1 gives, found from the expected modulus and the fibre's area (the planning loads below).",
+      "rows": []
+     },
+     {
+      "id": "alignment",
+      "clause": "§11.3.5",
+      "level": "lab",
+      "text": "The specimen centred in the jaws and aligned with the load.",
+      "rows": []
+     },
+     {
+      "id": "specimen-quality",
+      "clause": "§8.3",
+      "level": "lab",
+      "text": "Fuzzy, curved, uneven or otherwise flawed specimens rejected unless they represent the material.",
+      "rows": []
+     },
+     {
+      "id": "retests",
+      "clause": "§11.3.12",
+      "level": "lab",
+      "text": "A flawed or suspect specimen replaced or retested, slippage and breaks in the tabs or at the extensometer counted as such, every value recorded.",
+      "rows": []
+     }
+    ]
    }
   ]
+ },
+ "tow": {
+  "test": "fibre tow tension",
+  "kind": "fibre_tow",
+  "shared": [
+   "test",
+   "standard",
+   "filled_by",
+   "date",
+   "notes"
+  ],
+  "sections": [
+   {
+    "title": "The fibre tow",
+    "fields": [
+     {
+      "key": "fibre",
+      "label": "Fibre",
+      "kind": "text",
+      "help": "the fibre as its maker names it, with its filament count and sizing, e.g. T700SC-12000-50C; it identifies the samples tested (§13.1.3.1)",
+      "required": true,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "fibre_type",
+      "label": "Fibre type",
+      "kind": "list",
+      "help": "carbon or graphite, the fibres D4018 covers (§1.1); other for any other fibre, which lies outside it",
+      "required": true,
+      "default": null,
+      "words": [
+       "carbon",
+       "graphite",
+       "other"
+      ],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "lot",
+      "label": "Lot or spool",
+      "kind": "text",
+      "help": "the lot, spool or batch the samples came from, for traceability (§13.1.3.1)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "filaments",
+      "label": "Filaments per bundle",
+      "kind": "whole",
+      "help": "the filament count of one bundle, e.g. 12000 for a 12K tow",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "bundles",
+      "label": "Bundles per specimen",
+      "kind": "whole",
+      "help": "how many bundles were combined into one specimen: 1, or more only for a tow of 3000 filaments or fewer (§8.3)",
+      "required": true,
+      "default": 1,
+      "words": [],
+      "at_least": 1,
+      "above": null,
+      "unit": null
+     }
+    ]
+   },
+   {
+    "title": "Mass per unit length and density (§8.1, §8.2, §12.1, §12.2)",
+    "fields": [
+     {
+      "key": "mul",
+      "label": "Mass per unit length (g/m)",
+      "kind": "number",
+      "help": "the sized fibre's mass per unit length, e.g. 0.800, or blank to compute it from the MUL specimen's mass and length (Eq 1)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "mul_mass",
+      "label": "MUL specimen mass (g)",
+      "kind": "number",
+      "help": "the mass of the length of sized fibre weighed, e.g. 0.8012",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "mul_length",
+      "label": "MUL specimen length (m)",
+      "kind": "number",
+      "help": "the length weighed, at least 1 m (§8.1), e.g. 1.000",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "density_sample",
+      "label": "Density measured on",
+      "kind": "list",
+      "help": "the fibre the density was measured on: desized or unsized fibre is preferred (§4.3), and a sized fibre's density is corrected by k_c (§12.2.2)",
+      "required": true,
+      "default": null,
+      "words": [
+       "desized",
+       "unsized",
+       "sized"
+      ],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "fibre_density",
+      "label": "Measured density (g/cm³)",
+      "kind": "number",
+      "help": "the density measured on that fibre, e.g. 1.80",
+      "required": true,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "density_correction",
+      "label": "Sizing correction k_c (g/cm³)",
+      "kind": "number",
+      "help": "for a sized fibre only: the correction found from ten paired tests of sized and desized fibre (§12.2.2), or blank for none",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     }
+    ]
+   },
+   {
+    "title": "The impregnated strand (§10.3, §12.3.1)",
+    "fields": [
+     {
+      "key": "resin",
+      "label": "Resin",
+      "kind": "text",
+      "help": "the resin and its hardener, e.g. a bisphenol A epoxy with diethyltoluene diamine (§13.1.3.5)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "resin_strain",
+      "label": "Resin strain to failure (microstrain)",
+      "kind": "number",
+      "help": "the consolidated resin's strain to failure, at least twice the fibre's (§4.5), e.g. 50000",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "impregnation",
+      "label": "Impregnation apparatus",
+      "kind": "text",
+      "help": "how the fibre was impregnated, e.g. a dip bath and a die (§13.1.3.5)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "cure",
+      "label": "Consolidation and cure",
+      "kind": "text",
+      "help": "the cure cycle, held under tension, e.g. 2 h at 120 °C (§13.1.3.5)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "mul_impregnated",
+      "label": "Impregnated mass per unit length (g/m)",
+      "kind": "number",
+      "help": "MUL_i, the impregnated and consolidated strand's mass per unit length, for the resin content (Eq 3), or give the resin content instead",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "resin_content",
+      "label": "Resin content (% by weight)",
+      "kind": "number",
+      "help": "the resin content when it was measured another way, or blank when MUL_i is given",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     }
+    ]
+   },
+   {
+    "title": "The tensile test (§8.3, §11.3)",
+    "fields": [
+     {
+      "key": "tow_gauge_length",
+      "label": "Gauge length (mm)",
+      "kind": "number",
+      "help": "the free length between the tabs, or between the grips of an untabbed specimen: 150 mm ± 5 mm (§8.3)",
+      "required": true,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "tow_tabs",
+      "label": "Tabs",
+      "kind": "list",
+      "help": "the tabs on the ends, or none for a specimen gripped directly (§6.1.3)",
+      "required": true,
+      "default": null,
+      "words": [
+       "none",
+       "paper or card",
+       "cast resin",
+       "metal",
+       "other"
+      ],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "speed",
+      "label": "Machine speed (mm/min)",
+      "kind": "number",
+      "help": "the crosshead speed, at most 250 mm/min (§11.3.2)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "machine",
+      "label": "Testing machine and extensometer",
+      "kind": "text",
+      "help": "the tensile testing apparatus (§13.1.3.6)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "facility",
+      "label": "Test facility",
+      "kind": "text",
+      "help": "where the tests were run (§13.1.3.3)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "failure_strain",
+      "label": "Typical strain at failure (microstrain)",
+      "kind": "number",
+      "help": "the product's typical strain at failure, e.g. 21000 for 2.1 %: it sets the chord strains (Table 2) and the largest preload (Table 1)",
+      "required": true,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "chord_lower",
+      "label": "Chord lower strain (microstrain)",
+      "kind": "number",
+      "help": "the strain the force P_l was read at, or blank for Table 2's",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": 0,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "chord_upper",
+      "label": "Chord upper strain (microstrain)",
+      "kind": "number",
+      "help": "the strain the force P_u was read at, or blank for Table 2's",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     }
+    ]
+   },
+   {
+    "title": "Datasheet values, for the planning loads",
+    "fields": [
+     {
+      "key": "datasheet_strength",
+      "label": "Datasheet strength (MPa)",
+      "kind": "number",
+      "help": "the fibre's tensile strength on its datasheet, e.g. 4900: the force to expect at failure",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "datasheet_modulus",
+      "label": "Datasheet modulus (GPa)",
+      "kind": "number",
+      "help": "the fibre's tensile modulus on its datasheet, e.g. 230: the preload and the chord forces to expect",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     }
+    ]
+   }
+  ],
+  "specimen_fields": [
+   {
+    "key": "id",
+    "label": "Specimen",
+    "kind": "text",
+    "help": "its name or number, e.g. 1",
+    "required": true,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": null,
+    "unit": null
+   },
+   {
+    "key": "max_force",
+    "label": "Maximum force (N)",
+    "kind": "number",
+    "help": "P, the largest force before failure; blank for a specimen tested for modulus only",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": 0,
+    "unit": null
+   },
+   {
+    "key": "force_lower",
+    "label": "Force at lower strain (N)",
+    "kind": "number",
+    "help": "P_l, read at the chord's lower strain; blank for strength only",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": 0,
+    "above": null,
+    "unit": null
+   },
+   {
+    "key": "force_upper",
+    "label": "Force at upper strain (N)",
+    "kind": "number",
+    "help": "P_u, read at the chord's upper strain; blank for strength only",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": 0,
+    "unit": null
+   },
+   {
+    "key": "failure_code",
+    "label": "Failure code",
+    "kind": "text",
+    "help": "the three letters of Fig. 1, the failure's type, area and location, e.g. LGM",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": null,
+    "unit": null
+   },
+   {
+    "key": "status",
+    "label": "Status",
+    "kind": "list",
+    "help": "valid, or rejected with the reason in the note (§11.3.12): a rejected specimen is listed, not counted",
+    "required": true,
+    "default": "valid",
+    "words": [
+     "valid",
+     "rejected"
+    ],
+    "at_least": null,
+    "above": null,
+    "unit": null
+   },
+   {
+    "key": "note",
+    "label": "Note",
+    "kind": "text",
+    "help": "why it was rejected, or what was atypical about its failure (§13.1.3.8)",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": null,
+    "unit": null
+   }
+  ],
+  "item_of_row": {
+   "test": "identity",
+   "standard": "identity",
+   "filled_by": "identity",
+   "date": "identity",
+   "notes": "identity",
+   "fibre": "identity",
+   "fibre_type": "identity",
+   "lot": "identity",
+   "filaments": "identity",
+   "bundles": "identity",
+   "mul": "fibre",
+   "mul_mass": "fibre",
+   "mul_length": "fibre",
+   "density_sample": "fibre",
+   "fibre_density": "fibre",
+   "density_correction": "fibre",
+   "resin": "fibre",
+   "resin_strain": "fibre",
+   "impregnation": "fibre",
+   "cure": "fibre",
+   "mul_impregnated": "fibre",
+   "resin_content": "fibre",
+   "tow_gauge_length": "test",
+   "tow_tabs": "test",
+   "speed": "test",
+   "machine": "test",
+   "facility": "test",
+   "failure_strain": "test",
+   "chord_lower": "test",
+   "chord_upper": "test",
+   "datasheet_strength": "test",
+   "datasheet_modulus": "test",
+   "specimens": "specimens"
+  },
+  "failure_code": {
+   "type": {
+    "G": "grip or tab",
+    "L": "lateral",
+    "S": "long splitting (fibre pull-out)",
+    "X": "explosive",
+    "O": "other"
+   },
+   "area": {
+    "I": "inside the grip or tab",
+    "A": "at the grip or tab",
+    "W": "within one width of the grip or tab",
+    "G": "gauge",
+    "P": "tab pull-out",
+    "V": "various",
+    "U": "unknown"
+   },
+   "location": {
+    "B": "bottom",
+    "T": "top",
+    "M": "middle",
+    "V": "various",
+    "U": "unknown"
+   }
+  },
+  "units": {
+   "force": "N",
+   "strength": "MPa",
+   "modulus": "GPa",
+   "mul": "g/m",
+   "density": "g/cm³",
+   "area": "mm²",
+   "strain": "microstrain",
+   "length": "mm",
+   "resin_content": "% by weight"
+  }
  }
 }

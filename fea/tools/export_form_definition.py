@@ -24,8 +24,10 @@ from pathlib import Path
 from anisotropy_fea import __version__, paths
 from anisotropy_fea.intake import (BLOCKS, CRITERION_WORDS, FORM_VERSION, GLOSSARY, HOW_TO, LIBRARY_COLUMNS, TESTS, UNITS, in_stated, library_records,
                                    library_row)
-from anisotropy_fea.spec import AREA_REGIONS, EDGE_REGIONS, TEST_CODES
+from anisotropy_fea.spec import AREA_REGIONS, EDGE_REGIONS, TOW_TEST, test_name
 from anisotropy_fea.standards import NONE, PROFILES
+from anisotropy_fea.standards.astm_d4018 import FAILURE_AREAS, FAILURE_LOCATIONS, FAILURE_TYPES, KIND as TOW_KIND
+from anisotropy_fea.tow_test import ITEM_OF_ROW as TOW_ITEM_OF_ROW, REPORT_UNITS as TOW_UNITS, SHARED as TOW_SHARED, SPECIMEN_FIELDS, TOW_BLOCKS
 from anisotropy_fea.units import DECK_UNITS, UNIT_LABEL, UNIT_SYSTEMS, from_si, units_words
 
 TARGET = paths.ROOT / "lib" / "coupon-form-definition.json"
@@ -74,11 +76,21 @@ def standards() -> dict:
     for p in PROFILES.values():
         needs = (["specimen"] if p.variant_words else []) + (["strain_device", "strain_length"] if p.requires_strain else [])
         profiles.append({"id": p.id, "designation": p.designation, "title": p.title, "organisation": p.organisation, "catalog_url": p.catalog_url,
-                         "edition_note": p.edition_note, "systems": p.systems, "rights": p.rights, "tests": [TEST_CODES[k][1] for k in p.kinds],
+                         "edition_note": p.edition_note, "systems": p.systems, "rights": p.rights, "tests": [test_name(k) for k in p.kinds],
                          "aliases": list(p.aliases), "needs": needs, "variant_words": list(p.variant_words),
                          "variants": [preset_entry(v) for v in p.variants], "classes": [preset_entry(c) for c in p.classes],
                          "requirements": [{"id": r.id, "clause": r.clause, "level": r.level, "text": r.text, "rows": list(r.rows)} for r in p.requirements]})
     return {"none": NONE, "profiles": profiles}
+
+
+def tow() -> dict:
+    """The fibre tow test (ADR-0073): its rows in sections, the coupon form's rows it reads too, the rows of one specimen, the words of the
+    Fig. 1 failure code, and the units it reports in. Its rows carry the standard's units in their labels; no Units row changes them."""
+    return {"test": TOW_TEST, "kind": TOW_KIND, "shared": list(TOW_SHARED),
+            "sections": [{"title": title, "fields": [field_entry(f) for f in fields]} for title, fields in TOW_BLOCKS],
+            "specimen_fields": [field_entry(f) for f in SPECIMEN_FIELDS], "item_of_row": dict(TOW_ITEM_OF_ROW),
+            "failure_code": {"type": dict(FAILURE_TYPES), "area": dict(FAILURE_AREAS), "location": dict(FAILURE_LOCATIONS)},
+            "units": dict(TOW_UNITS)}
 
 
 def definition() -> dict:
@@ -99,6 +111,7 @@ def definition() -> dict:
         "plate": {"test": "plate", "edges": list(EDGE_REGIONS), "areas": list(AREA_REGIONS), "with_tabs": ["Tab-Bottom", "Tab-Top"], "with_hole": ["Hole"],
                   "dofs": {"1": "x", "2": "y", "3": "z", "4": "tilt about x", "5": "tilt about y", "6": "rotation about z"}},
         "standards": standards(),
+        "tow": tow(),
     }
 
 

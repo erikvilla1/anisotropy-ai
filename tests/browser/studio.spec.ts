@@ -7,7 +7,7 @@ const BENDING = "three-point bending";
 const API = /https?:\/\/[^/]+\/v1\//;
 
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
-async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number }, options: { missFirstFieldsRead?: boolean } = {}) {
+async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[] }, options: { missFirstFieldsRead?: boolean } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
@@ -19,6 +19,11 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) return json(route, { detail: "Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read" }, 503); // no project store: the browser keeps the project alone
     if (path === "/v1/coupons/IM7-UNT-L1/values") return json(route, { name: "IM7-UNT-L1", values: fixture("values") });
+    if (path === "/v1/tow-tests" && request.method() === "POST") { // a fibre tow record, answered by the package from the public fixture (ADR-0073)
+      (calls.tows ??= []).push(request.postDataJSON());
+      const answer = fixture("tow", "studio-tow");
+      return json(route, { run_id: "run-6", state: answer.checklist.state, checklist: answer.checklist, result: answer.result });
+    }
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
       const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
@@ -583,4 +588,55 @@ test("the model is lit for presentation before a run: the sketch and the package
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "");
   await page.getByTestId("studio-scene").screenshot({ path: ".local/website/screenshots/studio-preview-lit.png" });
   expect(browserErrors).toEqual([]);
+});
+
+test("the fibre tow test swaps the panels for the tow's, and Calculate shows each specimen and the statistics (ADR-0073)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[], tows: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await page.getByLabel("Test", { exact: true }).selectOption("fibre tow tension");
+  await expect(page.getByTestId("tow-form")).toBeVisible();
+  await expect(page.getByTestId("panel-geometry")).toHaveCount(0); // a tow has no coupon geometry, layup or mesh
+  await expect(page.getByTestId("tow-sketch")).toBeVisible();
+  const standard = page.getByLabel("Standard", { exact: true });
+  await expect(standard.locator("option")).toHaveText(["none", "ASTM D4018-23"]);
+  await standard.selectOption("ASTM D4018-23");
+  await expect(page.getByTestId("standard-card")).toContainText("What Calculate will judge");
+  await expect(page.getByLabel("Bundles per specimen", { exact: true })).toHaveValue("1");
+  const values = fixture("values", "studio-tow");
+  await page.getByLabel("Filled in by", { exact: true }).fill(values.filled_by);
+  for (const [label, key] of [["Fibre", "fibre"], ["Filaments per bundle", "filaments"], ["Mass per unit length (g/m)", "mul"], ["Measured density (g/cm³)", "fibre_density"],
+    ["Resin strain to failure (microstrain)", "resin_strain"], ["Impregnated mass per unit length (g/m)", "mul_impregnated"], ["Gauge length (mm)", "tow_gauge_length"],
+    ["Machine speed (mm/min)", "speed"], ["Typical strain at failure (microstrain)", "failure_strain"], ["Datasheet strength (MPa)", "datasheet_strength"],
+    ["Datasheet modulus (GPa)", "datasheet_modulus"]] as const) {
+    await page.getByLabel(label, { exact: true }).fill(String(values[key]));
+  }
+  await page.getByLabel("Fibre type", { exact: true }).selectOption("carbon");
+  await page.getByLabel("Density measured on", { exact: true }).selectOption("desized");
+  await page.getByLabel("Tabs", { exact: true }).selectOption("paper or card");
+  await expect(page.getByTestId("strand-sketch")).toHaveAttribute("aria-label", /150 mm between the tabs, paper or card tabs/);
+  const pasted = (values.specimens as Record<string, unknown>[]).map((s) => ["id", "max_force", "force_lower", "force_upper", "failure_code", "status", "note"]
+    .map((k) => (s[k] ?? "")).join("\t")).join("\n");
+  await page.getByText("Paste specimens from a spreadsheet").click();
+  await page.getByLabel("Specimens to paste").fill(pasted);
+  await page.getByRole("button", { name: "Replace the list" }).click();
+  await expect(page.getByTestId("tow-specimens").locator("fieldset")).toHaveCount(5);
+  await expect(page.getByTestId("tow-specimens").locator("[data-specimen='4']")).toContainText("grip or tab, at the grip or tab, top");
+  await page.getByTestId("tow-calculate").click();
+  await expect(page.getByTestId("tow-results")).toBeVisible();
+  const sent = (calls.tows[0] as { values: Record<string, unknown> }).values;
+  expect([sent.test, sent.standard, sent.mul, sent.tow_gauge_length, sent.bundles, (sent.specimens as unknown[]).length]).toEqual(["fibre tow tension", "ASTM D4018-23", 0.8, 150, 1, 5]);
+  expect((sent.specimens as Record<string, unknown>[])[0]).toEqual(values.specimens[0]);
+  const result = fixture("tow", "studio-tow").result;
+  await expect(page.getByTestId("tow-strength")).toContainText(`${Number(result.strength.mean.toPrecision(4))} MPa`); // the engine's mean, printed
+  await expect(page.getByTestId("tow-modulus")).toContainText(`${Number(result.modulus.mean.toPrecision(4))} GPa`);
+  await expect(page.getByTestId("tow-specimen-table").locator("tbody tr")).toHaveCount(5);
+  await expect(page.getByTestId("tow-specimen-table").locator("tr[data-status=rejected]")).toContainText("slipped in the top grip");
+  await expect(page.getByTestId("tow-conformance")).toContainText("test record checked against ASTM D4018-23: 7 of 7 requirements the record shows are met");
+  await expect(page.getByTestId("standard-card").locator("[data-requirement=grip-failures]")).toHaveAttribute("data-state", "note");
+  await expect(page.getByTestId("tow-report").locator("li[data-shown=no]").first()).toContainText("not in this record");
+  await page.getByLabel("Test", { exact: true }).selectOption("unnotched tension"); // back to a coupon: its panels, the tow's standard cleared
+  await expect(page.getByTestId("tow-form")).toHaveCount(0);
+  await expect(page.getByLabel("Standard", { exact: true })).toHaveValue("none");
 });

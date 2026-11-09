@@ -696,6 +696,22 @@ class CouponJobs:
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
+    def tow(self, values: bytes, timeout_s: float | None = None) -> dict:
+        """A fibre tow record (ADR-0073): its checklist and, when nothing blocks, its result, as `studio_tool.py tow` writes them."""
+        self.refresh()
+        folder = Path(tempfile.mkdtemp(prefix="tow-", dir=self._folder()))
+        try:
+            source = folder / "values.json"
+            source.write_bytes(values)
+            done = self._studio(["tow", str(source), "--out", str(folder / "out")], timeout_s or CHECK_TIMEOUT_S)
+            answer_path = folder / "out" / "tow.json"
+            if done.returncode != 0 or not answer_path.is_file():
+                tail = (done.stderr or done.stdout).strip().splitlines()[-3:]
+                raise JobRefused("the studio tool failed: " + (" | ".join(tail) or f"exit code {done.returncode}"))
+            return json.loads(answer_path.read_text(encoding="utf-8"))
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
     def list_coupons(self, timeout_s: float | None = None) -> list[dict]:
         """Every coupon on this machine, as the studio tool lists them."""
         self.refresh()

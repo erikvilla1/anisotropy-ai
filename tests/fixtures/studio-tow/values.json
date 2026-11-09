@@ -1,0 +1,62 @@
+{
+ "form_version": "0.8",
+ "test": "fibre tow tension",
+ "standard": "ASTM D4018-23",
+ "filled_by": "A. Tester",
+ "date": "2026-11-09",
+ "fibre": "constructed 12K carbon tow",
+ "fibre_type": "carbon",
+ "filaments": 12000,
+ "bundles": 1,
+ "mul": 0.8,
+ "density_sample": "desized",
+ "fibre_density": 1.8,
+ "resin_strain": 50000,
+ "mul_impregnated": 1.4,
+ "tow_gauge_length": 150,
+ "tow_tabs": "paper or card",
+ "speed": 10,
+ "failure_strain": 21000,
+ "datasheet_strength": 4900,
+ "datasheet_modulus": 230,
+ "specimens": [
+  {
+   "id": "1",
+   "max_force": 2150,
+   "force_lower": 101.5,
+   "force_upper": 610.2,
+   "failure_code": "LGM",
+   "status": "valid"
+  },
+  {
+   "id": "2",
+   "max_force": 2210,
+   "force_lower": 102.8,
+   "force_upper": 616,
+   "failure_code": "SGV",
+   "status": "valid"
+  },
+  {
+   "id": "3",
+   "max_force": 2080,
+   "force_lower": 100.9,
+   "force_upper": 607.5,
+   "failure_code": "XGM",
+   "status": "valid"
+  },
+  {
+   "id": "4",
+   "max_force": 2195,
+   "force_lower": 103.1,
+   "force_upper": 618.4,
+   "failure_code": "GAT",
+   "status": "valid"
+  },
+  {
+   "id": "5",
+   "max_force": 1650,
+   "status": "rejected",
+   "note": "slipped in the top grip"
+  }
+ ]
+}

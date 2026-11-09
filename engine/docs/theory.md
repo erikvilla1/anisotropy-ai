@@ -642,6 +642,74 @@ First-ply failure under the one loading given, every load scaling together with 
 
 <!-- code: first_ply_failure_summary, face_of -->
 
+## 11. Fibre tow tension (`tow.py`)
+
+The tension test of a resin-impregnated, consolidated carbon or graphite fibre tow, ASTM D4018-23 (ADR-0073). A tow is a strand, not a laminate: the resin holds the filaments together so they load evenly (§4.5), and the area that carries the force is the fibre's. Nothing in this section uses Sections 1 to 10. The standard is read in the licensed copy; its text is not in this repository (ADR-0018 amendment 1), so each equation below names its number for a reader with their own copy.
+
+Everything is SI: masses in kg, lengths in m, densities in kg/m³, mass per unit length in kg/m, forces in N, stresses and moduli in Pa, strains absolute. The standard states its equations in g, m, g/cm³ and N and its strain limits in microstrain; the fea package converts at the boundary (ADR-0002).
+
+The mass per unit length of the sized fibre (Eq 1) is computed by `mass_per_unit_length` from a specimen of mass $`W_1`$ and length $`L`$:
+
+```math
+\mathrm{MUL} = \frac{W_1}{L}
+```
+
+<!-- code: mass_per_unit_length -->
+
+A density measured on sized fibre, corrected for the sizing (Eq 2), is computed by `fibre_density`; the correction $`k_c`$ is the laboratory's, found from repeated tests of sized and desized fibre (§12.2.2), and a desized or unsized sample needs none:
+
+```math
+\rho_f = \rho_{sf} - k_c
+```
+
+<!-- code: fibre_density -->
+
+The resin content by weight of the impregnated, consolidated strand (Eq 3) is computed by `resin_content`; a strand no heavier than its fibre is refused:
+
+```math
+RC = 100\left(1 - \frac{\mathrm{MUL}}{\mathrm{MUL}_i}\right)
+```
+
+<!-- code: resin_content -->
+
+The fibre's area, computed by `fibre_area`, is the mass per unit length over the density. Eqs 4 and 5 divide by it, and §11.3.6 sizes the preload with it:
+
+```math
+A = \frac{\mathrm{MUL}}{\rho_f}
+```
+
+<!-- code: fibre_area -->
+
+The tensile strength from the maximum force $`P`$ (Eq 4) and the chord modulus from the forces $`P_l`$ and $`P_u`$ read at the chord's lower and upper strain (Eq 5, §11.3.11) are computed by `tow_strength` and `tow_chord_modulus`:
+
+```math
+\sigma = \frac{P\,\rho_f}{\mathrm{MUL}}, \qquad E = \frac{(P_u - P_l)\,\rho_f}{(\varepsilon_u - \varepsilon_l)\,\mathrm{MUL}}
+```
+
+<!-- code: tow_strength, tow_chord_modulus -->
+
+The strains in $`E`$ are absolute. The standard multiplies Eq 5 by $`B = 10^{-3}`$ for a load in newtons to report GPa and lists $`\varepsilon_u`$ and $`\varepsilon_l`$ in microstrain; the two do not agree. With $`P`$ in N, $`\rho_f`$ in g/cm³ and MUL in g/m, $`P\rho_f/\mathrm{MUL}`$ is in MPa (Eq 4 with its factor $`A = 1`$); divided by a strain difference and multiplied by $`10^{-3}`$, it is in GPa only when the strains are absolute (0.005, not 5000). With microstrain the result is $`10^{6}`$ times too small. This is our reading, recorded in ADR-0073; `engine/tests/test_tow.py` works one case both ways.
+
+The strains of the chord (Table 2) and the largest preload (Table 1) depend on the product's typical strain at failure $`\varepsilon_f`$, and are computed by `chord_strains` and `preload_strain`:
+
+For a typical failure strain of at least 12000 microstrain the chord runs from 1000 to 6000 microstrain and the preload is at most 200 microstrain; from 6000 up to 12000, from 1000 to 3000 and at most 100; below 6000, from 500 to 1500 and at most 100. A failure strain on a bound takes the higher row.
+
+<!-- code: chord_strains, preload_strain -->
+
+The forces to plan a test with are computed by `planning_loads`: $`P = \varepsilon E A`$ at the preload strain and at the two chord strains, and $`P = \sigma A`$ at the strength, from a datasheet's modulus and strength (linear to failure). §11.3.6 asks for the preload to be found this way. A datasheet value left out leaves the forces that need it out.
+
+<!-- code: planning_loads -->
+
+A series of $`n`$ specimens is summarised by its mean, its sample standard deviation and its coefficient of variation in percent (Eqs 6 to 8), computed by `sample_statistics`. The deviation is computed in the two-pass form, equal in exact arithmetic to Eq 7 as printed, $`\sqrt{(\sum x_i^2 - n\bar{x}^2)/(n-1)}`$, without its loss of digits to cancellation:
+
+```math
+\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i, \qquad s_{n-1} = \sqrt{\frac{\sum_{i=1}^{n}(x_i - \bar{x})^2}{n - 1}}, \qquad CV = 100\,\frac{s_{n-1}}{\bar{x}}
+```
+
+<!-- code: sample_statistics -->
+
+The checks of the record against the standard's clauses (gauge length, number of specimens, resin strain, speed) are the fea package's profile `standards/astm_d4018.py`; the engine only computes.
+
 ## Not modeled yet
 
 - Moisture effects, and elastic properties that change with temperature

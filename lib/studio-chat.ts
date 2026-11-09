@@ -7,6 +7,7 @@ import {
   BENDING_TESTS, blankForm, DEFAULT_UNITS, fieldByKey, fields, FOUR_POINT_TEST, labelFor, libraryConstantsIn, libraryOptions, OPEN_HOLE_TEST, PLATE_TEST, PLY_KEYS,
   STANDARDS, standardOf, STRAIN_KEYS, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "./studio-form";
+import { TOW_TEST } from "./studio-tow";
 
 export type ChatStep = "test" | "material" | "shear" | "layup" | "geometry" | "loading" | "name" | "review";
 export const STEP_ORDER: ChatStep[] = ["test", "material", "shear", "layup", "geometry", "loading", "name", "review"];
@@ -198,7 +199,8 @@ export function readMessage(text: string, units: string = DEFAULT_UNITS): { rows
   const L = `(?:${LENGTH_WORDS[units] ?? LENGTH_WORDS[DEFAULT_UNITS]})`;
   const F = FORCE_WORDS[units] ?? FORCE_WORDS[DEFAULT_UNITS];
 
-  const test = /open[\s-]?hole|\boht\b|d5766|c1869/.test(t) ? OPEN_HOLE_TEST
+  const test = /\btows?\b|d4018|fib(?:re|er)\s+tow/.test(t) ? TOW_TEST // the fibre tow test (ADR-0073): its rows are the tow panels'
+    : /open[\s-]?hole|\boht\b|d5766|c1869/.test(t) ? OPEN_HOLE_TEST
     : /four[\s-]?point|4[\s-]?point|\b4pb\b/.test(t) ? FOUR_POINT_TEST
     : /three[\s-]?point|3[\s-]?point|\b3pb\b|d7264|d790/.test(t) ? "three-point bending"
     : /compress|d6641|d3410|d695/.test(t) ? "unnotched compression"

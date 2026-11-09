@@ -31,8 +31,9 @@ from anisotropy_engine.library import LibraryMaterial, library_material, list_da
 
 from . import __version__, forms, paths
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
-from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
+from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
                    to_si)
+from .spec import test_name as test_word
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
 from .units import from_si as value_from_si, to_si as value_to_si
 
@@ -118,7 +119,9 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("test", "Test", "list", "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), "
               "open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), "
               "three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines) or plate "
-              "(a laminate held and loaded on regions you name, stated from the studio); see Definitions, Tests", required=True, words=tuple(TESTS)),
+              "(a laminate held and loaded on regions you name, stated from the studio) or fibre tow tension (a resin-impregnated carbon fibre tow "
+              "under ASTM D4018, stated and calculated from the studio, with no model); see Definitions, Tests", required=True,
+              words=(*TESTS, TOW_TEST)),
         Field("material_code", "Material code", "text", "optional: a short code for the material in the coupon's name, capital letters and digits, "
               "X840PW in X840PW-UNT-L1; left blank, the code this material already has is reused, or a new one is derived from the library "
               "record (IM78552 for im7-8552) or numbered (M1, M2, ...) for your own constants"),
@@ -696,6 +699,9 @@ def read_values(path: Path | str) -> FormInput:
     if not isinstance(data, dict):
         raise IntakeError(f"{path.name}: a values file is one JSON object of the form's rows by field key")
     data = dict(data)
+    if str(data.get("test", "")).strip().lower() == TOW_TEST:
+        raise IntakeError(f"{path.name}: Test: {TOW_TEST} is no coupon; its record is calculated by `studio_tool.py tow` (POST /v1/tow-tests, "
+                          "ADR-0073), not checked as a coupon")
     version = data.pop("form_version", None)
     if version is None:
         raise IntakeError(f"{path.name}: form_version is required; the current form is {FORM_VERSION}")
@@ -967,7 +973,9 @@ def check_form(form: FormInput) -> Values:
                 problems.append(f"Date: {day!r} is not a date (write YYYY-MM-DD)")
     test_name = forms.text_of(cells.get("test"))
     kind = TESTS.get(test_name.lower() if test_name else "", "")
-    if not kind:
+    if test_name.lower() == TOW_TEST:
+        problems.append(f"Test: {TOW_TEST} is stated and calculated from the studio's tow panels (ADR-0073); this form's rows describe a coupon")
+    elif not kind:
         problems.append(f"Test: {test_name!r} is not one of {', '.join(TESTS)}" if test_name else f"Test: required; one of {', '.join(TESTS)}")
     material_code = text("material_code").upper() or None
     if material_code and not MATERIAL_CODE.match(material_code):
@@ -978,7 +986,7 @@ def check_form(form: FormInput) -> Values:
     standard, size_from = word("standard") or NO_STANDARD, text("size_from")  # "none" or a designation of the list (ADR-0072)
     profile = profile_of_word(standard)
     if profile is not None and kind and kind not in profile.kinds:
-        covers = ", ".join(TEST_CODES[k][1] for k in profile.kinds)
+        covers = ", ".join(test_word(k) for k in profile.kinds)
         problems.append(f"{L('standard')}: {profile.designation} covers {covers}, not {TEST_CODES[kind][1]}; pick none or the standard of this test")
     specimen = word("specimen") or None
     if profile is not None and profile.variant_words:

@@ -15,7 +15,9 @@ const LEVEL_WORDS: Record<string, string> = {
 /** The requirements of a standard, grouped by level, each with its clause; judged (the verdict, this coupon's value and what the clause asks)
  * after a check, or as the list of what the check will judge before one. A list, not a table, so it reads in the narrow rail. Every word
  * comes from the package: the page judges nothing. */
-export function RequirementTable({ requirements, judged }: { requirements: (StandardRequirement | JudgedRequirement)[]; judged: boolean }) {
+export function RequirementTable({ requirements, judged, subject = "This coupon" }: {
+  requirements: (StandardRequirement | JudgedRequirement)[]; judged: boolean; subject?: string;
+}) {
   const groups = LEVEL_ORDER.map((level) => [level, requirements.filter((r) => r.level === level)] as const).filter(([, rows]) => rows.length);
   return (
     <div className="ws-requirements" data-testid="requirement-table">
@@ -33,7 +35,7 @@ export function RequirementTable({ requirements, judged }: { requirements: (Stan
                   </span>
                   <span>{r.text}</span>
                   {judged && (j.value || j.limit) ? (
-                    <span className="studio-hint">{j.value ? <>This coupon: {j.value}</> : null}{j.value && j.limit ? "; " : null}{j.limit ? <>the clause asks: {j.limit}</> : null}</span>
+                    <span className="studio-hint">{j.value ? <>{subject}: {j.value}</> : null}{j.value && j.limit ? "; " : null}{j.limit ? <>the clause asks: {j.limit}</> : null}</span>
                   ) : null}
                 </li>
               );

@@ -37,6 +37,7 @@ from .settings import allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore, sync
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
+    TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -440,6 +441,28 @@ def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Reque
     if problem.project_id is not None:
         _note_check(request, actor, problem.project_id, body)
     return body
+
+
+@app.post("/v1/tow-tests", response_model=TowTestResponse)
+def calculate_tow_test(problem: TowTestRequest, actor: Actor, request: Request, response: Response) -> TowTestResponse:
+    """A fibre tow record under ASTM D4018 (ADR-0073): its rows and specimens read and refused by row, judged clause by clause against the
+    standard when it names one, and reduced by the engine to each specimen's strength and chord modulus and their statistics, by
+    fea/tools/studio_tool.py tow. It is answered at once: a tow has no model and no solver. Recorded with its actor (ADR-0026); the
+    record keeps the values' digest. The studio tool answers within two minutes or the request is refused with 504.
+    """
+    jobs = _coupon_jobs(request)
+
+    def compute() -> TowTestResponse:
+        try:
+            found = jobs.tow(problem.values_bytes())
+        except CheckTimedOut as exc:
+            raise HTTPException(status_code=504, detail=str(exc)) from exc
+        except JobRefused as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        checklist = found["checklist"]
+        return TowTestResponse(run_id=None, state=checklist["state"], checklist=checklist, result=found.get("result"))
+
+    return _deliver(request, response, actor, problem.receipt(), compute)
 
 
 # ----------------------------------------------------------------------------------------------- the projects (ADR-0062 part 6)
