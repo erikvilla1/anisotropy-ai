@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
-import { legendGradient, legendTicks, printed, scaleFor, type Scale } from "@/lib/studio-colors";
+import { legendGradient, legendTicks, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { Scene } from "./scene";
 import type { SceneField, SceneMarker } from "./scene-canvas";
@@ -68,8 +68,8 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
 }
 
 const DASH = "–";
-const three = (v: (number | null | undefined)[] | undefined, marks?: (boolean | null)[]) =>
-  v ? v.map((x, i) => `${x === null || x === undefined ? DASH : printed(x)}${marks && marks[i] === false ? " ✕" : ""}`).join(" / ") : DASH;
+const three = (v: (number | null | undefined)[] | undefined, marks?: (boolean | null)[]) =>  // the noise beside a triple's real values prints as 0
+  v ? settled(v).map((x, i) => `${x === null || x === undefined ? DASH : printed(x)}${marks && marks[i] === false ? " ✕" : ""}`).join(" / ") : DASH;
 
 /** The validation table (ADR-0066): one row per quantity, one column per source, every cell the same quantity read the same way: the
  *  reaction, the gauge-centre strain and every ply's σ₁ / σ₂ / τ₁₂ in its fibre axes at the gauge-centre element. */

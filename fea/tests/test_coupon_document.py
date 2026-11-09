@@ -3,6 +3,7 @@ stand-in as a coupon the team has not built, and a fixture coupon with a team co
 (ADR-0042): the command line is run on one when this machine has it."""
 
 import importlib.util
+import re
 import subprocess
 import sys
 from datetime import date
@@ -195,6 +196,8 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     header = next(line for line in validation.splitlines() if line.startswith(r"\textbf{Quantity}"))
     assert "Abaqus" not in header and header.count("&") == 4  # no team fields for the public coupon: no Abaqus column (the founder, 2026-11-08)
     assert all(line.count("&") == 4 for line in validation.splitlines() if line.startswith("Ply "))
+    assert not re.search(r"10\^\{-(1[2-9]|[2-9]\d)\}", validation)  # the noise beside a triple's real values prints as 0, not as 4 x 10^-15
+    assert coupon.settled([479.2, -0.2514, 4.078e-15]) == [479.2, -0.2514, 0.0] and coupon.settled([-0.001127, 0.003641, 5.883e-7])[2] == 5.883e-7
     assert r"\section{Stress concentration at the clamped edge: not a validation value}\label{sec:peaks}" in tex
     assert "touches a grip" in tex and "Von Mises is not a laminate quantity" in tex
     assert r"\evidence{MANUAL" not in tex  # the guide for the team is Abaqus/CAE only: no PrePoMax tags, not even in the legend
