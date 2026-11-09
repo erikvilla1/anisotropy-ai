@@ -37,9 +37,11 @@ from datetime import date
 from pathlib import Path
 
 from anisotropy_fea import __version__, paths
+from anisotropy_fea.standards.conformance import conformance
+from anisotropy_fea.test_quantities import STRAIN_PROBES
 from anisotropy_fea.attempts import AttemptError, attempt_number, attempts, start_attempt
 from anisotropy_fea.calculix import CalculixError, ccx_version, find_ccx
-from anisotropy_fea.calculix_summary import calculix_summary
+from anisotropy_fea.calculix_summary import calculix_summary, extensometer_of
 from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, record_summary, rel, signed
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.femodel import build_model
@@ -87,6 +89,7 @@ class Outcome:
     outputs: dict[str, Path]
     documents: str = "written"  # "written", or what is missing and why: a document can fail after the result stands (ADR-0064)
     result_at: float | None = None  # time.perf_counter() when the result was reported
+    standard: dict | None = None  # the test standard named and the check's words on it (ADR-0072); None when the coupon names none
 
 
 class Progress:
@@ -225,12 +228,12 @@ def package(name: str, pdf: bool, theory: bool) -> Path:
     return folder
 
 
-def beside(fields_path: Path, record: Path) -> None:
+def beside(fields_path: Path, record: Path, twin: Path | None = None) -> None:
     """CalculiX's reaction, gauge ply stresses and .frd peaks written into the fields file's summary as `calculix`, so the page shows
-    them beside ours from the one file it reads (ADR-0030 amendment 6)."""
+    them beside ours from the one file it reads (ADR-0030 amendment 6); with the twin's spec, its chord modulus too (ADR-0072)."""
     try:
         data = json.loads(fields_path.read_text(encoding="utf-8"))
-        data["summary"]["calculix"] = calculix_summary(record, data["units"])
+        data["summary"]["calculix"] = calculix_summary(record, data["units"], extensometer_of(load_spec(twin)) if twin is not None else None)
         fields_path.write_text(json.dumps(data), encoding="utf-8")
         print(f"written    {rel(fields_path)} (CalculiX's numbers beside ours)")
     except (OSError, ValueError, KeyError) as exc:  # the page then shows ours alone, and says nothing of CalculiX's; the record itself stands
@@ -326,8 +329,10 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     print(f"attempt folder: {rel(attempt)}")
     progress.made(**write_studio(out / STUDIO, checklist, model, quality))
     record = paths.verification(name) / f"{name}-calculix.toml"
-    kind = load_spec(twin).kind
+    twin_spec = load_spec(twin)
+    kind = twin_spec.kind
     nodes, elements = gauge_probes(kind)
+    nodes = (*nodes, *(name for name in STRAIN_PROBES if name in twin_spec.probes.nodes))  # the strain measurement's ends (ADR-0072)
     notes = f"written by fea/tools/run_coupon.py, attempt {number:02d}; {LEFT_OUT.get(kind, LEFT_OUT[None])}"
     steps = [
         ("our engine", [str(paths.FEA / "examples/build_model.py"), str(spec), "--out", str(out / "kernel"), "--drawings", "without"],
@@ -367,7 +372,7 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
                 if step == "the convergence study":
                     convergence_into(out / "kernel" / f"{name}-fields.json", out / "kernel" / f"{name}-convergence.json")  # into the fields the result shows
                 if step == "the CalculiX record":
-                    beside(out / "kernel" / f"{name}-fields.json", record)  # CalculiX's numbers into the fields the result shows (ADR-0030 amendment 6)
+                    beside(out / "kernel" / f"{name}-fields.json", record, twin)  # CalculiX's numbers into the fields the result shows (ADR-0030 amendment 6)
             finally:  # what the step wrote stays reported, a failed step's deck and console included; a study that was not written is not
                 progress.made(**{key: path for key, path in made.items() if path.exists() or step != "the convergence study"})
         progress.start("the result")
@@ -402,7 +407,10 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     if not record.with_suffix(".md").is_file():
         print(f"Next, by hand: the record's reading, {rel(record.with_suffix('.md'))}: what the numbers show (ADR-0031); the local tests "
               "name a record without one")
-    return Outcome(name, attempt, result, outputs, documents, result_at)
+    judged = conformance(load_spec(spec))
+    standard = None if judged is None else {"designation": judged.profile.designation, "words": judged.words(), "deviations": len(judged.deviations),
+                                            "advisories": len(judged.advisories)}
+    return Outcome(name, attempt, result, outputs, documents, result_at, standard)
 
 
 def outcome_line(folder: Path) -> str:
@@ -446,13 +454,15 @@ def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, prog
 
 
 def write_result(path: Path | None, status: str, message: str, coupon: str | None = None, attempt: Path | None = None,
-                 outputs: dict[str, Path] | None = None, documents: str | None = None, result: str | None = None) -> None:
+                 outputs: dict[str, Path] | None = None, documents: str | None = None, result: str | None = None, standard: dict | None = None) -> None:
     """The run's outcome as JSON, for the API's coupon jobs (ADR-0050): done, stopped or refused, and the files by key; for a done
-    run, `result` is the result's one line and `documents` "written" or what is missing and why (ADR-0064)."""
+    run, `result` is the result's one line, `documents` "written" or what is missing and why (ADR-0064), and `standard` the test
+    standard the coupon names with the check's words on it, or None (ADR-0072)."""
     if path is None:
         return
     data = {"status": status, "message": message, "coupon": coupon, "attempt": None if attempt is None else rel(attempt),
-            "outputs": {key: rel(p) for key, p in (outputs or {}).items()}, "result": result, "documents": documents, "fea_version": __version__}
+            "outputs": {key: rel(p) for key, p in (outputs or {}).items()}, "result": result, "documents": documents, "standard": standard,
+            "fea_version": __version__}
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
@@ -484,7 +494,7 @@ def main() -> None:
     progress.finish()
     print("timings: " + ", ".join(f"{stage} {seconds:.1f} s" for stage, seconds in progress.timings.items()), flush=True)
     message = done.result if done.documents == "written" else f"{done.result}; {done.documents}"
-    write_result(args.result, "done", message, done.coupon, done.attempt, done.outputs, done.documents, done.result)
+    write_result(args.result, "done", message, done.coupon, done.attempt, done.outputs, done.documents, done.result, done.standard)
 
 
 if __name__ == "__main__":

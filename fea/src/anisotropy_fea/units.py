@@ -12,36 +12,38 @@ from __future__ import annotations
 from anisotropy_engine.units import INCH, LBF, PSI  # one set of constants for the whole repository (ADR-0002)
 
 
-def _system(length: float, stress: float, force: float) -> dict[str, float]:
+def _system(length: float, stress: float, force: float, modulus: float) -> dict[str, float]:
     """The factors that multiply a stated value to give the SI base value: a section force resultant is a force per length, a
-    curvature is one per length. A moment resultant per unit width (N mm/mm, lbf in/in) is numerically a force in every system, so
-    it converts with the "force" kind and is labelled "moment"."""
-    return {"length": length, "stress": stress, "force": force, "force_per_length": force / length, "per_length": 1.0 / length}
+    curvature is one per length, an area a length squared. A moment resultant per unit width (N mm/mm, lbf in/in) is numerically a force
+    in every system, so it converts with the "force" kind and is labelled "moment". A modulus is written in a larger unit than a stress
+    (GPa beside MPa, Msi beside psi), so it carries its own factor (ADR-0072: the chord modulus of a test method)."""
+    return {"length": length, "stress": stress, "force": force, "force_per_length": force / length, "per_length": 1.0 / length,
+            "area": length * length, "modulus": modulus}
 
 
 # Force is the product of stress and length squared, so MPa with mm gives newtons and Pa with m gives newtons: the factor is 1 in both.
 UNIT_SYSTEMS: dict[str, dict[str, float]] = {
-    "mm-MPa": _system(1e-3, 1e6, 1.0),
-    "m-Pa": _system(1.0, 1.0, 1.0),
-    "in-psi": _system(INCH, PSI, LBF),
-    "in-ksi": _system(INCH, 1e3 * PSI, LBF),
+    "mm-MPa": _system(1e-3, 1e6, 1.0, 1e9),
+    "m-Pa": _system(1.0, 1.0, 1.0, 1e9),
+    "in-psi": _system(INCH, PSI, LBF, 1e6 * PSI),
+    "in-ksi": _system(INCH, 1e3 * PSI, LBF, 1e6 * PSI),
 }
 
 # The systems an Abaqus deck is written in. A deck is unitless; every deck we write, read back and compare is in one of these two.
 DECK_UNIT_SYSTEMS: dict[str, dict[str, float]] = {name: UNIT_SYSTEMS[name] for name in ("mm-MPa", "m-Pa")}
 DECK_UNITS = "mm-MPa"  # the deck system of a coupon stated in a system a deck is not written in
 
-KINDS = ("length", "stress", "force", "force_per_length", "per_length")
+KINDS = ("length", "stress", "force", "force_per_length", "per_length", "area", "modulus")
 
 # How each kind is written for a reader, per system: the documents, the studio and the case pages share one table.
 UNIT_LABEL: dict[str, dict[str, str]] = {
-    "mm-MPa": {"force": "N", "length": "mm", "stress": "MPa", "force_per_length": "N/mm", "modulus": "GPa", "stiffness": "N/mm",
+    "mm-MPa": {"area": "mm²", "force": "N", "length": "mm", "stress": "MPa", "force_per_length": "N/mm", "modulus": "GPa", "stiffness": "N/mm",
                "per_length": "1/mm", "moment": "N·mm/mm", "rotation": "rad"},
-    "m-Pa": {"force": "N", "length": "m", "stress": "Pa", "force_per_length": "N/m", "modulus": "GPa", "stiffness": "N/m",
+    "m-Pa": {"area": "m²", "force": "N", "length": "m", "stress": "Pa", "force_per_length": "N/m", "modulus": "GPa", "stiffness": "N/m",
              "per_length": "1/m", "moment": "N·m/m", "rotation": "rad"},
-    "in-psi": {"force": "lbf", "length": "in", "stress": "psi", "force_per_length": "lbf/in", "modulus": "Msi", "stiffness": "lbf/in",
+    "in-psi": {"area": "in²", "force": "lbf", "length": "in", "stress": "psi", "force_per_length": "lbf/in", "modulus": "Msi", "stiffness": "lbf/in",
                "per_length": "1/in", "moment": "lbf·in/in", "rotation": "rad"},
-    "in-ksi": {"force": "lbf", "length": "in", "stress": "ksi", "force_per_length": "lbf/in", "modulus": "Msi", "stiffness": "lbf/in",
+    "in-ksi": {"area": "in²", "force": "lbf", "length": "in", "stress": "ksi", "force_per_length": "lbf/in", "modulus": "Msi", "stiffness": "lbf/in",
                "per_length": "1/in", "moment": "lbf·in/in", "rotation": "rad"},
 }
 assert set(UNIT_LABEL) == set(UNIT_SYSTEMS)

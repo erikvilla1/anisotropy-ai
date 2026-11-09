@@ -192,9 +192,9 @@ REQUIREMENTS = (
     Requirement("conditioning", "§10", "lab", "The conditioning is reported; without one, the specimens are reported as unconditioned, moisture unknown."),
     Requirement("speed", "§11.3", "lab", "The strain rate gives failure in 1 to 10 minutes: 0.01 per minute in strain control, or 2 mm/min [0.05 in/min] "
                 "of the head as a start."),
-    Requirement("bending", "§11.6.1", "lab", "Bending is checked with back-to-back transducers on at least one specimen per sample at 2000 µε; above "
+    Requirement("bending", "§11.6.1", "lab", "Bending is checked with back-to-back transducers on at least one specimen per sample at 2000 microstrain; above "
                 "3 % the strains of both faces are averaged."),
-    Requirement("alignment", "§7.2.5", "lab", "The load train's alignment is checked; good practice keeps bending to 3 to 5 % above 1000 µε."),
+    Requirement("alignment", "§7.2.5", "lab", "The load train's alignment is checked; good practice keeps bending to 3 to 5 % above 1000 microstrain."),
     Requirement("failure-mode", "§11.9", "lab", "Each failure is recorded with the three-part code of the failure type, area and location."),
     Requirement("grip-failures", "§12.2", "lab", "When many specimens fail within one width of a tab or grip, the gripping is re-examined."),
 )

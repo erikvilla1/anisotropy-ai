@@ -63,6 +63,48 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
             section, is compared with.</p>
         </>
       ) : null}
+      {s.test_method ? <TestMethodCard tm={s.test_method} cx={cx?.test_method ?? null} /> : null}
+    </div>
+  );
+}
+
+/** The quantities the coupon's test standard reduces a test to (ADR-0072), as the package wrote them: the area, the stress, the strain over the
+ * measurement, the chord modulus beside laminate theory and CalculiX, Poisson's ratio, the net section of an open hole, and the first-ply
+ * failure stress, which is never the standard's ultimate strength. Three significant figures, as the standards report. */
+function TestMethodCard({ tm, cx }: { tm: NonNullable<Fields["summary"]["test_method"]>; cx: NonNullable<CalculixBeside["test_method"]> | null }) {
+  const u = tm.units;
+  const three = (v: number) => Number(v.toPrecision(3)).toString();
+  const rows: [string, string][] = [
+    ["Gross area", `${three(tm.area)} ${u.area} (${three(tm.width)} × ${three(tm.thickness)} ${u.length})`],
+    ["Stress P/A", `${three(Math.abs(tm.stress))} ${u.stress} under ${three(Math.abs(tm.force))} ${u.force}`],
+  ];
+  if (tm.hole) {
+    rows.push(["Net section", `${three(tm.hole.net_area)} ${u.area}, ${three(Math.abs(tm.hole.net_stress))} ${u.stress}`],
+      ["w/D and D/h", `${three(tm.hole.width_to_hole)} and ${three(tm.hole.hole_to_thickness)}`]);
+  }
+  if (tm.strain) {
+    const c = tm.strain.chord;
+    rows.push([`Strain over the ${tm.strain.device}`, `${three(Math.abs(tm.strain.microstrain))} microstrain over ${three(tm.strain.modelled_length)} ${u.length}`],
+      ["Chord modulus, 1000 to 3000 microstrain", `${three(c.modulus)} ${u.modulus}` + (cx ? `; CalculiX ${three(cx.calculix.modulus)} ${u.modulus}` : "")
+        + `; laminate theory ${three(tm.laminate_theory.modulus)} ${u.modulus}`],
+      ["Load for the chord", `${three(Math.abs(c.force_from))} to ${three(Math.abs(c.force_to))} ${u.force}`]);
+    if (tm.strain.poisson !== null) rows.push(["Poisson's ratio", `${three(tm.strain.poisson)}; laminate theory ${three(tm.laminate_theory.poisson)}`]);
+  }
+  const first = tm.earliest ? tm.fpf[tm.earliest] : null;
+  if (first) {
+    rows.push([`First-ply-failure stress (${tm.earliest}, ${tm.fpf_basis})`, `${three(Math.abs(first.stress))} ${u.stress} gross`
+      + (first.net_stress !== undefined ? `, ${three(Math.abs(first.net_stress))} ${u.stress} net` : "")
+      + (first.microstrain !== undefined ? ` at ${three(Math.abs(first.microstrain))} microstrain` : "")]);
+  }
+  return (
+    <div className="ws-test-method" data-testid="test-method">
+      <h4>{tm.designation ? `As ${tm.designation} reduces a test` : "As a test is reduced"}</h4>
+      <dl className="studio-summary">
+        {rows.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}
+      </dl>
+      <p className="studio-muted">From our engine&apos;s solution by the standard&apos;s own formulas. A linear model gives the same chord over any range. The first-ply-failure stress is the load
+        at which the first ply fails, over the area: not the ultimate strength the standard takes at a test&apos;s maximum force, which a linear model cannot give.
+        {tm.note_b ? " The first ply fails below 6000 microstrain, where Table 3 note B of D3039 moves the chord range." : ""}</p>
     </div>
   );
 }
