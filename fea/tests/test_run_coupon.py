@@ -56,7 +56,7 @@ def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
     outcome = tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False, theory=False, progress=tool.Progress(progress_path))
     folder, attempt = paths.LOCAL / DESIGNATION, outcome.attempt
     out = attempt / "run"
-    assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "prepomax_deck", "prepomax_results", "kernel_summary",
+    assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "prepomax_deck", "prepomax_results", "kernel_summary", "convergence",
                                                                       "kernel_vtu", "fields", "explanation", "record", "checklist", "preview"}  # no document without the PDF
     assert all(path.exists() for path in outcome.outputs.values())
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
@@ -142,8 +142,8 @@ def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):
     row = next(line for line in (folder / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 02 |"))
     assert "stopped at CalculiX: run_calculix.py exited with code 1" in row
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
-    assert progress["stage"] == "CalculiX" and progress["done"] == ["the setup check", "the input", "the decks", "the attempt", "our engine"]
-    assert set(progress["outputs"]) == {"checklist", "preview"}  # the stand-in engine step wrote nothing; the studio files are there
+    assert progress["stage"] == "CalculiX" and progress["done"] == ["the setup check", "the input", "the decks", "the attempt", "our engine", "the convergence study"]
+    assert set(progress["outputs"]) == {"checklist", "preview"}  # the stand-in steps wrote nothing; the studio files are there
     assert (folder / "team" / progress["attempt"].rsplit("_", 1)[-1] / "values.json").is_file()  # the values file is filed with the coupon
 
 
@@ -265,7 +265,7 @@ def test_the_result_is_reported_before_the_documents_and_a_failed_package_leaves
     seen = {"progress": tmp_path / "progress.json"}
     stand_in_steps(tool, monkeypatch, seen)
     outcome = tool.run(str(public_values(tmp_path)), "A. Engineer", pdf=True, progress=tool.Progress(seen["progress"]))
-    assert seen["steps"] == ["our engine", "CalculiX", "the CalculiX record", "the drawings"]
+    assert seen["steps"] == ["our engine", "the convergence study", "CalculiX", "the CalculiX record", "the drawings"]
     assert seen["result when the package started"] == "57 of 57 recorded values agree with CalculiX"
     assert outcome.result == "57 of 57 recorded values agree with CalculiX" and outcome.result_at is not None
     assert outcome.documents.startswith("the package not written (the package: Tectonic stopped)")

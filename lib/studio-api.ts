@@ -73,10 +73,23 @@ export type Fields = {
     /** Every ply's own peaks at the element centroids, each marked when its element touches a gripped node (ADR-0066); absent on older jobs. */
     ply_peaks?: PlyPeak[];
     /** Classical laminate theory for a gripped coupon: the reaction over the width as N_y, every ply at its middle (ADR-0066); null when it does not apply. */
-    clt?: CltCheck | null };
+    clt?: CltCheck | null;
+    /** The mesh convergence study (ADR-0068): the kernel on the spec's mesh and its refinements, the validation quantities and the peaks on each; absent on older jobs. */
+    convergence?: Convergence | null };
   quality?: QualitySummary;
 };
 export type PlyPeak = { ply: number; angle: number } & Record<"S11" | "S22" | "S12", { value: number; element: number; label: string; xy: number[]; face: string | null; touches_grip: boolean }>;
+/** One mesh of the convergence study: its size, the solve's seconds, and ADR-0066's quantities on it (ADR-0068). */
+export type ConvergenceMesh = { factor: number; nx: number; ny: number; elements: number; nodes: number; solve_s: number; reaction: number; reaction_set: string;
+  gauge_element: number; gauge_xy: number[]; gauge_strain: number[]; plies: { ply: number; angle: number; stress_12: number[] }[];
+  peaks: { ply: number; angle: number; s1: number; element: number; touches_grip: boolean }[]; fpf: Record<string, number>; fpf_gauge: Record<string, number> };
+/** The study: `studied` false with the reason when it does not cover the coupon; else the meshes, each quantity's change from the previous mesh
+ * (null for the first; a fraction of the finer value, of a triple's largest component) and whether each group settled (last change under `settled_below`). */
+export type Convergence = { studied: boolean; reason?: string; units: string | null; factors: number[]; cap: number; settled_below: number; meshes: ConvergenceMesh[];
+  left_out: { factor: number; elements: number; reason: string }[]; kernel?: string; note?: string;
+  changes?: { reaction: (number | null)[]; gauge_strain: ((number | null)[] | null)[]; plies: { ply: number; stress_12: ((number | null)[] | null)[] }[];
+    peaks: { ply: number; s1: (number | null)[] }[]; fpf: Record<string, (number | null)[]>; fpf_gauge: Record<string, (number | null)[]> };
+  settled?: Record<"reaction" | "gauge_strain" | "plies" | "peaks" | "fpf" | "fpf_gauge", boolean> };
 export type CltCheck = { Ny: number; width: number; strain: number[]; plies: { ply: number; angle: number; stress_12: number[] }[]; note: string };
 /** One ply's peaks in its own fibre axes read from the `.frd`'s bricks: nodal, extrapolated, as a viewer would show them per ply (ADR-0066). */
 export type FrdPly = { ply: number; angle: number; fibre: number; nodes: number; s1_max?: number; s1_max_node?: number; s1_max_xyz?: number[]; s2_max?: number; s2_max_node?: number;
