@@ -23,6 +23,7 @@ from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.case_pages import CasePageError, read_case
 from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, setup_checklist
+from anisotropy_fea.convergence import convergence_study
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.fields import field_data
 from anisotropy_fea.intake import IntakeError, read_input, values_of_spec
@@ -102,6 +103,7 @@ def fixtures(values_path: Path, out: Path, root: Path) -> None:
     coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
               "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
     data = field_data(deck, solution, spec.units, criteria=tuple(spec.output.fpf_criteria), quality=quality, coupon=coupon)
+    data["summary"]["convergence"] = convergence_study(spec)  # as a run writes it into the fields (ADR-0068)
     write_json(out / "fields.json", data)
     write_json(out / "explanation.json", explanation(data["summary"], coupon, spec.units, data["labels"], checklist.as_dict()))
     print(f"written checklist.json, preview.json, {deck_path.name}, fields.json, explanation.json in {out}")

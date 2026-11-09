@@ -144695,7 +144695,21 @@
   "free_residual": 2.6707525080382766e-12,
   "earliest": "tsai_hill",
   "fpf_gauge": {},
-  "earliest_gauge": null
+  "earliest_gauge": null,
+  "convergence": {
+   "studied": false,
+   "reason": "the study covers gripped in-plane coupons; three point bending is a later step",
+   "units": "mm-MPa",
+   "factors": [
+    1,
+    2,
+    4
+   ],
+   "cap": 40000,
+   "settled_below": 0.01,
+   "meshes": [],
+   "left_out": []
+  }
  },
  "quality": {
   "elements": 180,

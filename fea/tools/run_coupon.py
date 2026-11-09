@@ -57,8 +57,8 @@ LEFT_OUT = {  # why the record keeps the gauge probes only, in the words the cou
 }
 COUPON_DOCUMENT = "anisotropy_models_coupon"  # docs/models/coupon.py, loaded under the name its tests use
 INPUT_SUFFIXES = (".xlsx", VALUES_SUFFIX)
-STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the result", "the drawings",
-          "the package", "the outputs")
+STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "the convergence study", "CalculiX", "the CalculiX record", "the result",
+          "the drawings", "the package", "the outputs")
 DOCUMENT_STAGES = STAGES[STAGES.index("the drawings"):]  # after the result: made in the background of the studio's view (ADR-0064)
 STUDIO = "studio"  # the attempt's run/studio/: the checklist and the preview the studio showed before the run
 GATE_GO = "go"  # the word at the gate that lets a held run go on
@@ -237,6 +237,18 @@ def beside(fields_path: Path, record: Path) -> None:
         print(f"CalculiX's numbers were not written beside ours in {rel(fields_path)}: {str(exc).splitlines()[0]}")
 
 
+def convergence_into(fields_path: Path, study_path: Path) -> None:
+    """The mesh convergence study written into the fields file's summary as `convergence` (ADR-0068), so the page shows which numbers
+    settle as the mesh is refined from the one file it reads."""
+    try:
+        data = json.loads(fields_path.read_text(encoding="utf-8"))
+        data["summary"]["convergence"] = json.loads(study_path.read_text(encoding="utf-8"))
+        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        print(f"written    {rel(fields_path)} (the mesh convergence study in the summary)")
+    except (OSError, ValueError, KeyError) as exc:  # the page then shows the result without the study; the study file itself stands
+        print(f"the convergence study was not written into {rel(fields_path)}: {str(exc).splitlines()[0]}")
+
+
 def add_row(folder: Path, cells: list[str]) -> None:
     """The attempt's row, after the last row of the case page's attempt log."""
     readme = folder / "README.md"
@@ -321,6 +333,8 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         ("our engine", [str(paths.FEA / "examples/build_model.py"), str(spec), "--out", str(out / "kernel"), "--drawings", "without"],
          {"kernel_summary": out / "kernel" / "summary.txt", "fields": out / "kernel" / f"{name}-fields.json",
           "explanation": out / "kernel" / f"{name}-explanation.json"}),
+        ("the convergence study", [str(paths.FEA / "tools/convergence_study.py"), str(spec), "--out", str(out / "kernel" / f"{name}-convergence.json")],
+         {"convergence": out / "kernel" / f"{name}-convergence.json"}),
         ("CalculiX", [str(paths.FEA / "examples/run_calculix.py"), str(twin), "--out", str(out / "calculix")],
          {"prepomax_deck": out / "calculix" / f"{name}-nodal-ccx.inp", "prepomax_results": out / "calculix" / f"{name}-nodal-ccx.frd",
           "calculix_console": out / "calculix" / f"{name}-nodal-ccx.log", "calculix_status": out / "calculix" / f"{name}-nodal-ccx.sta"}),
@@ -344,12 +358,22 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         for step, args, made in steps:
             progress.start(step)
             try:
-                script(step, args, paths.FEA)
+                try:
+                    script(step, args, paths.FEA)
+                except StepFailed as exc:
+                    if step != "the convergence study":  # the study is a reading beside the result, never a reason to stop the run (ADR-0068)
+                        raise
+                    print(f"{exc}; the run goes on without the convergence study")
+                if step == "the convergence study":
+                    convergence_into(out / "kernel" / f"{name}-fields.json", out / "kernel" / f"{name}-convergence.json")  # into the fields the result shows
                 if step == "the CalculiX record":
                     beside(out / "kernel" / f"{name}-fields.json", record)  # CalculiX's numbers into the fields the result shows (ADR-0030 amendment 6)
-            finally:
-                progress.made(**made)  # what the step wrote stays reported, a failed step's deck and console included
+            finally:  # what the step wrote stays reported, a failed step's deck and console included; a study that was not written is not
+                progress.made(**{key: path for key, path in made.items() if path.exists() or step != "the convergence study"})
         progress.start("the result")
+        study = out / "kernel" / f"{name}-convergence.json"
+        if study.is_file():
+            answer.append(("convergence", "our engine: the mesh convergence study", study))
         missing = [path for _, _, path in answer if not path.exists()]
         if missing:
             raise StepFailed(f"the result: {', '.join(rel(path) for path in missing)} not written")
