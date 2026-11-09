@@ -9,6 +9,7 @@ plies and the laminate membrane stiffness `A` they give.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 
@@ -50,9 +51,17 @@ class Mesh:
 
     def element(self, key: ElementKey) -> int:
         try:
-            return self.element_keys.index(key)
-        except ValueError:
+            return self._element_index[key]
+        except KeyError:
             raise KernelError(f"element {key[0]}.{key[1]} is not in the mesh") from None
+
+    @cached_property
+    def _element_index(self) -> dict[ElementKey, int]:
+        """Element key -> its first position, built once: a gauge set of thousands of elements is looked up in one pass (ADR-0069)."""
+        index: dict[ElementKey, int] = {}
+        for e, key in enumerate(self.element_keys):
+            index.setdefault(key, e)
+        return index
 
     @property
     def node_count(self) -> int:
