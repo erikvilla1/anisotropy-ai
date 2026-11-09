@@ -28,6 +28,8 @@ MODE_WORDS = {  # the engine's governing modes, each with what it means for an e
     "none": "no stress at all (the ply carries nothing there)",
 }
 AXIS_WORDS = {"x": "across the coupon", "y": "along the coupon", "z": "out of the plane (the deflection w)"}
+# the ply stress components as the fields name them (the team's CAE names), said with their symbols: PrePoMax's S11 is another quantity (ADR-0066)
+STRESS_WORDS = {"S11": "sigma_1 along the fibres", "S22": "sigma_2 across the fibres", "S12": "tau_12 in-plane shear"}
 DIGITS = 4
 
 
@@ -56,6 +58,8 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
         "max_displacement_axis": summary["max_displacement"].get("axis", "y"),
     }
     for name, m in summary["max_ply"].items():
+        if name == "mises":
+            continue  # a ply's von Mises is not a laminate quantity (ADR-0066): the sheet leaves it out, so no sentence can quote it
         facts[f"max_{name}"] = printed(float(m["value"]))
         facts[f"max_{name}_ply"] = int(m["ply"])
         facts[f"max_{name}_angle"] = printed(float(m["angle"]))
@@ -88,12 +92,11 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
            f"The largest displacement is {number(facts['max_displacement'])} {facts['length_unit']} at node {facts['max_displacement_node']} "
            f"({number(facts['max_displacement_x'])}, {number(facts['max_displacement_y'])} {facts['length_unit']}), mostly "
            f"{AXIS_WORDS.get(facts['max_displacement_axis'], facts['max_displacement_axis'])}.",
-           "The largest ply stresses in material axes are "
-           + ", ".join(f"{name} = {number(facts[f'max_{name}'])} {facts['stress_unit']} in ply {facts[f'max_{name}_ply']} "
+           "The largest ply stresses, each in its own ply's fibre axes, are "
+           + ", ".join(f"{STRESS_WORDS[name]} = {number(facts[f'max_{name}'])} {facts['stress_unit']} in ply {facts[f'max_{name}_ply']} "
                        f"({number(facts[f'max_{name}_angle'])} degrees){_face(facts[f'max_{name}_face'])} at element {facts[f'max_{name}_element']}"
                        for name in ("S11", "S22", "S12"))
-           + f"; the largest ply von Mises stress is {number(facts['max_mises'])} {facts['stress_unit']} in ply {facts['max_mises_ply']} "
-           f"({number(facts['max_mises_angle'])} degrees){_face(facts['max_mises_face'])} at element {facts['max_mises_element']}."]
+           + "; these are element centroids in the ply's axes, not the global-axis values a viewer such as PrePoMax shows."]
     if not facts["criteria"]:
         out.append("No failure criterion was asked for, so first-ply failure is not reported.")
         return out

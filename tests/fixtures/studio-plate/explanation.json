@@ -35,18 +35,13 @@
   "max_S12_angle": 0.0,
   "max_S12_element": "241",
   "max_S12_face": "bottom",
-  "max_mises": 32.48,
-  "max_mises_ply": 1,
-  "max_mises_angle": 0.0,
-  "max_mises_element": "241",
-  "max_mises_face": "bottom",
   "criteria": [],
   "earliest": null
  },
  "sentences": [
   "NOM-PLT-L1, plate, under a pressure of 0.01 MPa on the whole plate, along its normal: the supports carries 100 N, holding the plate down.",
   "The largest displacement is 0.6333 mm at node 145 (50, 50 mm), mostly out of the plane (the deflection w).",
-  "The largest ply stresses in material axes are S11 = -28.47 MPa in ply 1 (0 degrees) on its bottom face at element 137, S22 = -28.47 MPa in ply 1 (0 degrees) on its bottom face at element 137, S12 = 18.75 MPa in ply 1 (0 degrees) on its bottom face at element 241; the largest ply von Mises stress is 32.48 MPa in ply 1 (0 degrees) on its bottom face at element 241.",
+  "The largest ply stresses, each in its own ply's fibre axes, are sigma_1 along the fibres = -28.47 MPa in ply 1 (0 degrees) on its bottom face at element 137, sigma_2 across the fibres = -28.47 MPa in ply 1 (0 degrees) on its bottom face at element 137, tau_12 in-plane shear = 18.75 MPa in ply 1 (0 degrees) on its bottom face at element 241; these are element centroids in the ply's axes, not the global-axis values a viewer such as PrePoMax shows.",
   "No failure criterion was asked for, so first-ply failure is not reported."
  ],
  "setup_sentences": [
