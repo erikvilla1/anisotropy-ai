@@ -10,7 +10,7 @@ from anisotropy_engine.response import ply_surfaces
 from anisotropy_engine.rotation import stress_transformation
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.model import section_plies
-from anisotropy_fea.calculix import ENV_VARIABLE, KNOWN_FATALS, CalculixError, diagnose, find_ccx, parse_dat, run_calculix
+from anisotropy_fea.calculix import ENV_VARIABLE, KNOWN_FATALS, CalculixError, diagnose, find_ccx, parse_dat, run_calculix, solver_environment
 from anisotropy_fea.compare import layer_values, load_conventions
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.membrane import solve_membrane
@@ -201,6 +201,22 @@ def test_calculix_prints_tensor_shear_strain(tmp_path):
     strains = dat.strains("EALL").values
     assert strains[:, 3] == pytest.approx(np.full(len(strains), 0.005), abs=1e-9)  # tensor: half the engineering shear
     assert dat.stresses("EALL").values[:, 3] == pytest.approx(np.full(len(strains), G * 0.01), rel=1e-6)
+
+
+def test_the_equation_solver_runs_on_one_thread_whatever_the_assembly_gets():
+    """SPOOLES on several threads answers differently on each run, now and then 1 % off (ADR-0056 amendment 7)."""
+    env = solver_environment(4)
+    assert env["OMP_NUM_THREADS"] == "4" and env["CCX_NPROC_EQUATION_SOLVER"] == "1"
+    assert solver_environment(0)["OMP_NUM_THREADS"] == "1"
+
+
+@needs_ccx
+def test_calculix_gives_the_same_answer_on_every_run_of_a_deck(tmp_path):
+    """The public coupon's CalculiX twin, run three times on four threads: the .dat is the same, byte for byte. With SPOOLES on four
+    threads, three runs on a four-core machine gave three different files, one with the reaction 0.7 % low (2026-11-09)."""
+    deck = paths.FEA / "checks" / "unnotched-im7-8552" / "decks" / "unnotched-im7-8552-nodal-ccx.inp"
+    texts = {run_calculix(deck, workdir=tmp_path / f"run-{k}", threads=4).dat_text for k in range(3)}
+    assert len(texts) == 1
 
 
 def test_the_environment_variable_is_documented():
