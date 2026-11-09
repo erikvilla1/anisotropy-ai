@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { couponValues, DOWNLOADS, fileUrl, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
-import { buildValues, exampleForm, formFromValues, PLATE_TEST, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
+import { buildValues, exampleForm, formFromValues, PLATE_TEST, rowErrorsFrom, withStandard, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateFromValues, plateValues, type PlateLists } from "@/lib/studio-plate";
 import { MATERIAL_KEYS, panel, panelOfItem, panelState, visibleKeys, type PanelId } from "@/lib/workspace-panels";
 import { ChecklistPanel } from "@/components/studio/checklist-panel";
 import { FieldGrid } from "@/components/studio/coupon-form";
 import { remember, remembered, RUN_BY_KEY, today } from "@/components/studio/local";
 import { PlatePanel } from "@/components/studio/plate-panel";
+import { StandardCard } from "@/components/studio/standard-card";
 import { useProject } from "@/components/studio/project-context";
 import { LayupEditor } from "./panels/layup-editor";
+import { StandardSize } from "./panels/standard-size";
 import { showPanel, StepPanel } from "./panels/step-panel";
 
 /** The left column of the coupon FEA workspace (ADR-0062, part 3): one panel per step, each editing named rows of the one values file
@@ -35,7 +37,14 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   const { clearChecked } = runner;
   const changed = useCallback((what: string) => { setErrors({}); clearChecked(); setMessage(""); setStatus(`${what} changed. Check the setup again before solving.`); }, [clearChecked]);
-  const edit = useCallback((key: string, value: string) => { setForm((f) => ({ ...f, [key]: value })); changed("Inputs"); }, [setForm, changed]);
+  const edit = useCallback((key: string, value: string) => {
+    // a new test or standard clears the rows that belonged to the old one, and says so (ADR-0072)
+    const note = key === "test" ? withTest(form, value).note : "";
+    setForm((f) => (key === "test" ? withTest(f, value).form : key === "standard" ? withStandard(f, value) : { ...f, [key]: value }));
+    changed("Inputs");
+    if (note) setStatus(note);
+  }, [form, setForm, changed]);
+  const editSize = useCallback((rows: StudioForm) => { setForm((f) => ({ ...f, ...rows })); changed("The size"); }, [setForm, changed]);
   const editRows = useCallback((rows: StudioForm) => { setForm((f) => ({ ...f, ...rows })); changed("The layup"); }, [setForm, changed]);
   const editPlate = useCallback((lists: PlateLists) => { setPlate(lists); changed("Supports or loads"); }, [setPlate, changed]);
   const isPlate = form.test === PLATE_TEST;
@@ -130,10 +139,12 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
           ) : null}
         </div>
         {grid("project")}
+        <StandardCard form={form} checklist={checklist} />
         {checklist?.designation ? <p className="studio-hint">Coupon {checklist.designation}{checklist.coupon_exists ? `, ${checklist.attempts} attempt${checklist.attempts === 1 ? "" : "s"} so far` : ", new"}: the name is derived from the material, the test and the layup.</p> : null}
       </StepPanel>
 
       <StepPanel id="geometry" title="Geometry" state={state("geometry")}>
+        <StandardSize form={form} disabled={busy} onRows={editSize} />
         {grid("geometry")}
         {isPlate ? <p className="studio-hint">A plate&apos;s regions, the boxes you draw, are listed under Loads and supports.</p> : null}
       </StepPanel>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { couponValues, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import {
-  blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
+  blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "@/lib/studio-form";
 import {
   applyMessage, COMMON_MATERIALS, couponLines, isBending, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
@@ -187,7 +187,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** Apply rows from a click, echo what the engineer chose, and move on. */
   function answer(echo: string, rows: StudioForm) {
-    const next: StudioForm = { ...formRef.current, ...rows };
+    const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
     if (rows.filled_by) remember(RUN_BY_KEY, rows.filled_by.trim());
     setForm(next);
     clearRun();
@@ -294,7 +294,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
     add({ role: "user", text }, { role: "assistant", kind: "text", title: "Got it", body: <>
       <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul>{note ? <p className="chat-note">{note}</p> : null}</> });
-    const next: StudioForm = { ...formRef.current, ...rows };
+    const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
     setForm(next); clearRun();
     proceed(next);
   }

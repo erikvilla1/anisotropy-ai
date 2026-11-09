@@ -108,6 +108,29 @@ OWN_FIXTURE = NAMED_SPEC.replace('library = "im7-8552"\ndataset = "ncamp-im7-855
                                  'F6 = 91.15\nsource = "the fixture\'s own constants"\n')
 
 
+D3039_PUBLIC = (PUBLIC_COUPON.replace('standard = "none"', 'standard = "ASTM D3039/D3039M-17"')
+                .replace("[geometry]", '[test_method]\nid = "astm-d3039"\n\n[geometry]', 1)
+                .replace("nodes = { centre = [12.5, 125.0] }", "nodes = { centre = [12.5, 125.0], extensometer_bottom = [12.5, 110.0], extensometer_top = [12.5, 140.0] }")
+                .replace("[output]", '[strain]\ndevice = "extensometer"\ngauge_length = 30.0\n\n[output]', 1))
+
+
+def test_a_coupon_under_a_test_standard_gets_its_test_method_section(coupon, tmp_path):
+    """ADR-0072: the specimen judged clause by clause, the laboratory's clauses listed, and the quantities the standard reduces a test to at
+    three significant figures, the first-ply-failure stress named apart from the ultimate strength; one sentence on the cover."""
+    tex_path, _ = coupon.build_document(public_sources(coupon, tmp_path, D3039_PUBLIC), pdf=False, theory=False)
+    tex = tex_path.read_text(encoding="utf-8")
+    assert r"\section{The test method: ASTM D3039/D3039M-17}\label{sec:test-method}" in tex
+    section = tex.split(r"\label{sec:test-method}")[1].split(r"\chapter{")[0]
+    assert "4 of 4 requirements a model can meet are met" in section and "Table 2" in section and "not followed" in section
+    assert r"\item §8.1".replace("§", r"\S{}") in section and "Chord modulus, 1000 to 3000 microstrain" in section
+    assert "Laminate modulus along the pull" in section and "Poisson's ratio" in section and "mm²" in section
+    assert "not the ultimate strength the standard takes at the maximum force of a test" in section and "conforms" not in section
+    assert r"\textbf{Test method.} Checked against ASTM D3039/D3039M-17" in tex
+    (tmp_path / "plain").mkdir()
+    plain = coupon.build_document(public_sources(coupon, tmp_path / "plain"), pdf=False, theory=False)[0].read_text(encoding="utf-8")
+    assert "sec:test-method" not in plain and "Test method." not in plain
+
+
 def test_the_teams_own_constants_make_a_document_and_a_package_without_a_library_record(coupon, tmp_path):
     """A coupon from an input form with the team's own constants (ADR-0046): the material section, the deck heading, the package's
     material file and the audit's material row all say where the values come from; no library citation anywhere."""
@@ -198,6 +221,11 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     assert all(line.count("&") == 4 for line in validation.splitlines() if line.startswith("Ply "))
     assert not re.search(r"10\^\{-(1[2-9]|[2-9]\d)\}", validation)  # the noise beside a triple's real values prints as 0, not as 4 x 10^-15
     assert coupon.settled([479.2, -0.2514, 4.078e-15]) == [479.2, -0.2514, 0.0] and coupon.settled([-0.001127, 0.003641, 5.883e-7])[2] == 5.883e-7
+    # the mesh convergence study (ADR-0068), computed while the document is built: a column per mesh, a last step per row, the words
+    convergence = tex[tex.index(r"\label{sec:convergence}"):tex.index(r"\section{CalculiX: every group of compared numbers}")]
+    assert r"1$\times$: " in convergence and ", settled" in convergence and ", still moving" in convergence and "numbers a finer mesh confirms" in convergence
+    assert "still moved by more than 1" in convergence and ", and the" not in convergence  # the moving quantities read as one list
+    assert coupon.percent_change(-0.00023590981) == r"$-$0.024\,\%" and coupon.percent_change(0.11390684) == r"+11.4\,\%" and coupon.percent_change(None) == "--"
     assert r"\section{Stress concentration at the clamped edge: not a validation value}\label{sec:peaks}" in tex
     assert "touches a grip" in tex and "Von Mises is not a laminate quantity" in tex
     assert r"\evidence{MANUAL" not in tex  # the guide for the team is Abaqus/CAE only: no PrePoMax tags, not even in the legend

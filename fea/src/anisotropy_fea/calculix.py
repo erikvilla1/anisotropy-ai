@@ -67,6 +67,14 @@ def ccx_version(ccx: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def solver_environment(threads: int) -> dict[str, str]:
+    """The environment CalculiX runs in: `threads` for the assembly, one thread for the equation solver. SPOOLES on more than one
+    thread (CCX_NPROC_EQUATION_SOLVER above 1, CalculiX 2.21 as Ubuntu and our image ship it) gives a different answer on every run of
+    the same deck, now and then a wrong one: the public coupon's reaction 15,989 N instead of 16,097.7 N, its ply stresses 1 % off
+    (ADR-0056 amendment 7). The assembly on many threads gives the same answer every time, as fast."""
+    return {**os.environ, "OMP_NUM_THREADS": str(max(1, int(threads))), "CCX_NPROC_EQUATION_SOLVER": "1"}
+
+
 def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: Path | str | None = None,
                  timeout_s: float = 600.0, threads: int = 1) -> CalculixResult:
     """Copy the deck into the working folder as <job>.inp, run `ccx -i <job>` there, and collect the outputs."""
@@ -80,7 +88,7 @@ def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: 
     target = workdir / f"{job}.inp"
     if target.resolve() != deck_path.resolve():
         shutil.copyfile(deck_path, target)
-    env = {**os.environ, "OMP_NUM_THREADS": str(threads), "CCX_NPROC_EQUATION_SOLVER": str(threads)}  # the assembly and the solver alike
+    env = solver_environment(threads)
     start = time.perf_counter()
     try:
         done = subprocess.run([str(solver), "-i", job], cwd=workdir, capture_output=True, text=True, timeout=timeout_s, env=env, check=False)

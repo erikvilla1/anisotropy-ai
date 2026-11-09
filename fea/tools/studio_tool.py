@@ -31,6 +31,7 @@ from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.preview import preview_data
 from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
+from anisotropy_fea.test_quantities import method_inputs
 from anisotropy_fea.units import deck_units_of
 from anisotropy_fea.write_abaqus import write_abaqus
 
@@ -102,7 +103,7 @@ def fixtures(values_path: Path, out: Path, root: Path) -> None:
     solution = solve_deck(deck)
     coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
               "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
-    data = field_data(deck, solution, spec.units, criteria=tuple(spec.output.fpf_criteria), quality=quality, coupon=coupon)
+    data = field_data(deck, solution, spec.units, criteria=tuple(spec.output.fpf_criteria), quality=quality, coupon=coupon, method=method_inputs(spec))
     data["summary"]["convergence"] = convergence_study(spec)  # as a run writes it into the fields (ADR-0068)
     write_json(out / "fields.json", data)
     write_json(out / "explanation.json", explanation(data["summary"], coupon, spec.units, data["labels"], checklist.as_dict()))

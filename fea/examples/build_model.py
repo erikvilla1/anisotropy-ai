@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
+from anisotropy_fea.test_quantities import method_inputs
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.femodel import build_model
@@ -177,7 +178,8 @@ def main() -> None:
                 report += f"first-ply failure, {criterion}: not available ({exc})\n"
         coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
                   "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
-        data = field_data(deck, solution, spec.units, criteria=tuple(available), quality=element_quality(model.mesh.xy, model.mesh.corners), coupon=coupon)
+        data = field_data(deck, solution, spec.units, criteria=tuple(available), quality=element_quality(model.mesh.xy, model.mesh.corners), coupon=coupon,
+                          method=method_inputs(spec))  # the test standard's quantities, when the spec names one (ADR-0072)
         fields_path = args.out / f"{stem}-fields.json"
         fields_path.write_text(json.dumps(data), encoding="utf-8")
         print("written", fields_path)

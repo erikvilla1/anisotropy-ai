@@ -207,7 +207,7 @@ def test_every_test_folder_has_the_same_shape():
                 assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
     # The public checks with a CalculiX record, by name, so a check added without its record or a record that strays is noticed.
     assert {r.parent.parent.name for r in paths.all_records() if paths.CHECKS in r.parents} == {
-        "open-hole-im7-8552", "plate-pressure-isotropic", "three-point-im7-8552", "unnotched-im7-8552",
+        "d3039-im7-8552", "open-hole-im7-8552", "plate-pressure-isotropic", "three-point-im7-8552", "unnotched-im7-8552",
     }
     assert paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
 

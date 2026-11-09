@@ -40,7 +40,7 @@ def main() -> None:
     ccx_deck.write_text(write_calculix(model), encoding="utf-8", newline="\n")
     print("written", ccx_deck, f"({model.mesh.node_count} nodes, {model.mesh.element_count} S8R elements)")
     try:
-        result = run_calculix(ccx_deck, threads=os.cpu_count() or 1)  # every core of this machine (ADR-0056 amendment 6)
+        result = run_calculix(ccx_deck, threads=os.cpu_count() or 1)  # every core for the assembly, one for SPOOLES (ADR-0056 amendments 6 and 7)
     except CalculixError as exc:
         raise SystemExit(f"{exc}\n(the solver's console is {ccx_deck.with_suffix('.log')})") from None
     print(f"CalculiX {result.version}: {result.elapsed_s:.1f} s, {len(result.warnings)} warnings; results in {result.workdir} (.dat, .frd)")

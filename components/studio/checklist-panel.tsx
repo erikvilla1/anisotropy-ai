@@ -1,6 +1,7 @@
 "use client";
 
 import type { Checklist } from "@/lib/studio-form";
+import { RequirementTable } from "./requirement-table";
 
 const MARK: Record<string, string> = { pass: "✓", warn: "!", fail: "✕", missing: "○", pending: "…" };
 const WORD: Record<string, string> = { pass: "passed", warn: "warning", fail: "failed", missing: "needs input", pending: "not judged yet" };
@@ -28,6 +29,12 @@ export function ChecklistPanel({ checklist, checking }: { checklist: Checklist |
               <strong>{item.label}</strong> <span className="studio-muted">({WORD[item.state]})</span>
               {item.message ? <span className="studio-check-message">{item.message}</span> : null}
               {item.rows.length ? <span className="studio-check-rows">Rows: {item.rows.join(", ")}</span> : null}
+              {item.requirements?.length ? (
+                <details className="ws-check-requirements">
+                  <summary>Each requirement of the standard, with its clause</summary>
+                  <RequirementTable requirements={item.requirements} judged />
+                </details>
+              ) : null}
             </span>
           </li>
         ))}

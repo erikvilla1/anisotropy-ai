@@ -70,6 +70,7 @@ from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
 from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
 from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
+from anisotropy_fea.convergence import convergence_study  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.fields import field_data  # noqa: E402
@@ -81,6 +82,9 @@ from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place
                                    model_facts, solve_record, summarize)
 from anisotropy_fea.spec import BENDING_KINDS, TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
 from anisotropy_fea.units import deck_units_of, from_si, units_words  # noqa: E402
+from anisotropy_fea.calculix_summary import calculix_test_method, extensometer_of  # noqa: E402
+from anisotropy_fea.standards.conformance import conformance  # noqa: E402
+from anisotropy_fea.test_quantities import method_inputs  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 
 CHAPTER_STYLE = "\n".join([
@@ -386,7 +390,7 @@ def abaqus_chapter(src: Sources, spec, deck, solution, units: str, committed: Pa
 
 # --------------------------------------------------------------------------------------------- chapter 5, our results
 
-def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[str, dict]:
+def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: dict | None = None) -> tuple[str, dict]:
     labels = documents.UNIT_LABEL[units]
     documents.plot_deck_module.plot_solution(deck, solution, units, figures / "solution.png", title=f"Our engine's solution, units {units}")
     bending = spec.kind in BENDING_KINDS
@@ -472,7 +476,100 @@ def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[st
                    if at_grip else ""),
                 documents.long_table(["Criterion", "Factor", "Loading at failure", "Ply (angle)", f"Element (x, y in {escape(labels['length'])}), where", "Mode"],
                                      rows, r">{\raggedright\arraybackslash}p{2.1cm}rr>{\raggedright\arraybackslash}p{2cm}Y>{\raggedright\arraybackslash}p{1.9cm}")]
+    method = test_method_section(spec, deck, solution, units, calculix)
+    if method is not None:
+        out.append(method[0])
+        summary["test_method"] = method[1]
     return "\n\n".join(out), summary
+
+
+VERDICT_WORDS = {"met": "met", "deviation": "deviation", "advisory": "not followed", "note": "note", "na": "does not apply"}
+
+
+def calculix_method(src, record: dict, rows, units: str) -> dict | None:
+    """CalculiX's chord modulus at the twin's strain-measurement nodes, from the record (ADR-0072); None without a strain measurement or
+    when the record does not hold those nodes."""
+    found = extensometer_of(load_spec(src.twin))
+    return calculix_test_method(rows, record["units"], units, *found) if found is not None else None
+
+
+def three(value: float) -> str:
+    """A number at three significant figures as prose prints it, without an exponent: 2230, not 2.23e+03 (the standards report three)."""
+    return f"{float(f'{value:.3g}'):g}"
+
+
+def test_method_section(spec, deck, solution, units: str, calculix: dict | None) -> tuple[str, dict] | None:
+    """The section on the test standard (ADR-0072): the specimen judged against the standard's clauses, the procedure's clauses left to the
+    laboratory, and the quantities the standard reduces a test to, at three significant figures as the standards report them. None for a
+    coupon that names no standard and states no strain measurement."""
+    inputs = method_inputs(spec)
+    if inputs is None:
+        return None
+    summary = field_data(deck, solution, units, criteria=tuple(spec.output.fpf_criteria), method=inputs)["summary"]
+    tm = summary.get("test_method")
+    if tm is None:
+        return None
+    u = tm["units"]
+    judged = conformance(spec)
+    out = [rf"\section{{The test method{': ' + escape(tm['designation']) if tm['designation'] else ''}}}\label{{sec:test-method}}"]
+    if judged is not None:
+        words = judged.words()
+        out.append(escape(f"{judged.profile.designation} covers the {judged.profile.title.lower()}. {words[:1].upper()}{words[1:]}. Each requirement carries its clause, in our words: read the clause in your own copy of the standard. A "
+                          "deviation is reported and does not stop the run, and the model is never said to conform: the test is the laboratory's."))
+        rows = [rf"{escape(j.requirement.clause)} & {escape(j.requirement.text)} & {escape(j.value)} & {escape(j.limit)} & {escape(VERDICT_WORDS[j.state])} \\"
+                for j in judged.judged if j.state != "lab"]
+        out.append(documents.long_table(["Clause", "Requirement", "This coupon", "The clause asks", "Verdict"], rows,
+                                        r">{\raggedright\arraybackslash}p{1.6cm}Y>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{3.1cm}"
+                                        r">{\raggedright\arraybackslash}p{1.5cm}"))
+        lab = [j.requirement for j in judged.judged if j.state == "lab"]
+        out.append(r"The clauses of the procedure, for the laboratory's report:" + "\n" + r"\begin{itemize}" + "\n"
+                   + "\n".join(rf"\item {escape(r.clause)}: {escape(r.text)}" for r in lab) + "\n" + r"\end{itemize}")
+    q = []
+
+    def row(name: str, value, unit: str, how: str) -> None:
+        q.append(rf"{escape(name)} & {number(value, 3)} & {escape(unit)} & {escape(how)} \\")
+
+    row("Gross area A", tm["area"], u["area"], f"width {three(tm['width'])} times thickness {three(tm['thickness'])} (D3039 §11.2.2, C1869 Eq 2)")
+    row("Force along the coupon P", abs(tm["force"]), u["force"], "the moving grip's reaction, or the applied force")
+    row("Stress P/A", abs(tm["stress"]), u["stress"], "D3039 Eq 6, C1869 Eq 1")
+    if tm.get("hole"):
+        h = tm["hole"]
+        row("Net area through the hole", h["net_area"], u["area"], "(width less the hole) times thickness (C1869 Eq 5)")
+        row("Net stress", abs(h["net_stress"]), u["stress"], "P over the net area")
+        row("Width over hole diameter", h["width_to_hole"], "-", "C1869 Eq 7")
+        row("Hole diameter over thickness", h["hole_to_thickness"], "-", "C1869 Eq 8")
+    s = tm.get("strain")
+    lt = tm["laminate_theory"]
+    if s:
+        row(f"Strain over the {s['device']}", abs(s["value"]) * 1e6, "microstrain", f"two nodes {three(s['modelled_length'])} {u['length']} apart on the centre line (D3039 Eq 7)")
+        row("Stress at 1000 microstrain", abs(s["chord"]["stress_from"]), u["stress"], f"force {three(abs(s['chord']['force_from']))} {u['force']}")
+        row("Stress at 3000 microstrain", abs(s["chord"]["stress_to"]), u["stress"], f"force {three(abs(s['chord']['force_to']))} {u['force']}")
+        row("Chord modulus, 1000 to 3000 microstrain", s["chord"]["modulus"], u["modulus"], "D3039 Table 3, Eq 8; a linear model gives the same chord over any range")
+        if calculix:
+            row("Chord modulus, CalculiX", calculix["calculix"]["modulus"], u["modulus"],
+                f"its reaction and its displacements at the same two nodes; ours on the twin {three(calculix['ours']['modulus'])}, {calculix['difference']}")
+        row("Laminate modulus along the pull", lt["modulus"], u["modulus"], "classical laminate theory, the engine's ABD")
+        if s.get("poisson") is not None:
+            row("Poisson's ratio", s["poisson"], "-", "minus the strain across the width over the strain along it, at mid-length (D3039 Eq 9)")
+            row("Laminate Poisson's ratio", lt["poisson"], "-", "classical laminate theory")
+    earliest = tm.get("earliest")
+    if earliest:
+        first = tm["fpf"][earliest]
+        basis = tm["fpf_basis"]
+        row(f"First-ply-failure stress, gross ({CRITERION.get(earliest, earliest)})", abs(first["stress"]), u["stress"], f"over {basis}, {first.get('place') or ''}")
+        if "net_stress" in first:
+            row("First-ply-failure stress, net", abs(first["net_stress"]), u["stress"], "the same load over the net area")
+        if "strain" in first:
+            row("Strain at first-ply failure", abs(first["strain"]) * 1e6, "microstrain", "over the strain measurement")
+    out.append(r"The quantities the standard reduces a test to, from our engine's solution at three significant figures (the standards report three):")
+    out.append(documents.long_table(["Quantity", "Value", "Unit", "How"], q, r">{\raggedright\arraybackslash}p{4.2cm}rlY"))
+    notes = [r"A first-ply-failure stress is the load at which the first ply fails by the criterion, over the area: not the ultimate strength the "
+             r"standard takes at the maximum force of a test, which a linear model cannot give."]
+    if tm.get("note_b"):
+        notes.append(r"The first ply fails below 6000 microstrain, where D3039's Table 3 note B moves the chord range to 25 to 50\% of the ultimate; "
+                     r"a linear model gives no ultimate, so the 1000 to 3000 microstrain chord above stands.")
+    out.append(" ".join(notes))
+    return "\n\n".join(out), tm
 
 
 # --------------------------------------------------------------------------------------------- chapter 6, verification
@@ -603,8 +700,87 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
     return "\n\n".join(out)
 
 
+def percent_change(change: float | None) -> str:
+    """A change from the previous mesh as the page prints it: signed, two figures under 1 %, one decimal above (`percentChange`)."""
+    if change is None:
+        return DASH
+    magnitude = abs(100.0 * change)
+    text = "0.00" if magnitude < 1e-3 else f"{magnitude:.2g}" if magnitude < 1 else f"{magnitude:.1f}"
+    return ("$-$" if change < 0 and magnitude >= 1e-3 else "+") + text + r"\,\%"
+
+
+def worst_change(changes: list[float | None] | None) -> float | None:
+    """The largest |change| of a triple's components, the one its row reports."""
+    finite = [c for c in (changes or []) if c is not None]
+    return max(finite, key=abs) if finite else None
+
+
+def convergence_section(spec, units: str) -> str:
+    """The mesh convergence study (ADR-0068), computed while the document is built as every number here is: one column per mesh, each
+    cell the value and its change from the previous mesh, a last column saying whether the quantity has settled, and the words."""
+    study = convergence_study(spec)
+    out = [r"\section{Mesh convergence: what settles as the mesh is refined}\label{sec:convergence}"]
+    if not study["studied"]:
+        out.append(escape(f"Not studied: {study['reason']}."))
+        return "\n\n".join(out)
+    labels = documents.UNIT_LABEL[units]
+    meshes, changes, flags, below = study["meshes"], study["changes"], study["settled"], study["settled_below"]
+    last = len(meshes) - 1
+
+    def verdict(change: float | None) -> str:
+        if change is None:
+            return DASH
+        return percent_change(change) + (", settled" if abs(change) < below else ", still moving")
+
+    def cells(values: list[str], steps: list[float | None]) -> list[str]:
+        return [v + (f" ({percent_change(c)})" if i > 0 and c is not None else "") for i, (v, c) in enumerate(zip(values, steps))] + [verdict(steps[last])]
+
+    def row(name: str, values: list[str], steps: list[float | None]) -> str:
+        return " & ".join([name, *cells(values, steps)]) + r" \\"
+
+    def triple(values: list[float]) -> str:  # the triples print as the validation table does: the noise beside the real values as 0 (`settled`)
+        return " / ".join(number(v, 5) for v in settled(values))
+
+    table = [row(f"Reaction force, {escape(labels['force'])}", [number(m["reaction"], 5) for m in meshes], changes["reaction"]),
+             row(f"Gauge centre {documents.MATH['eps_x']} / {documents.MATH['eps_y']} / {documents.MATH['gamma_xy']}",
+                 [triple(m["gauge_strain"]) for m in meshes], [worst_change(c) for c in changes["gauge_strain"]])]
+    for k, p in enumerate(meshes[0]["plies"]):
+        table.append(row(f"Ply {p['ply']} ({p['angle']:g}°) {documents.MATH['sigma_1']} / {documents.MATH['sigma_2']} / {documents.MATH['tau_12']} at the gauge centre, "
+                         f"{escape(labels['stress'])}", [triple(m["plies"][k]["stress_12"]) for m in meshes], [worst_change(c) for c in changes["plies"][k]["stress_12"]]))
+    for k, p in enumerate(meshes[0]["peaks"]):
+        table.append(row(rf"Ply {p['ply']} ({p['angle']:g}°) largest $|\sigma_1|$ over the mesh{', clamped edge' if p['touches_grip'] else ''}, {escape(labels['stress'])}",
+                         [number(m["peaks"][k]["s1"], 5) for m in meshes], changes["peaks"][k]["s1"]))
+    for criterion, steps in changes["fpf"].items():
+        table.append(row(f"First-ply failure $R$, {escape(CRITERION.get(criterion, criterion))}, over the mesh", [number(m["fpf"][criterion], 5) for m in meshes], steps))
+    for criterion, steps in changes["fpf_gauge"].items():
+        table.append(row(f"First-ply failure $R$, {escape(CRITERION.get(criterion, criterion))}, over the gauge section",
+                         [number(m["fpf_gauge"][criterion], 5) for m in meshes], steps))
+    header = ["Quantity", *[rf"{m['factor']}$\times$: {m['nx']} by {m['ny']}, {m['elements']} elements" for m in meshes],
+              rf"Last step (settled under {100 * below:g}\,\%)"]
+    gauge = list(dict.fromkeys(m["gauge_element"] for m in meshes))
+    settled_names = [name for key, name in (("reaction", "the reaction"), ("gauge_strain", "the gauge-centre strain"), ("plies", "every ply's gauge stresses")) if flags[key]]
+    moving_names = [name for key, name in (("peaks", "the clamped-edge peaks"), ("fpf", "the first-ply-failure factor over the mesh"),
+                                           ("fpf_gauge", "the factor over the gauge section")) if not flags[key]]
+    words = (f"Our engine solved the coupon on its own mesh and on refinements that split every element along both axes, and read the same quantities at the "
+             f"gauge-centre element (element {', then '.join(str(e) for e in gauge)}{', the one nearest the probe on each mesh' if len(gauge) > 1 else ''}); a cell's "
+             f"percentage is the change from the previous mesh, a triple's the largest of its components against its largest value.")
+    def listed(names: list[str]) -> str:  # "a", "a and b", "a, b and c"
+        return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+    if settled_names:
+        words += f" Between the two finest meshes, {listed(settled_names)} moved by less than {100 * below:g} %: these are the numbers a finer mesh confirms."
+    if moving_names:
+        moving = listed(moving_names)
+        words += (f" {moving[0].upper() + moving[1:]} still moved by more than {100 * below:g} % at the last refinement: where a gripped tab ends at a free edge "
+                  "the elastic solution is singular, so a value read there grows with every refinement and is a trend, not a validation value.")
+    for o in study["left_out"]:
+        words += f" The {o['factor']}x mesh ({o['elements']} elements) was left out: past the study's cap of {study['cap']}."
+    out += [escape(words), documents.long_table(header, table, "Y" + "r" * len(meshes) + "l", r"\footnotesize")]
+    return "\n\n".join(out)
+
+
 def verification_chapter(src: Sources, deck, solution, record: dict, rows, problems, summaries, units: str, map_drawn: bool, full_tables: bool, c,
-                         figures: Path, coupled_reaction: float | None = None) -> str:
+                         figures: Path, coupled_reaction: float | None = None, spec=None) -> str:
     solver = record["solver"]
     twin = next((r.kernel for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
     same = ""
@@ -625,6 +801,7 @@ def verification_chapter(src: Sources, deck, solution, record: dict, rows, probl
            + r". Elsewhere Chapter~\ref{ch:results} is our engine's alone." + escape(same) + r" The record and the solver's conventions file are kept with us; this "
            r"chapter and Appendix~\ref{app:record} print them.",
            validation_section(deck, solution, record, rows, c, units),
+           *([convergence_section(spec, units)] if spec is not None else []),
            r"\section{CalculiX: every group of compared numbers}",
            documents.summary_section(record, rows, problems, summaries, units, METHOD),
            r"To see it yourself in PrePoMax 2.6: File, Import the CalculiX deck from the package (\texttt{2-our-model/calculix/}), run it, then File, "
@@ -723,6 +900,12 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
                      + (r", so the loading of this model is past first-ply failure" if factor < 1 else "") + "." + others
                      + r" No other solver has checked first-ply failure")
         verdict.append(text + ".")
+    if summary.get("test_method", {}).get("designation"):
+        tm = summary["test_method"]
+        s = tm.get("strain")
+        verdict.append(rf"\textbf{{Test method.}} Checked against {escape(tm['designation'])} (Section~\ref{{sec:test-method}}): the stress on the gross "
+                       rf"area is {number(abs(tm['stress']), 3)} {escape(tm['units']['stress'])}"
+                       + (rf", the chord modulus {number(s['chord']['modulus'], 3)} {escape(tm['units']['modulus'])}" if s else "") + ".")
     agreeing = sum(r.agrees for r in rows)
     expected = record["expected"]
     verdict.append(rf"\textbf{{Verified against CalculiX}} {escape(str(solver['version']))} ({escape(solver['element_type'])}) at "
@@ -849,7 +1032,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         c.package = package
     documents.difference_figure(rows, figures / "differences.png")
     map_drawn = documents.element_map(rows, summaries, element_centroids(rec_solution, deck_units), rec_solution, deck_units, figures / "element-map.png")
-    results, summary = results_chapter(spec, deck, solution, units, figures)
+    results, summary = results_chapter(spec, deck, solution, units, figures, calculix_method(src, record, rows, units))
     abaqus = abaqus_chapter(src, spec, deck, solution, deck_units, committed, c, figures)
 
     # the audit (ADR-0043): our tools score the rubric; the chapter and the form show the same rows
@@ -894,7 +1077,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\chapter{Results from our engine}\label{ch:results}", results,
         r"\chapter{Verification against other solvers}\label{ch:verification}",
         verification_chapter(src, deck, solution, record, rows, problems, summaries, deck_units, map_drawn, full_tables, c, figures,
-                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None),
+                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None, spec),
         r"\chapter{What this shows and what it does not}\label{ch:reading}", reading_chapter(src, card, c),
         r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, audited + compared, form, deck_units, escape, code, team.table, documents.kv_table,
                                                                     team_built=c is not None),

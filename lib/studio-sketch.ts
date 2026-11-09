@@ -2,7 +2,7 @@
  * bending coupon and a plate's drawn boxes, each at the position the engineer typed. Nothing here is a result: the sketch is labelled
  * "not meshed", the thickness is a proportion of plies times ply thickness so the slab reads as a laminate, and no number is printed
  * from it (ADR-0001). The mesh, the held sets and the loads come from the package once the setup is checked (ADR-0051). */
-import { BENDING_TESTS, FOUR_POINT_TEST, OPEN_HOLE_TEST, PLATE_TEST, unitLabels, unitsOf, type StudioForm } from "./studio-form";
+import { BENDING_TESTS, FOUR_POINT_TEST, OPEN_HOLE_TEST, PLATE_TEST, standardOf, unitLabels, unitsOf, type StudioForm } from "./studio-form";
 import { libraryThickness, pliesOf } from "./studio-chat";
 import type { PlateLists } from "./studio-plate";
 
@@ -20,6 +20,13 @@ export type Sketch = {
   boxes: SketchBox[];
   plies: number;
   lengthUnit: string;
+  /** Bonded tabs as typed (ADR-0072): their thickness and their bevel in degrees, drawn on both faces of each tab; null without them. */
+  tabThickness: number | null; tabBevel: number | null;
+  /** The strain measurement: its device and gauge length, drawn as two knife edges centred on the coupon; null when it is not typed or does
+   * not fit between the tabs. */
+  strain: { device: string; length: number } | null;
+  /** The standard picked and its specimen, for the caption. */
+  standard: string | null; specimen: string | null;
 };
 
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
@@ -68,10 +75,21 @@ export function sketchOf(form: StudioForm, lists?: PlateLists | null): Sketch | 
       boxes.push({ name: region.name.trim() || `Box ${boxes.length + 1}`, x0, x1, y0, y1 });
     }
   }
+  const tabThickness = tabs !== null ? positive(form.tab_thickness) : null;
+  const bevel = positive(form.tab_bevel);
+  const tabBevel = tabThickness !== null && bevel !== null && bevel <= 90 ? bevel : null;
+  const gauge = !bending && !plate ? positive(form.strain_length) : null;
+  const device = (form.strain_device ?? "").trim();
+  const strain = gauge !== null && device && gauge < length - 2 * (tabs ?? 0) ? { device, length: gauge } : null;
+  const profile = standardOf(form);
   const listed = pliesOf(form).filter((text) => NUMBER.test(text)).length;
   const plies = form.symmetric === "yes" ? 2 * listed : listed;
   const plyThickness = positive(form.ply_thickness) ?? libraryThickness(form);
   const toScale = plies > 0 && plyThickness !== null && plyThickness > 0;
   const thickness = toScale ? plies * (plyThickness as number) : 0.02 * Math.max(width, length);
-  return { width, length, thickness, toScale, tabs, hole, supports, noses, boxes, plies, lengthUnit: unitLabels(unitsOf(form)).length };
+  return {
+    width, length, thickness, toScale, tabs, hole, supports, noses, boxes, plies, lengthUnit: unitLabels(unitsOf(form)).length,
+    tabThickness: tabBevel !== null ? tabThickness : null, tabBevel, strain, standard: profile?.designation ?? null,
+    specimen: profile?.variant_words.length && form.specimen ? form.specimen : null,
+  };
 }

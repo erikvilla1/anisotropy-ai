@@ -87,6 +87,58 @@ export const STRAIN_KEYS = ["strain_device", "strain_length"];
 export const standardOf = (form: StudioForm): StandardProfile | null => STANDARDS.find((p) => p.designation === form.standard) ?? null;
 /** The standards that cover a test, as the Standard row offers them. */
 export const standardsFor = (test: string): StandardProfile[] => STANDARDS.filter((p) => p.tests.includes(test));
+
+/** The words a list row offers on this form (ADR-0072): the Standard row "none" and the standards of the test picked (every one before a
+ * test is picked), the Specimen row the specimens of the standard picked; every other row its own words. The check still refuses a word
+ * that does not belong. */
+export function wordsFor(field: FieldDefinition, form: StudioForm): string[] {
+  if (field.key === "standard") return [NO_STANDARD, ...(form.test ? standardsFor(form.test) : STANDARDS).map((p) => p.designation)];
+  if (field.key === "specimen") return standardOf(form)?.variant_words ?? field.words;
+  return field.words;
+}
+
+/** The form with another test, and what was cleared: a standard that does not cover the new test goes back to none, with its specimen,
+ * and the note says so, so no row keeps a word the check would refuse. */
+export function withTest(form: StudioForm, test: string): { form: StudioForm; note: string } {
+  const standard = standardOf(form);
+  if (!standard || standard.tests.includes(test)) return { form: { ...form, test }, note: "" };
+  return {
+    form: { ...form, test, standard: NO_STANDARD, specimen: "" },
+    note: `${standard.designation} covers ${standard.tests.join(" and ")}, not ${test || "a blank test"}: the Standard row is back to none.`,
+  };
+}
+
+/** The form with another standard: a specimen the new standard does not name is cleared. */
+export function withStandard(form: StudioForm, designation: string): StudioForm {
+  const next = { ...form, standard: designation };
+  const words = standardOf(next)?.variant_words ?? [];
+  return words.includes(form.specimen ?? "") ? next : { ...next, specimen: "" };
+}
+
+/** Rows merged into the form as the chat states them: a test that the standard picked does not cover clears the standard, and a standard
+ * clears a specimen it does not name, as the panels do (ADR-0072). */
+export function mergeRows(form: StudioForm, rows: StudioForm): StudioForm {
+  let next: StudioForm = { ...form, ...rows };
+  if (rows.test !== undefined && rows.standard === undefined) next = withTest({ ...next, test: form.test }, rows.test).form;
+  if (rows.standard !== undefined) next = withStandard(next, rows.standard);
+  return next;
+}
+
+/** A standard's sizes the form can take: its specimens (C1869 A, B) or its classes of laminate (D3039 Table 2). */
+export const presetsOf = (profile: StandardProfile): StandardPreset[] => [...profile.variants, ...profile.classes];
+
+/** The rows a standard's size sets, in the coupon's units as the engine wrote them (the page converts nothing), with the specimen it names
+ * and the words of Where the size comes from. A size without bonded tabs (D3039's balanced class, gripped through emery cloth) clears the tab
+ * rows another size of the same standard set; the tab length it does not give stays as typed. */
+export function presetRows(form: StudioForm, profile: StandardProfile, preset: StandardPreset): StudioForm {
+  const rows: StudioForm = {};
+  for (const [key, value] of Object.entries(preset.values[unitsOf(form)] ?? {})) rows[key] = String(value);
+  const tabbed = presetsOf(profile).some((p) => Object.values(p.values).some((v) => "tab_thickness" in v));
+  if (tabbed && !("tab_thickness" in rows)) for (const key of TAB_KEYS) rows[key] = "";
+  if (profile.variant_words.includes(preset.key)) rows.specimen = preset.key;
+  rows.size_from = `${profile.designation}, ${preset.clause}: ${preset.label}` + (preset.note ? `; ${preset.note}` : "");
+  return rows;
+}
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /** The public IM7/8552 example (the stand-in of `fea/tests/public_coupon.py`): a complete, solvable coupon to start from. */
@@ -187,9 +239,9 @@ export function rowErrorsFrom(checklist: Checklist): Record<string, string> {
   return errors;
 }
 
-/** The first sentence of a row's help, for the hint under its input. */
+/** The first sentence of a row's help, for the hint under its input; "e.g." and "i.e." do not end a sentence. */
 export function shortHelp(field: FieldDefinition): string {
-  const text = field.help.split(/(?<=[.;])\s/)[0] ?? "";
+  const text = field.help.split(/(?<!\be\.g\.|\bi\.e\.)(?<=[.;])\s/)[0] ?? "";
   return text.length > 140 ? text.slice(0, 137).trimEnd() + "..." : text;
 }
 

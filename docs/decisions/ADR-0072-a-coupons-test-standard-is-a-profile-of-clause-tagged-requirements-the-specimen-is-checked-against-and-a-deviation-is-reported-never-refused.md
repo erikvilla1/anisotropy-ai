@@ -80,6 +80,19 @@ On the website side:
   - the tab and strain rows are hidden for bending and a plate;
   - the chat writes the listed designation.
 
+Part 2, the studio (2026-11-08):
+- `lib/studio-form.ts`: `wordsFor`, `withTest`, `withStandard`, `mergeRows`, `presetsOf`, `presetRows`.
+- `components/studio/standard-card.tsx`, `requirement-table.tsx` (a list, to fit the rail) and `components/workspace/panels/standard-size.tsx`.
+- The checklist item opens the judged requirements; the sketch draws bonded tabs and the strain measurement (`lib/studio-sketch.ts`, `components/studio/sketch-canvas.tsx`). The hole stays an outline on the sketch, not a cut.
+- Evidence: `tests/studio-standards.test.ts` (6 passed), `npm test` 174 passed and 1 skipped, `npm run test:studio` 16 passed with the new scenario, `tests/browser/expansion.spec.ts` 6 passed; screenshots in `.local/website/screenshots/standards-*.png`.
+
+Part 3, the quantities (2026-11-08):
+- `fea/src/anisotropy_fea/test_quantities.py` holds the standards' formulas (gross and net area, stress, extensometer strain, chord modulus, Poisson's ratio) and `method_summary`, which `fields.field_data` writes as `summary.test_method`; `fea/docs/theory.md` Section 9. This differs from the plan, which put the formulas in the engine: they act on the finite element results, which the project rules place in `fea`, and the engine's laminate theory, `engineering_constants`, is their check.
+- The form puts two probe nodes, `extensometer_bottom` and `extensometer_top`, at the measurement's ends, with node rows there and an even count across; the decks print them, and the CalculiX record carries their displacements (`run_coupon.py`). `calculix_summary.extensometer_of` and `calculix_test_method` give CalculiX's chord modulus through the same functions.
+- The fact sheet and its sentences, the document's Test method section and cover sentence, the Summary's card, the run result's `standard`; the API's `recorded_inputs` are unchanged, since the run record's response carries the standard.
+- The public check `fea/checks/d3039-im7-8552/` with its CalculiX record and reading.
+- A coupon with a strain measurement reopens in the studio with its mesh as seeds per segment (the "Your Abaqus mesh" rows), not as an element size: the extensometer's node rows make it a seeded mesh, read back as one; the mesh is the same.
+
 ## Why (evidence)
 
 - **The public IM7/8552 coupon under D3039:**
@@ -101,6 +114,7 @@ On the website side:
   - `npm test`: 168 passed, 1 skipped; `npm run typecheck` is clean;
   - `npm run test:studio` after `npm run build`: 15 passed;
   - `tools/export_form_definition.py --check` reports the definition current.
+- **Part 3:** on the public IM7/8552 coupon under D3039 the virtual extensometer's chord modulus is 60.8494 GPa against laminate theory's 60.8485 GPa, and Poisson's ratio 0.315174 against 0.315173 (`fea/tests/test_test_quantities.py`, 8 passed); the check's CalculiX record agrees on 61 of 61 values, CalculiX's chord modulus 60.38 GPa (its reaction 0.78 % lower; the strains agree to seven figures).
 - **The 14 local coupon specs:** `uv run python tools/migrate_standard.py --dry-run` found none that needed restating.
 - **The publisher's pages:** https://store.astm.org/d3039_d3039m-17r25.html and https://store.astm.org/c1869-18.html (2026-11-08).
 - **Not yet checked:**
