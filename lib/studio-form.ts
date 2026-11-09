@@ -29,6 +29,20 @@ export type FormDefinition = {
   /** Each library material's E1, E2, G12 and ply thickness in every system, written by the engine: the page converts nothing. */
   library_constants: Record<string, Record<string, LibraryConstants>>;
   plate?: { test: string; edges: string[]; areas: string[]; with_tabs: string[]; with_hole: string[]; dofs: Record<string, string> };
+  /** The test standards the Standard row offers (ADR-0072): each with its tests, the rows it needs, its specimens or classes with their sizes in
+   * every system, and its requirements by clause. The page judges nothing: the checklist's Test standard item carries the judgement. */
+  standards: { none: string; profiles: StandardProfile[] };
+};
+/** A size a standard names: a specimen (C1869 A, B) or a class of laminate (D3039 Table 2), by row, in every unit system. */
+export type StandardPreset = {
+  key: string; label: string; clause: string; minimum: string[]; note: string; values: Record<string, Record<string, number>>;
+  thickness: Record<string, number | null>;
+};
+export type StandardRequirement = { id: string; clause: string; level: string; text: string; rows: string[] };
+export type StandardProfile = {
+  id: string; designation: string; title: string; organisation: string; catalog_url: string; edition_note: string; systems: string; rights: string;
+  tests: string[]; aliases: string[]; needs: string[]; variant_words: string[]; variants: StandardPreset[]; classes: StandardPreset[];
+  requirements: StandardRequirement[];
 };
 /** Every row's text as typed, by field key; blank means the row is empty. */
 export type StudioForm = Record<string, string>;
@@ -64,6 +78,15 @@ export const OPEN_HOLE_TEST = "open-hole tension";
 export const BENDING_TESTS = ["three-point bending", "four-point bending"];
 export const FOUR_POINT_TEST = "four-point bending";
 export const PLATE_TEST = formDefinition.plate?.test ?? "plate";
+export const NO_STANDARD = formDefinition.standards.none;
+export const STANDARDS: StandardProfile[] = formDefinition.standards.profiles;
+/** Bonded tabs and the strain measurement: rows of the pulled and pushed tests only, which the check refuses for bending and a plate. */
+export const TAB_KEYS = ["tab_thickness", "tab_bevel", "tab_material"];
+export const STRAIN_KEYS = ["strain_device", "strain_length"];
+/** The standard the form's Standard row names; null for none, a blank row or a word the list does not hold (the check refuses it). */
+export const standardOf = (form: StudioForm): StandardProfile | null => STANDARDS.find((p) => p.designation === form.standard) ?? null;
+/** The standards that cover a test, as the Standard row offers them. */
+export const standardsFor = (test: string): StandardProfile[] => STANDARDS.filter((p) => p.tests.includes(test));
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /** The public IM7/8552 example (the stand-in of `fea/tests/public_coupon.py`): a complete, solvable coupon to start from. */
@@ -104,6 +127,8 @@ export function sectionsFor(form: StudioForm): SectionDefinition[] {
     if (field.key === "tab_length") return !bending;
     if (GRIP_KEYS.includes(field.key)) return !bending && !plate;
     if (LOADING_KEYS.includes(field.key)) return !plate;
+    if (TAB_KEYS.includes(field.key) || STRAIN_KEYS.includes(field.key)) return !bending && !plate;
+    if (field.key === "specimen") return (standardOf(form)?.variant_words.length ?? 0) > 0; // only a standard that names its specimens asks
     return true;
   };
   return formDefinition.sections
@@ -142,7 +167,11 @@ export function formFromValues(values: Record<string, unknown>): StudioForm {
   return form;
 }
 
-export type CheckItem = { id: string; label: string; state: "pass" | "warn" | "fail" | "missing" | "pending"; message: string; rows: string[] };
+/** One requirement of the coupon's standard as the check judged it (ADR-0072): met, a deviation, an advisory, a note, the laboratory's, or na. */
+export type JudgedRequirement = StandardRequirement & { state: "met" | "deviation" | "advisory" | "note" | "lab" | "na"; value: string; limit: string };
+export type CheckItem = {
+  id: string; label: string; state: "pass" | "warn" | "fail" | "missing" | "pending"; message: string; rows: string[]; requirements?: JudgedRequirement[];
+};
 export type Checklist = { items: CheckItem[]; designation: string | null; coupon_exists: boolean; attempts: number; state: "ready" | "blocked"; problems: string[] };
 
 /** The rows a checklist names, by field key, with the item's message: what the form highlights. */

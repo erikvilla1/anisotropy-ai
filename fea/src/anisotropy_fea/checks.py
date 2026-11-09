@@ -27,6 +27,7 @@ from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
 from .spec import BENDING_KINDS, TEST_CODES, SpecError, full_angles, layup_text, spec_plies
+from .standards.conformance import conformance
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
 STATES = ("pass", "warn", "fail", "missing", "pending")
@@ -37,6 +38,7 @@ ITEMS = (  # in the order the studio lists them: id, label
     ("identity", "Who and which coupon"),
     ("units", "Units consistent"),
     ("geometry", "Geometry defined"),
+    ("standard", "Test standard"),
     ("material", "Material defined"),
     ("laminate", "Laminate assigned"),
     ("constraints", "Constraints defined"),
@@ -48,10 +50,12 @@ ITEMS = (  # in the order the studio lists them: id, label
     ("document", "Document builder installed"),
 )
 ITEM_OF_KEY = {  # which item a form row belongs to
-    **{key: "identity" for key in ("filled_by", "date", "notes", "test", "material_code", "layup_code", "standard", "size_from", "team_model", "test_data",
+    **{key: "identity" for key in ("filled_by", "date", "notes", "test", "material_code", "layup_code", "size_from", "team_model", "test_data",
                                    "name_part", "name_instance", "name_material", "name_layup", "name_section")},
     "units": "units",
-    **{key: "geometry" for key in ("length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span")},
+    **{key: "geometry" for key in ("length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span", "tab_thickness", "tab_bevel",
+                                   "tab_material")},
+    **{key: "standard" for key in ("standard", "specimen", "strain_device", "strain_length")},
     **{key: "mesh" for key in ("hole_circumferential", "hole_radial", "hole_ring", "hole_growth", "element_size", "mesh_nx", "mesh_partitions", "mesh_seeds")},
     **{key: "laminate" for key in ("symmetric", "ply_thickness", *(f"ply_{i}" for i in range(1, 17)))},
     **{key: "material" for key in ("library", "own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c",
@@ -71,6 +75,7 @@ class CheckItem:
     state: str
     message: str
     rows: tuple[str, ...] = ()  # the form rows concerned, by label
+    requirements: tuple[dict, ...] = ()  # the Test standard item: each requirement of the standard, judged (standards.conformance, ADR-0072)
 
 
 @dataclass(frozen=True)
@@ -83,7 +88,8 @@ class Checklist:
     problems: tuple[str, ...]  # every refusal, as the tools word it
 
     def as_dict(self) -> dict[str, Any]:
-        return {"items": [{**asdict(item), "rows": list(item.rows)} for item in self.items], "designation": self.designation, "coupon_exists": self.coupon_exists,
+        return {"items": [{**asdict(item), "rows": list(item.rows), "requirements": list(item.requirements)} for item in self.items],
+                "designation": self.designation, "coupon_exists": self.coupon_exists,
                 "attempts": self.attempts, "state": self.state, "problems": list(self.problems)}
 
 
@@ -172,6 +178,7 @@ class _Notes:
         self.state = {item_id: "pending" for item_id, _ in ITEMS}
         self.messages: dict[str, list[str]] = {item_id: [] for item_id, _ in ITEMS}
         self.rows: dict[str, list[str]] = {item_id: [] for item_id, _ in ITEMS}
+        self.requirements: dict[str, tuple[dict, ...]] = {}
 
     def note(self, item_id: str, state: str, message: str, rows: tuple[str, ...] = ()) -> None:
         if self.state[item_id] == "pending" or SEVERITY[state] > SEVERITY[self.state[item_id]]:
@@ -189,8 +196,8 @@ class _Notes:
 
     def items(self) -> tuple[CheckItem, ...]:
         labels = dict(ITEMS)
-        return tuple(CheckItem(item_id, labels[item_id], self.state[item_id], "; ".join(self.messages[item_id]), tuple(self.rows[item_id]))
-                     for item_id, _ in ITEMS)
+        return tuple(CheckItem(item_id, labels[item_id], self.state[item_id], "; ".join(self.messages[item_id]), tuple(self.rows[item_id]),
+                               self.requirements.get(item_id, ())) for item_id, _ in ITEMS)
 
 
 def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,
@@ -240,6 +247,13 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             problems.append(reason)
             notes.note("material", "fail", f"our engine refuses these constants: {reason}",
                        (row("own_E1"), row("own_E2"), row("own_G12"), row("own_nu12")))
+    if spec is not None:  # the test standard: judged on the spec, whatever the mesh says; a deviation warns and never blocks (ADR-0072)
+        judged = conformance(spec)
+        if judged is None:
+            notes.note("standard", "pass", "no standard picked: the size comes from " + (spec.coupon.size_from if spec.coupon else "the spec"))
+        else:
+            notes.note("standard", "warn" if judged.deviations else "pass", judged.words(), tuple(row(key) for key in judged.deviation_rows()))
+            notes.requirements["standard"] = tuple(j.as_dict() for j in judged.judged)
     designation = named.name if named is not None else None
     exists, attempts = coupon_attempts(root, designation)
 

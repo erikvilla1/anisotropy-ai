@@ -68,7 +68,7 @@ def test_the_ply_rows_may_be_given_one_by_one(tmp_path):
 
 @pytest.mark.parametrize("changes, message", [
     ({"form_version": None}, "form_version is required"),
-    ({"form_version": "0.2"}, "form_version '0.2' is not the current form's"),
+    ({"form_version": "0.2"}, "form_version '0.2' is not one this tool reads"),
     ({"thickness": 1.0}, "unknown keys thickness"),
     ({"ply_1": 0}, "give angles or the ply rows"),
     ({"angles": "45, 0"}, "angles must be a list"),

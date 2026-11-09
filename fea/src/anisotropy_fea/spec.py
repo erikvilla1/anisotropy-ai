@@ -24,6 +24,7 @@ from anisotropy_engine.lamina import Lamina, Strengths
 from anisotropy_engine.laminate import Ply
 from anisotropy_engine.library import library_material
 
+from .standards import BY_DESIGNATION, PROFILES
 from .units import UNIT_LABEL, unit_factors
 
 Kind = Literal["unnotched_tension", "open_hole_tension", "compression", "shear_pm45", "three_point_bending", "four_point_bending", "plate"]
@@ -239,6 +240,29 @@ class Coupon(Record):
     test_data: str = Field(min_length=1)  # measured results to benchmark against, or "none" and why
 
 
+class StandardRef(Record):
+    """The test standard the coupon follows (ADR-0072): a profile of `standards.PROFILES` by id, and the specimen it names when it names
+    more than one. Only structure is checked here; how the coupon meets the standard is the checklist's (`standards.conformance`)."""
+
+    id: str
+    variant: str | None = None
+
+
+class Strain(Record):
+    """How the test measures strain along the coupon: an extensometer's gauge length or a bonded strain gauge's active length."""
+
+    device: Literal["extensometer", "strain gauge"]
+    gauge_length: PositiveFloat
+
+
+class Tabs(Record):
+    """Bonded tabs, drawn and reported: the model holds the gripped length rigidly and does not carry the tabs as material."""
+
+    thickness: PositiveFloat
+    bevel: float  # degrees from the coupon's face: 90 is a square end
+    material: str | None = Field(default=None, min_length=1)
+
+
 class OutputRequests(Record):
     fpf_criteria: list[str]
     abaqus: AbaqusOutput
@@ -248,9 +272,11 @@ class OutputRequests(Record):
 class CouponSpec(Record):
     title: str
     coupon: Coupon | None = None  # the identity card; every coupon model has one (ADR-0038)
+    test_method: StandardRef | None = None  # the standard the specimen follows, when it follows one (ADR-0072)
     kind: Kind
     units: str  # the unit system the coupon is stated in and read in (units.UNIT_SYSTEMS); a deck is written in units.deck_units_of it (ADR-0061)
     geometry: Geometry
+    tabs: Tabs | None = None  # bonded tabs: drawn and reported, not modelled as material
     mesh: MeshControls
     layup: Layup
     material: MaterialSpec
@@ -261,6 +287,7 @@ class CouponSpec(Record):
     loads: list[Load] = []  # a plate's loads
     regions: list[Region] = []  # a plate's own boxes, beside the built-in regions
     probes: Probes = Probes()
+    strain: Strain | None = None  # how the test measures strain along the coupon (ADR-0072)
     names: Names | None = None  # the deck's part, instance, material, layup and section-set names; our names when absent
     source_sha256: str = ""
     source_path: str | None = None
@@ -466,6 +493,33 @@ def validate_spec(spec: CouponSpec) -> None:
             value = getattr(spec.names, field)
             need(bool(ABAQUS_NAME.match(value)), f"names.{field} = {value!r}: a name starts with a letter and holds only letters, digits, - and _ (at most 80)")
         need(spec.names.part != spec.names.instance, "names.part and names.instance must differ")
+    # the test standard, the strain measurement and the tabs (ADR-0072): their structure; how the coupon meets a standard is the checklist's
+    if spec.test_method is not None:
+        method = spec.test_method
+        profile = PROFILES.get(method.id)
+        need(profile is not None, f"test_method.id = {method.id!r} is not one of {', '.join(PROFILES)}")
+        need(kind in profile.kinds, f"test_method.id = {method.id!r}: {profile.designation} covers {', '.join(TEST_CODES[k][1] for k in profile.kinds)}, "
+                                    f"not {TEST_CODES[kind][1]}")
+        need(spec.coupon is not None and spec.coupon.standard == profile.designation,
+             f"test_method.id = {method.id!r} needs coupon.standard = {profile.designation!r}, the designation it is listed under")
+        if profile.variant_words:
+            need(method.variant in profile.variant_words, f"test_method.variant must be one of {', '.join(profile.variant_words)} for {profile.designation}")
+        else:
+            need(method.variant is None, f"test_method.variant: {profile.designation} names no specimens")
+        if profile.requires_strain:
+            need(spec.strain is not None, f"test_method.id = {method.id!r}: {profile.designation} counts the strain measurement's gauge length in its "
+                                          "rules, so the spec needs a [strain] table")
+    elif spec.coupon is not None:
+        named = BY_DESIGNATION.get(spec.coupon.standard)
+        need(named is None, f"coupon.standard = {spec.coupon.standard!r} names a standard we check, so the spec needs [test_method] id = {named.id!r}"
+             if named is not None else "")
+    if spec.strain is not None:
+        need(kind in IN_PLANE_KINDS, "[strain] belongs to the pulled and pushed kinds")
+        free = g.length - 2 * (g.tab_length or 0.0)
+        need(spec.strain.gauge_length < free, f"strain.gauge_length ({spec.strain.gauge_length:g}) must fit between the grips, {free:g} apart")
+    if spec.tabs is not None:
+        need(kind in IN_PLANE_KINDS and bool(g.tab_length), "[tabs] describes bonded tabs: a pulled or pushed kind with a positive geometry.tab_length")
+        need(0.0 < spec.tabs.bevel <= 90.0, f"tabs.bevel is an angle in degrees above 0 and at most 90, not {spec.tabs.bevel:g}")
     # the coupon's identity card
     if spec.coupon is not None:
         designation = spec.coupon.designation
@@ -582,8 +636,10 @@ def to_si(spec: CouponSpec) -> CouponSpec:
     supports = [s.model_copy(update={"value": s.value * (L if all(d <= 3 for d in s.dofs) else 1.0)}) for s in spec.supports]  # rotations stay in radians
     loads = [ld.model_copy(update={"total": scale(ld.total, F), "pressure": scale(ld.pressure, S)}) for ld in spec.loads]
     regions = [r.model_copy(update={"x0": r.x0 * L, "x1": r.x1 * L, "y0": r.y0 * L, "y1": r.y1 * L}) for r in spec.regions]
+    strain = None if spec.strain is None else spec.strain.model_copy(update={"gauge_length": spec.strain.gauge_length * L})
+    tabs = None if spec.tabs is None else spec.tabs.model_copy(update={"thickness": spec.tabs.thickness * L})  # the bevel stays in degrees
     return spec.model_copy(update={"geometry": g, "mesh": m, "layup": layup, "material": mat, "loading": loading, "probes": probes, "si": True,
-                                   "supports": supports, "loads": loads, "regions": regions})
+                                   "supports": supports, "loads": loads, "regions": regions, "strain": strain, "tabs": tabs})
 
 
 # --- what the model takes from the spec ---------------------------------------------------------
@@ -691,7 +747,7 @@ def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
         size += f", central hole of {length(g.hole_diameter)}"
     if g.span:
         size += f", span {length(g.span)}"
-    return [
+    card = [
         ("Coupon", c.designation),
         ("Test", TEST_CODES[spec.kind][1]),
         ("Material", material),
@@ -699,9 +755,15 @@ def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
         ("Size", size),
         ("Size from", c.size_from),
         ("Standard", c.standard),
-        ("Team's model", c.team_model),
-        ("Test data", c.test_data),
     ]
+    if spec.test_method is not None and spec.test_method.variant is not None:  # rows a spec without a standard never prints (ADR-0072)
+        card.append(("Specimen", spec.test_method.variant))
+    if spec.tabs is not None:
+        card.append(("Tabs", f"bonded, {length(spec.tabs.thickness)} thick, {spec.tabs.bevel:g} deg bevel" + (f", {spec.tabs.material}" if spec.tabs.material else "")
+                     + "; drawn and reported, not modelled"))
+    if spec.strain is not None:
+        card.append(("Strain measurement", f"{spec.strain.device}, {length(spec.strain.gauge_length)} gauge length"))
+    return card + [("Team's model", c.team_model), ("Test data", c.test_data)]
 
 
 def spec_plies(spec: CouponSpec) -> list[Ply]:

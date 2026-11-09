@@ -80,7 +80,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByTestId("check-button").click();
   await expect(page.getByTestId("panel-geometry")).toHaveAttribute("data-state", "pass");
   await expect(page.getByTestId("checklist")).toHaveAttribute("data-state", "ready");
-  await expect(page.getByTestId("checklist").locator("li[data-state=pass]")).toHaveCount(12);
+  await expect(page.getByTestId("checklist").locator("li[data-state=pass]")).toHaveCount(13);
   expect(calls.checks).toHaveLength(1);
   const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
   expect(sent.length).toBe(250);

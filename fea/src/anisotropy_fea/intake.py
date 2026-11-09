@@ -30,12 +30,17 @@ from typing import Any
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
 
 from . import __version__, forms, paths
+from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
 from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
                    to_si)
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
 from .units import from_si as value_from_si, to_si as value_to_si
 
-FORM_VERSION = "0.7"  # 0.7: the ply rows count their angles from the coupon's length axis (ADR-0065); a 0.6 file is refused, never reinterpreted
+FORM_VERSION = "0.8"  # 0.8: the Standard row is a list of the standards we check, with the Specimen, tab and strain rows (ADR-0072)
+# 0.7: the ply rows count their angles from the coupon's length axis (ADR-0065); a 0.6 file is refused, never reinterpreted. A 0.7 file is read
+# as it is: no row changed its meaning in 0.8, the new rows are blank, and a Standard row that names no standard of the list is refused by row.
+READ_VERSIONS = ("0.7", FORM_VERSION)
+ROWS_ADDED = {"0.8": ("specimen", "tab_thickness", "tab_bevel", "tab_material", "strain_device", "strain_length")}  # a form of an older version lacks them
 INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD = "Coupon", "How to fill it in", "Definitions", "Library materials", "Record"
 UNITS = "mm-MPa"  # the system the rows are in unless the Units row says another, the one the labels are written in, and the library sheet's
 TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45", "three_point_bending", "four_point_bending", "plate")  # as the form lists them
@@ -46,6 +51,7 @@ YES_NO = ("yes", "no")
 CONTROLS = ("displacement", "force")
 GRIPS = ("coupling", "nodal")
 REGIONS = ("tabs", "line")
+STRAIN_DEVICES = ("extensometer", "strain gauge")
 PLIES = 16  # rows offered for the ply angles
 HOLE_DEFAULTS = {"circumferential": 32, "radial_layers": 6, "ring_ratio": 2.0, "growth": 1.2}  # the public open-hole check's O-grid
 ELEMENT_SIZE_DEFAULT = 2.0  # mm, the public checks' row spacing; `element_size_default` gives it in the stated units
@@ -118,7 +124,12 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
               "record (IM78552 for im7-8552) or numbered (M1, M2, ...) for your own constants"),
         Field("layup_code", "Layup code", "text", "optional: a short code for the stacking sequence, L1, L2 and so on; left blank, the code of this "
               "same stacking sequence is reused or the next free one is given"),
-        Field("standard", "Standard", "text", "the test standard the specimen follows, e.g. ASTM D3039, or none", default="none"),
+        Field("standard", "Standard", "list", "the test standard the specimen follows, from our list, or none for your own design. With a standard "
+              "picked we check the coupon against each of its clauses a model can meet and report the deviations; see Definitions, Test standards",
+              default=NO_STANDARD, words=STANDARD_WORDS),
+        Field("specimen", "Specimen", "list", "the standard's specimen when it names more than one: for ASTM C1869, A (a 6 mm hole in a 36 mm "
+              "wide strip), B (a 3 mm hole in a 10 mm wide strip) or other (a size of its Annex A1, reported as a variation); blank otherwise",
+              words=VARIANT_WORDS),
         Field("size_from", "Where the size comes from", "text", "where the length, width and tabs come from: a standard, a drawing, or your own design",
               required=True),
         Field("team_model", "Your Abaqus model of this coupon", "text", "the name of your Abaqus model or job for this coupon, or not built yet",
@@ -132,9 +143,20 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("tab_length", "Tab length (mm)", "number", "how much of each end the grip holds, e.g. 56; 0 for no tabs, and then set Grip region to line. "
               "Required for the pulled and pushed tests; leave it blank for bending, which has supports instead of grips", at_least=0),
     )),
+    ("Tabs and strain measurement (pulled and pushed tests; leave blank for bending and a plate)", (
+        Field("tab_thickness", "Tab thickness (mm)", "number", "the thickness of each bonded tab, e.g. 1.5; leave the three tab rows blank when the "
+              "coupon is gripped directly or through emery cloth. We draw and report the tabs; our model holds the gripped length rigidly", above=0),
+        Field("tab_bevel", "Tab bevel angle (deg)", "number", "the angle of the tab's end facing the gauge section, in degrees: 90 is a square "
+              "end, 7 a long taper; ASTM D3039 takes 5 to 90", above=0),
+        Field("tab_material", "Tab material", "text", "what the tabs are made of, e.g. E-glass/epoxy at 45 degrees, or steel"),
+        Field("strain_device", "Strain measurement", "list", "how the test reads strain along the coupon: an extensometer or a bonded strain "
+              "gauge; ASTM D3039 needs it, since its minimum length counts the gauge length", words=STRAIN_DEVICES),
+        Field("strain_length", "Strain measurement length (mm)", "number", "the extensometer's gauge length or the strain gauge's active length, "
+              "e.g. 25; it must fit between the grips", above=0),
+    )),
     ("Bending (three- and four-point bending only; ignored for the other tests)", (
-        Field("span", "Support span (mm)", "number", "the distance between the two support lines, e.g. 48; ASTM D7264 takes 32 times the laminate "
-              "thickness. The coupon lies across the supports with its length along y", above=0),
+        Field("span", "Support span (mm)", "number", "the distance between the two support lines, e.g. 48, as the standard you follow sets it. "
+              "The coupon lies across the supports with its length along y", above=0),
         Field("overhang", "Overhang (mm)", "number", "how far the coupon reaches past each support, so that Length = span + 2 overhang; 0 for a coupon "
               "that ends at its supports", default=0.0, at_least=0),
         Field("load_span", "Loading span (mm)", "number", "four-point bending only: the distance between the two loading noses, centred on the span, "
@@ -240,6 +262,9 @@ ROWS_OF_KEY = {
     "material.transverse": "G13", "grips.region": "region", "grips.kind": "grips", "loading.value": "value", "loading.control": "control",
     "names.part": "name_part", "names.instance": "name_instance", "names.material": "name_material", "names.layup": "name_layup",
     "names.section_set": "name_section", "coupon.designation": "material_code", "output.fpf_criteria": "criteria", "material.f12_star": "f12_star",
+    "coupon.standard": "standard", "test_method.id": "standard", "test_method.variant": "specimen", "test_method": "standard",
+    "tabs.thickness": "tab_thickness", "tabs.bevel": "tab_bevel", "tabs.material": "tab_material", "tabs": "tab_thickness",
+    "strain.device": "strain_device", "strain.gauge_length": "strain_length", "strain": "strain_device",
 }
 
 HOW_TO = (
@@ -266,6 +291,10 @@ HOW_TO = (
     "and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
     "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway "
     "to the tab. You do not enter these points: we place them from the geometry.",
+    "Standard: pick the test standard the specimen follows from the list, or none for your own design. With a standard picked we check the "
+    "coupon against each of its clauses a model can meet, list every deviation with its clause, and list the clauses of the procedure (specimens, "
+    "conditioning, speed, alignment, failure mode) as the laboratory's. ASTM D3039 also needs the strain measurement; ASTM C1869 needs its "
+    "specimen, A, B or other. A deviation never stops the run, and we never say a model conforms to a test standard.",
     "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
     "Send the file back as it is. If something is missing or inconsistent, we send it back with every problem named.",
 )
@@ -283,25 +312,44 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
         ("Gauge section", "The free part between the tabs, where the coupon should fail and where results are read.", ""),
     )),
     ("Tests", (
-        ("Unnotched tension", "A plain strip pulled along its length. It gives the laminate's tensile stiffness and strength.", "ASTM D3039."),
+        ("Unnotched tension", "A plain strip pulled along its length. It gives the laminate's tensile stiffness and strength.",
+         "ASTM D3039/D3039M, in our Standard list."),
         ("Unnotched compression", "A plain strip pushed along its length. It gives the compressive stiffness and strength. Our model is flat and "
-         "in-plane, so it does not buckle.", "ASTM D6641."),
+         "in-plane, so it does not buckle.", "ASTM D6641 (not in our Standard list yet)."),
         ("Open-hole tension", "A strip with a hole drilled through its centre, pulled. The hole concentrates the stress at its edge.",
-         "ASTM D5766: 36 mm wide with a 6 mm hole."),
+         "ASTM D5766 for polymer composites (not in our Standard list yet); ASTM C1869 for ceramic composites, in our list, whose Specimen A is "
+         "a 6 mm hole in a 36 mm wide strip (Table 1)."),
         ("In-plane shear", "A strip made of +45 and -45 plies only, pulled. The plies are loaded in shear, which gives the shear stiffness and "
-         "strength.", "ASTM D3518. Every ply +45 or -45, as many of each."),
+         "strength.", "ASTM D3518 (not in our Standard list yet). Every ply +45 or -45, as many of each."),
         ("Plate", "A flat laminate held and loaded on regions you name: an edge, a tab, the ring of a hole, the whole face, or a box you draw on it. "
          "Each support says which directions it holds (and a travel, if it moves); each load is a force along a direction spread over its region, or a "
          "pressure on an area. Stated from the studio, which draws the regions; the Excel form has no rows for them.",
          "A square plate simply supported on its four edges under a pressure."),
         ("Three-point bending", "A strip resting on two support lines, pushed down at midspan by a loading nose that moves by the value you give. It "
          "gives the flexural stiffness and strength; the outer plies carry most of the stress, the bottom ones in tension.",
-         "ASTM D7264 procedure A: 13 mm wide, span 32 times the thickness."),
+         "ASTM D7264 procedure A (not in our Standard list yet)."),
         ("Four-point bending", "A strip on two support lines, pushed down by two loading noses centred on the span. Between the noses the moment "
-         "is constant, so the failure is not under a nose.", "ASTM D7264 procedure B: the loading span is half the support span."),
+         "is constant, so the failure is not under a nose.", "ASTM D7264 procedure B (not in our Standard list yet)."),
         ("Support span, overhang, loading span", "The span is the distance between the support lines; the overhang is what reaches past each "
          "support (Length = span + 2 overhang); the loading span is the distance between the two noses of four-point bending.",
          "Span 48, overhang 6: a 60 mm coupon."),
+    )),
+    ("Test standards", (
+        ("Standard", "The test method the specimen follows, picked from the list on the Standard row, or none for your own design. With a "
+         "standard picked we check the coupon against each of its clauses a model can meet and say which are met. We hold the standard's "
+         "values with their clause numbers, in our words; read the clauses in your own copy.", "ASTM D3039/D3039M-17 for unnotched tension."),
+        ("Specimen", "A size the standard names. ASTM C1869 names Specimen A, a 6 mm hole in a 36 mm wide strip (Table 1), and Specimen B, a "
+         "3 mm hole in a 10 mm wide strip (Table 2); other is a size of its Annex A1, reported as a variation (section 9.2.6).", "A."),
+        ("Deviation", "A requirement of the standard the coupon does not meet. The coupon still runs; the checklist and the document state the "
+         "deviation with its clause. We never say a model conforms: the procedure (specimens, conditioning, speed, alignment, failure mode) is "
+         "the laboratory's.", "D3039 Table 1: a 150 mm coupon that needs at least 187 mm."),
+        ("Recommendation", "A size or value the standard suggests without requiring it, such as the sizes ASTM D3039 suggests for each class of "
+         "laminate in its Table 2. A recommendation not followed is noted, not counted as a deviation.", ""),
+        ("Strain measurement", "How the test reads strain along the coupon: an extensometer, by its gauge length, or a bonded strain gauge, by "
+         "its active length. ASTM D3039 counts the gauge length in its minimum length (Table 1).", "An extensometer of 25 mm."),
+        ("Tab thickness, bevel and material", "Bonded tabs: their thickness, the angle of their end (90 degrees is a square end), and what "
+         "they are made of. We draw and report them; our model holds the gripped length rigidly and does not carry the tabs as material.",
+         "1.5 mm glass/epoxy tabs with a 7 degree bevel."),
     )),
     ("Layup and plies", (
         ("Ply", "One layer of the laminate: fibres in resin, all at one angle.", ""),
@@ -595,6 +643,14 @@ class FormInput:
         return FIELDS[key].label_in(self.units)
 
 
+def version_tuple(version: str) -> tuple[int, ...]:
+    """A form version as numbers, "0.8" as (0, 8), so that versions compare; a version that is not numbers sorts first."""
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError:
+        return ()
+
+
 def read_form(path: Path | str) -> FormInput:
     """The cells of a filled-in form, by field key; refused when the file is not a coupon input form."""
     from openpyxl import load_workbook
@@ -616,7 +672,8 @@ def read_form(path: Path | str) -> FormInput:
         if key is not None:
             value = sheet.cell(r, 2).value
             cells[key] = None if isinstance(value, str) and not value.strip() else value
-    missing = [FIELDS[key].label for key in FIELDS if key not in cells]
+    added = {key for since, keys in ROWS_ADDED.items() if version_tuple(str(version)) < version_tuple(since) for key in keys}
+    missing = [FIELDS[key].label for key in FIELDS if key not in cells and key not in added]
     if len(missing) > len(FIELDS) // 2:
         raise IntakeError(f"{path.name}: not a coupon input form (its rows are not ours)")
     if missing:
@@ -642,8 +699,9 @@ def read_values(path: Path | str) -> FormInput:
     version = data.pop("form_version", None)
     if version is None:
         raise IntakeError(f"{path.name}: form_version is required; the current form is {FORM_VERSION}")
-    if str(version) != FORM_VERSION:
-        raise IntakeError(f"{path.name}: form_version {version!r} is not the current form's, {FORM_VERSION}; the rows follow the current definition")
+    if str(version) not in READ_VERSIONS:
+        raise IntakeError(f"{path.name}: form_version {version!r} is not one this tool reads ({', '.join(READ_VERSIONS)}); the current form is "
+                          f"{FORM_VERSION} and the rows follow its definition")
     lists: dict[str, list] = {}
     for name in PLATE_LISTS:
         if name in data:
@@ -709,6 +767,12 @@ def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
         match = DESIGNATION.match(spec.coupon.designation)
         values.update(material_code=match["material"], layup_code=match["layup"], standard=spec.coupon.standard, size_from=spec.coupon.size_from,
                       team_model=spec.coupon.team_model, test_data=spec.coupon.test_data)
+    if spec.test_method is not None:  # the standard as the list names it, and its specimen (ADR-0072)
+        values.update(standard=PROFILES[spec.test_method.id].designation, specimen=spec.test_method.variant)
+    if spec.tabs is not None:
+        values.update(tab_thickness=back(spec.tabs.thickness, L), tab_bevel=spec.tabs.bevel, tab_material=spec.tabs.material)
+    if spec.strain is not None:
+        values.update(strain_device=spec.strain.device, strain_length=back(spec.strain.gauge_length, L))
     values.update(length=back(g.length, L), width=back(g.width, L), tab_length=back(g.tab_length, L) if g.tab_length is not None else None,
                   hole_diameter=back(g.hole_diameter, L), span=back(g.span, L), overhang=back(g.overhang, L), load_span=back(g.load_span, L))
     if m.hole is not None:
@@ -816,6 +880,12 @@ class Values:
     loads: list[dict] | None = None
     regions: list[dict] | None = None
     units: str = UNITS  # the unit system every number above is in (ADR-0061)
+    specimen: str | None = None  # the standard's specimen when it names more than one (ADR-0072)
+    tab_thickness: float | None = None  # bonded tabs: drawn and reported, not modelled
+    tab_bevel: float | None = None  # degrees
+    tab_material: str | None = None
+    strain_device: str | None = None  # "extensometer" or "strain gauge"
+    strain_length: float | None = None
 
     @property
     def test_code(self) -> str:
@@ -905,7 +975,20 @@ def check_form(form: FormInput) -> Values:
     layup_code = text("layup_code").upper() or None
     if layup_code and not LAYUP_CODE.match(layup_code):
         problems.append(f"Layup code: {layup_code!r} is not L followed by a number, such as L1")
-    standard, size_from = text("standard") or "none", text("size_from")
+    standard, size_from = word("standard") or NO_STANDARD, text("size_from")  # "none" or a designation of the list (ADR-0072)
+    profile = profile_of_word(standard)
+    if profile is not None and kind and kind not in profile.kinds:
+        covers = ", ".join(TEST_CODES[k][1] for k in profile.kinds)
+        problems.append(f"{L('standard')}: {profile.designation} covers {covers}, not {TEST_CODES[kind][1]}; pick none or the standard of this test")
+    specimen = word("specimen") or None
+    if profile is not None and profile.variant_words:
+        if specimen is None:
+            problems.append(f"{L('specimen')}: required for {profile.designation}; one of {', '.join(profile.variant_words)}")
+        elif specimen not in profile.variant_words:
+            problems.append(f"{L('specimen')}: {specimen!r} is not a specimen of {profile.designation}; one of {', '.join(profile.variant_words)}")
+    elif specimen is not None:
+        named = ", ".join(p.designation for p in PROFILES.values() if p.variant_words)
+        problems.append(f"{L('specimen')}: belongs to a standard that names its specimens ({named}); leave it blank")
     team_model, test_data = text("team_model") or "not built yet", text("test_data") or "none"
 
     length, width, tab_length = number("length"), number("width"), number("tab_length")
@@ -945,6 +1028,26 @@ def check_form(form: FormInput) -> Values:
     hole = {"circumferential": number("hole_circumferential", whole=True), "radial_layers": number("hole_radial", whole=True),
             "ring_ratio": number("hole_ring"), "growth": number("hole_growth")}
     hole = {k: HOLE_DEFAULTS[k] if v is None else v for k, v in hole.items()}
+    tab_thickness, tab_bevel, tab_material = number("tab_thickness"), number("tab_bevel"), text("tab_material") or None
+    if tab_thickness is not None or tab_bevel is not None or tab_material is not None:
+        if kind and (bending or plate):
+            problems.append(f"{L('tab_thickness')} and the other tab rows: belong to the pulled and pushed tests; leave them blank")
+        else:
+            if tab_thickness is None or tab_bevel is None:
+                problems.append(f"{L('tab_thickness')} and {L('tab_bevel')}: give both for bonded tabs, or leave the three tab rows blank")
+            if not tab_length:
+                problems.append(f"{L('tab_thickness')}: bonded tabs need a {L('tab_length')} above 0")
+    if tab_bevel is not None and tab_bevel > 90:
+        problems.append(f"{L('tab_bevel')}: at most 90 (a square end), not {tab_bevel:g}")
+    strain_device, strain_length = word("strain_device") or None, number("strain_length")
+    if strain_device is not None or strain_length is not None:
+        if kind and (bending or plate):
+            problems.append(f"{L('strain_device')} and {L('strain_length')}: belong to the pulled and pushed tests; leave them blank")
+        elif strain_device is None or strain_length is None:
+            problems.append(f"{L('strain_device')} and {L('strain_length')}: give both, or neither")
+    elif profile is not None and profile.requires_strain:
+        problems.append(f"{L('strain_device')}: required for {profile.designation}, whose minimum length counts the gauge length (Table 1); "
+                        f"one of {', '.join(STRAIN_DEVICES)}, with its length")
 
     angles: list[float] = []
     ended = False
@@ -1043,7 +1146,8 @@ def check_form(form: FormInput) -> Values:
                   hole_diameter, hole, angles, symmetric, ply_thickness, library, own, G13, G23, control, value, element_size if size_given else None,
                   mesh_nx, partitions, seeds, grips, region, names or None, criteria, f12_star,
                   span=span if bending else None, overhang=overhang if bending else None, load_span=load_span if bending else None,
-                  supports=supports, loads=loads, regions=regions, units=units)
+                  supports=supports, loads=loads, regions=regions, units=units, specimen=specimen, tab_thickness=tab_thickness, tab_bevel=tab_bevel,
+                  tab_material=tab_material, strain_device=strain_device, strain_length=strain_length)
 
 
 def plate_regions_of(tab_length: float | None, hole_diameter: float | None, regions: list[dict]) -> list[str]:
@@ -1412,6 +1516,24 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
                                      else "a push: negative along the coupon" if kind == "compression" else "along the coupon")
     if bending:
         comments["geometry.span"] = "the distance between the support lines, as given on the form; w is held along each line"
+    profile = profile_of_word(values.standard)
+    extra: dict[str, tuple[str, dict]] = {}  # after which table each new one goes
+    if profile is not None:
+        extra["coupon"] = ("test_method", {"id": profile.id, **({"variant": values.specimen} if values.specimen else {})})
+        comments["test_method.id"] = f"{profile.designation}: the specimen is checked against it and every deviation reported (ADR-0072)"
+    if values.tab_thickness is not None:
+        extra["geometry"] = ("tabs", {"thickness": values.tab_thickness, "bevel": values.tab_bevel, **({"material": values.tab_material} if values.tab_material else {})})
+        comments["tabs.thickness"] = "bonded tabs as given on the form: drawn and reported; the model holds the gripped length rigidly"
+    if values.strain_device is not None:
+        extra["probes"] = ("strain", {"device": values.strain_device, "gauge_length": values.strain_length})
+        comments["strain.device"] = "how the test reads strain along the coupon, as given on the form"
+    if extra:
+        ordered: dict = {}
+        for key, value in data.items():
+            ordered[key] = value
+            if key in extra:
+                ordered[extra[key][0]] = extra[key][1]
+        data = ordered
     comments["output.fpf_criteria"] = (("every criterion the material allows" if values.criteria is None else "as chosen on the form") if criteria
                                        else ("no strengths given, so no failure criterion" if not strengths else "none chosen on the form"))
     header = (f"{designation.name}, {test_name}: built from the coupon input form {form_name}, filled in by {values.filled_by} on {values.day}.",
@@ -1473,7 +1595,7 @@ def render_toml(data: dict, comments: dict[str, str] | None = None, header: tupl
 def form_rows_of(message: str, units: str = UNITS) -> list[str]:
     """The form rows a spec message concerns, by the table.key names it mentions, labelled in the stated units."""
     rows = []
-    for key in re.findall(r"\b(?:geometry|mesh|layup|material|grips|loading|probes|names|coupon|output)\.[A-Za-z0-9_]+", message):
+    for key in re.findall(r"\b(?:geometry|mesh|layup|material|grips|loading|probes|names|coupon|output|test_method|tabs|strain)\.[A-Za-z0-9_]+", message):
         field_key = ROWS_OF_KEY.get(key) or ROWS_OF_KEY.get(key.rsplit(".", 1)[0])
         if field_key and FIELDS[field_key].label_in(units) not in rows:
             rows.append(FIELDS[field_key].label_in(units))

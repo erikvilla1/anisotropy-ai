@@ -71,7 +71,8 @@ def test_a_complete_setup_passes_every_item(tmp_path):
     assert model is not None and model.mesh.element_count == 1200 and quality is not None and quality.element_count == 1200
     as_dict = checked.as_dict()
     assert as_dict["state"] == "ready" and as_dict["items"][0] == {"id": "identity", "label": "Who and which coupon", "state": "pass",
-                                                                   "message": items["identity"].message, "rows": []}
+                                                                   "message": items["identity"].message, "rows": [], "requirements": []}
+    assert items["standard"].message.startswith("no standard picked: the size comes from") and items["standard"].requirements == ()
     json.dumps(as_dict)
 
 
