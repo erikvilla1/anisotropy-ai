@@ -201,6 +201,7 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     # the mesh convergence study (ADR-0068), computed while the document is built: a column per mesh, a last step per row, the words
     convergence = tex[tex.index(r"\label{sec:convergence}"):tex.index(r"\section{CalculiX: every group of compared numbers}")]
     assert r"1$\times$: " in convergence and ", settled" in convergence and ", still moving" in convergence and "numbers a finer mesh confirms" in convergence
+    assert "still moved by more than 1" in convergence and ", and the" not in convergence  # the moving quantities read as one list
     assert coupon.percent_change(-0.00023590981) == r"$-$0.024\,\%" and coupon.percent_change(0.11390684) == r"+11.4\,\%" and coupon.percent_change(None) == "--"
     assert r"\section{Stress concentration at the clamped edge: not a validation value}\label{sec:peaks}" in tex
     assert "touches a grip" in tex and "Von Mises is not a laminate quantity" in tex

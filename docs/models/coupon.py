@@ -668,11 +668,15 @@ def convergence_section(spec, units: str) -> str:
     words = (f"Our engine solved the coupon on its own mesh and on refinements that split every element along both axes, and read the same quantities at the "
              f"gauge-centre element (element {', then '.join(str(e) for e in gauge)}{', the one nearest the probe on each mesh' if len(gauge) > 1 else ''}); a cell's "
              f"percentage is the change from the previous mesh, a triple's the largest of its components against its largest value.")
+    def listed(names: list[str]) -> str:  # "a", "a and b", "a, b and c"
+        return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
     if settled_names:
-        words += f" {', '.join(settled_names).capitalize()} change by less than {100 * below:g} % between the two finest meshes: these are the numbers a finer mesh confirms."
+        words += f" Between the two finest meshes, {listed(settled_names)} moved by less than {100 * below:g} %: these are the numbers a finer mesh confirms."
     if moving_names:
-        words += (f" {', and '.join(moving_names).capitalize()} {'keep' if len(moving_names) > 1 else 'keeps'} moving: where a gripped tab ends at a free edge the elastic "
-                  "solution is singular, so a value read there grows with every refinement and is a trend, not a validation value.")
+        moving = listed(moving_names)
+        words += (f" {moving[0].upper() + moving[1:]} still moved by more than {100 * below:g} % at the last refinement: where a gripped tab ends at a free edge "
+                  "the elastic solution is singular, so a value read there grows with every refinement and is a trend, not a validation value.")
     for o in study["left_out"]:
         words += f" The {o['factor']}x mesh ({o['elements']} elements) was left out: past the study's cap of {study['cap']}."
     out += [escape(words), documents.long_table(header, table, "Y" + "r" * len(meshes) + "l", r"\footnotesize")]

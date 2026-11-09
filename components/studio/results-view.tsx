@@ -221,9 +221,9 @@ function ConvergenceTable({ study, lab }: { study: Convergence; lab: Fields["lab
         Anisotropy solved the coupon on its own mesh and on refinements that split every element along both axes, and read the same quantities at the gauge-centre element
         (element {gaugeElements.join(", then ")}{gaugeElements.length > 1 ? ", the one nearest the probe on each mesh" : ""}); a cell&apos;s percentage is the change from the previous mesh,
         a triple&apos;s the largest of its components against its largest value.
-        {settledNames.length ? <> {capitalise(settledNames.join(", "))} change by less than {printed(100 * below)} % between the two finest meshes: these are the numbers a finer mesh confirms.</> : null}
-        {movingNames.length ? <> {capitalise(movingNames.join(", and "))} {movingNames.length > 1 ? "keep" : "keeps"} moving: where a gripped tab ends at a free edge the elastic solution is singular, so a value read there grows
-          with every refinement and is a trend, not a validation value.</> : null}
+        {settledNames.length ? <> Between the two finest meshes, {listed(settledNames)} moved by less than {printed(100 * below)} %: these are the numbers a finer mesh confirms.</> : null}
+        {movingNames.length ? <> {capitalise(listed(movingNames))} still moved by more than {printed(100 * below)} % at the last refinement: where a gripped tab ends at a free edge the elastic solution is
+          singular, so a value read there grows with every refinement and is a trend, not a validation value.</> : null}
         {study.left_out.length ? <> {study.left_out.map((o) => `The ${o.factor}× mesh (${o.elements.toLocaleString("en-US")} elements) was left out: past the study's cap of ${study.cap.toLocaleString("en-US")}.`).join(" ")}</> : null}
       </p>
     </details>
@@ -231,6 +231,9 @@ function ConvergenceTable({ study, lab }: { study: Convergence; lab: Fields["lab
 }
 
 const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** Names as prose: "a", "a and b", "a, b and c". */
+const listed = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
 
 /** The Summary of a job solved before ADR-0066: the largest of each component over all plies, and CalculiX's viewer numbers beside them. */
 function OlderPeaks({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {

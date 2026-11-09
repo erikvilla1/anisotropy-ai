@@ -114,7 +114,8 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("convergence-table")).toContainText("4,000 elements");
   await expect(page.getByTestId("convergence-table").locator("tr[data-row='reaction']")).toContainText("−0.024 %, settled");
   await expect(page.getByTestId("convergence-table").locator("tr[data-row='peak'][data-ply='2']")).toContainText("+11.4 %, still moving");
-  await expect(page.getByTestId("convergence-words")).toContainText("the clamped-edge peaks");
+  await expect(page.getByTestId("convergence-words")).toContainText("the reaction, the gauge-centre strain and every ply's gauge stresses moved by less than 1 %");
+  await expect(page.getByTestId("convergence-words")).toContainText("The clamped-edge peaks, the first-ply-failure factor over the mesh and the factor over the gauge section still moved");
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("fpf-gauge-factor-tsai_hill")).toHaveText("1.032");  // the gauge section's own first-ply failure, away from the clamped edge
   await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
