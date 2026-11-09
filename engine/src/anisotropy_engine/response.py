@@ -166,3 +166,34 @@ def ply_surfaces(plies: list[Ply], eps0: np.ndarray, kappa: np.ndarray) -> list[
                 stress_12=t_sigma @ stress_xy,
             ))
     return surfaces
+
+
+
+def ply_surface_arrays(plies: list[Ply], eps0: np.ndarray, kappa: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """`ply_surfaces` for n mid-plane states at once (ADR-0073): eps0 and kappa are (n, 3), and the result is strain_xy, stress_xy,
+    strain_12 and stress_12, each (n, plies, 2, 3), the bottom then the top face of every ply, bottom ply first. The same matrices and
+    the same operations as `ply_surfaces`, row by row, so a finite element kernel gets every element's plies in one call."""
+    eps0 = np.asarray(eps0, dtype=float)
+    kappa = np.asarray(kappa, dtype=float)
+    for value, name in ((eps0, "eps0"), (kappa, "kappa")):
+        if value.ndim != 2 or value.shape[1] != 3:
+            raise ValueError(f"{name} must be an array of shape (n, 3)")
+        if not np.all(np.isfinite(value)):
+            raise ValueError(f"{name} must contain only finite numbers")
+    if eps0.shape != kappa.shape:
+        raise ValueError("eps0 and kappa must have the same shape")
+    z = ply_interfaces(plies)
+    shape = (eps0.shape[0], len(plies), 2, 3)
+    strain_xy, stress_xy, strain_12, stress_12 = (np.empty(shape) for _ in range(4))
+    for k, ply in enumerate(plies):
+        q_bar = transformed_reduced_stiffness(ply.material, ply.angle_deg)
+        t_sigma = stress_transformation(ply.angle_deg)
+        t_eps = strain_transformation(ply.angle_deg)
+        for face, z_m in enumerate((z[k], z[k + 1])):
+            strain = eps0 + z_m * kappa
+            stress = (q_bar @ strain[:, :, None])[:, :, 0]
+            strain_xy[:, k, face] = strain
+            stress_xy[:, k, face] = stress
+            strain_12[:, k, face] = (t_eps @ strain[:, :, None])[:, :, 0]
+            stress_12[:, k, face] = (t_sigma @ stress[:, :, None])[:, :, 0]
+    return strain_xy, stress_xy, strain_12, stress_12

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
+import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
-import { legendGradient, legendTicks, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
+import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { Scene } from "./scene";
 import type { SceneField, SceneMarker } from "./scene-canvas";
@@ -49,6 +49,7 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
           <PeaksTable s={s} cx={cx} lab={lab} criterion={s.earliest ?? ""} onShow={onShow} />
         </>
       ) : <OlderPeaks fields={fields} onShow={onShow} />}
+      {s.convergence ? <ConvergenceTable study={s.convergence} lab={lab} /> : null}
       <h4>First-ply failure</h4>
       {Object.keys(s.fpf).length === 0 ? <p className="studio-muted">No failure criterion was asked for.</p> : (
         <FailureTable fpf={s.fpf} earliest={s.earliest} testId="fpf-table" factorPrefix="fpf-factor" onShow={onShow} />
@@ -193,6 +194,88 @@ function PeaksTable({ s, cx, lab, criterion, onShow }: { s: Fields["summary"]; c
     </details>
   );
 }
+
+/** The largest |change| of a triple's components, the one its row reports (the components are read against the triple's largest value). */
+const worst = (changes: (number | null)[] | null | undefined): number | null =>
+  changes ? changes.reduce<number | null>((acc, c) => (c === null ? acc : acc === null || Math.abs(c) > Math.abs(acc) ? c : acc), null) : null;
+
+/** The mesh convergence study (ADR-0068): the kernel on the coupon's mesh and on refinements that split every element along both axes; one
+ *  column per mesh, each cell the value and its change from the previous mesh, and a last column saying whether the quantity has settled
+ *  (its last change under the study's threshold). The peaks and the failure factors keep ADR-0066's label: not validation values. */
+function ConvergenceTable({ study, lab }: { study: Convergence; lab: Fields["labels"] }) {
+  if (!study.studied) {
+    return <p className="studio-muted" data-testid="convergence-not-studied">Mesh convergence: not studied, {study.reason}.</p>;
+  }
+  const meshes = study.meshes, changes = study.changes!, settled = study.settled!, below = study.settled_below;
+  const last = meshes.length - 1;
+  const verdict = (change: number | null) => (change === null ? DASH : Math.abs(change) < below ? `${percentChange(change)}, settled` : `${percentChange(change)}, still moving`);
+  const cells = (values: (number | string)[], steps: (number | null)[]) => (
+    <>
+      {values.map((v, i) => <td key={i}>{typeof v === "number" ? printed(v) : v}{i > 0 && steps[i] !== null ? <span className="studio-muted"> ({percentChange(steps[i])})</span> : null}</td>)}
+      <td>{verdict(steps[last])}</td>
+    </>
+  );
+  const tripleCells = (values: number[][], steps: ((number | null)[] | null)[]) =>
+    cells(values.map((v) => three(v)), steps.map((c) => worst(c)));
+  const gaugeElements = Array.from(new Set(meshes.map((m) => m.gauge_element)));
+  const settledNames = Object.entries({ reaction: "the reaction", gauge_strain: "the gauge-centre strain", plies: "every ply's gauge stresses" })
+    .filter(([key]) => settled[key as keyof typeof settled]).map(([, name]) => name);
+  const movingNames = Object.entries({ peaks: "the clamped-edge peaks", fpf: "the first-ply-failure factor over the mesh", fpf_gauge: "the factor over the gauge section" })
+    .filter(([key]) => !settled[key as keyof typeof settled]).map(([, name]) => name);
+  return (
+    <details className="studio-details" data-testid="convergence">
+      <summary><h4>Mesh convergence: what settles as the mesh is refined</h4></summary>
+      <table className="studio-table" data-testid="convergence-table">
+        <thead>
+          <tr><th>Quantity</th>{meshes.map((m) => <th key={m.factor}>{m.factor}× mesh</th>)}<th>Last step</th></tr>
+          <tr className="studio-muted"><th />{meshes.map((m) => <th key={m.factor}>{m.nx} by {m.ny}, {m.elements.toLocaleString("en-US")} elements</th>)}<th>settled under {printed(100 * below)} %</th></tr>
+        </thead>
+        <tbody>
+          <tr data-row="reaction"><td>Reaction force, {lab.force}</td>{cells(meshes.map((m) => m.reaction), changes.reaction)}</tr>
+          <tr data-row="strain"><td>Gauge centre εx / εy / γxy</td>{tripleCells(meshes.map((m) => m.gauge_strain), changes.gauge_strain)}</tr>
+          {meshes[0].plies.map((p, k) => (
+            <tr key={`gauge-${p.ply}`} data-ply={p.ply} data-row="gauge">
+              <td>Ply {p.ply} ({p.angle}°): σ₁ / σ₂ / τ₁₂ at the gauge centre, {lab.stress}</td>
+              {tripleCells(meshes.map((m) => m.plies[k].stress_12), changes.plies[k].stress_12)}
+            </tr>
+          ))}
+          {meshes[0].peaks.map((p, k) => (
+            <tr key={`peak-${p.ply}`} data-ply={p.ply} data-row="peak">
+              <td>Ply {p.ply} ({p.angle}°): largest |σ₁| over the mesh{p.touches_grip ? ", clamped edge" : ""}, {lab.stress}</td>
+              {cells(meshes.map((m) => m.peaks[k].s1), changes.peaks[k].s1)}
+            </tr>
+          ))}
+          {Object.keys(changes.fpf).map((criterion) => (
+            <tr key={`fpf-${criterion}`} data-row="fpf" data-criterion={criterion}>
+              <td>First-ply failure R, {criterion.replace("_", " ")}, over the mesh</td>
+              {cells(meshes.map((m) => m.fpf[criterion]), changes.fpf[criterion])}
+            </tr>
+          ))}
+          {Object.keys(changes.fpf_gauge).map((criterion) => (
+            <tr key={`fpfg-${criterion}`} data-row="fpf-gauge" data-criterion={criterion}>
+              <td>First-ply failure R, {criterion.replace("_", " ")}, over the gauge section</td>
+              {cells(meshes.map((m) => m.fpf_gauge[criterion]), changes.fpf_gauge[criterion])}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="studio-muted" data-testid="convergence-words">
+        Anisotropy solved the coupon on its own mesh and on refinements that split every element along both axes, and read the same quantities at the gauge-centre element
+        (element {gaugeElements.join(", then ")}{gaugeElements.length > 1 ? ", the one nearest the probe on each mesh" : ""}); a cell&apos;s percentage is the change from the previous mesh,
+        a triple&apos;s the largest of its components against its largest value.
+        {settledNames.length ? <> Between the two finest meshes, {listed(settledNames)} moved by less than {printed(100 * below)} %: these are the numbers a finer mesh confirms.</> : null}
+        {movingNames.length ? <> {capitalise(listed(movingNames))} still moved by more than {printed(100 * below)} % at the last refinement: where a gripped tab ends at a free edge the elastic solution is
+          singular, so a value read there grows with every refinement and is a trend, not a validation value.</> : null}
+        {study.left_out.length ? <> {study.left_out.map((o) => `The ${o.factor}× mesh (${o.elements.toLocaleString("en-US")} elements) was left out: past the study's cap of ${study.cap.toLocaleString("en-US")}.`).join(" ")}</> : null}
+      </p>
+    </details>
+  );
+}
+
+const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** Names as prose: "a", "a and b", "a, b and c". */
+const listed = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
 
 /** The Summary of a job solved before ADR-0066: the largest of each component over all plies, and CalculiX's viewer numbers beside them. */
 function OlderPeaks({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
