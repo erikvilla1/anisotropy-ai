@@ -109,6 +109,12 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("validation-table").locator("tr[data-ply='2']")).toContainText("Ply 2 (0°)");
   await expect(page.getByTestId("peaks")).toContainText("Stress concentration at the clamped edge: not a validation value");
   await expect(page.getByTestId("peaks-table").locator("tr[data-ply='2']")).toContainText("at element 178"); // the 0° ply's largest σ₁, named by its element
+  // the mesh convergence study (ADR-0068): the kernel at 1x, 2x and 4x; the reaction settles, the 0° ply's clamped-edge peak keeps growing
+  await expect(page.getByTestId("convergence")).toContainText("Mesh convergence: what settles as the mesh is refined");
+  await expect(page.getByTestId("convergence-table")).toContainText("4,000 elements");
+  await expect(page.getByTestId("convergence-table").locator("tr[data-row='reaction']")).toContainText("−0.024 %, settled");
+  await expect(page.getByTestId("convergence-table").locator("tr[data-row='peak'][data-ply='2']")).toContainText("+11.4 %, still moving");
+  await expect(page.getByTestId("convergence-words")).toContainText("the clamped-edge peaks");
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("fpf-gauge-factor-tsai_hill")).toHaveText("1.032");  // the gauge section's own first-ply failure, away from the clamped edge
   await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
@@ -170,6 +176,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("summary-reaction")).toContainText("pressing the coupon down");
   await expect(page.getByTestId("summary")).toContainText("the deflection w");
+  await expect(page.getByTestId("convergence-not-studied")).toContainText("three point bending is a later step");  // ADR-0068: a bending coupon says so
   await expect(page.getByTestId("fpf-table")).toContainText("bottom face");
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (z)");

@@ -70,6 +70,7 @@ from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
 from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
 from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
+from anisotropy_fea.convergence import convergence_study  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.fields import field_data  # noqa: E402
@@ -603,8 +604,83 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
     return "\n\n".join(out)
 
 
+def percent_change(change: float | None) -> str:
+    """A change from the previous mesh as the page prints it: signed, two figures under 1 %, one decimal above (`percentChange`)."""
+    if change is None:
+        return DASH
+    magnitude = abs(100.0 * change)
+    text = "0.00" if magnitude < 1e-3 else f"{magnitude:.2g}" if magnitude < 1 else f"{magnitude:.1f}"
+    return ("$-$" if change < 0 and magnitude >= 1e-3 else "+") + text + r"\,\%"
+
+
+def worst_change(changes: list[float | None] | None) -> float | None:
+    """The largest |change| of a triple's components, the one its row reports."""
+    finite = [c for c in (changes or []) if c is not None]
+    return max(finite, key=abs) if finite else None
+
+
+def convergence_section(spec, units: str) -> str:
+    """The mesh convergence study (ADR-0068), computed while the document is built as every number here is: one column per mesh, each
+    cell the value and its change from the previous mesh, a last column saying whether the quantity has settled, and the words."""
+    study = convergence_study(spec)
+    out = [r"\section{Mesh convergence: what settles as the mesh is refined}\label{sec:convergence}"]
+    if not study["studied"]:
+        out.append(escape(f"Not studied: {study['reason']}."))
+        return "\n\n".join(out)
+    labels = documents.UNIT_LABEL[units]
+    meshes, changes, flags, below = study["meshes"], study["changes"], study["settled"], study["settled_below"]
+    last = len(meshes) - 1
+
+    def verdict(change: float | None) -> str:
+        if change is None:
+            return DASH
+        return percent_change(change) + (", settled" if abs(change) < below else ", still moving")
+
+    def cells(values: list[str], steps: list[float | None]) -> list[str]:
+        return [v + (f" ({percent_change(c)})" if i > 0 and c is not None else "") for i, (v, c) in enumerate(zip(values, steps))] + [verdict(steps[last])]
+
+    def row(name: str, values: list[str], steps: list[float | None]) -> str:
+        return " & ".join([name, *cells(values, steps)]) + r" \\"
+
+    def triple(values: list[float]) -> str:  # the triples print as the validation table does: the noise beside the real values as 0 (`settled`)
+        return " / ".join(number(v, 5) for v in settled(values))
+
+    table = [row(f"Reaction force, {escape(labels['force'])}", [number(m["reaction"], 5) for m in meshes], changes["reaction"]),
+             row(f"Gauge centre {documents.MATH['eps_x']} / {documents.MATH['eps_y']} / {documents.MATH['gamma_xy']}",
+                 [triple(m["gauge_strain"]) for m in meshes], [worst_change(c) for c in changes["gauge_strain"]])]
+    for k, p in enumerate(meshes[0]["plies"]):
+        table.append(row(f"Ply {p['ply']} ({p['angle']:g}°) {documents.MATH['sigma_1']} / {documents.MATH['sigma_2']} / {documents.MATH['tau_12']} at the gauge centre, "
+                         f"{escape(labels['stress'])}", [triple(m["plies"][k]["stress_12"]) for m in meshes], [worst_change(c) for c in changes["plies"][k]["stress_12"]]))
+    for k, p in enumerate(meshes[0]["peaks"]):
+        table.append(row(rf"Ply {p['ply']} ({p['angle']:g}°) largest $|\sigma_1|$ over the mesh{', clamped edge' if p['touches_grip'] else ''}, {escape(labels['stress'])}",
+                         [number(m["peaks"][k]["s1"], 5) for m in meshes], changes["peaks"][k]["s1"]))
+    for criterion, steps in changes["fpf"].items():
+        table.append(row(f"First-ply failure $R$, {escape(CRITERION.get(criterion, criterion))}, over the mesh", [number(m["fpf"][criterion], 5) for m in meshes], steps))
+    for criterion, steps in changes["fpf_gauge"].items():
+        table.append(row(f"First-ply failure $R$, {escape(CRITERION.get(criterion, criterion))}, over the gauge section",
+                         [number(m["fpf_gauge"][criterion], 5) for m in meshes], steps))
+    header = ["Quantity", *[rf"{m['factor']}$\times$: {m['nx']} by {m['ny']}, {m['elements']} elements" for m in meshes],
+              rf"Last step (settled under {100 * below:g}\,\%)"]
+    gauge = list(dict.fromkeys(m["gauge_element"] for m in meshes))
+    settled_names = [name for key, name in (("reaction", "the reaction"), ("gauge_strain", "the gauge-centre strain"), ("plies", "every ply's gauge stresses")) if flags[key]]
+    moving_names = [name for key, name in (("peaks", "the clamped-edge peaks"), ("fpf", "the first-ply-failure factor over the mesh"),
+                                           ("fpf_gauge", "the factor over the gauge section")) if not flags[key]]
+    words = (f"Our engine solved the coupon on its own mesh and on refinements that split every element along both axes, and read the same quantities at the "
+             f"gauge-centre element (element {', then '.join(str(e) for e in gauge)}{', the one nearest the probe on each mesh' if len(gauge) > 1 else ''}); a cell's "
+             f"percentage is the change from the previous mesh, a triple's the largest of its components against its largest value.")
+    if settled_names:
+        words += f" {', '.join(settled_names).capitalize()} change by less than {100 * below:g} % between the two finest meshes: these are the numbers a finer mesh confirms."
+    if moving_names:
+        words += (f" {', and '.join(moving_names).capitalize()} {'keep' if len(moving_names) > 1 else 'keeps'} moving: where a gripped tab ends at a free edge the elastic "
+                  "solution is singular, so a value read there grows with every refinement and is a trend, not a validation value.")
+    for o in study["left_out"]:
+        words += f" The {o['factor']}x mesh ({o['elements']} elements) was left out: past the study's cap of {study['cap']}."
+    out += [escape(words), documents.long_table(header, table, "Y" + "r" * len(meshes) + "l", r"\footnotesize")]
+    return "\n\n".join(out)
+
+
 def verification_chapter(src: Sources, deck, solution, record: dict, rows, problems, summaries, units: str, map_drawn: bool, full_tables: bool, c,
-                         figures: Path, coupled_reaction: float | None = None) -> str:
+                         figures: Path, coupled_reaction: float | None = None, spec=None) -> str:
     solver = record["solver"]
     twin = next((r.kernel for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
     same = ""
@@ -625,6 +701,7 @@ def verification_chapter(src: Sources, deck, solution, record: dict, rows, probl
            + r". Elsewhere Chapter~\ref{ch:results} is our engine's alone." + escape(same) + r" The record and the solver's conventions file are kept with us; this "
            r"chapter and Appendix~\ref{app:record} print them.",
            validation_section(deck, solution, record, rows, c, units),
+           *([convergence_section(spec, units)] if spec is not None else []),
            r"\section{CalculiX: every group of compared numbers}",
            documents.summary_section(record, rows, problems, summaries, units, METHOD),
            r"To see it yourself in PrePoMax 2.6: File, Import the CalculiX deck from the package (\texttt{2-our-model/calculix/}), run it, then File, "
@@ -894,7 +971,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\chapter{Results from our engine}\label{ch:results}", results,
         r"\chapter{Verification against other solvers}\label{ch:verification}",
         verification_chapter(src, deck, solution, record, rows, problems, summaries, deck_units, map_drawn, full_tables, c, figures,
-                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None),
+                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None, spec),
         r"\chapter{What this shows and what it does not}\label{ch:reading}", reading_chapter(src, card, c),
         r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, audited + compared, form, deck_units, escape, code, team.table, documents.kv_table,
                                                                     team_built=c is not None),
