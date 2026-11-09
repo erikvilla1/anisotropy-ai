@@ -144,7 +144,10 @@ def test_every_number_in_a_sentence_is_a_fact(data):
         for token in numbers_in(sentence):
             assert token in printed or token.lstrip("-+") in printed, (token, sentence)
     assert sentences[0].startswith("IM7-UNT-L1, unnotched tension, under a displacement of 1 mm along the coupon: the top grip carries")
-    assert "The largest displacement is" in sentences[1] and "S11 =" in sentences[2] and "von Mises" in sentences[2]
+    assert "The largest displacement is" in sentences[1]
+    # the ply stresses are said with their symbols, not the CAE names a viewer's global S11 collides with (ADR-0066), and no ply von Mises
+    assert "sigma_1 along the fibres =" in sentences[2] and "tau_12 in-plane shear =" in sentences[2] and "in the ply's axes" in sentences[2]
+    assert "S11 =" not in sentences[2] and "von Mises" not in sentences[2] and "max_mises" not in facts
     assert any("criterion at the applied loading" in s for s in sentences) and sentences[-1].startswith("The earliest of the criteria is")
     assert any(MODE_WORDS[facts[f"{c}_mode"]] in s for c in facts["criteria"] for s in sentences)
 

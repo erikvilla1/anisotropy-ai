@@ -478,6 +478,15 @@ def results_chapter(spec, deck, solution, units: str, figures: Path) -> tuple[st
 # --------------------------------------------------------------------------------------------- chapter 6, verification
 
 DASH = "--"
+NOISE = 1e-9  # a component below this fraction of its set's largest magnitude is the solver's arithmetic, not a value
+
+
+def settled(values: list[float | None]) -> list[float | None]:
+    """A quantity's components read together, with the ones that are numerical noise beside the others set to zero, as the page's table
+    does: a 4e-15 MPa shear in a 0° ply is zero, and a table that prints it reads as a difference between the solvers."""
+    finite = [abs(v) for v in values if v is not None and np.isfinite(v)]
+    scale = max(finite) if finite else 0.0
+    return [0.0 if v is not None and np.isfinite(v) and abs(v) < NOISE * scale else v for v in values]
 CLT_NOTE = (r"\textbf{Laminate theory}: the reaction over the width as $N_y$ with $N_x = N_{xy} = 0$ (free edges), the mid-plane strain from the "
             r"laminate's stiffness, each ply at its middle. ")
 
@@ -497,11 +506,18 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
     angles = check.angles_deg
     solver_name = {"calculix": "CalculiX", "abaqus": "Abaqus"}.get(record["solver"]["name"], record["solver"]["name"])
 
-    def ref(group: str, component: int, ply: int | None = None) -> str:
+    def ref(group: str, component: int, ply: int | None = None) -> float | None:
         for r in rows:
             if r.group == group and r.name == gauge.name and r.component == component and r.ply == ply:
-                return number(r.reference, 5)
-        return DASH
+                return float(r.reference)
+        return None
+
+    def cell(value: float | None) -> str:
+        return number(value, 5) if value is not None else DASH
+
+    def triple(values: list[float | None]) -> list[str]:
+        """A quantity's three components as the page prints them: the noise beside the real values set to zero (`settled`)."""
+        return [cell(v) for v in settled(values)]
 
     reactions = [r for r in rows if r.group == "rf" and r.component == 1]
     kernel_reaction = from_si(check.kernel_reaction_N, "force", units)
@@ -527,14 +543,17 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
 
     table = [row([r"Reaction $R_y$ at the moving grip", escape(labels["force"]), number(clt["Ny"] * clt["width"], 5) if clt else DASH,
                   number(kernel_reaction, 5), number(same_grip.reference, 5) if same_grip is not None else DASH], DASH)]
+    theory_strain = triple([float(v) for v in clt["strain"]] if clt else [None] * 3)
+    kernel_strain = triple([float(v) for v in check.kernel_strain])
+    solver_strain = triple([ref("strain", i) for i in range(3)])
     for i, name in enumerate(("eps_x", "eps_y", "gamma_xy")):
-        table.append(row([rf"{documents.MATH[name]} at element {escape(element)}", "--", number(clt["strain"][i], 5) if clt else DASH,
-                          number(float(check.kernel_strain[i]), 5), ref("strain", i)], DASH))
+        table.append(row([rf"{documents.MATH[name]} at element {escape(element)}", "--", theory_strain[i], kernel_strain[i], solver_strain[i]], DASH))
     for k, angle in enumerate(angles):
+        theory = triple([float(v) for v in clt["plies"][k]["stress_12"]] if clt else [None] * 3)
+        kernel = triple([from_si(float(check.kernel_ply_stress_12[k, i]), "stress", units) for i in range(3)])
+        solver = triple([ref("ply_stress_local", i, k + 1) for i in range(3)])
         for i, name in enumerate(("sigma_1", "sigma_2", "tau_12")):
-            theory = number(clt["plies"][k]["stress_12"][i], 5) if clt else DASH
-            table.append(row([rf"Ply {k + 1} ({angle:g}°) {documents.MATH[name]}", escape(labels["stress"]), theory,
-                              number(from_si(float(check.kernel_ply_stress_12[k, i]), "stress", units), 5), ref("ply_stress_local", i, k + 1)],
+            table.append(row([rf"Ply {k + 1} ({angle:g}°) {documents.MATH[name]}", escape(labels["stress"]), theory[i], kernel[i], solver[i]],
                              abaqus(i, k + 1) if with_abaqus else DASH))
     hint = (rf"To find a ply's cell in a viewer: in PrePoMax, open the part of ply $k$ (the $k$-th layer of bricks from the bottom) and read "
             rf"the global component along the pull (S22 for a 0° ply, S11 for a 90° ply; a ±45° ply needs the rotation) at element {escape(element)}; "

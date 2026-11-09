@@ -93,6 +93,14 @@ export function printed(value: number | null | undefined): string {
   return String(Number(value.toPrecision(4)));
 }
 
+/** A set of components read together, with the ones that are numerical noise beside the others set to zero: a component below a billionth of the
+ *  set's largest magnitude is the solver's arithmetic, not a value (a 4e-15 MPa shear in a 0° ply is zero, and a table that prints it reads
+ *  as a difference). A set with no finite value is returned as it is. */
+export function settled<T extends number | null | undefined>(values: T[]): T[] {
+  const scale = Math.max(0, ...values.map((x) => (typeof x === "number" && Number.isFinite(x) ? Math.abs(x) : 0)));
+  return values.map((x) => (typeof x === "number" && Number.isFinite(x) && Math.abs(x) < 1e-9 * scale ? (0 as T) : x));
+}
+
 /** The categorical slot of each distinct ply angle, in order of first appearance from the bottom ply. */
 export function angleSlots(angles: number[]): Map<number, string> {
   const slots = new Map<number, string>();

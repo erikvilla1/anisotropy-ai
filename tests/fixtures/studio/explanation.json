@@ -35,11 +35,6 @@
   "max_S12_angle": 45.0,
   "max_S12_element": "178",
   "max_S12_face": null,
-  "max_mises": 1203.0,
-  "max_mises_ply": 2,
-  "max_mises_angle": 0.0,
-  "max_mises_element": "178",
-  "max_mises_face": null,
   "criteria": [
    "max_stress",
    "tsai_hill"
@@ -73,7 +68,7 @@
  "sentences": [
   "IM7-UNT-L1, unnotched tension, under a displacement of 1 mm along the coupon: the top grip carries 1.622e+04 N, in tension.",
   "The largest displacement is 1 mm at node 235 (0, 194 mm), mostly along the coupon.",
-  "The largest ply stresses in material axes are S11 = 1203 MPa in ply 2 (0 degrees) at element 178, S22 = 62.33 MPa in ply 4 (90 degrees) at element 191, S12 = -45.86 MPa in ply 1 (45 degrees) at element 178; the largest ply von Mises stress is 1203 MPa in ply 2 (0 degrees) at element 178.",
+  "The largest ply stresses, each in its own ply's fibre axes, are sigma_1 along the fibres = 1203 MPa in ply 2 (0 degrees) at element 178, sigma_2 across the fibres = 62.33 MPa in ply 4 (90 degrees) at element 191, tau_12 in-plane shear = -45.86 MPa in ply 1 (45 degrees) at element 178; these are element centroids in the ply's axes, not the global-axis values a viewer such as PrePoMax shows.",
   "The laminate does not exceed the Tsai-Hill criterion at the applied loading: the first ply to fail would be ply 4 (90 degrees), tied with ply 5, at element 56, at the edge of a gripped tab, by the combined stresses (no single component governs), at 1.013 times the applied loading (failure index 0.9871). That element touches a gripped tab, where the stress is not expected to settle as the mesh is refined: read it as first damage at the grip.",
   "The laminate does not exceed the maximum stress criterion at the applied loading: the first ply to fail would be ply 4 (90 degrees), tied with ply 5, at element 56, at the edge of a gripped tab, by tension across the fibres (sigma_2 reaching F2t, a matrix-dominated mode), at 1.028 times the applied loading (failure index 0.9732). That element touches a gripped tab, where the stress is not expected to settle as the mesh is refined: read it as first damage at the grip.",
   "The earliest of the criteria is Tsai-Hill."
