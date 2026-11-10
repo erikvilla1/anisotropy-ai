@@ -1,4 +1,4 @@
-"""Tension of a resin-impregnated carbon or graphite fibre tow: the calculations of ASTM D4018-23 §12 and its Tables 1 and 2 (ADR-0073).
+"""Tension of a resin-impregnated carbon or graphite fibre tow: the calculations of ASTM D4018-23 §12 and its Tables 1 and 2 (ADR-0074).
 
 A tow is a strand, not a laminate. Its load-bearing area is the fibre's: the mass per unit length divided by the fibre density. The tensile
 strength and the chord modulus are the measured forces over that area; the resin only holds the filaments together (§4.5). Nothing here
@@ -10,7 +10,7 @@ microstrain; the caller converts where values enter and leave (ADR-0002).
 
 D4018-23 Eq 5 multiplies by B = 1e-3 for a load in newtons to give GPa and lists the strains in microstrain. The two do not agree: with P in N,
 rho_f in g/cm^3 and MUL in g/m, P rho_f / MUL is in MPa, and dividing by a strain difference then multiplying by 1e-3 gives GPa only when
-the strains are absolute (0.005, not 5000). Here the strains are absolute and no factor is needed (our reading, recorded in ADR-0073).
+the strains are absolute (0.005, not 5000). Here the strains are absolute and no factor is needed (our reading, recorded in ADR-0074).
 
 Invalid input is refused, never defaulted (ADR-0003): a value that is not a finite positive number where the physics needs one, a strain
 range that is empty, an impregnated strand lighter than its fibre.

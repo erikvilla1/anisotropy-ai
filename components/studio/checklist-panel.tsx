@@ -6,7 +6,7 @@ import { RequirementTable } from "./requirement-table";
 const MARK: Record<string, string> = { pass: "✓", warn: "!", fail: "✕", missing: "○", pending: "…" };
 const WORD: Record<string, string> = { pass: "passed", warn: "warning", fail: "failed", missing: "needs input", pending: "not judged yet" };
 
-/** The checklist of a coupon's setup, or of a fibre tow record (ADR-0073), which says so through `title`, `ready`, `waiting` and `subject`. */
+/** The checklist of a coupon's setup, or of a fibre tow record (ADR-0074), which says so through `title`, `ready`, `waiting` and `subject`. */
 export function ChecklistPanel({ checklist, checking, title = "Setup check", ready = "ready to solve", waiting, subject }: {
   checklist: Checklist | null; checking: boolean; title?: string; ready?: string; waiting?: string; subject?: string;
 }) {

@@ -7,7 +7,7 @@ import { RequirementTable } from "./requirement-table";
  * will judge, clause by clause; after it, each requirement with this coupon's value and the verdict, and the check's own summary. The model
  * is checked against the standard's specimen, never said to conform: the procedure stays the laboratory's. */
 export function StandardCard({ form, checklist, tow = false }: { form: StudioForm; checklist: Checklist | null; tow?: boolean }) {
-  // a fibre tow record (ADR-0073) is a test record judged as entered, not a modelled specimen
+  // a fibre tow record (ADR-0074) is a test record judged as entered, not a modelled specimen
   const action = tow ? "Calculate" : "Check setup", subject = tow ? "This record" : "This coupon";
   const profile = standardOf(form);
   if (!profile) {

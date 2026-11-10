@@ -697,7 +697,7 @@ class CouponJobs:
             shutil.rmtree(folder, ignore_errors=True)
 
     def tow(self, values: bytes, timeout_s: float | None = None) -> dict:
-        """A fibre tow record (ADR-0073): its checklist and, when nothing blocks, its result, as `studio_tool.py tow` writes them."""
+        """A fibre tow record (ADR-0074): its checklist and, when nothing blocks, its result, as `studio_tool.py tow` writes them."""
         self.refresh()
         folder = Path(tempfile.mkdtemp(prefix="tow-", dir=self._folder()))
         try:

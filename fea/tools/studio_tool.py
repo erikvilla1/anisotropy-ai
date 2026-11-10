@@ -10,7 +10,7 @@
 checklist says. `coupons` reads each coupon's spec and case page. `values` is the inverse of the form's reading
 (`intake.values_of_spec`). `fixtures` runs the checks and our engine on the public values given and writes checklist.json,
 preview.json, fields.json and explanation.json, so the browser tests need neither CalculiX nor the API. --root moves the coupons'
-folder (default .local/fea) for tests. `tow` reads a fibre tow record, which is no coupon (ADR-0073), and writes its checklist and,
+folder (default .local/fea) for tests. `tow` reads a fibre tow record, which is no coupon (ADR-0074), and writes its checklist and,
 when nothing blocks, its result (`tow_test.tow_answer`); it exits 0 whatever it finds. Nothing here computes a result: the modules named do.
 """
 

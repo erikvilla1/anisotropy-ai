@@ -84,7 +84,7 @@ def standards() -> dict:
 
 
 def tow() -> dict:
-    """The fibre tow test (ADR-0073): its rows in sections, the coupon form's rows it reads too, the rows of one specimen, the words of the
+    """The fibre tow test (ADR-0074): its rows in sections, the coupon form's rows it reads too, the rows of one specimen, the words of the
     Fig. 1 failure code, and the units it reports in. Its rows carry the standard's units in their labels; no Units row changes them."""
     return {"test": TOW_TEST, "kind": TOW_KIND, "shared": list(TOW_SHARED),
             "sections": [{"title": title, "fields": [field_entry(f) for f in fields]} for title, fields in TOW_BLOCKS],

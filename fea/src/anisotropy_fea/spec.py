@@ -224,11 +224,11 @@ TEST_CODES = {  # per kind: the test code of a coupon designation and the test's
     "plate": ("PLT", "plate"),
 }
 DESIGNATION = re.compile(r"^(?P<material>[A-Z][A-Z0-9]*)-(?P<test>[A-Z0-9]+)-(?P<layup>L[1-9][0-9]*)$")
-TOW_TEST = "fibre tow tension"  # the fibre tow test of ASTM D4018 on the form's Test list: no spec kind, no model (ADR-0073)
+TOW_TEST = "fibre tow tension"  # the fibre tow test of ASTM D4018 on the form's Test list: no spec kind, no model (ADR-0074)
 
 
 def test_name(kind: str) -> str:
-    """The test's name on the form: a spec kind's, or the fibre tow test's for the kind a tow standard covers (ADR-0073)."""
+    """The test's name on the form: a spec kind's, or the fibre tow test's for the kind a tow standard covers (ADR-0074)."""
     return TOW_TEST if kind == TOW_KIND else TEST_CODES[kind][1]
 
 

@@ -172,7 +172,7 @@ Option 3.
 
 ## Amendment 8, 2026-11-09 (the Test row lists the fibre tow test, which the studio states with its own rows; the form stays at 0.8)
 
-**Context.** ASTM D4018 tests a fibre tow, not a coupon. The founder put it on the coupon form's Test list ([ADR-0073](ADR-0073-the-fibre-tow-test-is-a-word-on-the-coupon-test-list-with-its-own-rows-and-specimens-reduced-by-the-engine-with-no-model-and-judged-against-astm-d4018-as-a-test-record.md)).
+**Context.** ASTM D4018 tests a fibre tow, not a coupon. The founder put it on the coupon form's Test list ([ADR-0074](ADR-0074-the-fibre-tow-test-is-a-word-on-the-coupon-test-list-with-its-own-rows-and-specimens-reduced-by-the-engine-with-no-model-and-judged-against-astm-d4018-as-a-test-record.md)).
 
 **Options.** (1) Add the tow's rows to the Excel form: every coupon form would carry some thirty rows a coupon never uses, and a sheet has no room for a list of specimens. Rejected. (2) The word on the Test row, the tow's rows stated from the studio only, as a plate's lists are (chosen). (3) Leave the word off the Excel form: the studio's Test list and the Excel's would differ. Rejected.
 

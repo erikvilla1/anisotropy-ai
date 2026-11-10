@@ -86,7 +86,7 @@ function SpecimenList({ rows, disabled, error, onRows }: { rows: TowSpecimenRow[
   );
 }
 
-/** The left column for a fibre tow record (ADR-0073): the coupon form's Test list picked "fibre tow tension", so its panels give way to the
+/** The left column for a fibre tow record (ADR-0074): the coupon form's Test list picked "fibre tow tension", so its panels give way to the
  * tow's: the fibre, its mass and density, the impregnated strand, the tensile set-up, the specimens and Calculate. The record goes to
  * `POST /v1/tow-tests` as typed; the fea package judges it and the engine computes every number, so this column only keeps the text. */
 export function TowRail({ apiBaseUrl }: { apiBaseUrl: string }) {

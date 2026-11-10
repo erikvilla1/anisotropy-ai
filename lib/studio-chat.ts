@@ -199,7 +199,7 @@ export function readMessage(text: string, units: string = DEFAULT_UNITS): { rows
   const L = `(?:${LENGTH_WORDS[units] ?? LENGTH_WORDS[DEFAULT_UNITS]})`;
   const F = FORCE_WORDS[units] ?? FORCE_WORDS[DEFAULT_UNITS];
 
-  const test = /\btows?\b|d4018|fib(?:re|er)\s+tow/.test(t) ? TOW_TEST // the fibre tow test (ADR-0073): its rows are the tow panels'
+  const test = /\btows?\b|d4018|fib(?:re|er)\s+tow/.test(t) ? TOW_TEST // the fibre tow test (ADR-0074): its rows are the tow panels'
     : /open[\s-]?hole|\boht\b|d5766|c1869/.test(t) ? OPEN_HOLE_TEST
     : /four[\s-]?point|4[\s-]?point|\b4pb\b/.test(t) ? FOUR_POINT_TEST
     : /three[\s-]?point|3[\s-]?point|\b3pb\b|d7264|d790/.test(t) ? "three-point bending"

@@ -8,7 +8,7 @@ import {
   failureCodeWords, nextSpecimen, pastedSpecimens, specimenFields, TOW_PANELS, TOW_TEST, towDefaults, towFields, towPanelState, towRowErrors, towValues,
 } from "../lib/studio-tow";
 
-/** The fibre tow test in the studio (ADR-0073): offered on the coupon form's Test list, its own rows and specimens, the values object the API
+/** The fibre tow test in the studio (ADR-0074): offered on the coupon form's Test list, its own rows and specimens, the values object the API
  * reads, the checklist's rows mapped back, and the project keeping the specimens. The page computes nothing: no number is checked here. */
 
 test("the tow test is on the coupon form's Test list and has its own standard", () => {

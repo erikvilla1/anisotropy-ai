@@ -1,4 +1,4 @@
-"""The fibre tow test of ASTM D4018 (ADR-0073): the studio's tow rows and specimen list read, refused by row, judged against the standard,
+"""The fibre tow test of ASTM D4018 (ADR-0074): the studio's tow rows and specimen list read, refused by row, judged against the standard,
 and reduced by the engine to the strength, the chord modulus and their statistics.
 
 "fibre tow tension" is a test on the coupon form's Test list, but no coupon: it has no spec, no mesh and no finite element model. The studio
@@ -563,7 +563,7 @@ def tow_result(v: TowValues, numbers: TowNumbers, conformance: Conformance | Non
         "conformance": None if conformance is None else conformance.as_dict(),
         "report": report,
         "note": "Strength and chord modulus divide by the fibre's area, MUL / density (Eqs 4 and 5); the chord strains are absolute in the "
-                "engine (ADR-0073: the standard's factor B gives GPa only with absolute strains). Nothing here is a model of the tow.",
+                "engine (ADR-0074: the standard's factor B gives GPa only with absolute strains). Nothing here is a model of the tow.",
     }
 
 

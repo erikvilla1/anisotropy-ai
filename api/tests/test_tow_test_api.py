@@ -1,4 +1,4 @@
-"""The fibre tow record through the API (ADR-0073): POST /v1/tow-tests answers at once with the checklist and the result that
+"""The fibre tow record through the API (ADR-0074): POST /v1/tow-tests answers at once with the checklist and the result that
 fea/tools/studio_tool.py tow writes. A stand-in for the tool plays the answers here, so these tests need neither the fea environment nor
 the engine; fea/tests/test_tow_test.py runs the tool itself."""
 

@@ -701,7 +701,7 @@ def read_values(path: Path | str) -> FormInput:
     data = dict(data)
     if str(data.get("test", "")).strip().lower() == TOW_TEST:
         raise IntakeError(f"{path.name}: Test: {TOW_TEST} is no coupon; its record is calculated by `studio_tool.py tow` (POST /v1/tow-tests, "
-                          "ADR-0073), not checked as a coupon")
+                          "ADR-0074), not checked as a coupon")
     version = data.pop("form_version", None)
     if version is None:
         raise IntakeError(f"{path.name}: form_version is required; the current form is {FORM_VERSION}")
@@ -974,7 +974,7 @@ def check_form(form: FormInput) -> Values:
     test_name = forms.text_of(cells.get("test"))
     kind = TESTS.get(test_name.lower() if test_name else "", "")
     if test_name.lower() == TOW_TEST:
-        problems.append(f"Test: {TOW_TEST} is stated and calculated from the studio's tow panels (ADR-0073); this form's rows describe a coupon")
+        problems.append(f"Test: {TOW_TEST} is stated and calculated from the studio's tow panels (ADR-0074); this form's rows describe a coupon")
     elif not kind:
         problems.append(f"Test: {test_name!r} is not one of {', '.join(TESTS)}" if test_name else f"Test: required; one of {', '.join(TESTS)}")
     material_code = text("material_code").upper() or None

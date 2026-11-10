@@ -84,7 +84,7 @@ class Requirement:
     clause: str  # "Table 1", "§6.4": where the reader finds it in their own copy
     level: str
     text: str  # what it asks, in our words
-    rule: Callable[[Any], Finding] | None = None  # judged on a Subject (a coupon) or a TowSubject (ADR-0073); None for the laboratory's clauses
+    rule: Callable[[Any], Finding] | None = None  # judged on a Subject (a coupon) or a TowSubject (ADR-0074); None for the laboratory's clauses
     rows: tuple[str, ...] = ()  # the form rows it concerns, by key
 
     def __post_init__(self) -> None:
@@ -137,7 +137,7 @@ class Profile:
     id: str  # what a spec's [test_method] names
     designation: str  # what the form's Standard row and the spec's coupon.standard carry
     title: str  # the standard's subject, in our words
-    kinds: tuple[str, ...]  # the spec kinds it covers; "fibre_tow" for the tow test, which is no spec kind (ADR-0073)
+    kinds: tuple[str, ...]  # the spec kinds it covers; "fibre_tow" for the tow test, which is no spec kind (ADR-0074)
     catalog_url: str  # the publisher's page for the standard; the text itself is never in this repository
     edition_note: str  # which copy was read, and what is known of the active edition
     systems: str  # "SI" or "SI and inch-pound, separately (§1.2)"

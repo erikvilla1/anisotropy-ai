@@ -445,7 +445,7 @@ def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Reque
 
 @app.post("/v1/tow-tests", response_model=TowTestResponse)
 def calculate_tow_test(problem: TowTestRequest, actor: Actor, request: Request, response: Response) -> TowTestResponse:
-    """A fibre tow record under ASTM D4018 (ADR-0073): its rows and specimens read and refused by row, judged clause by clause against the
+    """A fibre tow record under ASTM D4018 (ADR-0074): its rows and specimens read and refused by row, judged clause by clause against the
     standard when it names one, and reduced by the engine to each specimen's strength and chord modulus and their statistics, by
     fea/tools/studio_tool.py tow. It is answered at once: a tow has no model and no solver. Recorded with its actor (ADR-0026); the
     record keeps the values' digest. The studio tool answers within two minutes or the request is refused with 504.

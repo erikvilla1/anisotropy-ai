@@ -76,7 +76,7 @@ def judged(spec) -> dict:
 def test_every_requirement_names_its_clause_level_and_rule():
     assert STANDARD_WORDS == (NONE, *BY_DESIGNATION) and set(BY_DESIGNATION) == {D3039, C1869, D4018}
     for profile in PROFILES.values():
-        rows = TOW_ROWS if TOW_KIND in profile.kinds else FIELDS  # the tow's record has rows of its own (ADR-0073)
+        rows = TOW_ROWS if TOW_KIND in profile.kinds else FIELDS  # the tow's record has rows of its own (ADR-0074)
         ids = [r.id for r in profile.requirements]
         assert len(ids) == len(set(ids)), f"{profile.id}: requirement ids repeat"
         assert profile.catalog_url.startswith("https://store.astm.org/") and profile.rights == "licensed-reference" and profile.edition_note

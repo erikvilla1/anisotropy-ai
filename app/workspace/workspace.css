@@ -97,7 +97,7 @@
 .ws-size .studio-text-button { justify-self: start; }
 .ws-check-requirements { margin-top: 6px; }
 
-/* The fibre tow record (ADR-0073): the specimen cards in the rail, the strand and the results in the centre. */
+/* The fibre tow record (ADR-0074): the specimen cards in the rail, the strand and the results in the centre. */
 .ws-specimens { display: grid; gap: 8px; }
 .ws-specimen { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px 8px; margin: 0; min-width: 0; }
 .ws-specimen[data-status=rejected] { border-style: dashed; opacity: .85; }

@@ -1,11 +1,11 @@
-"""ASTM D4018: tensile properties of a resin-impregnated carbon or graphite fibre tow, as a profile (ADR-0073).
+"""ASTM D4018: tensile properties of a resin-impregnated carbon or graphite fibre tow, as a profile (ADR-0074).
 
 Read from the D4018-23 copy licensed to UC San Diego. Each value below carries its clause; the wording is ours. The standard is in SI only
 (§1.5). It judges a test record, not a model: the fibre, its mass per unit length and density, the impregnated strand, the tensile set-up
 and the specimens tested. The record is a `TowSubject`, in SI; the numbers (strength, chord modulus, statistics) are the engine's
 (`anisotropy_engine.tow`), and the fea package's `tow_test` reads the studio's rows into both.
 
-Our readings, recorded as readings in ADR-0073:
+Our readings, recorded as readings in ADR-0074:
 - §8.3 lets a tow of 3000 filaments or fewer be tested as several bundles combined into one specimen; the specimen's fibre mass per unit
   length is then the bundles' sum, so the strength and modulus divide by that sum.
 - §11.5 asks for the load introduction to be re-examined when a significant fraction of failures lie within one specimen width of a tab or
@@ -22,7 +22,7 @@ from .profile import RELATIVE, Finding, Profile, Requirement
 
 ID = "astm-d4018"
 DESIGNATION = "ASTM D4018-23"
-KIND = "fibre_tow"  # not a spec kind: a tow has no finite element model (ADR-0073)
+KIND = "fibre_tow"  # not a spec kind: a tow has no finite element model (ADR-0074)
 
 GAUGE_LENGTH = 0.150  # m, §8.3, §10.3.2.3 and §11.3.1: between the tabs, or between the grips of an untabbed specimen
 GAUGE_BAND = 0.005  # m, the same clauses: plus or minus

@@ -1,4 +1,4 @@
-# ADR-0073: The fibre tow test is a word on the coupon form's Test list with its own rows and specimens, reduced by the engine with no model, and judged against ASTM D4018 as a test record
+# ADR-0074: The fibre tow test is a word on the coupon form's Test list with its own rows and specimens, reduced by the engine with no model, and judged against ASTM D4018 as a test record
 
 - Status: Proposed
 - Date: 2026-11-09

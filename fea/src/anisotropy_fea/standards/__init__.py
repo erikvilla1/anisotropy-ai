@@ -1,7 +1,7 @@
 """The test standards a coupon may follow, as profiles our checks read (ADR-0072).
 
 The form's Standard row offers "none" and the designation of every profile here whose kinds include the coupon's test; a spec that names
-one carries `[test_method] id`. ASTM D4018 covers the fibre tow test, which is no spec kind: `tow_test` judges its record (ADR-0073). `conformance.conformance` judges a spec against its profile. This package imports nothing of the spec, so
+one carries `[test_method] id`. ASTM D4018 covers the fibre tow test, which is no spec kind: `tow_test` judges its record (ADR-0074). `conformance.conformance` judges a spec against its profile. This package imports nothing of the spec, so
 the spec can import it.
 """
 

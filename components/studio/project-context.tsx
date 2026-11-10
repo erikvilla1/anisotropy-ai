@@ -16,7 +16,7 @@ export type ProjectContextValue = {
   project: CouponProject;
   form: StudioForm;
   plate: PlateLists;
-  /** A fibre tow record's specimens (ADR-0073), and the last answer of its calculation, which belongs to the page, not the project. */
+  /** A fibre tow record's specimens (ADR-0074), and the last answer of its calculation, which belongs to the page, not the project. */
   specimens: TowSpecimenRow[];
   towAnswer: TowAnswer | null;
   /** True when the project came back from this browser's storage rather than starting blank. */

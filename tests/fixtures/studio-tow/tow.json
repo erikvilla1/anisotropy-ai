@@ -822,6 +822,6 @@
     "shown": true
    }
   ],
-  "note": "Strength and chord modulus divide by the fibre's area, MUL / density (Eqs 4 and 5); the chord strains are absolute in the engine (ADR-0073: the standard's factor B gives GPa only with absolute strains). Nothing here is a model of the tow."
+  "note": "Strength and chord modulus divide by the fibre's area, MUL / density (Eqs 4 and 5); the chord strains are absolute in the engine (ADR-0074: the standard's factor B gives GPa only with absolute strains). Nothing here is a model of the tow."
  }
 }

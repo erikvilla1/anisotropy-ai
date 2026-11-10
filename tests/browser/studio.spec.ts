@@ -19,7 +19,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) return json(route, { detail: "Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read" }, 503); // no project store: the browser keeps the project alone
     if (path === "/v1/coupons/IM7-UNT-L1/values") return json(route, { name: "IM7-UNT-L1", values: fixture("values") });
-    if (path === "/v1/tow-tests" && request.method() === "POST") { // a fibre tow record, answered by the package from the public fixture (ADR-0073)
+    if (path === "/v1/tow-tests" && request.method() === "POST") { // a fibre tow record, answered by the package from the public fixture (ADR-0074)
       (calls.tows ??= []).push(request.postDataJSON());
       const answer = fixture("tow", "studio-tow");
       return json(route, { run_id: "run-6", state: answer.checklist.state, checklist: answer.checklist, result: answer.result });
@@ -590,7 +590,7 @@ test("the model is lit for presentation before a run: the sketch and the package
   expect(browserErrors).toEqual([]);
 });
 
-test("the fibre tow test swaps the panels for the tow's, and Calculate shows each specimen and the statistics (ADR-0073)", async ({ page }) => {
+test("the fibre tow test swaps the panels for the tow's, and Calculate shows each specimen and the statistics (ADR-0074)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[], tows: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/workspace/fea");

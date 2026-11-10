@@ -76,6 +76,6 @@ export const testStandardReferences = [
   { designation: "ASTM D4018-23", title: "Standard Test Methods for Properties of Continuous Filament Carbon and Graphite Fiber Tows",
     publisher: "ASTM International", rights: "licensed-reference" as const,
     rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
-      + "with their clause only; readers consult their own copy. No finite element model: the engine reduces a test record (ADR-0073).",
+      + "with their clause only; readers consult their own copy. No finite element model: the engine reduces a test record (ADR-0074).",
     url: "https://store.astm.org/d4018-23.html" },
 ];

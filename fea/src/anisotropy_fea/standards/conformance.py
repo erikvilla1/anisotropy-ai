@@ -38,7 +38,7 @@ class Conformance:
     subject: Subject
     preset: Preset | None  # the specimen (C1869 A or B) or the laminate's class (D3039 Table 2) the coupon is held to
     judged: tuple[Judged, ...]
-    checked: str = "specimen"  # what was checked: a coupon's specimen, or a fibre tow's test record (ADR-0073)
+    checked: str = "specimen"  # what was checked: a coupon's specimen, or a fibre tow's test record (ADR-0074)
     judged_by: str = "a model can meet"  # which requirements count: those a model can meet, or those the record shows
 
     def count(self, state: str) -> int:

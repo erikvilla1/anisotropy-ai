@@ -19,7 +19,7 @@ export type CouponProject = {
   name: string;
   form: StudioForm;
   plate: PlateLists;
-  /** The specimens of a fibre tow record (ADR-0073), as typed; empty for a coupon. */
+  /** The specimens of a fibre tow record (ADR-0074), as typed; empty for a coupon. */
   specimens: TowSpecimenRow[];
   created: string;
   updated: string;
@@ -154,7 +154,7 @@ export const isUuid = (id: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f
 /** The project as the API keeps it: the page's own object under `content`, with the form version and the unit system it was stated in. */
 export function uploadOf(project: Project): ProjectUpload {
   if (project.kind === "fea") {
-    const content = { form: project.form, plate: project.plate, ...(project.specimens.length ? { specimens: project.specimens } : {}) }; // a tow's specimens (ADR-0073)
+    const content = { form: project.form, plate: project.plate, ...(project.specimens.length ? { specimens: project.specimens } : {}) }; // a tow's specimens (ADR-0074)
     return { kind: "fea", name: project.name, content, form_version: FORM_VERSION, units: project.form.units?.trim() || null };
   }
   return { kind: "laminate", name: project.name, content: { draft: project.draft }, form_version: null, units: project.draft.system || null };

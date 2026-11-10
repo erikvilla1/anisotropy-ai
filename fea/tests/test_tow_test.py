@@ -1,4 +1,4 @@
-"""The fibre tow test of ASTM D4018 (ADR-0073): the studio's tow record read, refused by row, judged clause by clause, and reduced by the
+"""The fibre tow test of ASTM D4018 (ADR-0074): the studio's tow record read, refused by row, judged clause by clause, and reduced by the
 engine; a deviation warns and never blocks; the coupon form and the coupon check refuse the tow and say where it goes.
 
 The record is a constructed 12K carbon tow with round numbers, not a published test: 0.800 g/m, 1.80 g/cm^3, five specimens.

@@ -116,7 +116,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
     setStatus("The public IM7/8552 example is loaded: 250 by 25 mm with 56 mm tabs, [45/0/-45/90]s, 1 mm pull.");
   }
 
-  if (isTow(form)) return <TowRail apiBaseUrl={apiBaseUrl} />; // the fibre tow test is no coupon: its own panels (ADR-0073)
+  if (isTow(form)) return <TowRail apiBaseUrl={apiBaseUrl} />; // the fibre tow test is no coupon: its own panels (ADR-0074)
 
   const busy = checking || isActive(job?.state);
   const checklist = checked?.checklist ?? null;

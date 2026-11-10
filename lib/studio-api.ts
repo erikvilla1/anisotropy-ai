@@ -213,7 +213,7 @@ export async function checkSetup(apiBase: string, values: StudioValues, signal?:
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview };
 }
 
-/** A fibre tow record's answer (ADR-0073): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
+/** A fibre tow record's answer (ADR-0074): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
  * g/cm³, mm², microstrain). Every number is the engine's; the page shows them as they come. */
 export type TowStats = { n: number; mean: number; sd: number; cv: number };
 export type TowSpecimenResult = {

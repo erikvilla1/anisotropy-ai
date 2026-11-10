@@ -1,4 +1,4 @@
-"""The fibre tow calculations of ASTM D4018-23 (ADR-0073), checked against values worked by hand in the standard's own units.
+"""The fibre tow calculations of ASTM D4018-23 (ADR-0074), checked against values worked by hand in the standard's own units.
 
 The tow is a constructed one with round numbers (a 12K carbon tow of 0.800 g/m and 1.80 g/cm^3); no published test record is reproduced.
 Each expected value is worked in the comment beside it, so the check does not repeat the engine's code.
@@ -47,7 +47,7 @@ def test_eq_5_chord_modulus_with_absolute_strains():
 
 
 def test_eq_5_as_printed_gives_gpa_only_with_absolute_strains():
-    """The finding ADR-0073 records: B = 1e-3 with P in N, rho_f in g/cm^3 and MUL in g/m gives GPa when the strains are absolute; with
+    """The finding ADR-0074 records: B = 1e-3 with P in N, rho_f in g/cm^3 and MUL in g/m gives GPa when the strains are absolute; with
     the strains in microstrain, as the standard lists them, the same arithmetic is off by a factor of 1e6."""
     B, dP, rho, mul = 1e-3, 470.0, 1.80, 0.800
     absolute = B * dP * rho / ((6000e-6 - 1000e-6) * mul)

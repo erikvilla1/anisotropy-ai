@@ -52,7 +52,7 @@ function Stat({ title, unit, stats, testid }: { title: string; unit: string; sta
   );
 }
 
-/** The record's result as the engine computed it and the fea package wrote it, in the standard's report units (ADR-0073): the fibre, each
+/** The record's result as the engine computed it and the fea package wrote it, in the standard's report units (ADR-0074): the fibre, each
  * specimen, the statistics, the planning loads and the report items the record gives. The page prints the numbers; it computes none. */
 export function TowResults({ result }: { result: TowResult }) {
   const u = result.units;
@@ -127,7 +127,7 @@ export function TowResults({ result }: { result: TowResult }) {
   );
 }
 
-/** The centre of the workspace for a fibre tow record (ADR-0073): the strand as typed, then the result once calculated. */
+/** The centre of the workspace for a fibre tow record (ADR-0074): the strand as typed, then the result once calculated. */
 export function TowStage() {
   const { form, specimens, towAnswer } = useProject();
   const result = towAnswer?.result ?? null;

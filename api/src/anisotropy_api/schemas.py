@@ -587,7 +587,7 @@ class CouponCheckResponse(Contract):
 
 
 class TowTestRequest(CouponCheckRequest):
-    """A fibre tow record under ASTM D4018 (ADR-0073): the tow test's rows and its specimens as one JSON object, the way the studio states
+    """A fibre tow record under ASTM D4018 (ADR-0074): the tow test's rows and its specimens as one JSON object, the way the studio states
     them; `test` is "fibre tow tension". The record keeps the values' digest, as a check does, never the rows."""
 
 
