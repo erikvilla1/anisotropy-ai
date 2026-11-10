@@ -7,10 +7,10 @@ Roles only. No contact details and no personal facts: this repository is public.
 Seats from the org chart of 2026-11-03. Each person holds one technical seat and one non-technical seat; a lead decides alone inside the seat and checks with the CEO on anything that could alter results, cost, security, test plans or spending.
 
 ### Christopher Valerio
-- CEO (GitHub cvv-mx-256). Technical seat: prompt engineering and AI evaluation. Signs off on test plans, standards and spending. One of the three X post approvers ([x.md](x.md)).
+- Co-founder and CEO (GitHub cvv-mx-256). Technical seat: prompt engineering and AI evaluation. Signs off on test plans, standards and spending. One of the three X post approvers ([x.md](x.md)).
 
 ### Erik Villa
-- Founder of the repository (GitHub erikvilla1); decides the decision records ("Founder" in every ADR). Technical seat: AI architecture and operations (system design, model and API choices, deployment). Non-technical seat: documentation and records (decision log, changelog, meeting notes). Second for the CEO and for software. One of the three X post approvers.
+- Co-founder (GitHub erikvilla1). Started the repository and decides the decision records ("Founder" in every ADR). Technical seat: AI architecture and operations (system design, model and API choices, deployment). Non-technical seat: documentation and records (decision log, changelog, meeting notes). Second for the CEO and for software. One of the three X post approvers.
 
 ### Kai Saucedo
 - Technical seat: software and UI/UX (application, interface, data storage, file organization). Non-technical seat: marketing and communications (website, LinkedIn, X, brand, announcements); a technical claim is checked with the testing and modeling leads first. One of the three X post approvers. GitHub ka1saucedo.
@@ -24,3 +24,4 @@ Seats from the org chart of 2026-11-03. Each person holds one technical seat and
 ## Log
 - 2026-11-04: Note created with the three people on the repository.
 - 2026-11-05: All five seats from the org chart presented at the weekly meeting of 2026-11-03; Christopher is CEO.
+- 2026-11-09: Christopher and Erik are co-founders (Erik, 2026-11-09); the site's team cards and contact page say so.
