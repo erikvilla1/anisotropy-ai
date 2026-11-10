@@ -81,6 +81,9 @@ def test_the_extensometer_reads_laminate_theory_on_the_d3039_coupon(d3039):
     first = tm["fpf"][tm["earliest"]]
     assert tm["fpf_basis"] == "the gauge section" and first["stress"] == pytest.approx(first["factor"] * tm["stress"])
     assert first["strain"] == pytest.approx(first["factor"] * s["value"]) and tm["note_b"] is False and tm["hole"] is None
+    words = tm["reduction"]  # D3039's own words: a chord between Table 3's strains, over the gross area (ADR-0075 gives D638 its own)
+    assert (words["modulus"], words["area"], words["modulus_clause"]) == ("chord modulus", "gross area", "D3039 Table 3, Eq 8")
+    assert (s["chord"]["from"], s["chord"]["to"]) == CHORD_RANGE and lt["isotropic"] is False
     assert spec.mesh.y_partitions == pytest.approx([0.056, 0.1125, 0.1375, 0.194]) and spec.mesh.y_seeds[2] % 2 == 0 and spec.mesh.nx % 2 == 0
 
 

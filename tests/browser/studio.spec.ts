@@ -262,7 +262,7 @@ test("a standard is offered by its test, fills its size, and the check judges th
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   const titles = page.getByTestId("question-standard").locator(".ws-choice-title");
-  await expect(titles).toHaveText(["ASTM D3039/D3039M-17", "No standard"]); // C1869 is open-hole tension: not offered here
+  await expect(titles).toHaveText(["ASTM D3039/D3039M-17", "ASTM D638-22", "No standard"]); // C1869 is open-hole tension: not offered here
   await expect(standardChoice(page, "none")).toBeChecked();
   await expect(page.getByTestId("setup-line")).toContainText("Setting up unnotched tension to your own size, under no standard");
   await expect(page.getByTestId("standard-card")).toContainText("No standard picked");
@@ -298,6 +298,38 @@ test("a standard is offered by its test, fills its size, and the check judges th
   await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveValue("3");
   await expect(page.getByTestId("sketch")).toContainText("10 by 60 mm, 15 mm tabs, a 3 mm hole");
   await expect(page.getByTestId("sketch")).toContainText("Sized for ASTM C1869-18(2023), Specimen B");
+});
+
+test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, E and nu in place of the plies (ADR-0075)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await pickStandard(page, "ASTM D638-22");
+  await expect(page.getByTestId("setup-line")).toContainText("Setting up unnotched tension under ASTM D638-22");
+  await page.getByRole("button", { name: /Use Type I: 13 mm wide/ }).click();
+  await expect(page.getByLabel("Narrow width (mm)", { exact: true })).toHaveValue("13");
+  await expect(page.getByLabel("Fillet radius (mm)", { exact: true })).toHaveValue("76");
+  await expect(page.getByLabel("Outer radius (mm)", { exact: true })).toHaveValue(""); // Type I has none
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("19");
+  await expect(page.getByLabel("Strain measurement", { exact: true })).toHaveValue("extensometer"); // the gage length is an extensometer's
+  await expect(page.getByLabel("Specimen", { exact: true })).toHaveValue("I");
+  await expect(page.getByTestId("layup-editor")).toBeVisible(); // plies until the material kind says otherwise
+  await page.getByLabel("Material kind", { exact: true }).selectOption("isotropic");
+  await expect(page.getByTestId("layup-editor")).toHaveCount(0);
+  await expect(page.getByTestId("isotropic-hint")).toBeVisible();
+  await page.getByLabel("Thickness (mm)", { exact: true }).fill("3.2");
+  await page.getByLabel("Own material: E (MPa)", { exact: true }).fill("3000");
+  await page.getByLabel("Own material: nu", { exact: true }).fill("0.35");
+  await expect(page.getByLabel("G13 (MPa)", { exact: true })).toHaveCount(0); // no ply material for a plastic
+  await expect(page.getByTestId("sketch")).toContainText("a dog-bone narrowing to 13 by 57 mm through 76 mm fillets");
+  await expect(page.getByTestId("sketch")).toContainText("One isotropic material, drawn 3.2 mm thick");
+  await page.getByTestId("check-button").click();
+  await expect.poll(() => calls.checks.length).toBeGreaterThan(0);
+  const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
+  expect([sent.standard, sent.specimen, sent.material_kind, sent.thickness, sent.own_E, sent.own_nu, sent.narrow_width, sent.radius])
+    .toEqual(["ASTM D638-22", "I", "isotropic", 3.2, 3000, 0.35, 13, 76]);
+  expect([sent.ply_1, sent.library, sent.G13, sent.criteria]).toEqual([undefined, undefined, undefined, undefined]); // hidden rows are not sent
 });
 
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {

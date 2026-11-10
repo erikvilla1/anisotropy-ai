@@ -30,17 +30,21 @@ from typing import Any
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
 
 from . import __version__, forms, paths
+from .dogbone import OutlineError, dogbone_outline
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
 from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
                    to_si)
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, unit_factors, units_words
 from .units import from_si as value_from_si, to_si as value_to_si
 
-FORM_VERSION = "0.8"  # 0.8: the Standard row is a list of the standards we check, with the Specimen, tab and strain rows (ADR-0072)
+FORM_VERSION = "0.9"  # 0.9: a plastic, one isotropic material with no plies, and the dog-bone's rows (ADR-0075)
+# 0.8: the Standard row is a list of the standards we check, with the Specimen, tab and strain rows (ADR-0072)
 # 0.7: the ply rows count their angles from the coupon's length axis (ADR-0065); a 0.6 file is refused, never reinterpreted. A 0.7 file is read
 # as it is: no row changed its meaning in 0.8, the new rows are blank, and a Standard row that names no standard of the list is refused by row.
-READ_VERSIONS = ("0.7", FORM_VERSION)
-ROWS_ADDED = {"0.8": ("specimen", "tab_thickness", "tab_bevel", "tab_material", "strain_device", "strain_length")}  # a form of an older version lacks them
+# A 0.8 file is read as it is too: every 0.9 row is new, and blank means a laminate of plies cut as a straight strip.
+READ_VERSIONS = ("0.7", "0.8", FORM_VERSION)
+ROWS_ADDED = {"0.8": ("specimen", "tab_thickness", "tab_bevel", "tab_material", "strain_device", "strain_length"),
+              "0.9": ("narrow_width", "narrow_length", "radius", "outer_radius", "material_kind", "thickness", "own_E", "own_nu")}  # a form of an older version lacks them
 INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD = "Coupon", "How to fill it in", "Definitions", "Library materials", "Record"
 UNITS = "mm-MPa"  # the system the rows are in unless the Units row says another, the one the labels are written in, and the library sheet's
 TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45", "three_point_bending", "four_point_bending", "plate")  # as the form lists them
@@ -52,6 +56,10 @@ CONTROLS = ("displacement", "force")
 GRIPS = ("coupling", "nodal")
 REGIONS = ("tabs", "line")
 STRAIN_DEVICES = ("extensometer", "strain gauge")
+MATERIAL_KINDS = ("plies", "isotropic")  # a laminate of plies, or one isotropic material with no plies (ADR-0075)
+DOGBONE_KEYS = ("narrow_width", "narrow_length", "radius", "outer_radius")
+ISOTROPIC_KEYS = ("thickness", "own_E", "own_nu")
+PLY_MATERIAL_KEYS = ("library", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c", "own_F6", "G13", "G23", "f12_star")
 PLIES = 16  # rows offered for the ply angles
 HOLE_DEFAULTS = {"circumferential": 32, "radial_layers": 6, "ring_ratio": 2.0, "growth": 1.2}  # the public open-hole check's O-grid
 ELEMENT_SIZE_DEFAULT = 2.0  # mm, the public checks' row spacing; `element_size_default` gives it in the stated units
@@ -128,8 +136,8 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
               "picked we check the coupon against each of its clauses a model can meet and report the deviations; see Definitions, Test standards",
               default=NO_STANDARD, words=STANDARD_WORDS),
         Field("specimen", "Specimen", "list", "the standard's specimen when it names more than one: for ASTM C1869, A (a 6 mm hole in a 36 mm "
-              "wide strip), B (a 3 mm hole in a 10 mm wide strip) or other (a size of its Annex A1, reported as a variation); blank otherwise",
-              words=VARIANT_WORDS),
+              "wide strip), B (a 3 mm hole in a 10 mm wide strip) or other (a size of its Annex A1, reported as a variation); for ASTM D638, its "
+              "Type I, II, III, IV or V of Fig. 1; blank otherwise", words=VARIANT_WORDS),
         Field("size_from", "Where the size comes from", "text", "where the length, width and tabs come from: a standard, a drawing, or your own design",
               required=True),
         Field("team_model", "Your Abaqus model of this coupon", "text", "the name of your Abaqus model or job for this coupon, or not built yet",
@@ -142,6 +150,15 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("width", "Width (mm)", "number", "across the coupon, e.g. 25", required=True, above=0),
         Field("tab_length", "Tab length (mm)", "number", "how much of each end the grip holds, e.g. 56; 0 for no tabs, and then set Grip region to line. "
               "Required for the pulled and pushed tests; leave it blank for bending, which has supports instead of grips", at_least=0),
+    )),
+    ("Dog-bone (unnotched tension only: a dumbbell, as ASTM D638 Fig. 1 draws it; leave the four rows blank for a straight strip)", (
+        Field("narrow_width", "Narrow width (mm)", "number", "the width of the narrow section at mid-length, W in ASTM D638, e.g. 13; the Width row "
+              "above is then the overall width at the ends, WO", above=0),
+        Field("narrow_length", "Narrow length (mm)", "number", "the length of the straight narrow section, L in ASTM D638, e.g. 57", above=0),
+        Field("radius", "Fillet radius (mm)", "number", "the radius of the fillet that joins the narrow section to the wider ends, tangent to the "
+              "narrow section, R in ASTM D638, e.g. 76", above=0),
+        Field("outer_radius", "Outer radius (mm)", "number", "only for a reverse curve, ASTM D638 Type IV: the second arc's radius, tangent to the "
+              "wide end, RO, e.g. 25; blank when the fillet meets the full width at a corner", above=0),
     )),
     ("Tabs and strain measurement (pulled and pushed tests; leave blank for bending and a plate)", (
         Field("tab_thickness", "Tab thickness (mm)", "number", "the thickness of each bonded tab, e.g. 1.5; leave the three tab rows blank when the "
@@ -174,6 +191,14 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("hole_growth", "Ring growth", "number", "how much thicker each ring is than the one inside it: 1.2 means 20% thicker, so the smallest "
               "elements sit at the edge of the hole, where stress changes fastest; 1 keeps every ring the same", default=HOLE_DEFAULTS["growth"], at_least=1),
     )),
+    ("What the coupon is made of: plies of a composite, or one isotropic material such as a plastic", (
+        Field("material_kind", "Material kind", "list", "plies: a laminate of plies, stated by the layup and a ply material below; isotropic: one "
+              "material alike in every direction, such as a plastic or a metal sheet, stated by its thickness, E and nu here, with its name and "
+              "source on the Own material rows, and no plies", default="plies", words=MATERIAL_KINDS),
+        Field("thickness", "Thickness (mm)", "number", "isotropic only: the coupon's thickness, e.g. 3.2", above=0),
+        Field("own_E", "Own material: E (MPa)", "number", "isotropic only: Young's modulus, e.g. 3000 for a rigid plastic", above=0),
+        Field("own_nu", "Own material: nu", "number", "isotropic only: Poisson's ratio, above -1 and below 0.5, e.g. 0.35 for a plastic; no unit"),
+    )),
     ("Layup, bottom ply first", tuple(
         Field(f"ply_{i}", f"Ply {i}" + (" (bottom)" if i == 1 else ""), "angle",
               "the fibre angle of the bottom ply in degrees, measured from the coupon's length, the direction it is pulled: 0 = fibres along the pull, "
@@ -181,7 +206,7 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
               else "the next ply up" if i == 2 else "")
         for i in range(1, PLIES + 1)) + (
         Field("symmetric", "Symmetric", "list", "yes: the plies listed are the lower half and are mirrored, so 0, 45, -45, 90 becomes 8 plies; "
-              "no: the plies listed are the whole stack", required=True, words=YES_NO),
+              "no: the plies listed are the whole stack; required for plies", words=YES_NO),
         Field("ply_thickness", "Ply thickness (mm)", "number", "the cured thickness of one ply, e.g. 0.127; leave blank only when the library "
               "material gives one (its Ply thickness column on the sheet Library materials)", above=0),
     )),
@@ -202,9 +227,9 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
         Field("own_source", "Own material: source", "text", "where these numbers come from: the supplier's datasheet and its date, or a test report. "
               "They stay with this coupon and never go into our library"),
         Field("G13", "G13 (MPa)", "number", "out-of-plane shear stiffness in the plane of the fibres and the thickness, as in your Abaqus material "
-              "(Lamina). No measured value? For a tape use G13 = G12 and say so in the notes; see Definitions, Material", required=True, above=0),
+              "(Lamina); required for plies. No measured value? For a tape use G13 = G12 and say so in the notes; see Definitions, Material", above=0),
         Field("G23", "G23 (MPa)", "number", "out-of-plane shear stiffness across the fibres and the thickness, as in your Abaqus material (Lamina). "
-              "No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material", required=True, above=0),
+              "Required for plies. No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material", above=0),
     )),
     ("Failure criterion: which first-ply failure criterion we report", (
         Field("criteria", "Failure criterion", "list", "all: every criterion the material allows (maximum stress and Tsai-Hill, and Tsai-Wu when "
@@ -265,6 +290,7 @@ ROWS_OF_KEY = {
     "coupon.standard": "standard", "test_method.id": "standard", "test_method.variant": "specimen", "test_method": "standard",
     "tabs.thickness": "tab_thickness", "tabs.bevel": "tab_bevel", "tabs.material": "tab_material", "tabs": "tab_thickness",
     "strain.device": "strain_device", "strain.gauge_length": "strain_length", "strain": "strain_device",
+    "geometry.dogbone": "narrow_width", "geometry.thickness": "thickness", "material.E": "own_E", "material.nu": "own_nu", "layup": "material_kind",
 }
 
 HOW_TO = (
@@ -281,11 +307,14 @@ HOW_TO = (
     "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed "
     "in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions "
     "says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has "
-    "no ply thickness, give one.",
+    "no ply thickness, give one. A plastic, or any material alike in every direction, is Material kind = isotropic: give its thickness, E and nu, "
+    "and its name and source on the Own material rows, and leave the plies, the ply material, G13 and G23 blank.",
     "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give "
     "its interaction term f12*; or pick one criterion, or none.",
     "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, "
     "give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
+    "Dog-bone: for a dumbbell specimen, such as ASTM D638's, give the narrow section's width and length and the fillet radius (and Type IV's outer "
+    "radius); Width and Length are then the overall sizes at the ends. Unnotched tension only; leave the rows blank for a straight strip. "
     "Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read "
     "only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, "
     "and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
@@ -294,7 +323,7 @@ HOW_TO = (
     "Standard: pick the test standard the specimen follows from the list, or none for your own design. With a standard picked we check the "
     "coupon against each of its clauses a model can meet, list every deviation with its clause, and list the clauses of the procedure (specimens, "
     "conditioning, speed, alignment, failure mode) as the laboratory's. ASTM D3039 also needs the strain measurement; ASTM C1869 needs its "
-    "specimen, A, B or other. A deviation never stops the run, and we never say a model conforms to a test standard.",
+    "specimen, A, B or other; ASTM D638 needs its type, I to V. A deviation never stops the run, and we never say a model conforms to a test standard.",
     "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
     "Send the file back as it is. If something is missing or inconsistent, we send it back with every problem named.",
 )
@@ -310,10 +339,13 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
         ("Tab, tab line", "A tab is the end region a grip holds. The tab line is where the tab ends and the free part of the coupon begins.",
          "With 56 mm tabs on a 250 mm coupon the tab lines are at y = 56 and y = 194."),
         ("Gauge section", "The free part between the tabs, where the coupon should fail and where results are read.", ""),
+        ("Dog-bone", "A coupon narrower in its middle than at its ends: a straight narrow section joined to the wide ends by fillets, so that "
+         "it fails in the narrow section and not in the grips. The plastics tensile test, ASTM D638, uses it.",
+         "ASTM D638 Type I: 13 mm wide over 57 mm, a 76 mm fillet, 19 mm wide at the ends."),
     )),
     ("Tests", (
         ("Unnotched tension", "A plain strip pulled along its length. It gives the laminate's tensile stiffness and strength.",
-         "ASTM D3039/D3039M, in our Standard list."),
+         "ASTM D3039/D3039M for composites, and ASTM D638 for plastics on a dog-bone, both in our Standard list."),
         ("Unnotched compression", "A plain strip pushed along its length. It gives the compressive stiffness and strength. Our model is flat and "
          "in-plane, so it does not buckle.", "ASTM D6641 (not in our Standard list yet)."),
         ("Open-hole tension", "A strip with a hole drilled through its centre, pulled. The hole concentrates the stress at its edge.",
@@ -369,6 +401,9 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
         ("Empty cell on the sheet Library materials", "The source does not give that value. With no strength we cannot predict when a ply fails, "
          "so we leave failure out; with no ply thickness, give one on the form.", ""),
         ("Own material", "Your own constants, with where they come from. They stay with this coupon and never go into our library.", ""),
+        ("Isotropic material", "A material alike in every direction, such as a plastic or a metal sheet: it has no plies, and two constants "
+         "state it, Young's modulus E and Poisson's ratio nu (the shear modulus is E / (2 (1 + nu))). Our deck writes it as Abaqus's isotropic "
+         "Elastic and a homogeneous shell section of the thickness you give.", "A rigid plastic: E = 3000 MPa, nu = 0.35, 3.2 mm thick."),
         ("Directions 1, 2, 3", "The ply's own directions: 1 along the fibres, 2 across the fibres in the plane of the ply, 3 through the thickness.",
          ""),
         ("E1, E2", "Stiffness (Young's modulus) along the fibres (E1) and across them (E2).", "IM7/8552 in our library: E1 = 162,096 MPa, "
@@ -753,7 +788,8 @@ def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
     """
     if spec.units not in UNIT_SYSTEMS:
         raise IntakeError(f"the form states a coupon in one of {', '.join(UNIT_SYSTEMS)}; the spec is in {spec.units}")
-    if not (spec.material.transverse.plane_stress and spec.material.transverse.transverse_isotropy):
+    isotropic = spec.layup is None  # one isotropic material with no plies (ADR-0075)
+    if not isotropic and not (spec.material.transverse.plane_stress and spec.material.transverse.transverse_isotropy):
         raise IntakeError("the form fixes plane_stress = true and transverse_isotropy = true for the out-of-plane constants; the spec states them otherwise")
     if spec.mesh.element_order != 1:
         raise IntakeError(f"the form fixes element_order = 1; the spec asks for order {spec.mesh.element_order}")
@@ -777,19 +813,31 @@ def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
                   hole_diameter=back(g.hole_diameter, L), span=back(g.span, L), overhang=back(g.overhang, L), load_span=back(g.load_span, L))
     if m.hole is not None:
         values.update(hole_circumferential=m.hole.circumferential, hole_radial=m.hole.radial_layers, hole_ring=m.hole.ring_ratio, hole_growth=m.hole.growth)
-    values.update(angles=[int(a) if float(a).is_integer() else a for a in spec.layup.angles], symmetric="yes" if spec.layup.symmetric else "no",
-                  ply_thickness=None if spec.layup.ply_thickness == "library" else back(spec.layup.ply_thickness, L))
-    if mat.library is not None:
+    if g.dogbone is not None:
+        values.update(narrow_width=back(g.dogbone.narrow_width, L), narrow_length=back(g.dogbone.narrow_length, L), radius=back(g.dogbone.radius, L),
+                      outer_radius=back(g.dogbone.outer_radius, L))
+    if isotropic:
+        values.update(material_kind="isotropic", thickness=back(g.thickness, L), own_E=back(mat.E, S), own_nu=mat.nu, own_source=mat.source,
+                      own_name=spec.names.material if spec.names is not None else None)
+    else:
+        values.update(angles=[int(a) if float(a).is_integer() else a for a in spec.layup.angles], symmetric="yes" if spec.layup.symmetric else "no",
+                      ply_thickness=None if spec.layup.ply_thickness == "library" else back(spec.layup.ply_thickness, L))
+    if isotropic:
+        pass
+    elif mat.library is not None:
         values["library"] = mat.library
     else:
         values.update(own_name=spec.names.material if spec.names is not None else None, own_E1=back(mat.E1, S), own_E2=back(mat.E2, S),
                       own_G12=back(mat.G12, S), own_nu12=mat.nu12, own_F1t=back(mat.F1t, S), own_F1c=back(mat.F1c, S), own_F2t=back(mat.F2t, S),
                       own_F2c=back(mat.F2c, S), own_F6=back(mat.F6, S), own_source=mat.source)
-    values.update(G13=back(t.G13, S), G23=back(t.G23, S), f12_star=mat.f12_star)
+    if not isotropic:
+        values.update(G13=back(t.G13, S), G23=back(t.G23, S), f12_star=mat.f12_star)
     strengths = mat.library is not None and library_material(mat.library, mat.dataset).lamina.strengths is not None or mat.F1t is not None
     asked = list(spec.output.fpf_criteria)
     every = [*FPF_CRITERIA, *(["tsai_wu"] if mat.f12_star is not None else [])] if strengths else []
-    if asked == every:
+    if isotropic:
+        values["criteria"] = "none"
+    elif asked == every:
         values["criteria"] = "all"
     elif not asked:
         values["criteria"] = "none"
@@ -822,6 +870,8 @@ def values_of_spec(spec: CouponSpec) -> dict[str, Any]:
     if spec.names is not None:
         names = spec.names.model_dump()
         given = {key: names[key] for key in ("part", "instance", "layup", "section_set") if names[key] != DEFAULT_NAMES[key]}
+        if isotropic:
+            given.pop("layup", None)  # no layup to name: the material's name is its own row
         if mat.library is not None and names["material"] != mat.library.upper():
             given["material"] = names["material"]
         for key, spec_key in NAME_KEYS.items():
@@ -886,10 +936,19 @@ class Values:
     tab_material: str | None = None
     strain_device: str | None = None  # "extensometer" or "strain gauge"
     strain_length: float | None = None
+    isotropic: dict[str, Any] | None = None  # one isotropic material with no plies (ADR-0075): thickness, E, nu, name, source
+    dogbone: dict[str, float] | None = None  # a dumbbell outline: narrow_width, narrow_length, radius, and outer_radius when given
 
     @property
     def test_code(self) -> str:
         return TEST_CODES[self.kind][0]
+
+    @property
+    def stacking(self) -> tuple[float, ...]:
+        """The full stack, bottom first, that a layup code names; none for an isotropic material, which has no plies."""
+        if self.isotropic is not None:
+            return ()
+        return tuple(float(a) for a in (self.angles + self.angles[::-1] if self.symmetric else self.angles))
 
 
 def check_form(form: FormInput) -> Values:
@@ -1049,9 +1108,43 @@ def check_form(form: FormInput) -> Values:
         problems.append(f"{L('strain_device')}: required for {profile.designation}, whose minimum length counts the gauge length (Table 1); "
                         f"one of {', '.join(STRAIN_DEVICES)}, with its length")
 
+    dogbone_given = {key: number(key) for key in DOGBONE_KEYS}
+    dogbone = None
+    if any(cells.get(key) is not None for key in DOGBONE_KEYS):
+        if kind and kind != "unnotched_tension":
+            problems.append(f"{L('narrow_width')} and the other dog-bone rows: belong to unnotched tension only; leave them blank")
+        missing = [L(key) for key in ("narrow_width", "narrow_length", "radius") if cells.get(key) is None]
+        if missing:
+            problems.append(f"{', '.join(missing)}: required for a dog-bone (with {L('narrow_width')}, {L('narrow_length')} and {L('radius')} "
+                            f"together; {L('outer_radius')} only for a reverse curve)")
+        elif all(dogbone_given[key] is not None for key in ("narrow_width", "narrow_length", "radius")):
+            dogbone = {key: value for key, value in dogbone_given.items() if value is not None}
+
+    material_kind = word("material_kind") or "plies"
+    isotropic = None
     angles: list[float] = []
+    if material_kind == "isotropic":
+        given = [L(key) for key in (*(f"ply_{i}" for i in range(1, PLIES + 1)), "symmetric", "ply_thickness", *PLY_MATERIAL_KEYS)
+                 if cells.get(key) is not None]
+        if given:
+            problems.append(f"{', '.join(given)}: belong to a material of plies; an isotropic material has none, so leave them blank")
+        for key in ("thickness", "own_E", "own_nu", "own_name", "own_source"):
+            if cells.get(key) is None:
+                problems.append(f"{L(key)}: required for an isotropic material")
+        isotropic = {"thickness": number("thickness"), "E": number("own_E"), "nu": number("own_nu"), "name": text("own_name"),
+                     "source": text("own_source")}
+        if isotropic["nu"] is not None and not -1.0 < isotropic["nu"] < 0.5:
+            problems.append(f"{L('own_nu')}: Poisson's ratio of an isotropic material lies above -1 and below 0.5, not {isotropic['nu']:g}")
+        if isotropic["name"] and not ABAQUS_NAME.match(isotropic["name"]):
+            problems.append(f"Own material: name: {isotropic['name']!r} must start with a letter and hold only letters, digits, - and _")
+        if kind and kind not in ("unnotched_tension", "compression", "open_hole_tension"):
+            problems.append(f"{L('material_kind')}: an isotropic material is built for the pulled and pushed tests, not {TEST_CODES[kind][1]}")
+    else:
+        given = [L(key) for key in ISOTROPIC_KEYS if cells.get(key) is not None]
+        if given:
+            problems.append(f"{', '.join(given)}: belong to an isotropic material; pick Material kind = isotropic, or leave them blank")
     ended = False
-    for i in range(1, PLIES + 1):
+    for i in range(1, PLIES + 1) if isotropic is None else ():  # an isotropic material reads no ply rows
         value = cells.get(f"ply_{i}")
         if value is None:
             ended = True
@@ -1063,15 +1156,19 @@ def check_form(form: FormInput) -> Values:
             angles.append(float(value))
         except (TypeError, ValueError):
             problems.append(f"Ply {i}: an angle in degrees is needed, not {forms.text_of(value)!r}")
-    if not angles:
+    if not angles and isotropic is None:
         problems.append("Ply 1 (bottom): at least one ply is needed")
+    if isotropic is None and not forms.text_of(cells.get("symmetric")):
+        problems.append(f"{L('symmetric')}: required; one of {', '.join(YES_NO)}")
     symmetric = word("symmetric") == "yes"
     ply_thickness = number("ply_thickness")
 
     library = forms.text_of(cells.get("library")) or None
     own_given = {key: cells.get(key) for key in OWN_KEYS if cells.get(key) is not None}
     own = None
-    if library and own_given:
+    if isotropic is not None:
+        pass  # the isotropic material's name and source are its own rows; the ply material's rows were refused above
+    elif library and own_given:
         problems.append("Library material and Own material: give one of the two, not both")
     elif not library and not own_given:
         problems.append("Library material or Own material: one of the two is needed")
@@ -1089,6 +1186,10 @@ def check_form(form: FormInput) -> Values:
             problems.append(f"Own material strengths: give all five (F1t, F1c, F2t, F2c, F6) or none; given {', '.join(given)}")
         own["strengths"] = strengths if len(given) == len(STRENGTH_KEYS) else None
     G13, G23 = number("G13"), number("G23")
+    if isotropic is None:
+        for key, value in (("G13", G13), ("G23", G23)):
+            if value is None and cells.get(key) is None:
+                problems.append(f"{L(key)}: required")
 
     strengths_known: bool | None = None  # whether the material has strengths, when the form says enough to know
     if library and not own_given:
@@ -1100,7 +1201,9 @@ def check_form(form: FormInput) -> Values:
         strengths_known = own["strengths"] is not None
     criterion_word, f12_star = word("criteria"), number("f12_star")
     criteria: tuple[str, ...] | None = None
-    if criterion_word == "none":
+    if isotropic is not None and criterion_word not in (None, "all", "none"):  # blank too: the studio hides the row for a plastic
+        problems.append(f"{L('criteria')}: an isotropic material's yield and failure are not modelled yet; choose none")
+    if criterion_word == "none" or isotropic is not None:  # an isotropic material has no strengths yet: no criterion (ADR-0075)
         criteria = ()
     elif criterion_word in CRITERION_OF_WORD:
         criteria = (CRITERION_OF_WORD[criterion_word],)
@@ -1147,7 +1250,7 @@ def check_form(form: FormInput) -> Values:
                   mesh_nx, partitions, seeds, grips, region, names or None, criteria, f12_star,
                   span=span if bending else None, overhang=overhang if bending else None, load_span=load_span if bending else None,
                   supports=supports, loads=loads, regions=regions, units=units, specimen=specimen, tab_thickness=tab_thickness, tab_bevel=tab_bevel,
-                  tab_material=tab_material, strain_device=strain_device, strain_length=strain_length)
+                  tab_material=tab_material, strain_device=strain_device, strain_length=strain_length, isotropic=isotropic, dogbone=dogbone)
 
 
 def plate_regions_of(tab_length: float | None, hole_diameter: float | None, regions: list[dict]) -> list[str]:
@@ -1240,6 +1343,9 @@ class Designation:
 
 def material_meaning(values: Values) -> tuple:
     """What a material code stands for: a library record (and its primary dataset), or one set of own constants, in SI."""
+    if values.isotropic is not None:  # an isotropic material is its E and nu (ADR-0075)
+        iso = values.isotropic
+        return ("isotropic", round(value_to_si(iso["E"], "stress", values.units), 3), round(iso["nu"], 6))
     if values.library:
         return ("library", values.library, library_material(values.library).dataset_id)
     own = values.own
@@ -1248,6 +1354,8 @@ def material_meaning(values: Values) -> tuple:
 
 def spec_material_meaning(spec) -> tuple:
     mat = spec.material
+    if mat.E is not None:
+        return ("isotropic", round(mat.E, 3), round(mat.nu, 6))
     if mat.library is not None:
         return ("library", mat.library, mat.dataset or library_material(mat.library).dataset_id)
     return ("own", round(mat.E1, 3), round(mat.E2, 3), round(mat.G12, 3), round(mat.nu12, 6))
@@ -1289,7 +1397,7 @@ def designation_for(values: Values, root: Path) -> Designation:
         if match is None:
             continue
         materials.setdefault(match.group("material"), spec_material_meaning(spec))
-        layups.setdefault(match.group("layup"), tuple(full_angles(spec)))
+        layups.setdefault(match.group("layup"), () if spec.layup is None else tuple(full_angles(spec)))  # no plies: no stack (ADR-0075)
     meaning = material_meaning(values)
     code = values.material_code
     if code is None:
@@ -1302,7 +1410,7 @@ def designation_for(values: Values, root: Path) -> Designation:
         other = next((c for c, m in materials.items() if m == meaning and c != code), None)
         if other is not None:
             problems.append(f"Material code: this material already has the code {other}; use it")
-    stacking = tuple(float(a) for a in (values.angles + values.angles[::-1] if values.symmetric else values.angles))
+    stacking = values.stacking
     layup = values.layup_code
     if layup is None:
         layup = next((c for c, angles in layups.items() if angles == stacking), None)
@@ -1351,6 +1459,26 @@ def mesh_data(values: Values) -> tuple[dict, dict[str, str]]:
     size, L, w, tab = values.element_size, values.length, values.width, values.tab_length
     rows = lambda length: max(1, round(length / size))  # noqa: E731
     data["nx"] = rows(w)
+    if values.dogbone is not None:  # a dog-bone (ADR-0075): a node row where the outline turns too, so the mesh keeps its corners
+        d = values.dogbone
+        try:
+            turns = tuple(dogbone_outline(d["narrow_width"], d["narrow_length"], d["radius"], d.get("outer_radius"), w, L).lines().values())
+        except OutlineError:
+            turns = ()  # sizes that make no dog-bone: the spec refuses them by name, with the rows concerned
+        data["nx"] = rows(d["narrow_width"])  # the rows are squeezed to the outline: the narrow section's elements are about the size asked
+        half = values.strain_length / 2 if values.strain_length is not None else None
+        lines = sorted({round(y, 9) for y in (tab, L - tab, *turns, *((L / 2 - half, L / 2 + half) if half else ())) if 0.0 < y < L})
+        edges = [0.0, *lines, L]
+        seeds = [rows(b - a) for a, b in zip(edges, edges[1:])]
+        if half and round(L / 2 - half, 9) in edges:  # an even count over the gauge length puts a node row at mid-length
+            middle = edges.index(round(L / 2 - half, 9))
+            seeds[middle] += seeds[middle] % 2
+            data["nx"] += data["nx"] % 2
+        data.update(y_partitions=lines, y_seeds=seeds)
+        comments["mesh.y_seeds"] = (f"about {size:g} {unit} rows, with a node row on each tab line, where the outline turns"
+                                    + (f" and at each end of the {values.strain_length:g} {unit} {values.strain_device}" if half else ""))
+        comments["mesh.nx"] = "across the narrow section; every row is squeezed to the outline's width"
+        return data, comments
     if values.kind in BENDING_KINDS:  # a node row on each support line and each nose line
         lines = sorted({y for y in bending_lines_of(values) if 0.0 < y < L})
         edges = [0.0, *lines, L]
@@ -1432,6 +1560,11 @@ def gauge_probes(kind: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 def material_data(values: Values) -> tuple[dict, dict[str, str], str, bool]:
     """The [material] table, its comments, the material's name for the title, and whether it has strengths."""
+    if values.isotropic is not None:  # one isotropic material (ADR-0075): E and nu, no transverse table
+        iso = values.isotropic
+        return ({"E": iso["E"], "nu": iso["nu"], "source": iso["source"]},
+                {"material.E": "one isotropic material, as given on the form: no plies, a homogeneous shell section (ADR-0075)",
+                 "material.source": "the team's own constants, as given on the form; they stay in this folder"}, iso["name"], False)
     comments = {"material.transverse.plane_stress": "nu13 = nu23 = 0 for CalculiX, the plane stress Abaqus LAMINA and our engine assume",
                 "material.transverse.transverse_isotropy": "E3 = E2: a stated choice, used only by CalculiX",
                 "material.transverse.G13": "as given on the form", "material.transverse.G23": "as given on the form"}
@@ -1461,9 +1594,10 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     plate = kind in PLATE_KINDS
     test_name = TEST_CODES[kind][1]
     sign = -1.0 if kind == "compression" or bending else 1.0  # a push, and the nose moving down onto the coupon, are negative
-    layup = "[" + "/".join(f"{a:g}" for a in values.angles) + "]" + ("s" if values.symmetric else "")
     lab = UNIT_LABEL[values.units]
     mm, N = lab["length"], lab["force"]
+    layup = (f"{values.isotropic['thickness']:g} {mm} thick" if values.isotropic is not None
+             else "[" + "/".join(f"{a:g}" for a in values.angles) + "]" + ("s" if values.symmetric else ""))
     if plate:
         supports, loads = values.supports or [], values.loads or []
         grip_words = f"{len(supports)} support{'s' if len(supports) != 1 else ''}"
@@ -1477,6 +1611,8 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
         load_words = (f"{values.value:g} {mm} {'push' if kind == 'compression' else 'pull'}" if values.control == "displacement"
                       else f"{values.value:g} {N} {'compression' if kind == 'compression' else 'tension'}")
     hole_words = f", {values.hole_diameter:g} {mm} hole in {values.width:g} {mm}" if values.hole_diameter is not None else ""
+    if values.dogbone is not None:
+        hole_words += f", dog-bone {values.dogbone['narrow_width']:g} {mm} wide over {values.dogbone['narrow_length']:g} {mm}"
     title = f"{designation.name}, {test_name}: {material_name} {layup}{hole_words}, {grip_words}, {load_words}"
     if plate:
         geometry: dict = {"length": values.length, "width": values.width}
@@ -1492,13 +1628,19 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
         geometry = {"length": values.length, "width": values.width, "tab_length": values.tab_length}
     if kind == "open_hole_tension":
         geometry["hole_diameter"] = values.hole_diameter
+    if values.isotropic is not None:
+        geometry["thickness"] = values.isotropic["thickness"]
+    if values.dogbone is not None:
+        geometry["dogbone"] = dict(values.dogbone)
+        comments["geometry.width"] = "the overall width at the ends; the narrow section's is geometry.dogbone.narrow_width"
     data: dict = {
         "title": title, "kind": kind, "units": values.units,
         "coupon": {"designation": designation.name, "standard": values.standard, "size_from": values.size_from, "team_model": values.team_model,
                    "test_data": values.test_data},
         "geometry": geometry, "mesh": mesh,
-        "layup": {"angles": [int(a) if float(a).is_integer() else a for a in values.angles], "angles_from": "length", "symmetric": values.symmetric,
-                  "ply_thickness": values.ply_thickness if values.ply_thickness is not None else "library"},
+        **({} if values.isotropic is not None else {
+            "layup": {"angles": [int(a) if float(a).is_integer() else a for a in values.angles], "angles_from": "length", "symmetric": values.symmetric,
+                      "ply_thickness": values.ply_thickness if values.ply_thickness is not None else "library"}}),
         "material": material,
         **({} if bending or plate else {"grips": {"kind": grips_kind, "region": values.region}}),
         **({} if plate else {"loading": {"control": values.control, "value": sign * values.value}}),
@@ -1511,8 +1653,8 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
             data["regions"] = [dict(r) for r in values.regions]
         comments["supports"] = "what the plate holds, region by region, as stated in the studio (ADR-0054)"
         comments["loads"] = "what the plate carries: a force along a dof spread over a region, or a pressure on an area, positive against the normal"
-    if values.names or values.own:  # the team's own material always carries the name they gave it into the deck
-        deck_material = values.own["name"] if values.own else values.library.upper()
+    if values.names or values.own or values.isotropic:  # the team's own material always carries the name they gave it into the deck
+        deck_material = (values.isotropic["name"] if values.isotropic else values.own["name"] if values.own else values.library.upper())
         given = {**DEFAULT_NAMES, "material": deck_material, **(values.names or {})}
         data["names"] = {key: given[key] for key in ("part", "instance", "material", "layup", "section_set")}
     if values.f12_star is not None:
@@ -1525,9 +1667,12 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     data["output"] = {"fpf_criteria": criteria,
                       "abaqus": {"field_preselect": True, "node_print": True, "el_print": True},
                       "calculix": {"node_print": True, "el_print": True, "frd": True, "el_print_global": True}}
-    comments["layup.angles"] = "bottom ply first; the lower half when symmetric"
-    comments["layup.angles_from"] = "counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)"
-    comments["layup.ply_thickness"] = "from the library record" if values.ply_thickness is None else "as given on the form"
+    if values.isotropic is None:
+        comments["layup.angles"] = "bottom ply first; the lower half when symmetric"
+        comments["layup.angles_from"] = "counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)"
+        comments["layup.ply_thickness"] = "from the library record" if values.ply_thickness is None else "as given on the form"
+    else:
+        comments["geometry.thickness"] = "the isotropic material's thickness, as given on the form: no plies (ADR-0075)"
     if not bending and not plate:
         comments["grips.kind"] = ("a reference point at each end drives the whole tab, as in the team's decks" if grips_kind == "coupling"
                                   else "the grip nodes held directly: the CalculiX twin, which reports no reaction at a coupled reference node")
@@ -1555,6 +1700,7 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
                 ordered[extra[key][0]] = extra[key][1]
         data = ordered
     comments["output.fpf_criteria"] = (("every criterion the material allows" if values.criteria is None else "as chosen on the form") if criteria
+                                       else "an isotropic material's yield and failure are not modelled yet (ADR-0075)" if values.isotropic is not None
                                        else ("no strengths given, so no failure criterion" if not strengths else "none chosen on the form"))
     header = (f"{designation.name}, {test_name}: built from the coupon input form {form_name}, filled in by {values.filled_by} on {values.day}.",
               *([f"Notes from the team: {values.notes}"] if values.notes else []),
@@ -1682,7 +1828,7 @@ def material_words(values: Values) -> str:
     if values.library:
         lib = library_material(values.library)
         return f"{lib.name} (library record {lib.material_id}, dataset {lib.dataset_id}; rights class {lib.rights})"
-    own = values.own
+    own = values.own if values.isotropic is None else values.isotropic  # an isotropic material has its name and source too (ADR-0075)
     return (f"the team's own constants, named {own['name']} (source: {own['source']}; rights class user-supplied: private, kept in this folder and "
             "never published)")
 
@@ -1696,6 +1842,12 @@ def size_words(values: Values) -> str:
         size += f", {values.span:g} {mm} span" + (f", {values.load_span:g} {mm} loading span" if values.kind == "four_point_bending" else "")
     if values.hole_diameter is not None:
         size += f", central hole of {values.hole_diameter:g} {mm}"
+    if values.dogbone is not None:
+        d = values.dogbone
+        size += (f", a dog-bone {d['narrow_width']:g} {mm} wide over its {d['narrow_length']:g} {mm} narrow section, fillet radius {d['radius']:g} {mm}"
+                 + (f", outer radius {d['outer_radius']:g} {mm}" if d.get("outer_radius") else ""))
+    if values.isotropic is not None:
+        size += f", {values.isotropic['thickness']:g} {mm} thick"
     return size
 
 
@@ -1724,7 +1876,8 @@ def case_page(values: Values, designation: Designation, form_name: str, day: str
     """A case page to start from: the case line, the problem, an empty result block, the attempt log's first row, where to look, the
     rebuild commands. The status and the accepted attempt are written by hand from here on."""
     name, test = designation.name, TEST_CODES[values.kind][1]
-    layup = "[" + "/".join(f"{a:g}" for a in values.angles) + "]" + ("s" if values.symmetric else "")
+    layup = ("none (one isotropic material)" if values.isotropic is not None
+             else "[" + "/".join(f"{a:g}" for a in values.angles) + "]" + ("s" if values.symmetric else ""))
     material = material_words(values).split(" (")[0]
     where = [
         (f"`team/{day}/`", "the coupon input form as received", "the team"),

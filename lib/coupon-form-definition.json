@@ -1,5 +1,5 @@
 {
- "form_version": "0.8",
+ "form_version": "0.9",
  "fea_version": "0.1.0",
  "units": "mm-MPa",
  "row_units": {
@@ -186,6 +186,7 @@
      "words": [
       "none",
       "ASTM D3039/D3039M-17",
+      "ASTM D638-22",
       "ASTM C1869-18(2023)"
      ],
      "at_least": null,
@@ -196,10 +197,15 @@
      "key": "specimen",
      "label": "Specimen",
      "kind": "list",
-     "help": "the standard's specimen when it names more than one: for ASTM C1869, A (a 6 mm hole in a 36 mm wide strip), B (a 3 mm hole in a 10 mm wide strip) or other (a size of its Annex A1, reported as a variation); blank otherwise",
+     "help": "the standard's specimen when it names more than one: for ASTM C1869, A (a 6 mm hole in a 36 mm wide strip), B (a 3 mm hole in a 10 mm wide strip) or other (a size of its Annex A1, reported as a variation); for ASTM D638, its Type I, II, III, IV or V of Fig. 1; blank otherwise",
      "required": false,
      "default": null,
      "words": [
+      "I",
+      "II",
+      "III",
+      "IV",
+      "V",
       "A",
       "B",
       "other"
@@ -301,6 +307,83 @@
       "m-Pa": "Tab length (m)",
       "in-psi": "Tab length (in)",
       "in-ksi": "Tab length (in)"
+     }
+    }
+   ]
+  },
+  {
+   "title": "Dog-bone (unnotched tension only: a dumbbell, as ASTM D638 Fig. 1 draws it; leave the four rows blank for a straight strip)",
+   "fields": [
+    {
+     "key": "narrow_width",
+     "label": "Narrow width (mm)",
+     "kind": "number",
+     "help": "the width of the narrow section at mid-length, W in ASTM D638, e.g. 13; the Width row above is then the overall width at the ends, WO",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Narrow width (mm)",
+      "m-Pa": "Narrow width (m)",
+      "in-psi": "Narrow width (in)",
+      "in-ksi": "Narrow width (in)"
+     }
+    },
+    {
+     "key": "narrow_length",
+     "label": "Narrow length (mm)",
+     "kind": "number",
+     "help": "the length of the straight narrow section, L in ASTM D638, e.g. 57",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Narrow length (mm)",
+      "m-Pa": "Narrow length (m)",
+      "in-psi": "Narrow length (in)",
+      "in-ksi": "Narrow length (in)"
+     }
+    },
+    {
+     "key": "radius",
+     "label": "Fillet radius (mm)",
+     "kind": "number",
+     "help": "the radius of the fillet that joins the narrow section to the wider ends, tangent to the narrow section, R in ASTM D638, e.g. 76",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Fillet radius (mm)",
+      "m-Pa": "Fillet radius (m)",
+      "in-psi": "Fillet radius (in)",
+      "in-ksi": "Fillet radius (in)"
+     }
+    },
+    {
+     "key": "outer_radius",
+     "label": "Outer radius (mm)",
+     "kind": "number",
+     "help": "only for a reverse curve, ASTM D638 Type IV: the second arc's radius, tangent to the wide end, RO, e.g. 25; blank when the fillet meets the full width at a corner",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Outer radius (mm)",
+      "m-Pa": "Outer radius (m)",
+      "in-psi": "Outer radius (in)",
+      "in-ksi": "Outer radius (in)"
      }
     }
    ]
@@ -522,6 +605,74 @@
    ]
   },
   {
+   "title": "What the coupon is made of: plies of a composite, or one isotropic material such as a plastic",
+   "fields": [
+    {
+     "key": "material_kind",
+     "label": "Material kind",
+     "kind": "list",
+     "help": "plies: a laminate of plies, stated by the layup and a ply material below; isotropic: one material alike in every direction, such as a plastic or a metal sheet, stated by its thickness, E and nu here, with its name and source on the Own material rows, and no plies",
+     "required": false,
+     "default": "plies",
+     "words": [
+      "plies",
+      "isotropic"
+     ],
+     "at_least": null,
+     "above": null,
+     "unit": null
+    },
+    {
+     "key": "thickness",
+     "label": "Thickness (mm)",
+     "kind": "number",
+     "help": "isotropic only: the coupon's thickness, e.g. 3.2",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Thickness (mm)",
+      "m-Pa": "Thickness (m)",
+      "in-psi": "Thickness (in)",
+      "in-ksi": "Thickness (in)"
+     }
+    },
+    {
+     "key": "own_E",
+     "label": "Own material: E (MPa)",
+     "kind": "number",
+     "help": "isotropic only: Young's modulus, e.g. 3000 for a rigid plastic",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: E (MPa)",
+      "m-Pa": "Own material: E (Pa)",
+      "in-psi": "Own material: E (psi)",
+      "in-ksi": "Own material: E (ksi)"
+     }
+    },
+    {
+     "key": "own_nu",
+     "label": "Own material: nu",
+     "kind": "number",
+     "help": "isotropic only: Poisson's ratio, above -1 and below 0.5, e.g. 0.35 for a plastic; no unit",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null,
+     "unit": null
+    }
+   ]
+  },
+  {
    "title": "Layup, bottom ply first",
    "fields": [
     {
@@ -720,8 +871,8 @@
      "key": "symmetric",
      "label": "Symmetric",
      "kind": "list",
-     "help": "yes: the plies listed are the lower half and are mirrored, so 0, 45, -45, 90 becomes 8 plies; no: the plies listed are the whole stack",
-     "required": true,
+     "help": "yes: the plies listed are the lower half and are mirrored, so 0, 45, -45, 90 becomes 8 plies; no: the plies listed are the whole stack; required for plies",
+     "required": false,
      "default": null,
      "words": [
       "yes",
@@ -950,8 +1101,8 @@
      "key": "G13",
      "label": "G13 (MPa)",
      "kind": "number",
-     "help": "out-of-plane shear stiffness in the plane of the fibres and the thickness, as in your Abaqus material (Lamina). No measured value? For a tape use G13 = G12 and say so in the notes; see Definitions, Material",
-     "required": true,
+     "help": "out-of-plane shear stiffness in the plane of the fibres and the thickness, as in your Abaqus material (Lamina); required for plies. No measured value? For a tape use G13 = G12 and say so in the notes; see Definitions, Material",
+     "required": false,
      "default": null,
      "words": [],
      "at_least": null,
@@ -968,8 +1119,8 @@
      "key": "G23",
      "label": "G23 (MPa)",
      "kind": "number",
-     "help": "out-of-plane shear stiffness across the fibres and the thickness, as in your Abaqus material (Lamina). No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material",
-     "required": true,
+     "help": "out-of-plane shear stiffness across the fibres and the thickness, as in your Abaqus material (Lamina). Required for plies. No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material",
+     "required": false,
      "default": null,
      "words": [],
      "at_least": null,
@@ -1234,12 +1385,12 @@
   "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. The Units row says which units every number is in: mm, MPa and N unless you pick another system (m-Pa, in-psi or in-ksi); the results come back in the same units, and our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick. Every row says what it means beside it; the sheet Definitions explains each term with an example.",
   "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured from the coupon's length, the direction it is pulled, as ASTM D3039 counts them: 0 = fibres along the pull, 90 = fibres across the width. Our Abaqus deck carries this as a layup orientation whose direction 1 is global y, so its layer lines show the angles as you wrote them.",
   "Layup: one ply per row, bottom ply first, angles in degrees. With Symmetric = yes, the plies you list are the lower half and are mirrored.",
-  "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one.",
+  "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one. A plastic, or any material alike in every direction, is Material kind = isotropic: give its thickness, E and nu, and its name and source on the Own material rows, and leave the plies, the ply material, G13 and G23 blank.",
   "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give its interaction term f12*; or pick one criterion, or none.",
   "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
-  "Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
+  "Dog-bone: for a dumbbell specimen, such as ASTM D638's, give the narrow section's width and length and the fillet radius (and Type IV's outer radius); Width and Length are then the overall sizes at the ends. Unnotched tension only; leave the rows blank for a straight strip. Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
   "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway to the tab. You do not enter these points: we place them from the geometry.",
-  "Standard: pick the test standard the specimen follows from the list, or none for your own design. With a standard picked we check the coupon against each of its clauses a model can meet, list every deviation with its clause, and list the clauses of the procedure (specimens, conditioning, speed, alignment, failure mode) as the laboratory's. ASTM D3039 also needs the strain measurement; ASTM C1869 needs its specimen, A, B or other. A deviation never stops the run, and we never say a model conforms to a test standard.",
+  "Standard: pick the test standard the specimen follows from the list, or none for your own design. With a standard picked we check the coupon against each of its clauses a model can meet, list every deviation with its clause, and list the clauses of the procedure (specimens, conditioning, speed, alignment, failure mode) as the laboratory's. ASTM D3039 also needs the strain measurement; ASTM C1869 needs its specimen, A, B or other; ASTM D638 needs its type, I to V. A deviation never stops the run, and we never say a model conforms to a test standard.",
   "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
   "Send the file back as it is. If something is missing or inconsistent, we send it back with every problem named."
  ],
@@ -1266,6 +1417,11 @@
      "term": "Gauge section",
      "meaning": "The free part between the tabs, where the coupon should fail and where results are read.",
      "example": ""
+    },
+    {
+     "term": "Dog-bone",
+     "meaning": "A coupon narrower in its middle than at its ends: a straight narrow section joined to the wide ends by fillets, so that it fails in the narrow section and not in the grips. The plastics tensile test, ASTM D638, uses it.",
+     "example": "ASTM D638 Type I: 13 mm wide over 57 mm, a 76 mm fillet, 19 mm wide at the ends."
     }
    ]
   },
@@ -1275,7 +1431,7 @@
     {
      "term": "Unnotched tension",
      "meaning": "A plain strip pulled along its length. It gives the laminate's tensile stiffness and strength.",
-     "example": "ASTM D3039/D3039M, in our Standard list."
+     "example": "ASTM D3039/D3039M for composites, and ASTM D638 for plastics on a dog-bone, both in our Standard list."
     },
     {
      "term": "Unnotched compression",
@@ -1396,6 +1552,11 @@
      "term": "Own material",
      "meaning": "Your own constants, with where they come from. They stay with this coupon and never go into our library.",
      "example": ""
+    },
+    {
+     "term": "Isotropic material",
+     "meaning": "A material alike in every direction, such as a plastic or a metal sheet: it has no plies, and two constants state it, Young's modulus E and Poisson's ratio nu (the shear modulus is E / (2 (1 + nu))). Our deck writes it as Abaqus's isotropic Elastic and a homogeneous shell section of the thickness you give.",
+     "example": "A rigid plastic: E = 3000 MPa, nu = 0.35, 3.2 mm thick."
     },
     {
      "term": "Directions 1, 2, 3",
@@ -2710,6 +2871,580 @@
       "clause": "§12.2",
       "level": "lab",
       "text": "When many specimens fail within one width of a tab or grip, the gripping is re-examined.",
+      "rows": []
+     }
+    ]
+   },
+   {
+    "id": "astm-d638",
+    "designation": "ASTM D638-22",
+    "title": "Tensile properties of plastics",
+    "organisation": "ASTM International",
+    "catalog_url": "https://store.astm.org/d0638-22.html",
+    "edition_note": "read from the D638-22 copy the founder supplied, the active edition; every clause held here is the same in D638-14",
+    "systems": "SI; the inch-pound values are for information only (§1.5)",
+    "rights": "licensed-reference",
+    "tests": [
+     "unnotched tension"
+    ],
+    "aliases": [
+     "d638"
+    ],
+    "needs": [
+     "specimen"
+    ],
+    "variant_words": [
+     "I",
+     "II",
+     "III",
+     "IV",
+     "V"
+    ],
+    "variants": [
+     {
+      "key": "I",
+      "label": "Type I: 13 mm wide over 57 mm, for material 7 mm thick or less (the preferred type)",
+      "clause": "Fig. 1",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 19.0,
+        "length": 165.0,
+        "tab_length": 25.0,
+        "narrow_width": 13.0,
+        "narrow_length": 57.0,
+        "radius": 76.0,
+        "strain_length": 50.0
+       },
+       "m-Pa": {
+        "width": 0.019,
+        "length": 0.165,
+        "tab_length": 0.025,
+        "narrow_width": 0.013,
+        "narrow_length": 0.057,
+        "radius": 0.076,
+        "strain_length": 0.05
+       },
+       "in-psi": {
+        "width": 0.7480314961,
+        "length": 6.496062992,
+        "tab_length": 0.9842519685,
+        "narrow_width": 0.5118110236,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       },
+       "in-ksi": {
+        "width": 0.7480314961,
+        "length": 6.496062992,
+        "tab_length": 0.9842519685,
+        "narrow_width": 0.5118110236,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       }
+      },
+      "thickness": {
+       "mm-MPa": 3.2,
+       "m-Pa": 0.0032,
+       "in-psi": 0.125984252,
+       "in-ksi": 0.125984252
+      }
+     },
+     {
+      "key": "II",
+      "label": "Type II: 6 mm wide over 57 mm, for material 7 mm thick or less that will not break in Type I's narrow section",
+      "clause": "Fig. 1",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 19.0,
+        "length": 183.0,
+        "tab_length": 24.0,
+        "narrow_width": 6.0,
+        "narrow_length": 57.0,
+        "radius": 76.0,
+        "strain_length": 50.0
+       },
+       "m-Pa": {
+        "width": 0.019,
+        "length": 0.183,
+        "tab_length": 0.024,
+        "narrow_width": 0.006,
+        "narrow_length": 0.057,
+        "radius": 0.076,
+        "strain_length": 0.05
+       },
+       "in-psi": {
+        "width": 0.7480314961,
+        "length": 7.204724409,
+        "tab_length": 0.9448818898,
+        "narrow_width": 0.2362204724,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       },
+       "in-ksi": {
+        "width": 0.7480314961,
+        "length": 7.204724409,
+        "tab_length": 0.9448818898,
+        "narrow_width": 0.2362204724,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       }
+      },
+      "thickness": {
+       "mm-MPa": 3.2,
+       "m-Pa": 0.0032,
+       "in-psi": 0.125984252,
+       "in-ksi": 0.125984252
+      }
+     },
+     {
+      "key": "III",
+      "label": "Type III: 19 mm wide over 57 mm, for material over 7 mm and up to 14 mm thick",
+      "clause": "Fig. 1",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 29.0,
+        "length": 246.0,
+        "tab_length": 65.5,
+        "narrow_width": 19.0,
+        "narrow_length": 57.0,
+        "radius": 76.0,
+        "strain_length": 50.0
+       },
+       "m-Pa": {
+        "width": 0.029,
+        "length": 0.246,
+        "tab_length": 0.0655,
+        "narrow_width": 0.019,
+        "narrow_length": 0.057,
+        "radius": 0.076,
+        "strain_length": 0.05
+       },
+       "in-psi": {
+        "width": 1.141732283,
+        "length": 9.68503937,
+        "tab_length": 2.578740157,
+        "narrow_width": 0.7480314961,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       },
+       "in-ksi": {
+        "width": 1.141732283,
+        "length": 9.68503937,
+        "tab_length": 2.578740157,
+        "narrow_width": 0.7480314961,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       }
+      },
+      "thickness": {
+       "mm-MPa": null,
+       "m-Pa": null,
+       "in-psi": null,
+       "in-ksi": null
+      }
+     },
+     {
+      "key": "IV",
+      "label": "Type IV: 6 mm wide over 33 mm with two radii, for material 4 mm thick or less, nonrigid or compared across rigidity",
+      "clause": "Fig. 1",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 19.0,
+        "length": 115.0,
+        "tab_length": 25.0,
+        "narrow_width": 6.0,
+        "narrow_length": 33.0,
+        "radius": 14.0,
+        "strain_length": 25.0,
+        "outer_radius": 25.0
+       },
+       "m-Pa": {
+        "width": 0.019,
+        "length": 0.115,
+        "tab_length": 0.025,
+        "narrow_width": 0.006,
+        "narrow_length": 0.033,
+        "radius": 0.014,
+        "strain_length": 0.025,
+        "outer_radius": 0.025
+       },
+       "in-psi": {
+        "width": 0.7480314961,
+        "length": 4.527559055,
+        "tab_length": 0.9842519685,
+        "narrow_width": 0.2362204724,
+        "narrow_length": 1.299212598,
+        "radius": 0.5511811024,
+        "strain_length": 0.9842519685,
+        "outer_radius": 0.9842519685
+       },
+       "in-ksi": {
+        "width": 0.7480314961,
+        "length": 4.527559055,
+        "tab_length": 0.9842519685,
+        "narrow_width": 0.2362204724,
+        "narrow_length": 1.299212598,
+        "radius": 0.5511811024,
+        "strain_length": 0.9842519685,
+        "outer_radius": 0.9842519685
+       }
+      },
+      "thickness": {
+       "mm-MPa": null,
+       "m-Pa": null,
+       "in-psi": null,
+       "in-ksi": null
+      }
+     },
+     {
+      "key": "V",
+      "label": "Type V: 3.18 mm wide over 9.53 mm, for material 4 mm thick or less when little is at hand",
+      "clause": "Fig. 1, note C",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 9.53,
+        "length": 63.5,
+        "tab_length": 19.05,
+        "narrow_width": 3.18,
+        "narrow_length": 9.53,
+        "radius": 12.7,
+        "strain_length": 7.62
+       },
+       "m-Pa": {
+        "width": 0.00953,
+        "length": 0.0635,
+        "tab_length": 0.01905,
+        "narrow_width": 0.00318,
+        "narrow_length": 0.00953,
+        "radius": 0.0127,
+        "strain_length": 0.00762
+       },
+       "in-psi": {
+        "width": 0.3751968504,
+        "length": 2.5,
+        "tab_length": 0.75,
+        "narrow_width": 0.1251968504,
+        "narrow_length": 0.3751968504,
+        "radius": 0.5,
+        "strain_length": 0.3
+       },
+       "in-ksi": {
+        "width": 0.3751968504,
+        "length": 2.5,
+        "tab_length": 0.75,
+        "narrow_width": 0.1251968504,
+        "narrow_length": 0.3751968504,
+        "radius": 0.5,
+        "strain_length": 0.3
+       }
+      },
+      "thickness": {
+       "mm-MPa": null,
+       "m-Pa": null,
+       "in-psi": null,
+       "in-ksi": null
+      }
+     }
+    ],
+    "classes": [],
+    "requirements": [
+     {
+      "id": "scope-material",
+      "clause": "§1.1, Note 4",
+      "level": "scope",
+      "text": "The material is a plastic, unreinforced or reinforced. A resin-matrix composite reinforced by oriented fibres stiffer than 20 GPa is tested by ASTM D3039/D3039M instead.",
+      "rows": [
+       "library",
+       "own_name"
+      ]
+     },
+     {
+      "id": "scope-thickness",
+      "clause": "§1.2",
+      "level": "scope",
+      "text": "The specimen is at most 14 mm thick; thicker material is machined down to 14 mm.",
+      "rows": [
+       "thickness"
+      ]
+     },
+     {
+      "id": "shape",
+      "clause": "§6.1, Fig. 1",
+      "level": "mandatory",
+      "text": "The specimen is a dumbbell of Fig. 1: a narrow section joined to wider ends by fillets.",
+      "rows": [
+       "test"
+      ]
+     },
+     {
+      "id": "type-thickness",
+      "clause": "§6.1.1, Fig. 1",
+      "level": "mandatory",
+      "text": "The thickness lies in the type's range: up to 7 mm for Types I and II, over 7 mm and up to 14 mm for Type III, up to 4 mm for Types IV and V.",
+      "rows": [
+       "thickness",
+       "specimen"
+      ]
+     },
+     {
+      "id": "composite-type",
+      "clause": "§6.1.3",
+      "level": "mandatory",
+      "text": "A reinforced composite, a highly orthotropic laminate included, is tested as Type I.",
+      "rows": [
+       "specimen"
+      ]
+     },
+     {
+      "id": "narrow-width",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The narrow section's width W is the type's, within its band.",
+      "rows": [
+       "narrow_width"
+      ]
+     },
+     {
+      "id": "narrow-length",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The narrow section's length L is the type's, within its band.",
+      "rows": [
+       "narrow_length"
+      ]
+     },
+     {
+      "id": "fillet-radius",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The fillet radius R is the type's, within its band.",
+      "rows": [
+       "radius"
+      ]
+     },
+     {
+      "id": "outer-radius",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "Type IV's outer radius RO is 25 mm within its band; the other types have none.",
+      "rows": [
+       "outer_radius"
+      ]
+     },
+     {
+      "id": "overall-width",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The overall width WO is at least the type's, and at most that plus its tolerance (our reading of the plus tolerance).",
+      "rows": [
+       "width"
+      ]
+     },
+     {
+      "id": "overall-length",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The overall length LO is at least the type's; longer is allowed.",
+      "rows": [
+       "length"
+      ]
+     },
+     {
+      "id": "grip-distance",
+      "clause": "§10.2, Fig. 1",
+      "level": "mandatory",
+      "text": "The distance D between the grips is the type's, within 5 mm.",
+      "rows": [
+       "tab_length",
+       "length"
+      ]
+     },
+     {
+      "id": "gauge-length",
+      "clause": "§5.2, Fig. 1",
+      "level": "recommended",
+      "text": "An extensometer spans the full gage length G, within its band; for referee tests it must.",
+      "rows": [
+       "strain_length"
+      ]
+     },
+     {
+      "id": "molded-thickness",
+      "clause": "Fig. 1, note A",
+      "level": "recommended",
+      "text": "A molded specimen, and a Type I or II specimen where possible, is 3.2 mm thick within 0.4 mm.",
+      "rows": [
+       "thickness"
+      ]
+     },
+     {
+      "id": "preferred-type",
+      "clause": "§6.1.1",
+      "level": "recommended",
+      "text": "Type I is the preferred specimen where material 7 mm thick or less is at hand.",
+      "rows": [
+       "specimen"
+      ]
+     },
+     {
+      "id": "thin-sheet",
+      "clause": "§1.2",
+      "level": "recommended",
+      "text": "Sheet or film thinner than 1.0 mm is better tested by ASTM D882.",
+      "rows": [
+       "thickness"
+      ]
+     },
+     {
+      "id": "anisotropy",
+      "clause": "§6.6, §7.2",
+      "level": "note",
+      "text": "A material suspected of anisotropy is tested with specimens cut along and across its suspected direction, five of each.",
+      "rows": [
+       "library",
+       "own_name"
+      ]
+     },
+     {
+      "id": "centre-width",
+      "clause": "Fig. 1, note E",
+      "level": "lab",
+      "text": "The width at the centre is W to 0.10 mm less, any narrowing gradual and equal on both sides.",
+      "rows": []
+     },
+     {
+      "id": "die-width",
+      "clause": "Fig. 1, note B",
+      "level": "lab",
+      "text": "A Type IV die's narrow section is 6.00 mm wide within 0.05 mm.",
+      "rows": []
+     },
+     {
+      "id": "surfaces",
+      "clause": "§6.4",
+      "level": "lab",
+      "text": "Surfaces are free of visible flaws; machining marks are filed and sanded away along the long axis; molded flash is removed.",
+      "rows": []
+     },
+     {
+      "id": "gage-marks",
+      "clause": "§6.5",
+      "level": "lab",
+      "text": "Gage marks are drawn in wax crayon or India ink, never scratched, punched or pressed in.",
+      "rows": []
+     },
+     {
+      "id": "grips",
+      "clause": "§5.1.3",
+      "level": "lab",
+      "text": "The grips are fixed or self-aligning, hold the specimen without slipping, and align its long axis with the pull.",
+      "rows": []
+     },
+     {
+      "id": "extensometer-class",
+      "clause": "§5.2.1, §10.3",
+      "level": "lab",
+      "text": "A modulus is measured with an extensometer of Class B-2 or better (ASTM E83) that records continuously; elongation up to 20 % needs at least Class C.",
+      "rows": []
+     },
+     {
+      "id": "specimens",
+      "clause": "§7.1, §7.2",
+      "level": "lab",
+      "text": "At least five specimens per sample; for an anisotropic material, five along and five across its principal direction.",
+      "rows": []
+     },
+     {
+      "id": "breaks",
+      "clause": "§7.3",
+      "level": "lab",
+      "text": "A specimen that breaks at a flaw or outside the narrow section is discarded and retested.",
+      "rows": []
+     },
+     {
+      "id": "speed",
+      "clause": "§8, Table 1",
+      "level": "lab",
+      "text": "The speed is the lowest in Table 1 for the specimen and rigidity that breaks it in 0.5 to 5 minutes: 5 mm/min (±25 %) is the lowest for rigid and semirigid Types I to IV, 1 mm/min for Type V.",
+      "rows": []
+     },
+     {
+      "id": "conditioning",
+      "clause": "§9",
+      "level": "lab",
+      "text": "Specimens are conditioned by Procedure A of ASTM D618 and tested in the same atmosphere.",
+      "rows": []
+     },
+     {
+      "id": "measure",
+      "clause": "§10.1",
+      "level": "lab",
+      "text": "Width and thickness are measured to 0.025 mm at the centre and within 5 mm of each end of the gage length.",
+      "rows": []
+     },
+     {
+      "id": "jaw-separation",
+      "clause": "Note 11",
+      "level": "lab",
+      "text": "The separation of the jaws is never used for the modulus or the elongation.",
+      "rows": []
+     },
+     {
+      "id": "toe",
+      "clause": "§11.1, Annex A1",
+      "level": "lab",
+      "text": "The toe of the curve is compensated unless it is the material's own response.",
+      "rows": []
+     },
+     {
+      "id": "strength",
+      "clause": "§11.2",
+      "level": "lab",
+      "text": "The tensile strength is the greatest force over the average original cross-section in the gage length, to three significant figures.",
+      "rows": []
+     },
+     {
+      "id": "modulus",
+      "clause": "§11.4, §11.5",
+      "level": "lab",
+      "text": "The modulus is the slope of the initial straight part of the curve over the average original cross-section; with no straight part, a secant modulus at a stated strain.",
+      "rows": []
+     },
+     {
+      "id": "poisson",
+      "clause": "Annex A3",
+      "level": "lab",
+      "text": "Poisson's ratio is measured at 5 mm/min after a preload under 5 N, to at least 0.5 % strain, with a transverse extensometer across the width; with no straight part, over 0.05 % to 0.25 % axial strain.",
       "rows": []
      }
     ]

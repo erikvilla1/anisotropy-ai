@@ -42,8 +42,10 @@ test("every step of the assistant's conversation names the panel that holds its 
 test("a panel shows only the rows its test uses, in the definition's order", () => {
   const tension = { ...blankForm(), test: "unnotched tension" };
   assert.deepEqual(visibleKeys(tension, "geometry"), [
-    "size_from", "length", "width", "tab_length", "tab_thickness", "tab_bevel", "tab_material", "strain_device", "strain_length",
-  ]);
+    "size_from", "length", "width", "tab_length", "narrow_width", "narrow_length", "radius", "outer_radius", "tab_thickness", "tab_bevel", "tab_material",
+    "strain_device", "strain_length",
+  ]); // the dog-bone's rows for unnotched tension only (ADR-0075)
+  assert.ok(!visibleKeys({ ...tension, test: "open-hole tension" }, "geometry").includes("narrow_width"));
   assert.deepEqual(visibleKeys(tension, "test"), ["test", "standard"]); // no Specimen row without a standard that names them
   assert.ok(visibleKeys({ ...tension, test: "open-hole tension", standard: "ASTM C1869-18(2023)" }, "test").includes("specimen"));
   assert.deepEqual(visibleKeys(tension, "project"), ["notes", "units"]);
@@ -55,6 +57,19 @@ test("a panel shows only the rows its test uses, in the definition's order", () 
   assert.deepEqual(visibleKeys(plate, "loads"), []);
   assert.ok(visibleKeys(plate, "geometry").includes("hole_diameter"));
   assert.ok(visibleKeys(tension, "mesh").includes("element_size") && !visibleKeys(tension, "mesh").includes("hole_ring"));
+});
+
+test("the layup step asks what the coupon is made of first, and a plastic shows its thickness, E and nu in place of the plies (ADR-0075)", () => {
+  const tension = { ...blankForm(), test: "unnotched tension" };
+  const plies = visibleKeys(tension, "layup");
+  assert.equal(plies[0], "material_kind");
+  assert.ok(plies.includes("ply_1") && plies.includes("library") && plies.includes("criteria") && !plies.includes("thickness") && !plies.includes("own_E"));
+  assert.deepEqual(visibleKeys({ ...tension, material_kind: "isotropic" }, "layup"), ["material_kind", "thickness", "own_E", "own_nu", "own_name", "own_source"]);
+  const bending = visibleKeys({ ...tension, test: "three-point bending", material_kind: "isotropic" }, "layup"); // a plastic is built for the pulled and pushed tests
+  assert.ok(!bending.includes("material_kind") && bending.includes("ply_1") && !bending.includes("own_E"));
+  assert.ok(!MATERIAL_KEYS.includes("material_kind") && MATERIAL_KEYS.includes("own_E") && MATERIAL_KEYS.includes("thickness"));
+  assert.equal(panelOfKey("narrow_width"), "geometry");
+  assert.equal(panelOfKey("own_nu"), "layup");
 });
 
 test("a panel's badge is the worst of its items", () => {
@@ -83,7 +98,7 @@ test("the setup opens on the test and its standard, and the steps that depend on
   assert.equal(testDescription("unnotched tension"), "a plain strip pulled");
   assert.equal(setupLine(blankForm()), null);
   const tension = { ...blankForm(), test: "unnotched tension" };
-  assert.deepEqual(setupLine(tension)?.offered.map((p) => p.designation), ["ASTM D3039/D3039M-17"]);
+  assert.deepEqual(setupLine(tension)?.offered.map((p) => p.designation), ["ASTM D3039/D3039M-17", "ASTM D638-22"]);
   assert.equal(setupLine(tension)?.standard, null);
   assert.equal(setupLine({ ...tension, standard: "ASTM D3039/D3039M-17" })?.standard?.id, "astm-d3039");
   assert.deepEqual(setupLine({ ...blankForm(), test: "in-plane shear" })?.offered, []);
@@ -105,4 +120,15 @@ test("each step shows what the coupon's standard asks of its rows, judged once c
   };
   const judged = stepRequirements(d3039, "geometry", checklist).find((r) => r.id === "t2-width");
   assert.equal(judged && "state" in judged ? judged.state : null, "advisory");
+});
+
+test("D638's requirements show on the steps whose rows they name: the dog-bone's sizes on Geometry, the thickness on Layup (ADR-0075)", () => {
+  const d638 = { ...blankForm(), test: "unnotched tension", standard: "ASTM D638-22", specimen: "I" };
+  const geometry = stepRequirements(d638, "geometry", null).map((r) => r.id);
+  for (const id of ["narrow-width", "narrow-length", "fillet-radius", "outer-radius", "overall-width", "overall-length", "grip-distance", "gauge-length"]) {
+    assert.ok(geometry.includes(id), `${id} on Geometry: ${geometry.join(", ")}`);
+  }
+  const layup = stepRequirements(d638, "layup", null).map((r) => r.id);
+  assert.ok(layup.includes("scope-material") && layup.includes("scope-thickness") && layup.includes("type-thickness") && !layup.includes("narrow-width"),
+    layup.join(", "));
 });

@@ -692,11 +692,14 @@ def write_material_csv(path: Path, lib, material, units: str) -> None:
     length_unit, stress_unit, _ = UNITS[units]
     if lib is None:
         stress = lambda v: f"{from_si(v, 'stress', units):.10g}"  # noqa: E731
-        rows = [("E1", stress(material.E1), stress_unit), ("E2", stress(material.E2), stress_unit), ("G12", stress(material.G12), stress_unit),
-                ("nu12", f"{material.nu12:.10g}", "")]
-        if material.strengths is not None:
-            rows += [(role, stress(getattr(material.strengths, role)), stress_unit) for role in ("F1t", "F1c", "F2t", "F2c", "F6")]
-        rows += [("G13", stress(material.G13), stress_unit), ("G23", stress(material.G23), stress_unit)]
+        if material.isotropic:  # one isotropic material (ADR-0075): stated by E and nu
+            rows = [("E", stress(material.E1), stress_unit), ("nu", f"{material.nu12:.10g}", "")]
+        else:
+            rows = [("E1", stress(material.E1), stress_unit), ("E2", stress(material.E2), stress_unit), ("G12", stress(material.G12), stress_unit),
+                    ("nu12", f"{material.nu12:.10g}", "")]
+            if material.strengths is not None:
+                rows += [(role, stress(getattr(material.strengths, role)), stress_unit) for role in ("F1t", "F1c", "F2t", "F2c", "F6")]
+            rows += [("G13", stress(material.G13), stress_unit), ("G23", stress(material.G23), stress_unit)]
         with path.open("w", encoding="utf-8-sig", newline="") as handle:
             writer = csv.writer(handle, lineterminator="\n")
             writer.writerow(["material", material.name, "the team's own constants"])

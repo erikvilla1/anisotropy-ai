@@ -3,8 +3,8 @@ units = "mm-MPa"
 spec = "../d638-type-i-plastic.toml"
 deck_kernel = "../decks/d638-type-i-plastic-abaqus.inp"
 deck_reference = "../decks/d638-type-i-plastic-ccx.inp"
-deck_kernel_sha256 = "20338d94975553accd57107a565ce06e67869e9e536ad79dd9e8c9530eb57037"
-deck_reference_sha256 = "72f7bcef3b0429a183b7c9451f8b3a8273a38ca9fdebfddd89dfc8446d2a4f66"
+deck_kernel_sha256 = "5b4f17995fa5141b81ea62970999d50d0804c8dd9a708d8344387160c8fc19ed"
+deck_reference_sha256 = "417a71d7b1dde23feb35c3fc272be5efa22f44442230e6207488f3a145772d5a"
 
 [solver]
 name = "calculix"
