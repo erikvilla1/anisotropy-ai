@@ -50,6 +50,9 @@ from anisotropy_fea.units import deck_units_of
 from anisotropy_fea.write_abaqus import write_abaqus
 
 IMPORT_SECONDS = time.perf_counter() - _STARTED
+# The full run's own tools: CalculiX, which checks our result, and the document builder. Our kernel needs neither, so a live solve goes
+# ahead without them; the checklist still says so, and the full run stays blocked until they are installed (ADR-0086).
+RUN_ONLY = ("solver", "document")
 
 
 def write_json(path: Path, data) -> Path:
@@ -150,6 +153,11 @@ def solved(model, quality, timings: dict[str, float]) -> tuple[dict, dict]:
     return data, coupon
 
 
+def solvable(checklist: Checklist, model) -> bool:
+    """Our kernel can answer: the model builds, and nothing blocks but the full run's own tools (RUN_ONLY)."""
+    return model is not None and all(item.state not in ("fail", "missing") or item.id in RUN_ONLY for item in checklist.items)
+
+
 def live(values_path: Path, out: Path, root: Path, started: float | None = None) -> str:
     """The edit-by-edit preview (ADR-0086): the setup check and, when nothing blocks, our kernel's solve with its answer and explanation;
     the seconds of each stage in timings.json. Returns the checklist's state. Nothing is recorded as an attempt and no file is kept."""
@@ -167,7 +175,7 @@ def live(values_path: Path, out: Path, root: Path, started: float | None = None)
     write_json(out / "checklist.json", checklist.as_dict())
     if model is not None:
         write_json(out / "preview.json", preview_data(model, quality))
-    if model is None or checklist.state != "ready":
+    if not solvable(checklist, model):
         write_json(out / "timings.json", timings)
         print(f"{checklist.state}: nothing solved")
         return checklist.state
@@ -179,13 +187,14 @@ def live(values_path: Path, out: Path, root: Path, started: float | None = None)
     timings["write"] = time.perf_counter() - clock
     timings["total"] = time.perf_counter() - (_STARTED if started is None else started)
     write_json(out / "timings.json", timings)
-    print(f"ready: {checklist.designation}, solved by our kernel in {timings['solve']:.2f} s, {timings['total']:.2f} s in all")
-    return "ready"
+    print(f"{checklist.state}: {checklist.designation}, solved by our kernel in {timings['solve']:.2f} s, {timings['total']:.2f} s in all")
+    return checklist.state
 
 
 def fixtures(values_path: Path, out: Path, root: Path) -> None:
     """`live` and the mesh study a run writes into the fields (ADR-0068): the files the browser tests read."""
-    if live(values_path, out, root) != "ready":
+    live(values_path, out, root)
+    if not (out / "fields.json").is_file():
         raise IntakeError("the values do not build a model that can be solved: see checklist.json in " + str(out))
     (out / "timings.json").unlink()  # a fixture is the result, not one machine's seconds
     (out / "summary.json").unlink()  # it is inside fields.json
