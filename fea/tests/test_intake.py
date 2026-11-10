@@ -74,7 +74,7 @@ def test_the_blank_form_has_its_sheets_rows_lists_and_record(blank):
     assert sheet.protection.sheet and sheet.cell(rows["Length (mm)"], 3).value.startswith("required")
     lists = {str(v.sqref): v.formula1 for v in sheet.data_validations.dataValidation if v.type == "list"}
     assert lists[f"B{rows['Library material']}"] == f"'{LIBRARY}'!$A$2:$A${len(library_records()) + 1}"
-    assert lists[f"B{rows['Test']}"] == '"unnotched tension,unnotched compression,open-hole tension,in-plane shear,three-point bending,four-point bending,plate"'
+    assert lists[f"B{rows['Test']}"] == '"unnotched tension,unnotched compression,open-hole tension,in-plane shear,three-point bending,four-point bending,plate,fibre tow tension"'
     assert str(sheet.cell(rows["Library material"], 3).value).startswith("=IFERROR(INDEX(")
     assert str(sheet.cell(rows["Library material"], 3).value).endswith(f',"{LIBRARY_HELP}")')  # the instruction until a material is picked
     library = book[LIBRARY]
@@ -95,7 +95,7 @@ def test_every_row_says_what_it_means(blank):
         if f.label not in later_plies:
             assert sheet.cell(rows[f.label], 3).value, f"the row {f.label!r} has no explanation beside it"
     ply = sheet.cell(rows["Ply 1 (bottom)"], 3).value
-    assert "measured from x" in ply and "90 = fibres along the pull" in ply  # the direction an engineer asks about first
+    assert "measured from the coupon's length" in ply and "0 = fibres along the pull" in ply  # the direction an engineer asks about first (ADR-0065)
 
 
 def test_the_definitions_answer_the_first_questions(blank):

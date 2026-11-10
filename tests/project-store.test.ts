@@ -6,7 +6,7 @@ import {
 } from "../lib/project-store";
 import type { ProjectRecord } from "../lib/studio-api";
 import { blankDraft } from "../lib/laminate-chat";
-import { blankForm } from "../lib/studio-form";
+import { blankForm, FORM_VERSION } from "../lib/studio-form";
 
 function memory(): StorageLike & { map: Map<string, string> } {
   const map = new Map<string, string>();
@@ -73,7 +73,7 @@ test("a laminate project keeps the draft of a problem beside the coupons, each k
 test("a project goes to the server as the page states it and comes back whole; the later change wins when both sides hold it (ADR-0062, part 6)", () => {
   const coupon = reduce(newProject(blankForm(), "2026-11-06T10:00:00.000Z", "4f1c2e3d-5a6b-4c7d-8e9f-0a1b2c3d4e5f"), { type: "form", form: { ...blankForm(), length: "250", units: "mm-MPa" } }, "2026-11-06T10:01:00.000Z");
   const up = uploadOf(coupon);
-  assert.deepEqual([up.kind, up.form_version, up.units], ["fea", "0.6", "mm-MPa"]);
+  assert.deepEqual([up.kind, up.form_version, up.units], ["fea", FORM_VERSION, "mm-MPa"]);
   assert.deepEqual(up.content, { form: coupon.form, plate: coupon.plate });
   const laminate = newLaminateProject({ ...blankDraft(), system: "US" }, "2026-11-06T11:00:00.000Z", "5f1c2e3d-5a6b-4c7d-8e9f-0a1b2c3d4e5f");
   assert.deepEqual([uploadOf(laminate).kind, uploadOf(laminate).units, uploadOf(laminate).form_version], ["laminate", "US", null]);

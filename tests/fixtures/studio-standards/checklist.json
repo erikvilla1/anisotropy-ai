@@ -1,0 +1,408 @@
+{
+ "items": [
+  {
+   "id": "identity",
+   "label": "Who and which coupon",
+   "state": "pass",
+   "message": "IM7-UNT-L1, unnotched tension; a new coupon: its folder and case page are written when it runs",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "units",
+   "label": "Units consistent",
+   "state": "pass",
+   "message": "every row in mm, MPa and N; the results come back in the same units, and the decks are written in mm-MPa",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "geometry",
+   "label": "Geometry defined",
+   "state": "pass",
+   "message": "250 by 25 mm, 56 mm tabs with a node row on each tab line",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "standard",
+   "label": "Test standard",
+   "state": "pass",
+   "message": "specimen checked against ASTM D3039/D3039M-17, balanced and symmetric class (Table 2): 5 of 5 requirements a model can meet are met; 1 recommendation not followed; 12 clauses of the procedure are the laboratory's",
+   "rows": [],
+   "requirements": [
+    {
+     "id": "scope-matrix",
+     "clause": "§1.1",
+     "level": "scope",
+     "text": "The material is a polymer-matrix composite reinforced by high-modulus fibres.",
+     "state": "met",
+     "value": "carbon / epoxy",
+     "limit": "a polymer-matrix composite reinforced by high-modulus fibres",
+     "rows": [
+      "library",
+      "own_name"
+     ]
+    },
+    {
+     "id": "scope-laminate",
+     "clause": "§1.1",
+     "level": "scope",
+     "text": "The laminate is balanced and symmetric about the direction of the pull: a −θ ply for every +θ ply, and the stack a mirror image about its mid-plane.",
+     "state": "met",
+     "value": "balanced and symmetric, 8 plies",
+     "limit": "balanced and symmetric about the direction of the pull",
+     "rows": [
+      "ply_1",
+      "symmetric"
+     ]
+    },
+    {
+     "id": "section",
+     "clause": "Table 1",
+     "level": "mandatory",
+     "text": "The coupon has a constant rectangular cross-section.",
+     "state": "met",
+     "value": "a plain strip",
+     "limit": "a constant rectangular cross-section",
+     "rows": [
+      "test"
+     ]
+    },
+    {
+     "id": "min-length",
+     "clause": "Table 1",
+     "level": "mandatory",
+     "text": "The length is at least the gripped length, plus twice the width, plus the gauge length of the strain measurement (we read the gripped length as both grips together).",
+     "state": "met",
+     "value": "250 mm",
+     "limit": "at least 187 mm (2 × 56 mm gripped + 2 × 25 mm wide + 25 mm gauge)",
+     "rows": [
+      "length",
+      "tab_length",
+      "width",
+      "strain_length"
+     ]
+    },
+    {
+     "id": "tab-bevel",
+     "clause": "Table 1",
+     "level": "mandatory",
+     "text": "Bonded tabs are bevelled at 5° to 90°, both included.",
+     "state": "met",
+     "value": "7°",
+     "limit": "5° to 90°, both included",
+     "rows": [
+      "tab_bevel"
+     ]
+    },
+    {
+     "id": "t2-width",
+     "clause": "Table 2",
+     "level": "recommended",
+     "text": "The width suggested for the laminate's class.",
+     "state": "met",
+     "value": "25 mm",
+     "limit": "25 mm for a balanced and symmetric coupon",
+     "rows": [
+      "width"
+     ]
+    },
+    {
+     "id": "t2-length",
+     "clause": "Table 2",
+     "level": "recommended",
+     "text": "The overall length suggested for the laminate's class.",
+     "state": "met",
+     "value": "250 mm",
+     "limit": "250 mm for a balanced and symmetric coupon",
+     "rows": [
+      "length"
+     ]
+    },
+    {
+     "id": "t2-thickness",
+     "clause": "Table 2",
+     "level": "recommended",
+     "text": "The laminate thickness suggested for the laminate's class.",
+     "state": "advisory",
+     "value": "1.463 mm",
+     "limit": "2.5 mm for a balanced and symmetric coupon",
+     "rows": [
+      "ply_thickness",
+      "ply_1"
+     ]
+    },
+    {
+     "id": "t2-tab-length",
+     "clause": "Table 2",
+     "level": "recommended",
+     "text": "The tab length suggested for the laminate's class.",
+     "state": "na",
+     "value": "balanced and symmetric: Table 2 gives no tab length",
+     "limit": "gripped through emery cloth; the grip length is yours to state",
+     "rows": [
+      "tab_length"
+     ]
+    },
+    {
+     "id": "t2-tab-thickness",
+     "clause": "Table 2",
+     "level": "recommended",
+     "text": "The tab thickness suggested for the laminate's class.",
+     "state": "na",
+     "value": "bonded tabs",
+     "limit": "emery cloth for this class; bonded tabs are allowed (§8.2.1.2)",
+     "rows": [
+      "tab_thickness"
+     ]
+    },
+    {
+     "id": "t2-tab-bevel",
+     "clause": "Table 2",
+     "level": "recommended",
+     "text": "The tab bevel suggested for the laminate's class.",
+     "state": "na",
+     "value": "7°",
+     "limit": "emery cloth for this class",
+     "rows": [
+      "tab_bevel"
+     ]
+    },
+    {
+     "id": "extensometer",
+     "clause": "§7.3.2",
+     "level": "recommended",
+     "text": "An extensometer's gauge length lies between 10 and 50 mm [0.5 and 2.0 in].",
+     "state": "met",
+     "value": "25 mm",
+     "limit": "10 mm to 50 mm",
+     "rows": [
+      "strain_length"
+     ]
+    },
+    {
+     "id": "strain-gauge",
+     "clause": "§7.3.1",
+     "level": "recommended",
+     "text": "A bonded strain gauge's active length is at least 3 mm [0.125 in]; 6 mm [0.25 in] suits most materials.",
+     "state": "na",
+     "value": "an extensometer",
+     "limit": "at least 3 mm [0.125 in]",
+     "rows": [
+      "strain_length"
+     ]
+    },
+    {
+     "id": "edge-effects",
+     "clause": "§6.4",
+     "level": "note",
+     "text": "Off-axis plies soften the free edges, so the strength and stiffness of an angle-ply laminate can read low.",
+     "state": "note",
+     "value": "off-axis plies at ±45°",
+     "limit": "edge softening can make the measured strength and stiffness read low; less so with many 0° plies",
+     "rows": [
+      "ply_1"
+     ]
+    },
+    {
+     "id": "tolerance-width",
+     "clause": "Table 1",
+     "level": "lab",
+     "text": "The specimen's width is within ±1 % of its width.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "tolerance-thickness",
+     "clause": "Table 1",
+     "level": "lab",
+     "text": "The specimen's thickness is within ±4 % of its thickness.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "flatness",
+     "clause": "Table 1",
+     "level": "lab",
+     "text": "The specimen lies flat under light finger pressure.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "tab-match",
+     "clause": "Table 1",
+     "level": "lab",
+     "text": "Bonded tabs match in thickness within ±1 % and are feathered into the coupon without damaging it.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "measure",
+     "clause": "§11.2.2",
+     "level": "lab",
+     "text": "Width and thickness are measured at three places in the gauge section, and the area is their average width times their average thickness.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "specimens",
+     "clause": "§8.1",
+     "level": "lab",
+     "text": "At least five specimens are tested per condition.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "conditioning",
+     "clause": "§10",
+     "level": "lab",
+     "text": "The conditioning is reported; without one, the specimens are reported as unconditioned, moisture unknown.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "speed",
+     "clause": "§11.3",
+     "level": "lab",
+     "text": "The strain rate gives failure in 1 to 10 minutes: 0.01 per minute in strain control, or 2 mm/min [0.05 in/min] of the head as a start.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "bending",
+     "clause": "§11.6.1",
+     "level": "lab",
+     "text": "Bending is checked with back-to-back transducers on at least one specimen per sample at 2000 microstrain; above 3 % the strains of both faces are averaged.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "alignment",
+     "clause": "§7.2.5",
+     "level": "lab",
+     "text": "The load train's alignment is checked; good practice keeps bending to 3 to 5 % above 1000 microstrain.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "failure-mode",
+     "clause": "§11.9",
+     "level": "lab",
+     "text": "Each failure is recorded with the three-part code of the failure type, area and location.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "grip-failures",
+     "clause": "§12.2",
+     "level": "lab",
+     "text": "When many specimens fail within one width of a tab or grip, the gripping is re-examined.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    }
+   ]
+  },
+  {
+   "id": "material",
+   "label": "Material defined",
+   "state": "pass",
+   "message": "IM7-8552-Lamina: library im7-8552 / ncamp-im7-8552-2019-rtd-measured-v1 (record 2026-10-10.1; Hexcel 8552 IM7 unidirectional prepreg 190 gsm 35% RC · qualification material property data report · CAM-RP-2009-015 · Rev B · Wichita State University · NIAR / NCAMP · 2019-04-16); rights class open-publisher; strengths given",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "laminate",
+   "label": "Laminate assigned",
+   "state": "pass",
+   "message": "8 plies [45/0/-45/90]s, 1.46304 mm thick; symmetric, so B = 0 and the membrane model applies",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "constraints",
+   "label": "Constraints defined",
+   "state": "pass",
+   "message": "bottom grip held in every direction (84 nodes), top grip held across the width (84 nodes), through a reference point at each end; no rigid-body motion is left",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "load",
+   "label": "Load applied",
+   "state": "pass",
+   "message": "displacement of 1 mm on the top grip along the coupon, a pull",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "mesh",
+   "label": "Mesh quality acceptable",
+   "state": "pass",
+   "message": "300 elements, 357 nodes (structured mesh, order 1); aspect ratio 1.23 at worst (warns above 10); smallest angle 90° at worst (warns below 10°); largest angle 90° at worst (warns above 160°); Jacobian ratio 1 at worst (warns below 0.1)",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "criterion",
+   "label": "Failure criterion",
+   "state": "pass",
+   "message": "first-ply failure by max_stress, tsai_hill",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "probes",
+   "label": "Result points inside the coupon",
+   "state": "pass",
+   "message": "results are read at node centre at (12.5, 125), node extensometer_bottom at (12.5, 112.5), node extensometer_top at (12.5, 137.5), element centre, element near_grip (mm)",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "solver",
+   "label": "Reference solver installed",
+   "state": "pass",
+   "message": "CalculiX 2.22 at C:\\Tools\\PrePoMax v2.6.0\\Solver\\ccx_dynamic.exe: the reference solver that checks our engine's result",
+   "rows": [],
+   "requirements": []
+  },
+  {
+   "id": "document",
+   "label": "Document builder installed",
+   "state": "pass",
+   "message": "Tectonic at C:\\Users\\erikv\\AppData\\Local\\Programs\\tectonic\\tectonic.EXE: the package gets its PDF",
+   "rows": [],
+   "requirements": []
+  }
+ ],
+ "designation": "IM7-UNT-L1",
+ "coupon_exists": false,
+ "attempts": 0,
+ "state": "ready",
+ "problems": []
+}

@@ -9,7 +9,7 @@ import {
 const fixture = (name: string) => JSON.parse(readFileSync(`tests/fixtures/studio/${name}.json`, "utf8"));
 
 test("the readers accept the package's files and refuse other shapes", () => {
-  assert.equal(readChecklist(fixture("checklist")).items.length, 12);
+  assert.equal(readChecklist(fixture("checklist")).items.length, 13); // the twelve of ADR-0051 and the Test standard (ADR-0072)
   assert.equal(readPreview(fixture("preview")).mesh.element_count, 250);
   const fields = readFields(fixture("fields"));
   const bending = readFields(JSON.parse(readFileSync("tests/fixtures/studio-bending/fields.json", "utf8")));
@@ -74,6 +74,9 @@ test("file addresses and the download list", () => {
   assert.equal(fileUrl("http://api.test/", "abc", "fields"), "http://api.test/v1/coupon-jobs/abc/files/fields");
   assert.equal(DOWNLOADS[0][0], "package");
   assert.ok(DOWNLOADS.some(([key]) => key === "prepomax_results"));
+  // the page offers the package, its PDF and the decks; the JSON files, the record, the summary and the .vtu stay outputs, not downloads
+  assert.deepEqual(DOWNLOADS.map(([key]) => key), ["package", "document", "abaqus_deck", "prepomax_deck", "prepomax_results"]);
+  assert.ok(DOWNLOADS.every(([, label]) => !/JSON|TOML/.test(label)));
 });
 
 test("the explain answer carries its writer and reads only a known shape", async () => {

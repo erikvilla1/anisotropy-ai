@@ -18,8 +18,9 @@ DECK = paths.CHECK_DECKS / "coupon-1x1-im7-8552.inp"
 def test_the_two_deck_systems_and_their_factors():
     assert set(DECK_UNIT_SYSTEMS) == {"mm-MPa", "m-Pa"}
     assert deck_unit_factors("mm-MPa") == unit_factors("mm-MPa") and deck_unit_factors("m-Pa") == unit_factors("m-Pa")
-    assert unit_factors("mm-MPa") == {"length": 1e-3, "stress": 1e6, "force": 1.0, "force_per_length": 1e3, "per_length": 1e3}
-    assert unit_factors("m-Pa") == {"length": 1.0, "stress": 1.0, "force": 1.0, "force_per_length": 1.0, "per_length": 1.0}
+    assert unit_factors("mm-MPa") == {"length": 1e-3, "stress": 1e6, "force": 1.0, "force_per_length": 1e3, "per_length": 1e3, "area": 1e-6,
+                                     "modulus": 1e9}  # a modulus in GPa (ADR-0072)
+    assert unit_factors("m-Pa") == {"length": 1.0, "stress": 1.0, "force": 1.0, "force_per_length": 1.0, "per_length": 1.0, "area": 1.0, "modulus": 1e9}
     assert from_si(461.869e3, "force_per_length", "mm-MPa") == pytest.approx(461.869)  # N/m to N/mm
     assert from_si(2.0, "per_length", "mm-MPa") == pytest.approx(2e-3)  # a curvature of 2 per m is 0.002 per mm
 
@@ -34,15 +35,16 @@ def test_scalar_conversions_round_trip():
 
 def test_the_four_stated_systems_use_the_engines_constants():
     assert list(UNIT_SYSTEMS) == ["mm-MPa", "m-Pa", "in-psi", "in-ksi"] and set(UNIT_LABEL) == set(UNIT_SYSTEMS)
-    assert unit_factors("in-psi") == {"length": INCH, "stress": PSI, "force": LBF, "force_per_length": LBF / INCH, "per_length": 1 / INCH}
+    assert unit_factors("in-psi") == {"length": INCH, "stress": PSI, "force": LBF, "force_per_length": LBF / INCH, "per_length": 1 / INCH,
+                                     "area": INCH * INCH, "modulus": 1e6 * PSI}  # a modulus in Msi (ADR-0072)
     assert unit_factors("in-ksi")["stress"] == 1e3 * PSI and unit_factors("in-ksi")["length"] == INCH
     assert to_si(10.0, "length", "in-psi") == pytest.approx(0.254)
     assert to_si(1.0, "stress", "in-psi") == pytest.approx(6894.757, rel=1e-6) and to_si(1.0, "stress", "in-ksi") == pytest.approx(6.894757e6, rel=1e-6)
     assert to_si(1.0, "force", "in-psi") == pytest.approx(4.448222, rel=1e-6)
     assert from_si(to_si(23.5e6, "stress", "in-psi"), "stress", "in-ksi") == pytest.approx(23.5e3)
     assert from_si(1000.0, "force_per_length", "in-psi") == pytest.approx(1000.0 * INCH / LBF)  # N/m to lbf/in
-    assert UNIT_LABEL["in-psi"] == {"force": "lbf", "length": "in", "stress": "psi", "force_per_length": "lbf/in", "modulus": "Msi", "stiffness": "lbf/in",
-                                    "per_length": "1/in", "moment": "lbf·in/in", "rotation": "rad"}
+    assert UNIT_LABEL["in-psi"] == {"area": "in²", "force": "lbf", "length": "in", "stress": "psi", "force_per_length": "lbf/in", "modulus": "Msi",
+                                    "stiffness": "lbf/in", "per_length": "1/in", "moment": "lbf·in/in", "rotation": "rad"}
     assert UNIT_LABEL["in-ksi"]["stress"] == "ksi"
     assert units_words("mm-MPa") == "mm, MPa and N" and units_words("in-ksi") == "in, ksi and lbf"
 

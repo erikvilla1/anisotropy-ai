@@ -42,6 +42,9 @@ const whitneyMethod = (name: string, equation: string, detail: string, location:
   name, equation, detail, units, reference: { ...whitneyReference, location },
 });
 
+const towReference = { title: "ASTM D4018-23 · Properties of Continuous Filament Carbon and Graphite Fiber Tows (licensed; values cited by clause, never its text)",
+  url: "https://store.astm.org/d4018-23.html" };
+
 // Operations the engine implements beyond the foundation cards (ADR-0019). Each names its engine function.
 export const laminateExtensions: Method[] = [
   method("Laminate compliance · ABD inverse",
@@ -137,6 +140,14 @@ export const foundationTopics: PhysicsTopic[] = [
         "The book uses water volume per composite volume for c; M is relative mass gain. Density and volume references must match the coefficient definition. A coefficient based on mass fraction cannot be used with volume concentration without conversion. This defines expansion inputs; it is not a diffusion model.",
         "Eq. 10.19, p. 314", "M and c: fractions, not percentages; density ratio dimensionless. β is strain per unit c."),
       ...thermalExtensions,
+    ] },
+  { id: "tow", title: "Fibre tow tension", subtitle: "A resin-impregnated tow reduced to strength and chord modulus",
+    assumptions: "A tow is a strand, not a laminate: the fibre carries the force over its own area, its mass per unit length over its density, and the resin only holds the filaments together. The chord is linear between its two strains. No finite element model; the standard's text is not reproduced, so read each clause in your own copy.",
+    source: towReference.title, url: towReference.url, methods: [
+      { name: "Fibre tow strength & chord modulus", equation: "A = MUL / ρf\nσ = P ρf / MUL\nE = (Pu − Pl) ρf / ((εu − εl) MUL)\nRC = 100 (1 − MUL / MULi)",
+        detail: "MUL is a weighed length's mass over its length (W1/L); ρf a sized sample's density less its sizing correction kc. The chord strains follow from the product's typical strain at failure (Table 2) and are absolute here: the standard's factor B = 10⁻³ gives GPa only with absolute strains, not the microstrain it lists (ADR-0074). Mean, s(n−1) and CV over the valid specimens (Eqs 6–8). Engine: tow.tow_strength, tow.tow_chord_modulus, tow.resin_content, tow.sample_statistics.",
+        units: "Engine in SI: P in N, MUL in kg/m, ρf in kg/m³, σ and E in Pa, strains absolute. In the standard's units, N with g/cm³ and g/m gives MPa directly; RC in % by weight.",
+        reference: { ...towReference, location: "Eqs 1–8, §12; Tables 1–2" } },
     ] },
 ];
 

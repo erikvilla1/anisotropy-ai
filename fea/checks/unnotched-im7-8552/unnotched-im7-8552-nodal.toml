@@ -17,6 +17,7 @@ ny = 125            # 2 mm rows: the tab lines at 56 and 194 mm fall on node row
 
 [layup]
 angles = [45, 0, -45, 90]
+angles_from = "length"  # counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)
 symmetric = true
 ply_thickness = "library"
 

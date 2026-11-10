@@ -44,15 +44,26 @@ progress = {"stage": "our engine", "done": ["the setup check", "the input", "the
             "outputs": {"fields": str(fields), "outside": str(outside)}, "coupon": "IM7-UNT-L1", "attempt": ".local/fea/IM7-UNT-L1/ours/runs/attempt-02_2026-10-27"}
 pathlib.Path(args.progress).write_text(json.dumps(progress), encoding="utf-8")
 if args.source == "STOPS":
+    console = result.parent / "STOPS-nodal-ccx.log"
+    console.write_text(" fatal error in GPart_makeYCmap\n bad input\n", encoding="utf-8")
     result.write_text(json.dumps({"status": "stopped", "message": "stopped at CalculiX: run_calculix.py exited with code 1",
-                                  "coupon": "STOPS", "attempt": ".local/fea/STOPS/ours/runs/attempt-02_2026-10-27", "outputs": {}}))
+                                  "coupon": "STOPS", "attempt": ".local/fea/STOPS/ours/runs/attempt-02_2026-10-27", "outputs": {"calculix_console": str(console)}}))
     sys.exit(1)
 if args.source == "CRASHES":
     print("Traceback: something broke", flush=True)
     sys.exit(2)
-if args.source == "WAITS":
+if args.source == "RESULT":  # the result reported while the package is still being built (ADR-0064)
+    pathlib.Path(args.progress).write_text(json.dumps({**progress, "stage": "the package", "result": "57 of 57 recorded values agree with CalculiX"}),
+                                           encoding="utf-8")
+if args.source in ("WAITS", "RESULT"):
     while not (result.parent.parent / "release").exists():
         time.sleep(0.05)
+if args.source == "RESULT":
+    result.write_text(json.dumps({"status": "done", "coupon": "IM7-UNT-L1", "attempt": progress["attempt"], "outputs": {"fields": str(fields)},
+                                  "message": "57 of 57 recorded values agree with CalculiX; the package not written (the package: Tectonic stopped)",
+                                  "result": "57 of 57 recorded values agree with CalculiX",
+                                  "documents": "the package not written (the package: Tectonic stopped)"}), encoding="utf-8")
+    sys.exit(0)
 package = result.parent / "2026-10-27_IM7-UNT-L1"
 package.mkdir()
 (package / "IM7-UNT-L1.pdf").write_bytes(b"%PDF")
@@ -118,7 +129,8 @@ def test_one_job_runs_at_a_time(jobs):
 def test_a_stopped_run_says_where_and_has_no_package(jobs):
     job_id = client.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"]
     body = ended(job_id)
-    assert body["state"] == "stopped" and body["message"] == "stopped at CalculiX: run_calculix.py exited with code 1" and body["outputs"] == {}
+    assert body["state"] == "stopped" and body["message"] == "stopped at CalculiX: run_calculix.py exited with code 1"
+    assert list(body["outputs"]) == ["calculix_console"]  # a stopped run keeps the files it made, the solver's console among them
     package = client.get(f"/v1/coupon-jobs/{job_id}/package")
     assert package.status_code == 409 and "stopped at CalculiX" in package.json()["detail"]
 
@@ -248,6 +260,34 @@ def test_the_status_shows_the_stage_and_the_files_so_far(jobs):
     package = client.get(f"/v1/coupon-jobs/{job_id}/files/package")
     assert package.status_code == 200 and package.headers["content-type"] == "application/zip"
     assert client.get(f"/v1/coupon-jobs/{job_id}/files/fields").status_code == 200
+
+
+def test_the_result_shows_while_the_package_is_still_being_built(jobs):
+    """ADR-0064: the tool reports the result in its progress before the drawings and the package; the status says it while the job
+    runs, and once it ends keeps the result apart from a document that failed."""
+    job_id = client.post("/v1/coupon-jobs", json={"coupon": "RESULT", "run_by": "A. Engineer"}).json()["job_id"]
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and client.get(f"/v1/coupon-jobs/{job_id}").json()["result"] is None:
+        time.sleep(0.05)
+    running = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert running["state"] == "running" and running["stage"] == "the package" and running["documents"] == "building"
+    assert running["result"] == running["message"] == "57 of 57 recorded values agree with CalculiX"
+    assert client.get(f"/v1/coupon-jobs/{job_id}/files/fields").status_code == 200
+    (jobs.root / "release").touch()
+    done = ended(job_id)
+    assert done["state"] == "done" and done["result"] == "57 of 57 recorded values agree with CalculiX"
+    assert done["documents"] == "the package not written (the package: Tectonic stopped)" and done["message"].endswith(done["documents"])
+
+
+def test_a_job_before_its_result_has_none(jobs):
+    job_id = client.post("/v1/coupon-jobs", json={"coupon": "WAITS", "run_by": "A. Engineer"}).json()["job_id"]
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and client.get(f"/v1/coupon-jobs/{job_id}").json()["stage"] is None:
+        time.sleep(0.05)
+    running = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert running["result"] is None and running["documents"] is None and running["message"] is None
+    (jobs.root / "release").touch()
+    assert ended(job_id)["result"] == ended(job_id)["message"]  # an outcome without a result line: its message is the result
 
 
 def test_jobs_are_listed_newest_first(jobs):
@@ -392,6 +432,18 @@ def test_while_a_job_runs_its_files_come_from_the_disk(tmp_path, monkeypatch):
     assert fields.status_code == 200 and fields.json() == {"summary": {"reaction": {"value": 1.0}}}  # served from the disk, no link yet
     (registry.root / "release").touch()
     assert ended(started["job_id"])["state"] == "done"
+
+
+def test_a_stopped_runs_files_go_to_the_store_too(tmp_path, monkeypatch):
+    # the deck, the console and the status file of a run CalculiX stopped outlive the solver's container, so the fault can be read (ADR-0030 amendment 5)
+    store = MemoryStore()
+    registry = storing_registry(tmp_path, store, monkeypatch)
+    stopped = ended(client.post("/v1/coupon-jobs", json={"coupon": "STOPS", "run_by": "A. Engineer"}).json()["job_id"])
+    assert stopped["state"] == "stopped" and list(stopped["outputs"]) == ["calculix_console"]
+    key = "coupons/STOPS/attempt-02_2026-10-27/files/calculix_console/STOPS-nodal-ccx.log"
+    assert key in store.objects and registry.get(_uuid.UUID(stopped["job_id"])).stored == {"calculix_console": key}
+    console = client.get(f"/v1/coupon-jobs/{stopped['job_id']}/files/calculix_console", follow_redirects=False)
+    assert console.status_code == 307 and console.headers["location"] == f"https://store.test/{key}?expires=600"
 
 
 def test_a_store_that_fails_stops_the_job_and_withholds_its_result(tmp_path, monkeypatch):

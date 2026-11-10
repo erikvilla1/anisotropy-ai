@@ -1,5 +1,6 @@
 """Specs: every required key by name, every invalid combination refused, units converted once (ADR-0030, ADR-0003)."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -7,8 +8,8 @@ import pytest
 from public_coupon import PUBLIC_COUPON, SEEDS
 
 from anisotropy_fea import paths  # where the files live (ADR-0036)
-from anisotropy_fea.spec import (SpecError, admissible_ny, full_angles, load_spec, mesh_counts, parse_spec, row_coordinates, spec_material, spec_plies,
-                                 to_si)
+from anisotropy_fea.spec import (LENGTH_AXIS_ROTATION_DEG, SpecError, admissible_ny, fibre_angle, fibre_angles, full_angles, load_spec, mesh_counts,
+                                 normalised_angle, parse_spec, row_coordinates, spec_material, spec_plies, to_si)
 
 NODAL = (paths.spec_path("unnotched-im7-8552-nodal")).read_text(encoding="utf-8")
 
@@ -30,8 +31,9 @@ def test_every_spec_loads_and_converts_to_si():
             assert material.source.startswith("the team's own constants: ")
             continue
         if spec.material.library is None:
-            # the Kirsch plate and the pressure plate (ADR-0054): nominal isotropic constants written in the spec, no dataset to cite; the title and comments say so
-            assert ("Kirsch" in spec.title or spec.kind == "plate") and material.rights == "spec" and material.E1 == material.E2 and material.strengths is None
+            # the Kirsch plate, the pressure plate (ADR-0054) and the D638 plastic (ADR-0075): nominal isotropic constants written in the spec, no
+            # dataset to cite; the title and comments say so
+            assert ("Kirsch" in spec.title or spec.kind == "plate" or "nominal isotropic plastic" in spec.title) and material.rights == "spec" and material.E1 == material.E2 and material.strengths is None
             continue
         # A spec names a library record whose values may be cited: public-domain, open-publisher, or a licensed reference cited
         # by table and page (ADR-0018; ADR-0030 amendment 4). User-supplied data and explicit constants stay out of specs (R-16).
@@ -80,7 +82,24 @@ def test_units_are_converted_once_and_only_dimensioned_numbers_change():
 def test_full_angles_and_mesh_counts():
     spec = parse_spec(NODAL)
     assert full_angles(spec) == [45, 0, -45, 90, 90, -45, 0, 45]
+    assert fibre_angles(spec) == [-45, 90, 45, 0, 0, 45, 90, -45]  # the stated angles count from the length axis, the engine's from x (ADR-0065)
     assert mesh_counts(spec) == (10, 125)
+
+
+def test_fibre_angles_are_the_stated_angles_turned_from_the_length_axis_to_x():
+    assert LENGTH_AXIS_ROTATION_DEG == 90.0
+    assert [fibre_angle(a) for a in (0, 45, -45, 90, -90, 30, -60, 180, 135)] == [90, -45, 45, 0, 0, -60, 30, 90, 45]
+    assert [normalised_angle(a) for a in (90, -90, 180, 270, -270, 0, 89.5, -89.5, 90.5)] == [90, 90, 0, 90, 90, 0, 89.5, -89.5, -89.5]
+    assert [p.angle_deg for p in spec_plies(to_si(parse_spec(NODAL)))] == [-45, 90, 45, 0, 0, 45, 90, -45]
+
+
+def test_a_spec_without_angles_from_is_refused_with_the_migration_named():
+    without = re.sub(r"angles_from = \"length\"[^\n]*\n", "", NODAL)
+    assert "angles_from" not in without
+    with pytest.raises(SpecError, match="layup.angles_from = \"length\" is required \\(ADR-0065\\).*fea/tools/migrate_angles.py"):
+        parse_spec(without)
+    with pytest.raises(SpecError, match="layup.angles_from"):
+        spec_with('angles_from = "length"', 'angles_from = "width"')
     by_size = spec_with("nx = 10\nny = 125            # 2 mm rows: the tab lines at 56 and 194 mm fall on node rows", "element_size = 2.0")
     assert mesh_counts(by_size) == (13, 125)
 

@@ -9,12 +9,13 @@ plies and the laminate membrane stiffness `A` they give.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 
 from anisotropy_engine.laminate import Ply, abd_matrices
 
-from .model import Deck, ElementKey, Material, NodeKey, ShellSection, expanded_layers, is_symmetric_layup, section_plies
+from .model import Deck, ElementKey, Material, NodeKey, ShellSection, expanded_layers, fibre_angles, is_symmetric_layup, section_plies
 
 
 class KernelError(ValueError):
@@ -24,7 +25,8 @@ class KernelError(ValueError):
 @dataclass(frozen=True)
 class Section:
     name: str
-    plies: list[Ply]
+    plies: list[Ply]  # the engine plies: each angle is the fibre angle from global x (ADR-0004), the physics
+    angles_deg: tuple[float, ...]  # the angles the deck states, bottom-first, the symmetric half expanded: what every label prints (ADR-0065)
     A: np.ndarray  # (3, 3), N/m: N = A eps with engineering shear strain (ADR-0004)
     B: np.ndarray | None = None  # (3, 3), N: the coupling stiffness; set for a shell mesh (ADR-0053), None for the membrane
     D: np.ndarray | None = None  # (3, 3), N m: the bending stiffness
@@ -49,9 +51,17 @@ class Mesh:
 
     def element(self, key: ElementKey) -> int:
         try:
-            return self.element_keys.index(key)
-        except ValueError:
+            return self._element_index[key]
+        except KeyError:
             raise KernelError(f"element {key[0]}.{key[1]} is not in the mesh") from None
+
+    @cached_property
+    def _element_index(self) -> dict[ElementKey, int]:
+        """Element key -> its first position, built once: a gauge set of thousands of elements is looked up in one pass (ADR-0073)."""
+        index: dict[ElementKey, int] = {}
+        for e, key in enumerate(self.element_keys):
+            index.setdefault(key, e)
+        return index
 
     @property
     def node_count(self) -> int:
@@ -72,7 +82,12 @@ def section_stiffness(section: ShellSection, materials: dict[str, Material], nam
         raise KernelError(f"section {name!r}: layup is not symmetric (||B|| / (||A|| h) = {ratio:.2g}); the membrane model needs "
                           "B = 0. Add `symmetric` to the shell section or mirror the layers.")
     A, _, _ = abd_matrices(plies)
-    return Section(name=name, plies=plies, A=A)
+    return Section(name=name, plies=plies, angles_deg=stated_angles(section), A=A)
+
+
+def stated_angles(section: ShellSection) -> tuple[float, ...]:
+    """The layer angles as the deck writes them, bottom-first with the symmetric half expanded, for the labels (ADR-0065)."""
+    return tuple(layer.angle_deg for layer in expanded_layers(section))
 
 
 SHEAR_CORRECTION = 5.0 / 6.0  # the shear correction factor of the flat shell (ADR-0053); shell.py states the choice
@@ -81,9 +96,10 @@ SHEAR_CORRECTION = 5.0 / 6.0  # the shear correction factor of the flat shell (A
 def transverse_shear_stiffness(section: ShellSection, materials: dict[str, Material], name: str, correction: float = SHEAR_CORRECTION) -> np.ndarray:
     """H (2, 2) for [gamma_xz, gamma_yz]: the correction factor times the sum over the plies of thickness times the ply's transverse
     shear stiffness rotated to the laminate axes, Q55 = G13 c^2 + G23 s^2, Q44 = G13 s^2 + G23 c^2, Q45 = (G13 - G23) c s, with c and s the
-    cosine and sine of the ply angle. An isotropic material takes G13 = G23 = G; a lamina must state G13 and G23."""
+    cosine and sine of the ply's fibre angle from global x (the stated angle plus the section's rotation, ADR-0065). An isotropic material
+    takes G13 = G23 = G; a lamina must state G13 and G23."""
     H = np.zeros((2, 2))
-    for layer in expanded_layers(section):
+    for layer, angle in zip(expanded_layers(section), fibre_angles(section)):
         material = materials[layer.material]
         if material.elastic is None:
             raise KernelError(f"section {name!r}: material {material.name!r} has no *Elastic")
@@ -95,7 +111,7 @@ def transverse_shear_stiffness(section: ShellSection, materials: dict[str, Mater
                 raise KernelError(f"section {name!r}: material {material.name!r} states no G13 and G23; a shell needs both (*Elastic, type=LAMINA with "
                                   "all five constants)")
             G13, G23 = e.G13, e.G23
-        c, s = np.cos(np.radians(layer.angle_deg)), np.sin(np.radians(layer.angle_deg))
+        c, s = np.cos(np.radians(angle)), np.sin(np.radians(angle))
         Q55 = G13 * c * c + G23 * s * s
         Q44 = G13 * s * s + G23 * c * c
         Q45 = (G13 - G23) * c * s
@@ -107,7 +123,7 @@ def shell_section_stiffness(section: ShellSection, materials: dict[str, Material
     """The engine plies of a section with A, B, D and the transverse shear stiffness H: the laminate's full law, B included (ADR-0053)."""
     plies = section_plies(section, materials)
     A, B, D = abd_matrices(plies)
-    return Section(name=name, plies=plies, A=A, B=B, D=D, H=transverse_shear_stiffness(section, materials, name))
+    return Section(name=name, plies=plies, angles_deg=stated_angles(section), A=A, B=B, D=D, H=transverse_shear_stiffness(section, materials, name))
 
 
 def mesh_from_deck(deck: Deck, shell: bool = False) -> Mesh:

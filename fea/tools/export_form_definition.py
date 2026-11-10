@@ -6,7 +6,9 @@
 Every row of the form (key, label, kind, what it means, whether it is required, its default, its words, its bounds, and for a row
 with a unit its label and default in each unit system), the sections they sit in, the unit systems a coupon may be stated in with
 their labels, the instructions, the Definitions sheet, the tests offered, the criterion words, and the library materials the form
-lists with their constants in MPa and mm and, under `library_constants`, in every system (ADR-0061). The page converts nothing:
+lists with their constants in MPa and mm and, under `library_constants`, in every system (ADR-0061), and under `standards` the test
+standards the Standard row offers, each with the tests it covers, the rows it needs, its specimens or classes with their sizes in every
+system, and its requirements by clause (ADR-0072). The page converts nothing:
 every number it shows in a system is written here by the engine. The website imports the file at build time;
 `fea/tests/test_studio_tool.py` fails when it drifts from the package, as `tests/material-library-export.test.ts` does for the
 material library.
@@ -22,7 +24,10 @@ from pathlib import Path
 from anisotropy_fea import __version__, paths
 from anisotropy_fea.intake import (BLOCKS, CRITERION_WORDS, FORM_VERSION, GLOSSARY, HOW_TO, LIBRARY_COLUMNS, TESTS, UNITS, in_stated, library_records,
                                    library_row)
-from anisotropy_fea.spec import AREA_REGIONS, EDGE_REGIONS
+from anisotropy_fea.spec import AREA_REGIONS, EDGE_REGIONS, TOW_TEST, test_name
+from anisotropy_fea.standards import NONE, PROFILES
+from anisotropy_fea.standards.astm_d4018 import FAILURE_AREAS, FAILURE_LOCATIONS, FAILURE_TYPES, KIND as TOW_KIND
+from anisotropy_fea.tow_test import ITEM_OF_ROW as TOW_ITEM_OF_ROW, REPORT_UNITS as TOW_UNITS, SHARED as TOW_SHARED, SPECIMEN_FIELDS, TOW_BLOCKS
 from anisotropy_fea.units import DECK_UNITS, UNIT_LABEL, UNIT_SYSTEMS, from_si, units_words
 
 TARGET = paths.ROOT / "lib" / "coupon-form-definition.json"
@@ -50,6 +55,44 @@ def library_constants() -> dict:
     return out
 
 
+def clean(value: float) -> float:
+    """A converted value without the float noise of the conversion: 0.5 in, not 0.49999999999999994."""
+    return float(f"{value:.10g}")
+
+
+def preset_entry(preset) -> dict:
+    """A specimen or class of a standard: its rows in every system (the standard's own inch values for a coupon stated in inches when it
+    gives them), the rows that are least values, and the laminate thickness it suggests."""
+    return {"key": preset.key, "label": preset.label, "clause": preset.clause, "minimum": list(preset.minimum), "note": preset.note,
+            "values": {units: {row: clean(v) for row, v in preset.values_in(units).items()} for units in UNIT_SYSTEMS},
+            "thickness": {units: None if preset.thickness_si(units) is None else clean(from_si(preset.thickness_si(units), "length", units))
+                          for units in UNIT_SYSTEMS}}
+
+
+def standards() -> dict:
+    """The standards the Standard row offers, as the page reads them: by test, with the rows each needs and its sizes; every judgement stays
+    in the package (standards.conformance), the page shows the checklist's answer."""
+    profiles = []
+    for p in PROFILES.values():
+        needs = (["specimen"] if p.variant_words else []) + (["strain_device", "strain_length"] if p.requires_strain else [])
+        profiles.append({"id": p.id, "designation": p.designation, "title": p.title, "organisation": p.organisation, "catalog_url": p.catalog_url,
+                         "edition_note": p.edition_note, "systems": p.systems, "rights": p.rights, "tests": [test_name(k) for k in p.kinds],
+                         "aliases": list(p.aliases), "needs": needs, "variant_words": list(p.variant_words),
+                         "variants": [preset_entry(v) for v in p.variants], "classes": [preset_entry(c) for c in p.classes],
+                         "requirements": [{"id": r.id, "clause": r.clause, "level": r.level, "text": r.text, "rows": list(r.rows)} for r in p.requirements]})
+    return {"none": NONE, "profiles": profiles}
+
+
+def tow() -> dict:
+    """The fibre tow test (ADR-0074): its rows in sections, the coupon form's rows it reads too, the rows of one specimen, the words of the
+    Fig. 1 failure code, and the units it reports in. Its rows carry the standard's units in their labels; no Units row changes them."""
+    return {"test": TOW_TEST, "kind": TOW_KIND, "shared": list(TOW_SHARED),
+            "sections": [{"title": title, "fields": [field_entry(f) for f in fields]} for title, fields in TOW_BLOCKS],
+            "specimen_fields": [field_entry(f) for f in SPECIMEN_FIELDS], "item_of_row": dict(TOW_ITEM_OF_ROW),
+            "failure_code": {"type": dict(FAILURE_TYPES), "area": dict(FAILURE_AREAS), "location": dict(FAILURE_LOCATIONS)},
+            "units": dict(TOW_UNITS)}
+
+
 def definition() -> dict:
     sections = [{"title": title, "fields": [field_entry(f) for f in fields]} for title, fields in BLOCKS]
     library = [dict(zip(LIBRARY_COLUMNS, library_row(lib))) for lib in library_records()]
@@ -67,6 +110,8 @@ def definition() -> dict:
         "library_constants": library_constants(),
         "plate": {"test": "plate", "edges": list(EDGE_REGIONS), "areas": list(AREA_REGIONS), "with_tabs": ["Tab-Bottom", "Tab-Top"], "with_hole": ["Hole"],
                   "dofs": {"1": "x", "2": "y", "3": "z", "4": "tilt about x", "5": "tilt about y", "6": "rotation about z"}},
+        "standards": standards(),
+        "tow": tow(),
     }
 
 

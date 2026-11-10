@@ -82,7 +82,7 @@ def validate_record(record: dict) -> None:
     for field in RECORD_FIELDS:
         if field not in record:
             raise RecordError(f"record needs {field!r}")
-    unknown = set(record) - set(RECORD_FIELDS) - {"known_differences", "_dir"}
+    unknown = set(record) - set(RECORD_FIELDS) - {"known_differences", "frd", "_dir"}  # [frd]: what a viewer shows of the .frd (ADR-0030 amendment 6)
     if unknown:
         raise RecordError(f"record has unknown keys {sorted(unknown)}")
     solver = record["solver"]
@@ -243,7 +243,7 @@ def reference_quantities(model: FEModel, dat: DatResults, conventions: dict,
     if u:
         expected["w" if bending else "u"] = u
     plies = model.section.plies
-    angles = [p.angle_deg for p in plies]
+    angles = [p.fibre_deg for p in plies]  # the rotation from global xy to the ply's 1-2 axes is by the fibre angle from x, not the stated one (ADR-0065)
     strain, stress_local, strain_local = {}, {}, {}
     for name, index in model.probe_elements.items():
         if element_probes is not None and name not in element_probes:
@@ -289,12 +289,16 @@ def format_record(record: dict) -> str:
             return repr(float(v)) if isinstance(v, float) else str(v)
         if isinstance(v, list):
             return "[" + ", ".join(value(x) for x in v) + "]"
+        if isinstance(v, dict):  # an inline table, for the [frd] block's per-ply peaks (ADR-0066)
+            return "{" + ", ".join(f"{k} = {value(x)}" for k, x in v.items()) + "}"
         return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
     lines = [f"{key} = {value(record[key])}" for key in ("title", "units", "spec", "deck_kernel", "deck_reference", "deck_kernel_sha256", "deck_reference_sha256")]
     lines += ["", "[solver]"] + [f"{k} = {value(v)}" for k, v in record["solver"].items()]
     if record.get("known_differences"):
         lines += ["", "[known_differences]"] + [f"{k} = {value(v)}" for k, v in record["known_differences"].items()]
+    if record.get("frd"):
+        lines += ["", "[frd]"] + [f"{k} = {value(v)}" for k, v in record["frd"].items()]
     expected = record["expected"]
     lines += ["", "[expected]", f"tolerance = {value(expected['tolerance'])}"]
     if "floor" in expected:

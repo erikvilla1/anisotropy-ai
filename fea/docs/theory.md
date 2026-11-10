@@ -4,7 +4,7 @@ Every equation the finite element layer uses, and the function that computes it 
 
 ## Conventions
 
-- The laminate x axis is the deck's global x axis: the only orientation our deck reader accepts is the global one, so ply angles are measured from global x, counterclockwise, as in ADR-0004.
+- The laminate x axis is the deck's global x axis, and the engine's ply angle is counted from it, counterclockwise, as in ADR-0004. A coupon states its ply angles from its length axis, global y (ADR-0065): the load axis in tension and compression, the span in bending, the length of a plate, so a stated 0-degree ply has its fibres along the pull. A spec's `fibre_angles` are therefore its stated angles plus 90 degrees, brought into (-90, 90]; the deck we write carries the stated angles on its layer lines under an `*Orientation` whose local direction 1 is +y. Our deck reader accepts any right-handed frame in the plate's plane (a unit `a` in the x-y plane, `b` the normal crossed with `a`, a rotation about axis 3 only) and records the angle from global x to local 1 as the section's `rotation_deg`; the engine ply of a layer is at the layer angle plus that rotation (`model.fibre_angles`), and every label prints the layer angle as the deck states it (`Section.angles_deg`). A deck without an orientation counts from x, as the hand-made check decks do.
 - In the membrane kernel (Sections 1 to 7) each node has two degrees of freedom, $`u`$ along x and $`v`$ along y, Abaqus dofs 1 and 2; there are no out-of-plane or rotational degrees of freedom. The flat shell kernel (Section 8) adds $`w`$ along z and the rotations $`\theta_x`$, $`\theta_y`$ about the x and y axes, Abaqus dofs 3 to 5; the drilling rotation, dof 6, is never carried.
 - Strain is the membrane (midplane) strain $`\boldsymbol{\varepsilon} = [\varepsilon_x, \varepsilon_y, \gamma_{xy}]^T`$ with engineering shear; the shell adds the curvature $`\boldsymbol{\kappa}`$ and the transverse shear strain $`\boldsymbol{\gamma} = [\gamma_{xz}, \gamma_{yz}]^T`$, engineering too.
 - Section forces are resultants per unit width, $`\mathbf{N} = [N_x, N_y, N_{xy}]^T`$ in N/m, what Abaqus reports as SF; the shell adds the moments $`\mathbf{M}`$ in N (Abaqus SM) and the transverse shear forces $`\mathbf{Q}`$ in N/m.
@@ -268,6 +268,30 @@ At every element's centroid the membrane strain, the curvature and the transvers
 
 <!-- code: element_states -->
 
+## 9. The quantities of a test standard (`test_quantities.py`)
+
+A coupon that names a test standard, or states a strain measurement, gets the numbers the standard reduces a test to (ADR-0072), each from the solved model by the standard's own formula. The cross-section the standards divide by disregards a hole, computed by `gross_area`, and through the hole of an open-hole coupon it is the net section, computed by `net_area`:
+
+```math
+A = w\,h \quad\text{(D3039 §11.2.2, C1869 Eq. 2)}, \qquad A_{\mathrm{NS}} = (w - D)\,h \quad\text{(C1869 Eq. 5)} ,
+```
+
+with $`h`$ the plies times the ply thickness. The stress is the force the coupon carries along its length over that area, computed by `engineering_stress` (D3039 Eq. 6, C1869 Eq. 1); the force is the moving grip's reaction under a displacement and the applied total under a force. The strain measurement is modelled by two nodes on the coupon's centre line at its two ends, $`y = L/2 \mp L_g/2`$, where the form's mesh puts a node row; its strain is their change of distance over their distance, computed by `extensometer_strain` (D3039 Eq. 7):
+
+```math
+\varepsilon = \frac{v_{\mathrm{top}} - v_{\mathrm{bottom}}}{y_{\mathrm{top}} - y_{\mathrm{bottom}}} .
+```
+
+The chord modulus between the strains $`\varepsilon_1 = 1000`$ and $`\varepsilon_2 = 3000`$ microstrain (D3039 Table 3, Eq. 8) is computed by `chord_modulus`. The model is linear, so the stress at a strain is the solved stress scaled by the ratio of the strains, and the chord equals $`\sigma/\varepsilon`$ whatever the range; the stresses and forces at the two ends are reported for the laboratory's load range. Poisson's ratio is minus the transverse strain over the longitudinal one, computed by `poisson_ratio` (D3039 Eq. 9), the transverse strain from the edge nodes across the width at mid-length; an open-hole coupon has none, its mid-length section being the hole's:
+
+```math
+E^{\mathrm{chord}} = \frac{\sigma(\varepsilon_2) - \sigma(\varepsilon_1)}{\varepsilon_2 - \varepsilon_1}, \qquad \nu = -\frac{\varepsilon_t}{\varepsilon_l} .
+```
+
+ASTM D638 reduces the same record by the same formulas in its own words, the standard's words computed by `reduction_of` from the standard the coupon names (ADR-0075): its modulus of elasticity is the slope of the initial straight line over any segment of it (§11.4), read here between $`\varepsilon_1 = 500`$ and $`\varepsilon_2 = 2500`$ microstrain, the axial strains of its A3.9.8; its area is the least original cross-section (§11.2), on a dog-bone the narrow section's width times the thickness; its Poisson's ratio is A3.10's, the same ratio. On a linear model the slope is $`\sigma/\varepsilon`$ whichever standard reads it. Both are set beside the laminate's $`E_y`$ and $`\nu_{yx}`$ from the engine's ABD, where the coupon's length is $`y`$ (ADR-0065); for an isotropic material these are its own $`E`$ and $`\nu`$. The first-ply-failure factor of Section 7 scales the force, the stresses and the strain to the load at which the first ply fails; that stress on the gross and the net area is a first-ply-failure stress, never the ultimate strength the standards take at a test's maximum force (D3039 Eq. 5, C1869 Eq. 3 and 4), which a linear model does not reach. The block, in the stated units, is computed by `method_summary`.
+
+<!-- code: gross_area, net_area, engineering_stress, extensometer_strain, chord_modulus, poisson_ratio, reduction_of, method_summary -->
+
 ## Checks
 
 Each check below is a test in `fea/tests/`, in the file named after it; the tests run on every change to our code, and their output is not printed here.
@@ -285,9 +309,12 @@ Each check below is a test in `fea/tests/`, in the file named after it; the test
 - The shell reproduces the membrane on a symmetric in-plane deck, and through a kinematic coupling on the gripped coupon, to 1e-12 and 1e-10; the dispatch sends the in-plane decks to the membrane and a bending, pressure or unsymmetric deck to the shell; a plate free to move out of its plane and a load on the drilling rotation are refused by name; an unsymmetric layup under tension is refused by the membrane and solved, bending, by the shell (`test_shell_solve.py`).
 - Closed forms (cases `plate-ss-isotropic-uniform-pressure-navier`, `plate-ss-isotropic-thin-no-locking`, `plate-ss-cross-ply-sinusoidal-navier`, `strip-cantilever-tip-load-timoshenko`): the simply supported isotropic square plate under uniform pressure reproduces Whitney's Navier series with transverse shear deformation within 0.5 % on 16 by 16 elements, and does so unchanged when the plate is a thousand times thinner than wide, where a displacement-based bilinear element would lock; the simply supported IM7/8552 [0/90]s plate under a sinusoidal pressure reproduces the one-term solution, both faces of every ply included, within 1 % on 32 by 32 elements; the cantilever strip with $`\nu = 0`$ reproduces the Timoshenko beam's tip deflection, shear part included, within 0.02 % and its tip rotation, root moment and shear force to 1e-9 (`test_fe_validation_cases.py`; the closed forms themselves are checked in `test_plate_closed_forms.py` against the tabulated 0.00406 coefficient, the Kirchhoff limit and the plate equation).
 
+- The quantities of a test standard: the formulas reproduce hand values; on the public IM7/8552 coupon under ASTM D3039 the extensometer's chord modulus and Poisson's ratio meet the laminate's $`E_y`$ and $`
+u_{yx}`$ from the engine within a relative 1e-4, the open hole's net area and ratios follow its geometry, and the stated units convert the area and the modulus (`test_test_quantities.py`).
+
 ## Not modeled yet
 
-- Rotated laminate axes (an `*Orientation` other than the global axes)
+- An `*Orientation` out of the plate's plane, rotated about axis 1 or 2, or with `b` not the normal crossed with `a` (in-plane right-handed frames are read since ADR-0065)
 - Triangles, higher-order shells, solids, membranes (M3D4)
 - Distributed loads other than a uniform pressure per element (surface tractions, gravity, line loads by `*Dload`); thermal strain
 - Interlaminar stresses from equilibrium (the transverse shear stress is uniform through the thickness in the shell's law, Whitney Eq. 10.22, and is not reported per ply)

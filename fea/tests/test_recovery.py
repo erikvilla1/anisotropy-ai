@@ -39,9 +39,29 @@ def test_ply_states_equal_the_engine_ply_surfaces_with_zero_curvature():
         assert field.stress_12[0][k] == pytest.approx(bottom.stress_12, rel=1e-12, abs=1e-3)
         assert field.strain_12[0][k] == pytest.approx(bottom.strain_12, rel=1e-12, abs=1e-16)
         assert field.stress_xy[0][k] == pytest.approx(bottom.stress_xy, rel=1e-12, abs=1e-3)
-        assert field.angles_deg[0][k] == bottom.angle_deg
+        assert field.angles_deg[0][k] == bottom.angle_deg  # this deck has the global orientation, so the stated and the engine angle agree
     # the 30 and -30 plies see the same fiber stress magnitude pattern only if the state were pure axial; here gamma_xy != 0, so they differ
     assert not np.allclose(field.stress_12[0][1], field.stress_12[0][2])
+
+
+def test_a_rotated_deck_labels_its_plies_as_stated_and_computes_them_at_the_fibre_angle(tmp_path):
+    """The same deck under an *Orientation with local 1 along +y (ADR-0065): the labels keep the stated [0/30/-30/30/0]s, the engine plies
+    sit 90 degrees further from x, and the 1-2 state is the engine's for those rotated plies."""
+    text = ONE.read_text(encoding="utf-8").replace("1., 0., 0., 0., 1., 0.", "0., 1., 0., -1., 0., 0.", 1)
+    path = tmp_path / "rotated.inp"
+    path.write_text(text, encoding="utf-8")
+    deck = read_deck(path, "mm-MPa")
+    plies = section_plies(deck.parts["Coupon"].sections[0], deck.materials)
+    assert [p.angle_deg for p in plies] == [90, -60, 60, -60, 90, 90, -60, 60, -60, 90]
+    solution = solve_membrane(deck)
+    field = element_ply_states(solution)
+    assert field.angles_deg[0].tolist() == [0, 30, -30, 30, 0, 0, 30, -30, 30, 0]
+    surfaces = ply_surfaces(plies, solution.strain[0], np.zeros(3))[0::2]
+    for k, surface in enumerate(surfaces):
+        assert field.stress_12[0][k] == pytest.approx(surface.stress_12, rel=1e-12, abs=1e-3)
+        assert field.angles_deg[0][k] != surface.angle_deg  # the label is the stated angle, the physics the fibre angle
+    # the 90-degree fibres (stated 0) carry the pull: sigma_1 of ply 1 is the largest magnitude in the stack
+    assert np.argmax(np.abs(field.stress_12[0][:, 0])) in (0, 4) and field.stress_12[0][0, 0] > 0
 
 
 @pytest.mark.parametrize("criterion", ["max_stress", "tsai_hill", "tsai_wu"])

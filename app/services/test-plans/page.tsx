@@ -18,15 +18,15 @@ export default function TestPlans() {
           <em>stated before it runs.</em>
         </>
       }
-      lede="A coupon's dimensions, tabs, hole, layup, material, load and failure criterion, in the proportions the standards ask for, checked line by line before a solver starts. The document a lab would file is not written yet."
+      lede="A coupon's dimensions, tabs, hole, layup, material, load and failure criterion, checked line by line before a solver starts, and against the clauses of the test standard you pick. The document a lab would file is not written yet."
       exists={[
         {
-          title: "Coupons in standard proportions",
-          text: "Tension after ASTM D3039, compression after D6641, open-hole tension after D5766, in-plane shear after D3518 and bending after D7264, as the proportions of the model, not as a certification.",
+          title: "The standard, clause by clause",
+          text: "Pick ASTM D3039/D3039M for tension or ASTM C1869 for open-hole tension of ceramic composites, and every requirement the model can meet is judged with its clause: the coupon's value beside what the clause asks, a deviation reported and never hidden, the procedure left to the laboratory. Not a certification. A carbon fibre tow's record under ASTM D4018 is reduced to each specimen's strength and chord modulus and their statistics with no model, and judged against its clauses the same way. Compression, polymer open-hole, shear and bending keep the proportions of D6641, D5766, D3518 and D7264 until those standards are added.",
         },
         {
           title: "The checklist",
-          text: "Twelve rows, from identity to the document, each one passing, warning or failing with the reason written next to it. A setup that fails does not run.",
+          text: "Thirteen rows, from identity to the document, the test standard among them, each one passing, warning or failing with the reason written next to it. A setup that fails does not run.",
         },
         {
           title: "The input form",

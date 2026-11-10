@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { angleSlots, CATEGORICAL, colorAt, colorsOf, DIVERGING, hexToRgb, legendGradient, legendTicks, printed, ramp, scaleFor, SEQUENTIAL } from "../lib/studio-colors";
+import { angleSlots, CATEGORICAL, colorAt, colorsOf, DIVERGING, hexToRgb, legendGradient, legendTicks, percentChange, printed, ramp, scaleFor, SEQUENTIAL, settled } from "../lib/studio-colors";
 
 test("the ramps: one hue dark to light for a magnitude, two hues around a neutral grey for a signed field", () => {
   assert.equal(SEQUENTIAL.length, 7);
@@ -41,6 +41,24 @@ test("legend ticks and printed numbers", () => {
   assert.equal(printed(2787.75), "2788");
   assert.equal(printed(0), "0");
   assert.equal(printed(null), "–");
+});
+
+test("a change from the previous mesh prints signed, two figures under one percent and one decimal above (ADR-0068)", () => {
+  assert.equal(percentChange(-0.00023590981), "−0.024 %");
+  assert.equal(percentChange(0.11390684), "+11.4 %");
+  assert.equal(percentChange(-0.0776955), "−7.8 %");
+  assert.equal(percentChange(0), "+0.00 %");
+  assert.equal(percentChange(-1e-7), "+0.00 %");
+  assert.equal(percentChange(null), "–");
+});
+
+test("a component that is noise beside the others in its set prints as zero, a small real one stays", () => {
+  assert.deepEqual(settled([479.2, -0.2514, 4.078e-15]), [479.2, -0.2514, 0]);  // the 0° ply's shear under tension is zero, not 4e-15
+  assert.deepEqual(settled([-0.001127, 0.003641, 5.883e-7]), [-0.001127, 0.003641, 5.883e-7]);  // CalculiX's small shear strain is a value
+  assert.deepEqual(settled([-0.001127, 0.003641, -3.49e-19]), [-0.001127, 0.003641, 0]);
+  assert.deepEqual(settled([0, 0, 0]), [0, 0, 0]);
+  assert.deepEqual(settled([null, 1e-20, 2]), [null, 0, 2]);
+  assert.deepEqual(settled([null, undefined]), [null, undefined]);
 });
 
 test("the scale's ends are the package's range when it wrote one, the values' extremes otherwise (ADR-0063)", () => {
