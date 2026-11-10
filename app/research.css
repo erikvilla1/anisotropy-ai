@@ -670,26 +670,6 @@
     justify-content: center;
   }
 }
-.wordmark .brand-symbol {
-  display: block;
-  width: 42px;
-  height: 40px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-.site-footer .brand-symbol {
-  width: 34px;
-  height: 32px;
-}
-@media (max-width: 560px) {
-  .wordmark .brand-symbol {
-    width: 35px;
-    height: 33px;
-  }
-  .wordmark {
-    gap: 9px;
-  }
-}
 .main-nav .mobile-chat-cta {
   display: none;
 }

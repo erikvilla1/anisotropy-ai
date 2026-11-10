@@ -7,17 +7,14 @@ import { ArrowUpRight, Menu, X } from "lucide-react";
 import { primaryNav } from "@/lib/site-nav";
 import { ServicesMenu } from "@/components/services-menu";
 
+/** The logo (ADR-0080): the triangle, then the name, both drawn by `app/brand.css` from the vector files in
+ * `public/assets/brand/`. The word itself stays in the link, hidden from view, for screen readers and search engines. */
 function Wordmark({ onClick }: { onClick?: () => void }) {
   return (
     <Link className="wordmark" href="/" aria-label="Anisotropy home" onClick={onClick}>
-      <img
-        className="brand-symbol"
-        src="/assets/brand/anisotropy-mark.svg"
-        alt=""
-        width="40"
-        height="40"
-      />
-      <span>Anisotropy</span>
+      <span className="brand-mark" aria-hidden="true" />
+      <span className="brand-name" aria-hidden="true" />
+      <span className="brand-text">Anisotropy</span>
     </Link>
   );
 }

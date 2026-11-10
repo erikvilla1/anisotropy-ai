@@ -223,17 +223,7 @@ img {
   font-weight: 600;
   white-space: nowrap;
 }
-/* The name in heavy capitals, after PhysicsX's wordmark (ADR-0077 amendment 4, ADR-0079): Archivo at weight 800, tight. Only
- * the look changes: the text stays "Anisotropy" for page titles, links and screen readers. */
-.wordmark > span {
-  font-family: "Archivo Variable", var(--font);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: -0.01em;
-}
-.wordmark svg {
-  color: var(--accent);
-}
+/* The logo itself, the triangle and the name, is drawn by app/brand.css (ADR-0080). */
 .brand-dot {
   color: var(--accent);
 }
@@ -2333,12 +2323,6 @@ html:has(.site-header:not(.chat-site-header)) {
   }
   .site-header:not(.chat-site-header) .wordmark {
     justify-self: start;
-    gap: 16px;
-    font-size: 27px;
-  }
-  .site-header:not(.chat-site-header) .brand-symbol {
-    width: 28px;
-    height: 28px;
   }
   .site-header:not(.chat-site-header) .main-nav {
     font-size: min(17px, 1.1vw);

@@ -1,0 +1,47 @@
+/* The logo (ADR-0080): the triangle, then the name, side by side and centred on one line. Both are the lead's artwork as vector
+ * files, drawn through CSS masks so they take the colour of the text around them: light on the dark header and footer, dark on
+ * a light ground. One number sets the size, the triangle's height; the name's letters are half as tall. The link still holds
+ * the word "Anisotropy" for screen readers, search engines and tests, hidden from view. */
+.wordmark {
+  --brand-h: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--brand-h) * 0.5);
+  line-height: 1;
+}
+.wordmark .brand-mark,
+.wordmark .brand-name {
+  display: block;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: var(--brand-src) center / contain no-repeat;
+  mask: var(--brand-src) center / contain no-repeat;
+}
+.wordmark .brand-mark {
+  --brand-src: url("/assets/brand/anisotropy-triangle.svg");
+  height: var(--brand-h);
+  aspect-ratio: 257 / 211;
+}
+.wordmark .brand-name {
+  --brand-src: url("/assets/brand/anisotropy-wordmark.svg");
+  height: calc(var(--brand-h) * 0.5);
+  aspect-ratio: 588 / 46;
+}
+.wordmark .brand-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (min-width: 1201px) {
+  .site-header:not(.chat-site-header) .wordmark {
+    --brand-h: 28px;
+  }
+}
+@media (max-width: 560px) {
+  .wordmark {
+    --brand-h: 22px;
+  }
+}
