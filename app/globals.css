@@ -2404,14 +2404,55 @@ html:has(.site-header:not(.chat-site-header)) {
 .site-header:not(.chat-site-header) .main-nav {
   color: #f4f4f4;
 }
+/* The Workspace button's hover (ADR-0077 amendment 15): a white fill sweeps in from the arrow's side, the words and the arrow
+ * turn black, and the arrow turns from up-right to right; it runs back when the pointer leaves. The fill is a pseudo-element
+ * under the words, scaled from the right edge. Keyboard focus shows the same state. */
 .site-header:not(.chat-site-header) .header-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background: transparent;
   border-color: #efefef73;
   border-radius: 2px;
   color: #f4f4f4;
+  transition:
+    color 0.3s cubic-bezier(0.65, 0, 0.35, 1),
+    border-color 0.3s;
 }
-.site-header:not(.chat-site-header) .header-cta:hover {
-  border-color: #efefef;
+.site-header:not(.chat-site-header) .header-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #ffffff;
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.site-header:not(.chat-site-header) .header-cta svg {
+  transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.site-header:not(.chat-site-header) .header-cta:hover,
+.site-header:not(.chat-site-header) .header-cta:focus-visible {
+  background: transparent;
+  transform: none;
+  border-color: #ffffff;
+  color: #0d0d0d;
+}
+.site-header:not(.chat-site-header) .header-cta:hover::before,
+.site-header:not(.chat-site-header) .header-cta:focus-visible::before {
+  transform: scaleX(1);
+}
+.site-header:not(.chat-site-header) .header-cta:hover svg,
+.site-header:not(.chat-site-header) .header-cta:focus-visible svg {
+  transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-header:not(.chat-site-header) .header-cta,
+  .site-header:not(.chat-site-header) .header-cta::before,
+  .site-header:not(.chat-site-header) .header-cta svg {
+    transition: none;
+  }
 }
 @media (min-width: 1201px) {
   .site-header:not(.chat-site-header) {

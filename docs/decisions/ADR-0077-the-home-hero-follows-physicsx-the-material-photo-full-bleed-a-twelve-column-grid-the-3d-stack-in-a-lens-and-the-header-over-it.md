@@ -204,3 +204,11 @@ On phones it is one column.
 - **Checks:** `npm run typecheck` clean, also on this commit's tree alone. `npm test`: 196 passed, 1 skipped. `home.spec.ts`, `expansion.spec.ts` and `portfolio.spec.ts`: 18 passed, 1 failed, before and after; the failure is the workspace chat test of `portfolio.spec.ts`.
 - **Flaky once:** one run also failed the Services disclosure test (`aria-expanded` stayed false after Enter). It then passed 2 of 2 and in the final run; the cause was not found.
 - **UNVERIFIED:** the production build of this commit alone, and the look on phones.
+
+## Amendment 15, 2026-11-10 (the Workspace button's hover: a white fill, black words, the arrow turned)
+
+**Context.** The lead showed a recording of another site's button: a darker chip around its arrow grows across the whole button on hover, and shrinks back on leave. The lead asked for the same on the header's Workspace button, "but obv just white when you hover over it (like inverted) text to black box to white and arrow switch directions or something".
+
+**Decision.** On hover, and on keyboard focus, a white fill sweeps across the Workspace button from the arrow's side in 0.35 s. The words and the arrow turn near-black, the border turns white, and the arrow turns 45°, from up-right to right. It runs back when the pointer leaves. The fill is a pseudo-element under the words, scaled from the right edge, so the markup is unchanged. The button no longer lifts 2 px on hover. Reduced motion gets the same end state with no movement.
+
+**Evidence.** In the browser on 2026-11-10 at 1440 px, on the dev server: at rest the button is outlined with white words and an up-right arrow; hovered, its words are rgb(13, 13, 13), its border white, the fill at full width and the arrow turned 45°; after the pointer leaves it returns to the rest state. Screenshots of each state were looked at. UNVERIFIED: touch screens, where there is no hover.
