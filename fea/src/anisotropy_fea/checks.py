@@ -24,7 +24,7 @@ from .case_pages import read_case
 from .femodel import FEModel, build_model
 from .intake import FIELDS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, spec_from_values
 from .mesher import MeshError, gmsh_available
-from .model import PLAUSIBLE_MODULUS_PA, is_symmetric_layup
+from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
 from .spec import BENDING_KINDS, TEST_CODES, SpecError, full_angles, is_isotropic, layup_text, spec_plies
 from .standards.conformance import conformance
@@ -270,7 +270,8 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         isotropic = is_isotropic(spec)  # one material with no plies (ADR-0075): E is its only modulus on the form
         moduli = ((("E", material.E1),) if isotropic else
                   (("E1", material.E1), ("E2", material.E2), ("G12", material.G12), ("G13", material.G13), ("G23", material.G23)))
-        suspicious = [name for name, value in moduli if not PLAUSIBLE_MODULUS_PA[0] <= value <= PLAUSIBLE_MODULUS_PA[1]]
+        low, high = PLAUSIBLE_ISOTROPIC_MODULUS_PA if isotropic else PLAUSIBLE_MODULUS_PA  # a plastic may be as soft as 1 MPa (D883)
+        suspicious = [name for name, value in moduli if not low <= value <= high]
         deck_units = deck_units_of(units)
         if suspicious:
             shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in suspicious)

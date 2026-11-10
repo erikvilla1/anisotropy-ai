@@ -2537,6 +2537,7 @@
      "strain_device",
      "strain_length"
     ],
+    "variant_noun": "Specimen",
     "variant_words": [],
     "variants": [],
     "classes": [
@@ -2895,6 +2896,7 @@
     "needs": [
      "specimen"
     ],
+    "variant_noun": "Type",
     "variant_words": [
      "I",
      "II",
@@ -3283,9 +3285,9 @@
      },
      {
       "id": "grip-distance",
-      "clause": "§10.2, Fig. 1",
+      "clause": "§10.2, Fig. 1, note J",
       "level": "mandatory",
-      "text": "The distance D between the grips is the type's, within 5 mm.",
+      "text": "The distance D between the grips is the type's, within 5 mm. With self-tightening grips on a highly extensible polymer, D may follow the grips, kept the same once chosen (note J).",
       "rows": [
        "tab_length",
        "length"
@@ -3325,6 +3327,15 @@
       "text": "Sheet or film thinner than 1.0 mm is better tested by ASTM D882.",
       "rows": [
        "thickness"
+      ]
+     },
+     {
+      "id": "si-values",
+      "clause": "§1.5",
+      "level": "note",
+      "text": "The SI values are the standard; the inch-pound values in parentheses are for information only. A coupon stated in inches is held to the millimetres, converted exactly.",
+      "rows": [
+       "units"
       ]
      },
      {
@@ -3374,7 +3385,7 @@
      },
      {
       "id": "extensometer-class",
-      "clause": "§5.2.1, §10.3",
+      "clause": "§5.2.1, §5.2.2, §10.3",
       "level": "lab",
       "text": "A modulus is measured with an extensometer of Class B-2 or better (ASTM E83) that records continuously; elongation up to 20 % needs at least Class C.",
       "rows": []
@@ -3469,6 +3480,7 @@
     "needs": [
      "specimen"
     ],
+    "variant_noun": "Specimen",
     "variant_words": [
      "A",
      "B",
@@ -3806,6 +3818,7 @@
      "d4018"
     ],
     "needs": [],
+    "variant_noun": "Specimen",
     "variant_words": [],
     "variants": [],
     "classes": [],

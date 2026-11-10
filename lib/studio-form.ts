@@ -41,7 +41,7 @@ export type StandardPreset = {
 export type StandardRequirement = { id: string; clause: string; level: string; text: string; rows: string[] };
 export type StandardProfile = {
   id: string; designation: string; title: string; organisation: string; catalog_url: string; edition_note: string; systems: string; rights: string;
-  tests: string[]; aliases: string[]; needs: string[]; variant_words: string[]; variants: StandardPreset[]; classes: StandardPreset[];
+  tests: string[]; aliases: string[]; needs: string[]; variant_noun: string; variant_words: string[]; variants: StandardPreset[]; classes: StandardPreset[];
   requirements: StandardRequirement[];
 };
 /** Every row's text as typed, by field key; blank means the row is empty. */
@@ -122,14 +122,23 @@ export function withTest(form: StudioForm, test: string): { form: StudioForm; no
   const standard = standardOf(form);
   if (!standard || standard.tests.includes(test)) return { form: { ...form, test }, note: "" };
   return {
-    form: { ...form, test, standard: NO_STANDARD, specimen: "" },
+    form: { ...form, test, standard: NO_STANDARD, specimen: "", size_from: sizeFromWithout(form, standard) },
     note: `${standard.designation} covers ${standard.tests.join(" and ")}, not ${test || "a blank test"}: the Standard row is back to none.`,
   };
 }
 
-/** The form with another standard: a specimen the new standard does not name is cleared. */
+/** Where the size comes from, unless a size of this standard wrote it ("ASTM D638-22, Fig. 1: Type I"): then it no longer says where the
+ * size comes from, and the row is emptied for the engineer to state. */
+function sizeFromWithout(form: StudioForm, standard: StandardProfile): string {
+  const said = form.size_from ?? "";
+  return said.startsWith(`${standard.designation}, `) ? "" : said;
+}
+
+/** The form with another standard: a specimen the new standard does not name is cleared, and so is a Size from that the old standard's
+ * size wrote. */
 export function withStandard(form: StudioForm, designation: string): StudioForm {
-  const next = { ...form, standard: designation };
+  const old = standardOf(form);
+  const next = { ...form, standard: designation, ...(old && old.designation !== designation ? { size_from: sizeFromWithout(form, old) } : {}) };
   const words = standardOf(next)?.variant_words ?? [];
   return words.includes(form.specimen ?? "") ? next : { ...next, specimen: "" };
 }
@@ -149,13 +158,16 @@ export const presetsOf = (profile: StandardProfile): StandardPreset[] => [...pro
 /** The rows a standard's size sets, in the coupon's units as the engine wrote them (the page converts nothing), with the specimen it names
  * and the words of Where the size comes from. A size without bonded tabs (D3039's balanced class, gripped through emery cloth) clears the tab
  * rows another size of the same standard set; the tab length it does not give stays as typed. A D638 type without Type IV's outer radius
- * clears it, and a size that gives the gage length names the extensometer the standard measures it with when no device is typed (ADR-0075). */
+ * clears it, and a size that gives the gage length names the extensometer the standard measures it with when no device is typed (ADR-0075).
+ * A size is a whole shape: a straight strip's (D3039, C1869) clears the dog-bone rows, a dog-bone's (D638) the bonded tab rows. */
 export function presetRows(form: StudioForm, profile: StandardProfile, preset: StandardPreset): StudioForm {
   const rows: StudioForm = {};
   for (const [key, value] of Object.entries(preset.values[unitsOf(form)] ?? {})) rows[key] = String(value);
   const somewhere = (key: string) => presetsOf(profile).some((p) => Object.values(p.values).some((v) => key in v));
   if (somewhere("tab_thickness") && !("tab_thickness" in rows)) for (const key of TAB_KEYS) rows[key] = "";
   if (somewhere("outer_radius") && !("outer_radius" in rows)) rows.outer_radius = "";
+  if ("narrow_width" in rows) { for (const key of TAB_KEYS) rows[key] = ""; }
+  else { for (const key of DOGBONE_KEYS) if ((form[key] ?? "").trim()) rows[key] = ""; }
   if ("strain_length" in rows && !(form.strain_device ?? "").trim()) rows.strain_device = "extensometer";
   if (profile.variant_words.includes(preset.key)) rows.specimen = preset.key;
   rows.size_from = `${profile.designation}, ${preset.clause}: ${preset.label}` + (preset.note ? `; ${preset.note}` : "");

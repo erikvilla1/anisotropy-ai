@@ -41,7 +41,7 @@ class Subject:
     units: str  # the system the coupon is stated in: how a value is shown, and which of a standard's systems it is held to
     length: float
     width: float
-    tab_length: float  # the gripped length at each end; 0 when only the end rows are held
+    tab_length: float  # the tab's length at each end, as stated (D3039 Table 2 suggests one); what the grips hold is `gripped`
     hole_diameter: float | None
     angles: tuple[float, ...]  # every ply, bottom first, from the length axis, in (-90, 90] (ADR-0065)
     ply_thickness: float
@@ -58,6 +58,7 @@ class Subject:
     narrow_length: float | None = None
     fillet_radius: float | None = None
     outer_radius: float | None = None
+    grip_length: float | None = None  # the length the model's grips hold at each end when it is not the tab length: 0 for grips on the end rows
 
     @property
     def thickness(self) -> float:
@@ -68,9 +69,14 @@ class Subject:
         return self.narrow_width is not None
 
     @property
+    def gripped(self) -> float:
+        """The length the model's grips hold at each end: the tab length when the whole tab is held, 0 when only the end rows are."""
+        return self.tab_length if self.grip_length is None else self.grip_length
+
+    @property
     def gauge_length(self) -> float:
         """The free length between the grips."""
-        return self.length - 2 * self.tab_length
+        return self.length - 2 * self.gripped
 
     @property
     def inch_pound(self) -> bool:

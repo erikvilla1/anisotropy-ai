@@ -570,6 +570,12 @@ def validate_spec(spec: CouponSpec) -> None:
         need(kind in IN_PLANE_KINDS, "[strain] belongs to the pulled and pushed kinds")
         free = g.length - 2 * (g.tab_length or 0.0)
         need(spec.strain.gauge_length < free, f"strain.gauge_length ({spec.strain.gauge_length:g}) must fit between the grips, {free:g} apart")
+        if g.dogbone is not None:  # over the fillets the strain is no longer the narrow section's, while the stress is read on it
+            need(spec.strain.gauge_length <= g.dogbone.narrow_length, f"strain.gauge_length ({spec.strain.gauge_length:g}) must lie within the "
+                 f"dog-bone's narrow section, geometry.dogbone.narrow_length = {g.dogbone.narrow_length:g}")
+    if g.dogbone is not None and spec.grips is not None and spec.grips.region == "tabs":
+        need(2 * (g.tab_length or 0.0) <= g.length - g.dogbone.narrow_length, f"geometry.tab_length ({g.tab_length:g}) reaches the dog-bone's "
+             f"narrow section: each grip holds at most (length - narrow_length) / 2 = {(g.length - g.dogbone.narrow_length) / 2:g}")
     if spec.tabs is not None:
         need(kind in IN_PLANE_KINDS and bool(g.tab_length), "[tabs] describes bonded tabs: a pulled or pushed kind with a positive geometry.tab_length")
         need(0.0 < spec.tabs.bevel <= 90.0, f"tabs.bevel is an angle in degrees above 0 and at most 90, not {spec.tabs.bevel:g}")

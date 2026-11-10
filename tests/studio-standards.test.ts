@@ -71,7 +71,25 @@ test("the sketch draws bonded tabs with their bevel and the strain measurement a
   assert.equal(sketchOf({ ...form, tab_bevel: "120" })!.tabBevel, null);
   assert.equal(sketchOf({ ...form, strain_length: "200" })!.strain, null); // longer than the 138 mm between the tabs
   const b = sketchOf({ ...blankForm(), test: "open-hole tension", standard: C1869, specimen: "B", width: "10", length: "60", tab_length: "15", hole_diameter: "3" })!;
-  assert.deepEqual([b.hole, b.specimen, b.standard], [3, "B", C1869]);
+  assert.deepEqual([b.hole, b.specimen, b.standard], [3, "Specimen B", C1869]);
+  const one = sketchOf({ ...blankForm(), test: "unnotched tension", standard: D638, specimen: "I", width: "19", length: "165", tab_length: "25" })!;
+  assert.equal(one.specimen, "Type I"); // the standard's own word: D638 has types, C1869 specimens
+});
+
+test("a size is a whole shape, and a Size from that an old standard's size wrote leaves with that standard (review of ADR-0075)", () => {
+  const type = (key: string) => d638.variants.find((v) => v.key === key)!;
+  const tabbed = { ...blankForm(), test: "unnotched tension", standard: D638, tab_thickness: "1.5", tab_bevel: "7", tab_material: "glass" };
+  const dogbone = presetRows(tabbed, d638, type("I"));
+  assert.deepEqual([dogbone.tab_thickness, dogbone.tab_bevel, dogbone.tab_material], ["", "", ""]); // a dog-bone takes no bonded tabs
+  const typeOne: Record<string, string> = { ...tabbed, ...dogbone };
+  const strip = presetRows({ ...typeOne, standard: D3039 }, d3039, d3039.classes.find((c) => c.key === "0-ud")!);
+  assert.deepEqual([strip.narrow_width, strip.narrow_length, strip.radius], ["", "", ""]); // a strip has no narrow section
+  assert.equal(presetRows(blankForm(), d3039, d3039.classes.find((c) => c.key === "0-ud")!).narrow_width, undefined); // nothing to clear
+  assert.equal(withStandard(typeOne, D3039).size_from, ""); // "ASTM D638-22, Fig. 1: Type I ..." no longer says where the size comes from
+  assert.equal(withStandard(typeOne, D638).size_from, typeOne.size_from); // the same standard keeps it
+  assert.equal(withStandard({ ...typeOne, size_from: "our drawing AB-12" }, D3039).size_from, "our drawing AB-12"); // the engineer's own words stay
+  const moved = withTest(typeOne, "open-hole tension").form;
+  assert.deepEqual([moved.standard, moved.size_from], [NO_STANDARD, ""]);
 });
 
 test("D638's types fill the dog-bone's rows, name the extensometer, and a type without Type IV's outer radius clears it (ADR-0075)", () => {

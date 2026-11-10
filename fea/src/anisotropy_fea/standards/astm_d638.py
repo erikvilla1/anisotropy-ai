@@ -84,10 +84,18 @@ def _no_type(s: Subject, asked: str) -> Finding:
 def _matrix(s: Subject) -> Finding:
     asked = "a plastic, unreinforced or reinforced; a resin-matrix composite with fibres stiffer than 20 GPa is tested by ASTM D3039/D3039M"
     if s.isotropic:
-        return Finding(True, "one isotropic material, stated by its modulus and Poisson's ratio", asked)
+        return Finding(None, "one isotropic material: the form does not say whether it is a plastic or a metal, so state it in the notes", asked)
     if s.family is None:
         return Finding(None, "your own ply constants: state in the notes whether the fibres are stiffer than 20 GPa", asked)
     return Finding(False, f"{s.family.lower()}: fibres far stiffer than 20 GPa, whose tensile test is ASTM D3039/D3039M", asked)
+
+
+def _si_values(s: Subject) -> Finding:
+    asked = "the millimetre values of Fig. 1 and the clauses"
+    if not s.inch_pound:
+        return Finding(True, f"stated in {s.units}", asked)
+    return Finding(False, f"stated in {s.units}: each limit is the millimetre value converted exactly, so a size typed from the standard's "
+                   "inch values in parentheses can fall just outside it", asked)
 
 
 def _max_thickness(s: Subject) -> Finding:
@@ -160,8 +168,8 @@ def _grip_distance(s: Subject) -> Finding:
     f = _fig1(s)
     if f is None:
         return _no_type(s, "Fig. 1's distance between the grips")
-    have = s.length - 2 * s.tab_length
-    words = amount(have, s.units) + (" between the grips" if s.tab_length else ": the model holds only the end rows")
+    have = s.length - 2 * s.gripped
+    words = amount(have, s.units) + (" between the grips" if s.gripped else ": the model holds only the end rows")
     return Finding(within(have, f["D"], f["tol"]["D"]), words, f"{amount(f['D'], s.units)} ± {amount(f['tol']['D'], s.units)} for Type {s.variant}")
 
 
@@ -172,6 +180,9 @@ def _outer_radius(s: Subject) -> Finding:
     if f["RO"] is None:
         return Finding(s.outer_radius is None, "none" if s.outer_radius is None else amount(s.outer_radius, s.units),
                        f"none: Type {s.variant} has the fillet alone")
+    if s.outer_radius is None and s.dogbone:
+        return Finding(False, "none: the fillet meets the full width at a corner",
+                       f"{amount(f['RO'], s.units)} ± {amount(f['tol']['RO'], s.units)} for Type {s.variant}")
     return _band("RO", "outer radius", lambda x: x.outer_radius)(s)
 
 
@@ -243,7 +254,8 @@ REQUIREMENTS = (
     Requirement("overall-width", "Fig. 1", "mandatory", "The overall width WO is at least the type's, and at most that plus its tolerance (our reading "
                 "of the plus tolerance).", _overall_width, ("width",)),
     Requirement("overall-length", "Fig. 1", "mandatory", "The overall length LO is at least the type's; longer is allowed.", _overall_length, ("length",)),
-    Requirement("grip-distance", "§10.2, Fig. 1", "mandatory", "The distance D between the grips is the type's, within 5 mm.", _grip_distance,
+    Requirement("grip-distance", "§10.2, Fig. 1, note J", "mandatory", "The distance D between the grips is the type's, within 5 mm. With "
+                "self-tightening grips on a highly extensible polymer, D may follow the grips, kept the same once chosen (note J).", _grip_distance,
                 ("tab_length", "length")),
     Requirement("gauge-length", "§5.2, Fig. 1", "recommended", "An extensometer spans the full gage length G, within its band; for referee tests it "
                 "must.", _gauge, ("strain_length",)),
@@ -252,6 +264,8 @@ REQUIREMENTS = (
     Requirement("preferred-type", "§6.1.1", "recommended", "Type I is the preferred specimen where material 7 mm thick or less is at hand.", _preferred,
                 ("specimen",)),
     Requirement("thin-sheet", "§1.2", "recommended", "Sheet or film thinner than 1.0 mm is better tested by ASTM D882.", _thin_sheet, ("thickness",)),
+    Requirement("si-values", "§1.5", "note", "The SI values are the standard; the inch-pound values in parentheses are for information "
+                "only. A coupon stated in inches is held to the millimetres, converted exactly.", _si_values, ("units",)),
     Requirement("anisotropy", "§6.6, §7.2", "note", "A material suspected of anisotropy is tested with specimens cut along and across its suspected "
                 "direction, five of each.", _anisotropy, ("library", "own_name")),
     Requirement("centre-width", "Fig. 1, note E", "lab", "The width at the centre is W to 0.10 mm less, any narrowing gradual and equal on both sides."),
@@ -261,7 +275,7 @@ REQUIREMENTS = (
     Requirement("gage-marks", "§6.5", "lab", "Gage marks are drawn in wax crayon or India ink, never scratched, punched or pressed in."),
     Requirement("grips", "§5.1.3", "lab", "The grips are fixed or self-aligning, hold the specimen without slipping, and align its long axis with the "
                 "pull."),
-    Requirement("extensometer-class", "§5.2.1, §10.3", "lab", "A modulus is measured with an extensometer of Class B-2 or better (ASTM E83) that "
+    Requirement("extensometer-class", "§5.2.1, §5.2.2, §10.3", "lab", "A modulus is measured with an extensometer of Class B-2 or better (ASTM E83) that "
                 "records continuously; elongation up to 20 % needs at least Class C."),
     Requirement("specimens", "§7.1, §7.2", "lab", "At least five specimens per sample; for an anisotropic material, five along and five across its "
                 "principal direction."),

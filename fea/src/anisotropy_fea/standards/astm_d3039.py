@@ -37,7 +37,10 @@ CLASSES = (ZERO_UD, NINETY_UD, BALANCED)  # Table 2's fourth class, random-disco
 
 def classify(s: Subject) -> Preset | None:
     """The Table 2 class of the coupon's laminate: 0° or 90° unidirectional for a tape (or the team's own constants, taken as a tape) whose
-    plies all lie at 0° or all at 90°, otherwise balanced and symmetric when it is; None when it is neither."""
+    plies all lie at 0° or all at 90°, otherwise balanced and symmetric when it is; None when it is neither, or one isotropic material
+    (ADR-0075), which has no plies to class."""
+    if s.isotropic:
+        return None
     tape = is_tape(s)
     if tape is not False and all(same(a, 0.0) for a in s.angles):
         return ZERO_UD
@@ -58,6 +61,8 @@ def _matrix(s: Subject) -> Finding:
 
 
 def _laminate(s: Subject) -> Finding:
+    if s.isotropic:
+        return Finding(None, "one isotropic material: no plies to balance", "balanced and symmetric about the direction of the pull")
     ok = is_balanced(s.angles) and is_symmetric(s.angles)
     return Finding(ok, f"{laminate_words(s.angles)}, {len(s.angles)} plies", "balanced and symmetric about the direction of the pull")
 
@@ -71,9 +76,9 @@ def _min_length(s: Subject) -> Finding:
     u = s.units
     if s.strain_length is None:
         return Finding(None, "no strain measurement stated", "gripped length + 2 × width + gauge length")
-    need = 2 * s.tab_length + 2 * s.width + s.strain_length
+    need = 2 * s.gripped + 2 * s.width + s.strain_length
     return Finding(at_least(s.length, need), amount(s.length, u),
-                   f"at least {amount(need, u)} (2 × {amount(s.tab_length, u)} gripped + 2 × {amount(s.width, u)} wide + {amount(s.strain_length, u)} gauge)")
+                   f"at least {amount(need, u)} (2 × {amount(s.gripped, u)} gripped + 2 × {amount(s.width, u)} wide + {amount(s.strain_length, u)} gauge)")
 
 
 def _tab_bevel(s: Subject) -> Finding:
