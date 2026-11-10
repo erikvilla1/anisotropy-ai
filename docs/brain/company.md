@@ -4,8 +4,8 @@ Anisotropy helps engineers analyze composite laminates and test coupons, with re
 
 ## Who builds it
 
-- **Christopher Valerio**, CEO. Prompt engineering and AI evaluation.
-- **Erik Villa**, founder of the repository; AI architecture and operations; documentation and records. Decides the decision records.
+- **Christopher Valerio**, co-founder and CEO. Prompt engineering and AI evaluation.
+- **Erik Villa**, co-founder; started the repository; AI architecture and operations; documentation and records. Decides the decision records.
 - **Kai Saucedo**, software and UI/UX; marketing and communications.
 - **Jusung Park**, reference modeling and validation; operations and logistics.
 - **Tabassum Zaman**, fabrication, prototypes and mechanical testing; partnerships and outreach.
