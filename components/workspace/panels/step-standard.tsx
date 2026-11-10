@@ -31,7 +31,7 @@ export function SetupLine({ form }: { form: StudioForm }) {
   if (!setup) {
     return <p className="ws-setup-line" data-testid="setup-line" data-state="none">Start with step 1: pick the test, then its standard.</p>;
   }
-  const specimen = setup.specimen ? `, Specimen ${setup.specimen}` : "";
+  const specimen = setup.specimen ? `, ${setup.standard?.variant_noun ?? "Specimen"} ${setup.specimen}` : ""; // D638's Type I, C1869's Specimen A
   return (
     <p className="ws-setup-line" data-testid="setup-line" data-state={setup.standard ? "standard" : "own"}>
       <span className="studio-muted">Setting up</span> <strong>{setup.test}</strong>{" "}

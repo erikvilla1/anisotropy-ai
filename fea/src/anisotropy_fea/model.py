@@ -31,6 +31,8 @@ GLOBAL_AXES = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))  # the *Orientation of a deck w
 IN_PLANE_DOFS = (1, 2)
 ROTATION_DOFS = (4, 5, 6)
 PLAUSIBLE_MODULUS_PA = (1e9, 1e12)  # a modulus outside this range after conversion usually means the wrong unit system
+# One isotropic material (ADR-0075) may be a plastic: ASTM D883 calls a plastic below 70 MPa nonrigid, so its range starts at 1 MPa.
+PLAUSIBLE_ISOTROPIC_MODULUS_PA = (1e6, 1e12)
 SYMMETRY_TOLERANCE = 1e-9  # relative size of B that still counts as a symmetric layup (roundoff)
 
 
@@ -532,10 +534,12 @@ def to_si(deck: Deck, units: str) -> Deck:
     materials = {name: scale_material(material) for name, material in deck.materials.items()}
     for material in materials.values():
         if material.elastic is not None:
-            for modulus in (material.elastic.E1, material.elastic.E2, material.elastic.G12):
-                if not PLAUSIBLE_MODULUS_PA[0] <= modulus <= PLAUSIBLE_MODULUS_PA[1]:
+            isotropic = material.elastic.kind == "ISOTROPIC"  # its G12 is derived from E and nu, so E alone is checked
+            low, high = PLAUSIBLE_ISOTROPIC_MODULUS_PA if isotropic else PLAUSIBLE_MODULUS_PA
+            for modulus in ((material.elastic.E1,) if isotropic else (material.elastic.E1, material.elastic.E2, material.elastic.G12)):
+                if not low <= modulus <= high:
                     warnings.warn(f"material {material.name!r}: a modulus of {modulus:.3g} Pa after converting from {units!r} is outside "
-                                  f"1 GPa to 1000 GPa; check that the deck is really written in {units!r}", stacklevel=2)
+                                  f"{low / 1e9:g} GPa to {high / 1e9:g} GPa; check that the deck is really written in {units!r}", stacklevel=2)
     return dataclasses.replace(
         deck,
         parts=parts,

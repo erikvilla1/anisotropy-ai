@@ -52,6 +52,8 @@ def _not_baseline(s: Subject, asked: str) -> Finding:
 
 def _matrix(s: Subject) -> Finding:
     asked = "a ceramic matrix composite with continuous fibres"
+    if s.isotropic:
+        return Finding(False, "one isotropic material with no fibres: not a ceramic matrix composite", asked)
     if s.family is None:
         return Finding(None, "your own constants: state in the notes that the material is a ceramic matrix composite", asked)
     words = s.family.lower()
@@ -61,6 +63,8 @@ def _matrix(s: Subject) -> Finding:
 
 
 def _architecture(s: Subject) -> Finding:
+    if s.isotropic:
+        return Finding(None, "one isotropic material: no plies", "a balanced, symmetric two-dimensional laminate; others are allowed and described in the report")
     ok = is_balanced(s.angles) and is_symmetric(s.angles)
     return Finding(ok, laminate_words(s.angles), "a balanced, symmetric two-dimensional laminate; others are allowed and described in the report")
 
@@ -110,8 +114,8 @@ def _grip(s: Subject) -> Finding:
     lim = _limits(s)
     if lim is None:
         return _not_baseline(s, "the least grip length of Specimen A or B")
-    value = amount(s.tab_length, s.units) if s.tab_length else "0: the model holds only the end rows"
-    return Finding(at_least(s.tab_length, lim["L_grip"]), value, f"at least {amount(lim['L_grip'], s.units)} at each end for Specimen {s.variant}")
+    value = amount(s.gripped, s.units) if s.gripped else "0: the model holds only the end rows"
+    return Finding(at_least(s.gripped, lim["L_grip"]), value, f"at least {amount(lim['L_grip'], s.units)} at each end for Specimen {s.variant}")
 
 
 def _thickness(s: Subject) -> Finding:

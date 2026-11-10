@@ -99,3 +99,62 @@ Options 2 and 4, delivered in two parts.
 - A plastic's deck from us is read by the team as something other than their own isotropic shell model.
 - A fillet's chords between rows move a result that a finer row spacing settles. The convergence study of ADR-0068 is the place to see it.
 - A later edition of D638 changes a value of Fig. 1 that the profile holds.
+
+## Amendment 1, 2026-11-09 (a review of parts 1 and 2: what the grips hold, what a model cannot know about the material, and a dog-bone's extensometer and grips)
+
+**Context.** The founder asked for the D638 work to be checked for bugs before everything was merged. A review read every value of Fig. 1 and every clause against the D638-22 and D638-14 copies and found no wrong number. It found judgements and words that misled:
+- A coupon gripped on its end rows only (grip region "line") with a tab length was judged as if its grips held the tabs: "115 mm between the grips: met" for a model whose grips are 165 mm apart. `Subject.tab_length` already said "0 when only the end rows are held"; `subject_of` did not.
+- One isotropic material was judged as a 0° unidirectional laminate by D3039's Table 2 and as balanced and symmetric by C1869, and C1869 asked for it to be stated a ceramic composite.
+- D638's scope was "met" for any isotropic material, though the form offers one for a plastic or a metal sheet.
+- Any isotropic E below 1 GPa, and any isotropic deck's derived shear modulus below 1 GPa, was flagged as a possible unit slip, though D638 covers soft plastics.
+- An extensometer longer than the narrow section, or grips reaching into it, was accepted.
+- Smaller items: Type IV without its outer radius was called "a straight strip"; the page wrote "Specimen I" for D638's Type I; a Size from written by one standard's size stayed after another standard was picked; a D638 size kept bonded tab rows and a strip's size kept the dog-bone rows; the extensometer clause missed §5.2.2 and the grip distance note J.
+
+**Options.**
+- What the grips hold:
+  - (1) Carry the gripped length beside the tab length (chosen). D638's D, C1869's grip length and the free length read what the model holds, and D3039 Table 2's tab length stays the tab's.
+  - (2) Set the tab length to 0 for end-row grips. Rejected: it would also judge D3039's bonded tab length as none.
+  - (3) Refuse end-row grips with a tab length. Rejected: the form allows it, and it is a model the engineer may want.
+- D638's scope for an isotropic material:
+  - (1) Not judged, and the engineer states in the notes whether it is a plastic (chosen). The model cannot tell a plastic from a metal.
+  - (2) Judged from E. Rejected: a rule of ours, not the standard's.
+  - (3) A new row, plastic or metal. Rejected for now: a new form version for one word.
+- A dog-bone's extensometer and grips:
+  - (1) Refused when the extensometer is longer than the narrow section, or a grip reaches into it (chosen). Over the fillets the strain is not the narrow section's while the stress is read on it, so the modulus would be wrong (ADR-0003).
+  - (2) A warning. Rejected: the result would still be wrong.
+- A coupon stated in inches:
+  - (1) Held to the millimetre values, as before, with a note under §1.5 saying so (chosen). The standard's inch values in parentheses are for information only, and some fall just outside the millimetres (Type II's 7.2 in is 182.88 mm against 183).
+  - (2) Accept the parenthetical inch values. Rejected: not the standard.
+
+**Decision.**
+- **What the grips hold.** `Subject` carries `grip_length`, and `gripped` is what the model's grips hold: the tab length, or 0 for grips on the end rows.
+- **One isotropic material:**
+  - D3039 gives it no Table 2 class, and its laminate is not judged.
+  - C1869 finds it no ceramic composite, and does not judge its architecture.
+  - D638 leaves its scope to the engineer.
+- **Plausible moduli.** The plausible range for one isotropic material's E is 1 MPa to 1000 GPa (ASTM D883 calls a plastic below 70 MPa nonrigid). An isotropic deck is checked on E alone.
+- **Refusals.** The spec refuses a dog-bone's extensometer longer than its narrow section, and grips over the tabs that reach the narrow section.
+- **Words and clauses:**
+  - D638 gains the note "si-values" (§1.5).
+  - The grip distance cites note J.
+  - The extensometer clause cites §5.2.2.
+  - Type IV without its outer radius reads "none: the fillet meets the full width at a corner".
+- **The page:**
+  - It names the specimen in the standard's own word (`variant_noun`, exported with the profiles).
+  - A standard's Size from leaves with that standard.
+  - A dog-bone size clears the tab rows, and a strip's size clears the dog-bone rows.
+- **Unchanged:** the coupon card in the deck heading still reads "Specimen I". Changing it would rewrite the public check's decks.
+- Both copies are now named by edition in `.local/sources/astm/`: `D638-14.pdf` and `D638-22.pdf`.
+
+**Evidence.**
+- `fea/tests/test_dogbone.py`:
+  - `test_grips_on_the_end_rows_hold_no_length_whatever_the_tab_length`
+  - `test_an_isotropic_material_is_no_d3039_class_no_ceramic_composite_and_d638s_scope_is_the_engineers_to_state`
+  - `test_type_iv_without_its_outer_radius_says_the_fillet_meets_the_width_at_a_corner`
+  - `test_an_inch_coupon_is_told_that_the_millimetres_govern`
+  - `test_an_isotropic_deck_is_checked_on_e_alone_from_1_mpa`
+  - `test_a_soft_plastic_is_no_unit_slip_on_the_checklist`
+  - `test_grips_that_reach_the_narrow_section_are_refused`
+  - the extensometer case of `test_the_spec_refuses_what_this_version_does_not_build`
+- `tests/studio-standards.test.ts`, "a size is a whole shape ...", and the sketch test's "Type I".
+- The public Type I check: 14 requirements met, none missed. The scope now reads "state in the notes".

@@ -95,6 +95,7 @@ def subject_of(spec: CouponSpec) -> Subject:
         record = find_dataset(mat.library, mat.dataset)
         family, architecture = record.get("family"), record.get("architecture")
     method, strain, tabs, d = spec.test_method, spec.strain, spec.tabs, g.dogbone
+    end_rows = spec.grips is not None and spec.grips.region == "line"  # the grips hold the end rows only, whatever the tab length
     return Subject(kind=spec.kind, units=spec.units, length=g.length, width=g.width, tab_length=g.tab_length or 0.0, hole_diameter=g.hole_diameter,
                    angles=tuple(normalised_angle(a) for a in full_angles(spec)), ply_thickness=spec_ply_thickness(spec), family=family,
                    architecture=architecture, variant=method.variant if method is not None else None,
@@ -102,7 +103,8 @@ def subject_of(spec: CouponSpec) -> Subject:
                    tab_thickness=tabs.thickness if tabs is not None else None, tab_bevel=tabs.bevel if tabs is not None else None,
                    tab_material=tabs.material if tabs is not None else None, isotropic=is_isotropic(spec),
                    narrow_width=d.narrow_width if d is not None else None, narrow_length=d.narrow_length if d is not None else None,
-                   fillet_radius=d.radius if d is not None else None, outer_radius=d.outer_radius if d is not None else None)
+                   fillet_radius=d.radius if d is not None else None, outer_radius=d.outer_radius if d is not None else None,
+                   grip_length=0.0 if end_rows else None)
 
 
 def judge(requirement: Requirement, subject: Subject) -> Judged:
