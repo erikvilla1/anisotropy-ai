@@ -2256,23 +2256,49 @@ img {
   color: var(--muted);
 }
 
-/* The page veil (ADR-0070), after PhysicsX: its colour, rgb(248, 248, 248), and its 400 ms before the next page. It never takes a
- * click. The first load fades out of it with CSS alone; components/page-transition.tsx runs it for header and footer links. */
+/* The page veil (ADR-0070 amendment 1), after Anduril: its colour, #010101; 300 ms out of black on the first load, eased as
+ * Anduril's "easeOutCubic"; 350 ms into black before the next page ("easeOutSine") and 350 ms out of it ("easeInSine"). It never
+ * takes a click. The first paint is black until components/page-transition.tsx has the page's text ready and lifts it; if no
+ * script runs it lifts alone, at once where the browser reports scripting is off and after 2 s otherwise. */
 .page-transition {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: #f8f8f8;
+  background: #010101;
   opacity: 0;
   pointer-events: none;
 }
 .page-transition.is-enter {
-  animation: page-veil-out 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 1;
+  animation: page-veil-out 300ms cubic-bezier(0.215, 0.61, 0.355, 1) 2000ms forwards;
+}
+.page-transition.is-lift {
+  animation: page-veil-lift 300ms cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
 }
 .page-transition.is-leave {
-  animation: page-veil-in 400ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: page-veil-in 350ms cubic-bezier(0.39, 0.575, 0.565, 1) forwards;
 }
+.page-transition.is-arrive {
+  animation: page-veil-arrive 350ms cubic-bezier(0.47, 0, 0.745, 0.715) forwards;
+}
+/* Three names for the same fade out, so that each change of state starts a new animation rather than retiming the last. */
 @keyframes page-veil-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes page-veil-lift {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes page-veil-arrive {
   from {
     opacity: 1;
   }
@@ -2286,6 +2312,11 @@ img {
   }
   to {
     opacity: 1;
+  }
+}
+@media (scripting: none) {
+  .page-transition.is-enter {
+    animation-delay: 0s;
   }
 }
 @media (prefers-reduced-motion: reduce) {

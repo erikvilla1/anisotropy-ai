@@ -52,17 +52,18 @@ export default function Home() {
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
         <div className="home-hero-grid">
-          <h1 className="home-hero-title" id="home-hero-title">
+          {/* The load-in (ADR-0070 amendment 1): the headline rises, the paragraphs are typed in (components/intro-text.ts). */}
+          <h1 className="home-hero-title" id="home-hero-title" data-intro="rise">
             Composites.
             <br />
             Calculated.
           </h1>
           <div className="home-hero-copy">
-            <p>
+            <p data-intro="type">
               We&apos;re bringing composite theory and real test data into one engineering platform, changing how laminates
               and coupons are set up, analyzed and documented.
             </p>
-            <p>
+            <p data-intro="type">
               Spend less time on setup and reports. Spend more time on the structure. Trace every number back to its source.
             </p>
           </div>
