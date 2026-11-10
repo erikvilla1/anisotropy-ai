@@ -1,9 +1,9 @@
-# ADR-0068: The wordmark is set in Archivo at weight 800, the nearest open-licence match to PhysicsX's lettering
+# ADR-0079: The wordmark is set in Archivo at weight 800, the nearest open-licence match to PhysicsX's lettering
 
 - Status: Proposed
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
-- Related: [ADR-0066](ADR-0066-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (amendment 4, the wordmark in capitals), `app/layout.tsx`, `app/globals.css`, `app/home.css`, `package.json`
+- Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (amendment 4, the wordmark in capitals), `app/layout.tsx`, `app/globals.css`, `app/home.css`, `package.json`
 
 ## Context
 
@@ -28,7 +28,7 @@ Option 5. The package `@fontsource-variable/archivo` (^5.3.0) is self-hosted wit
 
 - The comparison sheet described above (kept outside the repository).
 - Measured in the browser on the home header at 1440 px: Archivo loaded, cap height 19 px, mark 28 px, gap 16 px. PhysicsX's are 19.5, 28 and 16.
-- Checks of 2026-11-07: `npm run typecheck` clean; `npm test` 166 tests, 165 passed, 1 skipped; the build ships the Archivo files. Against the built site, `home`, `expansion`, `portfolio` and `workspace`: 18 passed, 1 failed, the stale chat test of ADR-0065.
+- Checks of 2026-11-07: `npm run typecheck` clean; `npm test` 166 tests, 165 passed, 1 skipped; the build ships the Archivo files. Against the built site, `home`, `expansion`, `portfolio` and `workspace`: 18 passed, 1 failed, the stale chat test of ADR-0076.
 
 ## Consequences
 

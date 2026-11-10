@@ -223,7 +223,7 @@ img {
   font-weight: 600;
   white-space: nowrap;
 }
-/* The name in heavy capitals, after PhysicsX's wordmark (ADR-0066 amendment 4, ADR-0068): Archivo at weight 800, tight. Only
+/* The name in heavy capitals, after PhysicsX's wordmark (ADR-0077 amendment 4, ADR-0079): Archivo at weight 800, tight. Only
  * the look changes: the text stays "Anisotropy" for page titles, links and screen readers. */
 .wordmark > span {
   font-family: "Archivo Variable", var(--font);
@@ -244,7 +244,7 @@ img {
   color: #bababa;
 }
 /* PhysicsX's hover, measured on 2026-11-07: a link fades to 60 % in 0.15 s, so the page shows through it as if pressed in
- * (ADR-0066 amendment 4). The Services chevron and the dropdown's entries do the same. */
+ * (ADR-0077 amendment 4). The Services chevron and the dropdown's entries do the same. */
 .main-nav a {
   transition: opacity 0.15s;
 }
@@ -2293,7 +2293,7 @@ img {
   }
 }
 
-/* The site header after PhysicsX, the same on every page but the workspace's (ADR-0066 amendments 2 and 8): transparent, in the
+/* The site header after PhysicsX, the same on every page but the workspace's (ADR-0077 amendments 2 and 8): transparent, in the
  * page's flow so it scrolls away, and over the hero on the home page. From 1201 px: 56 px tall, 32 px margins, a 28 px mark, the
  * links from the halfway line (the hero's column 7) at up to 17 px, Workspace in the top-right corner, no version label. */
 html:has(.site-header:not(.chat-site-header)) {

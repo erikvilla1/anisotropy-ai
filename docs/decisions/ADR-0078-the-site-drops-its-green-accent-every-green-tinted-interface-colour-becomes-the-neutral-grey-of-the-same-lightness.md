@@ -1,9 +1,9 @@
-# ADR-0067: The site drops its green accent: every green-tinted interface colour becomes the neutral grey of the same lightness; data colours keep theirs
+# ADR-0078: The site drops its green accent: every green-tinted interface colour becomes the neutral grey of the same lightness; data colours keep theirs
 
 - Status: Proposed
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
-- Related: [ADR-0066](ADR-0066-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the monochrome hero), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md) (the studio's colours), [ADR-0018](ADR-0018-source-rights-classes.md) (source rights), `app/globals.css`, `lib/studio-colors.ts`
+- Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the monochrome hero), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md) (the studio's colours), [ADR-0018](ADR-0018-source-rights-classes.md) (source rights), `app/globals.css`, `lib/studio-colors.ts`
 
 ## Context
 
@@ -33,7 +33,7 @@ The studio's pass, ready, done and OK marks used the accent, so they are now lig
 
 - The request, and the counts above from a scan of every stylesheet, component and library file. A second scan after the change finds green only in the kept colours listed above.
 - Screenshots of the home page, About, the finite element service page, the materials library and the workspace at 1440 by 900, before and after: no green in the interface, no console errors.
-- Checks of 2026-11-07: `npm run typecheck` clean; `npm test` 166 tests, 165 passed, 1 skipped. The whole browser suite against the built site, with the local API for the calculator cases: 52 passed, 1 skipped (the hosted live test), 5 failed. Two are the stale tests of ADR-0065. Three are stale counts on pages this change does not touch: the physics page now says "40 reference cards" where its test expects 39, and the materials tests look for "25 materials".
+- Checks of 2026-11-07: `npm run typecheck` clean; `npm test` 166 tests, 165 passed, 1 skipped. The whole browser suite against the built site, with the local API for the calculator cases: 52 passed, 1 skipped (the hosted live test), 5 failed. Two are the stale tests of ADR-0076. Three are stale counts on pages this change does not touch: the physics page now says "40 reference cards" where its test expects 39, and the materials tests look for "25 materials".
 
 ## Consequences
 

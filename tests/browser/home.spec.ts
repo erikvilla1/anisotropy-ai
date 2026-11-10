@@ -23,7 +23,7 @@ const scene = (page: Page) => {
   return calculator.getByTestId("laminate-scene").or(calculator.getByTestId("webgl-missing"));
 };
 
-test("the hero opens the page and the laminate calculator follows it (ADR-0065)", async ({ page }) => {
+test("the hero opens the page and the laminate calculator follows it (ADR-0076)", async ({ page }) => {
   await playApi(page, []);
   await page.goto("/");
   const order = await page.locator("main > section").evaluateAll((sections) => sections.slice(0, 2).map((section) => section.id));
@@ -31,7 +31,7 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0065)"
   await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Composites/);
 });
 
-test("the hero's words are only the headline and the two paragraphs (ADR-0066)", async ({ page }) => {
+test("the hero's words are only the headline and the two paragraphs (ADR-0077)", async ({ page }) => {
   const posts: Posted[] = [];
   await playApi(page, posts);
   await page.goto("/");
@@ -43,7 +43,7 @@ test("the hero's words are only the headline and the two paragraphs (ADR-0066)",
   await expect(hero.getByRole("textbox")).toHaveCount(0);
   await expect(hero.getByRole("link")).toHaveCount(0);
   await expect.poll(() => posts.length).toBe(1);
-  // The header lies over the hero on the home page; elsewhere it is the same header in the page's flow, 56 px tall (ADR-0066
+  // The header lies over the hero on the home page; elsewhere it is the same header in the page's flow, 56 px tall (ADR-0077
   // amendment 8).
   await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
   await page.goto("/about");
@@ -77,7 +77,7 @@ test("the hero's lens plays our own results with a caption, on wide screens only
   await expect(lens).toBeHidden();
 });
 
-test("the demo sits on its heading's columns, and the engine's answer on the same ones (ADR-0066 amendment 10)", async ({ page }) => {
+test("the demo sits on its heading's columns, and the engine's answer on the same ones (ADR-0077 amendment 10)", async ({ page }) => {
   await playApi(page, []);
   await page.goto("/");
   await expect(page.getByTestId("abd-grid")).toBeVisible();

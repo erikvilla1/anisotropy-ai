@@ -1,4 +1,4 @@
-# ADR-0065: The home page opens on the hero, and the laminate calculator follows it as the demonstration
+# ADR-0076: The home page opens on the hero, and the laminate calculator follows it as the demonstration
 
 - Status: Proposed; reverses items 4 and 5 of the CEO's website audit of 2026-10-31 (built under ADR-0058) until the CEO confirms
 - Date: 2026-11-07

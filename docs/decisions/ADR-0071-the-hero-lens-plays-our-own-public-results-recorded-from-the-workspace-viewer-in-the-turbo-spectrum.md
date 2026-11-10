@@ -3,11 +3,11 @@
 - Status: Proposed
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 (the lens showing models of different applications; "try spectrum?" for its colours) | Drafted by: Claude Code
-- Related: [ADR-0066](ADR-0066-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) amendments 3 and 9 (the hero, the first lens and its removal), [ADR-0069](ADR-0069-the-licensed-hero-clip-stays-out-of-the-public-repository-a-script-makes-its-web-copy-and-the-page-plays-it-when-present.md) (the clip under it), [ADR-0045](ADR-0045-abaqus-without-the-gui-odbaccess-reports-and-an-optional-second-reference.md) (the Abaqus licence), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) (what stays off the repository), [ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) (the viewer's shader), `scripts/hero-lens.ts`, `components/home/hero-lens.tsx`, `lib/hero-lens.ts`, `app/home.css`, `tests/hero-lens.test.ts`, `tests/browser/home.spec.ts`
+- Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) amendments 3 and 9 (the hero, the first lens and its removal), [ADR-0069](ADR-0069-the-licensed-hero-clip-stays-out-of-the-public-repository-a-script-makes-its-web-copy-and-the-page-plays-it-when-present.md) (the clip under it), [ADR-0045](ADR-0045-abaqus-without-the-gui-odbaccess-reports-and-an-optional-second-reference.md) (the Abaqus licence), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) (what stays off the repository), [ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) (the viewer's shader), `scripts/hero-lens.ts`, `components/home/hero-lens.tsx`, `lib/hero-lens.ts`, `app/home.css`, `tests/hero-lens.test.ts`, `tests/browser/home.spec.ts`
 
 ## Context
 
-After the 3D lens left the hero (ADR-0066 amendment 3), the lead found the hero "empty/spacious" and noted that PhysicsX's "lens is animated". The lead asked for "the abaqus models animated/appearing within the lens … showcasing like different applications", with Abaqus tutorial screenshots as the reference.
+After the 3D lens left the hero (ADR-0077 amendment 3), the lead found the hero "empty/spacious" and noted that PhysicsX's "lens is animated". The lead asked for "the abaqus models animated/appearing within the lens … showcasing like different applications", with Abaqus tutorial screenshots as the reference.
 
 - Those screenshots belong to Dassault Systèmes and the tutorials' authors.
 - The team's Abaqus licence is a teaching licence. ADR-0045 limits it to "the course and the team comparison only, never a customer deliverable", and the site is neither.
@@ -24,7 +24,7 @@ After the 3D lens left the hero (ADR-0066 amendment 3), the lead found the hero 
 2. Live 3D: the viewer itself running in the hero. Rejected: a WebGL context and about 3 MB of field data on every visit to the home page, for decoration.
 3. Pre-recorded clips of our own viewer drawing the three public results. Chosen: our own work and public, so the files can be committed to the repository (unlike the iStock clip, ADR-0069), and a small video is all a visitor loads.
 4. For the colours:
-   - a. the viewer's own green ramp, which ADR-0067 left behind as a data colour;
+   - a. the viewer's own green ramp, which ADR-0078 left behind as a data colour;
    - b. the site's blue-to-orange diverging scale;
    - c. Turbo, the classic blue-to-red spectrum. The lead chose c ("try spectrum?"). It reads as an FEA result at a glance, as in the references.
 5. A solid frame showing the recording on its black ground. Tried and rejected on sight: the frame looked pasted on. Chosen instead: the frame dims and blurs the clip behind it like glass, and the recording is screen-blended so its black drops out and only the model shows in colour.

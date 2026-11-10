@@ -1,4 +1,4 @@
-/* The home page: the hero first, the laminate calculator under it as the demonstration (ADR-0065), then the product blurbs. */
+/* The home page: the hero first, the laminate calculator under it as the demonstration (ADR-0076), then the product blurbs. */
 .hero-laminate {
   position: relative;
   border-bottom: 1px solid var(--line);
@@ -7,7 +7,7 @@
     radial-gradient(40% 40% at 20% 80%, #191919 0%, transparent 60%),
     var(--bg);
 }
-/* The section's head is set as PhysicsX sets its white sections (ADR-0066 amendment 7, measured 2026-11-07): a 16 px monospace
+/* The section's head is set as PhysicsX sets its white sections (ADR-0077 amendment 7, measured 2026-11-07): a 16 px monospace
  * label with a short tick in the first column, and the heading from column 4, 38/41 px, with its instructions as an 18 px caption,
  * behind a 1 px rule that sits in the middle of the gutter so the text starts exactly on the column. 88 px above and below, the hero's 32 px margins. */
 .hero-laminate-inner {
@@ -61,7 +61,7 @@
   line-height: 26px;
   color: var(--muted);
 }
-/* The demo on the head's 12 columns (ADR-0066 amendment 10): the inputs under the label (columns 1 to 3), the 3D view under the
+/* The demo on the head's 12 columns (ADR-0077 amendment 10): the inputs under the label (columns 1 to 3), the 3D view under the
  * statement (4 to 9), so the view starts where the heading's text does, and the plies with the view's caption beside it (10 to 12).
  * The view fills the row's height, so no column leaves a gap under it. The engine's answer is one band under all three, its parts
  * on the same columns. Under 1280 px the columns regroup (below). */
@@ -725,7 +725,7 @@
   }
 }
 
-/* The hero after PhysicsX's home page (ADR-0066): the material photo full-bleed, only the headline on columns 1 to 6 and two
+/* The hero after PhysicsX's home page (ADR-0077): the material photo full-bleed, only the headline on columns 1 to 6 and two
  * short paragraphs from column 7 of a 12-column grid (32 px gutters and margins, as measured there on 2026-11-07). The header
  * (app/globals.css) lies over the hero on this page and scrolls away with it. */
 .home-hero {
@@ -919,7 +919,7 @@
   }
 }
 
-/* The demo section on white (ADR-0066 amendment 6): after the dark hero, the calculator sits on a white page, as PhysicsX's sections do.
+/* The demo section on white (ADR-0077 amendment 6): after the dark hero, the calculator sits on a white page, as PhysicsX's sections do.
  * The section sets the site's colour variables for itself, then corrects the few colours written out for a dark page. The 3D
  * view stays a dark viewport, since its axes and dust are drawn for a dark ground. */
 .hero-laminate {

@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
-- Related: [ADR-0066](ADR-0066-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the redesign after PhysicsX), `components/page-transition.tsx`, `app/layout.tsx`, `app/globals.css`
+- Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the redesign after PhysicsX), `components/page-transition.tsx`, `app/layout.tsx`, `app/globals.css`
 
 ## Context
 
@@ -31,7 +31,7 @@ Option 2. `components/page-transition.tsx` renders one fixed layer, `#f8f8f8`, t
   - Clicking About in the header: the layer reaches 1.0 at 400 ms, the address becomes `/about` at about 600 ms, and the layer is gone by about 1.4 s.
   - Back, and the workspace's first load: no veil.
   - On a phone, the menu closes after navigating.
-- `npm run typecheck` clean; `npm test` 165 passed, 1 skipped. The whole browser suite against the built site, with the local API: 52 passed, 1 skipped, 5 failed. The five are the stale tests recorded in ADR-0065 and ADR-0067, on pages this change does not touch.
+- `npm run typecheck` clean; `npm test` 165 passed, 1 skipped. The whole browser suite against the built site, with the local API: 52 passed, 1 skipped, 5 failed. The five are the stale tests recorded in ADR-0076 and ADR-0078, on pages this change does not touch.
 
 ## Consequences
 

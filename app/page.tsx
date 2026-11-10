@@ -37,7 +37,7 @@ const news = [
   },
 ];
 
-/** The home page: the hero first, the laminate calculator under it as the demonstration (ADR-0065, ADR-0066),
+/** The home page: the hero first, the laminate calculator under it as the demonstration (ADR-0076, ADR-0077),
  * then short blurbs on the mission, the platform, the evidence, the team and what is new. The workflow and the roadmap live
  * on About. */
 export default function Home() {

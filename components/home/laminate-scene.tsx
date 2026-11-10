@@ -159,7 +159,7 @@ function Dust({ count, active }: { count: number; active: boolean }) {
 }
 
 /** Keeps the stack's full width in view when the canvas is narrower than 4:3, as the home page's view can be when it fills its row
- * (ADR-0066 amendment 10): the camera zooms out by the aspect's shortfall. At 4:3 or wider it changes nothing. */
+ * (ADR-0077 amendment 10): the camera zooms out by the aspect's shortfall. At 4:3 or wider it changes nothing. */
 function FitWidth() {
   const { camera, size, invalidate } = useThree();
   useEffect(() => {
