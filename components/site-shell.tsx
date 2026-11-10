@@ -76,6 +76,10 @@ export function SiteHeader() {
   );
 }
 
+/** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and the tagline in the left half, and the header's own
+ * navigation (`lib/site-nav.ts`) as columns of links from the halfway line: the plain pages and the workspace in the first
+ * column, then each item with children as a column of its own under its landing page. Under a rule, the copyright line, the
+ * version and the way back to the top, on the same columns. Absent in the workspace, which is an app. */
 export function SiteFooter() {
   const pathname = usePathname();
   if (pathname === "/chat" || pathname.startsWith("/workspace")) return null;

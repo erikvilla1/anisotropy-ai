@@ -234,12 +234,11 @@ img {
   color: #bababa;
 }
 /* PhysicsX's hover, measured on 2026-11-07: a link fades to 60 % in 0.15 s, so the page shows through it as if pressed in
- * (ADR-0077 amendment 4). The Services chevron and the dropdown's entries do the same. */
+ * (ADR-0077 amendment 4). The Services menu has its own rules in components/services-menu.css. */
 .main-nav a {
   transition: opacity 0.15s;
 }
-.main-nav a:hover,
-.nav-disclosure-button:hover {
+.main-nav a:hover {
   opacity: 0.6;
 }
 .header-actions {
@@ -2208,95 +2207,7 @@ img {
   inset: 0;
 }
 
-/* The Services disclosure in the header (ADR-0058): a link plus a button that shows the five service pages. */
-.nav-disclosure {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.nav-disclosure-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: #bababa;
-  cursor: pointer;
-  transition: opacity 0.15s, color 0.2s, background 0.2s, transform 0.2s;
-}
-.nav-disclosure-button:focus-visible,
-.nav-disclosure.open .nav-disclosure-button {
-  color: var(--accent);
-  background: #1f1f1f;
-}
-.nav-disclosure.open .nav-disclosure-button svg {
-  transform: rotate(180deg);
-}
-.nav-sublist {
-  position: absolute;
-  top: calc(100% + 14px);
-  left: -16px;
-  min-width: 240px;
-  margin: 0;
-  padding: 10px 0;
-  list-style: none;
-  background: #151515;
-  border: 1px solid #464646;
-  border-radius: 10px;
-  box-shadow: 0 18px 40px #00000066;
-  z-index: 40;
-}
-.nav-sublist::before {
-  content: "";
-  position: absolute;
-  top: -14px;
-  left: 0;
-  right: 0;
-  height: 14px;
-}
-.nav-sublist li a {
-  display: block;
-  padding: 9px 18px;
-  font-size: 12px;
-  color: #d8d8d8;
-  white-space: nowrap;
-}
-.nav-sublist li a:focus-visible,
-.nav-sublist li a[aria-current="page"] {
-  color: var(--accent);
-  background: #1a1a1a;
-}
-@media (max-width: 640px) {
-  .nav-disclosure {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  .nav-disclosure-button {
-    display: none;
-  }
-  .main-nav.open .nav-sublist {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    position: static;
-    min-width: 0;
-    padding: 0 0 0 14px;
-    border: 0;
-    border-left: 1px solid #464646;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-  .nav-sublist li a {
-    padding: 6px 0;
-    font-size: 13px;
-  }
-}
+/* The Services menu of the header (ADR-0058) has its own stylesheet: components/services-menu.css. */
 
 /* A photo or clip slot, or the labelled placeholder that holds its place (audit of 2026-10-31). */
 .media-slot {
