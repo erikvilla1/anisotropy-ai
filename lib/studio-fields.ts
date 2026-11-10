@@ -87,7 +87,8 @@ export function fieldOptions(fields: Fields): FieldOption[] {
 
 export const DEFAULT_CHOICE = (fields: Fields): FieldChoice => ({
   id: Object.keys(fields.element.failure).length ? "failure_index" : (fields.mesh.translations ?? 2) === 3 ? "u_z" : "eps_y", ply: 1, face: 0,
-  criterion: fields.summary.earliest ?? Object.keys(fields.element.failure)[0] ?? "", averaged: true,
+  // the answer's earliest criterion (ADR-0085), the gauge section's on a gripped coupon; the whole model's on an older job
+  criterion: fields.summary.verdict?.earliest ?? fields.summary.earliest ?? Object.keys(fields.element.failure)[0] ?? "", averaged: true,
 });
 
 /** The values of the chosen field: per node when averaged (or nodal by nature), else per element; with the range the package wrote for them. */
