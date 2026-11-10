@@ -20,13 +20,15 @@ from anisotropy_fea.spec import SpecError, parse_spec
 from anisotropy_fea.standards import BY_DESIGNATION, LEVELS, NONE, PROFILES, STANDARD_WORDS, profile_of_word, profiles_for
 from anisotropy_fea.standards.astm_c1869 import SPECIMEN_A, SPECIMEN_B
 from anisotropy_fea.standards.astm_d3039 import BALANCED, NINETY_UD, ZERO_UD, classify
+from anisotropy_fea.standards.astm_d4018 import KIND as TOW_KIND
+from anisotropy_fea.tow_test import ITEM_OF_ROW as TOW_ROWS
 from anisotropy_fea.standards.conformance import conformance, subject_of
 from anisotropy_fea.standards.profile import OTHER_FAMILIES, POLYMER_FAMILIES, is_balanced, is_symmetric
 
 from public_coupon import PUBLIC_COUPON
 from test_intake import PUBLIC_FILL
 
-D3039, C1869, D638 = "ASTM D3039/D3039M-17", "ASTM C1869-18(2023)", "ASTM D638-22"
+D3039, C1869, D638, D4018 = "ASTM D3039/D3039M-17", "ASTM C1869-18(2023)", "ASTM D638-22", "ASTM D4018-23"
 TOOLS = dict(ccx=lambda: Path("ccx"), tectonic=lambda: "tectonic", gmsh=lambda: "4.15")
 STRIP = {**PUBLIC_FILL, "mesh_nx": None, "mesh_partitions": None, "mesh_seeds": None, "element_size": 5.0}  # the public coupon, coarsely meshed
 D3039_STRIP = {**STRIP, "standard": D3039, "strain_device": "extensometer", "strain_length": 25.0}
@@ -72,18 +74,20 @@ def judged(spec) -> dict:
 # --------------------------------------------------------------------------------------------- the registry
 
 def test_every_requirement_names_its_clause_level_and_rule():
-    assert STANDARD_WORDS == (NONE, *BY_DESIGNATION) and set(BY_DESIGNATION) == {D3039, D638, C1869}
+    assert STANDARD_WORDS == (NONE, *BY_DESIGNATION) and set(BY_DESIGNATION) == {D3039, D638, C1869, D4018}
     for profile in PROFILES.values():
+        rows = TOW_ROWS if TOW_KIND in profile.kinds else FIELDS  # the tow's record has rows of its own (ADR-0074)
         ids = [r.id for r in profile.requirements]
         assert len(ids) == len(set(ids)), f"{profile.id}: requirement ids repeat"
         assert profile.catalog_url.startswith("https://store.astm.org/") and profile.rights == "licensed-reference" and profile.edition_note
         for r in profile.requirements:
             assert r.clause and r.text.endswith(".") and r.level in LEVELS, r.id
             assert (r.rule is None) == (r.level == "lab"), r.id
-            assert all(row in FIELDS for row in r.rows), f"{profile.id}.{r.id}: a row the form does not have"
+            assert all(row in rows for row in r.rows), f"{profile.id}.{r.id}: a row the form does not have"
         for preset in (*profile.variants, *profile.classes):
             assert all(row in FIELDS for row in preset.si), f"{profile.id}.{preset.key}: a row the form does not have"
     assert profiles_for("unnotched_tension") == [PROFILES["astm-d3039"], PROFILES["astm-d638"]] and profiles_for("open_hole_tension") == [PROFILES["astm-c1869"]]
+    assert profiles_for(TOW_KIND) == [PROFILES["astm-d4018"]]
     assert profiles_for("three_point_bending") == [] and profile_of_word("none") is None and profile_of_word("astm d3039/d3039m-17") is PROFILES["astm-d3039"]
 
 

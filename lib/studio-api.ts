@@ -217,6 +217,37 @@ export async function checkSetup(apiBase: string, values: StudioValues, signal?:
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview };
 }
 
+/** A fibre tow record's answer (ADR-0074): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
+ * g/cm³, mm², microstrain). Every number is the engine's; the page shows them as they come. */
+export type TowStats = { n: number; mean: number; sd: number; cv: number };
+export type TowSpecimenResult = {
+  id: string; status: "valid" | "rejected"; note: string; max_force: number | null; force_lower: number | null; force_upper: number | null;
+  strength: number | null; modulus: number | null; failure_code: string | null; failure_words: string | null;
+};
+export type TowResult = {
+  test: string; designation: string | null; fibre: string; lot: string | null; units: Record<string, string>;
+  fibre_properties: { mul: number; mul_from: string; bundles: number; specimen_mul: number; density: number; density_from: string; area: number;
+    resin_content: number | null; resin_content_from: string | null };
+  strains: { failure: number; preload: number; chord: [number, number]; chord_table: [number, number]; chord_from: string };
+  specimens: TowSpecimenResult[];
+  strength: TowStats | null; modulus: TowStats | null;
+  counts: { specimens: number; valid: number; strength: number; modulus: number };
+  planning: { preload_force: number | null; force_lower: number | null; force_upper: number | null; failure_force: number | null; from: string[] };
+  conformance: { designation: string; words: string; deviations: number; advisories: number } | null;
+  report: { clause: string; item: string; rows: string[]; shown: boolean }[];
+  note: string;
+};
+export type TowAnswer = { run_id: string | null; state: "ready" | "blocked"; checklist: Checklist; result: TowResult | null };
+
+export async function towTest(apiBase: string, values: Record<string, unknown>, signal?: AbortSignal, projectId: string | null = null): Promise<TowAnswer> {
+  const body = { values, ...(projectId ? { project_id: projectId } : {}) };
+  const payload = await call(`${base(apiBase)}/v1/tow-tests`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the tow calculation");
+  if (!isObject(payload)) throw new StudioError("The tow calculation answered with an unexpected shape.");
+  const checklist = readChecklist(payload.checklist);
+  const result = isObject(payload.result) && Array.isArray(payload.result.specimens) ? (payload.result as unknown as TowResult) : null;
+  return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, checklist, result };
+}
+
 export async function startSolve(apiBase: string, values: StudioValues, runBy: string, replace: boolean, signal?: AbortSignal, projectId: string | null = null): Promise<JobStatus> {
   const body = { values, run_by: runBy, replace, ...(projectId ? { project_id: projectId } : {}) };
   return readJob(await call(`${base(apiBase)}/v1/coupon-jobs`, { method: "POST", headers, body: JSON.stringify(body), signal }, "starting the solve"));

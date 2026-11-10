@@ -68,6 +68,8 @@ export const physicsLatex: Record<string, string[]> = {
   "Longitudinal rule of mixtures": [tex`\begin{aligned}V_m&=1-V_f\\[4pt]E_1&=E_{1f}V_f+E_mV_m\\[4pt]\nu_{12}&=\nu_{12f}V_f+\nu_mV_m\end{aligned}`],
   "Transverse inverse-mixture estimate": [tex`\frac1{E_2}=\frac{V_f}{E_{2f}}+\frac{V_m}{E_m}`],
   "In-plane shear inverse-mixture estimate": [tex`\frac1{G_{12}}=\frac{V_f}{G_{12f}}+\frac{V_m}{G_m}`],
+  "Fibre tow strength & chord modulus": [tex`A=\frac{\mathrm{MUL}}{\rho_f}`,tex`\sigma=\frac{P\,\rho_f}{\mathrm{MUL}}`,
+    tex`E=\frac{(P_u-P_l)\,\rho_f}{(\varepsilon_u-\varepsilon_l)\,\mathrm{MUL}}`,tex`RC=100\left(1-\frac{\mathrm{MUL}}{\mathrm{MUL}_i}\right)`],
   "Halpin–Tsai estimate": [tex`\eta=\frac{P_f/P_m-1}{P_f/P_m+\xi}`,tex`P=P_m\frac{1+\xi\eta V_f}{1-\eta V_f}`],
   "Thermal expansion · constituent estimate": [tex`\begin{aligned}E_1&=E_fV_f+E_mV_m\\[4pt]\nu_{12}&=\nu_fV_f+\nu_mV_m\end{aligned}`,
     tex`\alpha_1=\frac{E_f\alpha_fV_f+E_m\alpha_mV_m}{E_1}`,

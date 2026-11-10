@@ -5,6 +5,8 @@ import { projectTitle } from "@/lib/project-store";
 import { CouponChat, CouponSpec } from "@/components/studio/coupon-chat";
 import { CouponStudio } from "@/components/studio/coupon-studio";
 import { ProjectProvider, useProject } from "@/components/studio/project-context";
+import { TowStage } from "@/components/studio/tow-stage";
+import { isTow } from "@/lib/studio-tow";
 import { FeaRail } from "./fea-rail";
 import { WorkspaceShell } from "./shell";
 
@@ -26,7 +28,7 @@ function FeaColumns({ apiBaseUrl, onLaminate }: { apiBaseUrl: string; onLaminate
       kind="Coupon FEA"
       title={<input type="text" aria-label="Project name" value={project.name} placeholder={projectTitle(project)} onChange={(e) => rename(e.target.value)} data-testid="project-name" />}
       rail={<FeaRail apiBaseUrl={apiBaseUrl} />}
-      stage={<><CouponSpec form={form} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>}
+      stage={isTow(form) ? <TowStage /> : <><CouponSpec form={form} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>}
       assistant={<CouponChat apiBaseUrl={apiBaseUrl} onLaminate={onLaminate} />}
     />
   );

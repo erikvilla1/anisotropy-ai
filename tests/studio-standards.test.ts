@@ -18,7 +18,8 @@ test("the Standard row offers none and the standards of the test picked; the Spe
   assert.deepEqual(wordsFor(fieldByKey.standard, { ...blankForm(), test: "unnotched tension" }), [NO_STANDARD, D3039, D638]);
   assert.deepEqual(wordsFor(fieldByKey.standard, { ...blankForm(), test: "open-hole tension" }), [NO_STANDARD, C1869]);
   assert.deepEqual(wordsFor(fieldByKey.standard, { ...blankForm(), test: "three-point bending" }), [NO_STANDARD]);
-  assert.deepEqual(wordsFor(fieldByKey.standard, blankForm()), [NO_STANDARD, D3039, D638, C1869]); // before a test is picked, every one
+  assert.deepEqual(wordsFor(fieldByKey.standard, blankForm()), [NO_STANDARD, D3039, D638, C1869, "ASTM D4018-23"]); // before a test is picked, every one
+  assert.deepEqual(wordsFor(fieldByKey.standard, { ...blankForm(), test: "fibre tow tension" }), [NO_STANDARD, "ASTM D4018-23"]); // ADR-0074
   assert.deepEqual(wordsFor(fieldByKey.specimen, { ...blankForm(), test: "open-hole tension", standard: C1869 }), ["A", "B", "other"]);
   assert.deepEqual(wordsFor(fieldByKey.specimen, { ...blankForm(), test: "unnotched tension", standard: D638 }), ["I", "II", "III", "IV", "V"]);
   assert.deepEqual(standardsFor("unnotched tension").map((p) => p.id), ["astm-d3039", "astm-d638"]);

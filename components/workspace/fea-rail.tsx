@@ -16,6 +16,8 @@ import { StandardSize } from "./panels/standard-size";
 import { SetupLine, StepStandard } from "./panels/step-standard";
 import { showPanel, StepPanel } from "./panels/step-panel";
 import { TestStep } from "./panels/test-step";
+import { TowRail } from "./tow-rail";
+import { isTow } from "@/lib/studio-tow";
 
 /** The left column of the coupon FEA workspace (ADR-0062, part 3): one panel per step, each editing named rows of the one values file
  * (`lib/workspace-panels.ts`), the checklist under Validate, the run under Run, the files under Outputs. The first step asks what test the
@@ -116,6 +118,8 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
     setForm(exampleForm(today())); setErrors({}); clearChecked(); setMessage("");
     setStatus("The public IM7/8552 example is loaded: 250 by 25 mm with 56 mm tabs, [45/0/-45/90]s, 1 mm pull.");
   }
+
+  if (isTow(form)) return <TowRail apiBaseUrl={apiBaseUrl} />; // the fibre tow test is no coupon: its own panels (ADR-0074)
 
   const busy = checking || isActive(job?.state);
   const checklist = checked?.checklist ?? null;

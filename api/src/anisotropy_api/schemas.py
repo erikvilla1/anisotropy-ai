@@ -586,6 +586,22 @@ class CouponCheckResponse(Contract):
     preview: dict[str, Any] | None
 
 
+class TowTestRequest(CouponCheckRequest):
+    """A fibre tow record under ASTM D4018 (ADR-0074): the tow test's rows and its specimens as one JSON object, the way the studio states
+    them; `test` is "fibre tow tension". The record keeps the values' digest, as a check does, never the rows."""
+
+
+class TowTestResponse(Contract):
+    """What the tow record gives: its checklist as fea/src/anisotropy_fea/tow_test.py writes it and, when nothing blocks, the result: the
+    fibre's area, each specimen's strength and chord modulus, their statistics, the planning loads and, under the standard, each clause
+    judged. Every number is the engine's (anisotropy_engine.tow). Recorded as a run (ADR-0026)."""
+
+    run_id: str | None
+    state: Literal["ready", "blocked"]
+    checklist: dict[str, Any]
+    result: dict[str, Any] | None
+
+
 class ExplainRequest(Contract):
     """What to explain of a job (ADR-0052): the setup, from the attempt's checklist, or the result, from the solve's fact sheet."""
 

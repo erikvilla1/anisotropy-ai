@@ -17,6 +17,7 @@ import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
 import { JobProgress } from "./job-progress";
+import { TOW_TEST } from "@/lib/studio-tow";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
@@ -142,6 +143,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   useEffect(() => {
     const current = live.current.entries.find((e) => e.id === live.current.active);
     if (!current || current.role !== "assistant" || current.kind !== "ask" || current.step === "review" || current.step === "reopen") return;
+    if (form.test === TOW_TEST) { proceed(form); return; } // a fibre tow picked on a panel: hand over to its panels once (ADR-0074)
     if (missingIn(current.step, form).length) return;
     const step = nextStep(form);
     if (step !== "review") { ask(step); return; }
@@ -167,6 +169,14 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** Ask the next missing thing, or check the setup once nothing is missing. */
   function proceed(next: StudioForm) {
+    if (next.test === TOW_TEST) { // a fibre tow record is no coupon: its rows and specimens are the tow panels' (ADR-0074)
+      setActive(null);
+      add({ role: "assistant", kind: "text", title: "A fibre tow record is filled in on the panels",
+        body: <><p>The tow test of ASTM D4018 has no model: give the fibre, its mass per unit length and density, the test and each specimen&apos;s forces on
+          the panels to the left, then Calculate. The strength and chord modulus of each specimen and their statistics appear in the centre.</p>
+          <Chips><button type="button" onClick={() => showPanel("tow-fibre")}><SlidersHorizontal size={14} /> Open The fibre tow</button></Chips></> });
+      return;
+    }
     if (next.test === PLATE_TEST) {
       setActive(null);
       add({ role: "assistant", kind: "text", title: "Plates are set up on the model",

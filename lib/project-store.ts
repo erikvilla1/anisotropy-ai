@@ -8,6 +8,7 @@ import { blankDraft, type LaminateDraft } from "./laminate-chat";
 import type { ProjectRecord, ProjectUpload } from "./studio-api";
 import { blankForm, FORM_VERSION, type StudioForm } from "./studio-form";
 import { emptyPlate, type PlateLists } from "./studio-plate";
+import type { TowSpecimenRow } from "./studio-tow";
 
 export const PROJECTS_KEY = "anisotropy.projects.v1";
 export const KEPT = 20; // the projects a browser keeps, newest first
@@ -18,6 +19,8 @@ export type CouponProject = {
   name: string;
   form: StudioForm;
   plate: PlateLists;
+  /** The specimens of a fibre tow record (ADR-0074), as typed; empty for a coupon. */
+  specimens: TowSpecimenRow[];
   created: string;
   updated: string;
 };
@@ -36,6 +39,7 @@ export type Project = CouponProject | LaminateProject;
 export type ProjectAction =
   | { type: "form"; form: StudioForm }
   | { type: "plate"; plate: PlateLists }
+  | { type: "specimens"; specimens: TowSpecimenRow[] }
   | { type: "rename"; name: string }
   | { type: "replace"; project: CouponProject };
 
@@ -54,7 +58,7 @@ export function makeId(): string {
 }
 
 export function newProject(form: StudioForm = blankForm(), now: string = new Date().toISOString(), id: string = makeId()): CouponProject {
-  return { id, kind: "fea", name: "", form, plate: emptyPlate(), created: now, updated: now };
+  return { id, kind: "fea", name: "", form, plate: emptyPlate(), specimens: [], created: now, updated: now };
 }
 
 export function newLaminateProject(draft: LaminateDraft = blankDraft(), now: string = new Date().toISOString(), id: string = makeId()): LaminateProject {
@@ -69,6 +73,7 @@ export function reduce(project: CouponProject, action: ProjectAction, now: strin
   switch (action.type) {
     case "form": return { ...project, form: action.form, updated: now };
     case "plate": return { ...project, plate: action.plate, updated: now };
+    case "specimens": return { ...project, specimens: action.specimens, updated: now };
     case "rename": return { ...project, name: action.name, updated: now };
     case "replace": return action.project;
   }
@@ -96,9 +101,19 @@ function isLaminateProject(value: unknown): value is LaminateProject {
   return hasShape(value) && value.kind === "laminate" && typeof value.draft === "object" && value.draft !== null;
 }
 
+/** A tow record's specimens as kept: each an object of text cells; anything else is dropped (a project kept before the tow test has none). */
+export function specimenRows(value: unknown): TowSpecimenRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
+    .map((row) => Object.fromEntries(Object.entries(row).filter(([, v]) => typeof v === "string")) as TowSpecimenRow);
+}
+
 /** A kept project with the lists and the draft's rows a newer page expects filled in. */
 function whole(project: Project): Project {
-  if (project.kind === "fea") return { ...project, plate: { supports: project.plate.supports ?? [], loads: project.plate.loads ?? [], regions: project.plate.regions ?? [] } };
+  if (project.kind === "fea") {
+    return { ...project, plate: { supports: project.plate.supports ?? [], loads: project.plate.loads ?? [], regions: project.plate.regions ?? [] },
+      specimens: specimenRows(project.specimens) };
+  }
   return { ...project, draft: { ...blankDraft(), ...project.draft } };
 }
 
@@ -139,7 +154,8 @@ export const isUuid = (id: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f
 /** The project as the API keeps it: the page's own object under `content`, with the form version and the unit system it was stated in. */
 export function uploadOf(project: Project): ProjectUpload {
   if (project.kind === "fea") {
-    return { kind: "fea", name: project.name, content: { form: project.form, plate: project.plate }, form_version: FORM_VERSION, units: project.form.units?.trim() || null };
+    const content = { form: project.form, plate: project.plate, ...(project.specimens.length ? { specimens: project.specimens } : {}) }; // a tow's specimens (ADR-0074)
+    return { kind: "fea", name: project.name, content, form_version: FORM_VERSION, units: project.form.units?.trim() || null };
   }
   return { kind: "laminate", name: project.name, content: { draft: project.draft }, form_version: null, units: project.draft.system || null };
 }
@@ -154,7 +170,8 @@ export function projectOfRecord(record: ProjectRecord): Project | null {
     const form = content.form, plate = content.plate as Partial<PlateLists> | undefined;
     if (!form || typeof form !== "object" || Array.isArray(form)) return null;
     const rows = Object.fromEntries(Object.entries(form as Record<string, unknown>).filter(([, v]) => typeof v === "string")) as StudioForm;
-    return { ...base, kind: "fea", form: rows, plate: { supports: plate?.supports ?? [], loads: plate?.loads ?? [], regions: plate?.regions ?? [] } };
+    return { ...base, kind: "fea", form: rows, plate: { supports: plate?.supports ?? [], loads: plate?.loads ?? [], regions: plate?.regions ?? [] },
+      specimens: specimenRows(content.specimens) };
   }
   const draft = content.draft;
   if (!draft || typeof draft !== "object" || Array.isArray(draft)) return null;

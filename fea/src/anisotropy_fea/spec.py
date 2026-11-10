@@ -26,6 +26,7 @@ from anisotropy_engine.library import library_material
 
 from .dogbone import Outline, OutlineError, dogbone_outline
 from .standards import BY_DESIGNATION, PROFILES
+from .standards.astm_d4018 import KIND as TOW_KIND
 from .units import UNIT_LABEL, unit_factors
 
 Kind = Literal["unnotched_tension", "open_hole_tension", "compression", "shear_pm45", "three_point_bending", "four_point_bending", "plate"]
@@ -240,6 +241,12 @@ TEST_CODES = {  # per kind: the test code of a coupon designation and the test's
     "plate": ("PLT", "plate"),
 }
 DESIGNATION = re.compile(r"^(?P<material>[A-Z][A-Z0-9]*)-(?P<test>[A-Z0-9]+)-(?P<layup>L[1-9][0-9]*)$")
+TOW_TEST = "fibre tow tension"  # the fibre tow test of ASTM D4018 on the form's Test list: no spec kind, no model (ADR-0074)
+
+
+def test_name(kind: str) -> str:
+    """The test's name on the form: a spec kind's, or the fibre tow test's for the kind a tow standard covers (ADR-0074)."""
+    return TOW_TEST if kind == TOW_KIND else TEST_CODES[kind][1]
 
 
 class Coupon(Record):
@@ -544,7 +551,7 @@ def validate_spec(spec: CouponSpec) -> None:
         method = spec.test_method
         profile = PROFILES.get(method.id)
         need(profile is not None, f"test_method.id = {method.id!r} is not one of {', '.join(PROFILES)}")
-        need(kind in profile.kinds, f"test_method.id = {method.id!r}: {profile.designation} covers {', '.join(TEST_CODES[k][1] for k in profile.kinds)}, "
+        need(kind in profile.kinds, f"test_method.id = {method.id!r}: {profile.designation} covers {', '.join(test_name(k) for k in profile.kinds)}, "
                                     f"not {TEST_CODES[kind][1]}")
         need(spec.coupon is not None and spec.coupon.standard == profile.designation,
              f"test_method.id = {method.id!r} needs coupon.standard = {profile.designation!r}, the designation it is listed under")

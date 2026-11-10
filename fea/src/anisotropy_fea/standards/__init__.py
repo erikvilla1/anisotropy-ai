@@ -1,17 +1,19 @@
 """The test standards a coupon may follow, as profiles our checks read (ADR-0072).
 
 The form's Standard row offers "none" and the designation of every profile here whose kinds include the coupon's test; a spec that names
-one carries `[test_method] id`. `conformance.conformance` judges a spec against its profile. This package imports nothing of the spec, so
+one carries `[test_method] id`. ASTM D4018 covers the fibre tow test, which is no spec kind: `tow_test` judges its record (ADR-0074). `conformance.conformance` judges a spec against its profile. This package imports nothing of the spec, so
 the spec can import it.
 """
 
 from __future__ import annotations
 
-from . import astm_c1869, astm_d3039, astm_d638
+from . import astm_c1869, astm_d3039, astm_d638, astm_d4018
 from .profile import INCH_POUND_SYSTEMS, LEVELS, STATES, Finding, Preset, Profile, Requirement, Subject
 
 NONE = "none"  # the Standard row's word for a coupon that follows no standard
-PROFILES: dict[str, Profile] = {profile.id: profile for profile in (astm_d3039.PROFILE, astm_d638.PROFILE, astm_c1869.PROFILE)}
+PROFILES: dict[str, Profile] = {
+    profile.id: profile for profile in (astm_d3039.PROFILE, astm_d638.PROFILE, astm_c1869.PROFILE, astm_d4018.PROFILE)
+}
 BY_DESIGNATION: dict[str, Profile] = {profile.designation: profile for profile in PROFILES.values()}
 VARIANT_WORDS: tuple[str, ...] = tuple(dict.fromkeys(word for profile in PROFILES.values() for word in profile.variant_words))  # the Specimen row's words
 STANDARD_WORDS: tuple[str, ...] = (NONE, *BY_DESIGNATION)  # the Standard row's words
