@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("homepage hands its message once to the coupon assistant (ADR-0055 amendment 1)", async ({
+test("homepage hands its message once to the coupon assistant (ADR-0055 amendment 1; ADR-0062)", async ({
   page,
 }) => {
   await page.goto("/");
@@ -14,14 +14,16 @@ test("homepage hands its message once to the coupon assistant (ADR-0055 amendmen
   await input.press("Shift+Enter");
   await expect(page).toHaveURL(/\/$/);
   await input.press("Enter");
-  await expect(page).toHaveURL(/\/chat\/?$/);
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/); // the assistant's page since ADR-0058 amendment 1
   await expect(page.locator(".chat-user")).toHaveCount(1);
   await expect(page.getByTestId("chat-spec")).toContainText("open-hole tension");
   await expect(page.getByTestId("chat-spec")).toContainText("[45/0/-45/90]s, 8 plies");
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear");
   await page.reload();
+  // The message is not handed over again, but the project is kept across the reload (ADR-0062 part 1).
   await expect(page.locator(".chat-user")).toHaveCount(0);
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
+  await expect(page.getByTestId("chat-spec")).toContainText("[45/0/-45/90]s, 8 plies");
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear");
 });
 
 test("physics topics group transformations, local recovery and failure functions", async ({
@@ -47,7 +49,15 @@ test("physics topics group transformations, local recovery and failure functions
   await page
     .getByRole("textbox", { name: "Search this physics topic" })
     .fill("Tsai");
-  await expect(page.locator(".method-entry")).toHaveCount(4);
+  // Five cards since 2026-10-10 (ADR-0019): the combined-load card states the Tsai–Wu quadratic.
+  await expect(page.locator(".method-entry")).toHaveCount(5);
+  await expect(page.locator(".method-entry summary strong")).toHaveText([
+    "Tsai–Hill",
+    "Tsai–Wu coefficients",
+    "Tsai–Wu failure index",
+    "Strength ratio & safety margin",
+    "Strength ratio with fixed & variable loads",
+  ]);
   await expect(
     page.locator("details[open]").filter({ hasText: "Tsai–Wu coefficients" }),
   ).toContainText("experimental evidence");
