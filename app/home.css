@@ -993,6 +993,28 @@
     display: none;
   }
 }
+/* The programme badge (ADR-0081): a small monospace line over UC San Diego's The Basement mark in white, in the hero's bottom
+ * left corner, on the page's 32 px margin. */
+.home-hero-backed {
+  position: absolute;
+  z-index: 2;
+  left: 32px;
+  bottom: 32px;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #efefefa6;
+}
+.home-hero-backed img {
+  display: block;
+  width: auto;
+  height: 40px;
+}
 @media (max-width: 1023px) {
   .home-hero {
     padding: 120px 24px 96px;
@@ -1009,6 +1031,13 @@
 @media (max-width: 640px) {
   .home-hero {
     padding: 104px 20px 80px;
+  }
+  .home-hero-backed {
+    left: 20px;
+    bottom: 20px;
+  }
+  .home-hero-backed img {
+    height: 32px;
   }
   .home-hero-grid {
     row-gap: 32px;

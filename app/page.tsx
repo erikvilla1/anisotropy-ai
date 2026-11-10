@@ -65,6 +65,11 @@ export default function Home() {
             </p>
           </div>
         </div>
+        {/* The programme the team is part of, in the hero's bottom left corner (ADR-0081). */}
+        <p className="home-hero-backed">
+          <span>Part of the Fall 2026 Launchpad cohort</span>
+          <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
+        </p>
       </section>
       <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
       {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendment 11), dark and light in
