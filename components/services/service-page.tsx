@@ -7,7 +7,7 @@ export type ServiceFact = { title: string; text: string };
 export type ServiceLink = { label: string; href: string; primary?: boolean; external?: boolean };
 export type ServicePageProps = {
   slug: string;
-  /** The h1, with an <em> on the part to colour. */
+  /** The h1. An <em> marks its second phrase; the page opening sets it like the rest (app/inner-pages.css). */
   headline: ReactNode;
   lede: string;
   /** What the service does today, in facts the repository backs. */
@@ -26,57 +26,59 @@ const statusText: Record<Service["status"], string> = {
 
 /** The shared shape of the five service pages (audit of 2026-10-31, item 14): the description and a demonstration
  * first, the access last. Each page passes its own facts; this component decides nothing about them. */
-export function ServicePage({ slug, headline, lede, exists, demonstration, planned, access }: ServicePageProps) {
+export function ServicePage({ slug, headline, lede, exists, demonstration, planned = [], access }: ServicePageProps) {
   const service = findService(slug);
   if (!service) throw new Error(`No service is named ${slug}`);
   const index = services.indexOf(service);
   const previous = services[(index + services.length - 1) % services.length];
   const next = services[(index + 1) % services.length];
+  const hasPlanned = planned.length > 0;
   return (
-    <main id="main" className="inner-page service-page">
-      <section className="section page-intro">
-        <span className="eyebrow">SERVICES / {service.eyebrow}</span>
-        <div className="intro-grid">
-          <div>
-            <h1>{headline}</h1>
+    <main id="main" className="kit-page service-page">
+      <section className="page-opening">
+        <p className="page-opening-label">SERVICES / {service.eyebrow}</p>
+        <h1 className="page-opening-title">{headline}</h1>
+        <div className="page-opening-grid">
+          <div className="page-opening-copy">
             <p>{lede}</p>
           </div>
-          <div className="intro-aside">
-            <span className="status-dot" />
-            <span>{statusLabel[service.status]}</span>
+          <div className="page-opening-note">
+            <p className={`page-opening-note-label is-${service.status}`}>{statusLabel[service.status]}</p>
             <p>{statusText[service.status]}</p>
           </div>
         </div>
       </section>
-      <section className="section service-section">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">WHAT EXISTS TODAY</span>
+      <section className="band is-light service-exists">
+        <div className="band-head">
+          <p className="band-label">WHAT EXISTS TODAY</p>
+          <div className="band-statement">
             <h2>What it does now.</h2>
           </div>
         </div>
         <div className="service-facts">
           {exists.map((fact, i) => (
-            <article key={fact.title}>
-              <span className="tiny-label">0{i + 1}</span>
-              <h3>{fact.title}</h3>
-              <p>{fact.text}</p>
+            <article className="kit-row" key={fact.title}>
+              <div className="kit-row-head service-fact-head">
+                <span className="kit-mono">0{i + 1}</span>
+                <h3 className="kit-title">{fact.title}</h3>
+              </div>
+              <p className="kit-row-body kit-text">{fact.text}</p>
             </article>
           ))}
         </div>
       </section>
-      <section className="section service-section service-demo">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">DEMONSTRATION</span>
+      <section className="band service-demo">
+        <div className="band-head">
+          <p className="band-label">DEMONSTRATION</p>
+          <div className="band-statement">
             <h2>See it work.</h2>
+            <p>{demonstration.intro}</p>
           </div>
-          <p>{demonstration.intro}</p>
         </div>
-        <div className="service-demo-grid">
+        <div className="band-grid">
           <div className="service-demo-media">{demonstration.media}</div>
           <div className="service-demo-list">
-            <span className="tiny-label">WHAT YOU GET</span>
+            <span className="kit-mono">WHAT YOU GET</span>
             <ul>
               {demonstration.artefacts.map((item) => (
                 <li key={item}>{item}</li>
@@ -86,53 +88,58 @@ export function ServicePage({ slug, headline, lede, exists, demonstration, plann
           </div>
         </div>
       </section>
-      {planned && planned.length > 0 ? (
-        <section className="section service-section service-planned">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">PLANNED</span>
+      {hasPlanned ? (
+        <section className="band is-light service-planned">
+          <div className="band-head">
+            <p className="band-label">PLANNED</p>
+            <div className="band-statement">
               <h2>What comes next.</h2>
+              <p>Listed so the site claims nothing that does not exist. Dates are not announced.</p>
             </div>
-            <p>Listed so the site claims nothing that does not exist. Dates are not announced.</p>
           </div>
-          <div className="service-facts">
-            {planned.map((fact) => (
-              <article key={fact.title}>
-                <span className="sample-badge">PLANNED</span>
-                <h3>{fact.title}</h3>
-                <p>{fact.text}</p>
-              </article>
-            ))}
+          <div className="band-grid">
+            <div className="service-planned-list">
+              {planned.map((fact) => (
+                <article className="band-card service-planned-card" key={fact.title}>
+                  <span className="kit-badge">PLANNED</span>
+                  <h3 className="kit-title">{fact.title}</h3>
+                  <p>{fact.text}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
       ) : null}
-      <section className="section service-access" id="access">
-        <div>
-          <span className="eyebrow">ACCESS</span>
-          <h2>Use it.</h2>
-          <p>{access.text}</p>
-        </div>
-        <div className="service-access-links">
-          {access.links.map((link) =>
-            link.external ? (
-              <a key={link.href} className={link.primary ? "button primary" : "text-button"} href={link.href} target="_blank" rel="noreferrer">
-                {link.label} <ArrowUpRight size={16} />
-              </a>
-            ) : (
-              <Link key={link.href} className={link.primary ? "button primary" : "text-button"} href={link.href}>
-                {link.label} <ArrowUpRight size={16} />
-              </Link>
-            ),
-          )}
+      {/* The bands alternate, light first: with a Planned band before it this one is dark, without one it is light. */}
+      <section className={hasPlanned ? "band service-access" : "band is-light service-access"} id="access">
+        <div className="band-head">
+          <p className="band-label">ACCESS</p>
+          <div className="band-statement">
+            <h2>Use it.</h2>
+            <p>{access.text}</p>
+            <div className="service-access-links">
+              {access.links.map((link) =>
+                link.external ? (
+                  <a key={link.href} className={link.primary ? "button primary" : "kit-link"} href={link.href} target="_blank" rel="noreferrer">
+                    {link.label} <ArrowUpRight size={16} />
+                  </a>
+                ) : (
+                  <Link key={link.href} className={link.primary ? "button primary" : "kit-link"} href={link.href}>
+                    {link.label} <ArrowUpRight size={16} />
+                  </Link>
+                ),
+              )}
+            </div>
+          </div>
         </div>
       </section>
-      <nav className="section service-nav" aria-label="Other services">
+      <nav className="service-nav" aria-label="Other services">
         <Link href={serviceHref(previous)}>
-          <ArrowLeft size={15} /> {previous.title}
+          <ArrowLeft size={16} /> {previous.title}
         </Link>
         <Link href="/services">All services</Link>
         <Link href={serviceHref(next)}>
-          {next.title} <ArrowRight size={15} />
+          {next.title} <ArrowRight size={16} />
         </Link>
       </nav>
     </main>

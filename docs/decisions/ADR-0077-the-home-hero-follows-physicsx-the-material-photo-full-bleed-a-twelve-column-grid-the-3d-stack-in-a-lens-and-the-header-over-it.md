@@ -185,6 +185,28 @@ On phones it is one column.
 - **Checks:** `npm run typecheck` clean, also on this commit's tree alone. `home.spec.ts` and `portfolio.spec.ts`: 12 passed, 1 failed. The failure is the workspace chat test, which does not load the home page and failed before this change.
 - **UNVERIFIED:** the production build of this commit alone, and the look on phones and tablets (rules are written; no visual check yet).
 
+## Amendment 12, 2026-11-10 (the inner pages on the section kit)
+
+**Context.** About, Industries, Services, its five pages and Contact were still in the old dark style: a 1,440 px container with 64 px side padding, so nothing lined up with the header's 32 px; small eyebrows above the headings; 13 px body text; gradient cards. Their rules sit in `app/expansion.css`, `app/globals.css` and `app/research.css`, which other pages share, and Next keeps a page's stylesheet loaded after navigation.
+
+**Decision.**
+- **The opening.** Each page opens on the dark page ground under the header: a monospace label with a tick, the h1 in the hero's type (DM Sans 400, `clamp(44px, 5vw, 72px)`, -0.03em) across the page, then the introduction at 18/26 px from column 7 and the page's short note in columns 1 to 4.
+- **The bands.** Every section after it is a kit band, light first, then alternating. The old eyebrow is the band's label; the h2 and its paragraph are the statement.
+- **The content.** It sits on the twelve columns: rows on the head's columns (name 1 to 3, text 4 to 9, link or state 10 to 12), cards of three columns, and halves for a picture beside a list.
+- **States and pictures.** A service's state is the home page's mark (full dot, half dot, ring) with the word; no colour carries it. An empty media slot is the band's panel colour with a hatch and a label. The coupon illustration stays a dark viewport on a light band.
+- **The rules.** They are in a new `app/inner-pages.css` under new class names (`kit-`, `page-opening`, `industry-`), and `<main>` is `kit-page`, so nothing here restyles a class another page uses.
+- **Copy.** Every word, link, id and label is unchanged. One browser test's two selectors on the Industries page follow the renamed elements; the counts it checks are the same.
+
+**Option not chosen.** The h1 beside the introduction in columns 1 to 6, as the home hero has it: at 1440 px six columns are 672 px, and "From an engineering question" at 72 px measures about 930 px.
+
+**Evidence.** On 2026-11-10, against the dev server:
+- **Measured at 1440 px:** label and h1 at x = 32, the logo's x; the introduction at x = 736, where the header's links start; band headings computed 38/41 px, weight 400.
+- **Overflow:** none sideways on any of the nine pages at 390, 768, 1100, 1440 and 1860 px.
+- **Copy:** a comparison of each page's text and non-class attributes with the previous commit shows no change.
+- **Checks:** `npm run typecheck` clean, also on this commit's tree alone.
+- **Browser specs: no clean run.** `expansion.spec.ts` and `portfolio.spec.ts` gave 9 passed and 1 failed before (the workspace chat test), and 6 to 8 passed afterwards across three runs. Every new failure started on the home page, which other work in progress was changing at the same time (a header link clicked from `/` not navigating in time, the home page's own screenshot timing out). The checks those specs make about these nine pages were run directly: 25 of 25 held.
+- **UNVERIFIED:** the full browser suite and the production build, which are to be run when the home page's work in progress is finished; phones; hover and focus states.
+
 ## Amendment 13, 2026-11-10 (the closing section as a light band; the footer with the site's navigation in columns)
 
 **Context.** The closing section of the home and industries pages was a dark gradient panel in a 1,440 px container with 64 px padding and 7 to 10 px labels, and its markup was written twice, once per page. The footer was one row of 9 px text with no navigation. PhysicsX's footer, measured at 1440 px on 2026-11-10, has 48/32/24 px padding, the logo on the left, and columns of 17/22 px links behind 1 px rules set 16 px left of the grid column. Its copyright line is 14 px monospace capitals. Its closing heading and button start on column 7.

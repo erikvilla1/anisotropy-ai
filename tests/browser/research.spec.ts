@@ -55,6 +55,6 @@ test("research positioning is explicit without an AI implementation pitch on Abo
     /machine learning|scikit-learn|PyTorch|surrogate|FastAPI/i,
   );
   await page.goto("/industries");
-  await expect(page.locator(".priority-grid .industry-card")).toHaveCount(2);
-  await expect(page.locator(".potential-grid article")).toHaveCount(4);
+  await expect(page.locator(".industry-priorities .industry-priority")).toHaveCount(2);
+  await expect(page.locator(".industry-potentials .industry-potential")).toHaveCount(4);
 });

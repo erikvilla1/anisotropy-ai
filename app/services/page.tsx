@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, BookOpen, Box, ClipboardList, FileText, Layers3, ScanLine, Wrench } from "lucide-react";
 import { MediaSlot } from "@/components/media-slot";
 import { serviceHref, services, statusLabel, type Service } from "@/lib/services";
+import "../inner-pages.css";
 import "./services.css";
 
 export const metadata = {
@@ -28,26 +29,23 @@ const media: Record<Service["slug"], { label: string; src?: string; alt?: string
 /** The services landing page (audit of 2026-10-31, item 13): one short summary per service, each leading to its page. */
 export default function Services() {
   return (
-    <main id="main" className="inner-page services-page">
-      <section className="section page-intro">
-        <span className="eyebrow">
-          SERVICES / ONE COMPOSITE DEVELOPMENT WORKFLOW
-        </span>
-        <div className="intro-grid">
-          <div>
-            <h1>
-              From an engineering question
-              <br />
-              to <em>a documented answer.</em>
-            </h1>
+    <main id="main" className="kit-page services-page">
+      <section className="page-opening">
+        <p className="page-opening-label">SERVICES / ONE COMPOSITE DEVELOPMENT WORKFLOW</p>
+        <h1 className="page-opening-title">
+          From an engineering question
+          <br />
+          to <em>a documented answer.</em>
+        </h1>
+        <div className="page-opening-grid">
+          <div className="page-opening-copy">
             <p>
               Five ways to use the same platform: the geometry, the model, the test, the document and the plan for
               the shop, all from one coupon record. Each page says what exists today and what is planned.
             </p>
           </div>
-          <div className="intro-aside">
-            <span className="status-dot" />
-            <span>RESEARCH-FIRST PRODUCT</span>
+          <div className="page-opening-note">
+            <p className="page-opening-note-label">RESEARCH-FIRST PRODUCT</p>
             <p>
               Start with the material.
               <br />
@@ -57,9 +55,9 @@ export default function Services() {
             </p>
           </div>
         </div>
-        <div className="service-selectors">
+        <div className="page-opening-links">
           <Link href="/workspace/fea">
-            <Layers3 size={23} />
+            <Layers3 size={24} strokeWidth={1.4} />
             <div>
               <span>TRY THE EXPERIENCE</span>
               <h3>Development Process Streamlining</h3>
@@ -67,7 +65,7 @@ export default function Services() {
             <ArrowUpRight size={18} />
           </Link>
           <Link href="/library">
-            <BookOpen size={23} />
+            <BookOpen size={24} strokeWidth={1.4} />
             <div>
               <span>EXPLORE THE FOUNDATION</span>
               <h3>Materials & Physics Library</h3>
@@ -76,53 +74,55 @@ export default function Services() {
           </Link>
         </div>
       </section>
-      <section className="section service-grid-section">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">THE FIVE SERVICES</span>
+      <section className="band is-light service-list-band">
+        <div className="band-head">
+          <p className="band-label">THE FIVE SERVICES</p>
+          <div className="band-statement">
             <h2>
               One record.
               <br />
               Five ways to use it.
             </h2>
+            <p>
+              A coupon described once feeds every service. The finite element model and the documentation are built;
+              geometry and test plans exist in part; manufacturing plans are stated as planned.
+            </p>
           </div>
-          <p>
-            A coupon described once feeds every service. The finite element model and the documentation are built;
-            geometry and test plans exist in part; manufacturing plans are stated as planned.
-          </p>
         </div>
-        <div className="service-grid">
+        <div className="service-list">
           {services.map((service, i) => {
             const Icon = icons[service.slug];
             const picture = media[service.slug];
             return (
-              <article className="service-card" key={service.slug}>
-                <MediaSlot label={picture.label} src={picture.src} alt={picture.alt} ratio="3/2" />
-                <div className="service-card-body">
-                  <div className="service-card-top">
+              <article className="kit-row service-item" key={service.slug}>
+                <MediaSlot className="kit-row-head" label={picture.label} src={picture.src} alt={picture.alt} ratio="3/2" />
+                <div className="kit-row-body service-item-body">
+                  <div className="service-item-top">
                     <Icon size={22} strokeWidth={1.4} />
-                    <span className="tiny-label">0{i + 1} / {service.eyebrow}</span>
-                    <span className={`service-status service-status-${service.status}`}>{statusLabel[service.status]}</span>
+                    <span className="kit-mono">0{i + 1} / {service.eyebrow}</span>
                   </div>
                   <h3>{service.title}</h3>
-                  <p>{service.summary}</p>
-                  <Link className="text-button" href={serviceHref(service)}>
-                    Read about {service.title.toLowerCase()} <ArrowUpRight size={15} />
+                  <p className="kit-text">{service.summary}</p>
+                  <Link className="kit-link" href={serviceHref(service)}>
+                    Read about {service.title.toLowerCase()} <ArrowUpRight size={16} />
                   </Link>
                 </div>
+                <span className={`kit-row-aside kit-status kit-status-${service.status}`}>{statusLabel[service.status]}</span>
               </article>
             );
           })}
         </div>
       </section>
-      <section className="section service-preview-note">
-        <p>
-          The studio, the materials library and the calculator are interactive today. Every page under Services
-          names its planned parts as planned, without a date.
-        </p>
-        <Link href="/contact">
-          Ask about access <ArrowUpRight size={15} />
-        </Link>
+      <section className="band service-preview">
+        <div className="band-grid">
+          <p className="service-preview-text">
+            The studio, the materials library and the calculator are interactive today. Every page under Services
+            names its planned parts as planned, without a date.
+          </p>
+          <Link className="kit-link service-preview-link" href="/contact">
+            Ask about access <ArrowUpRight size={16} />
+          </Link>
+        </div>
       </section>
     </main>
   );
