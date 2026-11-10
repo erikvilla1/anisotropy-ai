@@ -41,7 +41,7 @@ export function LayupEditor({ form, errors, disabled, onChange, onRows }: {
       {angles.length ? (
         <div className="ws-layup-stack">
           <LaminateScene plies={plies} hovered={hovered} onHover={setHovered} reducedMotion={true} decor={false} />
-          <p className="studio-hint">{angles.length} plies drawn bottom face first, {form.symmetric === "yes" ? "mirrored at the midplane" : "as listed"}; hover a ply for its angle. Stripes follow the fibres; the drawn thickness is a shape, not a scale.</p>
+          <p className="studio-hint">{angles.length} plies drawn bottom face first, {form.symmetric === "yes" ? "mirrored at the midplane" : "as listed"}; hover a ply for its angle. The grain follows the fibres; the drawn thickness is a shape, not a scale.</p>
         </div>
       ) : null}
     </div>
