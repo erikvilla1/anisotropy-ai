@@ -38,6 +38,8 @@ class Conformance:
     subject: Subject
     preset: Preset | None  # the specimen (C1869 A or B) or the laminate's class (D3039 Table 2) the coupon is held to
     judged: tuple[Judged, ...]
+    checked: str = "specimen"  # what was checked: a coupon's specimen, or a fibre tow's test record (ADR-0074)
+    judged_by: str = "a model can meet"  # which requirements count: those a model can meet, or those the record shows
 
     def count(self, state: str) -> int:
         return sum(1 for j in self.judged if j.state == state)
@@ -64,8 +66,8 @@ class Conformance:
         judged = [j for j in self.judged if j.requirement.level in JUDGED_LEVELS and j.state in ("met", "deviation")]
         met = sum(1 for j in judged if j.state == "met")
         held = self.held_to()
-        parts = [f"specimen checked against {self.profile.designation}" + (f", {held}" if held else "")
-                 + f": {met} of {len(judged)} requirement{'s' if len(judged) != 1 else ''} a model can meet {'is' if met == 1 else 'are'} met"]
+        parts = [f"{self.checked} checked against {self.profile.designation}" + (f", {held}" if held else "")
+                 + f": {met} of {len(judged)} requirement{'s' if len(judged) != 1 else ''} {self.judged_by} {'is' if met == 1 else 'are'} met"]
         if self.deviations:
             parts.append(f"{len(self.deviations)} deviation{'s' if len(self.deviations) != 1 else ''} to report ("
                          + "; ".join(f"{j.requirement.clause}: {j.value}, against {j.limit}" for j in self.deviations) + ")")

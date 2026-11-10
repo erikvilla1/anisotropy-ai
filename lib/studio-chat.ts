@@ -4,9 +4,10 @@
  * `intake.check_form` does, through the setup check (ADR-0001, ADR-0003). A message that names nothing it can read changes nothing.
  */
 import {
-  BENDING_TESTS, blankForm, DEFAULT_UNITS, fieldByKey, fields, FOUR_POINT_TEST, labelFor, libraryConstantsIn, libraryOptions, OPEN_HOLE_TEST, PLATE_TEST, PLY_KEYS,
+  BENDING_TESTS, blankForm, DEFAULT_UNITS, DOGBONE_KEYS, fieldByKey, fields, FOUR_POINT_TEST, isIsotropic, labelFor, libraryConstantsIn, libraryOptions, OPEN_HOLE_TEST, PLATE_TEST, PLY_KEYS,
   STANDARDS, standardOf, STRAIN_KEYS, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "./studio-form";
+import { TOW_TEST } from "./studio-tow";
 
 export type ChatStep = "test" | "material" | "shear" | "layup" | "geometry" | "loading" | "name" | "review";
 export const STEP_ORDER: ChatStep[] = ["test", "material", "shear", "layup", "geometry", "loading", "name", "review"];
@@ -70,9 +71,11 @@ export function missingIn(step: ChatStep, form: StudioForm): string[] {
   const need = (keys: string[]) => keys.filter((key) => !filled(form, key));
   switch (step) {
     case "test": return need(["test", ...((standardOf(form)?.variant_words.length ?? 0) > 0 ? ["specimen"] : [])]);
-    case "material": return filled(form, "library") ? [] : need(["own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_source"]);
-    case "shear": return need(["G13", "G23"]);
-    case "layup": return [...need(["ply_1", "symmetric"]), ...(libraryThickness(form) === null ? need(["ply_thickness"]) : [])];
+    case "material":
+      if (isIsotropic(form)) return need(["thickness", "own_name", "own_E", "own_nu", "own_source"]); // a plastic: one material, no plies (ADR-0075)
+      return filled(form, "library") ? [] : need(["own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_source"]);
+    case "shear": return isIsotropic(form) ? [] : need(["G13", "G23"]);
+    case "layup": return isIsotropic(form) ? [] : [...need(["ply_1", "symmetric"]), ...(libraryThickness(form) === null ? need(["ply_thickness"]) : [])];
     case "geometry": {
       const keys = ["length", "width", "size_from"];
       if (isBending(form)) keys.push("span", "overhang", ...(form.test === FOUR_POINT_TEST ? ["load_span"] : []));
@@ -99,7 +102,8 @@ export function stepOfKey(key: string): ChatStep | null {
   if (key === "library" || key.startsWith("own_")) return "material";
   if (["G13", "G23"].includes(key)) return "shear";
   if (PLY_KEYS.includes(key) || ["symmetric", "ply_thickness"].includes(key)) return "layup";
-  if (["length", "width", "tab_length", "size_from", "span", "overhang", "load_span", "hole_diameter", ...STRAIN_KEYS].includes(key)) return "geometry";
+  if (["material_kind", "thickness"].includes(key)) return "material"; // what the coupon is made of: plies, or one isotropic material (ADR-0075)
+  if (["length", "width", "tab_length", "size_from", "span", "overhang", "load_span", "hole_diameter", ...STRAIN_KEYS, ...DOGBONE_KEYS].includes(key)) return "geometry";
   if (["control", "value"].includes(key)) return "loading";
   if (key === "filled_by") return "name"; // who runs it; the codes in the coupon's name are derived (ADR-0038 amendment 1), overrides on the form
   if (["criteria", "f12_star", "element_size", "grips", "region", "date", "notes"].includes(key)) return "review";
@@ -198,7 +202,8 @@ export function readMessage(text: string, units: string = DEFAULT_UNITS): { rows
   const L = `(?:${LENGTH_WORDS[units] ?? LENGTH_WORDS[DEFAULT_UNITS]})`;
   const F = FORCE_WORDS[units] ?? FORCE_WORDS[DEFAULT_UNITS];
 
-  const test = /open[\s-]?hole|\boht\b|d5766|c1869/.test(t) ? OPEN_HOLE_TEST
+  const test = /\btows?\b|d4018|fib(?:re|er)\s+tow/.test(t) ? TOW_TEST // the fibre tow test (ADR-0074): its rows are the tow panels'
+    : /open[\s-]?hole|\boht\b|d5766|c1869/.test(t) ? OPEN_HOLE_TEST
     : /four[\s-]?point|4[\s-]?point|\b4pb\b/.test(t) ? FOUR_POINT_TEST
     : /three[\s-]?point|3[\s-]?point|\b3pb\b|d7264|d790/.test(t) ? "three-point bending"
     : /compress|d6641|d3410|d695/.test(t) ? "unnotched compression"

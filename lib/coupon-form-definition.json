@@ -1,5 +1,5 @@
 {
- "form_version": "0.8",
+ "form_version": "0.9",
  "fea_version": "0.1.0",
  "units": "mm-MPa",
  "row_units": {
@@ -136,7 +136,7 @@
      "key": "test",
      "label": "Test",
      "kind": "list",
-     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines) or plate (a laminate held and loaded on regions you name, stated from the studio); see Definitions, Tests",
+     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines), plate (a laminate held and loaded on regions you name, stated from the studio) or fibre tow tension (a resin-impregnated carbon fibre tow under ASTM D4018, stated and calculated from the studio, with no model); see Definitions, Tests",
      "required": true,
      "default": null,
      "words": [
@@ -146,7 +146,8 @@
       "in-plane shear",
       "three-point bending",
       "four-point bending",
-      "plate"
+      "plate",
+      "fibre tow tension"
      ],
      "at_least": null,
      "above": null,
@@ -186,7 +187,9 @@
      "words": [
       "none",
       "ASTM D3039/D3039M-17",
-      "ASTM C1869-18(2023)"
+      "ASTM D638-22",
+      "ASTM C1869-18(2023)",
+      "ASTM D4018-23"
      ],
      "at_least": null,
      "above": null,
@@ -196,10 +199,15 @@
      "key": "specimen",
      "label": "Specimen",
      "kind": "list",
-     "help": "the standard's specimen when it names more than one: for ASTM C1869, A (a 6 mm hole in a 36 mm wide strip), B (a 3 mm hole in a 10 mm wide strip) or other (a size of its Annex A1, reported as a variation); blank otherwise",
+     "help": "the standard's specimen when it names more than one: for ASTM C1869, A (a 6 mm hole in a 36 mm wide strip), B (a 3 mm hole in a 10 mm wide strip) or other (a size of its Annex A1, reported as a variation); for ASTM D638, its Type I, II, III, IV or V of Fig. 1; blank otherwise",
      "required": false,
      "default": null,
      "words": [
+      "I",
+      "II",
+      "III",
+      "IV",
+      "V",
       "A",
       "B",
       "other"
@@ -301,6 +309,83 @@
       "m-Pa": "Tab length (m)",
       "in-psi": "Tab length (in)",
       "in-ksi": "Tab length (in)"
+     }
+    }
+   ]
+  },
+  {
+   "title": "Dog-bone (unnotched tension only: a dumbbell, as ASTM D638 Fig. 1 draws it; leave the four rows blank for a straight strip)",
+   "fields": [
+    {
+     "key": "narrow_width",
+     "label": "Narrow width (mm)",
+     "kind": "number",
+     "help": "the width of the narrow section at mid-length, W in ASTM D638, e.g. 13; the Width row above is then the overall width at the ends, WO",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Narrow width (mm)",
+      "m-Pa": "Narrow width (m)",
+      "in-psi": "Narrow width (in)",
+      "in-ksi": "Narrow width (in)"
+     }
+    },
+    {
+     "key": "narrow_length",
+     "label": "Narrow length (mm)",
+     "kind": "number",
+     "help": "the length of the straight narrow section, L in ASTM D638, e.g. 57",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Narrow length (mm)",
+      "m-Pa": "Narrow length (m)",
+      "in-psi": "Narrow length (in)",
+      "in-ksi": "Narrow length (in)"
+     }
+    },
+    {
+     "key": "radius",
+     "label": "Fillet radius (mm)",
+     "kind": "number",
+     "help": "the radius of the fillet that joins the narrow section to the wider ends, tangent to the narrow section, R in ASTM D638, e.g. 76",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Fillet radius (mm)",
+      "m-Pa": "Fillet radius (m)",
+      "in-psi": "Fillet radius (in)",
+      "in-ksi": "Fillet radius (in)"
+     }
+    },
+    {
+     "key": "outer_radius",
+     "label": "Outer radius (mm)",
+     "kind": "number",
+     "help": "only for a reverse curve, ASTM D638 Type IV: the second arc's radius, tangent to the wide end, RO, e.g. 25; blank when the fillet meets the full width at a corner",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Outer radius (mm)",
+      "m-Pa": "Outer radius (m)",
+      "in-psi": "Outer radius (in)",
+      "in-ksi": "Outer radius (in)"
      }
     }
    ]
@@ -522,6 +607,74 @@
    ]
   },
   {
+   "title": "What the coupon is made of: plies of a composite, or one isotropic material such as a plastic",
+   "fields": [
+    {
+     "key": "material_kind",
+     "label": "Material kind",
+     "kind": "list",
+     "help": "plies: a laminate of plies, stated by the layup and a ply material below; isotropic: one material alike in every direction, such as a plastic or a metal sheet, stated by its thickness, E and nu here, with its name and source on the Own material rows, and no plies",
+     "required": false,
+     "default": "plies",
+     "words": [
+      "plies",
+      "isotropic"
+     ],
+     "at_least": null,
+     "above": null,
+     "unit": null
+    },
+    {
+     "key": "thickness",
+     "label": "Thickness (mm)",
+     "kind": "number",
+     "help": "isotropic only: the coupon's thickness, e.g. 3.2",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "length",
+     "labels": {
+      "mm-MPa": "Thickness (mm)",
+      "m-Pa": "Thickness (m)",
+      "in-psi": "Thickness (in)",
+      "in-ksi": "Thickness (in)"
+     }
+    },
+    {
+     "key": "own_E",
+     "label": "Own material: E (MPa)",
+     "kind": "number",
+     "help": "isotropic only: Young's modulus, e.g. 3000 for a rigid plastic",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": 0,
+     "unit": "stress",
+     "labels": {
+      "mm-MPa": "Own material: E (MPa)",
+      "m-Pa": "Own material: E (Pa)",
+      "in-psi": "Own material: E (psi)",
+      "in-ksi": "Own material: E (ksi)"
+     }
+    },
+    {
+     "key": "own_nu",
+     "label": "Own material: nu",
+     "kind": "number",
+     "help": "isotropic only: Poisson's ratio, above -1 and below 0.5, e.g. 0.35 for a plastic; no unit",
+     "required": false,
+     "default": null,
+     "words": [],
+     "at_least": null,
+     "above": null,
+     "unit": null
+    }
+   ]
+  },
+  {
    "title": "Layup, bottom ply first",
    "fields": [
     {
@@ -720,8 +873,8 @@
      "key": "symmetric",
      "label": "Symmetric",
      "kind": "list",
-     "help": "yes: the plies listed are the lower half and are mirrored, so 0, 45, -45, 90 becomes 8 plies; no: the plies listed are the whole stack",
-     "required": true,
+     "help": "yes: the plies listed are the lower half and are mirrored, so 0, 45, -45, 90 becomes 8 plies; no: the plies listed are the whole stack; required for plies",
+     "required": false,
      "default": null,
      "words": [
       "yes",
@@ -950,8 +1103,8 @@
      "key": "G13",
      "label": "G13 (MPa)",
      "kind": "number",
-     "help": "out-of-plane shear stiffness in the plane of the fibres and the thickness, as in your Abaqus material (Lamina). No measured value? For a tape use G13 = G12 and say so in the notes; see Definitions, Material",
-     "required": true,
+     "help": "out-of-plane shear stiffness in the plane of the fibres and the thickness, as in your Abaqus material (Lamina); required for plies. No measured value? For a tape use G13 = G12 and say so in the notes; see Definitions, Material",
+     "required": false,
      "default": null,
      "words": [],
      "at_least": null,
@@ -968,8 +1121,8 @@
      "key": "G23",
      "label": "G23 (MPa)",
      "kind": "number",
-     "help": "out-of-plane shear stiffness across the fibres and the thickness, as in your Abaqus material (Lamina). No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material",
-     "required": true,
+     "help": "out-of-plane shear stiffness across the fibres and the thickness, as in your Abaqus material (Lamina). Required for plies. No measured value? For a tape use G23 = E2 / 3 and say so in the notes; see Definitions, Material",
+     "required": false,
      "default": null,
      "words": [],
      "at_least": null,
@@ -1234,12 +1387,12 @@
   "Fill in the yellow cells only. Rows marked 'required' must be given; the others have a default or may stay blank. The Units row says which units every number is in: mm, MPa and N unless you pick another system (m-Pa, in-psi or in-ksi); the results come back in the same units, and our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick. Every row says what it means beside it; the sheet Definitions explains each term with an example.",
   "Directions: the coupon lies with its length along y, the direction it is pulled or pushed, and its width along x. Ply angles are measured from the coupon's length, the direction it is pulled, as ASTM D3039 counts them: 0 = fibres along the pull, 90 = fibres across the width. Our Abaqus deck carries this as a layup orientation whose direction 1 is global y, so its layer lines show the angles as you wrote them.",
   "Layup: one ply per row, bottom ply first, angles in degrees. With Symmetric = yes, the plies you list are the lower half and are mirrored.",
-  "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one.",
+  "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one. A plastic, or any material alike in every direction, is Material kind = isotropic: give its thickness, E and nu, and its name and source on the Own material rows, and leave the plies, the ply material, G13 and G23 blank.",
   "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give its interaction term f12*; or pick one criterion, or none.",
   "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
-  "Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
+  "Dog-bone: for a dumbbell specimen, such as ASTM D638's, give the narrow section's width and length and the fillet radius (and Type IV's outer radius); Width and Length are then the overall sizes at the ends. Unnotched tension only; leave the rows blank for a straight strip. Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
   "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway to the tab. You do not enter these points: we place them from the geometry.",
-  "Standard: pick the test standard the specimen follows from the list, or none for your own design. With a standard picked we check the coupon against each of its clauses a model can meet, list every deviation with its clause, and list the clauses of the procedure (specimens, conditioning, speed, alignment, failure mode) as the laboratory's. ASTM D3039 also needs the strain measurement; ASTM C1869 needs its specimen, A, B or other. A deviation never stops the run, and we never say a model conforms to a test standard.",
+  "Standard: pick the test standard the specimen follows from the list, or none for your own design. With a standard picked we check the coupon against each of its clauses a model can meet, list every deviation with its clause, and list the clauses of the procedure (specimens, conditioning, speed, alignment, failure mode) as the laboratory's. ASTM D3039 also needs the strain measurement; ASTM C1869 needs its specimen, A, B or other; ASTM D638 needs its type, I to V. A deviation never stops the run, and we never say a model conforms to a test standard.",
   "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
   "Send the file back as it is. If something is missing or inconsistent, we send it back with every problem named."
  ],
@@ -1266,6 +1419,11 @@
      "term": "Gauge section",
      "meaning": "The free part between the tabs, where the coupon should fail and where results are read.",
      "example": ""
+    },
+    {
+     "term": "Dog-bone",
+     "meaning": "A coupon narrower in its middle than at its ends: a straight narrow section joined to the wide ends by fillets, so that it fails in the narrow section and not in the grips. The plastics tensile test, ASTM D638, uses it.",
+     "example": "ASTM D638 Type I: 13 mm wide over 57 mm, a 76 mm fillet, 19 mm wide at the ends."
     }
    ]
   },
@@ -1275,7 +1433,7 @@
     {
      "term": "Unnotched tension",
      "meaning": "A plain strip pulled along its length. It gives the laminate's tensile stiffness and strength.",
-     "example": "ASTM D3039/D3039M, in our Standard list."
+     "example": "ASTM D3039/D3039M for composites, and ASTM D638 for plastics on a dog-bone, both in our Standard list."
     },
     {
      "term": "Unnotched compression",
@@ -1396,6 +1554,11 @@
      "term": "Own material",
      "meaning": "Your own constants, with where they come from. They stay with this coupon and never go into our library.",
      "example": ""
+    },
+    {
+     "term": "Isotropic material",
+     "meaning": "A material alike in every direction, such as a plastic or a metal sheet: it has no plies, and two constants state it, Young's modulus E and Poisson's ratio nu (the shear modulus is E / (2 (1 + nu))). Our deck writes it as Abaqus's isotropic Elastic and a homogeneous shell section of the thickness you give.",
+     "example": "A rigid plastic: E = 3000 MPa, nu = 0.35, 3.2 mm thick."
     },
     {
      "term": "Directions 1, 2, 3",
@@ -2715,6 +2878,580 @@
     ]
    },
    {
+    "id": "astm-d638",
+    "designation": "ASTM D638-22",
+    "title": "Tensile properties of plastics",
+    "organisation": "ASTM International",
+    "catalog_url": "https://store.astm.org/d0638-22.html",
+    "edition_note": "read from the D638-22 copy the founder supplied, the active edition; every clause held here is the same in D638-14",
+    "systems": "SI; the inch-pound values are for information only (§1.5)",
+    "rights": "licensed-reference",
+    "tests": [
+     "unnotched tension"
+    ],
+    "aliases": [
+     "d638"
+    ],
+    "needs": [
+     "specimen"
+    ],
+    "variant_words": [
+     "I",
+     "II",
+     "III",
+     "IV",
+     "V"
+    ],
+    "variants": [
+     {
+      "key": "I",
+      "label": "Type I: 13 mm wide over 57 mm, for material 7 mm thick or less (the preferred type)",
+      "clause": "Fig. 1",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 19.0,
+        "length": 165.0,
+        "tab_length": 25.0,
+        "narrow_width": 13.0,
+        "narrow_length": 57.0,
+        "radius": 76.0,
+        "strain_length": 50.0
+       },
+       "m-Pa": {
+        "width": 0.019,
+        "length": 0.165,
+        "tab_length": 0.025,
+        "narrow_width": 0.013,
+        "narrow_length": 0.057,
+        "radius": 0.076,
+        "strain_length": 0.05
+       },
+       "in-psi": {
+        "width": 0.7480314961,
+        "length": 6.496062992,
+        "tab_length": 0.9842519685,
+        "narrow_width": 0.5118110236,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       },
+       "in-ksi": {
+        "width": 0.7480314961,
+        "length": 6.496062992,
+        "tab_length": 0.9842519685,
+        "narrow_width": 0.5118110236,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       }
+      },
+      "thickness": {
+       "mm-MPa": 3.2,
+       "m-Pa": 0.0032,
+       "in-psi": 0.125984252,
+       "in-ksi": 0.125984252
+      }
+     },
+     {
+      "key": "II",
+      "label": "Type II: 6 mm wide over 57 mm, for material 7 mm thick or less that will not break in Type I's narrow section",
+      "clause": "Fig. 1",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 19.0,
+        "length": 183.0,
+        "tab_length": 24.0,
+        "narrow_width": 6.0,
+        "narrow_length": 57.0,
+        "radius": 76.0,
+        "strain_length": 50.0
+       },
+       "m-Pa": {
+        "width": 0.019,
+        "length": 0.183,
+        "tab_length": 0.024,
+        "narrow_width": 0.006,
+        "narrow_length": 0.057,
+        "radius": 0.076,
+        "strain_length": 0.05
+       },
+       "in-psi": {
+        "width": 0.7480314961,
+        "length": 7.204724409,
+        "tab_length": 0.9448818898,
+        "narrow_width": 0.2362204724,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       },
+       "in-ksi": {
+        "width": 0.7480314961,
+        "length": 7.204724409,
+        "tab_length": 0.9448818898,
+        "narrow_width": 0.2362204724,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       }
+      },
+      "thickness": {
+       "mm-MPa": 3.2,
+       "m-Pa": 0.0032,
+       "in-psi": 0.125984252,
+       "in-ksi": 0.125984252
+      }
+     },
+     {
+      "key": "III",
+      "label": "Type III: 19 mm wide over 57 mm, for material over 7 mm and up to 14 mm thick",
+      "clause": "Fig. 1",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 29.0,
+        "length": 246.0,
+        "tab_length": 65.5,
+        "narrow_width": 19.0,
+        "narrow_length": 57.0,
+        "radius": 76.0,
+        "strain_length": 50.0
+       },
+       "m-Pa": {
+        "width": 0.029,
+        "length": 0.246,
+        "tab_length": 0.0655,
+        "narrow_width": 0.019,
+        "narrow_length": 0.057,
+        "radius": 0.076,
+        "strain_length": 0.05
+       },
+       "in-psi": {
+        "width": 1.141732283,
+        "length": 9.68503937,
+        "tab_length": 2.578740157,
+        "narrow_width": 0.7480314961,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       },
+       "in-ksi": {
+        "width": 1.141732283,
+        "length": 9.68503937,
+        "tab_length": 2.578740157,
+        "narrow_width": 0.7480314961,
+        "narrow_length": 2.244094488,
+        "radius": 2.992125984,
+        "strain_length": 1.968503937
+       }
+      },
+      "thickness": {
+       "mm-MPa": null,
+       "m-Pa": null,
+       "in-psi": null,
+       "in-ksi": null
+      }
+     },
+     {
+      "key": "IV",
+      "label": "Type IV: 6 mm wide over 33 mm with two radii, for material 4 mm thick or less, nonrigid or compared across rigidity",
+      "clause": "Fig. 1",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 19.0,
+        "length": 115.0,
+        "tab_length": 25.0,
+        "narrow_width": 6.0,
+        "narrow_length": 33.0,
+        "radius": 14.0,
+        "strain_length": 25.0,
+        "outer_radius": 25.0
+       },
+       "m-Pa": {
+        "width": 0.019,
+        "length": 0.115,
+        "tab_length": 0.025,
+        "narrow_width": 0.006,
+        "narrow_length": 0.033,
+        "radius": 0.014,
+        "strain_length": 0.025,
+        "outer_radius": 0.025
+       },
+       "in-psi": {
+        "width": 0.7480314961,
+        "length": 4.527559055,
+        "tab_length": 0.9842519685,
+        "narrow_width": 0.2362204724,
+        "narrow_length": 1.299212598,
+        "radius": 0.5511811024,
+        "strain_length": 0.9842519685,
+        "outer_radius": 0.9842519685
+       },
+       "in-ksi": {
+        "width": 0.7480314961,
+        "length": 4.527559055,
+        "tab_length": 0.9842519685,
+        "narrow_width": 0.2362204724,
+        "narrow_length": 1.299212598,
+        "radius": 0.5511811024,
+        "strain_length": 0.9842519685,
+        "outer_radius": 0.9842519685
+       }
+      },
+      "thickness": {
+       "mm-MPa": null,
+       "m-Pa": null,
+       "in-psi": null,
+       "in-ksi": null
+      }
+     },
+     {
+      "key": "V",
+      "label": "Type V: 3.18 mm wide over 9.53 mm, for material 4 mm thick or less when little is at hand",
+      "clause": "Fig. 1, note C",
+      "minimum": [
+       "width",
+       "length"
+      ],
+      "note": "the overall width and length are the least allowed; the grips leave the distance D between them; the extensometer spans the gage length G",
+      "values": {
+       "mm-MPa": {
+        "width": 9.53,
+        "length": 63.5,
+        "tab_length": 19.05,
+        "narrow_width": 3.18,
+        "narrow_length": 9.53,
+        "radius": 12.7,
+        "strain_length": 7.62
+       },
+       "m-Pa": {
+        "width": 0.00953,
+        "length": 0.0635,
+        "tab_length": 0.01905,
+        "narrow_width": 0.00318,
+        "narrow_length": 0.00953,
+        "radius": 0.0127,
+        "strain_length": 0.00762
+       },
+       "in-psi": {
+        "width": 0.3751968504,
+        "length": 2.5,
+        "tab_length": 0.75,
+        "narrow_width": 0.1251968504,
+        "narrow_length": 0.3751968504,
+        "radius": 0.5,
+        "strain_length": 0.3
+       },
+       "in-ksi": {
+        "width": 0.3751968504,
+        "length": 2.5,
+        "tab_length": 0.75,
+        "narrow_width": 0.1251968504,
+        "narrow_length": 0.3751968504,
+        "radius": 0.5,
+        "strain_length": 0.3
+       }
+      },
+      "thickness": {
+       "mm-MPa": null,
+       "m-Pa": null,
+       "in-psi": null,
+       "in-ksi": null
+      }
+     }
+    ],
+    "classes": [],
+    "requirements": [
+     {
+      "id": "scope-material",
+      "clause": "§1.1, Note 4",
+      "level": "scope",
+      "text": "The material is a plastic, unreinforced or reinforced. A resin-matrix composite reinforced by oriented fibres stiffer than 20 GPa is tested by ASTM D3039/D3039M instead.",
+      "rows": [
+       "library",
+       "own_name"
+      ]
+     },
+     {
+      "id": "scope-thickness",
+      "clause": "§1.2",
+      "level": "scope",
+      "text": "The specimen is at most 14 mm thick; thicker material is machined down to 14 mm.",
+      "rows": [
+       "thickness"
+      ]
+     },
+     {
+      "id": "shape",
+      "clause": "§6.1, Fig. 1",
+      "level": "mandatory",
+      "text": "The specimen is a dumbbell of Fig. 1: a narrow section joined to wider ends by fillets.",
+      "rows": [
+       "test"
+      ]
+     },
+     {
+      "id": "type-thickness",
+      "clause": "§6.1.1, Fig. 1",
+      "level": "mandatory",
+      "text": "The thickness lies in the type's range: up to 7 mm for Types I and II, over 7 mm and up to 14 mm for Type III, up to 4 mm for Types IV and V.",
+      "rows": [
+       "thickness",
+       "specimen"
+      ]
+     },
+     {
+      "id": "composite-type",
+      "clause": "§6.1.3",
+      "level": "mandatory",
+      "text": "A reinforced composite, a highly orthotropic laminate included, is tested as Type I.",
+      "rows": [
+       "specimen"
+      ]
+     },
+     {
+      "id": "narrow-width",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The narrow section's width W is the type's, within its band.",
+      "rows": [
+       "narrow_width"
+      ]
+     },
+     {
+      "id": "narrow-length",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The narrow section's length L is the type's, within its band.",
+      "rows": [
+       "narrow_length"
+      ]
+     },
+     {
+      "id": "fillet-radius",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The fillet radius R is the type's, within its band.",
+      "rows": [
+       "radius"
+      ]
+     },
+     {
+      "id": "outer-radius",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "Type IV's outer radius RO is 25 mm within its band; the other types have none.",
+      "rows": [
+       "outer_radius"
+      ]
+     },
+     {
+      "id": "overall-width",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The overall width WO is at least the type's, and at most that plus its tolerance (our reading of the plus tolerance).",
+      "rows": [
+       "width"
+      ]
+     },
+     {
+      "id": "overall-length",
+      "clause": "Fig. 1",
+      "level": "mandatory",
+      "text": "The overall length LO is at least the type's; longer is allowed.",
+      "rows": [
+       "length"
+      ]
+     },
+     {
+      "id": "grip-distance",
+      "clause": "§10.2, Fig. 1",
+      "level": "mandatory",
+      "text": "The distance D between the grips is the type's, within 5 mm.",
+      "rows": [
+       "tab_length",
+       "length"
+      ]
+     },
+     {
+      "id": "gauge-length",
+      "clause": "§5.2, Fig. 1",
+      "level": "recommended",
+      "text": "An extensometer spans the full gage length G, within its band; for referee tests it must.",
+      "rows": [
+       "strain_length"
+      ]
+     },
+     {
+      "id": "molded-thickness",
+      "clause": "Fig. 1, note A",
+      "level": "recommended",
+      "text": "A molded specimen, and a Type I or II specimen where possible, is 3.2 mm thick within 0.4 mm.",
+      "rows": [
+       "thickness"
+      ]
+     },
+     {
+      "id": "preferred-type",
+      "clause": "§6.1.1",
+      "level": "recommended",
+      "text": "Type I is the preferred specimen where material 7 mm thick or less is at hand.",
+      "rows": [
+       "specimen"
+      ]
+     },
+     {
+      "id": "thin-sheet",
+      "clause": "§1.2",
+      "level": "recommended",
+      "text": "Sheet or film thinner than 1.0 mm is better tested by ASTM D882.",
+      "rows": [
+       "thickness"
+      ]
+     },
+     {
+      "id": "anisotropy",
+      "clause": "§6.6, §7.2",
+      "level": "note",
+      "text": "A material suspected of anisotropy is tested with specimens cut along and across its suspected direction, five of each.",
+      "rows": [
+       "library",
+       "own_name"
+      ]
+     },
+     {
+      "id": "centre-width",
+      "clause": "Fig. 1, note E",
+      "level": "lab",
+      "text": "The width at the centre is W to 0.10 mm less, any narrowing gradual and equal on both sides.",
+      "rows": []
+     },
+     {
+      "id": "die-width",
+      "clause": "Fig. 1, note B",
+      "level": "lab",
+      "text": "A Type IV die's narrow section is 6.00 mm wide within 0.05 mm.",
+      "rows": []
+     },
+     {
+      "id": "surfaces",
+      "clause": "§6.4",
+      "level": "lab",
+      "text": "Surfaces are free of visible flaws; machining marks are filed and sanded away along the long axis; molded flash is removed.",
+      "rows": []
+     },
+     {
+      "id": "gage-marks",
+      "clause": "§6.5",
+      "level": "lab",
+      "text": "Gage marks are drawn in wax crayon or India ink, never scratched, punched or pressed in.",
+      "rows": []
+     },
+     {
+      "id": "grips",
+      "clause": "§5.1.3",
+      "level": "lab",
+      "text": "The grips are fixed or self-aligning, hold the specimen without slipping, and align its long axis with the pull.",
+      "rows": []
+     },
+     {
+      "id": "extensometer-class",
+      "clause": "§5.2.1, §10.3",
+      "level": "lab",
+      "text": "A modulus is measured with an extensometer of Class B-2 or better (ASTM E83) that records continuously; elongation up to 20 % needs at least Class C.",
+      "rows": []
+     },
+     {
+      "id": "specimens",
+      "clause": "§7.1, §7.2",
+      "level": "lab",
+      "text": "At least five specimens per sample; for an anisotropic material, five along and five across its principal direction.",
+      "rows": []
+     },
+     {
+      "id": "breaks",
+      "clause": "§7.3",
+      "level": "lab",
+      "text": "A specimen that breaks at a flaw or outside the narrow section is discarded and retested.",
+      "rows": []
+     },
+     {
+      "id": "speed",
+      "clause": "§8, Table 1",
+      "level": "lab",
+      "text": "The speed is the lowest in Table 1 for the specimen and rigidity that breaks it in 0.5 to 5 minutes: 5 mm/min (±25 %) is the lowest for rigid and semirigid Types I to IV, 1 mm/min for Type V.",
+      "rows": []
+     },
+     {
+      "id": "conditioning",
+      "clause": "§9",
+      "level": "lab",
+      "text": "Specimens are conditioned by Procedure A of ASTM D618 and tested in the same atmosphere.",
+      "rows": []
+     },
+     {
+      "id": "measure",
+      "clause": "§10.1",
+      "level": "lab",
+      "text": "Width and thickness are measured to 0.025 mm at the centre and within 5 mm of each end of the gage length.",
+      "rows": []
+     },
+     {
+      "id": "jaw-separation",
+      "clause": "Note 11",
+      "level": "lab",
+      "text": "The separation of the jaws is never used for the modulus or the elongation.",
+      "rows": []
+     },
+     {
+      "id": "toe",
+      "clause": "§11.1, Annex A1",
+      "level": "lab",
+      "text": "The toe of the curve is compensated unless it is the material's own response.",
+      "rows": []
+     },
+     {
+      "id": "strength",
+      "clause": "§11.2",
+      "level": "lab",
+      "text": "The tensile strength is the greatest force over the average original cross-section in the gage length, to three significant figures.",
+      "rows": []
+     },
+     {
+      "id": "modulus",
+      "clause": "§11.4, §11.5",
+      "level": "lab",
+      "text": "The modulus is the slope of the initial straight part of the curve over the average original cross-section; with no straight part, a secant modulus at a stated strain.",
+      "rows": []
+     },
+     {
+      "id": "poisson",
+      "clause": "Annex A3",
+      "level": "lab",
+      "text": "Poisson's ratio is measured at 5 mm/min after a preload under 5 N, to at least 0.5 % strain, with a transverse extensometer across the width; with no straight part, over 0.05 % to 0.25 % axial strain.",
+      "rows": []
+     }
+    ]
+   },
+   {
     "id": "astm-c1869",
     "designation": "ASTM C1869-18(2023)",
     "title": "Open-hole tensile strength of fibre-reinforced advanced ceramic composites",
@@ -3052,7 +3789,768 @@
       "rows": []
      }
     ]
+   },
+   {
+    "id": "astm-d4018",
+    "designation": "ASTM D4018-23",
+    "title": "Tensile properties of continuous-filament carbon and graphite fibre tows",
+    "organisation": "ASTM International",
+    "catalog_url": "https://store.astm.org/d4018-23.html",
+    "edition_note": "read from the D4018-23 copy licensed to UC San Diego",
+    "systems": "SI only (§1.5)",
+    "rights": "licensed-reference",
+    "tests": [
+     "fibre tow tension"
+    ],
+    "aliases": [
+     "d4018"
+    ],
+    "needs": [],
+    "variant_words": [],
+    "variants": [],
+    "classes": [],
+    "requirements": [
+     {
+      "id": "scope-fibre",
+      "clause": "§1.1",
+      "level": "scope",
+      "text": "A continuous-filament carbon or graphite yarn, roving or tow, impregnated with resin and consolidated before it is pulled.",
+      "rows": [
+       "fibre_type"
+      ]
+     },
+     {
+      "id": "gauge",
+      "clause": "§8.3, §11.3.1",
+      "level": "mandatory",
+      "text": "A gauge length of 150 mm ± 5 mm between the tabs, or between the grips of an untabbed specimen.",
+      "rows": [
+       "tow_gauge_length",
+       "tow_tabs"
+      ]
+     },
+     {
+      "id": "strength-count",
+      "clause": "§8.3, §11.3",
+      "level": "mandatory",
+      "text": "At least four valid specimens tested for strength.",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "modulus-count",
+      "clause": "§8.3, §11.3",
+      "level": "mandatory",
+      "text": "At least four valid specimens tested for modulus, the same four as for strength or another four.",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "bundles",
+      "clause": "§8.3",
+      "level": "mandatory",
+      "text": "Several fibre bundles combined into one specimen only for a tow of 3000 filaments or fewer, the bundles combined before impregnation.",
+      "rows": [
+       "bundles",
+       "filaments"
+      ]
+     },
+     {
+      "id": "resin-strain",
+      "clause": "§4.5",
+      "level": "mandatory",
+      "text": "A consolidated resin able to strain at least twice as far as the fibre.",
+      "rows": [
+       "resin_strain",
+       "failure_strain"
+      ]
+     },
+     {
+      "id": "chord",
+      "clause": "Table 2, §11.3.11",
+      "level": "mandatory",
+      "text": "The forces for the chord modulus read at the strains Table 2 gives for the product's typical strain at failure.",
+      "rows": [
+       "chord_lower",
+       "chord_upper",
+       "failure_strain"
+      ]
+     },
+     {
+      "id": "mul-length",
+      "clause": "§8.1, §11.1.1",
+      "level": "mandatory",
+      "text": "A mass-per-unit-length specimen of sized fibre at least 1 m long.",
+      "rows": [
+       "mul_length"
+      ]
+     },
+     {
+      "id": "speed",
+      "clause": "§11.3.2",
+      "level": "mandatory",
+      "text": "A testing machine speed of at most 250 mm/min.",
+      "rows": [
+       "speed"
+      ]
+     },
+     {
+      "id": "resin-content",
+      "clause": "§6.1.1, §10.3.2",
+      "level": "recommended",
+      "text": "A uniform impregnation, typically 35 % to 60 % resin by weight.",
+      "rows": [
+       "mul_impregnated",
+       "resin_content"
+      ]
+     },
+     {
+      "id": "density-sample",
+      "clause": "§4.3, §10.2",
+      "level": "recommended",
+      "text": "The density measured on desized or unsized fibre.",
+      "rows": [
+       "density_sample"
+      ]
+     },
+     {
+      "id": "density-correction",
+      "clause": "§12.2.2",
+      "level": "note",
+      "text": "A sized fibre's density is corrected for its sizing by k_c, found from ten paired tests; no correction is needed when sized and desized results differ by less than 1.0 %.",
+      "rows": [
+       "density_sample",
+       "density_correction"
+      ]
+     },
+     {
+      "id": "failure-codes",
+      "clause": "§11.4, Fig. 1",
+      "level": "recommended",
+      "text": "Each specimen's failure recorded by its type, area and location.",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "grip-failures",
+      "clause": "§11.5",
+      "level": "note",
+      "text": "When a significant fraction of the failures lies within one specimen width of a tab or grip, re-examine the tabs, their adhesive, the grips, their pressure and their alignment.",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "machine",
+      "clause": "§6.1.4",
+      "level": "lab",
+      "text": "A testing machine verified to ASTM E4 at the largest expected force, its force recorded together with the extensometer's elongation.",
+      "rows": []
+     },
+     {
+      "id": "extensometer",
+      "clause": "§6.1.4.3",
+      "level": "lab",
+      "text": "An extensometer and recorder of ASTM E83 Class B-2.",
+      "rows": []
+     },
+     {
+      "id": "measuring",
+      "clause": "§6.1.4.4, §6.1.4.6",
+      "level": "lab",
+      "text": "Masses on an analytical balance to ±0.0002 g; lengths to ±2 mm.",
+      "rows": []
+     },
+     {
+      "id": "density-method",
+      "clause": "§11.2",
+      "level": "lab",
+      "text": "The density by ASTM D3800 Method A (Archimedes) or by D70 or D5550 (pycnometer).",
+      "rows": []
+     },
+     {
+      "id": "conditioning",
+      "clause": "§9",
+      "level": "lab",
+      "text": "Conditioning and the test atmosphere by the fibre's moisture adsorption: no conditioning below 0.5 % by weight at 23 °C and 90 % relative humidity, 24 h at 23 °C and 50 % relative humidity above it.",
+      "rows": []
+     },
+     {
+      "id": "consolidation",
+      "clause": "§6.1.2, §6.1.4.8, §10.3.2.1",
+      "level": "lab",
+      "text": "The impregnated strand held under tension while it consolidates, and cured in an oven held within ±10 °C.",
+      "rows": []
+     },
+     {
+      "id": "preload",
+      "clause": "§11.3.6, Table 1",
+      "level": "lab",
+      "text": "A preload no larger than Table 1 gives, found from the expected modulus and the fibre's area (the planning loads below).",
+      "rows": []
+     },
+     {
+      "id": "alignment",
+      "clause": "§11.3.5",
+      "level": "lab",
+      "text": "The specimen centred in the jaws and aligned with the load.",
+      "rows": []
+     },
+     {
+      "id": "specimen-quality",
+      "clause": "§8.3",
+      "level": "lab",
+      "text": "Fuzzy, curved, uneven or otherwise flawed specimens rejected unless they represent the material.",
+      "rows": []
+     },
+     {
+      "id": "retests",
+      "clause": "§11.3.12",
+      "level": "lab",
+      "text": "A flawed or suspect specimen replaced or retested, slippage and breaks in the tabs or at the extensometer counted as such, every value recorded.",
+      "rows": []
+     }
+    ]
    }
   ]
+ },
+ "tow": {
+  "test": "fibre tow tension",
+  "kind": "fibre_tow",
+  "shared": [
+   "test",
+   "standard",
+   "filled_by",
+   "date",
+   "notes"
+  ],
+  "sections": [
+   {
+    "title": "The fibre tow",
+    "fields": [
+     {
+      "key": "fibre",
+      "label": "Fibre",
+      "kind": "text",
+      "help": "the fibre as its maker names it, with its filament count and sizing, e.g. T700SC-12000-50C; it identifies the samples tested (§13.1.3.1)",
+      "required": true,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "fibre_type",
+      "label": "Fibre type",
+      "kind": "list",
+      "help": "carbon or graphite, the fibres D4018 covers (§1.1); other for any other fibre, which lies outside it",
+      "required": true,
+      "default": null,
+      "words": [
+       "carbon",
+       "graphite",
+       "other"
+      ],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "lot",
+      "label": "Lot or spool",
+      "kind": "text",
+      "help": "the lot, spool or batch the samples came from, for traceability (§13.1.3.1)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "filaments",
+      "label": "Filaments per bundle",
+      "kind": "whole",
+      "help": "the filament count of one bundle, e.g. 12000 for a 12K tow",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "bundles",
+      "label": "Bundles per specimen",
+      "kind": "whole",
+      "help": "how many bundles were combined into one specimen: 1, or more only for a tow of 3000 filaments or fewer (§8.3)",
+      "required": true,
+      "default": 1,
+      "words": [],
+      "at_least": 1,
+      "above": null,
+      "unit": null
+     }
+    ]
+   },
+   {
+    "title": "Mass per unit length and density (§8.1, §8.2, §12.1, §12.2)",
+    "fields": [
+     {
+      "key": "mul",
+      "label": "Mass per unit length (g/m)",
+      "kind": "number",
+      "help": "the sized fibre's mass per unit length, e.g. 0.800, or blank to compute it from the MUL specimen's mass and length (Eq 1)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "mul_mass",
+      "label": "MUL specimen mass (g)",
+      "kind": "number",
+      "help": "the mass of the length of sized fibre weighed, e.g. 0.8012",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "mul_length",
+      "label": "MUL specimen length (m)",
+      "kind": "number",
+      "help": "the length weighed, at least 1 m (§8.1), e.g. 1.000",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "density_sample",
+      "label": "Density measured on",
+      "kind": "list",
+      "help": "the fibre the density was measured on: desized or unsized fibre is preferred (§4.3), and a sized fibre's density is corrected by k_c (§12.2.2)",
+      "required": true,
+      "default": null,
+      "words": [
+       "desized",
+       "unsized",
+       "sized"
+      ],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "fibre_density",
+      "label": "Measured density (g/cm³)",
+      "kind": "number",
+      "help": "the density measured on that fibre, e.g. 1.80",
+      "required": true,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "density_correction",
+      "label": "Sizing correction k_c (g/cm³)",
+      "kind": "number",
+      "help": "for a sized fibre only: the correction found from ten paired tests of sized and desized fibre (§12.2.2), or blank for none",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     }
+    ]
+   },
+   {
+    "title": "The impregnated strand (§10.3, §12.3.1)",
+    "fields": [
+     {
+      "key": "resin",
+      "label": "Resin",
+      "kind": "text",
+      "help": "the resin and its hardener, e.g. a bisphenol A epoxy with diethyltoluene diamine (§13.1.3.5)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "resin_strain",
+      "label": "Resin strain to failure (microstrain)",
+      "kind": "number",
+      "help": "the consolidated resin's strain to failure, at least twice the fibre's (§4.5), e.g. 50000",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "impregnation",
+      "label": "Impregnation apparatus",
+      "kind": "text",
+      "help": "how the fibre was impregnated, e.g. a dip bath and a die (§13.1.3.5)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "cure",
+      "label": "Consolidation and cure",
+      "kind": "text",
+      "help": "the cure cycle, held under tension, e.g. 2 h at 120 °C (§13.1.3.5)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "mul_impregnated",
+      "label": "Impregnated mass per unit length (g/m)",
+      "kind": "number",
+      "help": "MUL_i, the impregnated and consolidated strand's mass per unit length, for the resin content (Eq 3), or give the resin content instead",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "resin_content",
+      "label": "Resin content (% by weight)",
+      "kind": "number",
+      "help": "the resin content when it was measured another way, or blank when MUL_i is given",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     }
+    ]
+   },
+   {
+    "title": "The tensile test (§8.3, §11.3)",
+    "fields": [
+     {
+      "key": "tow_gauge_length",
+      "label": "Gauge length (mm)",
+      "kind": "number",
+      "help": "the free length between the tabs, or between the grips of an untabbed specimen: 150 mm ± 5 mm (§8.3)",
+      "required": true,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "tow_tabs",
+      "label": "Tabs",
+      "kind": "list",
+      "help": "the tabs on the ends, or none for a specimen gripped directly (§6.1.3)",
+      "required": true,
+      "default": null,
+      "words": [
+       "none",
+       "paper or card",
+       "cast resin",
+       "metal",
+       "other"
+      ],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "speed",
+      "label": "Machine speed (mm/min)",
+      "kind": "number",
+      "help": "the crosshead speed, at most 250 mm/min (§11.3.2)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "machine",
+      "label": "Testing machine and extensometer",
+      "kind": "text",
+      "help": "the tensile testing apparatus (§13.1.3.6)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "facility",
+      "label": "Test facility",
+      "kind": "text",
+      "help": "where the tests were run (§13.1.3.3)",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "failure_strain",
+      "label": "Typical strain at failure (microstrain)",
+      "kind": "number",
+      "help": "the product's typical strain at failure, e.g. 21000 for 2.1 %: it sets the chord strains (Table 2) and the largest preload (Table 1)",
+      "required": true,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "chord_lower",
+      "label": "Chord lower strain (microstrain)",
+      "kind": "number",
+      "help": "the strain the force P_l was read at, or blank for Table 2's",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": 0,
+      "above": null,
+      "unit": null
+     },
+     {
+      "key": "chord_upper",
+      "label": "Chord upper strain (microstrain)",
+      "kind": "number",
+      "help": "the strain the force P_u was read at, or blank for Table 2's",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     }
+    ]
+   },
+   {
+    "title": "Datasheet values, for the planning loads",
+    "fields": [
+     {
+      "key": "datasheet_strength",
+      "label": "Datasheet strength (MPa)",
+      "kind": "number",
+      "help": "the fibre's tensile strength on its datasheet, e.g. 4900: the force to expect at failure",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     },
+     {
+      "key": "datasheet_modulus",
+      "label": "Datasheet modulus (GPa)",
+      "kind": "number",
+      "help": "the fibre's tensile modulus on its datasheet, e.g. 230: the preload and the chord forces to expect",
+      "required": false,
+      "default": null,
+      "words": [],
+      "at_least": null,
+      "above": 0,
+      "unit": null
+     }
+    ]
+   }
+  ],
+  "specimen_fields": [
+   {
+    "key": "id",
+    "label": "Specimen",
+    "kind": "text",
+    "help": "its name or number, e.g. 1",
+    "required": true,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": null,
+    "unit": null
+   },
+   {
+    "key": "max_force",
+    "label": "Maximum force (N)",
+    "kind": "number",
+    "help": "P, the largest force before failure; blank for a specimen tested for modulus only",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": 0,
+    "unit": null
+   },
+   {
+    "key": "force_lower",
+    "label": "Force at lower strain (N)",
+    "kind": "number",
+    "help": "P_l, read at the chord's lower strain; blank for strength only",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": 0,
+    "above": null,
+    "unit": null
+   },
+   {
+    "key": "force_upper",
+    "label": "Force at upper strain (N)",
+    "kind": "number",
+    "help": "P_u, read at the chord's upper strain; blank for strength only",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": 0,
+    "unit": null
+   },
+   {
+    "key": "failure_code",
+    "label": "Failure code",
+    "kind": "text",
+    "help": "the three letters of Fig. 1, the failure's type, area and location, e.g. LGM",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": null,
+    "unit": null
+   },
+   {
+    "key": "status",
+    "label": "Status",
+    "kind": "list",
+    "help": "valid, or rejected with the reason in the note (§11.3.12): a rejected specimen is listed, not counted",
+    "required": true,
+    "default": "valid",
+    "words": [
+     "valid",
+     "rejected"
+    ],
+    "at_least": null,
+    "above": null,
+    "unit": null
+   },
+   {
+    "key": "note",
+    "label": "Note",
+    "kind": "text",
+    "help": "why it was rejected, or what was atypical about its failure (§13.1.3.8)",
+    "required": false,
+    "default": null,
+    "words": [],
+    "at_least": null,
+    "above": null,
+    "unit": null
+   }
+  ],
+  "item_of_row": {
+   "test": "identity",
+   "standard": "identity",
+   "filled_by": "identity",
+   "date": "identity",
+   "notes": "identity",
+   "fibre": "identity",
+   "fibre_type": "identity",
+   "lot": "identity",
+   "filaments": "identity",
+   "bundles": "identity",
+   "mul": "fibre",
+   "mul_mass": "fibre",
+   "mul_length": "fibre",
+   "density_sample": "fibre",
+   "fibre_density": "fibre",
+   "density_correction": "fibre",
+   "resin": "fibre",
+   "resin_strain": "fibre",
+   "impregnation": "fibre",
+   "cure": "fibre",
+   "mul_impregnated": "fibre",
+   "resin_content": "fibre",
+   "tow_gauge_length": "test",
+   "tow_tabs": "test",
+   "speed": "test",
+   "machine": "test",
+   "facility": "test",
+   "failure_strain": "test",
+   "chord_lower": "test",
+   "chord_upper": "test",
+   "datasheet_strength": "test",
+   "datasheet_modulus": "test",
+   "specimens": "specimens"
+  },
+  "failure_code": {
+   "type": {
+    "G": "grip or tab",
+    "L": "lateral",
+    "S": "long splitting (fibre pull-out)",
+    "X": "explosive",
+    "O": "other"
+   },
+   "area": {
+    "I": "inside the grip or tab",
+    "A": "at the grip or tab",
+    "W": "within one width of the grip or tab",
+    "G": "gauge",
+    "P": "tab pull-out",
+    "V": "various",
+    "U": "unknown"
+   },
+   "location": {
+    "B": "bottom",
+    "T": "top",
+    "M": "middle",
+    "V": "various",
+    "U": "unknown"
+   }
+  },
+  "units": {
+   "force": "N",
+   "strength": "MPa",
+   "modulus": "GPa",
+   "mul": "g/m",
+   "density": "g/cm³",
+   "area": "mm²",
+   "strain": "microstrain",
+   "length": "mm",
+   "resin_content": "% by weight"
+  }
  }
 }

@@ -93,6 +93,8 @@ Part 3, the quantities (2026-11-08):
 - The public check `fea/checks/d3039-im7-8552/` with its CalculiX record and reading.
 - A coupon with a strain measurement reopens in the studio with its mesh as seeds per segment (the "Your Abaqus mesh" rows), not as an element size: the extensometer's node rows make it a seeded mesh, read back as one; the mesh is the same.
 
+Part 4, the fibre tow test of ASTM D4018, is no coupon and has its own record: [ADR-0074](ADR-0074-the-fibre-tow-test-is-a-word-on-the-coupon-test-list-with-its-own-rows-and-specimens-reduced-by-the-engine-with-no-model-and-judged-against-astm-d4018-as-a-test-record.md).
+
 ## Why (evidence)
 
 - **The public IM7/8552 coupon under D3039:**

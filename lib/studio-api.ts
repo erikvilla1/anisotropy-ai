@@ -97,7 +97,11 @@ export type TestMethod = {
   designation: string | null; width: number; thickness: number; area: number; force: number; stress: number;
   units: { length: string; area: string; force: string; stress: string; modulus: string };
   hole: { diameter: number; net_area: number; net_stress: number; width_to_hole: number; hole_to_thickness: number } | null;
-  laminate_theory: { modulus: number; poisson: number; note: string };
+  laminate_theory: { modulus: number; poisson: number; note: string; isotropic?: boolean };
+  /** The standard's own words for the shared formulas (D3039's chord over the gross area, D638's modulus of elasticity over the narrow
+   * section); absent from a package written before ADR-0075 part 2, which read D3039's. */
+  reduction?: { area: string; area_clause: string; stress_clause: string; strain_clause: string; modulus: string; modulus_clause: string; range: string;
+    poisson_clause: string };
   strain: { device: string; gauge_length: number; modelled_length: number; nodes: string[]; x: number[]; value: number; microstrain: number; poisson: number | null;
     chord: { from: number; to: number; stress_from: number; stress_to: number; force_from: number; force_to: number; modulus: number } } | null;
   fpf: Record<string, { factor: number; force: number; stress: number; net_stress?: number; strain?: number; microstrain?: number; place: string | null }>;
@@ -211,6 +215,37 @@ export async function checkSetup(apiBase: string, values: StudioValues, signal?:
   const checklist = readChecklist(payload.checklist);
   const preview = payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview);
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview };
+}
+
+/** A fibre tow record's answer (ADR-0074): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
+ * g/cm³, mm², microstrain). Every number is the engine's; the page shows them as they come. */
+export type TowStats = { n: number; mean: number; sd: number; cv: number };
+export type TowSpecimenResult = {
+  id: string; status: "valid" | "rejected"; note: string; max_force: number | null; force_lower: number | null; force_upper: number | null;
+  strength: number | null; modulus: number | null; failure_code: string | null; failure_words: string | null;
+};
+export type TowResult = {
+  test: string; designation: string | null; fibre: string; lot: string | null; units: Record<string, string>;
+  fibre_properties: { mul: number; mul_from: string; bundles: number; specimen_mul: number; density: number; density_from: string; area: number;
+    resin_content: number | null; resin_content_from: string | null };
+  strains: { failure: number; preload: number; chord: [number, number]; chord_table: [number, number]; chord_from: string };
+  specimens: TowSpecimenResult[];
+  strength: TowStats | null; modulus: TowStats | null;
+  counts: { specimens: number; valid: number; strength: number; modulus: number };
+  planning: { preload_force: number | null; force_lower: number | null; force_upper: number | null; failure_force: number | null; from: string[] };
+  conformance: { designation: string; words: string; deviations: number; advisories: number } | null;
+  report: { clause: string; item: string; rows: string[]; shown: boolean }[];
+  note: string;
+};
+export type TowAnswer = { run_id: string | null; state: "ready" | "blocked"; checklist: Checklist; result: TowResult | null };
+
+export async function towTest(apiBase: string, values: Record<string, unknown>, signal?: AbortSignal, projectId: string | null = null): Promise<TowAnswer> {
+  const body = { values, ...(projectId ? { project_id: projectId } : {}) };
+  const payload = await call(`${base(apiBase)}/v1/tow-tests`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the tow calculation");
+  if (!isObject(payload)) throw new StudioError("The tow calculation answered with an unexpected shape.");
+  const checklist = readChecklist(payload.checklist);
+  const result = isObject(payload.result) && Array.isArray(payload.result.specimens) ? (payload.result as unknown as TowResult) : null;
+  return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, checklist, result };
 }
 
 export async function startSolve(apiBase: string, values: StudioValues, runBy: string, replace: boolean, signal?: AbortSignal, projectId: string | null = null): Promise<JobStatus> {

@@ -1,0 +1,827 @@
+{
+ "checklist": {
+  "items": [
+   {
+    "id": "identity",
+    "label": "Who and which fibre",
+    "state": "pass",
+    "message": "",
+    "rows": [],
+    "requirements": []
+   },
+   {
+    "id": "fibre",
+    "label": "Mass, density and resin",
+    "state": "pass",
+    "message": "",
+    "rows": [],
+    "requirements": []
+   },
+   {
+    "id": "test",
+    "label": "Tensile set-up",
+    "state": "pass",
+    "message": "",
+    "rows": [],
+    "requirements": []
+   },
+   {
+    "id": "specimens",
+    "label": "Specimens tested",
+    "state": "pass",
+    "message": "",
+    "rows": [],
+    "requirements": []
+   },
+   {
+    "id": "standard",
+    "label": "Test standard",
+    "state": "pass",
+    "message": "test record checked against ASTM D4018-23: 7 of 7 requirements the record shows are met; 10 clauses of the procedure are the laboratory's",
+    "rows": [],
+    "requirements": [
+     {
+      "id": "scope-fibre",
+      "clause": "§1.1",
+      "level": "scope",
+      "text": "A continuous-filament carbon or graphite yarn, roving or tow, impregnated with resin and consolidated before it is pulled.",
+      "state": "met",
+      "value": "a carbon fibre",
+      "limit": "a continuous-filament carbon or graphite yarn, roving or tow",
+      "rows": [
+       "fibre_type"
+      ]
+     },
+     {
+      "id": "gauge",
+      "clause": "§8.3, §11.3.1",
+      "level": "mandatory",
+      "text": "A gauge length of 150 mm ± 5 mm between the tabs, or between the grips of an untabbed specimen.",
+      "state": "met",
+      "value": "150 mm between the tabs",
+      "limit": "150 mm ± 5 mm between the tabs",
+      "rows": [
+       "tow_gauge_length",
+       "tow_tabs"
+      ]
+     },
+     {
+      "id": "strength-count",
+      "clause": "§8.3, §11.3",
+      "level": "mandatory",
+      "text": "At least four valid specimens tested for strength.",
+      "state": "met",
+      "value": "4 valid specimens with a maximum force",
+      "limit": "at least 4",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "modulus-count",
+      "clause": "§8.3, §11.3",
+      "level": "mandatory",
+      "text": "At least four valid specimens tested for modulus, the same four as for strength or another four.",
+      "state": "met",
+      "value": "4 valid specimens with both chord forces",
+      "limit": "at least 4",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "bundles",
+      "clause": "§8.3",
+      "level": "mandatory",
+      "text": "Several fibre bundles combined into one specimen only for a tow of 3000 filaments or fewer, the bundles combined before impregnation.",
+      "state": "na",
+      "value": "one bundle per specimen",
+      "limit": "one bundle, or several combined only for a tow of 3000 filaments or fewer",
+      "rows": [
+       "bundles",
+       "filaments"
+      ]
+     },
+     {
+      "id": "resin-strain",
+      "clause": "§4.5",
+      "level": "mandatory",
+      "text": "A consolidated resin able to strain at least twice as far as the fibre.",
+      "state": "met",
+      "value": "50000 microstrain",
+      "limit": "at least 2 times the fibre's, 42000 microstrain",
+      "rows": [
+       "resin_strain",
+       "failure_strain"
+      ]
+     },
+     {
+      "id": "chord",
+      "clause": "Table 2, §11.3.11",
+      "level": "mandatory",
+      "text": "The forces for the chord modulus read at the strains Table 2 gives for the product's typical strain at failure.",
+      "state": "met",
+      "value": "1000 microstrain to 6000 microstrain",
+      "limit": "1000 microstrain to 6000 microstrain (Table 2, typical failure strain 21000 microstrain)",
+      "rows": [
+       "chord_lower",
+       "chord_upper",
+       "failure_strain"
+      ]
+     },
+     {
+      "id": "mul-length",
+      "clause": "§8.1, §11.1.1",
+      "level": "mandatory",
+      "text": "A mass-per-unit-length specimen of sized fibre at least 1 m long.",
+      "state": "na",
+      "value": "the mass per unit length is given, not the specimen it was weighed on",
+      "limit": "at least 1 m",
+      "rows": [
+       "mul_length"
+      ]
+     },
+     {
+      "id": "speed",
+      "clause": "§11.3.2",
+      "level": "mandatory",
+      "text": "A testing machine speed of at most 250 mm/min.",
+      "state": "met",
+      "value": "10 mm/min",
+      "limit": "at most 250 mm/min",
+      "rows": [
+       "speed"
+      ]
+     },
+     {
+      "id": "resin-content",
+      "clause": "§6.1.1, §10.3.2",
+      "level": "recommended",
+      "text": "A uniform impregnation, typically 35 % to 60 % resin by weight.",
+      "state": "met",
+      "value": "42.86 %",
+      "limit": "35 % to 60 % by weight",
+      "rows": [
+       "mul_impregnated",
+       "resin_content"
+      ]
+     },
+     {
+      "id": "density-sample",
+      "clause": "§4.3, §10.2",
+      "level": "recommended",
+      "text": "The density measured on desized or unsized fibre.",
+      "state": "met",
+      "value": "desized fibre",
+      "limit": "desized or unsized fibre",
+      "rows": [
+       "density_sample"
+      ]
+     },
+     {
+      "id": "density-correction",
+      "clause": "§12.2.2",
+      "level": "note",
+      "text": "A sized fibre's density is corrected for its sizing by k_c, found from ten paired tests; no correction is needed when sized and desized results differ by less than 1.0 %.",
+      "state": "na",
+      "value": "desized fibre: no correction",
+      "limit": "k_c from ten paired tests of sized and desized or unsized fibre; none needed when they differ by less than 1.0 %",
+      "rows": [
+       "density_sample",
+       "density_correction"
+      ]
+     },
+     {
+      "id": "failure-codes",
+      "clause": "§11.4, Fig. 1",
+      "level": "recommended",
+      "text": "Each specimen's failure recorded by its type, area and location.",
+      "state": "met",
+      "value": "4 of 4 valid specimens coded",
+      "limit": "every specimen's failure coded by type, area and location (Fig. 1)",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "grip-failures",
+      "clause": "§11.5",
+      "level": "note",
+      "text": "When a significant fraction of the failures lies within one specimen width of a tab or grip, re-examine the tabs, their adhesive, the grips, their pressure and their alignment.",
+      "state": "note",
+      "value": "1 of 4 coded failures at, in or within one width of a tab or grip",
+      "limit": "re-examine the tabs, the grips and their alignment when a significant fraction fails within one width of them",
+      "rows": [
+       "specimens"
+      ]
+     },
+     {
+      "id": "machine",
+      "clause": "§6.1.4",
+      "level": "lab",
+      "text": "A testing machine verified to ASTM E4 at the largest expected force, its force recorded together with the extensometer's elongation.",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "extensometer",
+      "clause": "§6.1.4.3",
+      "level": "lab",
+      "text": "An extensometer and recorder of ASTM E83 Class B-2.",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "measuring",
+      "clause": "§6.1.4.4, §6.1.4.6",
+      "level": "lab",
+      "text": "Masses on an analytical balance to ±0.0002 g; lengths to ±2 mm.",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "density-method",
+      "clause": "§11.2",
+      "level": "lab",
+      "text": "The density by ASTM D3800 Method A (Archimedes) or by D70 or D5550 (pycnometer).",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "conditioning",
+      "clause": "§9",
+      "level": "lab",
+      "text": "Conditioning and the test atmosphere by the fibre's moisture adsorption: no conditioning below 0.5 % by weight at 23 °C and 90 % relative humidity, 24 h at 23 °C and 50 % relative humidity above it.",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "consolidation",
+      "clause": "§6.1.2, §6.1.4.8, §10.3.2.1",
+      "level": "lab",
+      "text": "The impregnated strand held under tension while it consolidates, and cured in an oven held within ±10 °C.",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "preload",
+      "clause": "§11.3.6, Table 1",
+      "level": "lab",
+      "text": "A preload no larger than Table 1 gives, found from the expected modulus and the fibre's area (the planning loads below).",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "alignment",
+      "clause": "§11.3.5",
+      "level": "lab",
+      "text": "The specimen centred in the jaws and aligned with the load.",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "specimen-quality",
+      "clause": "§8.3",
+      "level": "lab",
+      "text": "Fuzzy, curved, uneven or otherwise flawed specimens rejected unless they represent the material.",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     },
+     {
+      "id": "retests",
+      "clause": "§11.3.12",
+      "level": "lab",
+      "text": "A flawed or suspect specimen replaced or retested, slippage and breaks in the tabs or at the extensometer counted as such, every value recorded.",
+      "state": "lab",
+      "value": "",
+      "limit": "",
+      "rows": []
+     }
+    ]
+   },
+   {
+    "id": "results",
+    "label": "Results",
+    "state": "pass",
+    "message": "4 strengths and 4 moduli from the valid specimens",
+    "rows": [],
+    "requirements": []
+   }
+  ],
+  "designation": null,
+  "coupon_exists": false,
+  "attempts": 0,
+  "state": "ready",
+  "problems": []
+ },
+ "result": {
+  "test": "fibre tow tension",
+  "designation": "ASTM D4018-23",
+  "fibre": "constructed 12K carbon tow",
+  "lot": null,
+  "units": {
+   "force": "N",
+   "strength": "MPa",
+   "modulus": "GPa",
+   "mul": "g/m",
+   "density": "g/cm³",
+   "area": "mm²",
+   "strain": "microstrain",
+   "length": "mm",
+   "resin_content": "% by weight"
+  },
+  "fibre_properties": {
+   "mul": 0.8,
+   "mul_from": "given",
+   "bundles": 1,
+   "specimen_mul": 0.8,
+   "density": 1.8,
+   "density_from": "measured on desized fibre",
+   "area": 0.44444444444444453,
+   "resin_content": 42.85714285714285,
+   "resin_content_from": "Eq 3"
+  },
+  "strains": {
+   "failure": 21000.0,
+   "preload": 200.00000000000003,
+   "chord": [
+    1000.0000000000001,
+    6000.0
+   ],
+   "chord_table": [
+    1000.0000000000001,
+    6000.0
+   ],
+   "chord_from": "Table 2"
+  },
+  "specimens": [
+   {
+    "id": "1",
+    "status": "valid",
+    "note": "",
+    "max_force": 2150.0,
+    "force_lower": 101.5,
+    "force_upper": 610.2,
+    "strength": 4837.499999999999,
+    "modulus": 228.915,
+    "failure_code": "LGM",
+    "failure_words": "lateral, gauge, middle"
+   },
+   {
+    "id": "2",
+    "status": "valid",
+    "note": "",
+    "max_force": 2210.0,
+    "force_lower": 102.8,
+    "force_upper": 616.0,
+    "strength": 4972.499999999999,
+    "modulus": 230.94,
+    "failure_code": "SGV",
+    "failure_words": "long splitting (fibre pull-out), gauge, various"
+   },
+   {
+    "id": "3",
+    "status": "valid",
+    "note": "",
+    "max_force": 2080.0,
+    "force_lower": 100.9,
+    "force_upper": 607.5,
+    "strength": 4680.0,
+    "modulus": 227.96999999999997,
+    "failure_code": "XGM",
+    "failure_words": "explosive, gauge, middle"
+   },
+   {
+    "id": "4",
+    "status": "valid",
+    "note": "",
+    "max_force": 2195.0,
+    "force_lower": 103.1,
+    "force_upper": 618.4,
+    "strength": 4938.749999999999,
+    "modulus": 231.88499999999993,
+    "failure_code": "GAT",
+    "failure_words": "grip or tab, at the grip or tab, top"
+   },
+   {
+    "id": "5",
+    "status": "rejected",
+    "note": "slipped in the top grip",
+    "max_force": 1650.0,
+    "force_lower": null,
+    "force_upper": null,
+    "strength": 3712.4999999999995,
+    "modulus": null,
+    "failure_code": null,
+    "failure_words": null
+   }
+  ],
+  "strength": {
+   "n": 4,
+   "mean": 4857.187499999999,
+   "sd": 131.31694721169805,
+   "cv": 2.703559358408504
+  },
+  "modulus": {
+   "n": 4,
+   "mean": 229.92749999999998,
+   "sd": 1.7994374120818875,
+   "cv": 0.7826107847394886
+  },
+  "counts": {
+   "specimens": 5,
+   "valid": 4,
+   "strength": 4,
+   "modulus": 4
+  },
+  "planning": {
+   "preload_force": 20.444444444444446,
+   "force_lower": 102.22222222222223,
+   "force_upper": 613.3333333333334,
+   "failure_force": 2177.777777777778,
+   "from": [
+    "datasheet modulus",
+    "datasheet strength"
+   ]
+  },
+  "conformance": {
+   "id": "astm-d4018",
+   "designation": "ASTM D4018-23",
+   "held_to": "",
+   "words": "test record checked against ASTM D4018-23: 7 of 7 requirements the record shows are met; 10 clauses of the procedure are the laboratory's",
+   "deviations": 0,
+   "advisories": 0,
+   "requirements": [
+    {
+     "id": "scope-fibre",
+     "clause": "§1.1",
+     "level": "scope",
+     "text": "A continuous-filament carbon or graphite yarn, roving or tow, impregnated with resin and consolidated before it is pulled.",
+     "state": "met",
+     "value": "a carbon fibre",
+     "limit": "a continuous-filament carbon or graphite yarn, roving or tow",
+     "rows": [
+      "fibre_type"
+     ]
+    },
+    {
+     "id": "gauge",
+     "clause": "§8.3, §11.3.1",
+     "level": "mandatory",
+     "text": "A gauge length of 150 mm ± 5 mm between the tabs, or between the grips of an untabbed specimen.",
+     "state": "met",
+     "value": "150 mm between the tabs",
+     "limit": "150 mm ± 5 mm between the tabs",
+     "rows": [
+      "tow_gauge_length",
+      "tow_tabs"
+     ]
+    },
+    {
+     "id": "strength-count",
+     "clause": "§8.3, §11.3",
+     "level": "mandatory",
+     "text": "At least four valid specimens tested for strength.",
+     "state": "met",
+     "value": "4 valid specimens with a maximum force",
+     "limit": "at least 4",
+     "rows": [
+      "specimens"
+     ]
+    },
+    {
+     "id": "modulus-count",
+     "clause": "§8.3, §11.3",
+     "level": "mandatory",
+     "text": "At least four valid specimens tested for modulus, the same four as for strength or another four.",
+     "state": "met",
+     "value": "4 valid specimens with both chord forces",
+     "limit": "at least 4",
+     "rows": [
+      "specimens"
+     ]
+    },
+    {
+     "id": "bundles",
+     "clause": "§8.3",
+     "level": "mandatory",
+     "text": "Several fibre bundles combined into one specimen only for a tow of 3000 filaments or fewer, the bundles combined before impregnation.",
+     "state": "na",
+     "value": "one bundle per specimen",
+     "limit": "one bundle, or several combined only for a tow of 3000 filaments or fewer",
+     "rows": [
+      "bundles",
+      "filaments"
+     ]
+    },
+    {
+     "id": "resin-strain",
+     "clause": "§4.5",
+     "level": "mandatory",
+     "text": "A consolidated resin able to strain at least twice as far as the fibre.",
+     "state": "met",
+     "value": "50000 microstrain",
+     "limit": "at least 2 times the fibre's, 42000 microstrain",
+     "rows": [
+      "resin_strain",
+      "failure_strain"
+     ]
+    },
+    {
+     "id": "chord",
+     "clause": "Table 2, §11.3.11",
+     "level": "mandatory",
+     "text": "The forces for the chord modulus read at the strains Table 2 gives for the product's typical strain at failure.",
+     "state": "met",
+     "value": "1000 microstrain to 6000 microstrain",
+     "limit": "1000 microstrain to 6000 microstrain (Table 2, typical failure strain 21000 microstrain)",
+     "rows": [
+      "chord_lower",
+      "chord_upper",
+      "failure_strain"
+     ]
+    },
+    {
+     "id": "mul-length",
+     "clause": "§8.1, §11.1.1",
+     "level": "mandatory",
+     "text": "A mass-per-unit-length specimen of sized fibre at least 1 m long.",
+     "state": "na",
+     "value": "the mass per unit length is given, not the specimen it was weighed on",
+     "limit": "at least 1 m",
+     "rows": [
+      "mul_length"
+     ]
+    },
+    {
+     "id": "speed",
+     "clause": "§11.3.2",
+     "level": "mandatory",
+     "text": "A testing machine speed of at most 250 mm/min.",
+     "state": "met",
+     "value": "10 mm/min",
+     "limit": "at most 250 mm/min",
+     "rows": [
+      "speed"
+     ]
+    },
+    {
+     "id": "resin-content",
+     "clause": "§6.1.1, §10.3.2",
+     "level": "recommended",
+     "text": "A uniform impregnation, typically 35 % to 60 % resin by weight.",
+     "state": "met",
+     "value": "42.86 %",
+     "limit": "35 % to 60 % by weight",
+     "rows": [
+      "mul_impregnated",
+      "resin_content"
+     ]
+    },
+    {
+     "id": "density-sample",
+     "clause": "§4.3, §10.2",
+     "level": "recommended",
+     "text": "The density measured on desized or unsized fibre.",
+     "state": "met",
+     "value": "desized fibre",
+     "limit": "desized or unsized fibre",
+     "rows": [
+      "density_sample"
+     ]
+    },
+    {
+     "id": "density-correction",
+     "clause": "§12.2.2",
+     "level": "note",
+     "text": "A sized fibre's density is corrected for its sizing by k_c, found from ten paired tests; no correction is needed when sized and desized results differ by less than 1.0 %.",
+     "state": "na",
+     "value": "desized fibre: no correction",
+     "limit": "k_c from ten paired tests of sized and desized or unsized fibre; none needed when they differ by less than 1.0 %",
+     "rows": [
+      "density_sample",
+      "density_correction"
+     ]
+    },
+    {
+     "id": "failure-codes",
+     "clause": "§11.4, Fig. 1",
+     "level": "recommended",
+     "text": "Each specimen's failure recorded by its type, area and location.",
+     "state": "met",
+     "value": "4 of 4 valid specimens coded",
+     "limit": "every specimen's failure coded by type, area and location (Fig. 1)",
+     "rows": [
+      "specimens"
+     ]
+    },
+    {
+     "id": "grip-failures",
+     "clause": "§11.5",
+     "level": "note",
+     "text": "When a significant fraction of the failures lies within one specimen width of a tab or grip, re-examine the tabs, their adhesive, the grips, their pressure and their alignment.",
+     "state": "note",
+     "value": "1 of 4 coded failures at, in or within one width of a tab or grip",
+     "limit": "re-examine the tabs, the grips and their alignment when a significant fraction fails within one width of them",
+     "rows": [
+      "specimens"
+     ]
+    },
+    {
+     "id": "machine",
+     "clause": "§6.1.4",
+     "level": "lab",
+     "text": "A testing machine verified to ASTM E4 at the largest expected force, its force recorded together with the extensometer's elongation.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "extensometer",
+     "clause": "§6.1.4.3",
+     "level": "lab",
+     "text": "An extensometer and recorder of ASTM E83 Class B-2.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "measuring",
+     "clause": "§6.1.4.4, §6.1.4.6",
+     "level": "lab",
+     "text": "Masses on an analytical balance to ±0.0002 g; lengths to ±2 mm.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "density-method",
+     "clause": "§11.2",
+     "level": "lab",
+     "text": "The density by ASTM D3800 Method A (Archimedes) or by D70 or D5550 (pycnometer).",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "conditioning",
+     "clause": "§9",
+     "level": "lab",
+     "text": "Conditioning and the test atmosphere by the fibre's moisture adsorption: no conditioning below 0.5 % by weight at 23 °C and 90 % relative humidity, 24 h at 23 °C and 50 % relative humidity above it.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "consolidation",
+     "clause": "§6.1.2, §6.1.4.8, §10.3.2.1",
+     "level": "lab",
+     "text": "The impregnated strand held under tension while it consolidates, and cured in an oven held within ±10 °C.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "preload",
+     "clause": "§11.3.6, Table 1",
+     "level": "lab",
+     "text": "A preload no larger than Table 1 gives, found from the expected modulus and the fibre's area (the planning loads below).",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "alignment",
+     "clause": "§11.3.5",
+     "level": "lab",
+     "text": "The specimen centred in the jaws and aligned with the load.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "specimen-quality",
+     "clause": "§8.3",
+     "level": "lab",
+     "text": "Fuzzy, curved, uneven or otherwise flawed specimens rejected unless they represent the material.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    },
+    {
+     "id": "retests",
+     "clause": "§11.3.12",
+     "level": "lab",
+     "text": "A flawed or suspect specimen replaced or retested, slippage and breaks in the tabs or at the extensometer counted as such, every value recorded.",
+     "state": "lab",
+     "value": "",
+     "limit": "",
+     "rows": []
+    }
+   ]
+  },
+  "report": [
+   {
+    "clause": "§13.1.3.1",
+    "item": "Identification of the samples tested",
+    "rows": [
+     "fibre",
+     "lot"
+    ],
+    "shown": false
+   },
+   {
+    "clause": "§13.1.3.2",
+    "item": "Date of test",
+    "rows": [
+     "date"
+    ],
+    "shown": true
+   },
+   {
+    "clause": "§13.1.3.3",
+    "item": "Test facility",
+    "rows": [
+     "facility"
+    ],
+    "shown": false
+   },
+   {
+    "clause": "§13.1.3.4",
+    "item": "Who tested",
+    "rows": [
+     "filled_by"
+    ],
+    "shown": true
+   },
+   {
+    "clause": "§13.1.3.5",
+    "item": "Impregnation apparatus, resin and consolidation or cure cycle",
+    "rows": [
+     "impregnation",
+     "resin",
+     "cure"
+    ],
+    "shown": false
+   },
+   {
+    "clause": "§13.1.3.6",
+    "item": "Tensile testing apparatus",
+    "rows": [
+     "machine"
+    ],
+    "shown": false
+   },
+   {
+    "clause": "§13.1.3.7",
+    "item": "Each specimen's and the average strength and chord modulus",
+    "rows": [
+     "specimens"
+    ],
+    "shown": true
+   },
+   {
+    "clause": "§13.1.3.8",
+    "item": "Reasons for rejecting specimens and the failure modes",
+    "rows": [
+     "specimens"
+    ],
+    "shown": true
+   },
+   {
+    "clause": "§13.1.3.9",
+    "item": "Deviations from the method",
+    "rows": [],
+    "shown": true
+   }
+  ],
+  "note": "Strength and chord modulus divide by the fibre's area, MUL / density (Eqs 4 and 5); the chord strains are absolute in the engine (ADR-0074: the standard's factor B gives GPa only with absolute strains). Nothing here is a model of the tow."
+ }
+}

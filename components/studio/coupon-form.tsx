@@ -4,7 +4,8 @@ import { fieldByKey, labelFor, libraryOptions, PLY_KEYS, sectionsFor, shortHelp,
 
 type Props = { form: StudioForm; errors: Record<string, string>; disabled: boolean; onChange: (key: string, value: string) => void };
 
-function Field({ field, value, units, error, disabled, onChange, words = field.words }: {
+/** One row: its label (in the coupon's units), its input or list, and its error or the first sentence of its help. The tow's rows use it too. */
+export function Field({ field, value, units, error, disabled, onChange, words = field.words }: {
   field: FieldDefinition; value: string; units: string; error?: string; disabled: boolean; onChange: (value: string) => void; words?: string[];
 }) {
   const id = `studio-${field.key}`;

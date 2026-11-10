@@ -252,6 +252,13 @@ def failures_of(deck: Deck, solution: Solution, field: PlyField, criteria: tuple
     return out
 
 
+def isotropic_only(deck: Deck) -> bool:
+    """Every section is one layer of an isotropic material (ADR-0075): a plastic, whose "ply" is the coupon itself, axis 1 along its length."""
+    sections = [section for part in deck.parts.values() for section in part.sections]
+    return bool(sections) and all(len(section.layers) == 1 and (material := deck.materials.get(section.layers[0].material)) is not None
+                                  and material.elastic is not None and material.elastic.kind == "ISOTROPIC" for section in sections)
+
+
 def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, ...] | None = None, quality: QualityField | None = None,
                coupon: dict[str, Any] | None = None, method: MethodInputs | None = None) -> dict[str, Any]:
     """The solved deck as the viewer reads it. `criteria` names the first-ply-failure criteria to report (default: every one the deck
@@ -335,6 +342,7 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     }
     if "total_force" in applied:
         summary["applied"]["total_force"] = float(from_si(applied["total_force"], "force", units))
+    summary["isotropic"] = isotropic_only(deck)
 
     def place_of(flat_index: int, array: np.ndarray) -> dict[str, Any]:
         where = np.unravel_index(flat_index, array.shape)

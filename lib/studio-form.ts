@@ -83,10 +83,29 @@ export const STANDARDS: StandardProfile[] = formDefinition.standards.profiles;
 /** Bonded tabs and the strain measurement: rows of the pulled and pushed tests only, which the check refuses for bending and a plate. */
 export const TAB_KEYS = ["tab_thickness", "tab_bevel", "tab_material"];
 export const STRAIN_KEYS = ["strain_device", "strain_length"];
+/** The dog-bone's rows (ADR-0075): a narrow section joined to the full width by fillets, for unnotched tension only. */
+export const DOGBONE_KEYS = ["narrow_width", "narrow_length", "radius", "outer_radius"];
+export const DOGBONE_TEST = "unnotched tension";
+/** One isotropic material, a plastic (ADR-0075): its thickness, E and nu, with its name and source on the Own material rows. It is built for
+ * the pulled and pushed tests, and it has no plies, no ply material and, until its yield and failure are modelled, no criterion. */
+export const ISOTROPIC_KEYS = ["thickness", "own_E", "own_nu"];
+export const ISOTROPIC_TESTS = ["unnotched tension", "unnotched compression", "open-hole tension"];
+export const PLY_MATERIAL_KEYS = ["library", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c", "own_F6", "G13", "G23", "f12_star"];
+/** Whether the form states one isotropic material: its Material kind row says so, on a test that takes one. */
+export const isIsotropic = (form: StudioForm): boolean => form.material_kind === "isotropic" && ISOTROPIC_TESTS.includes(form.test);
 /** The standard the form's Standard row names; null for none, a blank row or a word the list does not hold (the check refuses it). */
 export const standardOf = (form: StudioForm): StandardProfile | null => STANDARDS.find((p) => p.designation === form.standard) ?? null;
 /** The standards that cover a test, as the Standard row offers them. */
 export const standardsFor = (test: string): StandardProfile[] => STANDARDS.filter((p) => p.tests.includes(test));
+
+/** What each test is, in the words of the Test row's own help as the engine writes it ("unnotched tension (a plain strip pulled)"), for the
+ * first step's choices (ADR-0062 amendment 1); a test the help does not describe gets an empty string, which `tests/workspace-panels.test.ts`
+ * refuses. */
+export function testDescription(test: string): string {
+  const help = fieldByKey.test?.help ?? "";
+  const escaped = test.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return help.match(new RegExp(`(?:^|[:,] |or )${escaped} \\(([^)]*)\\)`))?.[1] ?? "";
+}
 
 /** The words a list row offers on this form (ADR-0072): the Standard row "none" and the standards of the test picked (every one before a
  * test is picked), the Specimen row the specimens of the standard picked; every other row its own words. The check still refuses a word
@@ -129,12 +148,15 @@ export const presetsOf = (profile: StandardProfile): StandardPreset[] => [...pro
 
 /** The rows a standard's size sets, in the coupon's units as the engine wrote them (the page converts nothing), with the specimen it names
  * and the words of Where the size comes from. A size without bonded tabs (D3039's balanced class, gripped through emery cloth) clears the tab
- * rows another size of the same standard set; the tab length it does not give stays as typed. */
+ * rows another size of the same standard set; the tab length it does not give stays as typed. A D638 type without Type IV's outer radius
+ * clears it, and a size that gives the gage length names the extensometer the standard measures it with when no device is typed (ADR-0075). */
 export function presetRows(form: StudioForm, profile: StandardProfile, preset: StandardPreset): StudioForm {
   const rows: StudioForm = {};
   for (const [key, value] of Object.entries(preset.values[unitsOf(form)] ?? {})) rows[key] = String(value);
-  const tabbed = presetsOf(profile).some((p) => Object.values(p.values).some((v) => "tab_thickness" in v));
-  if (tabbed && !("tab_thickness" in rows)) for (const key of TAB_KEYS) rows[key] = "";
+  const somewhere = (key: string) => presetsOf(profile).some((p) => Object.values(p.values).some((v) => key in v));
+  if (somewhere("tab_thickness") && !("tab_thickness" in rows)) for (const key of TAB_KEYS) rows[key] = "";
+  if (somewhere("outer_radius") && !("outer_radius" in rows)) rows.outer_radius = "";
+  if ("strain_length" in rows && !(form.strain_device ?? "").trim()) rows.strain_device = "extensometer";
   if (profile.variant_words.includes(preset.key)) rows.specimen = preset.key;
   rows.size_from = `${profile.designation}, ${preset.clause}: ${preset.label}` + (preset.note ? `; ${preset.note}` : "");
   return rows;
@@ -168,11 +190,14 @@ export function exampleForm(today: string): StudioForm {
 
 /** The sections to show for a test: the open-hole rows only for open-hole tension and for a plate, the bending rows only for the bending
  * tests, which have supports instead of grips and tabs, the loading span only for four-point bending, and for a plate (ADR-0054) neither the
- * grips nor the loading rows, since it lists its supports and loads over regions (the tool ignores the rest otherwise). */
+ * grips nor the loading rows, since it lists its supports and loads over regions (the tool ignores the rest otherwise). The dog-bone's rows
+ * show for unnotched tension; an isotropic material (ADR-0075) shows its thickness, E and nu in place of the plies, the ply material and the
+ * criterion. */
 export function sectionsFor(form: StudioForm): SectionDefinition[] {
   const openHole = form.test === OPEN_HOLE_TEST;
   const bending = BENDING_TESTS.includes(form.test);
   const plate = form.test === PLATE_TEST;
+  const isotropic = isIsotropic(form);
   const visible = (field: FieldDefinition): boolean => {
     if (HOLE_KEYS.includes(field.key)) return openHole || plate;
     if (BENDING_KEYS.includes(field.key)) return bending && (field.key !== "load_span" || form.test === FOUR_POINT_TEST);
@@ -181,6 +206,10 @@ export function sectionsFor(form: StudioForm): SectionDefinition[] {
     if (LOADING_KEYS.includes(field.key)) return !plate;
     if (TAB_KEYS.includes(field.key) || STRAIN_KEYS.includes(field.key)) return !bending && !plate;
     if (field.key === "specimen") return (standardOf(form)?.variant_words.length ?? 0) > 0; // only a standard that names its specimens asks
+    if (DOGBONE_KEYS.includes(field.key)) return form.test === DOGBONE_TEST;
+    if (field.key === "material_kind") return ISOTROPIC_TESTS.includes(form.test);
+    if (ISOTROPIC_KEYS.includes(field.key)) return isotropic;
+    if (PLY_KEYS.includes(field.key) || PLY_MATERIAL_KEYS.includes(field.key) || ["symmetric", "ply_thickness", "criteria"].includes(field.key)) return !isotropic;
     return true;
   };
   return formDefinition.sections

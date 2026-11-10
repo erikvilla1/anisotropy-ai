@@ -5,9 +5,13 @@ import { printed } from "../../lib/studio-colors";
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
 const BENDING = "three-point bending";
 const API = /https?:\/\/[^/]+\/v1\//;
+/** The first step's answers (ADR-0062 amendment 1): a test, then a standard, each a choice on the Test and standard panel. */
+const pickTest = (page: Page, test: string) => page.getByTestId("question-test").locator(`input[value="${test}"]`).check();
+const pickStandard = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`).check();
+const standardChoice = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`);
 
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
-async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number }, options: { missFirstFieldsRead?: boolean } = {}) {
+async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[] }, options: { missFirstFieldsRead?: boolean } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
@@ -19,6 +23,11 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) return json(route, { detail: "Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read" }, 503); // no project store: the browser keeps the project alone
     if (path === "/v1/coupons/IM7-UNT-L1/values") return json(route, { name: "IM7-UNT-L1", values: fixture("values") });
+    if (path === "/v1/tow-tests" && request.method() === "POST") { // a fibre tow record, answered by the package from the public fixture (ADR-0074)
+      (calls.tows ??= []).push(request.postDataJSON());
+      const answer = fixture("tow", "studio-tow");
+      return json(route, { run_id: "run-6", state: answer.checklist.state, checklist: answer.checklist, result: answer.result });
+    }
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
       const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
@@ -161,7 +170,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await mockApi(page, calls);
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
-  await page.getByLabel("Test", { exact: true }).selectOption(BENDING);
+  await pickTest(page, BENDING);
   await expect(page.getByLabel("Support span (mm)", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Tab length (mm)", { exact: true })).toHaveCount(0); // a bending coupon rests on supports
   await expect(page.getByLabel("Grip kind", { exact: true })).toHaveCount(0);
@@ -202,7 +211,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   await mockApi(page, calls);
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
-  await page.getByLabel("Test", { exact: true }).selectOption("plate");
+  await pickTest(page, "plate");
   await expect(page.getByTestId("plate-panel")).toBeVisible();
   await expect(page.getByLabel("Grip kind", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Loading type", { exact: true })).toHaveCount(0);
@@ -257,11 +266,15 @@ test("a standard is offered by its test, fills its size, and the check judges th
   await mockApi(page, calls);
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
-  const standard = page.getByLabel("Standard", { exact: true });
-  await expect(standard.locator("option")).toHaveText(["none", "ASTM D3039/D3039M-17"]); // C1869 is open-hole tension: not offered here
+  const titles = page.getByTestId("question-standard").locator(".ws-choice-title");
+  await expect(titles).toHaveText(["ASTM D3039/D3039M-17", "ASTM D638-22", "No standard"]); // C1869 is open-hole tension: not offered here
+  await expect(standardChoice(page, "none")).toBeChecked();
+  await expect(page.getByTestId("setup-line")).toContainText("Setting up unnotched tension to your own size, under no standard");
   await expect(page.getByTestId("standard-card")).toContainText("No standard picked");
-  await standard.selectOption("ASTM D3039/D3039M-17");
+  await pickStandard(page, "ASTM D3039/D3039M-17");
+  await expect(page.getByTestId("setup-line")).toContainText("Setting up unnotched tension under ASTM D3039/D3039M-17");
   await expect(page.getByTestId("standard-card")).toContainText("Tensile properties of polymer matrix composites");
+  await expect(page.getByTestId("step-standard-geometry")).toContainText("What ASTM D3039/D3039M-17 asks of the geometry");
   await page.getByRole("button", { name: "Use 0° unidirectional" }).click();
   await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("15");
   await expect(page.getByLabel("Tab bevel angle (deg)", { exact: true })).toHaveValue("7");
@@ -276,13 +289,14 @@ test("a standard is offered by its test, fills its size, and the check judges th
   await expect(page.getByTestId("standard-summary")).toContainText("5 of 5 requirements a model can meet are met");
   await expect(page.getByTestId("standard-card").locator("[data-requirement=t2-thickness]")).toHaveAttribute("data-state", "advisory");
   await expect(page.getByTestId("standard-card").locator("[data-requirement=min-length]")).toContainText("at least 187 mm");
+  await expect(page.getByTestId("step-standard-geometry").locator("[data-requirement=min-length]")).toHaveAttribute("data-state", "met"); // judged on its step too
   const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
   expect([sent.standard, sent.strain_device, sent.strain_length, sent.width]).toEqual(["ASTM D3039/D3039M-17", "extensometer", 25, 25]);
-  await page.getByLabel("Test", { exact: true }).selectOption("open-hole tension"); // another test clears a standard that does not cover it
-  await expect(standard).toHaveValue("none");
+  await pickTest(page, "open-hole tension"); // another test clears a standard that does not cover it
+  await expect(standardChoice(page, "none")).toBeChecked();
   await expect(page.getByTestId("status")).toContainText("the Standard row is back to none");
-  await expect(standard.locator("option")).toHaveText(["none", "ASTM C1869-18(2023)"]);
-  await standard.selectOption("ASTM C1869-18(2023)");
+  await expect(titles).toHaveText(["ASTM C1869-18(2023)", "No standard"]);
+  await pickStandard(page, "ASTM C1869-18(2023)");
   await expect(page.getByLabel("Specimen", { exact: true }).locator("option")).toHaveText(["(blank)", "A", "B", "other"]);
   await page.getByRole("button", { name: /Use Specimen B/ }).click();
   await expect(page.getByLabel("Specimen", { exact: true })).toHaveValue("B");
@@ -291,12 +305,44 @@ test("a standard is offered by its test, fills its size, and the check judges th
   await expect(page.getByTestId("sketch")).toContainText("Sized for ASTM C1869-18(2023), Specimen B");
 });
 
+test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, E and nu in place of the plies (ADR-0075)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await pickStandard(page, "ASTM D638-22");
+  await expect(page.getByTestId("setup-line")).toContainText("Setting up unnotched tension under ASTM D638-22");
+  await page.getByRole("button", { name: /Use Type I: 13 mm wide/ }).click();
+  await expect(page.getByLabel("Narrow width (mm)", { exact: true })).toHaveValue("13");
+  await expect(page.getByLabel("Fillet radius (mm)", { exact: true })).toHaveValue("76");
+  await expect(page.getByLabel("Outer radius (mm)", { exact: true })).toHaveValue(""); // Type I has none
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("19");
+  await expect(page.getByLabel("Strain measurement", { exact: true })).toHaveValue("extensometer"); // the gage length is an extensometer's
+  await expect(page.getByLabel("Specimen", { exact: true })).toHaveValue("I");
+  await expect(page.getByTestId("layup-editor")).toBeVisible(); // plies until the material kind says otherwise
+  await page.getByLabel("Material kind", { exact: true }).selectOption("isotropic");
+  await expect(page.getByTestId("layup-editor")).toHaveCount(0);
+  await expect(page.getByTestId("isotropic-hint")).toBeVisible();
+  await page.getByLabel("Thickness (mm)", { exact: true }).fill("3.2");
+  await page.getByLabel("Own material: E (MPa)", { exact: true }).fill("3000");
+  await page.getByLabel("Own material: nu", { exact: true }).fill("0.35");
+  await expect(page.getByLabel("G13 (MPa)", { exact: true })).toHaveCount(0); // no ply material for a plastic
+  await expect(page.getByTestId("sketch")).toContainText("a dog-bone narrowing to 13 by 57 mm through 76 mm fillets");
+  await expect(page.getByTestId("sketch")).toContainText("One isotropic material, drawn 3.2 mm thick");
+  await page.getByTestId("check-button").click();
+  await expect.poll(() => calls.checks.length).toBeGreaterThan(0);
+  const sent = (calls.checks[0] as { values: Record<string, unknown> }).values;
+  expect([sent.standard, sent.specimen, sent.material_kind, sent.thickness, sent.own_E, sent.own_nu, sent.narrow_width, sent.radius])
+    .toEqual(["ASTM D638-22", "I", "isotropic", 3.2, 3000, 0.35, 13, 76]);
+  expect([sent.ply_1, sent.library, sent.G13, sent.criteria]).toEqual([undefined, undefined, undefined, undefined]); // hidden rows are not sent
+});
+
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
-  await page.getByLabel("Standard", { exact: true }).selectOption("ASTM D3039/D3039M-17");
+  await pickStandard(page, "ASTM D3039/D3039M-17");
   await page.getByLabel("Strain measurement", { exact: true }).selectOption("extensometer");
   await page.getByLabel("Strain measurement length (mm)", { exact: true }).fill("25");
   await page.getByTestId("check-button").click();
@@ -317,10 +363,17 @@ test("a fresh form's choices start blank, not on their first word", async ({ pag
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
   await page.goto("/workspace/fea");
-  for (const label of ["Test", "Symmetric", "Loading type"]) await expect(page.getByLabel(label, { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("Test", { exact: true }).locator("option:checked")).toHaveText("choose one");
-  await page.getByLabel("Test", { exact: true }).selectOption("unnotched tension");
-  await expect(page.getByLabel("Test", { exact: true })).toHaveValue("unnotched tension");
+  await expect(page.getByTestId("question-test").locator("input:checked")).toHaveCount(0); // the first step asks; nothing is picked for the engineer
+  await expect(page.getByTestId("setup-line")).toContainText("Start with step 1");
+  await expect(page.getByTestId("waiting-geometry")).toBeVisible(); // the steps that depend on the test wait for it
+  await expect(page.getByTestId("question-standard")).toHaveCount(0);
+  await pickTest(page, "unnotched tension");
+  await expect(page.getByTestId("waiting-geometry")).toHaveCount(0);
+  for (const label of ["Symmetric", "Loading type"]) await expect(page.getByLabel(label, { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Loading type", { exact: true }).locator("option:checked")).toHaveText("choose one");
+  await expect(standardChoice(page, "none")).toBeChecked();
+  await pickTest(page, "in-plane shear");
+  await expect(page.getByTestId("no-standard-offered")).toContainText("Our list holds no test standard for in-plane shear yet");
 });
 
 test("a coupon reopens into the form and the viewer window reads a job by its address", async ({ page }) => {
@@ -414,10 +467,10 @@ test("a word that names no value sends the engineer to the panel that asks for t
   await message.fill("coupon");
   await message.press("Enter");
   const redirect = page.getByTestId("chat-redirect").last();
-  await expect(redirect).toHaveAttribute("data-panel", "project"); // the test is the next thing to state, a Project row
+  await expect(redirect).toHaveAttribute("data-panel", "test"); // the test is the next thing to state, the first step
   await expect(redirect).toContainText("This is the coupon workspace");
-  await expect(redirect).toContainText("under the Project panel");
-  await page.getByTestId("ws-rail").getByLabel("Test", { exact: true }).selectOption("unnotched tension"); // typed on the panel, not in the chat
+  await expect(redirect).toContainText("under the Test and standard panel");
+  await page.getByTestId("ws-rail").getByTestId("question-test").locator('input[value="unnotched tension"]').check(); // picked on the panel, not in the chat
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material");
   await page.getByRole("button", { name: "IM7 / 8552", exact: true }).click();
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear");
@@ -591,4 +644,60 @@ test("the model is lit for presentation before a run: the sketch and the package
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "");
   await page.getByTestId("studio-scene").screenshot({ path: ".local/website/screenshots/studio-preview-lit.png" });
   expect(browserErrors).toEqual([]);
+});
+
+test("the fibre tow test swaps the panels for the tow's, and Calculate shows each specimen and the statistics (ADR-0074)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[], tows: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  const rail = page.getByTestId("ws-rail");
+  await rail.getByTestId("question-test").locator('input[value="fibre tow tension"]').check(); // the first step's card, as for a coupon
+  await expect(page.getByTestId("tow-form")).toBeVisible();
+  await expect(rail.getByTestId("panel-tow-standard")).toContainText("Test and standard"); // the same first step, still there
+  await expect(rail.getByTestId("question-test").locator("input:checked")).toHaveValue("fibre tow tension");
+  await expect(page.getByTestId("panel-geometry")).toHaveCount(0); // a tow has no coupon geometry, layup or mesh
+  await expect(page.getByTestId("tow-sketch")).toBeVisible();
+  const standard = rail.getByTestId("question-standard");
+  await expect(standard.locator("input")).toHaveCount(2);
+  expect(await standard.locator("input").evaluateAll((inputs) => inputs.map((i) => (i as HTMLInputElement).value))).toEqual(["ASTM D4018-23", "none"]);
+  await standard.locator('input[value="ASTM D4018-23"]').check();
+  await expect(page.getByTestId("setup-line")).toContainText("fibre tow tension under ASTM D4018-23");
+  await expect(page.getByTestId("standard-card")).toContainText("What Calculate will judge");
+  await expect(page.getByLabel("Bundles per specimen", { exact: true })).toHaveValue("1");
+  const values = fixture("values", "studio-tow");
+  await page.getByLabel("Filled in by", { exact: true }).fill(values.filled_by);
+  for (const [label, key] of [["Fibre", "fibre"], ["Filaments per bundle", "filaments"], ["Mass per unit length (g/m)", "mul"], ["Measured density (g/cm³)", "fibre_density"],
+    ["Resin strain to failure (microstrain)", "resin_strain"], ["Impregnated mass per unit length (g/m)", "mul_impregnated"], ["Gauge length (mm)", "tow_gauge_length"],
+    ["Machine speed (mm/min)", "speed"], ["Typical strain at failure (microstrain)", "failure_strain"], ["Datasheet strength (MPa)", "datasheet_strength"],
+    ["Datasheet modulus (GPa)", "datasheet_modulus"]] as const) {
+    await page.getByLabel(label, { exact: true }).fill(String(values[key]));
+  }
+  await page.getByLabel("Fibre type", { exact: true }).selectOption("carbon");
+  await page.getByLabel("Density measured on", { exact: true }).selectOption("desized");
+  await page.getByLabel("Tabs", { exact: true }).selectOption("paper or card");
+  await expect(page.getByTestId("strand-sketch")).toHaveAttribute("aria-label", /150 mm between the tabs, paper or card tabs/);
+  const pasted = (values.specimens as Record<string, unknown>[]).map((s) => ["id", "max_force", "force_lower", "force_upper", "failure_code", "status", "note"]
+    .map((k) => (s[k] ?? "")).join("\t")).join("\n");
+  await page.getByText("Paste specimens from a spreadsheet").click();
+  await page.getByLabel("Specimens to paste").fill(pasted);
+  await page.getByRole("button", { name: "Replace the list" }).click();
+  await expect(page.getByTestId("tow-specimens").locator("fieldset")).toHaveCount(5);
+  await expect(page.getByTestId("tow-specimens").locator("[data-specimen='4']")).toContainText("grip or tab, at the grip or tab, top");
+  await page.getByTestId("tow-calculate").click();
+  await expect(page.getByTestId("tow-results")).toBeVisible();
+  const sent = (calls.tows[0] as { values: Record<string, unknown> }).values;
+  expect([sent.test, sent.standard, sent.mul, sent.tow_gauge_length, sent.bundles, (sent.specimens as unknown[]).length]).toEqual(["fibre tow tension", "ASTM D4018-23", 0.8, 150, 1, 5]);
+  expect((sent.specimens as Record<string, unknown>[])[0]).toEqual(values.specimens[0]);
+  const result = fixture("tow", "studio-tow").result;
+  await expect(page.getByTestId("tow-strength")).toContainText(`${Number(result.strength.mean.toPrecision(4))} MPa`); // the engine's mean, printed
+  await expect(page.getByTestId("tow-modulus")).toContainText(`${Number(result.modulus.mean.toPrecision(4))} GPa`);
+  await expect(page.getByTestId("tow-specimen-table").locator("tbody tr")).toHaveCount(5);
+  await expect(page.getByTestId("tow-specimen-table").locator("tr[data-status=rejected]")).toContainText("slipped in the top grip");
+  await expect(page.getByTestId("tow-conformance")).toContainText("test record checked against ASTM D4018-23: 7 of 7 requirements the record shows are met");
+  await expect(page.getByTestId("standard-card").locator("[data-requirement=grip-failures]")).toHaveAttribute("data-state", "note");
+  await expect(page.getByTestId("tow-report").locator("li[data-shown=no]").first()).toContainText("not in this record");
+  await rail.getByTestId("question-test").locator('input[value="unnotched tension"]').check(); // back to a coupon: its panels, the tow's standard cleared
+  await expect(page.getByTestId("tow-form")).toHaveCount(0);
+  await expect(rail.getByTestId("question-standard").locator("input:checked")).toHaveValue("none");
 });

@@ -68,9 +68,19 @@ export const testStandardReferences = [
     rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
       + "with their clause only; readers consult their own copy. The publisher lists D3039/D3039M-17(2025), a reapproval, as active.",
     url: "https://store.astm.org/d3039_d3039m-17r25.html" },
+  { designation: "ASTM D638-22", title: "Standard Test Method for Tensile Properties of Plastics",
+    publisher: "ASTM International", rights: "licensed-reference" as const,
+    rightsEvidence: "Copyrighted and sold by ASTM; the founder supplied copies of D638-22, the active edition, and D638-14, kept out of the repository. "
+      + "Individual values with their clause only, in our words; readers consult their own copy (ADR-0075).",
+    url: "https://store.astm.org/d0638-22.html" },
   { designation: "ASTM C1869-18(2023)", title: "Standard Test Method for Open-Hole Tensile Strength of Fiber-Reinforced Advanced Ceramic Composites",
     publisher: "ASTM International", rights: "licensed-reference" as const,
     rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
       + "with their clause only; readers consult their own copy.",
     url: "https://store.astm.org/c1869-18.html" },
+  { designation: "ASTM D4018-23", title: "Standard Test Methods for Properties of Continuous Filament Carbon and Graphite Fiber Tows",
+    publisher: "ASTM International", rights: "licensed-reference" as const,
+    rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
+      + "with their clause only; readers consult their own copy. No finite element model: the engine reduces a test record (ADR-0074).",
+    url: "https://store.astm.org/d4018-23.html" },
 ];

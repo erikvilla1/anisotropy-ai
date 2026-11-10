@@ -26,7 +26,7 @@ from .intake import FIELDS, FormInput, IntakeError, Values, check_form, designat
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
-from .spec import BENDING_KINDS, TEST_CODES, SpecError, full_angles, layup_text, spec_plies
+from .spec import BENDING_KINDS, TEST_CODES, SpecError, full_angles, is_isotropic, layup_text, spec_plies
 from .standards.conformance import conformance
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
@@ -54,12 +54,12 @@ ITEM_OF_KEY = {  # which item a form row belongs to
                                    "name_part", "name_instance", "name_material", "name_layup", "name_section")},
     "units": "units",
     **{key: "geometry" for key in ("length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span", "tab_thickness", "tab_bevel",
-                                   "tab_material")},
+                                   "tab_material", "narrow_width", "narrow_length", "radius", "outer_radius")},
     **{key: "standard" for key in ("standard", "specimen", "strain_device", "strain_length")},
     **{key: "mesh" for key in ("hole_circumferential", "hole_radial", "hole_ring", "hole_growth", "element_size", "mesh_nx", "mesh_partitions", "mesh_seeds")},
-    **{key: "laminate" for key in ("symmetric", "ply_thickness", *(f"ply_{i}" for i in range(1, 17)))},
+    **{key: "laminate" for key in ("symmetric", "ply_thickness", "material_kind", "thickness", *(f"ply_{i}" for i in range(1, 17)))},
     **{key: "material" for key in ("library", "own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c",
-                                   "own_F6", "own_source", "G13", "G23")},
+                                   "own_F6", "own_source", "G13", "G23", "own_E", "own_nu")},
     **{key: "criterion" for key in ("criteria", "f12_star")},
     **{key: "load" for key in ("control", "value")},
     **{key: "constraints" for key in ("grips", "region")},
@@ -245,8 +245,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             model = None
             reason = str(exc).split("Value error, ", 1)[-1].split(" [type=", 1)[0]
             problems.append(reason)
+            iso = values is not None and values.isotropic is not None
             notes.note("material", "fail", f"our engine refuses these constants: {reason}",
-                       (row("own_E1"), row("own_E2"), row("own_G12"), row("own_nu12")))
+                       (row("own_E"), row("own_nu")) if iso else (row("own_E1"), row("own_E2"), row("own_G12"), row("own_nu12")))
     if spec is not None:  # the test standard: judged on the spec, whatever the mesh says; a deviation warns and never blocks (ADR-0072)
         judged = conformance(spec)
         if judged is None:
@@ -266,20 +267,22 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             f"the coupon has {attempts} row{'s' if attempts != 1 else ''} in its attempt log, so this run is attempt {attempts + 1}" if exists
             else "a new coupon: its folder and case page are written when it runs"))
         # units: every row is in the stated system; a modulus outside the engine's plausible range after conversion means the wrong unit
-        moduli = (("E1", material.E1), ("E2", material.E2), ("G12", material.G12), ("G13", material.G13), ("G23", material.G23))
+        isotropic = is_isotropic(spec)  # one material with no plies (ADR-0075): E is its only modulus on the form
+        moduli = ((("E", material.E1),) if isotropic else
+                  (("E1", material.E1), ("E2", material.E2), ("G12", material.G12), ("G13", material.G13), ("G23", material.G23)))
         suspicious = [name for name, value in moduli if not PLAUSIBLE_MODULUS_PA[0] <= value <= PLAUSIBLE_MODULUS_PA[1]]
         deck_units = deck_units_of(units)
         if suspicious:
             shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in suspicious)
             notes.note("units", "warn", f"{shown}: outside the plausible range for a modulus in {lab['stress']} ({lab['modulus']} typed as {lab['stress']}, "
-                       "or the reverse?)", tuple(row(f"own_{name}") if name in ("E1", "E2", "G12") else row(name) for name in suspicious))
+                       "or the reverse?)", tuple(row(f"own_{name}") if name in ("E", "E1", "E2", "G12") else row(name) for name in suspicious))
         else:
             notes.note("units", "pass", f"every row in {units_words(units)}; the results come back in the same units"
                        + (f"; the Abaqus and CalculiX decks are written in {units_words(deck_units)}, as every deck we solve is" if deck_units != units
                           else f", and the decks are written in {units}"))
         # transverse shear: our membrane never uses G13 and G23, CalculiX's brick does, so a value far from G12 parts the two solvers
         low, high = material.G12 / TRANSVERSE_SHEAR_RATIO, material.G12 * TRANSVERSE_SHEAR_RATIO
-        odd = [name for name, value in (("G13", material.G13), ("G23", material.G23)) if not low <= value <= high]
+        odd = [] if isotropic else [name for name, value in (("G13", material.G13), ("G23", material.G23)) if not low <= value <= high]
         if odd:
             shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in odd)
             notes.note("material", "warn", f"{shown} against G12 = {from_si(material.G12, 'stress', units):g} {lab['stress']}: a transverse shear modulus "
@@ -291,6 +294,12 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             size += f", {length(g.tab_length):g} {lab['length']} tabs with a node row on each tab line"
         if g.hole_diameter:
             size += f", central hole of {length(g.hole_diameter):g} {lab['length']}"
+        if g.dogbone is not None:
+            d = g.dogbone
+            size += (f", a dog-bone {length(d.narrow_width):g} {lab['length']} wide over its {length(d.narrow_length):g} {lab['length']} narrow section "
+                     f"with a {length(d.radius):g} {lab['length']} fillet" + (f" and a {length(d.outer_radius):g} {lab['length']} outer radius"
+                                                                            if d.outer_radius is not None else "")
+                     + ", the mesh rows squeezed to its outline")
         if spec.kind in BENDING_KINDS:
             size += (f", {length(g.span):g} {lab['length']} span with {length(g.overhang):g} {lab['length']} overhangs"
                      + (f", {length(g.load_span):g} {lab['length']} loading span" if g.load_span else "") + ", a node row on each support and nose line")
@@ -299,7 +308,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         has_strengths = material.strengths is not None
         if not odd:
             notes.note("material", "pass", f"{material.name}: {material.source}; rights class {material.rights}; "
-                       + ("strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
+                       + (f"isotropic, E = {from_si(material.E1, 'stress', units):g} {lab['stress']} and nu = {material.nu12:g}; its yield and failure "
+                          "are not modelled yet" if isotropic else
+                          "strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
         # laminate
         angles = full_angles(spec)
         thickness = length(sum(p.thickness_m for p in plies))
@@ -312,7 +323,11 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         else:
             kernel_words = ("symmetric, so B = 0 and the membrane model applies" if symmetric
                             else "not symmetric (B does not vanish), so the flat shell kernel solves it with stretching and bending coupled")
-        notes.note("laminate", "pass", f"{len(angles)} plies {layup_text(spec)}, {thickness:g} {lab['length']} thick; {kernel_words}")
+        if isotropic:
+            notes.note("laminate", "pass", f"no plies: one isotropic material, {thickness:g} {lab['length']} thick, in a homogeneous shell section; "
+                       "the membrane model applies")
+        else:
+            notes.note("laminate", "pass", f"{len(angles)} plies {layup_text(spec)}, {thickness:g} {lab['length']} thick; {kernel_words}")
         sets = model.node_sets
         held = [b for b in model.boundaries if b.value == 0.0]
         if model.plate:
@@ -391,8 +406,10 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         # criterion
         criteria = list(spec.output.fpf_criteria)
         if not criteria:
-            notes.note("criterion", "warn", "no failure criterion: first-ply failure will not be reported"
-                       + ("" if has_strengths else " (the material has no strengths)"), ("Failure criterion",))
+            notes.note("criterion", "warn", ("no failure criterion: an isotropic material's yield and failure are not modelled yet, so the run reports "
+                                             "stiffness, stress and strain only" if isotropic else
+                                             "no failure criterion: first-ply failure will not be reported"
+                                             + ("" if has_strengths else " (the material has no strengths)")), ("Failure criterion",))
         else:
             bad = []
             for criterion in criteria:
