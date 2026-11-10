@@ -56,7 +56,8 @@ On 2026-11-10, in headless Chromium on the dev server:
 - **Load,** medians on a quiet machine at 1440 by 900: 2,339 ms from load to idle with the tour, against 2,269 ms without it. A click from the home page to About took 475 ms, against 463 ms.
 - **Requests:** one before the loads step and two after it. With the engine's address emptied the page sent none.
 - **Checks:** `npm run typecheck` clean. `npm test`: 205 passed, 1 skipped, including 7 unit tests of the clock and the bridge's transform. `home.spec.ts`, `tour.spec.ts` and `intro.spec.ts`: 20 of 20.
-- **Flaky once:** one earlier run failed a load-in test, with the veil at opacity 0.998 where 1 was expected; it passed in every later run.
+- **Flaky once:** one earlier run failed a load-in test, with the veil at opacity 0.998 where 1 was expected. ADR-0070 amendment 2 removed that race.
+- **Against the built site,** the same day: the whole browser suite, 74 passed and 1 skipped (the live-studio test, which needs the hosted site). One calculator test had counted every request to the engine; reaching the calculator now scrolls through the tour, which may ask for its loaded case on the way, so that test counts the calculator's own requests.
 - **UNVERIFIED:** smoothness on a real graphics card (headless Chromium draws in software, and shows the view's plainer look); Safari and Firefox; phones beyond "nothing overflows at 390 px"; screen readers.
 
 ## Consequences

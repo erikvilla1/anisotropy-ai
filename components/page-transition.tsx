@@ -6,6 +6,7 @@ import { prepareIntro, type IntroRun } from "@/components/intro-text";
 import "@/app/intro.css";
 
 const LEAVE_MS = 350; // Anduril fades to black for 350 ms before it shows the next page (ADR-0070 amendment 1)
+const LEAVE_GRACE_MS = 200; // how long past the fade the navigation waits for the fade's end before going anyway
 const STUCK_MS = 4000; // if the next page has not arrived by then, lift the veil anyway
 const FONT_WAIT_MS = 800; // the longest the black waits for the page's fonts, so the text is measured in its own type
 
@@ -38,6 +39,8 @@ export function PageTransition() {
   const [phase, setPhase] = useState<Phase>(() => (pathname.startsWith("/workspace") || pathname === "/chat" ? "idle" : "enter"));
   const veil = useRef<HTMLDivElement>(null);
   const leaving = useRef(false);
+  const pending = useRef<string | null>(null); // where a header or footer link is going, until the veil is up
+  const navigate = useRef<() => void>(() => {});
   const timers = useRef<number[]>([]);
   const intro = useRef<IntroRun | null>(null);
   const firstLoad = useRef(phase === "enter");
@@ -77,6 +80,13 @@ export function PageTransition() {
   }, []);
 
   useEffect(() => {
+    function go() {
+      const to = pending.current;
+      if (to === null) return;
+      pending.current = null;
+      router.push(to);
+    }
+    navigate.current = go;
     function onClick(event: MouseEvent) {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const link = (event.target as Element | null)?.closest?.("a");
@@ -91,8 +101,11 @@ export function PageTransition() {
       // navigate; the navigation follows once the veil is up.
       event.preventDefault();
       leaving.current = true;
+      // The navigation follows when the veil's fade to black has ended (onAnimationEnd below), so the old page is fully
+      // covered before the address changes; the timer is the fallback for a browser that never reports the fade's end.
+      pending.current = url.pathname + url.search;
       setPhase("leave");
-      timers.current.push(window.setTimeout(() => router.push(url.pathname + url.search), LEAVE_MS));
+      timers.current.push(window.setTimeout(go, LEAVE_MS + LEAVE_GRACE_MS));
       timers.current.push(window.setTimeout(() => {
         if (leaving.current) { leaving.current = false; setPhase("arrive"); }
       }, LEAVE_MS + STUCK_MS));
@@ -122,7 +135,11 @@ export function PageTransition() {
       className={`page-transition is-${phase}`}
       aria-hidden="true"
       // A fade out has ended (the stylesheet's own, on a first load no script took over, included): the veil rests.
-      onAnimationEnd={() => setPhase((now) => (now === "leave" ? now : "idle"))}
+      // The fade to black has ended: the navigation that was waiting for it goes ahead, and the veil holds.
+      onAnimationEnd={() => {
+        if (leaving.current && pending.current !== null) navigate.current();
+        else setPhase((now) => (now === "leave" ? now : "idle"));
+      }}
     />
   );
 }

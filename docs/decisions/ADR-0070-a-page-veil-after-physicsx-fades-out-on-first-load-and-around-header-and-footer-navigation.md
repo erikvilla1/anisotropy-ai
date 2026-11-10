@@ -97,3 +97,11 @@ What Anduril's code does:
 
 - Every first load is black until the page's scripts and fonts are ready.
 - A screenshot taken in the first two or three seconds shows the moves; tests that need the settled page wait for the veil to go idle or ask for reduced motion.
+
+## Amendment 2, 2026-11-10 (the navigation waits for the fade to end)
+
+**Context.** After a header or footer link was clicked, the next page was requested by a 350 ms timer running beside the veil's 350 ms fade to black. The timer could fire one frame before the fade's last frame. Repeating the load-in's browser test three times against the built site, the test failed twice: the veil's opacity was 0.998, not 1, on the last frame before the address changed.
+
+**Decision.** The next page is requested when the veil's fade reports its end (`animationend`), so the old page is fully covered first. A timer 200 ms after the fade's length is the fallback for a browser that never reports the end.
+
+**Evidence.** On 2026-11-10, against the built site: `intro.spec.ts`, `home.spec.ts` and `tour.spec.ts` repeated five times each, 100 of 100 passed.

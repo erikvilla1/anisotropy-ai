@@ -106,22 +106,25 @@ test("typing a layup posts the expanded plies once the typing settles; an unread
   await playApi(page, posts);
   await page.goto("/");
   await expect.poll(() => posts.length).toBe(1);
+  // Reaching the calculator scrolls the page through the tour, which may ask the engine for its own loaded case on the way
+  // (ADR-0084; tour.spec.ts covers that request). This test counts the calculator's requests, which carry no load here.
+  const own = () => posts.filter((post) => Object.values(post.loads).every((value) => value === 0));
   const layup = page.getByLabel("Layup", { exact: true });
   await layup.fill("[0/90]s");
-  await expect.poll(() => posts.length).toBe(2);
-  expect(posts[1].plies.map((ply) => ply.angle_deg)).toEqual([0, 90, 90, 0]);
+  await expect.poll(() => own().length).toBe(2);
+  expect(own()[1].plies.map((ply) => ply.angle_deg)).toEqual([0, 90, 90, 0]);
   await expect(calculator(page).getByTestId("stack-row")).toHaveCount(4);
   await layup.pressSequentially("x", { delay: 20 });
   await expect(page.locator("#hero-layup-hint")).toContainText("Could not read the layup");
   await expect(page.locator(".hero-laminate-results").getByRole("alert")).toContainText("Could not read the layup");
   await page.waitForTimeout(700);
-  expect(posts.length).toBe(2);
+  expect(own().length).toBe(2);
   await layup.fill("[0/45/-45/90]");
   await layup.fill("[0/45]");
-  await expect.poll(() => posts.length).toBe(3);
-  expect(posts[2].plies.map((ply) => ply.angle_deg)).toEqual([0, 45]);
+  await expect.poll(() => own().length).toBe(3);
+  expect(own()[2].plies.map((ply) => ply.angle_deg)).toEqual([0, 45]);
   await page.waitForTimeout(700);
-  expect(posts.length).toBe(3);
+  expect(own().length).toBe(3);
 });
 
 test("a load turns on first-ply failure, with the engine's reasons for the criteria it did not run", async ({ page }) => {

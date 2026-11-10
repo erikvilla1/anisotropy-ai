@@ -38,7 +38,7 @@ Option 3.
 
 - Easier: one size number per place; the logo follows the ground's text colour without a second set of files.
 - Harder: the vector files are traces of small images. If the lead has the original vector artwork, it should replace them.
-- The `@fontsource-variable/archivo` package is no longer imported and can leave `package.json`.
+- The `@fontsource-variable/archivo` package is no longer imported, and has left `package.json`.
 
 ## How we will know it was wrong
 
