@@ -43,13 +43,9 @@ test("physics topics group transformations, local recovery and failure functions
 test("research positioning is explicit without an AI implementation pitch on About", async ({
   page,
 }) => {
+  // The home page's Impact section, which stated the research foundation, left it (ADR-0077 amendment 14).
   await page.goto("/");
-  await expect(page.locator(".research-foundation")).toContainText(
-    "open-source datasets",
-  );
-  await expect(page.locator(".research-foundation")).toContainText(
-    "published research studies",
-  );
+  await expect(page.locator(".research-foundation")).toHaveCount(0);
   await page.goto("/about");
   await expect(page.locator("main")).not.toContainText(
     /machine learning|scikit-learn|PyTorch|surrogate|FastAPI/i,

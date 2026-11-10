@@ -13,8 +13,10 @@ test("overview, the home page's blurbs, and material source document", async ({
   );
   // The lab imagery carousel and its lightbox left the home page (audit of 2026-10-31, item 6).
   await expect(page.getByRole("button", { name: "Next research image" })).toHaveCount(0);
-  for (const name of ["Your layup, calculated.", "Five ways to use it.", "Knowledge worth building on.", "Five people, two seats each.", "Lately."])
+  for (const name of ["Your layup, calculated.", "Five ways to use it.", "Five people, two seats each.", "Lately."])
     await expect(page.getByRole("heading", { name })).toBeVisible();
+  // The Impact section left the home page (ADR-0077 amendment 14).
+  await expect(page.getByRole("heading", { name: "Knowledge worth building on." })).toHaveCount(0);
   // Course material is never served as a public asset (ADR-0018).
   for (const path of ["/assets/documents/material-properties-2026-v2.pdf"])
     expect((await request.get(path)).status()).toBe(404);

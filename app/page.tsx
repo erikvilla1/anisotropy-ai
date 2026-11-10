@@ -5,7 +5,9 @@ import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
+import { LogoStrip } from "@/components/home/logo-strip";
 import { serviceHref, services, statusLabel } from "@/lib/services";
+import { supporters } from "@/lib/supporters";
 import { team } from "@/lib/team";
 import "./home.css";
 
@@ -72,9 +74,9 @@ export default function Home() {
         </p>
       </section>
       <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
-      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendment 11), dark and light in
-          turn. Each opens with the kit's head; what follows starts at column 4, under the statement. The four principles close
-          the Mission band as a strip. */}
+      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11 and 14), dark and
+          light in turn: Mission, the supporters' strip, Platform, About, What is new. Each numbered band opens with the kit's
+          head. The four principles close the Mission band as a strip. */}
       <section className="band home-blurb home-mission" id="mission">
         <div className="band-head">
           <p className="band-label">01 / MISSION</p>
@@ -101,7 +103,18 @@ export default function Home() {
           </li>
         </ul>
       </section>
-      <section className="band is-light home-blurb home-platform" id="platform">
+      {/* The supporters' strip, after PhysicsX's logo strip: the logos come from lib/supporters.ts. One logo stands beside its
+          sentence; more take the whole row, and drift once they are wider than it (components/home/logo-strip.tsx). */}
+      <section className="band is-light home-blurb home-supporters" id="supporters" aria-labelledby="supporters-label">
+        <p className="band-label" id="supporters-label">
+          SUPPORTED BY
+        </p>
+        <div className={supporters.length > 1 ? "home-supporters-row is-many" : "home-supporters-row"}>
+          <LogoStrip supporters={supporters} label="Supported by" />
+          <p>Anisotropy is part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego.</p>
+        </div>
+      </section>
+      <section className="band home-blurb home-platform" id="platform">
         <div className="band-head">
           <p className="band-label">02 / PLATFORM</p>
           <div className="band-statement">
@@ -130,58 +143,11 @@ export default function Home() {
           </div>
         </div>
       </section>
-      <section className="band home-blurb research-foundation" id="impact">
+      {/* About keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
+          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. */}
+      <section className="band is-light home-blurb home-about" id="working">
         <div className="band-head">
-          <p className="band-label">03 / IMPACT</p>
-          <div className="band-statement">
-            <h2>Knowledge worth building on.</h2>
-            <p>
-              Research comes first. Explore a growing foundation of reviewed open-source datasets, data from published
-              research studies, and evidence generated in our own lab.
-            </p>
-          </div>
-        </div>
-        <div className="band-grid">
-          <div className="home-cards home-evidence-grid">
-            <article className="band-card">
-              <div className="home-card-top">
-                <span className="home-tag">01 / EVERY NUMBER, A RECORD</span>
-              </div>
-              <h3>Trace it back.</h3>
-              <p>
-                Each calculation and each coupon job leaves a run record with its inputs, the engine version and the result,
-                so a number in a report can be followed to the run that produced it.
-              </p>
-            </article>
-            <article className="band-card">
-              <div className="home-card-top">
-                <span className="home-tag">02 / CHECKED AGAINST A REFERENCE</span>
-              </div>
-              <h3>Compared, not assumed.</h3>
-              <p>
-                Our first bending coupon, IM7/8552 in ASTM D7264 proportions, against CalculiX S8R: 100 numbers within 3&nbsp;%,
-                the nose reaction within 0.12&nbsp;%. The decks and the record are in the repository.
-              </p>
-            </article>
-            <article className="band-card">
-              <div className="home-card-top">
-                <span className="home-tag">03 / THE MATERIALS LIBRARY</span>
-              </div>
-              <h3>Keep the evidence close.</h3>
-              <p>
-                Source records for carbon, glass and sandwich cores, each value with its page and unit, alongside the
-                governing equations and topic-by-topic explanations.
-              </p>
-              <Link className="home-link" href="/library">
-                Explore the materials library <ArrowUpRight size={16} />
-              </Link>
-            </article>
-          </div>
-        </div>
-      </section>
-      <section className="band is-light home-blurb home-team" id="working">
-        <div className="band-head">
-          <p className="band-label">04 / WORKING AT ANISOTROPY</p>
+          <p className="band-label">03 / ABOUT</p>
           <div className="band-statement">
             <h2>Five people, two seats each.</h2>
             <p>
@@ -189,29 +155,53 @@ export default function Home() {
               could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
               decisions and their reasons with it.
             </p>
+            <p className="home-about-cohort">Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego</p>
           </div>
         </div>
-        <div className="band-grid">
-          <div className="home-cards home-team-grid">
-            {team.map((person) => (
-              <article className="band-card" key={person.name}>
-                <h3>{person.name}</h3>
-                <p>
-                  {person.role ? `${person.role}. ` : ""}
-                  {person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}
-                  {person.company ? `; ${person.company}` : ""}.
-                </p>
-              </article>
-            ))}
-            <Link className="home-link" href="/about#team">
-              The team on the About page <ArrowUpRight size={16} />
-            </Link>
-          </div>
+        <div className="home-faces">
+          {team.map((person) => (
+            <article className="home-face" key={person.name}>
+              <div className="home-face-frame">
+                {person.photo ? (
+                  <img src={person.photo} alt={`Portrait of ${person.name}`} loading="lazy" decoding="async" />
+                ) : (
+                  <span aria-hidden="true">
+                    {person.name
+                      .split(" ")
+                      .map((part) => part.charAt(0))
+                      .join("")}
+                  </span>
+                )}
+              </div>
+              <h3>
+                {person.linkedin ? (
+                  <a
+                    href={person.linkedin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
+                  >
+                    {person.name} <ArrowUpRight size={16} />
+                  </a>
+                ) : (
+                  person.name
+                )}
+              </h3>
+              <p>
+                {person.role ? `${person.role}. ` : ""}
+                {person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}
+                {person.company ? `; ${person.company}` : ""}.
+              </p>
+            </article>
+          ))}
         </div>
+        <Link className="home-link home-about-link" href="/about#team">
+          The team on the About page <ArrowUpRight size={16} />
+        </Link>
       </section>
       <section className="band home-blurb" id="news">
         <div className="band-head">
-          <p className="band-label">05 / WHAT IS NEW</p>
+          <p className="band-label">04 / WHAT IS NEW</p>
           <div className="band-statement">
             <h2>Lately.</h2>
             <p>

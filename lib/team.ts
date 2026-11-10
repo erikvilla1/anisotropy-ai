@@ -1,6 +1,8 @@
 /** The team as the shared brain records it (docs/brain/people.md), roles only: each person holds one technical seat and one
  * seat for the company. tests/team.test.ts keeps this list in step with that note. A name appears on the site only with
- * that person's consent (ADR-0057 amendment 1); removing a card is removing its line here. */
+ * that person's consent (ADR-0057 amendment 1); removing a card is removing its line here. A photo or a profile link is
+ * added only with that person's consent too (the same amendment); both are unset until then, and a card without a photo
+ * shows the person's initials. */
 export type Person = {
   name: string;
   /** The role named before the seats, when there is one. */
@@ -9,6 +11,10 @@ export type Person = {
   technical: string;
   /** The seat for the company, as people.md words it; the CEO's is the role itself. */
   company?: string;
+  /** A portrait, as a path under public/ (for example "/assets/team/name.jpg"); the home page's card shows it in place of the initials. */
+  photo?: string;
+  /** The person's LinkedIn profile address; the name on the home page's card becomes a link to it. */
+  linkedin?: string;
 };
 
 export const team: readonly Person[] = [

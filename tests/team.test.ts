@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { team } from "../lib/team";
 
@@ -16,7 +16,23 @@ test("every name and seat on the site is in docs/brain/people.md, and nothing be
     assert.ok(people.includes(person.technical.toLowerCase()), `${person.name}: technical seat "${person.technical}"`);
     if (person.company) assert.ok(people.includes(person.company.toLowerCase()), `${person.name}: company seat "${person.company}"`);
     if (person.role) assert.ok(people.includes(person.role.toLowerCase()), `${person.name}: role "${person.role}"`);
-    for (const value of Object.values(person)) assert.ok(!/@|\+?\d{3}[\s-]?\d{3}/.test(String(value)), `${person.name}: a contact detail`);
+    // The photo and the profile link are addresses, not words about the person; the test below checks them.
+    for (const value of [person.name, person.role, person.technical, person.company])
+      assert.ok(!/@|\+?\d{3}[\s-]?\d{3}/.test(String(value ?? "")), `${person.name}: a contact detail`);
+    assert.deepEqual(Object.keys(person).filter((key) => !["name", "role", "technical", "company", "photo", "linkedin"].includes(key)), []);
   }
   assert.equal(new Set(team.map((person) => person.name)).size, team.length);
+});
+
+// A portrait and a profile link are optional and added only with the person's consent (ADR-0057 amendment 1). When one is
+// set, the home page's card uses it, so it has to be a file the site serves or an address of the one kind the card links to.
+test("a photo is a file under public/ and a profile link is a LinkedIn profile address", () => {
+  for (const person of team) {
+    if (person.photo !== undefined) {
+      assert.match(person.photo, /^\/[\w./-]+\.(jpg|jpeg|png|webp|avif)$/, `${person.name}: photo "${person.photo}"`);
+      assert.ok(existsSync(join(process.cwd(), "public", person.photo)), `${person.name}: public${person.photo} does not exist`);
+    }
+    if (person.linkedin !== undefined)
+      assert.match(person.linkedin, /^https:\/\/(www\.)?linkedin\.com\/in\/[\w%-]+\/?$/, `${person.name}: profile link "${person.linkedin}"`);
+  }
 });

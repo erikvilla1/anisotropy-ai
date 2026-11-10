@@ -227,6 +227,31 @@ On phones it is one column.
 - **Flaky once:** one run also failed the Services disclosure test (`aria-expanded` stayed false after Enter). It then passed 2 of 2 and in the final run; the cause was not found.
 - **UNVERIFIED:** the production build of this commit alone, and the look on phones.
 
+## Amendment 14, 2026-11-10 (a supporters' strip; Impact removed; the team section becomes About with face cards)
+
+**Context.** The lead asked for a logo strip like PhysicsX's with UC San Diego's The Basement mark, a mention of the Launchpad programme there and in an About section, the Impact section hidden ("kinda useless"), and the team section turned into About, with face cards to be linked to LinkedIn with photos later. The only fact stated about the programme is that Anisotropy is part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego (ADR-0081).
+
+**Decision.**
+- **Order under the demo.** Mission dark, the supporters' strip light, Platform dark, About light, What is new dark. The labels are renumbered 01 to 04.
+- **The strip.** It is fed from `lib/supporters.ts` and drawn by `components/home/logo-strip.tsx`, under the label "SUPPORTED BY".
+  - One logo stands beside its sentence. Several take the row.
+  - A set wider than the row drifts as a marquee at 40 px a second, stops under the pointer and on focus, and wraps onto rows for reduced motion.
+  - The mark keeps its colours and proportions, 40 px tall, and is not a link.
+- **Impact.** Its markup is deleted from the home page. Two browser tests that read it now check that it is absent.
+- **About.** It keeps `id="working"`, the heading and the paragraph, and states the programme as one small monospace line, without a third copy of the mark. Each person has a 4:5 frame holding their initials, ready for a portrait.
+- **Portraits and profiles.** `Person` in `lib/team.ts` gains optional `photo` and `linkedin`, both unset. Each is added only with that person's consent (ADR-0057 amendment 1). `tests/team.test.ts` checks that a set photo is a file under `public/` and a set profile is a LinkedIn profile address.
+
+**Options not chosen.** Repeating the one logo to fill a moving row: it would fake a row of supporters. A logo in About as well: the hero and the strip already show it. Hiding Impact with CSS: it would stay in the page.
+
+**Evidence.** On 2026-11-10, against the dev server:
+- **PhysicsX's strip, measured at 1440 px:** white; a 16/20 px monospace capitals label at x = 32; logos 22 to 44 px tall, 112 px apart, drifting left at about 40 px a second.
+- **Ours at 1440 px:** the mark 135.4 by 40 px at x = 32; the sentence at x = 384 on one line; no animation with one logo.
+- **The marquee path,** checked with the logo listed eight times and then restored: two sets of eight, the copy hidden from assistive technology, 40.00 px a second, paused under the pointer and with focus, two rows and no animation for reduced motion.
+- **A face card with a stand-in photo and profile link,** then restored: the photo fills the frame, and the name links out in a new tab with `rel="noopener noreferrer"`.
+- **Overflow:** none sideways at 1860, 1440, 1100, 900 and 390 px.
+- **Checks:** `npm run typecheck` clean and `tests/team.test.ts` 2 of 2, both also on this commit's tree alone. `home.spec.ts`, `portfolio.spec.ts` and `research.spec.ts`: 13 passed, 2 failed; the failures are the workspace chat test and a count on the library's physics page, neither of which loads the home page.
+- **UNVERIFIED:** the production build; phones and tablets beyond the overflow check; several different real logos in the row; real portraits in the 4:5 frame; UC San Diego's rules for the mark.
+
 ## Amendment 15, 2026-11-10 (the Workspace button's hover: a white fill, black words, the arrow turned)
 
 **Context.** The lead showed a recording of another site's button: a darker chip around its arrow grows across the whole button on hover, and shrinks back on leave. The lead asked for the same on the header's Workspace button, "but obv just white when you hover over it (like inverted) text to black box to white and arrow switch directions or something".
