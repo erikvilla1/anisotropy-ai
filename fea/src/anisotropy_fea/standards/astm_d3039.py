@@ -50,6 +50,8 @@ def classify(s: Subject) -> Preset | None:
 
 def _matrix(s: Subject) -> Finding:
     asked = "a polymer-matrix composite reinforced by high-modulus fibres"
+    if s.isotropic:
+        return Finding(False, "an isotropic material with no fibres: a plastic's tensile test is ASTM D638", asked)
     if s.family is None:
         return Finding(None, "your own constants: the matrix is not on the form, so state it in the notes", asked)
     return Finding(s.family in POLYMER_FAMILIES, s.family.lower(), asked)
@@ -61,8 +63,8 @@ def _laminate(s: Subject) -> Finding:
 
 
 def _section(s: Subject) -> Finding:
-    return Finding(s.hole_diameter is None, "a plain strip" if s.hole_diameter is None else "a strip with a hole",
-                   "a constant rectangular cross-section")
+    words = "a dog-bone" if s.dogbone else ("a plain strip" if s.hole_diameter is None else "a strip with a hole")
+    return Finding(s.hole_diameter is None and not s.dogbone, words, "a constant rectangular cross-section")
 
 
 def _min_length(s: Subject) -> Finding:

@@ -22,7 +22,7 @@ import numpy as np
 
 from anisotropy_engine.engineering import engineering_constants
 
-from .spec import full_angles, spec_ply_thickness
+from .spec import full_angles, section_width, spec_ply_thickness
 from .standards import PROFILES
 from .units import UNIT_LABEL, from_si
 
@@ -69,7 +69,7 @@ class MethodInputs:
 
     designation: str | None  # the standard named, or None when only a strain measurement is stated
     kind: str
-    width: float
+    width: float  # the section the load is read over: a dog-bone's narrow section (ADR-0075)
     thickness: float
     hole_diameter: float | None
     device: str | None  # "extensometer" or "strain gauge"
@@ -82,7 +82,7 @@ def method_inputs(spec) -> MethodInputs | None:
         return None
     g = spec.geometry
     return MethodInputs(designation=PROFILES[spec.test_method.id].designation if spec.test_method is not None else None, kind=spec.kind,
-                        width=g.width, thickness=len(full_angles(spec)) * spec_ply_thickness(spec), hole_diameter=g.hole_diameter,
+                        width=section_width(spec), thickness=len(full_angles(spec)) * spec_ply_thickness(spec), hole_diameter=g.hole_diameter,
                         device=spec.strain.device if spec.strain is not None else None,
                         gauge_length=spec.strain.gauge_length if spec.strain is not None else None)
 

@@ -85,9 +85,14 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
     out.append("0., 1., 0., -1., 0., 0.")
     out.append("3, 0.")
     section = model.section
-    out.append(f"*Shell Section, elset={section.elset}, composite, orientation=Ori-1, layup={section.layup}" + (", symmetric" if section.symmetric else ""))
-    for ply in section.listed:
-        out.append(f"{number(length(ply.thickness_m))}, {SECTION_POINTS}, {ply.material}, {number(ply.angle_deg)}, {ply.name}")
+    if section.homogeneous:  # one isotropic material (ADR-0075): its thickness and the layer's section points; axis 1 along the length as above
+        ply = section.plies[0]
+        out.append(f"*Shell Section, elset={section.elset}, material={ply.material}, orientation=Ori-1")
+        out.append(f"{number(length(ply.thickness_m))}, {SECTION_POINTS}")
+    else:
+        out.append(f"*Shell Section, elset={section.elset}, composite, orientation=Ori-1, layup={section.layup}" + (", symmetric" if section.symmetric else ""))
+        for ply in section.listed:
+            out.append(f"{number(length(ply.thickness_m))}, {SECTION_POINTS}, {ply.material}, {number(ply.angle_deg)}, {ply.name}")
     out.append("*End Part")
 
     out.append("*Assembly, name=Assembly")
@@ -114,9 +119,13 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
     out.append("*End Assembly")
 
     out.append(f"*Material, name={material.name}")
-    out.append("*Elastic, type=LAMINA")
-    out.append(", ".join(number(stress(v)) for v in (material.E1, material.E2)) + f", {number(material.nu12)}, "
-               + ", ".join(number(stress(v)) for v in (material.G12, material.G13, material.G23)))
+    if material.isotropic:
+        out.append("*Elastic")
+        out.append(f"{number(stress(material.E1))}, {number(material.nu12)}")
+    else:
+        out.append("*Elastic, type=LAMINA")
+        out.append(", ".join(number(stress(v)) for v in (material.E1, material.E2)) + f", {number(material.nu12)}, "
+                   + ", ".join(number(stress(v)) for v in (material.G12, material.G13, material.G23)))
     if material.strengths is not None:
         s = material.strengths
         line = ", ".join(number(stress(v)) for v in (s.F1t, -s.F1c, s.F2t, -s.F2c, s.F6))

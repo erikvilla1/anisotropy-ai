@@ -24,6 +24,7 @@ from anisotropy_engine.lamina import Lamina, Strengths
 from anisotropy_engine.laminate import Ply
 from anisotropy_engine.library import library_material
 
+from .dogbone import Outline, OutlineError, dogbone_outline
 from .standards import BY_DESIGNATION, PROFILES
 from .units import UNIT_LABEL, unit_factors
 
@@ -65,9 +66,23 @@ class Record(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+class Dogbone(Record):
+    """A dumbbell (dog-bone) outline, as the plastics tensile standard draws it (ADR-0075): a straight narrow section of `narrow_width` over
+    `narrow_length` at mid-length, joined to the full width by a fillet of `radius` tangent to the narrow section; with `outer_radius`, a
+    second arc of that radius tangent to the full width and to the fillet (a reverse curve, D638 Type IV). The outline is symmetric about
+    both axes of the coupon; `geometry.width` is the overall width and `geometry.length` the overall length."""
+
+    narrow_width: PositiveFloat
+    narrow_length: PositiveFloat
+    radius: PositiveFloat
+    outer_radius: PositiveFloat | None = None
+
+
 class Geometry(Record):
     length: PositiveFloat  # total length along the loading axis y, tabs included
-    width: PositiveFloat  # along x
+    width: PositiveFloat  # along x; the overall width of a dog-bone
+    thickness: PositiveFloat | None = None  # the coupon's thickness when its material is isotropic and it has no layup (ADR-0075)
+    dogbone: Dogbone | None = None  # unnotched_tension only: a dumbbell outline instead of a straight strip (ADR-0075)
     tab_length: float | None = None  # in-plane kinds: gripped length at each end; 0 means no tabs
     hole_diameter: PositiveFloat | None = None  # open_hole_tension only
     span: PositiveFloat | None = None  # bending kinds: distance between the support lines
@@ -121,6 +136,8 @@ class Transverse(Record):
 
 class MaterialSpec(Record):
     library: str | None = None  # engine library material id; with it, no explicit constants
+    E: PositiveFloat | None = None  # an isotropic material (a plastic, ADR-0075): Young's modulus and Poisson's ratio, no plies and no
+    nu: float | None = None  # [material.transverse]; the coupon then states geometry.thickness and no [layup]
     dataset: str | None = None  # the library's primary dataset when absent
     E1: PositiveFloat | None = None
     E2: PositiveFloat | None = None
@@ -134,7 +151,7 @@ class MaterialSpec(Record):
     f12_star: float | None = None  # Tsai-Wu interaction term; required when tsai_wu is requested; written as the sixth *Fail Stress value
     source: str | None = Field(default=None, min_length=1)  # where the team's own constants come from, as the team states it (a datasheet,
     # a test report); makes them rights class "user-supplied": private, kept with the coupon, never in the library (ADR-0018, ADR-0046)
-    transverse: Transverse
+    transverse: Transverse | None = None  # required for a lamina; refused for an isotropic material
 
 
 class Grips(Record):
@@ -278,7 +295,7 @@ class CouponSpec(Record):
     geometry: Geometry
     tabs: Tabs | None = None  # bonded tabs: drawn and reported, not modelled as material
     mesh: MeshControls
-    layup: Layup
+    layup: Layup | None = None  # the plies; absent for an isotropic material, which states geometry.thickness instead (ADR-0075)
     material: MaterialSpec
     loading: Loading | None = None  # the one loading of a coupon kind; a plate lists its loads instead
     output: OutputRequests
@@ -308,7 +325,7 @@ def parse_spec(text: str, source_path: str | None = None) -> CouponSpec:
         raise SpecError(f"spec: {', '.join(loader_keys)} {'is' if len(loader_keys) == 1 else 'are'} set by the loader, not written in a file")
     data["source_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
     data["source_path"] = source_path
-    if isinstance(data.get("layup"), dict) and "angles_from" not in data["layup"]:
+    if isinstance(data.get("layup"), dict) and "angles_from" not in data["layup"]:  # an isotropic material has no layup to count from
         raise SpecError(f"spec: {ANGLES_FROM_HINT}")
     try:
         spec = CouponSpec(**data)
@@ -438,16 +455,43 @@ def validate_spec(spec: CouponSpec) -> None:
             if bad:
                 raise SpecError(f"mesh.ny = {ny} puts no node row on the line(s) {bad} (y = {[f'{lines[b]:g}' for b in bad]}); "
                                 f"admissible ny near {ny}: {admissible_ny(g.length, list(lines.values()), ny)}")
-    # layup
-    need(len(spec.layup.angles) >= 1, "layup.angles must list at least one ply")
-    if kind == "shear_pm45":
+    # the dog-bone outline (ADR-0075)
+    if g.dogbone is not None:
+        need(kind == "unnotched_tension", "geometry.dogbone belongs to unnotched_tension only")
+        need(m.mesher == "structured", "a dog-bone is meshed by the structured mesher, its columns following the outline: set mesh.mesher = \"structured\"")
+        try:
+            outline_of(spec)
+        except OutlineError as exc:
+            raise SpecError(f"geometry.dogbone: {exc}") from None
+    # layup, or the thickness of an isotropic material (ADR-0075)
+    mat = spec.material
+    isotropic = mat.E is not None or mat.nu is not None
+    if isotropic:
+        need(mat.E is not None and mat.nu is not None, "an isotropic material needs both material.E and material.nu")
+        need(-1.0 < mat.nu < 0.5, f"material.nu must lie strictly between -1 and 0.5 for an isotropic material, not {mat.nu:g}")
+        need(mat.library is None and mat.dataset is None and all(v is None for v in (mat.E1, mat.E2, mat.G12, mat.nu12, mat.F1t, mat.F1c, mat.F2t, mat.F2c, mat.F6,
+                                                                                      mat.f12_star)),
+             "material.E and material.nu state an isotropic material: give no library, no ply constants (E1, E2, G12, nu12) and no ply strengths")
+        need(mat.transverse is None, "an isotropic material takes no [material.transverse]: its out-of-plane constants follow from E and nu")
+        need(spec.layup is None and g.thickness is not None, "an isotropic material has no plies: give geometry.thickness and no [layup]")
+        need(kind in IN_PLANE_KINDS and kind != "shear_pm45", "an isotropic material is built for the pulled and pushed coupons (not in-plane shear, "
+                                                             "bending or a plate) in this version")
+        need(not spec.output.fpf_criteria, "output.fpf_criteria: the first-ply failure criteria are written for plies; an isotropic material "
+                                           "takes none in this version (its yield is a later part, ADR-0075)")
+    else:
+        need(spec.layup is not None, "the spec needs a [layup] (or, for an isotropic material, material.E, material.nu and geometry.thickness)")
+        need(g.thickness is None, "geometry.thickness belongs to an isotropic material; a laminate's thickness follows from its plies")
+        need(mat.transverse is not None, "material needs a [material.transverse] table: the out-of-plane constants every deck writes for a ply")
+        need(len(spec.layup.angles) >= 1, "layup.angles must list at least one ply")
+    if kind == "shear_pm45" and not isotropic:
         angles = full_angles(spec)
         need(all(abs(abs(a) - 45.0) < 1e-9 for a in angles), "shear_pm45 needs every ply at +45 or -45 degrees")
         need(sum(a > 0 for a in angles) == sum(a < 0 for a in angles), "shear_pm45 needs a balanced layup: as many +45 as -45 plies")
     # material
-    mat = spec.material
     explicit = [mat.E1, mat.E2, mat.G12, mat.nu12]
-    if mat.library is not None:
+    if isotropic:
+        pass
+    elif mat.library is not None:
         need(all(v is None for v in explicit + [mat.F1t, mat.F1c, mat.F2t, mat.F2c, mat.F6]), "material.library excludes explicit constants and strengths")
         need(mat.source is None, "material.source states where explicit constants come from; a library record carries its own citation")
     else:
@@ -456,7 +500,9 @@ def validate_spec(spec: CouponSpec) -> None:
         strengths = [mat.F1t, mat.F1c, mat.F2t, mat.F2c, mat.F6]
         need(all(v is not None for v in strengths) or all(v is None for v in strengths), "give all five strengths F1t, F1c, F2t, F2c, F6 or none")
     t = mat.transverse
-    if t.plane_stress:
+    if t is None:
+        pass
+    elif t.plane_stress:
         need(t.nu23 is None and t.nu13 is None, "material.transverse: with plane_stress = true, nu13 = nu23 = 0 are written; do not give nu23 or nu13")
         if t.transverse_isotropy:
             need(t.E3 is None, "material.transverse: with transverse_isotropy = true, E3 is derived (E3 = E2); do not give it")
@@ -531,8 +577,31 @@ def validate_spec(spec: CouponSpec) -> None:
         need(spec.title.startswith(f"{designation}, {name}: "), f"title must start with the coupon's name and test: \"{designation}, {name}: ...\"")
 
 
+def is_isotropic(spec: CouponSpec) -> bool:
+    """The coupon is one isotropic material with no plies (ADR-0075): material.E and material.nu, geometry.thickness, no [layup]."""
+    return spec.material.E is not None
+
+
+def outline_of(spec: CouponSpec) -> Outline | None:
+    """The dog-bone outline in the spec's lengths (SI once `to_si` has run); None for a straight strip. Raises OutlineError on sizes that make none."""
+    g = spec.geometry
+    if g.dogbone is None:
+        return None
+    d = g.dogbone
+    return dogbone_outline(d.narrow_width, d.narrow_length, d.radius, d.outer_radius, g.width, g.length)
+
+
+def section_width(spec: CouponSpec) -> float:
+    """The width of the section the load is read over: the narrow section of a dog-bone, else the coupon's width."""
+    g = spec.geometry
+    return g.dogbone.narrow_width if g.dogbone is not None else g.width
+
+
 def full_angles(spec: CouponSpec) -> list[float]:
-    """The stated angles of every ply, bottom-first, the symmetric half mirrored: what the coupon's labels print (ADR-0065)."""
+    """The stated angles of every ply, bottom-first, the symmetric half mirrored: what the coupon's labels print (ADR-0065). An isotropic
+    material is one layer of itself, its axis 1 along the length: [0] (ADR-0075)."""
+    if spec.layup is None:
+        return [0.0]
     angles = list(spec.layup.angles)
     return angles + angles[::-1] if spec.layup.symmetric else angles
 
@@ -548,7 +617,8 @@ def mesh_counts(spec: CouponSpec) -> tuple[int, int]:
         return m.nx, sum(m.y_seeds)
     if m.nx is not None:
         return m.nx, m.ny
-    return max(1, math.ceil(g.width / m.element_size - 1e-9)), max(1, math.ceil(g.length / m.element_size - 1e-9))
+    across = section_width(spec)  # a dog-bone's columns follow its outline, so the narrow section sets their count (ADR-0075)
+    return max(1, math.ceil(across / m.element_size - 1e-9)), max(1, math.ceil(g.length / m.element_size - 1e-9))
 
 
 def row_coordinates(spec: CouponSpec) -> list[float] | None:
@@ -618,16 +688,21 @@ def to_si(spec: CouponSpec) -> CouponSpec:
     f = unit_factors(spec.units)
     L, S, F = f["length"], f["stress"], f["force"]
     scale = lambda v, k: None if v is None else v * k  # noqa: E731
+    d = spec.geometry.dogbone
+    dogbone = None if d is None else d.model_copy(update={"narrow_width": d.narrow_width * L, "narrow_length": d.narrow_length * L, "radius": d.radius * L,
+                                                          "outer_radius": scale(d.outer_radius, L)})
     g = spec.geometry.model_copy(update={"length": spec.geometry.length * L, "width": spec.geometry.width * L,
+                                         "thickness": scale(spec.geometry.thickness, L), "dogbone": dogbone,
                                          "tab_length": scale(spec.geometry.tab_length, L), "hole_diameter": scale(spec.geometry.hole_diameter, L),
                                          "span": scale(spec.geometry.span, L), "overhang": scale(spec.geometry.overhang, L),
                                          "load_span": scale(spec.geometry.load_span, L)})
     m = spec.mesh.model_copy(update={"element_size": scale(spec.mesh.element_size, L),
                                      "y_partitions": None if spec.mesh.y_partitions is None else [p * L for p in spec.mesh.y_partitions]})
-    layup = spec.layup.model_copy(update={"ply_thickness": spec.layup.ply_thickness if spec.layup.ply_thickness == "library" else spec.layup.ply_thickness * L})
+    layup = None if spec.layup is None else spec.layup.model_copy(
+        update={"ply_thickness": spec.layup.ply_thickness if spec.layup.ply_thickness == "library" else spec.layup.ply_thickness * L})
     t = spec.material.transverse
-    transverse = t.model_copy(update={"G13": t.G13 * S, "G23": t.G23 * S, "E3": scale(t.E3, S)})
-    mat = spec.material.model_copy(update={"E1": scale(spec.material.E1, S), "E2": scale(spec.material.E2, S), "G12": scale(spec.material.G12, S),
+    transverse = None if t is None else t.model_copy(update={"G13": t.G13 * S, "G23": t.G23 * S, "E3": scale(t.E3, S)})
+    mat = spec.material.model_copy(update={"E": scale(spec.material.E, S), "E1": scale(spec.material.E1, S), "E2": scale(spec.material.E2, S), "G12": scale(spec.material.G12, S),
                                            "F1t": scale(spec.material.F1t, S), "F1c": scale(spec.material.F1c, S), "F2t": scale(spec.material.F2t, S),
                                            "F2c": scale(spec.material.F2c, S), "F6": scale(spec.material.F6, S), "transverse": transverse})
     loading = None if spec.loading is None else spec.loading.model_copy(update={"value": spec.loading.value * (L if spec.loading.control == "displacement" else F)})
@@ -665,6 +740,7 @@ class MaterialDefinition:
     source: str  # "library im7-8552 / <dataset>", "the team's own constants: <their source>", or "explicit constants in the spec"
     rights: str  # the library's rights class; "user-supplied" for the team's own constants (with a source); "spec" for explicit constants
     citation_lines: tuple[str, ...]  # one line per value, for the deck header
+    isotropic: bool = False  # one isotropic material (ADR-0075): the decks write *Elastic E, nu and a homogeneous shell section
 
     @property
     def lamina(self) -> Lamina:
@@ -677,6 +753,17 @@ def spec_material(spec: CouponSpec) -> MaterialDefinition:
         raise SpecError("spec_material needs the spec in SI (load_spec or to_si)")
     mat = spec.material
     t = mat.transverse
+    if mat.E is not None:  # isotropic (ADR-0075): every direction alike, G = E / (2 (1 + nu))
+        E, nu = mat.E, mat.nu
+        G = E / (2.0 * (1.0 + nu))
+        if mat.source is not None:
+            source, rights, name = f"the team's own constants: {mat.source}", "user-supplied", "EXPLICIT"
+        else:
+            source, rights, name = "explicit constants in the spec", "spec", "EXPLICIT"
+        if spec.names is not None:
+            name = spec.names.material
+        return MaterialDefinition(name=name, E1=E, E2=E, nu12=nu, G12=G, G13=G, G23=G, E3=E, nu13=nu, nu23=nu, plane_stress=False, strengths=None,
+                                  f12_star=None, source=source, rights=rights, citation_lines=(), isotropic=True)
     if mat.library is not None:
         try:
             lib = library_material(mat.library, mat.dataset)
@@ -706,6 +793,9 @@ def spec_material(spec: CouponSpec) -> MaterialDefinition:
 
 
 def spec_ply_thickness(spec: CouponSpec) -> float:
+    """The thickness of one ply; for an isotropic material, the coupon's thickness, its one layer (ADR-0075)."""
+    if spec.layup is None:
+        return float(spec.geometry.thickness)
     if spec.layup.ply_thickness != "library":
         return float(spec.layup.ply_thickness)
     mat = spec.material
@@ -718,7 +808,9 @@ def spec_ply_thickness(spec: CouponSpec) -> float:
 
 
 def layup_text(spec: CouponSpec) -> str:
-    """The stacking sequence as written on a coupon, for example [45/0/-45/90]s."""
+    """The stacking sequence as written on a coupon, for example [45/0/-45/90]s; "isotropic" for a material with no plies (ADR-0075)."""
+    if spec.layup is None:
+        return "isotropic"
     return "[" + "/".join(f"{angle:g}" for angle in spec.layup.angles) + "]" + ("s" if spec.layup.symmetric else "")
 
 
@@ -732,7 +824,8 @@ def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
     length = lambda v: f"{v / factor:g} {unit}"  # noqa: E731
     g = spec.geometry
     plies = len(full_angles(spec))
-    thickness = spec_ply_thickness(spec) / (metres if spec.layup.ply_thickness == "library" else factor)  # a library thickness is always SI
+    library_thickness = spec.layup is not None and spec.layup.ply_thickness == "library"
+    thickness = spec_ply_thickness(spec) / (metres if library_thickness else factor)  # a library thickness is always SI
     mat = spec.material
     if mat.library is not None:
         material = f"{library_material(mat.library, mat.dataset).name} (library record {mat.library}, dataset {mat.dataset})"
@@ -740,7 +833,13 @@ def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
         material = f"{spec.names.material if spec.names else 'own material'} (the team's own constants; source: {mat.source})"
     else:
         material = "explicit constants in the spec"
+    if mat.E is not None:
+        material += ", isotropic"
     size = f"{length(g.length)} long, {length(g.width)} wide"
+    if g.dogbone is not None:
+        d = g.dogbone
+        size += (f", a dog-bone narrowing to {length(d.narrow_width)} over {length(d.narrow_length)} with a {length(d.radius)} fillet"
+                 + (f" and a {length(d.outer_radius)} outer radius" if d.outer_radius is not None else ""))
     if g.tab_length:
         size += f", {length(g.tab_length)} tabs at each end"
     if g.hole_diameter:
@@ -751,7 +850,8 @@ def coupon_card(spec: CouponSpec) -> list[tuple[str, str]]:
         ("Coupon", c.designation),
         ("Test", TEST_CODES[spec.kind][1]),
         ("Material", material),
-        ("Layup", f"{layup_text(spec)}, {plies} plies of {thickness:g} {unit}, {plies * thickness:g} {unit} thick"),
+        ("Layup", f"none: one isotropic material, {thickness:g} {unit} thick" if spec.layup is None
+         else f"{layup_text(spec)}, {plies} plies of {thickness:g} {unit}, {plies * thickness:g} {unit} thick"),
         ("Size", size),
         ("Size from", c.size_from),
         ("Standard", c.standard),

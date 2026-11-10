@@ -19,9 +19,10 @@ import numpy as np
 
 from . import __version__ as package_version
 from .units import deck_units_of
-from .mesher import Mesh2D, gmsh_open_hole_plate, structured_rectangle
+from .mesher import Mesh2D, gmsh_open_hole_plate, structured_dogbone, structured_rectangle
 from .spec import (BENDING_KINDS, DEFAULT_NAMES, PLATE_KINDS, CouponSpec, MaterialDefinition, SpecError, coupon_card, edge_regions, fibre_angle,
-                   fibre_angles, full_angles, mesh_counts, node_lines, row_coordinates, spec_material, spec_ply_thickness)
+                   fibre_angles, full_angles, is_isotropic, mesh_counts, node_lines, outline_of, row_coordinates, spec_material,
+                   spec_ply_thickness)
 
 STEP_NAME = "Step-1"
 CARD_IN_HEADING = ("Coupon", "Test", "Standard", "Specimen", "Tabs", "Strain measurement", "Size from", "Team's model", "Test data")  # the rest of the card is in the heading already
@@ -43,6 +44,7 @@ class SectionDefinition:
     plies: tuple[PlyDefinition, ...]  # the full stack, bottom-first
     symmetric: bool
     listed: tuple[PlyDefinition, ...]  # what a deck lists: the lower half when symmetric, else the full stack
+    homogeneous: bool = False  # one isotropic material (ADR-0075): a homogeneous shell section of the one layer's thickness, no layup
 
 
 @dataclass(frozen=True)
@@ -173,6 +175,10 @@ def mesh_for_spec(spec: CouponSpec) -> Mesh2D:
                                                hole.ring_ratio, hole.growth, order=spec.mesh.element_order, tab_length=g.tab_length or 0.0,
                                                node_rows=node_lines(spec), element_bands=bands, node_bands=node_bands, boxes=boxes), spec)
     nx, ny = mesh_counts(spec)
+    outline = outline_of(spec)
+    if outline is not None:
+        return structured_dogbone(g.width, g.length, outline.width_at, nx, ny, spec.mesh.element_order, node_rows=node_lines(spec),
+                                  element_bands=bands, node_bands=node_bands, ys=row_coordinates(spec))
     return plate_sets(structured_rectangle(g.width, g.length, nx, ny, spec.mesh.element_order, node_rows=node_lines(spec), element_bands=bands,
                                            node_bands=node_bands, ys=row_coordinates(spec), boxes=boxes), spec)
 
@@ -195,8 +201,10 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
     fibres = fibre_angles(spec)
     names = spec.names.model_dump() if spec.names is not None else DEFAULT_NAMES
     plies = tuple(PlyDefinition(thickness, angle, material.name, f"Ply-{k}", fibre) for k, (angle, fibre) in enumerate(zip(angles, fibres), start=1))
-    listed = plies[: len(spec.layup.angles)] if spec.layup.symmetric else plies
-    section = SectionDefinition(elset=names["section_set"], layup=names["layup"], plies=plies, symmetric=spec.layup.symmetric, listed=listed)
+    symmetric = spec.layup is not None and spec.layup.symmetric
+    listed = plies[: len(spec.layup.angles)] if symmetric else plies
+    section = SectionDefinition(elset=names["section_set"], layup=names["layup"], plies=plies, symmetric=symmetric, listed=listed,
+                                homogeneous=is_isotropic(spec))
     orientation_angles = tuple(sorted(set(angles)))
     orientation_fibres = tuple(fibre_angle(angle) for angle in orientation_angles)
     probe_nodes = {name: mesh.nearest_node(point) for name, point in spec.probes.nodes.items()}
@@ -253,15 +261,19 @@ def build_model(spec: CouponSpec, mesh: Mesh2D | None = None) -> FEModel:
         f"{spec.title}",
         *[f"{label}: {value}" for label, value in coupon_card(spec) if label in CARD_IN_HEADING],
         f"kind {spec.kind}; length {g.length:g} m, width {g.width:g} m" + (f", tabs {g.tab_length:g} m" if g.tab_length else "")
-        + (f", central hole of diameter {g.hole_diameter:g} m" if g.hole_diameter else ""),
+        + (f", central hole of diameter {g.hole_diameter:g} m" if g.hole_diameter else "")
+        + (f", dog-bone: narrow section {g.dogbone.narrow_width:g} m wide over {g.dogbone.narrow_length:g} m, fillet radius {g.dogbone.radius:g} m"
+           + (f", outer radius {g.dogbone.outer_radius:g} m" if g.dogbone.outer_radius is not None else "") if g.dogbone is not None else ""),
         f"mesh {mesh.mesher}, {mesh.element_count} elements of order {mesh.order}, {mesh.node_count} nodes",
-        f"layup bottom-first {angles}" + (" (listed as the symmetric half)" if spec.layup.symmetric else "")
-        + f" from the length axis (fibres from x: {fibres}), ply thickness {thickness:g} m",
+        (f"no layup: one isotropic material, {thickness:g} m thick, in a homogeneous shell section whose axis 1 is the length axis" if is_isotropic(spec) else
+         f"layup bottom-first {angles}" + (" (listed as the symmetric half)" if spec.layup.symmetric else "")
+         + f" from the length axis (fibres from x: {fibres}), ply thickness {thickness:g} m"),
         f"material {material.name}: {material.source}; rights class {material.rights}",
         *[f"  {line}" for line in material.citation_lines],
-        f"out-of-plane constants: G13 {material.G13:g}, G23 {material.G23:g}, E3 {material.E3:g}, nu13 {material.nu13:g}, nu23 {material.nu23:g} (SI; "
-        + ("transverse isotropy stated in the spec" if spec.material.transverse.transverse_isotropy else "given in the spec") + ")"
-        + ("; nu13 = nu23 = 0 written for plane stress, as Abaqus LAMINA and our kernel assume (plane_stress = true in the spec)" if material.plane_stress else ""),
+        (f"isotropic: E {material.E1:g}, nu {material.nu12:g}, G = E / (2 (1 + nu)) = {material.G12:g} (SI)" if material.isotropic else
+         f"out-of-plane constants: G13 {material.G13:g}, G23 {material.G23:g}, E3 {material.E3:g}, nu13 {material.nu13:g}, nu23 {material.nu23:g} (SI; "
+         + ("transverse isotropy stated in the spec" if spec.material.transverse.transverse_isotropy else "given in the spec") + ")"
+         + ("; nu13 = nu23 = 0 written for plane stress, as Abaqus LAMINA and our kernel assume (plane_stress = true in the spec)" if material.plane_stress else "")),
         (plate_words(spec) if spec.kind in PLATE_KINDS else
          f"supports at y = {g.overhang:g} and {g.length - g.overhang:g} m (w held along the row; the centre node of each row pins the in-plane motion), "
          f"loading nose{'s' if spec.kind == 'four_point_bending' else ''} at y = "
