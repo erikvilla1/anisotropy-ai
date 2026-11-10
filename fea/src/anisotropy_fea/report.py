@@ -238,10 +238,42 @@ class LaminateCheck:
     kernel_section_force: np.ndarray
     kernel_ply_stress_12: np.ndarray
     kernel_reaction_N: float  # the reaction of the top group along y
+    compliance_length_m: float | None = None  # a coupon that narrows: the free length's integral of width_m / w(y) dy, None for a strip
 
     @property
     def reaction_N(self) -> float:
         return float(self.section_force[1] * self.width_m)
+
+    @property
+    def narrowed(self) -> bool:
+        """Whether the coupon narrows between the grips (a dog-bone, ADR-0075): then width_m is its narrowest width, and a pull is
+        shared along the free length by the compliance of each width (`edge_widths`)."""
+        return self.compliance_length_m is not None
+
+
+def edge_widths(deck: Deck, solution: MembraneSolution) -> tuple[np.ndarray, np.ndarray] | None:
+    """The coupon's width along its length, from its Edge-Left and Edge-Right node rows paired by y: (y, width) in m, sorted by y. None
+    when the deck has no such rows, or they do not pair (a mesh whose edge nodes are not in rows)."""
+    def side(name: str) -> dict[float, float] | None:
+        keys = next((keys for set_name, keys in deck.nsets.items() if set_name.rsplit(".", 1)[-1].lower() == name), None)
+        if not keys:
+            return None
+        mesh = solution.mesh
+        return {round(float(mesh.xy[mesh.node(key), 1]), 12): float(mesh.xy[mesh.node(key), 0]) for key in keys}
+    left, right = side("edge-left"), side("edge-right")
+    if left is None or right is None or set(left) != set(right):
+        return None
+    ys = np.array(sorted(left))
+    return ys, np.array([right[y] - left[y] for y in ys])
+
+
+def compliance_length(ys: np.ndarray, widths: np.ndarray) -> float:
+    """The integral of dy / w(y) over the rows given, the width linear between rows as the element edges are (dimensionless): a bar
+    whose width varies stretches by R times it times the strain per unit N_y (N_x = N_xy = 0) under a pull R."""
+    dy, w1, w2 = np.diff(ys), widths[:-1], widths[1:]
+    tapered = np.abs(w2 - w1) > 1e-12 * np.maximum(w1, w2)
+    ratio = np.where(tapered, np.log(w2 / w1) / np.where(tapered, w2 - w1, 1.0), 1.0 / w1)
+    return float(np.sum(dy * ratio))
 
 
 def gripped_groups(deck: Deck, solution: MembraneSolution) -> tuple[dict[int, float], dict[int, float]]:
@@ -354,9 +386,25 @@ def laminate_check(deck: Deck, solution: MembraneSolution) -> LaminateCheck:
     pull = float(np.mean(list(top.values())) - np.mean(list(bottom.values())))
     if free_length <= 0 or width <= 0:
         raise KernelError("the gripped groups leave no free length between them")
+    # a coupon that narrows between the grips (a dog-bone, ADR-0075) is a bar of varying width: the pull is shared along the free length
+    # by the compliance of each width, and the theory is stated over the narrowest one, where the gauge is
+    compliance = None
+    rows = edge_widths(deck, solution)
+    if rows is not None:
+        ys, widths = rows
+        lo, hi = float(y[on_coupon(bottom)].max()), float(y[on_coupon(top)].min())
+        free = (ys >= lo - 1e-9 * free_length) & (ys <= hi + 1e-9 * free_length)
+        if free.sum() >= 2 and np.ptp(widths[free]) > 1e-9 * float(widths[free].max()):
+            width = float(widths[free].min())
+            compliance = width * compliance_length(ys[free], widths[free])
     if pull != 0.0:
         control, applied = "displacement", pull
-        known = {"Nx": 0.0, "eps_y": pull / free_length, "Nxy": 0.0, "Mx": 0.0, "My": 0.0, "Mxy": 0.0}
+        if compliance is None:
+            known = {"Nx": 0.0, "eps_y": pull / free_length, "Nxy": 0.0, "Mx": 0.0, "My": 0.0, "Mxy": 0.0}
+        else:  # the pull is the strain per unit N_y times N_y over the compliance length, N_y the narrowest width's
+            unit = {"Nx": 0.0, "Ny": 1.0, "Nxy": 0.0, "Mx": 0.0, "My": 0.0, "Mxy": 0.0}
+            per_unit = float(mixed_response(plies, unit, None).midplane_strain[1])
+            known = {**unit, "Ny": pull / (per_unit * compliance)}
     else:
         total = sum(load.value for step in deck.steps for load in step.cloads if load.dof == 2)
         if total == 0.0:
@@ -378,7 +426,7 @@ def laminate_check(deck: Deck, solution: MembraneSolution) -> LaminateCheck:
                          free_length_m=free_length, control=control, applied=applied, strain=strain, section_force=section_force,
                          ply_stress_12=ply_stress, ply_strain_12=ply_strain, gauge=gauge,
                          kernel_strain=solution.strain[e], kernel_section_force=solution.section_force[e],
-                         kernel_ply_stress_12=field.stress_12[e], kernel_reaction_N=reaction)
+                         kernel_ply_stress_12=field.stress_12[e], kernel_reaction_N=reaction, compliance_length_m=compliance)
 
 
 # --- the facts a rebuild guide is made of ------------------------------------------------------------

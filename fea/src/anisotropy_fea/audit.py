@@ -899,7 +899,11 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
         label = check.gauge.name.rsplit(".", 1)[-1]  # the element's label in the deck, as Abaqus/CAE asks for it
         at = gauge_text(check.gauge, ev.units)
         width = from_si(check.width_m, "length", ev.units)
-        if check.control == "displacement":
+        if check.control == "displacement" and check.narrowed:  # a dog-bone (ADR-0075): the pull is shared by the compliance of each width
+            applied = (f"N_y = {check.section_force[1] * per_length:.6g} N/{length_unit} over the {width:g} {length_unit} narrowest width (the "
+                       f"{from_si(check.applied, 'length', ev.units):.4g} {length_unit} pull over the free length's integral of w_n / w(y) dy, "
+                       f"{from_si(check.compliance_length_m, 'length', ev.units):.4g} {length_unit}, times the strain per unit N_y)")
+        elif check.control == "displacement":
             applied = (f"eps_y = {check.applied / check.free_length_m:.4g} (the {from_si(check.applied, 'length', ev.units):.4g} {length_unit} pull over "
                        f"the {from_si(check.free_length_m, 'length', ev.units):.4g} {length_unit} free length)")
         else:

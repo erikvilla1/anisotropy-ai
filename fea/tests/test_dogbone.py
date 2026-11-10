@@ -208,6 +208,32 @@ def test_the_record_agrees_with_the_closed_form_too():
     assert modulus == pytest.approx(E, rel=5e-4), "CalculiX's extensometer reads the material's modulus too"
 
 
+def test_the_hand_check_shares_the_pull_along_the_dog_bone_by_each_widths_compliance(tmp_path):
+    """Laminate theory for a coupon that narrows: a bar of varying width stretches by R a22 times the integral of dy / w(y), so the pull
+    sets N_y over the narrowest width. The chords between rows make that integral the outline's within 0.01 %, and the kernel's reaction
+    and gauge strain lie within 0.1 % of it. The Summary's laminate-theory column carries the reaction over the narrow width too."""
+    from anisotropy_fea.report import laminate_check
+    from anisotropy_fea.spec import outline_of
+
+    spec = load_spec(CHECK)
+    path = tmp_path / "deck.inp"
+    path.write_text(write_abaqus(build_model(spec)), encoding="utf-8")
+    deck = read_deck(path, deck_units_of(spec.units))
+    solution = solve_deck(deck)
+    check = laminate_check(deck, solution)
+    assert check.narrowed and check.width_m == pytest.approx(W * MM) and check.free_length_m == pytest.approx(115 * MM)
+    outline = outline_of(spec)
+    ys = np.linspace(25 * MM, 140 * MM, 200001)
+    exact = W * MM * float(np.trapezoid(1.0 / np.array([outline.width_at(y) for y in ys]), ys))
+    assert check.compliance_length_m == pytest.approx(exact, rel=1e-4)
+    assert check.reaction_N == pytest.approx(0.5 * MM * E * 1e6 * THICKNESS * MM * W * MM / exact, rel=1e-4), "R = pull E t w_n / compliance"
+    assert check.kernel_reaction_N == pytest.approx(check.reaction_N, rel=1e-3)
+    assert check.kernel_strain[1] == pytest.approx(check.strain[1], rel=1e-3)
+    clt = field_data(deck, solution, spec.units, criteria=(), method=method_inputs(spec),
+                     coupon={"designation": "PLASTIC-UNT-L1", "test": "unnotched tension", "layup": "isotropic"})["summary"]["clt"]
+    assert clt["width"] == pytest.approx(W) and clt["strain"][1] == pytest.approx(check.kernel_strain[1], rel=1e-3)
+
+
 def test_the_mesh_of_the_check_has_rows_where_the_outline_turns():
     spec = load_spec(CHECK)
     mesh = mesh_for_spec(spec)
