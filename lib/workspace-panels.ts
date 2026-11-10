@@ -3,8 +3,8 @@
  * form belongs to exactly one panel; `tests/workspace-panels.test.ts` holds that against the definition. */
 import type { ChatStep } from "./studio-chat";
 import {
-  fieldByKey, fields, NO_STANDARD, PLY_KEYS, sectionsFor, standardOf, standardsFor, type Checklist, type JudgedRequirement, type StandardProfile,
-  type StandardRequirement, type StudioForm,
+  DOGBONE_KEYS, fieldByKey, fields, ISOTROPIC_KEYS, NO_STANDARD, PLY_KEYS, sectionsFor, standardOf, standardsFor, type Checklist, type JudgedRequirement,
+  type StandardProfile, type StandardRequirement, type StudioForm,
 } from "./studio-form";
 
 export type PanelId = "test" | "project" | "geometry" | "layup" | "loads" | "mesh" | "validate" | "run" | "outputs" | "advanced";
@@ -17,12 +17,13 @@ export const PANELS: readonly Panel[] = [
   {
     id: "geometry", title: "Geometry", items: ["geometry"],
     keys: ["size_from", "length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span", "tab_thickness", "tab_bevel", "tab_material", "strain_device",
-      "strain_length"],
+      "strain_length", ...DOGBONE_KEYS],
   },
   {
+    // what the coupon is made of first (ADR-0075): plies of a composite, or one isotropic material such as a plastic, stated by its thickness, E and nu
     id: "layup", title: "Layup and material", items: ["laminate", "material", "criterion"],
-    keys: [...PLY_KEYS, "symmetric", "ply_thickness", "library", "own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c",
-      "own_F6", "own_source", "G13", "G23", "criteria", "f12_star"],
+    keys: ["material_kind", ...ISOTROPIC_KEYS, ...PLY_KEYS, "symmetric", "ply_thickness", "library", "own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t",
+      "own_F1c", "own_F2t", "own_F2c", "own_F6", "own_source", "G13", "G23", "criteria", "f12_star"],
   },
   { id: "loads", title: "Loads and supports", keys: ["control", "value", "grips", "region"], items: ["constraints", "load"] },
   { id: "mesh", title: "Mesh", keys: ["element_size", "mesh_nx", "mesh_partitions", "mesh_seeds", "hole_circumferential", "hole_radial", "hole_ring", "hole_growth"], items: ["mesh", "probes"] },
@@ -41,8 +42,9 @@ export function panel(id: PanelId): Panel {
   return found;
 }
 
-/** The material rows of the layup panel, after the plies: what the panel renders below its ply editor. */
-export const MATERIAL_KEYS = panel("layup").keys.filter((key) => !PLY_KEYS.includes(key) && !["symmetric", "ply_thickness"].includes(key));
+/** The material rows of the layup panel, after the plies: what the panel renders below its ply editor. The Material kind row sits above the
+ * editor, since it decides whether there are plies at all (ADR-0075). */
+export const MATERIAL_KEYS = panel("layup").keys.filter((key) => !PLY_KEYS.includes(key) && !["material_kind", "symmetric", "ply_thickness"].includes(key));
 
 export function panelOfKey(key: string): PanelId | null {
   return PANELS.find((p) => p.keys.includes(key))?.id ?? null;

@@ -4,6 +4,7 @@ not build, the public Type I check reads the material's modulus back through its
 clauses ask. Nothing here touches .local/."""
 
 import dataclasses
+import json
 import math
 import re
 import tomllib
@@ -24,7 +25,8 @@ from anisotropy_fea.standards.astm_d3039 import PROFILE as D3039
 from anisotropy_fea.standards.astm_d638 import FIG1, PROFILE as D638, TYPES, VARIANTS
 from anisotropy_fea.standards.conformance import judge, subject_of
 from anisotropy_fea.standards.profile import LEVELS, MM
-from anisotropy_fea.test_quantities import method_inputs
+from anisotropy_fea.explain import fact_sheet, numbers_in, result_sentences
+from anisotropy_fea.test_quantities import D638_RANGE, method_inputs
 from anisotropy_fea.units import deck_units_of
 from anisotropy_fea.write_abaqus import write_abaqus
 from anisotropy_fea.write_calculix import write_calculix
@@ -200,6 +202,32 @@ def test_the_extensometer_reads_the_materials_modulus_over_the_narrow_section(so
     assert block["stress"] == pytest.approx(block["force"] / (W * THICKNESS))
 
 
+def test_d638_reads_its_modulus_of_elasticity_over_the_narrow_section_in_its_own_words(solved):
+    """D638 reduces the same record by its own clauses: the modulus of elasticity as the slope of the initial straight line, any segment of
+    it (§11.4), read between A3.9.8's strains, over the least original cross-section (§11.2), never D3039's chord over the gross area. The
+    explanation says the same, and every number it prints is a fact."""
+    spec, data = solved
+    block = data["summary"]["test_method"]
+    words, chord = block["reduction"], block["strain"]["chord"]
+    assert block["designation"] == "ASTM D638-22" and spec.test_method.variant == "I"
+    assert (words["modulus"], words["modulus_clause"], words["area"]) == ("modulus of elasticity", "D638 §11.4", "area of the narrow section")
+    assert words["poisson_clause"] == "D638 A3.10, Eq A3.1" and "D3039" not in " ".join(words.values())
+    assert (chord["from"], chord["to"]) == D638_RANGE and chord["stress_from"] == pytest.approx(chord["modulus"] * 1000 * 500e-6)
+    assert block["laminate_theory"]["isotropic"] is True and block["fpf"] == {} and block["note_b"] is False
+    facts = fact_sheet(data["summary"], data["coupon"], data["units"], data["labels"])
+    sentences = result_sentences(facts)
+    method = [s for s in sentences if s.startswith(("As ASTM", "The extensometer"))]
+    assert method[0].startswith("As ASTM D638-22 reduces a test: the area of the narrow section is 41.6 mm² (13 by 3.2 mm)")
+    assert "the modulus of elasticity between 500 and 2500 microstrain is 3.001 GPa (the material's own value gives 3 GPa)" in method[1]
+    assert not any(word in sentence for sentence in method for word in ("chord", "gross", "laminate theory"))
+    assert data["summary"]["isotropic"] is True and "The material is isotropic: its yield and failure are not modelled yet, so no failure is reported." in sentences
+    assert not any("ply" in sentence or "fibre" in sentence for sentence in sentences), "a plastic has no plies and no fibres to name"
+    printed = {str(v) for v in facts.values()} | {f"{v:g}" for v in facts.values() if isinstance(v, float)}
+    for sentence in sentences:
+        for token in numbers_in(sentence):
+            assert token in printed or any(token in v for v in printed), (token, sentence)
+
+
 def test_the_record_agrees_with_the_closed_form_too():
     record = tomllib.loads((CHECK.parent / "records" / "d638-type-i-plastic-calculix.toml").read_text(encoding="utf-8"))
     force = record["expected"]["rf"]["Grip-Top"][1]
@@ -258,9 +286,9 @@ def states(s) -> dict[str, str]:
     return {r.id: judge(r, s).state for r in D638.requirements}
 
 
-def test_the_profile_names_each_clause_level_and_rule_and_waits_for_the_form():
+def test_the_profile_names_each_clause_level_and_rule_and_is_on_the_list():
     ids = [r.id for r in D638.requirements]
-    assert len(ids) == len(set(ids)) and D638.id not in PROFILES, "D638 joins the registry with the form's rows (ADR-0075 part 2)"
+    assert len(ids) == len(set(ids)) and PROFILES[D638.id] is D638, "D638 is in the registry with the form's rows (ADR-0075 part 2)"
     assert D638.catalog_url.startswith("https://store.astm.org/") and D638.rights == "licensed-reference" and "D638-22" in D638.edition_note and "D638-14" in D638.edition_note
     for r in D638.requirements:
         assert r.clause and r.text.endswith(".") and r.level in LEVELS and (r.rule is None) == (r.level == "lab"), r.id
@@ -319,3 +347,80 @@ def test_an_inch_coupon_is_held_to_the_millimetre_values_converted():
     s = subject(variant="I", units="in-psi")
     found = judge(next(r for r in D638.requirements if r.id == "narrow-width"), s)
     assert found.state == "met" and found.limit == f"{13 / 25.4:.4g} in ± {0.5 / 25.4:.4g} in for Type I"
+
+
+# --- the form (ADR-0075, part 2) ---------------------------------------------------------------------
+
+PLASTIC = {"form_version": "0.9", "filled_by": "A. Engineer", "date": "2026-11-10", "units": "mm-MPa", "test": "unnotched tension",
+           "standard": "ASTM D638-22", "specimen": "I", "size_from": "ASTM D638-22, Fig. 1: Type I", "length": 165, "width": 19, "tab_length": 25,
+           "narrow_width": 13, "narrow_length": 57, "radius": 76, "strain_device": "extensometer", "strain_length": 50, "material_kind": "isotropic",
+           "thickness": 3.2, "own_E": 3000, "own_nu": 0.35, "own_name": "PLASTIC", "own_source": "a nominal plastic for a test",
+           "control": "displacement", "value": 0.5, "element_size": 1, "grips": "nodal", "region": "tabs"}
+
+
+def form_values(tmp_path, **changes):
+    from anisotropy_fea.intake import check_form, read_values
+    path = tmp_path / "values.json"
+    path.write_text(json.dumps({k: v for k, v in {**PLASTIC, **changes}.items() if v is not None}), encoding="utf-8")
+    return check_form(read_values(path))
+
+
+def test_the_form_states_a_plastic_dog_bone_and_the_spec_is_the_checks(tmp_path):
+    """The rows of form 0.9 make the public check's coupon: one isotropic material with no plies, the dog-bone's sizes, D638 Type I. The
+    mesh puts node rows where the outline turns and at the extensometer's ends, the spec builds a model, and D638 judges it met."""
+    from anisotropy_fea.intake import designation_for, spec_from_values
+    values = form_values(tmp_path)
+    assert values.isotropic == {"thickness": 3.2, "E": 3000.0, "nu": 0.35, "name": "PLASTIC", "source": "a nominal plastic for a test"}
+    assert values.dogbone == {"narrow_width": 13.0, "narrow_length": 57.0, "radius": 76.0} and values.stacking == () and values.criteria == ()
+    designation = designation_for(values, tmp_path / "none")
+    assert designation.material_code == "M1"  # an own material, as for own ply constants
+    spec = spec_from_values(values, designation, "values.json")
+    assert spec.layup is None and spec.material.E == pytest.approx(3e9) and spec.material.nu == pytest.approx(0.35)
+    assert spec.geometry.thickness == pytest.approx(3.2e-3) and spec.geometry.dogbone.narrow_width == pytest.approx(13e-3)
+    assert spec.test_method.id == "astm-d638" and spec.test_method.variant == "I" and list(spec.output.fpf_criteria) == []
+    lines = {round(y * 1e3, 6) for y in spec.mesh.y_partitions}
+    assert {25.0, 140.0, 54.0, 111.0, 57.5, 107.5}.issubset(lines) and any(abs(y - 32.857626) < 1e-5 for y in lines)
+    assert spec.mesh.nx % 2 == 0, "an even count across puts the extensometer's nodes on the centre line"
+    build_model(spec)
+    subject = subject_of(spec)
+    assert {judge(r, subject).state for r in D638.requirements} <= {"met", "lab", "na", "note"}, "Type I at its least size meets every clause it can"
+
+
+def test_the_check_reads_back_into_the_form_and_the_form_takes_it(tmp_path):
+    """`values_of_spec` is the form's reading turned round: the public check gives rows the form accepts, as the same plastic dog-bone."""
+    from anisotropy_fea.intake import check_form, read_values, values_of_spec
+    back = values_of_spec(load_spec(CHECK))
+    assert (back["material_kind"], back["thickness"], back["own_E"], back["own_nu"], back["criteria"]) == ("isotropic", 3.2, 3000.0, 0.35, "none")
+    assert (back["narrow_width"], back["narrow_length"], back["radius"]) == (13.0, 57.0, 76.0) and "outer_radius" not in back
+    assert not any(key in back for key in ("angles", "symmetric", "library", "G13", "G23")), "a plastic has no plies and no ply material"
+    # the check's spec names no person, date, material name or source; a coupon the form filed carries them
+    rows = {**{k: v for k, v in back.items() if v is not None}, "filled_by": "A. Engineer", "date": "2026-11-10", "own_name": "PLASTIC",
+            "own_source": "a nominal plastic"}
+    path = tmp_path / "values.json"
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    values = check_form(read_values(path))
+    assert values.isotropic["E"] == pytest.approx(3000.0) and values.dogbone["radius"] == pytest.approx(76.0)
+
+
+@pytest.mark.parametrize("changes, message", [
+    (dict(ply_1=0, symmetric="yes"), "Ply 1 (bottom), Symmetric: belong to a material of plies; an isotropic material has none, so leave them blank"),
+    (dict(library="im7-8552"), "Library material: belong to a material of plies"),
+    (dict(own_nu=0.5), "Own material: nu: Poisson's ratio of an isotropic material lies above -1 and below 0.5, not 0.5"),
+    (dict(own_E=None), "Own material: E (MPa): required for an isotropic material"),
+    (dict(criteria="tsai-wu"), "Failure criterion: an isotropic material's yield and failure are not modelled yet; choose none"),
+    (dict(test="three-point bending", span=48, overhang=6, tab_length=None, grips=None, region=None, narrow_width=None, narrow_length=None, radius=None,
+          strain_device=None, strain_length=None, standard="none", specimen=None),
+     "Material kind: an isotropic material is built for the pulled and pushed tests, not three-point bending"),
+    (dict(test="open-hole tension", hole_diameter=3, standard="none", specimen=None),
+     "Narrow width (mm) and the other dog-bone rows: belong to unnotched tension only; leave them blank"),
+    (dict(radius=None), "Fillet radius (mm): required for a dog-bone"),
+    (dict(material_kind="plies"), "Thickness (mm), Own material: E (MPa), Own material: nu: belong to an isotropic material"),
+])
+def test_the_form_refuses_what_a_plastic_or_a_dog_bone_cannot_be(tmp_path, changes, message):
+    from anisotropy_fea.intake import IntakeError
+    with pytest.raises(IntakeError, match=re.escape(message)):
+        form_values(tmp_path, **changes)
+
+
+def test_a_plastic_may_leave_the_criterion_blank_as_the_studio_does(tmp_path):
+    assert form_values(tmp_path, criteria=None).criteria == ()

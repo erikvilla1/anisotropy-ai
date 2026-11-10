@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { couponValues, DOWNLOADS, fileUrl, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
-import { buildValues, exampleForm, formFromValues, PLATE_TEST, rowErrorsFrom, withStandard, withTest, type StudioForm } from "@/lib/studio-form";
+import { buildValues, exampleForm, formFromValues, isIsotropic, PLATE_TEST, rowErrorsFrom, withStandard, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateFromValues, plateValues, type PlateLists } from "@/lib/studio-plate";
 import { MATERIAL_KEYS, NEEDS_TEST, panel, panelOfItem, panelState, stepNumber, visibleKeys, type PanelId } from "@/lib/workspace-panels";
 import { ChecklistPanel } from "@/components/studio/checklist-panel";
@@ -172,7 +172,10 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
       <StepPanel id="layup" step={stepNumber("layup")} title="Layup and material" state={state("layup")}>
         {waiting("layup") ?? (
           <>
-            <LayupEditor form={form} errors={errors} disabled={busy} onChange={edit} onRows={editRows} />
+            {grid("layup", visibleKeys(form, "layup").filter((key) => key === "material_kind"))}
+            {isIsotropic(form)
+              ? <p className="studio-hint" data-testid="isotropic-hint">One isotropic material, such as a plastic: no plies, so give its thickness, E and nu, with its name and source. Its yield and failure are not modelled yet, so no failure criterion applies.</p>
+              : <LayupEditor form={form} errors={errors} disabled={busy} onChange={edit} onRows={editRows} />}
             {grid("layup", visibleKeys(form, "layup").filter((key) => MATERIAL_KEYS.includes(key)))}
             <StepStandard form={form} id="layup" checklist={checklist} />
           </>

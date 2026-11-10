@@ -18,8 +18,8 @@ Our readings, not the standard's words:
 - A material stated as plies is a reinforced composite (§6.1.3); one stated by E and nu is a plastic. Every library record is a fibre
   composite whose fibres are far stiffer than 20 GPa, which Note 4 sends to D3039/D3039M.
 
-The profile is judged by `conformance.judge` like the others, and joins the registry, and with it the form's Standard list, in part 2 of
-ADR-0075, together with the form's rows for the dog-bone and the isotropic material that its requirements and types name.
+The profile is judged by `conformance.judge` like the others. It is in the registry, and with it the form's Standard list for unnotched tension,
+since part 2 of ADR-0075 gave the form the rows its requirements and types name: the dog-bone's sizes and the isotropic material's thickness.
 """
 
 from __future__ import annotations

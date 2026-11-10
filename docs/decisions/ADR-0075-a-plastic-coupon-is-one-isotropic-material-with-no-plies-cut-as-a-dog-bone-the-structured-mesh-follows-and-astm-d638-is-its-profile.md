@@ -50,6 +50,27 @@ Options 2 and 4, delivered in two parts.
 - `report.laminate_check` (the hand check of the model documents and the audit): a coupon whose Edge-Left and Edge-Right rows show a width that varies between the grips is a bar of varying width. The pull is shared along it by each width's compliance, R = pull / (a22 times the integral of dy / w(y)), and N_y is stated over the narrowest width. On the check it lies within 0.05 % of the kernel. A straight strip keeps its earlier path. `fields.classical_laminate_check` divides the reaction by the narrowest width. The model document's rebuild steps sketch the dog-bone from the spec and state an isotropic material and a homogeneous shell section (`docs/models/rebuild.py`).
 - `fea/checks/d638-type-i-plastic/`: Type I at its least size, 3.2 mm thick, a nominal plastic (E = 3000 MPa, nu = 0.35, not a cited dataset). It has a 50 mm extensometer and a CalculiX 2.21 record.
 
+## As built (2026-11-10, part 2)
+
+- **The registry.** `standards/__init__.py` holds D638 in `PROFILES`, between D3039 and C1869, so the form's Standard row offers it for unnotched tension. `lib/source-rights.ts` lists ASTM D638-22 as a licensed reference.
+- **The form (version 0.9).** `intake.py` adds two blocks of rows. The Dog-bone block has Narrow width, Narrow length, Fillet radius and Outer radius, for unnotched tension only; the first three come together. The material block has Material kind (`plies`, the default, or `isotropic`), Thickness, Own material: E and Own material: nu.
+  - An isotropic material needs its thickness, E, nu, name and source. It refuses the ply rows, Symmetric, the ply thickness and every ply-material row (library, ply constants and strengths, G13, G23, f12*).
+  - It is built for the pulled and pushed tests only. Its criterion may be none, all or blank, and it reads as none.
+  - Symmetric, G13 and G23 stay required for plies, now by the check rather than the row.
+  - Forms 0.7 and 0.8 still read.
+- **The form's other paths.** `values_of_spec` reads a spec without a layup back into the rows. The coupon's name codes an isotropic material by its E and nu, and its stacking as none. `mesh_data` puts node rows at the grip lines, where the outline turns and at the extensometer's ends, and an even count across. The setup check and the package word a plastic as one material with no plies, and the material table derives G = E / (2 (1 + nu)).
+- **D638's own words** (`test_quantities.Reduction`). The formulas are shared and each standard's words are its own.
+  - D3039, C1869 and a coupon without a standard keep D3039's chord between 1000 and 3000 microstrain, over the gross area.
+  - D638 reports the modulus of elasticity (§11.4), read between 500 and 2500 microstrain. §11.4 lets any segment of the initial straight line serve, and A3.9.8 names those strains for Poisson's ratio. It reads over the least original cross-section (§11.2), the narrow section of a dog-bone. Poisson's ratio cites A3.10.
+  - Table 3 note B is D3039's alone. A dog-bone under any standard names its area as the narrow section's.
+  - The package, the explanation and the studio's card print these words. An isotropic coupon's explanation names stresses along and across the coupon, not ply and fibre stresses, says no failure is modelled, and still gives the test method's sentences. Before, any coupon without a criterion lost them.
+- **The studio.**
+  - The Geometry step shows the dog-bone's rows for unnotched tension. The Layup step asks Material kind first, and an isotropic material replaces the ply editor with its thickness, E and nu.
+  - D638's five types fill the dog-bone's rows and the gage length. They name the extensometer when no device is typed, and a type without an outer radius clears Type IV's.
+  - The sketch extrudes the outline the engine meshes, from the same geometry (`lib/studio-sketch.ts`: `dogboneOutline`, `halfWidthAt`, `outlinePoints`), at the plastic's typed thickness.
+  - The guided chat asks a plastic for its thickness, E, nu, name and source in place of the plies. Its wording for a plastic is a later part.
+- **The public check** names `[test_method] id = "astm-d638"`, Type I. Its decks changed in their heading lines only. The CalculiX 2.21 record was rerun: the same numbers, new deck digests.
+
 ## Why (evidence)
 
 - **The closed form.** In the narrow section the stress is F / (W t), so an extensometer there reads E. On the public check the kernel's modulus is 3000.5 MPa against 3000 MPa (0.02 %), and Poisson's ratio 0.35006 against 0.35. CalculiX's displacements and reaction give 3000.5 MPa too (`fea/tests/test_dogbone.py`).
@@ -70,7 +91,7 @@ Options 2 and 4, delivered in two parts.
   - Other dumbbell standards (ISO 527-2, D412) reuse the outline.
 - **Harder:**
   - Every reader of a spec must allow for no `[layup]`. The intake's values-from-spec is extended in part 2, before any such coupon can reach it.
-  - Our virtual extensometer reports D3039's chord range. For a linear model this is the same slope as D638's initial modulus. The document's words for D638 are part 2.
+  - Our virtual extensometer reports D3039's chord range for D3039 and D638's modulus of elasticity for D638 (part 2). For a linear model both are the same slope; a plastic's nonlinear curve, where they differ, needs its yield, a later part.
 - **We now depend on** the founder's D638-22 copy being read clause by clause, and on the "individual values" position (R-25).
 
 ## How we will know it was wrong

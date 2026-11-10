@@ -10,10 +10,14 @@ units = "mm-MPa"
 
 [coupon]
 designation = "PLASTIC-UNT-L1"
-standard = "none"  # ASTM D638-22 joins the Standard list with the form's dog-bone rows (ADR-0075, part 2); until then the size is cited, not checked
+standard = "ASTM D638-22"
 size_from = "ASTM D638-22, Fig. 1: Type I, at its least overall width and length; the 3.2 mm thickness is note A's for a molded specimen"
 team_model = "not built yet"
 test_data = "none: a public check of the dog-bone and the isotropic material against the closed form and CalculiX"
+
+[test_method]
+id = "astm-d638"  # checked against the profile, clause by clause (ADR-0072, ADR-0075 part 2)
+variant = "I"
 
 [geometry]
 length = 165.0
