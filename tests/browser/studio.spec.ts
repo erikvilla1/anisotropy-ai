@@ -755,3 +755,48 @@ test("every settled edit is answered by our kernel live, labelled a preview, and
   await expect(page.getByTestId("live-banner")).toHaveCount(0);
   expect(calls.solves.length).toBe(1);
 });
+
+test("a temperature change named in the laminate chat brings up its condition, its panel and its values, and goes with the problem (ADR-0087)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const problems: Record<string, unknown>[] = [];
+  await mockApi(page, calls);
+  await page.route(API, async (route) => { // the laminate solve, answered from the captured fixture
+    const request = route.request();
+    if (new URL(request.url()).pathname !== "/v1/laminates/solve" || request.method() !== "POST") return route.fallback();
+    problems.push(request.postDataJSON() as Record<string, unknown>);
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixture("laminate-answer")) });
+  });
+  await page.goto("/workspace/laminate");
+  await page.locator("button[data-system='SI']").click();
+  const message = page.getByLabel("Message the laminate assistant", { exact: true });
+  const rail = page.getByTestId("laminate-rail");
+  await expect(rail.getByTestId("panel-temperature")).toHaveCount(0); // never shown before it is asked for
+  await expect(rail.getByTestId("add-condition")).toContainText("+ Temperature change");
+  // words that name the condition without a value: it is offered, nothing opens unasked
+  await message.fill("there are residual stresses from the cure");
+  await message.press("Enter");
+  await expect(page.locator("button[data-condition='temperature']")).toBeVisible();
+  await expect(rail.getByTestId("panel-temperature")).toHaveCount(0);
+  // a value states it: the condition comes on with it, read with its sign and unit
+  await message.fill("E1 147 GPa, E2 10.3 GPa, G12 7 GPa, nu12 0.27, F1t 2280 MPa, F1c 1725 MPa, F2t 57 MPa, F2c 228 MPa, F6 76 MPa");
+  await message.press("Enter");
+  await message.fill("[0/90]s, 0.25 mm plies, Nx = 0 N/m, the rest zero");
+  await message.press("Enter");
+  await message.fill("it is cooled by 150 °C after cure, alpha1 = -1e-6 /°C, alpha2 = 25e-6 /°C");
+  await message.press("Enter");
+  await expect(page.getByText("temperature change -150 °C")).toBeVisible();
+  await expect(rail.getByTestId("panel-temperature")).toBeVisible();
+  await expect(page.locator("#lam-delta-t")).toHaveValue("-150");
+  await expect(page.locator("#lam-alpha2")).toHaveValue("25e-6");
+  await expect(rail.getByTestId("add-condition")).toHaveCount(0); // the only condition is on
+  await expect(page.getByTestId("laminate-spec")).toContainText("-150 °C");
+  await page.getByTestId("laminate-solve").click();
+  await expect(page.getByTestId("laminate-answer")).toBeVisible({ timeout: 15_000 });
+  const sent = problems[0] as { delta_T: unknown; material: Record<string, unknown> };
+  expect(sent.delta_T).toEqual({ value: -150, unit: "degC" });
+  expect([sent.material.alpha1, sent.material.alpha2]).toEqual([{ value: -1e-6, unit: "1/degC" }, { value: 25e-6, unit: "1/degC" }]);
+  // removed, it sends nothing thermal and the menu offers it again
+  await rail.getByTestId("remove-temperature").click();
+  await expect(rail.getByTestId("panel-temperature")).toHaveCount(0);
+  await expect(rail.getByTestId("add-condition")).toContainText("+ Temperature change");
+});

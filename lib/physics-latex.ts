@@ -61,6 +61,7 @@ export const physicsLatex: Record<string, string[]> = {
   "Thermal resultants · uniform ΔT": [tex`\mathbf N^{T}=\Delta T\sum_k\overline{\mathbf Q}_k\boldsymbol\alpha_k\left(z_k-z_{k-1}\right)`,
     tex`\mathbf M^{T}=\frac{\Delta T}{2}\sum_k\overline{\mathbf Q}_k\boldsymbol\alpha_k\left(z_k^2-z_{k-1}^2\right)`,
     tex`\begin{bmatrix}\mathbf A&\mathbf B\\\mathbf B&\mathbf D\end{bmatrix}\begin{bmatrix}\boldsymbol\varepsilon^0\\\boldsymbol\kappa\end{bmatrix}=\begin{bmatrix}\mathbf N+\mathbf N^{T}\\\mathbf M+\mathbf M^{T}\end{bmatrix}`],
+  "First-ply failure under ΔT alone": [tex`\mathbf N=\mathbf M=\mathbf 0:\ \boldsymbol\sigma_k\propto\Delta T`, tex`\Delta T_{\mathrm{FPF}}=R\,\Delta T`],
   "Residual ply stress after ΔT": [tex`\boldsymbol\sigma_k(z)=\overline{\mathbf Q}_k\left(\boldsymbol\varepsilon^0+z\boldsymbol\kappa-\boldsymbol\alpha_k\Delta T\right)`],
   "Laminate expansion coefficients": [tex`\overline{\boldsymbol\alpha}=\boldsymbol\varepsilon^0\big|_{\Delta T=1,\ \mathbf N=\mathbf M=0}`],
   "Volume fractions & composite density": [tex`V_f+V_m+V_v=1`,tex`\rho_c=\rho_f V_f+\rho_m V_m\quad\text{(negligible void mass)}`],

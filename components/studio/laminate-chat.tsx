@@ -5,10 +5,12 @@ import { ArrowLeft, ArrowUp, Check, Layers3, Play, RotateCcw, SlidersHorizontal,
 import { libraryOptions } from "@/lib/studio-form";
 import { COMMON_MATERIALS } from "@/lib/studio-chat";
 import {
-  libraryNameOf, LOAD_NAMES, loadsWithZeros, missingIn, nextStep, printedUnit, problemLines, readConstants, readLayupLine, readLibraryMaterial, readLoads,
+  hasCondition, libraryNameOf, LOAD_NAMES, loadsWithZeros, missingIn, nextStep, printedUnit, problemLines, readConstants, readLayupLine, readLibraryMaterial, readLoads,
+  readTemperature,
   readSystem, REPORT_SYSTEMS, systemUnit, type LaminateDraft, type LaminateStep, type LoadName, type Quantity, type ReportUnits,
 } from "@/lib/laminate-chat";
-import { blankOwn } from "@/components/workspace/panels/laminate-fields";
+import { blankOwn, TemperatureFields } from "@/components/workspace/panels/laminate-fields";
+import { conditionOf, conditionsNamed } from "@/lib/conditions";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { useLaminate } from "./laminate-context";
 
@@ -30,7 +32,7 @@ const LAYUP_CHOICES: { notation: string; title: string }[] = [
 /** The panel on the left that holds each step's rows (ADR-0062, part 5): what a suggestion opens. */
 const PANEL_OF: Record<LaminateStep, { id: string; title: string }> = {
   units: { id: "units", title: "Units" }, material: { id: "material", title: "Material" }, layup: { id: "layup", title: "Layup" },
-  loads: { id: "loads", title: "Loads" }, review: { id: "solve", title: "Solve" },
+  loads: { id: "loads", title: "Loads" }, temperature: { id: "temperature", title: "Temperature change" }, review: { id: "solve", title: "Solve" },
 };
 
 const QUESTIONS: Record<LaminateStep, { title: string; text: string }> = {
@@ -38,6 +40,7 @@ const QUESTIONS: Record<LaminateStep, { title: string; text: string }> = {
   material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or type the constants the problem gives, e.g. “E1 147 GPa, E2 10.3, G12 7, nu12 0.27, F1t 2280, F1c 1725, F2t 57, F2c 228, F6 76 MPa”. Without strengths no failure is predicted." },
   layup: { title: "What is the layup?", text: "Laminate notation, bottom ply first, e.g. [0/45/-45/90]s, and the ply thickness. Here 0° runs along x, the direction of Nx, as in the textbooks; a coupon counts from its length, the direction it is pulled, so 0° is along the main axis in both workspaces." },
   loads: { title: "What loads does it carry?", text: "Force and moment resultants per unit width, e.g. “Nx = 100 N/mm, everything else zero”. Every one of the six is stated; nothing is assumed." },
+  temperature: { title: "What temperature change?", text: "The change in °C, K or °F, e.g. “cooled by 150 °C” or “ΔT = -270 °F”, and for your own material both expansion coefficients, e.g. “alpha1 = -0.9e-6 /°C, alpha2 = 27e-6 /°C”. With loads it is held while they grow to failure; alone, the change itself grows to failure." },
   review: { title: "Ready to solve", text: "The engine solves the stack by classical lamination theory: the A, B, D matrices, the mid-plane strains and curvatures, every ply's stresses and first-ply failure." },
 };
 
@@ -177,6 +180,22 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
         : (Object.fromEntries(LOAD_NAMES.map((n) => [n, merged[n] ?? { value: "", unit: systemUnit(system, n.startsWith("N") ? "N" : "M") }])) as Record<LoadName, Quantity>);
       understood.push(...loads.understood);
     }
+    const temperature = readTemperature(text);  // a temperature change and the expansion: the condition comes with them (ADR-0087)
+    if (temperature.understood.length) {
+      next.conditions = Array.from(new Set([...(next.conditions ?? []), "temperature"]));
+      if (temperature.delta_T) next.delta_T = temperature.delta_T;
+      if (temperature.alpha1 || temperature.alpha2) {
+        const blank = { value: "", unit: "1e-6/degC" };
+        next.alphas = { alpha1: temperature.alpha1 ?? next.alphas?.alpha1 ?? blank, alpha2: temperature.alpha2 ?? next.alphas?.alpha2 ?? blank };
+      }
+      understood.push(...temperature.understood);
+    }
+    const offered = conditionsNamed(text, "laminate").filter((c) => !hasCondition(next, c.id));
+    if (!understood.length && offered.length) {  // the words call a condition up but give no value: offer it, open nothing unasked
+      add({ role: "user", text }, { role: "assistant", kind: "text", title: `A ${offered[0].title.toLowerCase()}?`, body: <><p>{offered[0].title}: {offered[0].detail}.</p>
+        <Chips>{offered.map((c) => <button key={c.id} type="button" data-condition={c.id} onClick={() => addCondition(c.id)}><SlidersHorizontal size={14} /> Add a {c.title.toLowerCase()}</button>)}</Chips></> });
+      return;
+    }
     if (!understood.length) {
       if (refused.length) {
         add({ role: "user", text }, { role: "assistant", kind: "text", tone: "problem", title: "A unit does not fit", body: <ul className="chat-understood">{refused.map((r) => <li key={r}>{r}</li>)}</ul> });
@@ -188,6 +207,16 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
         {refused.length ? <ul className="chat-understood chat-refused">{refused.map((r) => <li key={r}>{r}</li>)}</ul> : null}</> });
     setDraft(next);
     proceed(next);
+  }
+
+  /** A condition switched on from the chat (ADR-0087): its panel opens, and the conversation asks for its rows. */
+  function addCondition(id: string) {
+    const condition = conditionOf(id);
+    if (!condition) return;
+    const next = { ...draftRef.current, conditions: Array.from(new Set([...(draftRef.current.conditions ?? []), id])) };
+    setDraft(next);
+    window.setTimeout(() => showPanel(condition.panel), 0);
+    ask(nextStep(next) === "review" ? "temperature" : nextStep(next));
   }
 
   function askWidget(step: LaminateStep, isLive: boolean): ReactNode {
@@ -246,6 +275,13 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
                 Nx = 100 {printedUnit(systemUnit(system, "N"))} only</button>
               <PanelLink step="loads">All six loads, under Loads</PanelLink>
             </Chips>
+          </>
+        );
+      case "temperature":
+        return (
+          <>
+            <TemperatureFields draft={draft} system={system} disabled={solving} onChange={(patch) => setDraft({ ...draftRef.current, ...patch })} />
+            <Chips><PanelLink step="temperature">The temperature change, under Temperature change</PanelLink></Chips>
           </>
         );
       case "review": {
