@@ -36,7 +36,7 @@ How the fields reach the page:
 ## Decision
 
 - **`studio_tool.py live` and `serve`.**
-  - `live` runs the setup check and, when nothing blocks, our kernel on the deck as a run writes it. It writes the fields with the answer (ADR-0085), the explanation, the summary apart, and each stage's seconds.
+  - `live` runs the setup check and, when nothing blocks but the full run's own tools (CalculiX and the document builder, which our kernel does not need; the checklist still names them and the full run stays blocked), our kernel on the deck as a run writes it. It writes the fields with the answer (ADR-0085), the explanation, the summary apart, and each stage's seconds.
   - There is no mesh study, no CalculiX, no attempt folder and no document.
   - `serve` is `live` kept warm: it imports once, says it is ready, then answers one JSON request per line on stdin with one JSON line on stdout.
   - `fixtures` is `live` and the mesh study, so the two cannot drift.
