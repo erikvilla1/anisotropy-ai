@@ -17,11 +17,10 @@ async function playApi(page: Page, posts: Posted[]) {
   });
 }
 
-// The calculator's own view.
-const scene = (page: Page) => {
-  const calculator = page.locator("#laminate");
-  return calculator.getByTestId("laminate-scene").or(calculator.getByTestId("webgl-missing"));
-};
+// The calculator's own parts. The tour above it (tests/browser/tour.spec.ts) shows the same components, so their test ids
+// are looked up inside the calculator.
+const calculator = (page: Page) => page.locator("#laminate");
+const scene = (page: Page) => calculator(page).getByTestId("laminate-scene").or(calculator(page).getByTestId("webgl-missing"));
 
 test("the hero opens the page and the laminate calculator follows it (ADR-0076)", async ({ page }) => {
   await playApi(page, []);
@@ -62,7 +61,7 @@ test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }
 test("the demo sits on its heading's columns, and the engine's answer on the same ones (ADR-0077 amendment 10)", async ({ page }) => {
   await playApi(page, []);
   await page.goto("/");
-  await expect(page.getByTestId("abd-grid")).toBeVisible();
+  await expect(calculator(page).getByTestId("abd-grid")).toBeVisible();
   const left = (selector: string) => page.locator(selector).first().evaluate((el) => Math.round(el.getBoundingClientRect().left));
   const statementText = await page.locator(".hero-laminate-statement h2").evaluate((el) => Math.round(el.getBoundingClientRect().left));
   expect(await left(".hero-laminate-inputs")).toBe(await left(".hero-laminate-label"));
@@ -86,17 +85,17 @@ test("the home page draws the stack, posts it once and shows the engine's descri
   expect(posts[0].material).toEqual({ library_id: "im7-8552", dataset_id: "ncamp-im7-8552-2019-rtd-measured-v1" });
   expect(posts[0].plies.map((ply) => ply.angle_deg)).toEqual([45, -45, 0, 90, 90, 0, -45, 45]);
   for (const ply of posts[0].plies) expect(ply.thickness_m).toBeCloseTo(0.00018288, 12);
-  await expect(page.getByTestId("stack-row")).toHaveCount(8);
-  const specs = page.getByTestId("specs");
+  await expect(calculator(page).getByTestId("stack-row")).toHaveCount(8);
+  const specs = calculator(page).getByTestId("specs");
   await expect(specs).toContainText("Quasi-isotropic");
   await expect(specs).toContainText("symmetric, balanced");
   await expect(specs).toContainText("1.463 mm");
   await expect(specs).toContainText("2.312 kg/m²");
   await expect(specs).toContainText("bending–twisting");
-  await expect(page.getByTestId("failure-panel")).toHaveCount(0);
-  await expect(page.getByTestId("abd-grid").getByRole("table", { name: "A matrix" })).toContainText("9.88e+7");
-  await expect(page.getByTestId("property-row")).toContainText("1580");
-  await expect(page.getByTestId("property-row")).toContainText("57.3");
+  await expect(calculator(page).getByTestId("failure-panel")).toHaveCount(0);
+  await expect(calculator(page).getByTestId("abd-grid").getByRole("table", { name: "A matrix" })).toContainText("9.88e+7");
+  await expect(calculator(page).getByTestId("property-row")).toContainText("1580");
+  await expect(calculator(page).getByTestId("property-row")).toContainText("57.3");
   await page.waitForTimeout(700);
   expect(posts.length).toBe(1);
   expect(errors).toEqual([]);
@@ -111,7 +110,7 @@ test("typing a layup posts the expanded plies once the typing settles; an unread
   await layup.fill("[0/90]s");
   await expect.poll(() => posts.length).toBe(2);
   expect(posts[1].plies.map((ply) => ply.angle_deg)).toEqual([0, 90, 90, 0]);
-  await expect(page.getByTestId("stack-row")).toHaveCount(4);
+  await expect(calculator(page).getByTestId("stack-row")).toHaveCount(4);
   await layup.pressSequentially("x", { delay: 20 });
   await expect(page.locator("#hero-layup-hint")).toContainText("Could not read the layup");
   await expect(page.locator(".hero-laminate-results").getByRole("alert")).toContainText("Could not read the layup");
@@ -134,7 +133,7 @@ test("a load turns on first-ply failure, with the engine's reasons for the crite
   await page.getByLabel("Nx (N/m)", { exact: true }).fill("25000");
   await expect.poll(() => posts.length).toBe(2);
   expect(posts[1].loads.Nx).toBe(25000);
-  const panel = page.getByTestId("failure-panel");
+  const panel = calculator(page).getByTestId("failure-panel");
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("Maximum stress");
   await expect(panel).toContainText("28.1");

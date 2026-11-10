@@ -1,0 +1,811 @@
+/* The tour of the calculator between the hero and the calculator (components/home/demo-tour.tsx). Its ground is dark: it
+ * continues the hero and its clip, and the live calculator after it stays white. Two layouts share one markup. By default the
+ * tour is an ordinary section: a head, the 3D view, then the steps one under another, each with its words and its panel. On a
+ * desktop-sized window whose visitor has not asked for reduced motion the stage is one viewport tall and pinned inside a tall
+ * wrapper, and the scroll steps through it. The type and the grid are the site's (app/sections.css): 12 columns, 32 px gutters
+ * and margins, monospace labels, headings 38/41 px at weight 400. */
+.demo-tour {
+  --tour-ground: #080808;
+  --bg: #0d0d0d;
+  --panel: #141414;
+  --raised: #1b1b1b;
+  --line: #2d2d2d;
+  --text: #efefef;
+  --muted: #a0a0a0;
+  --accent: #d4d4d4;
+  position: relative;
+  z-index: 1;
+  background: var(--tour-ground);
+  color: var(--text);
+}
+.demo-tour-stage {
+  padding: 88px 32px;
+}
+.demo-tour-head {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  margin-bottom: 64px;
+}
+.demo-tour-label {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.demo-tour-label::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 11px;
+  background: currentColor;
+}
+.demo-tour-head .demo-tour-label {
+  grid-column: 1 / 4;
+}
+.demo-tour-statement {
+  grid-column: 4 / 11;
+  display: grid;
+  gap: 16px;
+  margin-left: -16px;
+  padding-left: 15px;
+  border-left: 1px solid currentColor;
+}
+.demo-tour-statement h2,
+.demo-tour-text h3 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 41px;
+  letter-spacing: -0.01em;
+}
+.demo-tour-statement p,
+.demo-tour-text > p:last-child {
+  max-width: 36em;
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  color: var(--muted);
+}
+/* The 3D view, as the calculator frames it, in the middle of the section. */
+.demo-tour-scene {
+  max-width: 640px;
+  margin: 0 auto 72px;
+}
+/* Where the view will be, until it is mounted: the same box, empty. */
+.demo-tour-view-rest {
+  aspect-ratio: 4 / 3;
+  min-height: 260px;
+}
+.demo-tour-note {
+  min-height: 18px;
+  margin: 14px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: var(--muted);
+}
+.demo-tour-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  row-gap: 72px;
+}
+.demo-tour-step {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+}
+.demo-tour-text {
+  grid-column: 1 / 6;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+.demo-tour-text .demo-tour-label {
+  margin-bottom: 8px;
+}
+/* A step's panel: the calculator's own parts, compact, on the dark ground. */
+.demo-tour-card {
+  grid-column: 7 / 13;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #262626;
+  border-radius: 12px;
+  background: #101010;
+}
+.demo-tour-rail {
+  display: none;
+}
+.tour-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 18px;
+}
+.tour-eyebrow {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 1.8px;
+  color: var(--accent);
+}
+.tour-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.tour-card-head .tour-hint {
+  text-align: right;
+}
+/* A read-only field: the scroll fills it. The live fields are in the calculator below. */
+.tour-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.tour-field-label {
+  font-size: 12px;
+}
+.tour-field-label small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.tour-field-box {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #414141;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 14px;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tour-field-box[data-caret]::after {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin-left: 2px;
+  background: currentColor;
+  animation: tour-caret 1s steps(2, jump-none) infinite;
+}
+@keyframes tour-caret {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.tour-field.is-quiet .tour-field-box {
+  border-color: var(--line);
+  color: #6f6f6f;
+}
+.tour-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 14px;
+}
+.tour-loads {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.tour-loads .tour-field-box {
+  min-height: 34px;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+.tour-library {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+}
+.tour-library li {
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.25s, color 0.25s;
+}
+.tour-library li:first-child {
+  border-top: 0;
+}
+.tour-library li[data-picked] {
+  background: #efefef;
+  color: #111111;
+}
+.tour-library .tour-library-more {
+  color: #6f6f6f;
+}
+.tour-reveal {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.tour-reveal[data-shown] {
+  opacity: 1;
+}
+/* The request and the hand-over's summary: a few monospace lines. */
+.tour-request {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 18px;
+}
+.tour-request > div {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  column-gap: 8px;
+}
+.tour-request dt {
+  color: var(--muted);
+}
+.tour-request dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+/* Where the engine's numbers go. Each slot keeps the height its answer needs, so nothing moves when the answer arrives. */
+.tour-slot {
+  position: relative;
+  min-width: 0;
+}
+.tour-slot-specs {
+  min-height: 192px;
+}
+.tour-slot-abd {
+  min-height: 282px;
+}
+.tour-slot-failure {
+  min-height: 240px;
+}
+.tour-slot[data-busy]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #131313 0%, #1c1c1c 50%, #131313 100%) 0 0 / 200% 100%;
+  animation: tour-busy 1.2s linear infinite;
+}
+@keyframes tour-busy {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+.tour-waiting {
+  margin: 0;
+}
+.tour-needs-engine {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed #3a3a3a;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.tour-stack-head {
+  margin-top: 4px;
+  color: var(--muted);
+}
+/* The plies come up from the bottom of their slot, as they are laid. */
+.tour-stack-slot {
+  display: grid;
+  align-content: end;
+  min-height: calc(var(--tour-rows, 8) * 29px);
+}
+/* The calculator's parts on the dark ground: app/home.css sets them for the white calculator, so the dark values return here,
+ * and the matrices get the table rules the calculator page gives them. Each selector is one class heavier than the rule of
+ * app/home.css it answers, so the order the two files load in does not matter. */
+.demo-tour .hero-properties {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.demo-tour .hero-properties > div,
+.demo-tour .hero-specs > div {
+  border-color: var(--line);
+  background: #151515;
+}
+.demo-tour .hero-properties > div {
+  padding: 6px 8px;
+}
+.demo-tour .hero-specs > div {
+  padding: 8px 10px;
+}
+.demo-tour .hero-stack li {
+  grid-template-columns: 10px 22px 1fr auto;
+  padding: 3px 8px;
+}
+.demo-tour .hero-stack-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.demo-tour .hero-stack li.is-hovered {
+  border-color: #555555;
+  background: #1a1a1a;
+}
+.demo-tour .hero-abd {
+  gap: 8px 10px;
+}
+.demo-tour .hero-abd-note {
+  padding: 8px 10px;
+  font-size: 10px;
+}
+.demo-tour .calc-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.demo-tour .hero-abd .calc-matrix table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(8px, 0.62vw, 10px);
+  font-variant-numeric: tabular-nums;
+}
+.demo-tour .hero-abd .calc-matrix th,
+.demo-tour .hero-abd .calc-matrix td {
+  padding: 5px 3px;
+  text-align: right;
+  white-space: nowrap;
+}
+.demo-tour .calc-matrix th {
+  background: #151515;
+  font-weight: 400;
+  color: var(--muted);
+}
+.demo-tour .calc-matrix tbody tr + tr {
+  border-top: 1px solid var(--line);
+}
+.demo-tour .hero-failure h3 {
+  font-family: var(--font);
+  font-weight: 500;
+}
+.demo-tour .hero-failure th,
+.demo-tour .hero-failure td {
+  padding: 5px 6px;
+}
+
+/* "Scroll to explore" (components/home/scroll-to-explore.tsx), at the hero's bottom right, after Scale's: the words and a
+ * down arrow in a small bordered square. On a phone only the square is shown, clear of the line at the bottom left. */
+.home-hero-explore {
+  position: absolute;
+  z-index: 2;
+  right: 32px;
+  bottom: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 15px;
+  line-height: 20px;
+  color: #ffffff;
+}
+.home-hero-explore-box {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ffffffb3;
+  border-radius: 4px;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.home-hero-explore:hover .home-hero-explore-box {
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #080808;
+}
+.home-hero-explore:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 6px;
+  color: #ffffff;
+}
+@media (max-width: 760px) {
+  .home-hero-explore {
+    right: 20px;
+    bottom: 20px;
+  }
+  .home-hero-explore > span:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* The pinned tour. Before the page's script has set the mode the stage is not shown, so nothing overlaps the hero. */
+@media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  /* Where the 3D view stands on the stage, and the stage's ground: the view's own ground (the backdrop that
+   * components/home/laminate-studio.tsx draws: lighter behind the stack, darker outward) continued over the whole stage, so the
+   * view has no edge. The hero takes the same ground while the bridge plays, behind its clip. */
+  :root {
+    --tour-scene-x: 47.3vw;
+    --tour-scene-width: min(44vw, 72vh);
+    /* Two layers, as the view draws them: the floor's faint pool of light under the stack, over the backdrop's own gradient.
+     * The stops follow the view's shaders (a Gaussian for the pool, a smoothstep for the backdrop), in display values. */
+    --tour-stage-ground:
+      radial-gradient(ellipse calc(1.156 * var(--tour-scene-width)) calc(0.58 * var(--tour-scene-width)) at var(--tour-scene-x) calc(50vh + 0.15 * var(--tour-scene-width)),
+        rgb(255 255 255 / 0.06) 0%, rgb(255 255 255 / 0.0569) 12.5%, rgb(255 255 255 / 0.0485) 25%, rgb(255 255 255 / 0.0373) 37.5%,
+        rgb(255 255 255 / 0.0257) 50%, rgb(255 255 255 / 0.016) 62.5%, rgb(255 255 255 / 0.0075) 75%, rgb(255 255 255 / 0.0022) 87.5%,
+        rgb(255 255 255 / 0) 100%),
+      radial-gradient(ellipse calc(0.78 * var(--tour-scene-width)) 69.64vh at var(--tour-scene-x) 46vh,
+        rgb(28.6 28.6 28.6) 0%, rgb(27.8 27.8 27.8) 12.5%, rgb(25.8 25.8 25.8) 25%, rgb(22.9 22.9 22.9) 37.5%, rgb(19.6 19.6 19.6) 50%,
+        rgb(16.4 16.4 16.4) 62.5%, rgb(13.5 13.5 13.5) 75%, rgb(11.5 11.5 11.5) 87.5%, rgb(10.7 10.7 10.7) 100%),
+      rgb(10.7 10.7 10.7);
+  }
+  /* The wrapper starts at the top of the hero and is as tall as the scroll the tour takes plus the one screen the stage fills.
+   * Only the stage takes the pointer, and only once the bridge from the hero is done. */
+  .demo-tour {
+    height: calc((var(--tour-screens) + 1) * 100vh);
+    margin-top: calc(-1 * var(--tour-hero-height, max(640px, 100svh)));
+    background: none;
+    pointer-events: none;
+  }
+  .demo-tour:not([data-mode="pinned"]) > .demo-tour-stage,
+  .demo-tour[data-mode="pinned"]:not([data-phase]) > .demo-tour-stage {
+    visibility: hidden;
+  }
+  .demo-tour[data-mode="pinned"] > .demo-tour-stage {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 0;
+    overflow: hidden;
+  }
+  .demo-tour[data-mode="pinned"] > .demo-tour-stage {
+    background: var(--tour-stage-ground);
+  }
+  .demo-tour[data-mode="pinned"][data-phase="steps"] > .demo-tour-stage {
+    pointer-events: auto;
+  }
+  /* The bridge. The hero stays in the window while it plays, over the stage and with no ground of its own: the scroll then
+   * moves the hero's clip, not the page, and what the shrinking clip uncovers is the stage, with the stack standing on it.
+   * When the bridge is done the hero returns to the page's flow, above the window and under the stage. */
+  main:has(> .demo-tour[data-mode="pinned"][data-phase="bridge"]) > .home-hero {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: none;
+  }
+  /* The tour writes the bridge's moves on the hero as custom properties (components/home/tour-bridge.ts); these rules apply
+   * only while it has, so at rest the hero is exactly as app/home.css sets it. The words leave; the clip keeps its middle,
+   * shrinks into a card and is carried onto the top ply by one transform; the shades laid over it for the words go. */
+  .home-hero[style*="--tour-copy"] > :not(.home-hero-media) {
+    filter: opacity(var(--tour-copy, 1));
+    translate: 0 var(--tour-copy-lift, 0px);
+    visibility: var(--tour-copy-visibility, visible);
+  }
+  .home-hero[style*="--tour-media"] > .home-hero-media {
+    transform: var(--tour-media-transform, none);
+    transform-origin: 0 0;
+    clip-path: var(--tour-media-clip, none);
+    opacity: var(--tour-media-opacity, 1);
+    visibility: var(--tour-media-visibility, visible);
+    will-change: transform;
+  }
+  .home-hero[style*="--tour-shade"] > .home-hero-media::after {
+    opacity: var(--tour-shade, 1);
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* The view stands in the middle, between the words and the panel, the full height of the stage; its sides fade into the
+   * ground so the view has no edge. */
+  .demo-tour[data-mode="pinned"] .demo-tour-scene {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--tour-scene-x);
+    width: var(--tour-scene-width);
+    max-width: none;
+    margin: 0;
+    transform: translateX(-50%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 9%, #000 91%, transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0%, #000 9%, #000 91%, transparent 100%);
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-scene .demo-tour-view-rest,
+  .demo-tour[data-mode="pinned"] .demo-tour-scene .hero-laminate-canvas,
+  .demo-tour[data-mode="pinned"] .demo-tour-scene .hero-laminate-loading,
+  .demo-tour[data-mode="pinned"] .demo-tour-scene .studio-webgl-missing {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    aspect-ratio: auto;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-note {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 96px;
+    margin: 0;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-steps {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+  }
+  /* One step at a time: its words at the left, its panel at the right, both centred on the stage's height. */
+  .demo-tour[data-mode="pinned"] .demo-tour-step {
+    position: absolute;
+    inset: 0;
+    padding: 72px 32px 88px;
+    align-items: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-step[data-active] {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.4s ease 0.15s, visibility 0s;
+  }
+  .demo-tour[data-mode="pinned"][data-phase="steps"] .demo-tour-step[data-active] > * {
+    pointer-events: auto;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-text {
+    grid-column: 1 / 5;
+    transform: translateY(14px);
+    transition: transform 0.5s ease;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-step[data-active] .demo-tour-text {
+    transform: none;
+    transition-delay: 0.15s;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-text h3,
+  .demo-tour[data-mode="pinned"] .demo-tour-text > p:last-child {
+    max-width: 360px;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-card {
+    grid-column: 9 / 13;
+    max-height: 100%;
+    overflow: hidden;
+    background: #101010f2;
+  }
+  /* Where the tour is: five ticks along the foot of the stage, the current one filling with the scroll. */
+  .demo-tour[data-mode="pinned"] .demo-tour-rail {
+    position: absolute;
+    left: 32px;
+    right: 32px;
+    bottom: 28px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    column-gap: 32px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .demo-tour[data-mode="pinned"][data-phase="steps"] .demo-tour-rail {
+    opacity: 1;
+  }
+  .demo-tour-rail li {
+    position: relative;
+    padding-top: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    line-height: 16px;
+    letter-spacing: 0.06em;
+    color: #6f6f6f;
+    transition: color 0.3s;
+  }
+  .demo-tour-rail li[data-active] {
+    color: var(--text);
+  }
+  .demo-tour-rail li::before,
+  .demo-tour-rail li::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: var(--line);
+  }
+  .demo-tour-rail li::after {
+    background: var(--text);
+    transform: scaleX(var(--tour-fill, 0));
+    transform-origin: 0 50%;
+  }
+}
+/* A smaller desktop: the view is a little narrower, so the stack clears the words and the panel. */
+@media (min-width: 1280px) and (max-width: 1439px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  :root {
+    --tour-scene-width: min(40vw, 72vh);
+  }
+}
+/* Under 1440 px the failure table's rows wrap, so its slot is taller (not in a low window, which drops the notes). */
+@media (min-width: 1024px) and (max-width: 1439px) and (min-height: 860px) and (prefers-reduced-motion: no-preference) {
+  .demo-tour[data-mode="pinned"] .tour-slot-failure {
+    min-height: 296px;
+  }
+}
+/* A narrow desktop: the panel takes five columns, and the view moves left and shrinks to stand between it and the words. */
+@media (min-width: 1024px) and (max-width: 1279px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  :root {
+    --tour-scene-x: calc(45.83vw + 1px);
+    --tour-scene-width: min(34vw, 72vh);
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-card {
+    grid-column: 8 / 13;
+    padding: 16px;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-text h3 {
+    max-width: 290px;
+    font-size: 30px;
+    line-height: 34px;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-text > p:last-child {
+    max-width: 290px;
+    font-size: 16px;
+    line-height: 24px;
+  }
+}
+/* A low window (most laptops): the panels are set tighter and drop what is not a number. */
+@media (min-width: 1024px) and (min-height: 600px) and (max-height: 859px) and (prefers-reduced-motion: no-preference) {
+  .demo-tour[data-mode="pinned"] .demo-tour-step {
+    padding-top: 20px;
+    padding-bottom: 64px;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-card {
+    gap: 10px;
+    padding: 14px 16px;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-text h3 {
+    font-size: 30px;
+    line-height: 34px;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-text > p:last-child {
+    font-size: 16px;
+    line-height: 24px;
+  }
+  .demo-tour[data-mode="pinned"] .hero-abd-note,
+  .demo-tour[data-mode="pinned"] .hero-failure-note,
+  .demo-tour[data-mode="pinned"] .tour-library-more {
+    display: none;
+  }
+  .demo-tour[data-mode="pinned"] .hero-specs > div {
+    padding: 5px 10px;
+  }
+  .demo-tour[data-mode="pinned"] .hero-abd .calc-matrix th,
+  .demo-tour[data-mode="pinned"] .hero-abd .calc-matrix td {
+    padding: 3px;
+  }
+  .demo-tour[data-mode="pinned"] .hero-abd .calc-matrix h3 {
+    margin-bottom: 2px;
+  }
+  .demo-tour[data-mode="pinned"] .tour-slot-specs {
+    min-height: 176px;
+  }
+  .demo-tour[data-mode="pinned"] .tour-slot-abd {
+    min-height: 242px;
+  }
+  .demo-tour[data-mode="pinned"] .tour-slot-failure {
+    min-height: 164px;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-note {
+    bottom: 64px;
+  }
+  .demo-tour[data-mode="pinned"] .demo-tour-rail {
+    bottom: 20px;
+  }
+}
+/* A very low window: the engine's panel keeps the answer and drops the request's lines. */
+@media (min-width: 1024px) and (min-height: 600px) and (max-height: 699px) and (prefers-reduced-motion: no-preference) {
+  .demo-tour[data-mode="pinned"] .demo-tour-step[data-step="engine"] .tour-request {
+    display: none;
+  }
+}
+/* The unpinned tour on a small screen: one column, the words above their panel. */
+@media (max-width: 1023px) {
+  .demo-tour-head {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
+    margin-bottom: 48px;
+  }
+  .demo-tour-head .demo-tour-label,
+  .demo-tour-statement {
+    grid-column: 1;
+  }
+  .demo-tour-statement {
+    margin-left: 0;
+  }
+  .demo-tour-statement h2,
+  .demo-tour-text h3 {
+    font-size: 30px;
+    line-height: 34px;
+  }
+  .demo-tour-scene {
+    margin-bottom: 56px;
+  }
+  .demo-tour-steps {
+    row-gap: 56px;
+  }
+  .demo-tour-step {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 24px;
+  }
+  .demo-tour-text,
+  .demo-tour-card {
+    grid-column: 1;
+  }
+}
+@media (max-width: 760px) {
+  .demo-tour-stage {
+    padding: 64px 20px;
+  }
+  .demo-tour-head {
+    margin-bottom: 36px;
+  }
+  .demo-tour-statement h2,
+  .demo-tour-text h3 {
+    font-size: 24px;
+    line-height: 28px;
+  }
+  .demo-tour-statement p,
+  .demo-tour-text > p:last-child {
+    font-size: 16px;
+    line-height: 24px;
+  }
+  .demo-tour-label {
+    font-size: 13px;
+  }
+  .demo-tour-card {
+    padding: 16px;
+  }
+  .demo-tour .hero-properties {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .demo-tour .hero-abd {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tour-slot-specs {
+    min-height: 390px;
+  }
+  .tour-slot-abd {
+    min-height: 462px;
+  }
+  .tour-slot-failure {
+    min-height: 296px;
+  }
+}

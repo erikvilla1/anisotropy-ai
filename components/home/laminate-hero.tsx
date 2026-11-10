@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Layers3 } from "lucide-react";
 import { LaminateScene } from "./scene";
 import { AbdGrid, FailurePanel, PropertyRow, SpecsList, StackList } from "./laminate-panels";
+import { useEngineAnswers } from "./engine-answers";
 import {
   buildAnalysisRequest, CalculationError, loadNames, requestAnalysis, type AnalysisResult, type FieldErrors, type LoadName,
 } from "@/lib/laminate-api";
@@ -38,6 +39,8 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
   const lastSent = useRef<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const sequence = useRef(0);
+  // The page's shared answers (components/home/engine-answers.tsx): the tour above shows the answer asked for here.
+  const shared = useEngineAnswers();
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -73,24 +76,31 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
       lastSent.current = requestJson;
       setPending(true);
       setMessage("");
+      shared?.report(requestJson, { state: "pending" });
       const timeout = window.setTimeout(() => mine.abort("timeout"), TIMEOUT_MS);
       try {
         const answer = await requestAnalysis(apiBaseUrl, JSON.parse(requestJson), mine.signal);
+        shared?.report(requestJson, { state: "answer", result: answer });
         if (seq === sequence.current) setResult(answer);
       } catch (error) {
-        if (mine.signal.reason === "superseded" || mine.signal.reason === "unmount" || seq !== sequence.current) return;
+        if (mine.signal.reason === "superseded" || mine.signal.reason === "unmount" || seq !== sequence.current) {
+          shared?.report(requestJson, { state: "dropped" });
+          return;
+        }
         setResult(null);
         lastSent.current = null;
-        setMessage(mine.signal.aborted
+        const text = mine.signal.aborted
           ? "The calculation timed out. Edit the layup to try again."
-          : error instanceof CalculationError ? error.message : "Cannot reach the calculation service. The view still draws your stack.");
+          : error instanceof CalculationError ? error.message : "Cannot reach the calculation service. The view still draws your stack.";
+        setMessage(text);
+        shared?.report(requestJson, { state: "failed", message: text });
       } finally {
         window.clearTimeout(timeout);
         if (seq === sequence.current) setPending(false);
       }
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [apiBaseUrl, requestJson]);
+  }, [apiBaseUrl, requestJson, shared]);
 
   function update(next: Partial<HeroState>) {
     setState((current) => ({ ...current, ...next }));

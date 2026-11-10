@@ -3,9 +3,12 @@ import { join } from "node:path";
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
+import { DemoTour } from "@/components/home/demo-tour";
+import { EngineAnswersProvider } from "@/components/home/engine-answers";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { LogoStrip } from "@/components/home/logo-strip";
+import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { serviceHref, services, statusLabel } from "@/lib/services";
 import { supporters } from "@/lib/supporters";
 import { team } from "@/lib/team";
@@ -39,9 +42,9 @@ const news = [
   },
 ];
 
-/** The home page: the hero first, the laminate calculator under it as the demonstration (ADR-0076, ADR-0077),
- * then short blurbs on the mission, the platform, the evidence, the team and what is new. The workflow and the roadmap live
- * on About. */
+/** The home page: the hero first (ADR-0076, ADR-0077), a scroll-driven tour of one calculation (ADR-0084), the laminate
+ * calculator as the demonstration, then bands on the mission, the supporters, the platform, the team and what is new, and the
+ * closing band. The workflow and the roadmap live on About. */
 export default function Home() {
   return (
     <main id="main">
@@ -73,8 +76,15 @@ export default function Home() {
           <span>Part of the Fall 2026 Launchpad cohort</span>
           <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
         </p>
+        {/* "Scroll to explore", in the hero's bottom right corner: one press scrolls to the tour's first step. */}
+        <ScrollToExplore />
       </section>
-      <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
+      {/* The tour of the calculator (components/home/demo-tour.tsx): the scroll takes a visitor through one real run, then leaves
+          them at the live calculator. The provider renders no element; it lets the tour show the answer the calculator asked for. */}
+      <EngineAnswersProvider>
+        <DemoTour apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
+        <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
+      </EngineAnswersProvider>
       {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11 and 14), dark and
           light in turn: Mission, the supporters' strip, Platform, About, What is new. Each numbered band opens with the kit's
           head. The four principles close the Mission band as a strip. */}
