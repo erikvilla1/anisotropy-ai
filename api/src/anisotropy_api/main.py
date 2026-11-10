@@ -29,13 +29,15 @@ from .access import AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
-from .coupon_jobs import LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, UnknownCoupon, runner_command, studio_command
+from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
+                          studio_command)
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
                       owns_project, project_jobs, record_run, stop_orphans, update_project, upsert_project)
 from .settings import allowed_origins, environment, load_settings
-from .storage import R2Store, content_type, restore
+from .storage import R2Store, content_type, restore, sync
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
+    TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -43,7 +45,11 @@ from .schemas import (
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
+# With the job queue (ADR-0056 amendment 3), a queued job's answer carries its id here; the Worker sends the id to the queue and
+# drops the header, so a browser never sees it.
+ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
+SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only its Durable Object reaches (worker/index.ts)
 PROJECTS = "/v1/projects"
 
 
@@ -76,16 +82,19 @@ async def lifespan(app: FastAPI):
     # Durable outputs (ADR-0050 amendment 2): with an object store named, the coupons come back from it before any job runs, and
     # every done job's files go to it; with the database, the jobs table keeps each job's status, and the jobs a stopped process
     # never saw end are marked so.
+    # With the job queue (ADR-0056 amendment 3) the jobs run in solver containers: the API's container keeps its coupons level
+    # with the store (`sync`) and leaves the running rows to their solvers' heartbeats; a solver fetches the coupons per job.
     store = R2Store(settings.storage) if settings.storage.on else None
-    if store is not None:
-        files, coupons = restore(store, LOCAL_FEA)
+    role = settings.job_role
+    if store is not None and role != "solver":
+        files, coupons = (sync if role == "queue" else restore)(store, LOCAL_FEA)
         print(f"restored {files} file(s) of {coupons} coupon(s) from the bucket {settings.storage.bucket}", flush=True)
-    if app.state.records is not None:
+    if app.state.records is not None and role is None:
         orphans = stop_orphans(app.state.records, "the API stopped while this job ran, so it did not finish; start it again")
         if orphans:
             print(f"marked {orphans} job(s) of a stopped process as stopped", flush=True)
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records,
-                                       per_day=settings.jobs_per_user_per_day)
+                                       per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role)
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     # Behind Cloudflare Access, every request but /healthz must carry a valid token (ADR-0056); None means no sign-in, the local API.
     app.state.access_verifier = access_verifier(settings.access) if settings.access.on else None
@@ -329,8 +338,10 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
     """Start a coupon job (ADR-0050): fea/tools/run_coupon.py takes a filled-in input form, the coupon's values as the studio sends
     them (ADR-0051), or a coupon that has its specs, to the coupon's package, in the background. One job runs at a time; another is
     refused with 409 while it runs. With the hosted tier's per-user limit set, a person's second running job or a job past the day's
-    cap is refused with 429 and the reason (ADR-0056). Poll the job at the Location header until its state is no longer running: its stage and the
-    files made so far appear as it goes; its receipt is a run record written when it ends (ADR-0026).
+    cap is refused with 429 and the reason (ADR-0056). Poll the job at the Location header until its state is neither queued nor
+    running: its stage and the files made so far appear as it goes; its receipt is a run record written when it ends (ADR-0026).
+    With the job queue (ADR-0056 amendment 3) the job is answered `queued`, many run at once, each in a solver container of its own,
+    and the answer's X-Anisotropy-Enqueue header tells the Worker to queue it.
     """
     jobs = _coupon_jobs(request)
     form = (job_request.form_name, job_request.form_bytes()) if job_request.form_name is not None else None
@@ -346,6 +357,63 @@ def start_coupon_job(job_request: CouponJobRequest, actor: Actor, request: Reque
     except JobRefused as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     response.headers["Location"] = f"{COUPON_JOBS}/{job.id}"
+    if job.state == "queued":
+        response.headers[ENQUEUE_HEADER] = str(job.id)
+    with jobs.lock:
+        return CouponJobOutput.of(job)
+
+
+def _solver_jobs(request: Request) -> CouponJobs:
+    """The jobs of a solver container; 404 anywhere else, as if the route did not exist, since only the solver's Durable Object reaches it."""
+    jobs = _coupon_jobs(request)
+    if jobs.role != "solver":
+        raise HTTPException(status_code=404, detail="Not Found")
+    return jobs
+
+
+@app.post(SOLVER_JOBS + "/{job_id}", response_model=CouponJobOutput)
+def solve_queued_job(job_id: uuid.UUID, request: Request, response: Response) -> CouponJobOutput:
+    """A solver container's start (ADR-0056 amendment 3): the queued job claimed and run here, 202. The job as it stands, 200, when
+    this container has it already, running or ended; 409 when its row is not queued (another solver took it, it ended, or there is
+    none), so the consumer lets the message go."""
+    jobs = _solver_jobs(request)
+    with jobs.lock:
+        already = jobs.jobs.get(job_id)
+        running_here = already is not None and already.state != "queued"
+    try:
+        job = jobs.take(job_id)
+    except SolverBusy as exc:  # 423: the consumer tries the pool's next solver (ADR-0056 amendment 6)
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
+    except JobRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if job is None:
+        raise HTTPException(status_code=409, detail=f"coupon job {job_id} is not queued: another solver took it, it ended, or there is none")
+    response.status_code = 200 if running_here else 202
+    with jobs.lock:
+        return CouponJobOutput.of(job)
+
+
+@app.get(SOLVER_JOBS + "/{job_id}", response_model=CouponJobOutput)
+def solver_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
+    """The job as this solver container runs it: `running`, an ended state, or `queued` when it went back to the queue (another job
+    holds its coupon). 404 when this container does not have it (a new container after the old one stopped)."""
+    jobs = _solver_jobs(request)
+    with jobs.lock:
+        job = jobs.jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"this solver has no coupon job {job_id}")
+        return CouponJobOutput.of(job)
+
+
+@app.post(SOLVER_JOBS + "/{job_id}/stop", response_model=CouponJobOutput)
+def stop_solver_job(job_id: uuid.UUID, request: Request, reason: Annotated[str, Query(min_length=1, max_length=300)]) -> CouponJobOutput:
+    """The per-job timeout: the tool is killed and the job ends `stopped` with the reason the solver's timer gives (ADR-0056 amendment 4)."""
+    jobs = _solver_jobs(request)
+    job = jobs.stop(job_id, reason)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"this solver has no coupon job {job_id}")
     with jobs.lock:
         return CouponJobOutput.of(job)
 
@@ -373,6 +441,28 @@ def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Reque
     if problem.project_id is not None:
         _note_check(request, actor, problem.project_id, body)
     return body
+
+
+@app.post("/v1/tow-tests", response_model=TowTestResponse)
+def calculate_tow_test(problem: TowTestRequest, actor: Actor, request: Request, response: Response) -> TowTestResponse:
+    """A fibre tow record under ASTM D4018 (ADR-0074): its rows and specimens read and refused by row, judged clause by clause against the
+    standard when it names one, and reduced by the engine to each specimen's strength and chord modulus and their statistics, by
+    fea/tools/studio_tool.py tow. It is answered at once: a tow has no model and no solver. Recorded with its actor (ADR-0026); the
+    record keeps the values' digest. The studio tool answers within two minutes or the request is refused with 504.
+    """
+    jobs = _coupon_jobs(request)
+
+    def compute() -> TowTestResponse:
+        try:
+            found = jobs.tow(problem.values_bytes())
+        except CheckTimedOut as exc:
+            raise HTTPException(status_code=504, detail=str(exc)) from exc
+        except JobRefused as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        checklist = found["checklist"]
+        return TowTestResponse(run_id=None, state=checklist["state"], checklist=checklist, result=found.get("result"))
+
+    return _deliver(request, response, actor, problem.receipt(), compute)
 
 
 # ----------------------------------------------------------------------------------------------- the projects (ADR-0062 part 6)

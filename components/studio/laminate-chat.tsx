@@ -36,7 +36,7 @@ const PANEL_OF: Record<LaminateStep, { id: string; title: string }> = {
 const QUESTIONS: Record<LaminateStep, { title: string; text: string }> = {
   units: { title: "Which units is the problem stated in?", text: "Pick the system. A number typed with its own unit, like 10300 MPa or 0.0049 in, keeps that unit; the engine converts, never this page." },
   material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or type the constants the problem gives, e.g. “E1 147 GPa, E2 10.3, G12 7, nu12 0.27, F1t 2280, F1c 1725, F2t 57, F2c 228, F6 76 MPa”. Without strengths no failure is predicted." },
-  layup: { title: "What is the layup?", text: "Laminate notation, bottom ply first, e.g. [0/45/-45/90]s, and the ply thickness. Here 0° runs along x, the direction of Nx, as in the textbooks (a coupon test counts from across the width)." },
+  layup: { title: "What is the layup?", text: "Laminate notation, bottom ply first, e.g. [0/45/-45/90]s, and the ply thickness. Here 0° runs along x, the direction of Nx, as in the textbooks; a coupon counts from its length, the direction it is pulled, so 0° is along the main axis in both workspaces." },
   loads: { title: "What loads does it carry?", text: "Force and moment resultants per unit width, e.g. “Nx = 100 N/mm, everything else zero”. Every one of the six is stated; nothing is assumed." },
   review: { title: "Ready to solve", text: "The engine solves the stack by classical lamination theory: the A, B, D matrices, the mid-plane strains and curvatures, every ply's stresses and first-ply failure." },
 };

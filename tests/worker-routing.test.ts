@@ -33,3 +33,15 @@ test("the container receives the set, non-blank variables the API reads, and not
     assert.ok((CONTAINER_VARIABLES as readonly string[]).includes(name), `${name} is one the API reads`);
   }
 });
+
+test("the API's container is told to queue jobs only when the Worker has the queue", async () => {
+  const { apiEnvironment, isSolverPath, solverEnvironment } = await import("../worker/routing");
+  const env = { DATABASE_URL: "postgresql://u:p@h/db", ANISOTROPY_ACCESS_AUD: "aud", ANISOTROPY_JOBS_PER_USER_PER_DAY: "20" };
+  assert.deepEqual(apiEnvironment(env), { DATABASE_URL: "postgresql://u:p@h/db", ANISOTROPY_ACCESS_AUD: "aud", ANISOTROPY_JOBS_PER_USER_PER_DAY: "20" });
+  assert.equal(apiEnvironment({ ...env, JOB_QUEUE: { kind: "a binding" } }).ANISOTROPY_JOB_ROLE, "queue");
+  // a solver gets the database, the store and the role; no sign-in, origins, assistant or per-user cap
+  assert.deepEqual(solverEnvironment({ ...env, ANISOTROPY_R2_BUCKET: "b", ANTHROPIC_API_KEY: "k", ANISOTROPY_ALLOWED_ORIGINS: "https://anisotropy.dev" }),
+                   { DATABASE_URL: "postgresql://u:p@h/db", ANISOTROPY_R2_BUCKET: "b", ANISOTROPY_JOB_ROLE: "solver" });
+  for (const path of ["/v1/solver", "/v1/solver/jobs/x", "/v1/solver/jobs/x/stop"]) assert.ok(isSolverPath(path), path);
+  for (const path of ["/v1/coupon-jobs", "/v1/solvers", "/v1/coupon-jobs/v1/solver/"]) assert.ok(!isSolverPath(path), path);
+});

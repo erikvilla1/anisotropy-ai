@@ -53,6 +53,25 @@ def test_a_jobs_files_go_by_key_and_the_zip_stands_for_the_package_folder(tmp_pa
     assert store.objects[stored["package"]] == (b"PK\x03\x04", "application/zip", 'attachment; filename="2026-10-30_IM7-UNT-L1.zip"')
 
 
+def test_a_folder_uploaded_again_sends_only_what_changed(tmp_path):
+    """The upload at a job's end (ADR-0056 amendment 5): a file the store holds unchanged, by its tag, is not sent again."""
+    folder = tmp_path / "fea" / "IM7-UNT-L1"
+    (folder / "ours").mkdir(parents=True)
+    (folder / "README.md").write_text("# IM7-UNT-L1\n", encoding="utf-8")
+    (folder / "ours" / "IM7-UNT-L1.toml").write_text("[coupon]\n", encoding="utf-8")
+    store = MemoryStore()
+    assert storage.store_folder(store, folder, "IM7-UNT-L1") == 2
+    assert storage.store_folder(store, folder, "IM7-UNT-L1") == 0  # nothing changed, nothing sent
+    (folder / "README.md").write_bytes(b"# IM7-UNT-L1\n\n| 02 |\n")  # bytes: the store compares content, not the platform's line ends
+    (folder / "ours" / "runs").mkdir()
+    (folder / "ours" / "runs" / "attempt-02.txt").write_text("ok\n", encoding="utf-8")
+    assert storage.store_folder(store, folder, "IM7-UNT-L1") == 2  # the changed file and the new one
+    assert store.objects["coupons/IM7-UNT-L1/folder/README.md"][0] == b"# IM7-UNT-L1\n\n| 02 |\n"
+    store.objects["coupons/IM7-UNT-L1/folder/README.md"] = (b"other", "text/markdown", None)  # a quoted tag, as R2 returns it, reads the same
+    store.tags = lambda prefix, _tags=store.tags: {key: f'"{tag}"' for key, tag in _tags(prefix).items()}
+    assert storage.store_folder(store, folder, "IM7-UNT-L1") == 1
+
+
 def test_the_coupon_folder_round_trips_and_a_restore_fills_only_what_the_disk_lacks(tmp_path):
     folder = tmp_path / "fea" / "IM7-UNT-L1"
     (folder / "ours" / "runs" / "attempt-01").mkdir(parents=True)
@@ -106,3 +125,24 @@ def test_the_live_store_round_trips_and_its_link_serves_the_file(tmp_path):
     with urllib.request.urlopen(client.link(key, seconds=60), timeout=30) as response:
         assert response.status == 200 and response.headers.get("Content-Type", "").startswith("application/json")
         assert response.read() == source.read_bytes()
+
+
+def test_the_folder_copy_leaves_the_big_run_files_out(tmp_path):
+    # the frd, dat, vtu, fields, PDF, LaTeX and package folders are filed by the job's keys and read by no later job (ADR-0056 amendment 6)
+    from anisotropy_api.storage import kept_in_folder, store_folder
+
+    folder = tmp_path / "IM7-UNT-L1"
+    kept = ["README.md", "ours/IM7-UNT-L1.toml", "ours/decks/IM7-UNT-L1-abaqus.inp", "ours/verification/IM7-UNT-L1-calculix.toml",
+            "ours/runs/attempt-02_2026-11-08/run/kernel/summary.txt", "ours/runs/attempt-02_2026-11-08/run/studio/checklist.json",
+            "ours/runs/attempt-02_2026-11-08/run/calculix/IM7-UNT-L1-nodal-ccx.inp", "team/2026-11-08/values.json"]
+    left = ["ours/runs/attempt-02_2026-11-08/run/calculix/IM7-UNT-L1-nodal-ccx.frd", "ours/runs/attempt-02_2026-11-08/run/calculix/IM7-UNT-L1-nodal-ccx.dat",
+            "ours/runs/attempt-02_2026-11-08/run/kernel/IM7-UNT-L1.vtu", "ours/runs/attempt-02_2026-11-08/run/kernel/IM7-UNT-L1-fields.json",
+            "documents/2026-11-08_IM7-UNT-L1/IM7-UNT-L1.pdf", "documents/2026-11-08_IM7-UNT-L1/README.md", "ours/latex/IM7-UNT-L1.tex"]
+    for relative in kept + left:
+        path = folder / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+    assert all(kept_in_folder(Path(r).parts) for r in kept) and not any(kept_in_folder(Path(r).parts) for r in left)
+    store = MemoryStore()
+    assert store_folder(store, folder, "IM7-UNT-L1") == len(kept)
+    assert sorted(store.objects) == sorted(f"coupons/IM7-UNT-L1/folder/{r}" for r in kept)

@@ -2,6 +2,27 @@
 
 Written for: the team member who builds the Abaqus coupon models (ADR-0029). Our solver reads your `.inp` and solves on your mesh; to compare, we need the numbers Abaqus computed. Today your job writes only `PRESELECT` field output to the `.odb`, and the `.dat` has no result tables, so there is nothing to compare yet. Either route below works; the first needs no Abaqus/CAE steps.
 
+## Reading a composite result the way the page reads it (ADR-0066, 2026-11-08)
+
+The page's validation table and the `.frd` in PrePoMax and a layer in Abaqus/CAE are one result read three ways, and the three only agree when the same ply, the same axes and the same point are read. What the page prints, and how to see the same number in each viewer:
+
+| On the page | In Abaqus/CAE | In PrePoMax (the CalculiX `.frd`) |
+| --- | --- | --- |
+| Ply k, counted from the bottom face; its angle from the coupon's length axis | `Layer = k` (CAE counts layers from the bottom, SNEG side) | the k-th part of the expanded model: one layer of bricks per ply, the lowest z first |
+| σ₁, σ₂, τ₁₂ in the ply's fibre axes | `S11`, `S22`, `S12` at a composite section point are in the layer's material axes already | the file is in the **global** axes: `S11` is σxx across the width, `S22` is σyy along the coupon; for a 0° ply (fibres along the pull) σ₁ = `S22`, for a 90° ply σ₁ = `S11`; a ±45° ply needs the rotation, which the page does for you |
+| the element centroid, the ply's middle | `*El Print, position=CENTROIDAL` with a section point per layer, or in the viewer: section point **MID** of the layer, Result Options → Averaging off, Quantity to plot: Discontinuities off | the nodal values, extrapolated from the integration points: a corner node of the tab line reads above the centroid of the same element (on `AS48552-UNT-L1`: 633 against 537 MPa for the 0° ply) |
+| no von Mises | `S, Mises` of a layer is the plane-stress invariant of that layer's state | `Mises` is the three-dimensional invariant of the brick's state; neither is a laminate quantity |
+| the reaction force | `RF2` at the reference point of the moving grip (`*Node Print, nset=RF-Top, totals=YES`) | `*NODE PRINT, NSET=Grip-Top, TOTALS=YES` in the `.dat` |
+
+Two things our own deck already does so the numbers can be read back: `*El Print, position=CENTROIDAL` of `S` at the probe elements writes every layer's centroid stress into the `.dat`, and `*Node Print` the reaction. **Abaqus/CAE drops both when a deck is imported and the job is re-exported** (`Job-1.inp` of 2026-11-08 kept only `*Output, field, variable=PRESELECT`, whose `.odb` holds the outer section points alone, `SNEG` of layer 1 and `SPOS` of the top layer). So run the deck as written, from the command line:
+
+```
+abaqus job=<coupon>-abaqus input=<coupon>-abaqus.inp interactive
+abaqus python fea/tools/abaqus_extract_fields.py <coupon>-abaqus.odb --out <folder> --layer-point middle
+```
+
+The first fills the `.dat` with the reaction and every ply's centroid stresses at the probe elements, the validation table's Abaqus column; the second writes the field reports the peaks column reads. Both files go beside the coupon's run under `.local/fea/<coupon>/ours/runs/<attempt>/run/abaqus/` (ADR-0045).
+
 ## Route 1: print tables into the `.dat` (preferred)
 
 Add named sets for the probe points, then print requests inside the step. Everything in this block is our understanding of the Abaqus keywords and is UNVERIFIED by us: please check the job runs and that the tables appear, and tell us what you had to change.
@@ -28,13 +49,25 @@ SF, SE
 S, E
 ```
 
-Open questions for you to settle on your machine (each is UNVERIFIED by us):
+Open questions, and what the run of 2026-11-08 (Abaqus/Standard 2025, S4R, our deck `AS48552-UNT-L1-abaqus.inp` run from the command line) settled:
 
-1. Section points: for a composite layup, which section points does `*El Print` write by default, and how is the list of section points given (we believe the first data line of `*El Print` can list them)? We need `S` and `E` for every ply, or at least for plies 1, 2, 3 and the top ply, and we need to know which section point belongs to which ply.
-2. Axes: are `S11`, `S22`, `S12` at a layer's section point in that ply's material axes (what we expect) or in the section orientation? A 45 degree ply under axial tension answers this at a glance.
-3. Shear strain: is `E12` the tensor shear strain or the engineering shear strain (twice the tensor value)? Our engine uses engineering shear (ADR-0004).
-4. `*Fail Stress`: if you add strengths so Abaqus reports `MSTRS`, `TSAIH` and `TSAIW`, are `Xc` and `Yc` entered as negative numbers or as magnitudes?
-5. The reaction: `RF` at the loaded reference node with `totals=YES`; we will compare the sum.
+1. Section points: **settled.** With no section-point list, `*El Print` of a composite writes two section points only, the bottom of ply 1 and the top of the last ply (points 1 and 24 for 8 layers at 3 Simpson points each). The middle of layer k is section point 3k − 1 (2, 5, 8, 11, 14, 17, 20, 23), and the list goes on the first data line of `*El Print`, before the variable. Our writer lists them on the `S` and `E` tables of every membrane coupon since 2026-11-08 (`fea/src/anisotropy_fea/write_abaqus.py`), so every ply's centroid stress is printed. Verified on 2026-11-08: the regenerated `AS48552-UNT-L1` deck printed `S` and `E` at section points 2, 5, 8, 11, 14, 17, 20 and 23 for both probe elements, one row per ply, bottom first.
+2. Axes: **settled.** `S11`, `S22`, `S12` at a layer's section point are in that ply's material axes: the 45° ply of the gauge element read 170.0 / 15.22 / −23.00 MPa, the fibre-axis values our engine gives (170.1 / 15.2 / −23.0), not the section orientation's.
+3. Shear strain: **settled.** `E12` is the engineering shear strain, twice the tensor value: 0.004767 for the 45° ply, which is ε_y − ε_x of the laminate. Our engine uses the same (ADR-0004).
+4. `*Fail Stress`: if you add strengths so Abaqus reports `MSTRS`, `TSAIH` and `TSAIW`, are `Xc` and `Yc` entered as negative numbers or as magnitudes? Still UNVERIFIED.
+5. The reaction: **settled.** `RF2` at the loaded reference node with `totals=YES` is the coupon's force (4705.40 N against our 4706.78 N, 0.03 %); the `TOTAL` line is the one node.
+
+### Reading the `.dat` beside ours (2026-11-08)
+
+```
+uv run python tools/abaqus_beside.py <coupon>-abaqus.inp <coupon>-abaqus.dat [--units mm-MPa] [--json abaqus.json]
+```
+
+prints the validation table's rows, Abaqus against our kernel on the same deck at the gauge element: the reaction (the `RF` TOTAL of the moving grip's
+reference node), the gauge strain from `SE` (the layup's axis 1 runs along the coupon, so `SE1` is ε_y, `SE2` is ε_x and `SE3` is −γ_xy) and every ply's
+σ₁ σ₂ τ₁₂ from the `S` rows at each layer's middle section point, each marked when outside the record's tolerance (3 %, floor 2 % of the group's largest).
+The deck must be the current one, which lists the middle points; a `.dat` that prints points 1 and 24 only is refused with that message. The site's
+table does not show this column (ADR-0066 amendment 1): CalculiX is the reference the site runs, and this tool is the Abaqus check made by hand.
 
 ## Route 2: field reports from Abaqus/CAE
 

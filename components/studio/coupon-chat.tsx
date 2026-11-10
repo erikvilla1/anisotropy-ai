@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { couponValues, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
+import { couponValues, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import {
-  blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
+  blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "@/lib/studio-form";
 import {
   applyMessage, COMMON_MATERIALS, couponLines, isBending, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
@@ -17,6 +17,7 @@ import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
 import { JobProgress } from "./job-progress";
+import { TOW_TEST } from "@/lib/studio-tow";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
@@ -60,7 +61,7 @@ const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> =
   test: { title: "What are we working out?", text: "Pick a coupon test, or describe the whole coupon in one line, e.g. “open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 1 mm pull”. Numbers are read in the units picked below; the results come back in them. A laminate without a coupon, the hand-calculation kind, is the first choice." },
   material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or give your own under Layup and material." },
   shear: { title: "Out-of-plane shear moduli", text: "The engine needs G13 and G23, which the library does not list. Without measured values, the usual tape estimate is G13 = G12 and G23 = E2 / 3; the choice is noted on the coupon." },
-  layup: { title: "What is the layup?", text: "Type it in laminate notation, bottom ply first, or pick one. Angles are measured from x, across the coupon's width: 90° runs along the load, 0° across it." },
+  layup: { title: "What is the layup?", text: "Type it in laminate notation, bottom ply first, or pick one. Angles are counted from the coupon's length, the direction it is pulled: 0° runs along the load, 90° across the width, the same count as the laminate workspace." },
   geometry: { title: "Coupon size", text: "The coupon's length runs along the load. Type the rows under Geometry, or describe them here, e.g. “250 x 25 mm, 56 mm tabs”." },
   loading: { title: "How is it loaded?" },
   name: { title: "Who is running it?", text: "Type your name here, or give it under Run. It goes in the attempt log and the CalculiX record, and is remembered in this browser. The coupon's name is derived from the material, the test and the layup." },
@@ -142,6 +143,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   useEffect(() => {
     const current = live.current.entries.find((e) => e.id === live.current.active);
     if (!current || current.role !== "assistant" || current.kind !== "ask" || current.step === "review" || current.step === "reopen") return;
+    if (form.test === TOW_TEST) { proceed(form); return; } // a fibre tow picked on a panel: hand over to its panels once (ADR-0074)
     if (missingIn(current.step, form).length) return;
     const step = nextStep(form);
     if (step !== "review") { ask(step); return; }
@@ -167,6 +169,14 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** Ask the next missing thing, or check the setup once nothing is missing. */
   function proceed(next: StudioForm) {
+    if (next.test === TOW_TEST) { // a fibre tow record is no coupon: its rows and specimens are the tow panels' (ADR-0074)
+      setActive(null);
+      add({ role: "assistant", kind: "text", title: "A fibre tow record is filled in on the panels",
+        body: <><p>The tow test of ASTM D4018 has no model: give the fibre, its mass per unit length and density, the test and each specimen&apos;s forces on
+          the panels to the left, then Calculate. The strength and chord modulus of each specimen and their statistics appear in the centre.</p>
+          <Chips><button type="button" onClick={() => showPanel("tow-fibre")}><SlidersHorizontal size={14} /> Open The fibre tow</button></Chips></> });
+      return;
+    }
     if (next.test === PLATE_TEST) {
       setActive(null);
       add({ role: "assistant", kind: "text", title: "Plates are set up on the model",
@@ -187,7 +197,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** Apply rows from a click, echo what the engineer chose, and move on. */
   function answer(echo: string, rows: StudioForm) {
-    const next: StudioForm = { ...formRef.current, ...rows };
+    const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
     if (rows.filled_by) remember(RUN_BY_KEY, rows.filled_by.trim());
     setForm(next);
     clearRun();
@@ -254,8 +264,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   useEffect(() => {
-    if (runner.loadedJob) add({ role: "assistant", kind: "result", job: runner.loadedJob }); // once per job, when its fields are first read
-  }, [runner.loadedJob, add]);
+    // once per job, as soon as its fields are read: the entry follows the fields themselves, not the hook's bookkeeping of first reads
+    if (!fields || !job) return;
+    if (!live.current.entries.some((e) => e.role === "assistant" && e.kind === "result" && e.job === job.job_id)) add({ role: "assistant", kind: "result", job: job.job_id });
+  }, [fields, job, add]);
 
   /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
   function redirect(text: string) {
@@ -292,7 +304,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
     add({ role: "user", text }, { role: "assistant", kind: "text", title: "Got it", body: <>
       <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul>{note ? <p className="chat-note">{note}</p> : null}</> });
-    const next: StudioForm = { ...formRef.current, ...rows };
+    const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
     setForm(next); clearRun();
     proceed(next);
   }
@@ -328,7 +340,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             <Chips>
               <button type="button" onClick={loadExample}><FlaskConical size={14} /> Start from the IM7/8552 example</button>
               {coupons.length ? <button type="button" onClick={() => ask("reopen")}><RotateCcw size={14} /> Reopen a saved coupon</button> : null}
-              <PanelLink id="project">A plate, or every row: the panels</PanelLink>
+              <PanelLink id="test">A plate, or every row: the panels</PanelLink>
             </Chips>
           </>
         );
@@ -461,7 +473,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         </details>
         {latest && result.state === "ready" ? (
           <div className="chat-actions">
-            <button type="button" className="chat-primary" onClick={run} disabled={job?.state === "running"} data-testid="chat-run"><Play size={14} /> Run analysis</button>
+            <button type="button" className="chat-primary" onClick={run} disabled={isActive(job?.state)} data-testid="chat-run"><Play size={14} /> Run analysis</button>
             <button type="button" className="chat-secondary" onClick={() => showPanel("mesh")}><SlidersHorizontal size={14} /> Mesh, criteria, grips</button>
           </div>
         ) : null}
@@ -488,7 +500,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {earliest ? <p>R is the factor on the applied load at which the first ply fails{earliest.touches_grip ? "; this one sits at a gripped tab edge, so read it as first damage at the grip" : ""}.</p> : null}
         {explanation?.sentences.length ? <p>{explanation.sentences[0]}</p> : null}
         {job?.state === "done" && job.message ? <p className="chat-ok"><Check size={13} /> {job.message}</p> : null}
-        {job?.state === "running" ? <p className="chat-note">CalculiX, the record and the package are still running; the files appear under Outputs when they are written.</p> : null}
+        {job?.state === "running" && job.result ? <p className="chat-ok" data-testid="chat-result-line"><Check size={13} /> {job.result}</p> : null}
+        {job?.state === "queued" ? <p className="chat-note">Queued: {job.message ?? "waiting for a free solver"}. It starts by itself.</p> : null}
+        {job?.state === "running" && !job.result ? <p className="chat-note">CalculiX and the record are still running; the drawings and the package follow. The files appear under Outputs when they are written.</p> : null}
+        {job?.state === "running" && job.result ? <p className="chat-note">The drawings and the package are still being made; they appear under Outputs when written.</p> : null}
         <Chips>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("loading")}>Change the load</button>

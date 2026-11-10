@@ -199,3 +199,26 @@ def test_a_cap_that_is_not_a_whole_number_of_jobs_is_refused(value):
 def test_a_cap_with_records_off_is_refused_not_ignored():
     with pytest.raises(RuntimeError, match="needs run records on"):
         load_settings({**OFF, JOBS_PER_DAY_VARIABLE: "5"})
+
+
+# ------------------------------------------------------------------------------- the job queue (ADR-0056 amendment 3)
+
+from anisotropy_api.settings import JOB_ROLE_VARIABLE
+
+
+def test_jobs_run_in_this_process_unless_a_role_is_set():
+    assert load_settings(ON).job_role is None and load_settings({**ON, **STORE, JOB_ROLE_VARIABLE: " "}).job_role is None
+
+
+@pytest.mark.parametrize("role", ["queue", "solver"])
+def test_a_role_needs_the_jobs_table_and_the_store(role):
+    assert load_settings({**ON, **STORE, JOB_ROLE_VARIABLE: role}).job_role == role
+    with pytest.raises(RuntimeError, match="needs run records"):
+        load_settings({**OFF, **STORE, JOB_ROLE_VARIABLE: role})
+    with pytest.raises(RuntimeError, match="needs the object store"):
+        load_settings({**ON, JOB_ROLE_VARIABLE: role})
+
+
+def test_an_unknown_role_is_refused():
+    with pytest.raises(RuntimeError, match="must be one of queue, solver"):
+        load_settings({**ON, **STORE, JOB_ROLE_VARIABLE: "worker"})

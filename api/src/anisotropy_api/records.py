@@ -18,10 +18,12 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
-from sqlalchemy import CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, func, inspect, select, text
+from contextlib import contextmanager
+
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, func, inspect, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 # Who triggered a run. Adding one is a migration, so a new consumer is a reviewed change.
@@ -74,7 +76,7 @@ class Run(Base):
     )
 
 
-JOB_STATES = ("running", "done", "stopped", "refused")
+JOB_STATES = ("queued", "running", "done", "stopped", "refused")  # queued since migration 0008 (the job queue)
 
 
 class JobRow(Base):
@@ -106,6 +108,17 @@ class JobRow(Base):
     process: Mapped[str] = mapped_column(String(36), nullable=False)
     # The project the job was started for (ADR-0062 part 6, migration 0007); None for a job started without one.
     project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("projects.id"))
+    # The job queue (ADR-0056 amendment 3, migration 0008): what a solver container needs to run a queued job (the coupon's name or
+    # the input's object key, and the tool's options), the last sign of life of the container running it, and that container's peak
+    # memory when the job ended.
+    source: Mapped[str | None] = mapped_column(Text)
+    options: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    heartbeat_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    peak_memory_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    # Where a job's time goes (ADR-0056 amendment 6, migration 0009): when its solver took it up, and the seconds of each of the tool's
+    # stages and of the solver's own phases (restore_s, lock_wait_s, gate_s, upload_s).
+    claimed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    timings: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
 
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 
@@ -138,15 +151,19 @@ class ProjectRow(Base):
 
 
 CONNECT_TIMEOUT_S = 5
+# TCP keepalives and the user timeout, libpq's own parameters: a connection whose network went away under it (a container's can,
+# ADR-0056 amendment 5) fails within about half a minute instead of waiting for an answer that never comes. A system without one of
+# them ignores it.
+KEEPALIVE = {"keepalives": 1, "keepalives_idle": 15, "keepalives_interval": 5, "keepalives_count": 3, "tcp_user_timeout": 30_000}
 
 
 def connect(database_url: str) -> Engine:
     """A connection pool for the API process.
 
     `pool_pre_ping` drops connections the server closed; the connect timeout makes an unreachable
-    server a startup error within seconds instead of a long wait.
+    server a startup error within seconds instead of a long wait; KEEPALIVE bounds a wait on a dead connection.
     """
-    return create_engine(database_url, pool_pre_ping=True, connect_args={"connect_timeout": CONNECT_TIMEOUT_S})
+    return create_engine(database_url, pool_pre_ping=True, connect_args={"connect_timeout": CONNECT_TIMEOUT_S, **KEEPALIVE})
 
 
 def check_ready(engine: Engine) -> None:
@@ -237,11 +254,12 @@ def list_runs(engine: Engine, *, actor: str | None = None, endpoint: str | None 
 # ------------------------------------------------------------------------------------------- the jobs table (ADR-0050 amendment 2)
 
 def insert_job(engine: Engine, *, job_id: uuid.UUID, actor: str, user_email: str | None, inputs: dict, started_at: dt.datetime, process: str,
-               project_id: uuid.UUID | None = None) -> None:
-    """The row of a job that has just started; `project_id` names the project it was started for, when one was (ADR-0062 part 6)."""
+               project_id: uuid.UUID | None = None, state: str = "running", source: str | None = None, options: list[str] | None = None) -> None:
+    """The row of a job that has just started, or, with the queue, just been queued with its `source` and `options` (migration 0008);
+    `project_id` names the project it was started for, when one was (ADR-0062 part 6)."""
     with Session(engine) as session:
-        session.add(JobRow(id=job_id, actor=actor, user_email=user_email, state="running", inputs=inputs, started_at=started_at, process=process,
-                           stages_done=[], stages=[], outputs={}, stored={}, log_tail=[], project_id=project_id))
+        session.add(JobRow(id=job_id, actor=actor, user_email=user_email, state=state, inputs=inputs, started_at=started_at, process=process,
+                           stages_done=[], stages=[], outputs={}, stored={}, log_tail=[], project_id=project_id, source=source, options=list(options or [])))
         session.commit()
 
 
@@ -344,9 +362,9 @@ def _by_person(statement, user_email: str | None, actor: str):
 
 
 def running_job_of(engine: Engine, user_email: str | None, actor: str) -> JobRow | None:
-    """The person's job still `running`, in any process, or None (ADR-0056, the per-user limits)."""
+    """The person's job still `running` or `queued`, in any process, or None (ADR-0056, the per-user limits)."""
     with Session(engine) as session:
-        return session.scalars(_by_person(select(JobRow).where(JobRow.state == "running"), user_email, actor).limit(1)).first()
+        return session.scalars(_by_person(select(JobRow).where(JobRow.state.in_(("queued", "running"))), user_email, actor).limit(1)).first()
 
 
 def jobs_started_since(engine: Engine, user_email: str | None, actor: str, since: dt.datetime) -> int:
@@ -365,3 +383,61 @@ def stop_orphans(engine: Engine, reason: str) -> int:
             row.state, row.message, row.finished_at = "stopped", reason, now
         session.commit()
         return len(rows)
+
+
+# ----------------------------------------------------------------------------------- the job queue (ADR-0056 amendment 3)
+
+NAMING_LOCK = 0x616E69736F  # the advisory lock taken while a job names its coupon: "aniso" in ASCII, any fixed number would do
+
+
+def claim_job(engine: Engine, job_id: uuid.UUID, process: str, now: dt.datetime) -> JobRow | None:
+    """The queued job, now `running` in this process with its first heartbeat; None when the row is not queued (taken already, ended,
+    or unknown), so a message delivered twice runs the job once."""
+    with Session(engine, expire_on_commit=False) as session:
+        claimed = session.execute(update(JobRow).where(JobRow.id == job_id, JobRow.state == "queued")
+                                  .values(state="running", process=process, heartbeat_at=now, message=None).returning(JobRow.id)).first()
+        session.commit()
+        return None if claimed is None else session.get(JobRow, job_id)
+
+
+def claim_coupon(engine: Engine, job_id: uuid.UUID, coupon: str) -> JobRow | None:
+    """Name the running job's coupon on its row. None when that worked; the running job that holds the coupon when another does, which
+    the unique index over the running rows refuses (migration 0008)."""
+    try:
+        with Session(engine) as session:
+            session.execute(update(JobRow).where(JobRow.id == job_id).values(coupon=coupon))
+            session.commit()
+            return None
+    except IntegrityError:
+        with Session(engine, expire_on_commit=False) as session:
+            return session.scalars(select(JobRow).where(JobRow.coupon == coupon, JobRow.state == "running", JobRow.id != job_id)).first()
+
+
+@contextmanager
+def naming_lock(engine: Engine):
+    """One job at a time names its coupon (the designation's codes and the attempt's number are read from the coupons there are), held
+    for one transaction by PostgreSQL's transaction-level advisory lock, which works through a transaction-mode pooler and is let go
+    when the transaction ends, a lost connection included."""
+    with engine.connect() as connection, connection.begin():
+        connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": NAMING_LOCK})
+        yield
+
+
+def sweep_stale(engine: Engine, now: dt.datetime, *, silent_after: dt.timedelta, queued_after: dt.timedelta) -> int:
+    """Stop the jobs nothing will finish: a running job whose container has sent no heartbeat for `silent_after` (the container is
+    gone), and a job queued longer than `queued_after` (its message was lost or ran out of retries). Returns how many."""
+    with Session(engine) as session:
+        silent = session.execute(update(JobRow).where(JobRow.state == "running", JobRow.heartbeat_at.is_not(None), JobRow.heartbeat_at < now - silent_after)
+                                 .values(state="stopped", finished_at=now, message=f"the solver running this job stopped answering for "
+                                                                                   f"{silent_after.total_seconds():g} s, so it did not finish; start it again"))
+        waiting = session.execute(update(JobRow).where(JobRow.state == "queued", JobRow.started_at < now - queued_after)
+                                  .values(state="stopped", finished_at=now, message=f"no solver took this job up in {queued_after.total_seconds() / 60:g} minutes; "
+                                                                                    "start it again"))
+        session.commit()
+        return silent.rowcount + waiting.rowcount
+
+
+def queue_position(engine: Engine, job_id: uuid.UUID, queued_at: dt.datetime) -> int:
+    """How many queued jobs were queued before this one."""
+    with Session(engine) as session:
+        return session.scalar(select(func.count()).select_from(JobRow).where(JobRow.state == "queued", JobRow.started_at < queued_at, JobRow.id != job_id))

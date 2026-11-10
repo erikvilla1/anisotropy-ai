@@ -1,6 +1,6 @@
 # ADR-0046: A coupon enters as an Excel input form the team fills in, read into the spec by a tool
 
-- Status: Proposed
+- Status: Proposed; the ply rows' count of angles from x, across the width, is replaced by [ADR-0065](ADR-0065-coupon-ply-angles-are-counted-from-the-coupons-length-axis.md): form version 0.7 counts them from the coupon's length axis, and a 0.6 values file is refused, never reinterpreted
 - Date: 2026-10-25
 - Decided by: Founder, 2026-10-25: an Excel input form like the audit form; the founder runs the engine and the team only fills in the form; solver inputs only for now; a library material by name or the team's own constants with their source, own constants never in the repository. | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/intake.py`, `fea/src/anisotropy_fea/forms.py`, `fea/tools/coupon_form.py`, `fea/tools/coupon_from_form.py`, `fea/tests/test_intake.py`, [ADR-0018](ADR-0018-source-rights-classes.md), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0038](ADR-0038-coupon-identity-card-and-designation.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md), [ADR-0043](ADR-0043-coupon-audit-scored-by-a-fixed-rubric-delivered-as-one-package-folder.md)
@@ -159,3 +159,24 @@ Option 3.
 **Decision.** Option 2. Both rows keep their keys and their refusals (capital letters and digits; `L` and a number); their help text says that a blank code is reused or derived. No key changes, so `FORM_VERSION` stays 0.6 and `read_values` reads every file written since amendment 5. The workspace of [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) shows the two rows on its Advanced panel only.
 
 **Evidence.** `fea/tools/export_form_definition.py` run on 2026-11-06 changed the two help strings and nothing else in `lib/coupon-form-definition.json`; `cd fea && uv run pytest -q tests/test_intake.py tests/test_studio_tool.py`: the blank form's rows, lists and record unchanged but for the help, the definition equal to the package.
+
+## Amendment 7, 2026-11-08 (the Standard row a list, and the Specimen, tab and strain rows; form version 0.8)
+
+**Context.** The Standard row took any text and nothing read it. The founder asked that the engineer pick the test, then the standard for it from a list, and that the coupon be checked against it ([ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md)).
+
+**Options.** (1) Keep the free text and match it loosely ("ASTM D3039", "D3039 proportions"): rejected, one code would carry several meanings and nothing could be checked. (2) A list of "none" and the designations we check, with the rows a standard needs (chosen). (3) A Test list whose entries are the standards themselves: rejected by the founder, who chose the Test row first and a Standard list after it.
+
+**Decision.** Option 2. Standard is a list: none, ASTM D3039/D3039M-17, ASTM C1869-18(2023); the check refuses a standard that does not cover the test, and a word not on the list, by the row. New rows: Specimen (A, B or other, required for C1869 and refused otherwise); Tab thickness, Tab bevel angle and Tab material (bonded tabs of the pulled and pushed tests, thickness and bevel together, drawn and reported, not modelled); Strain measurement and Strain measurement length (an extensometer or a strain gauge, both or neither, required for D3039). The rows go into the spec's `[test_method]`, `[tabs]` and `[strain]` and back (`values_of_spec`). `FORM_VERSION` is 0.8. A 0.7 values file still reads, because no row changed its meaning (`READ_VERSIONS`); a 0.7 Excel form still reads without the new rows (`ROWS_ADDED`); a 0.7 file whose Standard text is not on the list is refused by the row, and `fea/tools/migrate_standard.py` restates such a spec.
+
+**Evidence.** `cd fea && uv run pytest -q tests/test_standards.py tests/test_migrate_standard.py tests/test_intake.py tests/test_values_input.py tests/test_checks.py tests/test_studio_tool.py`, run 2026-11-08, all passed within the full fea and engine suite (1179 passed, 7 skipped, 1 failed: `test_abaqus`, which needs the Abaqus licence, as before the change); a 0.7 values file and a 0.7 Excel form without the new rows read (`test_standards.py`).
+
+## Amendment 8, 2026-11-09 (the Test row lists the fibre tow test, which the studio states with its own rows; no new form version)
+
+**Context.** ASTM D4018 tests a fibre tow, not a coupon. The founder put it on the coupon form's Test list ([ADR-0074](ADR-0074-the-fibre-tow-test-is-a-word-on-the-coupon-test-list-with-its-own-rows-and-specimens-reduced-by-the-engine-with-no-model-and-judged-against-astm-d4018-as-a-test-record.md)).
+
+**Options.** (1) Add the tow's rows to the Excel form: every coupon form would carry some thirty rows a coupon never uses, and a sheet has no room for a list of specimens. Rejected. (2) The word on the Test row, the tow's rows stated from the studio only, as a plate's lists are (chosen). (3) Leave the word off the Excel form: the studio's Test list and the Excel's would differ. Rejected.
+
+**Decision.** Option 2. The Test row's words end with "fibre tow tension"; the Excel form refuses it by the row, naming the studio's tow panels, and `read_values` refuses a values file of the tow with a pointer to `studio_tool.py tow`. The tow's rows and its specimens are exported under `tow` in `lib/coupon-form-definition.json` and read by `anisotropy_fea.tow_test`. `FORM_VERSION` does not change (0.9 since ADR-0075): no coupon row changed, a values file written before reads the same, and an Excel form downloaded before only lacks the word.
+
+**Evidence.** `fea/tests/test_intake.py` (the Test list's words on the blank form) and `fea/tests/test_tow_test.py::test_the_coupon_form_and_the_coupon_check_send_the_tow_elsewhere`, run 2026-11-09, passed.
+

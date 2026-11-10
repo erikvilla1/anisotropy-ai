@@ -71,7 +71,7 @@ from anisotropy_fea.model import coupled_nodes, expanded_layers, node_name, refe
 from anisotropy_fea.results import ShellSolution  # noqa: E402
 from anisotropy_fea.report import (COMPONENTS, GROUP_KIND, ComparisonRow, GroupSummary, comparison_rows, element_centroids,  # noqa: E402
                                    laminate_check, model_facts, not_reported, solve_record, summarize)
-from anisotropy_fea.spec import TEST_CODES, coupon_card, load_spec, spec_material  # noqa: E402
+from anisotropy_fea.spec import TEST_CODES, coupon_card, load_spec, outline_of, spec_material  # noqa: E402
 from anisotropy_fea.units import UNIT_LABEL, from_si, unit_factors  # noqa: E402  (UNIT_LABEL: one table for the documents and the studio)
 
 escape, code, inline, number, convert, heading = manual.escape, manual.code, manual.inline, manual.number, manual.convert, manual.heading
@@ -501,7 +501,7 @@ def rebuild_section(record: dict, record_path: Path, deck, solution, units: str)
     """The step-by-step guide to recreating the model in Abaqus/CAE and PrePoMax, from the deck's facts (rebuild.py)."""
     base = record_path.parent
     spec_path = (base / record["spec"]).resolve() if not record["spec"].startswith("none") else None
-    material_lines, material_source, transverse, hole = (), None, None, None
+    material_lines, material_source, transverse, hole, outline = (), None, None, None, None
     if spec_path is not None and spec_path.is_file():
         spec = load_spec(spec_path)
         g = spec.geometry
@@ -509,6 +509,7 @@ def rebuild_section(record: dict, record_path: Path, deck, solution, units: str)
         material = spec_material(spec)
         material_lines, material_source = material.citation_lines, f"{material.source}; rights class {material.rights}"
         transverse = transverse_text(spec.material.transverse, units)
+        outline = outline_of(spec)
     else:
         spec_path = None
     helpers = rebuild.Helpers(escape=escape, code=code, inline=inline, number=number, heading=heading, kv_table=kv_table, long_table=long_table,
@@ -517,7 +518,7 @@ def rebuild_section(record: dict, record_path: Path, deck, solution, units: str)
                               reference_deck=(base / record["deck_reference"]).resolve(), kernel_sha256=record["deck_kernel_sha256"],
                               reference_sha256=record["deck_reference_sha256"], solver_name=record["solver"]["name"], spec_path=spec_path,
                               spec_material_lines=material_lines, spec_material_source=material_source, spec_transverse=transverse,
-                              record_title=record["title"], report_date=date.today().isoformat(), hole=hole)
+                              record_title=record["title"], report_date=date.today().isoformat(), hole=hole, outline=outline)
     return rebuild.render(context, helpers)
 
 
@@ -529,8 +530,11 @@ def roundoff(values, scale: float):
 
 def transverse_text(t, units: str) -> str:
     """What the spec states out of plane, and what the CalculiX deck makes of it, in one sentence."""
+    if t is None:  # an isotropic material states E and nu alone (ADR-0075)
+        return ("None: the material is isotropic, stated by E and nu alone, and both decks write it so "
+                "(Abaqus *Elastic, CalculiX *ELASTIC, TYPE=ISO)")
     mpa = lambda v: from_si(v, "stress", units)  # noqa: E731  the loaded spec is in SI
-    stated = f"G13 {mpa(t.G13):g} and G23 {mpa(t.G23):g} {UNIT_LABEL[units]['stress']}, stated in the spec. "
+    stated =f"G13 {mpa(t.G13):g} and G23 {mpa(t.G23):g} {UNIT_LABEL[units]['stress']}, stated in the spec. "
     if t.plane_stress:
         return stated + ("CalculiX's brick also needs E3, nu13 and nu23: the deck writes E3 = E2 (transverse isotropy) and nu13 = nu23 = 0 "
                          "(plane_stress = true), so that its response in the plane is the plane-stress one of Abaqus LAMINA and of our engine")
@@ -585,12 +589,17 @@ def clt_section(deck, solution, record: dict, rows: list[ComparisonRow], units: 
     out = [
         "Before any finite element, the engine's classical laminate theory predicts the coupon as a uniaxial test with free lateral edges: "
         r"the laminate's membrane stiffness $\mathbf{A}$ from its plies, then the strain state with $N_x = N_{xy} = 0$ and "
-        + (r"$\varepsilon_y$ set by the prescribed displacement over the free length between the gripped node rows" if check.control == "displacement"
-           else r"$N_y$ set by the applied load over the width")
+        + ((r"$N_y$ at the narrowest width set by the prescribed displacement, which the coupon, narrowing between the grips, shares along its "
+            r"free length as a bar of varying width does: the displacement is $a_{22} N_y w_n \int dy / w(y)$, with $a_{22}$ the strain per "
+            r"unit $N_y$, $w_n$ the narrowest width and $w(y)$ the width between the edge node rows" if check.narrowed
+            else r"$\varepsilon_y$ set by the prescribed displacement over the free length between the gripped node rows") if check.control == "displacement"
+           else r"$N_y$ set by the applied load over the " + ("narrowest width" if check.narrowed else "width"))
         + r", the section force $N_y$, the reaction $N_y w$, and every ply's stress in material axes from $\bar{\mathbf{Q}}^{(k)}\boldsymbol{\varepsilon}$ "
         r"(engine theory, Sections 3 and 4).",
         applies,
-        escape(f"Read from the deck: width {from_si(check.width_m, 'length', units):g} {labels['length']}, free length between the gripped groups "
+        escape(f"Read from the deck: {'narrowest width' if check.narrowed else 'width'} {from_si(check.width_m, 'length', units):g} {labels['length']}"
+               + (f" (the free length's integral of w_n / w(y) dy is {from_si(check.compliance_length_m, 'length', units):.6g} {labels['length']})"
+                  if check.narrowed else "") + ", free length between the gripped groups "
                f"{from_si(check.free_length_m, 'length', units):g} {labels['length']} ({widths:.2g} widths), applied "
                + (f"displacement {from_si(check.applied, 'length', units):g} {labels['length']}" if check.control == "displacement"
                   else f"load {check.applied:g} N")
@@ -640,7 +649,7 @@ def clt_section(deck, solution, record: dict, rows: list[ComparisonRow], units: 
     for k, ply in enumerate(check.plies):
         for i, name in enumerate(("sigma_1", "sigma_2", "tau_12")):
             clt, kernel = from_si(float(theory[k, i]), "stress", units), from_si(float(check.kernel_ply_stress_12[k, i]), "stress", units)
-            ply_rows.append(rf"{k + 1} & {ply.angle_deg:g} & {MATH[name]} & {number(clt)} & {number(kernel)} & {diff(clt, kernel)} & {ref('ply_stress_local', i, k + 1)} \\")
+            ply_rows.append(rf"{k + 1} & {check.angles_deg[k]:g} & {MATH[name]} & {number(clt)} & {number(kernel)} & {diff(clt, kernel)} & {ref('ply_stress_local', i, k + 1)} \\")
     out.append(rf"\textbf{{Ply stresses in material axes}} at element {escape(gauge.name)}, {escape(labels['stress'])} (bottom ply first; "
                r"a difference marked -- is a component whose laminate-theory value is zero):")
     out.append(long_table(["Ply", "Angle (deg)", "Comp.", "Laminate theory", "Kernel", "Difference", escape(solver_name)], ply_rows,

@@ -12,8 +12,8 @@ export type Person = {
 };
 
 export const team: readonly Person[] = [
-  { name: "Christopher Valerio", role: "CEO", technical: "prompt engineering and AI evaluation" },
-  { name: "Erik Villa", role: "Founder", technical: "AI architecture and operations", company: "documentation and records" },
+  { name: "Christopher Valerio", role: "Co-founder and CEO", technical: "prompt engineering and AI evaluation" },
+  { name: "Erik Villa", role: "Co-founder", technical: "AI architecture and operations", company: "documentation and records" },
   { name: "Kai Saucedo", technical: "software and UI/UX", company: "marketing and communications" },
   { name: "Jusung Park", technical: "reference modeling and validation", company: "operations and logistics" },
   { name: "Tabassum Zaman", technical: "fabrication, prototypes and mechanical testing", company: "partnerships and outreach" },

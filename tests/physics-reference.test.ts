@@ -45,7 +45,7 @@ test("laminate coupling, thickness scaling and constituent limits are consistent
   assert.throws(() => stack([0], 0), /positive/);
 });
 test("every current formula has a location and unit convention; future solver workflows are separate", () => {
-  assert.equal(physicsTopics.flatMap(t => t.methods).length, 40);
+  assert.equal(physicsTopics.flatMap(t => t.methods).length, 41);
   assert.ok(!physicsTopics.some(t => t.id === "fea" || t.id === "optimization"));
   for (const topic of physicsTopics) for (const method of topic.methods) {
     assert.ok(method.reference?.location && method.units);
@@ -65,7 +65,8 @@ test("every engine theory section has a card that names its function, cites a lo
     laminate_summary: "Laminate symmetry, balance & areal mass",
     thermal_resultants: "Thermal resultants · uniform ΔT", thermal_ply_surfaces: "Residual ply stress after ΔT",
     max_strain_ratio: "Maximum strain", tsai_hill_ratio: "Tsai–Hill", ritz_buckling: "Plate buckling · simply supported",
-    rule_of_mixtures: "Longitudinal rule of mixtures", series_model: "Transverse inverse-mixture estimate", halpin_tsai: "Halpin–Tsai estimate",
+    rule_of_mixtures: "Longitudinal rule of mixtures", tow_chord_modulus: "Fibre tow strength & chord modulus",
+    sample_statistics: "Fibre tow strength & chord modulus", series_model: "Transverse inverse-mixture estimate", halpin_tsai: "Halpin–Tsai estimate",
   };
   for (const [fn, name] of Object.entries(byFunction)) assert.match(card(name).detail, new RegExp(fn), `${name} should name ${fn}`);
   assert.match(card("Laminate compliance · ABD inverse").reference!.location, /7\.27–7\.28, p\. 166/);

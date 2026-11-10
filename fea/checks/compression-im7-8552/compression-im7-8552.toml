@@ -18,6 +18,7 @@ ny = 280            # 0.5 mm rows: the grip lines at 63.5 and 76.5 mm fall on no
 
 [layup]
 angles = [45, 0, -45, 90]
+angles_from = "length"  # counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)
 symmetric = true
 ply_thickness = "library"
 

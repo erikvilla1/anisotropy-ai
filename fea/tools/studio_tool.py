@@ -4,12 +4,14 @@
     uv run python tools/studio_tool.py coupons                              # every coupon on this machine, as JSON on stdout
     uv run python tools/studio_tool.py values <coupon>                      # a coupon's rows, as the values JSON the studio edits
     uv run python tools/studio_tool.py fixtures <values.json> --out <dir>   # check + a kernel solve: the files the browser tests read
+    uv run python tools/studio_tool.py tow <values.json> --out <dir>        # a fibre tow record (ASTM D4018): tow.json, its checklist and result
 
 `check` judges a values file the way `tools/run_coupon.py` will (`checks.setup_checklist`) and exits 0 whatever it finds: the
 checklist says. `coupons` reads each coupon's spec and case page. `values` is the inverse of the form's reading
 (`intake.values_of_spec`). `fixtures` runs the checks and our engine on the public values given and writes checklist.json,
 preview.json, fields.json and explanation.json, so the browser tests need neither CalculiX nor the API. --root moves the coupons'
-folder (default .local/fea) for tests. Nothing here computes a result: the modules named do.
+folder (default .local/fea) for tests. `tow` reads a fibre tow record, which is no coupon (ADR-0074), and writes its checklist and,
+when nothing blocks, its result (`tow_test.tow_answer`); it exits 0 whatever it finds. Nothing here computes a result: the modules named do.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.case_pages import CasePageError, read_case
 from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, setup_checklist
+from anisotropy_fea.convergence import convergence_study
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.fields import field_data
 from anisotropy_fea.intake import IntakeError, read_input, values_of_spec
@@ -30,6 +33,8 @@ from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
 from anisotropy_fea.preview import preview_data
 from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
+from anisotropy_fea.test_quantities import method_inputs
+from anisotropy_fea.tow_test import tow_answer
 from anisotropy_fea.units import deck_units_of
 from anisotropy_fea.write_abaqus import write_abaqus
 
@@ -101,7 +106,8 @@ def fixtures(values_path: Path, out: Path, root: Path) -> None:
     solution = solve_deck(deck)
     coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
               "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
-    data = field_data(deck, solution, spec.units, criteria=tuple(spec.output.fpf_criteria), quality=quality, coupon=coupon)
+    data = field_data(deck, solution, spec.units, criteria=tuple(spec.output.fpf_criteria), quality=quality, coupon=coupon, method=method_inputs(spec))
+    data["summary"]["convergence"] = convergence_study(spec)  # as a run writes it into the fields (ADR-0068)
     write_json(out / "fields.json", data)
     write_json(out / "explanation.json", explanation(data["summary"], coupon, spec.units, data["labels"], checklist.as_dict()))
     print(f"written checklist.json, preview.json, {deck_path.name}, fields.json, explanation.json in {out}")
@@ -121,6 +127,9 @@ def main() -> None:
     p = commands.add_parser("fixtures", help="the checks and a kernel solve of a values file, for the browser tests")
     p.add_argument("values", type=Path)
     p.add_argument("--out", type=Path, required=True)
+    p = commands.add_parser("tow", help="a fibre tow record (ASTM D4018): write tow.json, its checklist and result")
+    p.add_argument("values", type=Path)
+    p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     try:
         if args.command == "check":
@@ -129,6 +138,10 @@ def main() -> None:
             print(json.dumps(coupons(args.root), indent=1, ensure_ascii=False))
         elif args.command == "values":
             print(json.dumps(values(args.coupon, args.root), indent=1, ensure_ascii=False))
+        elif args.command == "tow":
+            answer = tow_answer(args.values)
+            write_json(args.out / "tow.json", answer)
+            print(f"{answer['checklist']['state']}: fibre tow record" + (f", {answer['result']['counts']['valid']} valid specimens" if answer["result"] else ""))
         else:
             fixtures(args.values, args.out, args.root)
     except (IntakeError, SpecError, KernelError, CasePageError) as exc:

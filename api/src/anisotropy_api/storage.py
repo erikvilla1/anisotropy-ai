@@ -8,12 +8,16 @@ The layout, under one prefix per coupon:
     coupons/<coupon>/folder/<path under .local/fea/<coupon>/>   the coupon's whole folder, so a new container restores it at
                                                             startup and the coupon list, a coupon's values and the next attempt's
                                                             number are what they were; the latest job's copy wins
+    jobs/<job id>/input/<file name>                         with the job queue, the form or the values as sent, for the solver
+                                                            container that runs the job (ADR-0056 amendment 3)
 
 Without the settings nothing is stored or restored: the files stay where the tool wrote them, as before.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
@@ -21,6 +25,8 @@ from .settings import StorageSettings
 
 COUPONS = "coupons"
 FOLDER = "folder"
+JOBS = "jobs"
+TAGS = ".store-tags.json"  # in the coupons' root: each restored file's object key and the store's tag for it when it was fetched
 LINK_SECONDS = 600  # a download link lives ten minutes: long enough to open, short enough not to be worth passing around
 MEDIA_TYPES = {".json": "application/json", ".txt": "text/plain; charset=utf-8", ".inp": "text/plain; charset=utf-8", ".toml": "text/plain; charset=utf-8",
                ".md": "text/markdown; charset=utf-8", ".tex": "text/plain; charset=utf-8", ".csv": "text/csv; charset=utf-8", ".vtu": "application/xml",
@@ -47,6 +53,8 @@ class ObjectStore(Protocol):
 
     def keys(self, prefix: str) -> list[str]: ...
 
+    def tags(self, prefix: str) -> dict[str, str]: ...
+
     def link(self, key: str, seconds: int = LINK_SECONDS) -> str: ...
 
 
@@ -64,7 +72,8 @@ class R2Store:
         self.client = boto3.client("s3", endpoint_url=settings.endpoint, aws_access_key_id=settings.access_key_id,
                                    aws_secret_access_key=settings.secret_access_key, region_name="auto",
                                    config=Config(signature_version="s3v4", s3={"addressing_style": "path"}, request_checksum_calculation="when_required",
-                                                 response_checksum_validation="when_required", retries={"max_attempts": 3, "mode": "standard"}))
+                                                 response_checksum_validation="when_required", retries={"max_attempts": 3, "mode": "standard"},
+                                                 connect_timeout=10, read_timeout=30))  # a bucket that does not answer gives a try up within a minute (ADR-0056 amendment 5)
 
     def put(self, key: str, path: Path, content_type: str, disposition: str | None = None) -> None:
         extra = {"ContentType": content_type}
@@ -79,6 +88,11 @@ class R2Store:
     def keys(self, prefix: str) -> list[str]:
         pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix)
         return [item["Key"] for page in pages for item in page.get("Contents", [])]
+
+    def tags(self, prefix: str) -> dict[str, str]:
+        """Every key under the prefix with the store's tag for its content (the ETag), which changes when the object does."""
+        pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix)
+        return {item["Key"]: item["ETag"] for page in pages for item in page.get("Contents", [])}
 
     def link(self, key: str, seconds: int = LINK_SECONDS) -> str:
         return self.client.generate_presigned_url("get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=seconds)
@@ -102,6 +116,17 @@ def folder_key(coupon: str, relative: PurePosixPath) -> str:
     return f"{COUPONS}/{coupon}/{FOLDER}/{relative.as_posix()}"
 
 
+def input_key(job_id: str, filename: str) -> str:
+    return f"{JOBS}/{job_id}/input/{filename}"
+
+
+def store_file(store: ObjectStore, coupon: str, attempt: str, key: str, path: Path) -> str:
+    """One reported file by its key, as `store_job` keeps it; returns the object key. For a running job's files (the queue)."""
+    object_key = file_key(coupon, attempt, key, path.name)
+    store.put(object_key, path, content_type(path), disposition(path))
+    return object_key
+
+
 def store_job(store: ObjectStore, coupon: str, attempt: str, outputs: dict[str, Path], package_zip: Path | None) -> dict[str, str]:
     """Upload every file the tool reported, by its key, and the package zip; returns key -> object key, what the status keeps so a
     later process can hand out links. A reported folder (the package itself) is left out: the zip stands for it."""
@@ -118,12 +143,35 @@ def store_job(store: ObjectStore, coupon: str, attempt: str, outputs: dict[str, 
     return stored
 
 
+# What the coupon folder's copy in the store leaves out (ADR-0056 amendment 6): the big files a run makes, which the job's own keys
+# already hold (`store_job`) and no later job reads: CalculiX's results and scratch files, the ParaView and fields files, the PDF, the
+# LaTeX and the package folders. The specs, decks, records, case page, team files, the attempt folders' small files stay, so the next
+# solver numbers attempts and builds packages as before.
+SKIPPED_SUFFIXES = (".frd", ".dat", ".12d", ".cvg", ".sta", ".vtu", "-fields.json", ".pdf", ".tex", ".log")
+SKIPPED_FOLDERS = (("documents",), ("ours", "latex"))
+
+
+def kept_in_folder(parts: tuple[str, ...] | list[str]) -> bool:
+    """Whether a file at this path under a coupon's folder belongs in the store's copy of the folder."""
+    parts = tuple(parts)
+    if any(parts[:len(skipped)] == skipped for skipped in SKIPPED_FOLDERS):
+        return False
+    return not parts[-1].endswith(SKIPPED_SUFFIXES)
+
+
 def store_folder(store: ObjectStore, folder: Path, coupon: str) -> int:
-    """Upload the coupon's whole folder (specs, decks, runs, verification, documents, the case page) under its `folder/` prefix;
-    returns the number of files."""
+    """Upload the coupon's whole folder (specs, decks, runs, verification, documents, the case page) under its `folder/` prefix, apart
+    from a file the store holds unchanged: its tag is the content's MD5 for an object put in one piece, as these are (ADR-0056
+    amendment 5, so the upload at a job's end does not grow with the coupon's attempts). Returns the number of files uploaded."""
+    held = store.tags(f"{COUPONS}/{coupon}/{FOLDER}/")
     count = 0
     for path in sorted(p for p in folder.rglob("*") if p.is_file()):
-        store.put(folder_key(coupon, PurePosixPath(path.relative_to(folder).as_posix())), path, content_type(path))
+        if not kept_in_folder(path.relative_to(folder).parts):
+            continue
+        key = folder_key(coupon, PurePosixPath(path.relative_to(folder).as_posix()))
+        if held.get(key, "").strip('"') == hashlib.md5(path.read_bytes()).hexdigest():
+            continue
+        store.put(key, path, content_type(path))
         count += 1
     return count
 
@@ -140,9 +188,52 @@ def restore(store: ObjectStore, root: Path) -> tuple[int, int]:
         if not coupon or "/" in coupon or not parts or any(part in ("", ".", "..") for part in parts):
             continue
         coupons.add(coupon)
+        if not kept_in_folder(parts):  # a copy filed before the folder's scope was narrowed
+            continue
         target = root.joinpath(coupon, *parts)
         if target.is_file():
             continue
         store.get(key, target)
         files += 1
+    return files, len(coupons)
+
+
+def _coupon_path(key: str) -> tuple[str, list[str]] | None:
+    """A key under a coupon's folder prefix as (coupon, parts of the path under it), or None for any other key or one that would leave
+    the coupon's folder."""
+    head, found, relative = key.partition(f"/{FOLDER}/")
+    coupon = head.removeprefix(f"{COUPONS}/")
+    parts = relative.split("/") if found else []
+    if not head.startswith(f"{COUPONS}/") or not coupon or "/" in coupon or not parts or any(part in ("", ".", "..") for part in parts):
+        return None
+    return coupon, parts
+
+
+def sync(store: ObjectStore, root: Path) -> tuple[int, int]:
+    """Every coupon's folder under root/<coupon>/ brought level with the store (the job queue, ADR-0056 amendment 3): a file is fetched
+    when the disk lacks it or the store's copy changed since this root last fetched it, judged by the store's tag kept in root/{TAGS};
+    a file the store does not hold is left alone. Returns the number of files fetched and of coupons seen. Where `restore` fills a
+    fresh disk once, this keeps a long-lived container's coupons current while other containers solve them."""
+    marks_path = root / TAGS
+    try:
+        marks = json.loads(marks_path.read_text(encoding="utf-8")) if marks_path.is_file() else {}
+    except (OSError, json.JSONDecodeError):
+        marks = {}
+    files, coupons = 0, set()
+    for key, tag in sorted(store.tags(f"{COUPONS}/").items()):
+        found = _coupon_path(key)
+        if found is None:
+            continue
+        coupon, parts = found
+        coupons.add(coupon)
+        if not kept_in_folder(parts):  # a copy filed before the folder's scope was narrowed
+            continue
+        target = root.joinpath(coupon, *parts)
+        if target.is_file() and marks.get(key) == tag:
+            continue
+        store.get(key, target)
+        marks[key] = tag
+        files += 1
+    root.mkdir(parents=True, exist_ok=True)
+    marks_path.write_text(json.dumps(marks, sort_keys=True), encoding="utf-8")
     return files, len(coupons)

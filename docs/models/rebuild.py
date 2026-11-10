@@ -68,6 +68,7 @@ class Context:
     hole: tuple[float, float, float] | None = None  # centre x, centre y, diameter (m) of an open hole, from the spec
     compared_deck: Path | None = None  # the deck our engine compared with the reference solver, when it is not the kernel deck
     compared_sha256: str | None = None
+    outline: object | None = None  # a dog-bone's `dogbone.Outline` from the spec (m), centred on the part; None for a straight strip
 
 
 LEGEND = "%%EVIDENCE-TAGS%%"  # where the tag legend goes once the guide knows which tags it used
@@ -127,6 +128,68 @@ def keyword_blocks(path: Path, keyword: str, data_lines: int | None = 12, first_
 def keyword_box(h: Helpers, title: str, text: str) -> str:
     return (r"\needspace{5\baselineskip}" + rf"\par\smallskip\noindent{{\sffamily\footnotesize\color{{muted}}Input-file keywords: \textcolor{{ink}}{{{h.escape(title)}}}}}\par\nopagebreak"
             + "\n" + r"\begin{plainfile}" + "\n" + h.listing_text(text) + "\n" + r"\end{plainfile}")
+
+
+def section_rotation_deg(section) -> float:
+    """The angle from global x to the section's local direction 1, from its orientation's a axis and rotation about axis 3; 0 without one."""
+    if section.orientation_axes is None:
+        return 0.0
+    a = section.orientation_axes[0]
+    extra = section.orientation_rotation[1] if section.orientation_rotation else 0.0
+    return math.degrees(math.atan2(a[1], a[0])) + extra
+
+
+def orientation_words(section) -> str:
+    """What the layup's local direction 1 is and what a 0-degree ply therefore means (ADR-0065)."""
+    rotation = section_rotation_deg(section)
+    if abs(rotation - 90.0) < 1e-9:
+        return "Local direction 1 is global y, ALONG the coupon's length: a 0-degree ply has its fibres along the load, as the coupon states its angles (ADR-0065)"
+    if abs(rotation) < 1e-9:
+        return "Local direction 1 is global x, ACROSS the width: a 0-degree ply of this deck has its fibres across the load"
+    return f"Local direction 1 lies {rotation:g} degrees past global x: a ply's fibres lie at its listed angle plus {rotation:g} degrees from x"
+
+
+def layup_csys_words(section) -> str:
+    """The Abaqus/CAE layup orientation step for the section's local direction 1 (ADR-0065)."""
+    rotation = section_rotation_deg(section)
+    if abs(rotation - 90.0) < 1e-9:
+        return ("Layup orientation: Definition Coordinate system, CSys a datum CSys with its X along global Y and its Y along global -X (axis 3 along "
+                "global Z), Additional rotation None, Normal direction Axis 3; this is the deck's *Orientation with a = (0, 1, 0) and b = (-1, 0, 0). "
+                "Region: the whole part (all faces).")
+    if abs(rotation) < 1e-9:
+        return "Layup orientation: Definition Coordinate system, CSys Global (axis 1 along global x), Additional rotation None, Normal direction Axis 3. Region: the whole part (all faces)."
+    return (f"Layup orientation: Definition Coordinate system, CSys a datum CSys turned {rotation:g} degrees about global Z from the global axes, "
+            "Additional rotation None, Normal direction Axis 3. Region: the whole part (all faces).")
+
+
+def dogbone_words(outline, length: Callable[[float], float], L: str) -> str:
+    """The dog-bone's outline in words, from the spec's sizes (ADR-0075)."""
+    words = (f"narrow section {length(2 * outline.a):g} {L} wide and {length(2 * outline.l):g} {L} long, joined to the full width "
+             f"{length(2 * outline.b):g} {L} by a fillet of radius {length(outline.R):g} {L} tangent to it")
+    if outline.RO is not None:
+        return words + (f", then an outer arc of radius {length(outline.RO):g} {L} tangent to the full width; the arcs meet "
+                        f"{length(outline.s_tangent):g} {L} and the full width begins {length(outline.s_full):g} {L} from mid-length")
+    return words + f"; the fillet meets the full width at a corner {length(outline.s_full):g} {L} from mid-length"
+
+
+def dogbone_sketch(outline, length: Callable[[float], float], L: str) -> str:
+    """The Abaqus/CAE sketch of the dog-bone, every point in part coordinates (x across, y along, the origin at a corner of the full width)."""
+    xc, yc = outline.b, outline.half_length
+    m = lambda v: f"{length(v):.6g}"  # noqa: E731
+    text = (f"Sketch the outline, symmetric about x = {m(xc)} and y = {m(yc)}. The narrow edges are the lines x = {m(xc - outline.a)} and "
+            f"x = {m(xc + outline.a)} from y = {m(yc - outline.l)} to {m(yc + outline.l)}. At each of their four ends, Create Arc: Center and 2 "
+            f"Endpoints, a fillet of radius {m(outline.R)} centred at x = {m(xc - outline.a - outline.R)} for the left edge or {m(xc + outline.a + outline.R)} for the right, "
+            f"y = {m(yc - outline.l)} or {m(yc + outline.l)} (the outer side of the narrow edge it leaves)")
+    if outline.RO is not None:
+        w = outline.half_width(outline.s_tangent)
+        text += (f", from the narrow edge's end to the point where the two arcs meet, x = {m(xc - w)} or {m(xc + w)}, y = "
+                 f"{m(yc - outline.s_tangent)} or {m(yc + outline.s_tangent)}; then an outer arc of radius "
+                 f"{m(outline.RO)} centred at x = {m(outline.RO)} for the left edge's arc or {m(2 * xc - outline.RO)} for the right's, y = {m(yc - outline.s_full)} or {m(yc + outline.s_full)}, "
+                 f"from that tangent point to the full width's edge at y = {m(yc - outline.s_full)} or {m(yc + outline.s_full)}")
+    else:
+        text += f", from the narrow edge's end to the full width's edge (x = 0 or {m(2 * xc)}) at y = {m(yc - outline.s_full)} or {m(yc + outline.s_full)}"
+    return text + (f". Close the outline with the full width's edges x = 0 and x = {m(2 * xc)} to the ends y = 0 and y = {m(2 * yc)}, and the two "
+                   "ends; Done.")
 
 
 def gui_steps(h: Helpers, tool: str, steps: list[str], tag_name: str) -> str:
@@ -244,6 +307,10 @@ def render(ctx: Context, h: Helpers) -> str:
     out.append(h.heading(1, "Model summary card"))
     (part_name, n_nodes, n_elements, element_type) = f.parts[0]
     section = f.sections[0] if f.sections else None
+    # a plastic (ADR-0075): one isotropic material in a homogeneous shell section, which the deck writes without `composite`
+    isotropic = any(m.elastic for m in ctx.deck.materials.values()) and all(m.elastic.kind == "ISOTROPIC" for m in ctx.deck.materials.values() if m.elastic)
+    homogeneous = section is not None and not any("composite" in block.splitlines()[0].lower() for block in keyword_blocks(ctx.kernel_deck, "Shell Section", 0))
+    dogbone = ctx.outline
     width = length(f.extent_x[1] - f.extent_x[0])
     total_length = length(f.extent_y[1] - f.extent_y[0])
     grips_y = f.grip_lines_y
@@ -254,13 +321,16 @@ def render(ctx: Context, h: Helpers) -> str:
     grips = ("two reference points, each kinematically coupled to a grip node set" if f.couplings
              else "direct constraints on the grip node sets (no reference points)")
     materials = ", ".join(f"{name} ({m.elastic.kind})" for name, m in ctx.deck.materials.items() if m.elastic)
-    layup = (f"[{'/'.join(f'{p.angle_deg:g}' for p in section.listed)}]" + ("s" if section.symmetric else "")
-             + f", {len(section.expanded)} plies x {length(section.expanded[0].thickness_m):g} = {length(section.total_thickness_m):g} {L}"
-             + f", {section.expanded[0].integration_points} integration points per ply") if section else "no shell section"
+    layup = ((f"none: a homogeneous shell section {length(section.total_thickness_m):g} {L} thick, {section.expanded[0].integration_points} "
+              "section points through it") if homogeneous else
+             (f"[{'/'.join(f'{p.angle_deg:g}' for p in section.listed)}]" + ("s" if section.symmetric else "")
+              + f", {len(section.expanded)} plies x {length(section.expanded[0].thickness_m):g} = {length(section.total_thickness_m):g} {L}"
+              + f", {section.expanded[0].integration_points} integration points per ply")) if section else "no shell section"
+    shape = (f"dog-bone coupon, {length(2 * dogbone.a):g} {L} wide over its narrow section," if dogbone is not None else "coupon")
     card = [
-        ("Purpose", e(f"Linear-elastic response of a {width:g} {L} by {total_length:g} {L} composite coupon"
+        ("Purpose", e(f"Linear-elastic response of a {width:g} {L} by {total_length:g} {L} {'isotropic' if isotropic else 'composite'} {shape}"
                       + (f" with a {hole[2]:g} {L} hole at ({hole[0]:g}, {hole[1]:g}) {L}" if hole else "") + " and gripped end zones") + " "
-         + tag("INP-derived" if hole is None else "SPEC")),
+         + tag("INP-derived" if hole is None and dogbone is None else "SPEC")),
         ("Analysis", e(f"Static, general, one step ({f.step[0]}), geometric nonlinearity {'ON' if f.step[1] else 'OFF'}") + " " + tag("INP")),
         ("Unit system", e(units) + " " + tag("SPEC" if generated else "ASSUMED")),
         ("Geometry", e(f"Planar deformable shell, x = {length(f.extent_x[0]):g} to {length(f.extent_x[1]):g}, y = {length(f.extent_y[0]):g} to {length(f.extent_y[1]):g}, z = 0") + " " + tag("INP")),
@@ -287,6 +357,7 @@ def render(ctx: Context, h: Helpers) -> str:
         ("Type", e("3D, deformable, planar shell (every node has z = 0)") + " " + tag("INP") + "; the modelling-space choice in the GUI " + tag("CAE-CHECK")),
         ("Extent", e(f"width (x) {width:g} {L}, length (y) {total_length:g} {L}") + " " + tag("INP")),
         *([("Hole", e(f"diameter {hole[2]:g} {L}, centre ({hole[0]:g}, {hole[1]:g}) {L}") + " " + tag("SPEC"))] if hole else []),
+        *([("Dog-bone outline", e(dogbone_words(dogbone, length, L)) + " " + tag("SPEC"))] if dogbone is not None else []),
         ("Load axis", e("global y (dof 2 is prescribed or loaded)") + " " + tag("INP")),
         ("Partition lines (y)", e(f"{lines_text} {L}: " + ("the inner edges of the gripped node groups and every y where the node-row spacing changes"
                                                           if f.grid else "the inner edges of the gripped node groups")) + " " + tag("INP-derived")),
@@ -294,6 +365,7 @@ def render(ctx: Context, h: Helpers) -> str:
     ]))
     out.append(gui_steps(h, "Abaqus/CAE", [
         e(f"Part module > Create Part. Name {part_name}, 3D, Deformable, Shell, Planar, approximate size {2 * total_length:g} {L}."),
+        e(dogbone_sketch(dogbone, length, L)) if dogbone is not None else
         e(f"Sketch a rectangle with corners ({length(f.extent_x[0]):g}, {length(f.extent_y[0]):g}) and ({length(f.extent_x[1]):g}, {length(f.extent_y[1]):g})"
           + ("; Done." if not hole else
              f". In the same sketch, Create Circle: Center and Perimeter: type the centre {hole[0]:g},{hole[1]:g}, Enter, then a point on the circle "
@@ -304,20 +376,22 @@ def render(ctx: Context, h: Helpers) -> str:
         e("File > New: model space 3D, unit system mm, ton, s, °C (the mm-MPa system of the deck). ") + tag("MANUAL p.8"),
         e("PrePoMax has no sketcher: a part comes from a CAD file (File > Import: STEP, IGES, B-rep, STL) or from a mesh file (.inp, .unv, .vol). ") + tag("MANUAL p.9")
         + e(" Route A, the one this project uses: File > Import the CalculiX deck of this model; the mesh, sets, material, section, boundary conditions and step come with it. ") + tag("GUI-SEEN"),
-        e(f"Route B, geometry by hand: draw the {width:g} by {total_length:g} {L} rectangle as a surface in a CAD tool, split it at y = {lines_text} {L} (Geometry > CAD Part > Split a Face Using Two Points, or split in CAD), export STEP and File > Import it. ") + tag("MANUAL p.17"),
+        e(f"Route B, geometry by hand: draw the {width:g} by {total_length:g} {L} {'dog-bone outline (Part geometry, above)' if dogbone is not None else 'rectangle'} as a surface in a CAD tool, split it at y = {lines_text} {L} (Geometry > CAD Part > Split a Face Using Two Points, or split in CAD), export STEP and File > Import it. ") + tag("MANUAL p.17"),
     ], "MANUAL"))
     out.append(keyword_box(h, ctx.kernel_deck.name, "\n".join(keyword_blocks(ctx.kernel_deck, "Part", 0) + keyword_blocks(ctx.kernel_deck, "Node", 3, first_only=True)
                                                         + keyword_blocks(ctx.kernel_deck, "Element", 3, first_only=True))))
 
     # ---------------------------------------------------------------- material
     out.append(h.heading(1, "Material"))
-    out.append(r"\textbf{Purpose.} Provide the lamina stiffness (and strengths) used by every ply.")
+    out.append(r"\textbf{Purpose.} " + ("Provide the isotropic material's Young's modulus and Poisson's ratio." if isotropic
+                                         else "Provide the lamina stiffness (and strengths) used by every ply."))
     for name, material in ctx.deck.materials.items():
         if material.elastic is None:
             continue
         el = material.elastic
-        constants = [("E1", el.E1, "stress"), ("E2", el.E2, "stress"), ("nu12", el.nu12, ""), ("G12", el.G12, "stress")]
-        if el.G13 is not None:
+        constants = ([("E", el.E1, "stress"), ("nu", el.nu12, "")] if el.kind == "ISOTROPIC" else
+                     [("E1", el.E1, "stress"), ("E2", el.E2, "stress"), ("nu12", el.nu12, ""), ("G12", el.G12, "stress")])
+        if el.G13 is not None and el.kind != "ISOTROPIC":
             constants += [("G13", el.G13, "stress"), ("G23", el.G23, "stress")]
         rows = [rf"{e(name)}: {lbl} & {n(stress(val) if kind == 'stress' else val)} {e(S) if kind == 'stress' else ''} & {tag('INP')} \\"
                 for lbl, val, kind in constants]
@@ -347,6 +421,8 @@ def render(ctx: Context, h: Helpers) -> str:
             out.append("The deck writes the compressive strengths Xc and Yc as negative numbers; as magnitudes they are the strengths F1c and F2c. "
                        + tag("INP"))
     out.append(gui_steps(h, "Abaqus/CAE", [
+        e("Property module > Create Material, enter the name > Mechanical > Elasticity > Elastic, Type Isotropic, one row: Young's Modulus E and Poisson's Ratio nu as the table gives them.")
+        if isotropic else
         e("Property module > Create Material, enter the name > Mechanical > Elasticity > Elastic, Type Lamina, one row: E1, E2, Nu12, G12, G13, G23 in the order of the table."),
         e("Mechanical > Damage for Fiber-Reinforced Composites is NOT used; the strengths go to Fail Stress: Mechanical > Elasticity > Elastic > "
           "Suboptions > Fail Stress, one row with the five values of the deck: Xt, Xc, Yt, Yc, S, with Xc and Yc negative as in the table. Leave "
@@ -355,6 +431,9 @@ def render(ctx: Context, h: Helpers) -> str:
         if any(m.fail_stress for m in ctx.deck.materials.values()) else e("No strengths are in the deck."),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
+        e("Property > Material > Create, Elasticity: Young's modulus and Poisson's ratio as the table gives them; the dialog states this isotropic material directly. ") + tag("MANUAL p.30"),
+        e("Or import the CalculiX deck of this model, whose *ELASTIC, TYPE=ISO brings the material into the model tree. ") + tag("INP"),
+    ] if isotropic else [
         e("Property > Material > Create offers Density, Elasticity (Young's modulus and Poisson's ratio only), Plasticity and thermal properties: no orthotropic or lamina type in the dialog. ") + tag("MANUAL p.30"),
         e("Route A: the imported CalculiX deck carries *ELASTIC, TYPE=ENGINEERING CONSTANTS and the material appears in the model tree. ") + tag("GUI-SEEN"),
         e("Route B: Model > Edit CalculiX Keywords, add the *MATERIAL and *ELASTIC, TYPE=ENGINEERING CONSTANTS block quoted below (nine constants and a temperature on two lines), or Property > Material > Import from .inp with the CalculiX deck. ") + tag("MANUAL p.23") + " " + tag("MANUAL p.30"),
@@ -367,7 +446,33 @@ def render(ctx: Context, h: Helpers) -> str:
                        + tag("INP"))
 
     # ---------------------------------------------------------------- layup
-    if section is not None:
+    if homogeneous:
+        out.append(h.heading(1, "Shell section"))
+        out.append(r"\textbf{Purpose.} Give the whole part one material and one thickness: there are no plies.")
+        axes = (f"axis a = {section.orientation_axes[0]}, axis b = {section.orientation_axes[1]}" if section.orientation_axes else "global axes (no *Orientation)")
+        out.append(h.kv_table([
+            ("Section", e("conventional shell, homogeneous (*Shell Section with material=, no composite)") + " " + tag("INP")),
+            ("Material", e(section.listed[0].material) + " " + tag("INP")),
+            ("Thickness", e(f"{length(section.total_thickness_m):g} {L}") + " " + tag("INP")),
+            ("Section points through the thickness", e(str(section.expanded[0].integration_points)) + " " + tag("INP")),
+            ("Region", e(f"element set {section.elset}, {section.elements} elements") + " " + tag("INP")),
+            ("Orientation", e(f"{section.orientation or 'none'}: {axes}. An isotropic material is the same in every direction, so the orientation "
+                              "only sets the axes the stresses are reported in: axis 1 along the coupon's length") + " " + tag("INP")),
+        ]))
+        out.append(gui_steps(h, "Abaqus/CAE", [
+            e(f"Property module > Create Section > Shell, Homogeneous. Shell thickness Value {length(section.total_thickness_m):g}, Material "
+              f"{section.listed[0].material}, Thickness integration rule Simpson, Thickness integration points {section.expanded[0].integration_points}."),
+            e("Assign Section: the whole part (all faces), Shell offset Middle surface."),
+            e("Assign Material Orientation, so that the stresses are reported along the coupon: " + layup_csys_words(section).replace("Layup orientation: ", "")),
+        ], "CAE-CHECK"))
+        out.append(gui_steps(h, "PrePoMax 2.6", [
+            e(f"Property > Section > Create > Shell: the material and the thickness {length(section.total_thickness_m):g} {L}, on the whole part. ") + tag("MANUAL p.31"),
+            e("Or import the CalculiX deck of this model, whose *SHELL SECTION with MATERIAL= brings the section with it. ") + tag("INP"),
+        ], "MANUAL"))
+        out.append(keyword_box(h, ctx.kernel_deck.name, "\n".join(keyword_blocks(ctx.kernel_deck, "Orientation") + keyword_blocks(ctx.kernel_deck, "Shell Section", 20))))
+        if ctx.reference_deck != ctx.kernel_deck:
+            out.append(keyword_box(h, ctx.reference_deck.name + " (CalculiX)", "\n".join(keyword_blocks(ctx.reference_deck, "Orientation") + keyword_blocks(ctx.reference_deck, "Shell Section", 20))))
+    elif section is not None:
         out.append(h.heading(1, "Composite layup"))
         out.append(r"\textbf{Purpose.} Define ply thickness, material, angle and stacking for the whole part.")
         axes = (f"axis a = {section.orientation_axes[0]}, axis b = {section.orientation_axes[1]}, rotation about axis {section.orientation_rotation[0]} = {section.orientation_rotation[1]:g} degrees"
@@ -377,7 +482,7 @@ def render(ctx: Context, h: Helpers) -> str:
             ("Element type", e("conventional shell (*Shell Section, composite); continuum shell is NOT used") + " " + tag("INP")),
             ("Symmetric flag", (e("yes: the listed plies are the lower half, mirrored above the midplane") if section.symmetric else e("no: every ply is listed")) + " " + tag("INP")),
             ("Region", e(f"element set {section.elset}, {section.elements} elements") + " " + tag("INP")),
-            ("Orientation", e(f"{section.orientation or 'none'}: {axes}. Local direction 1 is global x, ACROSS the width; a 0-degree ply has its material axis 1 across the load") + " " + tag("INP")),
+            ("Orientation", e(f"{section.orientation or 'none'}: {axes}. " + orientation_words(section)) + " " + tag("INP")),
             ("Integration points per ply", e(str(section.expanded[0].integration_points)) + " " + tag("INP")),
             ("Section integration", e(section.section_integration or "default (Simpson)") + " " + (tag("INP") if section.section_integration else tag("ASSUMED"))),
         ]))
@@ -400,9 +505,9 @@ def render(ctx: Context, h: Helpers) -> str:
         out.append(gui_steps(h, "Abaqus/CAE", [
             e(f"Property module > Composite Layup Manager > Create. Name {section.layup_name or 'Layup-1'}, Initial ply count {len(section.listed)}, Element type Conventional Shell."),
             e("Section tab: Section integration Simpson (the deck writes no override), Thickness integration points as the table, Poisson definition Default, Temperature Gradient, Density off; Offset Middle surface, Thickness Specify (per ply)."),
-            e(f"Plies tab: one row per listed ply with Material, Thickness {length(section.listed[0].thickness_m):g}, CSys <Layup>, Rotation angle = the ply angle, Integration points {section.listed[0].integration_points}; "
+            e(f"Plies tab: one row per listed ply with Material, Thickness {length(section.listed[0].thickness_m):g}, CSys <Layup>, Rotation angle = the ply angle as the table states it, Integration points {section.listed[0].integration_points}; "
               + ("tick the option that makes the calculated section symmetric. " if section.symmetric else "leave symmetric unticked. ")),
-            e("Layup orientation: Definition Coordinate system, CSys Global (axis 1 along global x), Additional rotation None, Normal direction Axis 3. Region: the whole part (all faces)."),
+            e(layup_csys_words(section)),
         ], "CAE-CHECK"))
         out.append(gui_steps(h, "PrePoMax 2.6", [
             e("Property > Section > Create offers Solid, Shell (one material, one thickness, offset), Membrane, Point mass and Distributed mass sections: no composite layup dialog. ") + tag("MANUAL p.31"),

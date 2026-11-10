@@ -16,7 +16,7 @@ from anisotropy_fea.mesh import mesh_from_deck
 from anisotropy_fea.model import section_plies, validate_deck
 from anisotropy_fea import paths  # where the files live (ADR-0036)
 from anisotropy_fea.mesher import gmsh_available
-from anisotropy_fea.spec import load_spec, parse_spec, to_si
+from anisotropy_fea.spec import load_spec, parse_spec, spec_plies, to_si
 from anisotropy_fea.write_abaqus import MAX_LINE, _comment, line_bytes, number, write_abaqus
 
 NODAL = paths.spec_path("unnotched-im7-8552-nodal").read_text(encoding="utf-8")
@@ -35,7 +35,8 @@ def test_the_deck_is_deterministic_and_round_trips_through_our_reader(tmp_path):
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     assert len(digest) == 64
     assert "*Element, type=S4R" in text and "*Shell Section, elset=All, composite, orientation=Ori-1, layup=Layup-1, symmetric" in text
-    assert "0.18288, 3, IM7-8552, 45., Ply-1" in text
+    assert "*Orientation, name=Ori-1\n0., 1., 0., -1., 0., 0.\n3, 0.\n" in text  # local 1 along +y, the coupon's length axis (ADR-0065)
+    assert "0.18288, 3, IM7-8552, 45., Ply-1" in text  # the layer lines carry the angles as the coupon states them
     assert "*Fail Stress\n2558.506536, -1731.480399, 64.05229525, -285.7187422, 91.14869142, 0." in text
     assert "*Node Print, nset=Grip-Top, totals=YES\nRF" in text and "*El Print, elset=Probe-near_grip, position=CENTROIDAL" in text
     assert "** rights class open-publisher" in "\n".join(line for line in text.splitlines() if line.startswith("**")) or "rights class open-publisher" in text
@@ -48,8 +49,11 @@ def test_the_deck_is_deterministic_and_round_trips_through_our_reader(tmp_path):
     assert mesh.node_count == model.mesh.node_count and mesh.element_count == model.mesh.element_count
     assert mesh.xy == pytest.approx(model.mesh.xy, abs=1e-12)
     assert mesh.connectivity.tolist() == model.mesh.connectivity().tolist()
-    plies = section_plies(read.parts["Coupon"].sections[0], read.materials)
-    assert [p.angle_deg for p in plies] == [45, 0, -45, 90, 90, -45, 0, 45] and plies[0].material.strengths.F1c == pytest.approx(1731.4804e6, rel=1e-7)
+    section = read.parts["Coupon"].sections[0]
+    plies = section_plies(section, read.materials)
+    assert section.rotation_deg == 90.0 and [layer.angle_deg for layer in section.layers] == [45, 0, -45, 90]
+    assert [p.angle_deg for p in plies] == [-45, 90, 45, 0, 0, 45, 90, -45] and plies[0].material.strengths.F1c == pytest.approx(1731.4804e6, rel=1e-7)
+    assert [p.angle_deg for p in plies] == [p.angle_deg for p in spec_plies(spec)]  # the deck read back gives the spec's own engine plies
 
 
 def test_nodal_and_coupled_grips_give_the_same_solution(tmp_path):
@@ -125,8 +129,32 @@ def test_every_abaqus_deck_keeps_the_input_rules_abaqus_standard_enforces(spec_p
     needs_mesher(spec_path)
     lines = write_abaqus(build_model(load_spec(spec_path))).splitlines()
     assert max(line_bytes(line) for line in lines) <= MAX_LINE
-    tables = [lines[i + 1] for i, line in enumerate(lines) if line.lower().startswith("*el print")]
+    tables = [variables_line(lines, i) for i, line in enumerate(lines) if line.lower().startswith("*el print")]
     assert tables and all("," not in variables for variables in tables)
+
+
+def variables_line(lines: list[str], i: int) -> str:
+    """The variables of the `*El Print` at line i: its first data line unless that lists section points (integers only)."""
+    first = lines[i + 1]
+    return lines[i + 2] if all(part.strip().isdigit() for part in first.split(",")) else first
+
+
+@pytest.mark.parametrize("spec_path", SPECS, ids=[p.stem for p in SPECS])
+def test_the_stress_and_strain_tables_of_a_membrane_coupon_list_every_layers_middle_section_point(spec_path):
+    """Abaqus printed section points 1 and 24 alone for the 8-layer coupon run on 2026-11-08, so the validation table had plies 1 and 8
+    only (ADR-0066): the writer lists the middle of every layer (point 3k - 1 at 3 Simpson points per layer) on the S and E tables of a
+    membrane coupon, and leaves a bending coupon's tables at Abaqus's default, the faces."""
+    needs_mesher(spec_path)
+    model = build_model(load_spec(spec_path))
+    lines = write_abaqus(model).splitlines()
+    expected = ", ".join(str(3 * k + 2) for k in range(len(model.section.plies)))
+    for i, line in enumerate(lines):
+        if not line.lower().startswith("*el print"):
+            continue
+        if model.bending or lines[i + 1] in ("SF", "SE"):
+            assert lines[i + 1] in ("SF", "SE", "S", "E"), f"{spec_path.name}: line {i + 1}"
+        else:
+            assert lines[i + 1] == expected and lines[i + 2] in ("S", "E"), f"{spec_path.name}: line {i + 1}"
 
 
 def test_a_long_heading_comment_is_wrapped_at_spaces_by_bytes_and_nothing_else_changes():
@@ -179,7 +207,7 @@ def test_every_test_folder_has_the_same_shape():
                 assert record.with_suffix(".md").is_file(), f"{record} has no reading note"
     # The public checks with a CalculiX record, by name, so a check added without its record or a record that strays is noticed.
     assert {r.parent.parent.name for r in paths.all_records() if paths.CHECKS in r.parents} == {
-        "open-hole-im7-8552", "plate-pressure-isotropic", "three-point-im7-8552", "unnotched-im7-8552",
+        "d3039-im7-8552", "d638-type-i-plastic", "open-hole-im7-8552", "plate-pressure-isotropic", "three-point-im7-8552", "unnotched-im7-8552",
     }
     assert paths.CONVENTIONS.is_file() and any(paths.CASES.glob("*.toml"))
 
@@ -212,3 +240,31 @@ def test_a_names_table_gives_the_deck_its_names_and_our_names_otherwise():
 
 def read_deck_text(text: str):
     return parse_deck(text)
+
+
+def test_regenerating_a_deck_that_changed_in_its_output_requests_alone_refreshes_the_records_digest(tmp_path, monkeypatch):
+    """tools/regenerate_decks.py --refresh-digests: a record names the deck the kernel read by its digest, and a change to the deck's
+    print requests changes no solver's numbers, so the digest is rewritten and the record stands; any other change asks for a new run."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("regenerate_decks", paths.FEA / "tools" / "regenerate_decks.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    before = "*Heading\nA\n*Node\n1, 0., 0.\n*Step\n*El Print, elset=Probe-centre, position=CENTROIDAL\nS\n*End Step\n"
+    after = before.replace("*El Print, elset=Probe-centre, position=CENTROIDAL\nS\n", "*El Print, elset=Probe-centre, position=CENTROIDAL\n2, 5\nS\n")
+    assert tool.without_output_requests(before) == tool.without_output_requests(after) == "*Heading\nA\n*Node\n1, 0., 0.\n*Step\n*End Step"
+    deck = tmp_path / "decks" / "x-abaqus.inp"
+    deck.parent.mkdir()
+    deck.write_text(after, encoding="utf-8")
+    record = tmp_path / "records" / "x-calculix.toml"
+    record.parent.mkdir()
+    record.write_text(f'title = "x"\ndeck_kernel = "../decks/x-abaqus.inp"\ndeck_reference = "../decks/x-ccx.inp"\n'
+                      f'deck_kernel_sha256 = "{"0" * 64}"\ndeck_reference_sha256 = "{"1" * 64}"\n', encoding="utf-8")
+    monkeypatch.setattr(tool.paths, "all_records", lambda: [record])
+    lines = tool.refresh_digests({deck.resolve(): before})
+    assert len(lines) == 1 and lines[0].startswith("refreshed") and "output requests only" in lines[0]
+    assert f'deck_kernel_sha256 = "{tool.sha256_of(deck)}"' in record.read_text(encoding="utf-8") and '"1" * 64' not in record.read_text(encoding="utf-8")
+    deck.write_text(after.replace("1, 0., 0.", "1, 0., 1."), encoding="utf-8")  # a node moved: the solvers' numbers change
+    lines = tool.refresh_digests({deck.resolve(): before})
+    assert len(lines) == 1 and lines[0].startswith("needs run") and "beyond its output requests" in lines[0]
+

@@ -42,6 +42,11 @@ STORAGE_VARIABLES = ("ANISOTROPY_R2_BUCKET", "ANISOTROPY_R2_ENDPOINT", "ANISOTRO
 # The per-user limits of the hosted tier (ADR-0056, stage 5): with a number set, a signed-in person (or, without an email, an actor)
 # may have one coupon job running at a time and start at most that many a day (UTC), counted in the jobs table; off unless set.
 JOBS_PER_DAY_VARIABLE = "ANISOTROPY_JOBS_PER_USER_PER_DAY"
+# The job queue (ADR-0056 stage 3, amendment 3): unset, this process runs each coupon job itself, one at a time (ADR-0050). `queue`:
+# it files the job in the object store and the jobs table and leaves it to the queue, which the Worker feeds; `solver`: it runs the
+# queued job a request names, in a container of that job's own. Either needs the jobs table and the store.
+JOB_ROLE_VARIABLE = "ANISOTROPY_JOB_ROLE"
+JOB_ROLES = ("queue", "solver")
 LOCAL_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001")
 
 
@@ -105,6 +110,7 @@ class Settings:
     allowed_origins: tuple[str, ...] = LOCAL_ORIGINS
     storage: StorageSettings = StorageSettings(None, None, None, None)
     jobs_per_user_per_day: int | None = None  # None: no per-user limit, as locally
+    job_role: str | None = None  # None: jobs run in this process; "queue" or "solver" with the job queue (ADR-0056 amendment 3)
 
 
 def environment() -> Mapping[str, str]:
@@ -133,7 +139,24 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
         url = sqlalchemy_url(url, DATABASE_VARIABLE)
     return Settings(database_url=url, run_records=switch == "on", assistant=assistant_settings(environ), access=access_settings(environ),
                     allowed_origins=allowed_origins(environ), storage=storage_settings(environ),
-                    jobs_per_user_per_day=jobs_per_user_per_day(environ, records_on=switch == "on"))
+                    jobs_per_user_per_day=jobs_per_user_per_day(environ, records_on=switch == "on"),
+                    job_role=job_role(environ, records_on=switch == "on", storage_on=storage_settings(environ).on))
+
+
+def job_role(environ: Mapping[str, str], *, records_on: bool, storage_on: bool) -> str | None:
+    """`queue`, `solver`, or None when unset. Both roles hand a job from one container to another through the jobs table and the
+    object store, so each needs run records on and the store's four settings; without them it is refused (ADR-0003)."""
+    raw = environ.get(JOB_ROLE_VARIABLE, "").strip()
+    if not raw:
+        return None
+    if raw not in JOB_ROLES:
+        raise RuntimeError(f"{JOB_ROLE_VARIABLE} must be one of {', '.join(JOB_ROLES)}, not {raw!r}; unset it to run jobs in this process")
+    missing = [what for what, on in ((f"run records ({RECORDING_VARIABLE}=on with {DATABASE_VARIABLE})", records_on),
+                                     (f"the object store ({', '.join(STORAGE_VARIABLES)})", storage_on)) if not on]
+    if missing:
+        raise RuntimeError(f"{JOB_ROLE_VARIABLE}={raw} passes jobs between containers through the jobs table and the object store; "
+                           f"it needs {' and '.join(missing)}")
+    return raw
 
 
 def jobs_per_user_per_day(environ: Mapping[str, str], *, records_on: bool) -> int | None:

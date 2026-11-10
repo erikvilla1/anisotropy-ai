@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchExplanation, fetchFields, getJob, POLL_MS, StudioError, type Explanation, type Fields, type JobStatus } from "@/lib/studio-api";
+import { fetchExplanation, fetchFields, getJob, isActive, POLL_MS, StudioError, type Explanation, type Fields, type JobStatus } from "@/lib/studio-api";
 import { JobProgress } from "./job-progress";
 import { ResultsView } from "./results-view";
 
@@ -24,7 +24,7 @@ export function StudioViewer({ apiBaseUrl }: { apiBaseUrl: string }) {
         const status = await getJob(apiBaseUrl, jobId);
         if (cancelled) return;
         setJob(status);
-        if (status.state === "running") timer = window.setTimeout(poll, POLL_MS);
+        if (isActive(status.state)) timer = window.setTimeout(poll, POLL_MS);
       } catch (error) {
         if (!cancelled) setMessage(error instanceof StudioError ? error.message : "The job could not be read.");
       }

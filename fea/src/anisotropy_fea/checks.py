@@ -26,15 +26,19 @@ from .intake import FIELDS, FormInput, IntakeError, Values, check_form, designat
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
-from .spec import BENDING_KINDS, TEST_CODES, SpecError, full_angles, layup_text, spec_plies
+from .spec import BENDING_KINDS, TEST_CODES, SpecError, full_angles, is_isotropic, layup_text, spec_plies
+from .standards.conformance import conformance
 from .units import UNIT_LABEL, UNIT_SYSTEMS, deck_units_of, from_si, units_words
 
 STATES = ("pass", "warn", "fail", "missing", "pending")
 SEVERITY = {"pass": 0, "warn": 1, "fail": 2, "missing": 2}
+SPOOLES_LAYER_BRICKS = 18000  # a structured mesh past this many layer bricks is where SPOOLES has failed (24000; 17850 solved), 2026-11-08; no rule, a warning
+TRANSVERSE_SHEAR_RATIO = 4.0  # G13 or G23 outside G12/4 .. 4 G12 is noted; a tape's G13 is about G12 and its G23 about G12/2 to G12 (MIL-HDBK-17-3F)
 ITEMS = (  # in the order the studio lists them: id, label
     ("identity", "Who and which coupon"),
     ("units", "Units consistent"),
     ("geometry", "Geometry defined"),
+    ("standard", "Test standard"),
     ("material", "Material defined"),
     ("laminate", "Laminate assigned"),
     ("constraints", "Constraints defined"),
@@ -46,14 +50,16 @@ ITEMS = (  # in the order the studio lists them: id, label
     ("document", "Document builder installed"),
 )
 ITEM_OF_KEY = {  # which item a form row belongs to
-    **{key: "identity" for key in ("filled_by", "date", "notes", "test", "material_code", "layup_code", "standard", "size_from", "team_model", "test_data",
+    **{key: "identity" for key in ("filled_by", "date", "notes", "test", "material_code", "layup_code", "size_from", "team_model", "test_data",
                                    "name_part", "name_instance", "name_material", "name_layup", "name_section")},
     "units": "units",
-    **{key: "geometry" for key in ("length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span")},
+    **{key: "geometry" for key in ("length", "width", "tab_length", "hole_diameter", "span", "overhang", "load_span", "tab_thickness", "tab_bevel",
+                                   "tab_material", "narrow_width", "narrow_length", "radius", "outer_radius")},
+    **{key: "standard" for key in ("standard", "specimen", "strain_device", "strain_length")},
     **{key: "mesh" for key in ("hole_circumferential", "hole_radial", "hole_ring", "hole_growth", "element_size", "mesh_nx", "mesh_partitions", "mesh_seeds")},
-    **{key: "laminate" for key in ("symmetric", "ply_thickness", *(f"ply_{i}" for i in range(1, 17)))},
+    **{key: "laminate" for key in ("symmetric", "ply_thickness", "material_kind", "thickness", *(f"ply_{i}" for i in range(1, 17)))},
     **{key: "material" for key in ("library", "own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_F1t", "own_F1c", "own_F2t", "own_F2c",
-                                   "own_F6", "own_source", "G13", "G23")},
+                                   "own_F6", "own_source", "G13", "G23", "own_E", "own_nu")},
     **{key: "criterion" for key in ("criteria", "f12_star")},
     **{key: "load" for key in ("control", "value")},
     **{key: "constraints" for key in ("grips", "region")},
@@ -69,6 +75,7 @@ class CheckItem:
     state: str
     message: str
     rows: tuple[str, ...] = ()  # the form rows concerned, by label
+    requirements: tuple[dict, ...] = ()  # the Test standard item: each requirement of the standard, judged (standards.conformance, ADR-0072)
 
 
 @dataclass(frozen=True)
@@ -81,7 +88,8 @@ class Checklist:
     problems: tuple[str, ...]  # every refusal, as the tools word it
 
     def as_dict(self) -> dict[str, Any]:
-        return {"items": [{**asdict(item), "rows": list(item.rows)} for item in self.items], "designation": self.designation, "coupon_exists": self.coupon_exists,
+        return {"items": [{**asdict(item), "rows": list(item.rows), "requirements": list(item.requirements)} for item in self.items],
+                "designation": self.designation, "coupon_exists": self.coupon_exists,
                 "attempts": self.attempts, "state": self.state, "problems": list(self.problems)}
 
 
@@ -170,6 +178,7 @@ class _Notes:
         self.state = {item_id: "pending" for item_id, _ in ITEMS}
         self.messages: dict[str, list[str]] = {item_id: [] for item_id, _ in ITEMS}
         self.rows: dict[str, list[str]] = {item_id: [] for item_id, _ in ITEMS}
+        self.requirements: dict[str, tuple[dict, ...]] = {}
 
     def note(self, item_id: str, state: str, message: str, rows: tuple[str, ...] = ()) -> None:
         if self.state[item_id] == "pending" or SEVERITY[state] > SEVERITY[self.state[item_id]]:
@@ -187,8 +196,8 @@ class _Notes:
 
     def items(self) -> tuple[CheckItem, ...]:
         labels = dict(ITEMS)
-        return tuple(CheckItem(item_id, labels[item_id], self.state[item_id], "; ".join(self.messages[item_id]), tuple(self.rows[item_id]))
-                     for item_id, _ in ITEMS)
+        return tuple(CheckItem(item_id, labels[item_id], self.state[item_id], "; ".join(self.messages[item_id]), tuple(self.rows[item_id]),
+                               self.requirements.get(item_id, ())) for item_id, _ in ITEMS)
 
 
 def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,
@@ -236,8 +245,16 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             model = None
             reason = str(exc).split("Value error, ", 1)[-1].split(" [type=", 1)[0]
             problems.append(reason)
+            iso = values is not None and values.isotropic is not None
             notes.note("material", "fail", f"our engine refuses these constants: {reason}",
-                       (row("own_E1"), row("own_E2"), row("own_G12"), row("own_nu12")))
+                       (row("own_E"), row("own_nu")) if iso else (row("own_E1"), row("own_E2"), row("own_G12"), row("own_nu12")))
+    if spec is not None:  # the test standard: judged on the spec, whatever the mesh says; a deviation warns and never blocks (ADR-0072)
+        judged = conformance(spec)
+        if judged is None:
+            notes.note("standard", "pass", "no standard picked: the size comes from " + (spec.coupon.size_from if spec.coupon else "the spec"))
+        else:
+            notes.note("standard", "warn" if judged.deviations else "pass", judged.words(), tuple(row(key) for key in judged.deviation_rows()))
+            notes.requirements["standard"] = tuple(j.as_dict() for j in judged.judged)
     designation = named.name if named is not None else None
     exists, attempts = coupon_attempts(root, designation)
 
@@ -250,31 +267,50 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             f"the coupon has {attempts} row{'s' if attempts != 1 else ''} in its attempt log, so this run is attempt {attempts + 1}" if exists
             else "a new coupon: its folder and case page are written when it runs"))
         # units: every row is in the stated system; a modulus outside the engine's plausible range after conversion means the wrong unit
-        moduli = (("E1", material.E1), ("E2", material.E2), ("G12", material.G12), ("G13", material.G13), ("G23", material.G23))
+        isotropic = is_isotropic(spec)  # one material with no plies (ADR-0075): E is its only modulus on the form
+        moduli = ((("E", material.E1),) if isotropic else
+                  (("E1", material.E1), ("E2", material.E2), ("G12", material.G12), ("G13", material.G13), ("G23", material.G23)))
         suspicious = [name for name, value in moduli if not PLAUSIBLE_MODULUS_PA[0] <= value <= PLAUSIBLE_MODULUS_PA[1]]
         deck_units = deck_units_of(units)
         if suspicious:
             shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in suspicious)
             notes.note("units", "warn", f"{shown}: outside the plausible range for a modulus in {lab['stress']} ({lab['modulus']} typed as {lab['stress']}, "
-                       "or the reverse?)", tuple(row(f"own_{name}") if name in ("E1", "E2", "G12") else row(name) for name in suspicious))
+                       "or the reverse?)", tuple(row(f"own_{name}") if name in ("E", "E1", "E2", "G12") else row(name) for name in suspicious))
         else:
             notes.note("units", "pass", f"every row in {units_words(units)}; the results come back in the same units"
                        + (f"; the Abaqus and CalculiX decks are written in {units_words(deck_units)}, as every deck we solve is" if deck_units != units
                           else f", and the decks are written in {units}"))
+        # transverse shear: our membrane never uses G13 and G23, CalculiX's brick does, so a value far from G12 parts the two solvers
+        low, high = material.G12 / TRANSVERSE_SHEAR_RATIO, material.G12 * TRANSVERSE_SHEAR_RATIO
+        odd = [] if isotropic else [name for name, value in (("G13", material.G13), ("G23", material.G23)) if not low <= value <= high]
+        if odd:
+            shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in odd)
+            notes.note("material", "warn", f"{shown} against G12 = {from_si(material.G12, 'stress', units):g} {lab['stress']}: a transverse shear modulus "
+                       "this far from G12 is unusual for a tape; our membrane does not use it, CalculiX's brick does, so the two will part (on 2026-11-08 a "
+                       "coupon with 100 MPa put CalculiX's reaction 4.6 % from ours, 0.8 % with 4500 MPa)", tuple(row(name) for name in odd))
         # geometry
         size = f"{length(g.length):g} by {length(g.width):g} {lab['length']}"
         if g.tab_length:
             size += f", {length(g.tab_length):g} {lab['length']} tabs with a node row on each tab line"
         if g.hole_diameter:
             size += f", central hole of {length(g.hole_diameter):g} {lab['length']}"
+        if g.dogbone is not None:
+            d = g.dogbone
+            size += (f", a dog-bone {length(d.narrow_width):g} {lab['length']} wide over its {length(d.narrow_length):g} {lab['length']} narrow section "
+                     f"with a {length(d.radius):g} {lab['length']} fillet" + (f" and a {length(d.outer_radius):g} {lab['length']} outer radius"
+                                                                            if d.outer_radius is not None else "")
+                     + ", the mesh rows squeezed to its outline")
         if spec.kind in BENDING_KINDS:
             size += (f", {length(g.span):g} {lab['length']} span with {length(g.overhang):g} {lab['length']} overhangs"
                      + (f", {length(g.load_span):g} {lab['length']} loading span" if g.load_span else "") + ", a node row on each support and nose line")
         notes.note("geometry", "pass", size)
         # material
         has_strengths = material.strengths is not None
-        notes.note("material", "pass", f"{material.name}: {material.source}; rights class {material.rights}; "
-                   + ("strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
+        if not odd:
+            notes.note("material", "pass", f"{material.name}: {material.source}; rights class {material.rights}; "
+                       + (f"isotropic, E = {from_si(material.E1, 'stress', units):g} {lab['stress']} and nu = {material.nu12:g}; its yield and failure "
+                          "are not modelled yet" if isotropic else
+                          "strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
         # laminate
         angles = full_angles(spec)
         thickness = length(sum(p.thickness_m for p in plies))
@@ -287,7 +323,11 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         else:
             kernel_words = ("symmetric, so B = 0 and the membrane model applies" if symmetric
                             else "not symmetric (B does not vanish), so the flat shell kernel solves it with stretching and bending coupled")
-        notes.note("laminate", "pass", f"{len(angles)} plies {layup_text(spec)}, {thickness:g} {lab['length']} thick; {kernel_words}")
+        if isotropic:
+            notes.note("laminate", "pass", f"no plies: one isotropic material, {thickness:g} {lab['length']} thick, in a homogeneous shell section; "
+                       "the membrane model applies")
+        else:
+            notes.note("laminate", "pass", f"{len(angles)} plies {layup_text(spec)}, {thickness:g} {lab['length']} thick; {kernel_words}")
         sets = model.node_sets
         held = [b for b in model.boundaries if b.value == 0.0]
         if model.plate:
@@ -352,6 +392,13 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         counts = f"{mesh.element_count} elements, {mesh.node_count} nodes ({mesh.mesher} mesh, order {mesh.order})"
         notes.note("mesh", "pass" if summary["acceptable"] else "warn", f"{counts}; {quality_words(summary)}"
                    + ("" if summary["acceptable"] else "; a mesh past a threshold still solves, but read the results near those elements with care"))
+        bricks = mesh.element_count * len(plies)  # CalculiX expands the S8R twin to one brick per element and ply (ADR-0030)
+        if spec.mesh.mesher == "structured" and bricks > SPOOLES_LAYER_BRICKS:
+            # SPOOLES, the image's only direct solver, stopped on one structured mesh of 24,000 layer bricks (55,733 equations) and ordered 17,850 on the
+            # same coupon and an open-hole mesh of about 25,000; the count is where it has failed, not a rule (ADR-0030 amendment 5)
+            notes.note("mesh", "warn", f"the CalculiX twin would be {bricks} layer bricks ({mesh.element_count} elements by {len(plies)} plies); the image's SPOOLES solver "
+                       f"stopped on a structured mesh of 24000 (2026-11-08, whatever the material) and ordered {SPOOLES_LAYER_BRICKS - 150} on the same coupon, so this run may stop in "
+                       "CalculiX; if it does, a coarser mesh solves (fea/checks/calculix-conventions.toml)", (row("element_size"), row("mesh_nx")))
         if spec.mesh.mesher == "gmsh":
             version = gmsh()
             notes.note("mesh", "pass" if version else "fail", f"Gmsh {version} meshes the hole" if version else
@@ -359,8 +406,10 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         # criterion
         criteria = list(spec.output.fpf_criteria)
         if not criteria:
-            notes.note("criterion", "warn", "no failure criterion: first-ply failure will not be reported"
-                       + ("" if has_strengths else " (the material has no strengths)"), ("Failure criterion",))
+            notes.note("criterion", "warn", ("no failure criterion: an isotropic material's yield and failure are not modelled yet, so the run reports "
+                                             "stiffness, stress and strain only" if isotropic else
+                                             "no failure criterion: first-ply failure will not be reported"
+                                             + ("" if has_strengths else " (the material has no strengths)")), ("Failure criterion",))
         else:
             bad = []
             for criterion in criteria:

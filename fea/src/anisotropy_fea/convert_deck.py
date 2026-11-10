@@ -17,7 +17,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .mesh import Mesh, mesh_from_deck
-from .model import Deck, ElementKey, NodeKey, coupled_nodes, expanded_layers, node_name, prescribed_dofs, reference_node, resolve_nodes
+from .model import Deck, ElementKey, NodeKey, coupled_nodes, expanded_layers, fibre_angles, node_name, prescribed_dofs, reference_node, resolve_nodes
 from .units import from_si
 from .write_abaqus import _rows, number
 from .write_calculix import REFERENCE_TEMPERATURE, CalculixWriterError, orientation_name
@@ -148,7 +148,6 @@ def calculix_from_deck(deck: Deck, transverse: TransverseChoice, probe_elements:
         out.append(f"*ELSET, ELSET=Section-{name.replace('.', '-')}")
         out += _rows(labels)
 
-    angles: set[float] = set()
     for material in deck.materials.values():
         e = material.elastic
         if e is None:
@@ -161,11 +160,21 @@ def calculix_from_deck(deck: Deck, transverse: TransverseChoice, probe_elements:
         out.append(", ".join(number(stress(v)) for v in (e.E1, e.E2, E3)) + f", {number(e.nu12)}, {number(nu13)}, {number(nu23)}, "
                    + ", ".join(number(stress(v)) for v in (e.G12, e.G13)))
         out.append(f"{number(stress(e.G23))}, {number(REFERENCE_TEMPERATURE)}")
+    # One *ORIENTATION per stated layer angle, named by that angle; its axes are the fibre direction from global x, the layer angle plus the
+    # section's rotation (ADR-0065). Two sections stating the same angle under different rotations would need two names: refused.
+    fibre_of: dict[float, float] = {}
     for part in deck.parts.values():
         for section in part.sections:
-            angles.update(layer.angle_deg for layer in expanded_layers(section))
-    for angle in sorted(angles):
-        c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+            for layer, fibre in zip(expanded_layers(section), fibre_angles(section)):
+                if layer.angle_deg in fibre_of and fibre_of[layer.angle_deg] != fibre:
+                    raise CalculixWriterError(f"line {section.line}: the layer angle {layer.angle_deg:g} stands for fibres at {fibre:g} degrees from x here and at "
+                                              f"{fibre_of[layer.angle_deg]:g} in another section; one orientation name cannot carry both")
+                fibre_of[layer.angle_deg] = fibre
+    if any(section.rotation_deg != 0.0 for part in deck.parts.values() for section in part.sections):
+        out.append("** Each *ORIENTATION is named by the layer angle the source deck states; its axes are the fibre direction from global x, the layer "
+                   "angle plus the section's *Orientation rotation (ADR-0065).")
+    for angle in sorted(fibre_of):
+        c, s = math.cos(math.radians(fibre_of[angle])), math.sin(math.radians(fibre_of[angle]))
         out.append(f"*ORIENTATION, NAME={orientation_name(angle)}")
         out.append(f"{number(c)}, {number(s)}, 0., {number(-s)}, {number(c)}, 0.")
     for instance_name, instance in deck.instances.items():
