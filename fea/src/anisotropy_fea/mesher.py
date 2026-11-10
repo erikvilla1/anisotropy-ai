@@ -1,4 +1,5 @@
-"""Meshes we generate ourselves (ADR-0030): a structured rectangle, and an open-hole plate meshed by Gmsh as a transfinite O-grid.
+"""Meshes we generate ourselves (ADR-0030): a structured rectangle, a dog-bone whose columns follow its outline (ADR-0075), and an
+open-hole plate meshed by Gmsh as a transfinite O-grid.
 
 `Mesh2D` is the solver-neutral mesh: node coordinates in metres, four corner nodes per element listed
 counterclockwise, optional midside nodes for 8-node elements, and named node and element sets. Its
@@ -211,6 +212,42 @@ def structured_rectangle(width: float, length: float, nx: int, ny: int, order: i
         if not any(abs(float(y) - y_line) <= tolerance * length for y in ys):
             raise MeshError(f"no node row lies on {name!r} at y = {y_line:g}; choose ny so that {y_line:g} / ({length:g} / ny) is an integer")
     node_sets, element_sets = sets_by_coordinates(points, corners, width, length, node_rows, element_bands, node_bands, tolerance, boxes)
+    return Mesh2D(xy=points, corners=corners, midside=midside, node_sets=node_sets, element_sets=element_sets, order=order, mesher="structured")
+
+
+def structured_dogbone(width: float, length: float, width_at, nx: int, ny: int, order: int = 1,
+                       node_rows: dict[str, float] | None = None, element_bands: dict[str, tuple[float, float]] | None = None,
+                       node_bands: dict[str, tuple[float, float]] | None = None, tolerance: float = 1e-9,
+                       ys: list[float] | None = None) -> Mesh2D:
+    """A dog-bone (ADR-0075): the structured rectangle's nx by ny grid with every node row squeezed to the outline's width at its y,
+    centred on x = width / 2, so the columns follow the outline and every element stays a quadrilateral in rows.
+
+    `width_at(y)` gives the outline's full width at y (`dogbone.Outline.width_at`). Each element edge across the fillet is a chord of the
+    arc between two node rows, so the outline is followed to within the sagitta of a row; rows on the outline's own lines (where the narrow
+    section ends and the full width begins) keep its corners exact. Edge-Left and Edge-Right are the first and last node of every row (with
+    the midside nodes between them at order 2), not the nodes at x = 0 and x = width as on a rectangle; every other set is as on a rectangle.
+    """
+    grid = structured_rectangle(width, length, nx, ny, order=1, node_rows=node_rows, tolerance=tolerance, ys=ys)
+    xy = grid.xy.copy()
+    centre = width / 2.0
+    for k, (x, y) in enumerate(xy):
+        xy[k, 0] = centre + (x - centre) * width_at(float(y)) / width
+    corners = grid.corners
+    points_list = [(float(x), float(y)) for x, y in xy]
+    midside = None
+    if order == 2:
+        points_list, midside = with_midside_nodes(points_list, corners)
+    points = np.asarray(points_list, dtype=float)
+    node_sets, element_sets = sets_by_coordinates(points, corners, width, length, node_rows, element_bands, node_bands, tolerance)
+    label = lambda i, j: i + (nx + 1) * j  # noqa: E731  the structured rectangle's corner numbering
+    for name, column in (("Edge-Left", 0), ("Edge-Right", nx)):
+        side = {label(column, j) for j in range(ny + 1)}
+        if midside is not None:
+            for nodes, mids in zip(corners, midside):
+                for k in range(4):
+                    if int(nodes[k]) in side and int(nodes[(k + 1) % 4]) in side:
+                        side.add(int(mids[k]))
+        node_sets[name] = np.array(sorted(side), dtype=int)
     return Mesh2D(xy=points, corners=corners, midside=midside, node_sets=node_sets, element_sets=element_sets, order=order, mesher="structured")
 
 
