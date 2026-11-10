@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ArrowUpRight, Menu, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Menu, X } from "lucide-react";
 import { primaryNav } from "@/lib/site-nav";
 import { ServicesMenu } from "@/components/services-menu";
 
@@ -79,17 +79,58 @@ export function SiteHeader() {
 export function SiteFooter() {
   const pathname = usePathname();
   if (pathname === "/chat" || pathname.startsWith("/workspace")) return null;
+  const current = (href: string) => (pathname === href ? "page" : undefined);
   return (
     <footer className="site-footer">
-      <Wordmark />
-      <span>Engineered from evidence.</span>
-      <span>
-        © {new Date().getFullYear()} Anisotropy{" "}
-        <span className="footer-divider">/</span> Research preview v.01
-      </span>
-      <a href="#">
-        Back to top <ArrowUpRight size={14} />
-      </a>
+      <div className="site-footer-top">
+        <div className="site-footer-brand">
+          <Wordmark />
+          <p>Engineered from evidence.</p>
+        </div>
+        <nav className="site-footer-nav" aria-label="Footer">
+          <ul>
+            {primaryNav
+              .filter((item) => !item.children)
+              .map((item) => (
+                <li key={item.href}>
+                  <Link href={item.href} aria-current={current(item.href)}>
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            <li>
+              <Link href="/workspace">
+                Workspace <ArrowUpRight size={16} />
+              </Link>
+            </li>
+          </ul>
+          {primaryNav
+            .filter((item) => item.children)
+            .map((item) => (
+              <ul key={item.href}>
+                <li>
+                  <Link href={item.href} aria-current={current(item.href)}>
+                    {item.label}
+                  </Link>
+                </li>
+                {item.children?.map((child) => (
+                  <li key={child.href} className="site-footer-child">
+                    <Link href={child.href} aria-current={current(child.href)}>
+                      {child.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ))}
+        </nav>
+      </div>
+      <div className="site-footer-bottom">
+        <span>© {new Date().getFullYear()} Anisotropy</span>
+        <span>Research preview v.01</span>
+        <a href="#">
+          Back to top <ArrowUp size={16} />
+        </a>
+      </div>
     </footer>
   );
 }

@@ -1324,78 +1324,235 @@ img {
   border-top: 1px solid var(--line);
   padding-top: 20px;
 }
-.closing-section {
-  background: linear-gradient(115deg, #222222, #141414);
-  border-top: 1px solid #414141;
-  border-bottom: 1px solid #414141;
-  padding-top: 66px;
-  padding-bottom: 0;
+/* The closing band (components/closing-band.tsx; ADR-0077 amendment 13), after PhysicsX's closing sections: a light band of the
+ * section kit (app/sections.css). The label, then the statement in the left half (columns 1 to 6) and the page's one action from
+ * the halfway line (column 7, where the header's links start), then an optional row of links under a 1 px rule on the same
+ * columns. A selector names the band as well as the part wherever the kit, loaded later, or `.inner-page h2` would otherwise win. */
+.band.closing-band.has-links {
+  padding-bottom: 32px;
 }
-.closing-section > .eyebrow {
-  font-size: 8px;
+.closing-band .band-label {
+  margin-bottom: 40px;
 }
-.closing-section > div:not(.document-links) {
-  display: flex;
-  justify-content: space-between;
-  gap: 25px;
-  align-items: center;
-  margin-top: 20px;
-  margin-bottom: 55px;
+.closing-band .closing-band-main {
+  align-items: end;
 }
-.closing-section h2 {
-  font-size: 53px;
-  letter-spacing: -2px;
-  line-height: 1.15;
+.closing-band .closing-band-statement {
+  grid-column: 1 / 7;
+  margin: 0;
+  font-family: var(--font);
+  font-size: clamp(40px, 4.6vw, 64px);
+  font-weight: 400;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
 }
-.document-links {
-  border-top: 1px solid #3b3b3b;
-  padding: 20px 0;
-  display: flex;
-  gap: 30px;
-  align-items: center;
+.closing-band .closing-band-action {
+  grid-column: 7 / 13;
+  justify-self: start;
+  gap: 20px;
+  margin-bottom: 6px;
+  padding: 16px 22px;
+  font-size: 16px;
+  line-height: 22px;
 }
-.document-links > span {
-  font-size: 7px;
-  letter-spacing: 1.5px;
-  color: #989898;
-  margin-right: auto;
+.closing-band .closing-band-links {
+  align-items: baseline;
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  font-size: 16px;
+  line-height: 22px;
 }
-.document-links > a {
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  color: #c1c1c1;
+.closing-band-links > span {
+  grid-column: 1 / 7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
-.document-links > a:hover {
-  color: var(--accent);
+.closing-band-links > div {
+  grid-column: 7 / 13;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 32px;
 }
+/* The arrow is set in the line, tied to the last word, so it follows that word when a link wraps. */
+.closing-band-links a {
+  justify-self: start;
+  transition: opacity 0.15s;
+}
+.closing-band-links a > span {
+  white-space: nowrap;
+}
+.closing-band-links a svg {
+  margin-left: 6px;
+  vertical-align: -2px;
+}
+.closing-band-links a:hover {
+  opacity: 0.6;
+}
+/* The footer (SiteFooter in components/site-shell.tsx; ADR-0077 amendment 13), after PhysicsX's: dark, 32 px margins, the logo
+ * and the tagline in the left half, and the site's navigation as two columns of links from the halfway line (columns 7 and 10),
+ * each behind a 1 px rule in the middle of the gutter as the kit's statement is. Then a 1 px rule and a row with the copyright
+ * line, the version and the way back to the top on the same columns. Links fade to 60 % on hover as the header's do. */
 .site-footer {
-  padding: 38px 48px;
-  display: flex;
+  padding: 64px 32px 32px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+}
+.site-footer-top,
+.site-footer-bottom {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+}
+.site-footer-brand {
+  grid-column: 1 / 7;
+  display: grid;
+  gap: 20px;
+  align-content: start;
+  justify-items: start;
+}
+.site-footer-brand p {
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--muted);
+}
+.site-footer-nav {
+  grid-column: 7 / 13;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40px 32px;
+  font-size: 16px;
+  line-height: 22px;
+}
+.site-footer-nav ul {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  justify-items: start;
+  margin: 0 0 0 -16px;
+  padding: 0 0 0 15px;
+  border-left: 1px solid currentColor;
+  list-style: none;
+}
+.site-footer-nav a {
+  display: inline-flex;
   align-items: center;
-  gap: 30px;
-  justify-content: space-between;
+  gap: 8px;
 }
-.site-footer .wordmark {
-  font-size: 19px;
+.site-footer-child a {
+  color: var(--muted);
 }
-.site-footer > span,
-.site-footer > a:last-child {
-  font-size: 9px;
-  color: #949494;
+.site-footer-nav a,
+.site-footer-bottom a {
+  transition: opacity 0.15s;
 }
-.site-footer > span:nth-child(2) {
-  margin-right: auto;
+.site-footer-nav a:hover,
+.site-footer-bottom a:hover {
+  opacity: 0.6;
 }
-.site-footer > a:last-child {
-  display: flex;
+.site-footer-bottom {
+  align-items: baseline;
+  row-gap: 12px;
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.site-footer-bottom > span:first-child {
+  grid-column: 1 / 7;
+}
+.site-footer-bottom > span + span {
+  grid-column: 7 / 10;
+}
+.site-footer-bottom > a {
+  grid-column: 10 / 13;
+  justify-self: start;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  color: var(--text);
 }
-.footer-divider {
-  padding: 0 8px;
-  color: #5a5a5a;
+/* Under the kit's 1024 px the halves stack: the action under the statement, the links under their label, and the footer's
+ * columns under the logo, still two abreast. Under 520 px the columns of links become one. */
+@media (max-width: 1023px) {
+  .closing-band .closing-band-main {
+    row-gap: 32px;
+  }
+  .closing-band .closing-band-statement,
+  .closing-band .closing-band-action,
+  .closing-band-links > span,
+  .closing-band-links > div {
+    grid-column: 1 / -1;
+  }
+  .closing-band .closing-band-action {
+    margin-bottom: 0;
+  }
+  .closing-band .closing-band-links {
+    row-gap: 16px;
+    margin-top: 48px;
+  }
+  .site-footer {
+    padding-top: 48px;
+  }
+  .site-footer-top {
+    row-gap: 40px;
+  }
+  .site-footer-brand,
+  .site-footer-nav {
+    grid-column: 1 / -1;
+  }
+  .site-footer-nav ul {
+    margin-left: 0;
+  }
+  .site-footer-bottom {
+    margin-top: 48px;
+  }
+  .site-footer-bottom > span:first-child {
+    grid-column: 1 / -1;
+  }
+  .site-footer-bottom > span + span,
+  .site-footer-bottom > a {
+    grid-column: span 6;
+  }
+}
+@media (max-width: 760px) {
+  .band.closing-band.has-links {
+    padding-bottom: 24px;
+  }
+  .closing-band .band-label {
+    margin-bottom: 28px;
+  }
+  .closing-band .closing-band-statement {
+    font-size: clamp(32px, 9vw, 40px);
+  }
+  .site-footer {
+    padding: 48px 20px 24px;
+  }
+  .site-footer-top,
+  .site-footer-bottom,
+  .site-footer-nav,
+  .closing-band-links > div {
+    column-gap: 20px;
+  }
+}
+@media (max-width: 520px) {
+  .closing-band-links > div,
+  .site-footer-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .site-footer-bottom > span + span,
+  .site-footer-bottom > a {
+    grid-column: 1 / -1;
+  }
 }
 .lightbox {
   width: min(1200px, 94vw);
@@ -1499,12 +1656,6 @@ img {
   }
   .roadmap-card h3 {
     font-size: 18px;
-  }
-  .site-footer {
-    padding: 32px;
-  }
-  .site-footer > span:nth-child(2) {
-    display: none;
   }
 }
 @media (max-width: 900px) {
@@ -1643,12 +1794,6 @@ img {
   }
   .roadmap-card p {
     max-width: none;
-  }
-  .closing-section h2 {
-    font-size: 45px;
-  }
-  .closing-section > div:not(.document-links) {
-    margin-bottom: 40px;
   }
 }
 @media (max-width: 640px) {
@@ -2033,51 +2178,6 @@ img {
   }
   .validation-gate svg {
     margin-top: 2px;
-  }
-  .closing-section {
-    padding-top: 50px;
-    padding-bottom: 0;
-  }
-  .closing-section > div:not(.document-links) {
-    display: block;
-    margin-bottom: 35px;
-  }
-  .closing-section h2 {
-    font-size: 43px;
-    letter-spacing: -1.5px;
-  }
-  .closing-section .button {
-    margin-top: 29px;
-    font-size: 11px;
-  }
-  .document-links {
-    flex-wrap: wrap;
-    gap: 15px 24px;
-    padding: 23px 0;
-  }
-  .document-links > span {
-    width: 100%;
-  }
-  .document-links > a {
-    font-size: 9px;
-    gap: 6px;
-  }
-  .site-footer {
-    padding: 30px 24px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 22px 10px;
-  }
-  .site-footer .wordmark {
-    font-size: 18px;
-  }
-  .site-footer > span:nth-child(3) {
-    grid-row: 2;
-    grid-column: 1/-1;
-    font-size: 8px;
-  }
-  .site-footer > a:last-child {
-    font-size: 8px;
   }
   .lightbox-header {
     font-size: 10px;

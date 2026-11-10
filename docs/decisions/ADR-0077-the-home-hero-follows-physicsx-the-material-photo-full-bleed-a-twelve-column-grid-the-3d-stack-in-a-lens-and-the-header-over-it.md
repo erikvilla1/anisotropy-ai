@@ -184,3 +184,23 @@ On phones it is one column.
 - **Overflow:** none sideways at 1860, 1440, 1100, 900 and 390 px.
 - **Checks:** `npm run typecheck` clean, also on this commit's tree alone. `home.spec.ts` and `portfolio.spec.ts`: 12 passed, 1 failed. The failure is the workspace chat test, which does not load the home page and failed before this change.
 - **UNVERIFIED:** the production build of this commit alone, and the look on phones and tablets (rules are written; no visual check yet).
+
+## Amendment 13, 2026-11-10 (the closing section as a light band; the footer with the site's navigation in columns)
+
+**Context.** The closing section of the home and industries pages was a dark gradient panel in a 1,440 px container with 64 px padding and 7 to 10 px labels, and its markup was written twice, once per page. The footer was one row of 9 px text with no navigation. PhysicsX's footer, measured at 1440 px on 2026-11-10, has 48/32/24 px padding, the logo on the left, and columns of 17/22 px links behind 1 px rules set 16 px left of the grid column. Its copyright line is 14 px monospace capitals. Its closing heading and button start on column 7.
+
+**Decision.**
+- **One component.** The closing section is `ClosingBand` (`components/closing-band.tsx`), used by both pages, as a light band of the section kit.
+- **Its parts.** The label sits above the statement, because both labels are longer than three columns. The statement is in columns 1 to 6 at `clamp(40px, 4.6vw, 64px)`, weight 400. The action starts on column 7. The optional links sit at 16 px on columns 7 and 10 under a 1 px rule.
+- **The footer.** It is dark, with 32 px margins. The logo and tagline are in the left half. The header's navigation from `lib/site-nav.ts` forms two columns on columns 7 and 10: the plain pages and Workspace, then Services with its five pages. Each column sits behind a 1 px rule in the gutter. Links are 16/22 px and fade to 60 % on hover.
+- **The bottom row.** Under a 1 px rule: the copyright line, "Research preview v.01" and "Back to top", in 14 px monospace capitals on the same columns.
+- **Nothing invented.** No link, address, social account or legal page was added. The footer stays absent in the workspace.
+- **Narrow screens.** Under 1024 px the halves stack. Under 520 px the link columns become one.
+- **Tests.** Four tests in two spec files now find the header's links inside "Main navigation": the footer repeats those names, and a page-wide lookup matched two links. No assertion was removed.
+
+**Evidence.** On 2026-11-10, against the dev server:
+- **Measured at 1440 px:** the button, both link columns and the bottom row's items start at x = 736 and x = 1,088; the column rules are at x = 720 and x = 1,072.
+- **Behaviour:** the footer is absent on `/workspace`, `/workspace/fea` and `/chat`; footer and closing links land on their addresses with no page errors; nothing extends past the viewport at 1200, 1024, 900, 768 and 390 px.
+- **Checks:** `npm run typecheck` clean, also on this commit's tree alone. `npm test`: 196 passed, 1 skipped. `home.spec.ts`, `expansion.spec.ts` and `portfolio.spec.ts`: 18 passed, 1 failed, before and after; the failure is the workspace chat test of `portfolio.spec.ts`.
+- **Flaky once:** one run also failed the Services disclosure test (`aria-expanded` stayed false after Enter). It then passed 2 of 2 and in the final run; the cause was not found.
+- **UNVERIFIED:** the production build of this commit alone, and the look on phones.

@@ -8,6 +8,7 @@ import {
   Factory,
   GraduationCap,
 } from "lucide-react";
+import { ClosingBand } from "@/components/closing-band";
 import { MediaSlot } from "@/components/media-slot";
 export const metadata = { title: "Industries — Anisotropy" };
 const priorities = [
@@ -158,19 +159,11 @@ export default function Industries() {
           </p>
         </div>
       </section>
-      <section className="section closing-section">
-        <span className="eyebrow">BEGIN WITH THE ENGINEERING QUESTION</span>
-        <div>
-          <h2>
-            What does your
-            <br />
-            material need to do?
-          </h2>
-          <Link className="button primary" href="/workspace/fea">
-            Define a scope <ArrowUpRight size={17} />
-          </Link>
-        </div>
-      </section>
+      <ClosingBand
+        label="BEGIN WITH THE ENGINEERING QUESTION"
+        heading={["What does your", "material need to do?"]}
+        action={{ label: "Define a scope", href: "/workspace/fea" }}
+      />
     </main>
   );
 }

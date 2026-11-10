@@ -14,7 +14,9 @@ test("navigation routes load directly with research-focused About", async ({
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
-  await page.getByRole("link", { name: "About", exact: true }).click();
+  // The footer repeats the header's links (ADR-0077 amendment 13), so the header's are found inside its navigation.
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await nav.getByRole("link", { name: "About", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "physical evidence",
   );
@@ -22,9 +24,9 @@ test("navigation routes load directly with research-focused About", async ({
   await expect(page.getByRole("heading", { name: "The team." })).toBeVisible();
   await expect(page.locator(".team-card")).toHaveCount(5);
   await expect(page.getByRole("heading", { name: "Start small. Prove it. Build forward." })).toBeVisible();
-  await page.getByRole("link", { name: "Industries", exact: true }).click();
+  await nav.getByRole("link", { name: "Industries", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Aerospace" })).toBeVisible();
-  await page.getByRole("link", { name: "Services", exact: true }).click();
+  await nav.getByRole("link", { name: "Services", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "documented answer",
   );
@@ -76,18 +78,20 @@ test("the Services disclosure lists the five service pages and the contact page 
 }) => {
   await page.goto("/");
   const button = page.getByRole("button", { name: "Show services" });
+  // The footer lists the service pages too (ADR-0077 amendment 13); the disclosure's links are the header's.
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
   await expect(button).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByRole("link", { name: "Finite element modeling", exact: true })).toBeHidden();
+  await expect(nav.getByRole("link", { name: "Finite element modeling", exact: true })).toBeHidden();
   await button.focus();
   await page.keyboard.press("Enter");
   await expect(button).toHaveAttribute("aria-expanded", "true");
-  const fem = page.getByRole("link", { name: "Finite element modeling", exact: true });
+  const fem = nav.getByRole("link", { name: "Finite element modeling", exact: true });
   await expect(fem).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(button).toHaveAttribute("aria-expanded", "false");
   await expect(button).toBeFocused();
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("link", { name: "Computer-aided design", exact: true })).toBeFocused();
+  await expect(nav.getByRole("link", { name: "Computer-aided design", exact: true })).toBeFocused();
   await fem.click();
   await expect(page).toHaveURL(/\/services\/finite-element-modeling\/?$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("ply by ply");
@@ -104,9 +108,10 @@ test("the mobile menu lists the five services under Services", async ({ page }) 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByRole("button", { name: "Open menu" }).click();
+  const nav = page.getByRole("navigation", { name: "Main navigation" }); // the footer lists the same pages
   for (const name of ["Computer-aided design", "Finite element modeling", "Test plans", "Documentation", "Manufacturing plans"])
-    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Test plans", exact: true }).click();
+    await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+  await nav.getByRole("link", { name: "Test plans", exact: true }).click();
   await expect(page).toHaveURL(/\/services\/test-plans\/?$/);
 });
 

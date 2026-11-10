@@ -88,7 +88,8 @@ test("mobile navigation and workspaces fit the screen", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("link", { name: "Workspace", exact: true }).click();
+  // Inside the header's navigation: the footer has a Workspace link too (ADR-0077 amendment 13).
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Workspace", exact: true }).click();
   await expect(page).toHaveURL(/\/workspace\/?$/);
   await page.getByRole("button", { name: /New coupon fea project/i }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);

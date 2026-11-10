@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
+import { ClosingBand } from "@/components/closing-band";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
@@ -226,28 +227,18 @@ export default function Home() {
           ))}
         </div>
       </section>
-      <section className="closing-section section">
-        <span className="eyebrow">THE NEXT LAYER STARTS WITH A QUESTION.</span>
-        <div>
-          <h2>
-            Let’s define what
-            <br />
-            comes next.
-          </h2>
-          <Link className="button primary" href="/workspace/fea">
-            Start a conversation <ArrowUpRight size={18} />
-          </Link>
-        </div>
-        <div className="document-links">
-          <span>EXPLORE THE RESEARCH</span>
-          <Link href="/library">
-            Materials & physics library <ArrowUpRight size={15} />
-          </Link>
-          <Link href="/about">
-            Our research approach <ArrowUpRight size={15} />
-          </Link>
-        </div>
-      </section>
+      <ClosingBand
+        label="THE NEXT LAYER STARTS WITH A QUESTION."
+        heading={["Let’s define what", "comes next."]}
+        action={{ label: "Start a conversation", href: "/workspace/fea" }}
+        links={{
+          label: "EXPLORE THE RESEARCH",
+          items: [
+            { label: "Materials & physics library", href: "/library" },
+            { label: "Our research approach", href: "/about" },
+          ],
+        }}
+      />
     </main>
   );
 }
