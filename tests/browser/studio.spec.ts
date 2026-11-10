@@ -132,7 +132,8 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("convergence-words")).toContainText("The clamped-edge peaks, the first-ply-failure factor over the mesh and the factor over the gauge section still moved");
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("fpf-gauge-factor-tsai_hill")).toHaveText("1.032");  // the gauge section's own first-ply failure, away from the clamped edge
-  await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
+  await expect(page.getByTestId("explanation")).toContainText("By the Tsai-Hill criterion the laminate holds at the applied loading, in the gauge section");
+  await expect(page.getByTestId("explanation")).toContainText("Outside the gauge section, Tsai-Hill is reached earlier, at 1.013 times the applied loading"); // the clamped edge apart (ADR-0085)
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "template", { timeout: 15_000 }); // the API answered the explain call
   // the result before the documents (ADR-0064): the agreement line while the job still draws and builds the package
   await expect(page.getByTestId("job-progress")).toContainText("The result is in; the drawings and the package are still being made", { timeout: 15_000 });

@@ -1,6 +1,7 @@
 {
  "units": "mm-MPa",
  "labels": {
+  "area": "mm²",
   "force": "N",
   "length": "mm",
   "stress": "MPa",
@@ -144669,7 +144670,15 @@
     "xy": [
      7.5833333335,
      28.999999999999996
-    ]
+    ],
+    "fails": false,
+    "at_failure": {
+     "applied": -2.7181753982488965,
+     "unit": "mm",
+     "reaction": -266.27966371420723,
+     "reaction_unit": "N",
+     "every_load": false
+    }
    },
    "tsai_hill": {
     "factor": 2.3223528720979325,
@@ -144688,14 +144697,992 @@
     "xy": [
      7.5833333335,
      28.999999999999996
-    ]
+    ],
+    "fails": false,
+    "at_failure": {
+     "applied": -2.3223528720979325,
+     "unit": "mm",
+     "reaction": -227.50384033581625,
+     "reaction_unit": "N",
+     "every_load": false
+    }
    }
   },
   "equilibrium_residual": 2.2039259306438908e-11,
   "free_residual": 2.6707525080382766e-12,
+  "isotropic": false,
+  "ply_peaks": [
+   {
+    "ply": 1,
+    "angle": 45.0,
+    "S11": {
+     "value": 196.45274886704902,
+     "element": 93,
+     "label": "Coupon-1.94",
+     "xy": [
+      7.5833333335,
+      31.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": 23.56444521249945,
+     "element": 92,
+     "label": "Coupon-1.93",
+     "xy": [
+      5.4166666665,
+      31.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": -23.753310956837417,
+     "element": 96,
+     "label": "Coupon-1.97",
+     "xy": [
+      1.0833333335,
+      33.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 2,
+    "angle": 0.0,
+    "S11": {
+     "value": 458.16533761380117,
+     "element": 87,
+     "label": "Coupon-1.88",
+     "xy": [
+      7.5833333335,
+      28.999999999999996
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": -5.963496781091898,
+     "element": 78,
+     "label": "Coupon-1.79",
+     "xy": [
+      1.0833333335,
+      27.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": -5.49041295050054,
+     "element": 83,
+     "label": "Coupon-1.84",
+     "xy": [
+      11.916666665000001,
+      27.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 3,
+    "angle": -45.0,
+    "S11": {
+     "value": 186.54640134878505,
+     "element": 92,
+     "label": "Coupon-1.93",
+     "xy": [
+      5.4166666665,
+      31.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": 8.27123459682488,
+     "element": 93,
+     "label": "Coupon-1.94",
+     "xy": [
+      7.5833333335,
+      31.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": 11.876655478418709,
+     "element": 96,
+     "label": "Coupon-1.97",
+     "xy": [
+      1.0833333335,
+      33.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 4,
+    "angle": 90.0,
+    "S11": {
+     "value": -72.5854976159544,
+     "element": 78,
+     "label": "Coupon-1.79",
+     "xy": [
+      1.0833333335,
+      27.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": 8.179574800385348,
+     "element": 87,
+     "label": "Coupon-1.88",
+     "xy": [
+      7.5833333335,
+      28.999999999999996
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": 1.8301376501668474,
+     "element": 83,
+     "label": "Coupon-1.84",
+     "xy": [
+      11.916666665000001,
+      27.0
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 5,
+    "angle": 90.0,
+    "S11": {
+     "value": 72.5854976159544,
+     "element": 78,
+     "label": "Coupon-1.79",
+     "xy": [
+      1.0833333335,
+      27.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": -8.179574800385348,
+     "element": 87,
+     "label": "Coupon-1.88",
+     "xy": [
+      7.5833333335,
+      28.999999999999996
+     ],
+     "face": "top",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": -1.830137650166848,
+     "element": 83,
+     "label": "Coupon-1.84",
+     "xy": [
+      11.916666665000001,
+      27.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 6,
+    "angle": -45.0,
+    "S11": {
+     "value": -186.54640134878508,
+     "element": 92,
+     "label": "Coupon-1.93",
+     "xy": [
+      5.4166666665,
+      31.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": -8.271234596824895,
+     "element": 93,
+     "label": "Coupon-1.94",
+     "xy": [
+      7.5833333335,
+      31.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": -11.8766554784187,
+     "element": 96,
+     "label": "Coupon-1.97",
+     "xy": [
+      1.0833333335,
+      33.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 7,
+    "angle": 0.0,
+    "S11": {
+     "value": -458.1653376138012,
+     "element": 87,
+     "label": "Coupon-1.88",
+     "xy": [
+      7.5833333335,
+      28.999999999999996
+     ],
+     "face": "top",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": 5.963496781091896,
+     "element": 78,
+     "label": "Coupon-1.79",
+     "xy": [
+      1.0833333335,
+      27.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": 5.490412950500541,
+     "element": 83,
+     "label": "Coupon-1.84",
+     "xy": [
+      11.916666665000001,
+      27.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    }
+   },
+   {
+    "ply": 8,
+    "angle": 45.0,
+    "S11": {
+     "value": -196.4527488670491,
+     "element": 93,
+     "label": "Coupon-1.94",
+     "xy": [
+      7.5833333335,
+      31.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": -23.56444521249945,
+     "element": 92,
+     "label": "Coupon-1.93",
+     "xy": [
+      5.4166666665,
+      31.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": 23.753310956837417,
+     "element": 96,
+     "label": "Coupon-1.97",
+     "xy": [
+      1.0833333335,
+      33.0
+     ],
+     "face": "top",
+     "touches_grip": false
+    }
+   }
+  ],
+  "clt": null,
   "earliest": "tsai_hill",
   "fpf_gauge": {},
   "earliest_gauge": null,
+  "verdict": {
+   "basis": "whole",
+   "earliest": "tsai_hill",
+   "factor": 2.3223528720979325,
+   "fails": false,
+   "outside_earlier": null
+  },
+  "ply_extremes": {
+   "plies": [
+    {
+     "ply": 1,
+     "angle": 45.0,
+     "S11": {
+      "tension": {
+       "value": 196.45274886704902,
+       "element": 93,
+       "label": "Coupon-1.94",
+       "xy": [
+        7.5833333335,
+        31.0
+       ],
+       "face": "bottom"
+      },
+      "compression": {
+       "value": -6.68505075679473,
+       "element": 161,
+       "label": "Coupon-1.162",
+       "xy": [
+        11.916666665000001,
+        53.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 23.56444521249945,
+       "element": 92,
+       "label": "Coupon-1.93",
+       "xy": [
+        5.4166666665,
+        31.0
+       ],
+       "face": "bottom"
+      },
+      "compression": {
+       "value": -5.202116526733578,
+       "element": 23,
+       "label": "Coupon-1.24",
+       "xy": [
+        11.916666665000001,
+        7.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": -23.753310956837417,
+       "element": 96,
+       "label": "Coupon-1.97",
+       "xy": [
+        1.0833333335,
+        33.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 189.24037775082368,
+       "element": 93,
+       "label": "Coupon-1.94",
+       "xy": [
+        7.5833333335,
+        31.0
+       ],
+       "face": "bottom"
+      }
+     }
+    },
+    {
+     "ply": 2,
+     "angle": 0.0,
+     "S11": {
+      "tension": {
+       "value": 458.16533761380117,
+       "element": 87,
+       "label": "Coupon-1.88",
+       "xy": [
+        7.5833333335,
+        28.999999999999996
+       ],
+       "face": "bottom"
+      },
+      "compression": {
+       "value": -27.22740091665629,
+       "element": 162,
+       "label": "Coupon-1.163",
+       "xy": [
+        1.0833333335,
+        55.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 5.354635088630711,
+       "element": 87,
+       "label": "Coupon-1.88",
+       "xy": [
+        7.5833333335,
+        28.999999999999996
+       ],
+       "face": "bottom"
+      },
+      "compression": {
+       "value": -5.963496781091898,
+       "element": 78,
+       "label": "Coupon-1.79",
+       "xy": [
+        1.0833333335,
+        27.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": -5.49041295050054,
+       "element": 83,
+       "label": "Coupon-1.84",
+       "xy": [
+        11.916666665000001,
+        27.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 455.56826125997213,
+       "element": 87,
+       "label": "Coupon-1.88",
+       "xy": [
+        7.5833333335,
+        28.999999999999996
+       ],
+       "face": "bottom"
+      }
+     }
+    },
+    {
+     "ply": 3,
+     "angle": -45.0,
+     "S11": {
+      "tension": {
+       "value": 186.54640134878505,
+       "element": 92,
+       "label": "Coupon-1.93",
+       "xy": [
+        5.4166666665,
+        31.0
+       ],
+       "face": "bottom"
+      },
+      "compression": {
+       "value": -53.08192188593505,
+       "element": 23,
+       "label": "Coupon-1.24",
+       "xy": [
+        11.916666665000001,
+        7.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 8.27123459682488,
+       "element": 93,
+       "label": "Coupon-1.94",
+       "xy": [
+        7.5833333335,
+        31.0
+       ],
+       "face": "bottom"
+      },
+      "compression": {
+       "value": -0.25577355271050445,
+       "element": 162,
+       "label": "Coupon-1.163",
+       "xy": [
+        1.0833333335,
+        55.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": 11.876655478418709,
+       "element": 96,
+       "label": "Coupon-1.97",
+       "xy": [
+        1.0833333335,
+        33.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 183.38485698425163,
+       "element": 92,
+       "label": "Coupon-1.93",
+       "xy": [
+        5.4166666665,
+        31.0
+       ],
+       "face": "bottom"
+      }
+     }
+    },
+    {
+     "ply": 4,
+     "angle": 90.0,
+     "S11": {
+      "tension": {
+       "value": 0.42591724856214386,
+       "element": 168,
+       "label": "Coupon-1.169",
+       "xy": [
+        1.0833333335,
+        57.0
+       ],
+       "face": "bottom"
+      },
+      "compression": {
+       "value": -72.5854976159544,
+       "element": 78,
+       "label": "Coupon-1.79",
+       "xy": [
+        1.0833333335,
+        27.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 8.179574800385348,
+       "element": 87,
+       "label": "Coupon-1.88",
+       "xy": [
+        7.5833333335,
+        28.999999999999996
+       ],
+       "face": "bottom"
+      },
+      "compression": {
+       "value": -0.5242155925733389,
+       "element": 162,
+       "label": "Coupon-1.163",
+       "xy": [
+        1.0833333335,
+        55.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": 1.8301376501668474,
+       "element": 83,
+       "label": "Coupon-1.84",
+       "xy": [
+        11.916666665000001,
+        27.0
+       ],
+       "face": "bottom"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 75.47561973684223,
+       "element": 78,
+       "label": "Coupon-1.79",
+       "xy": [
+        1.0833333335,
+        27.0
+       ],
+       "face": "bottom"
+      }
+     }
+    },
+    {
+     "ply": 5,
+     "angle": 90.0,
+     "S11": {
+      "tension": {
+       "value": 72.5854976159544,
+       "element": 78,
+       "label": "Coupon-1.79",
+       "xy": [
+        1.0833333335,
+        27.0
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -0.425917248562144,
+       "element": 168,
+       "label": "Coupon-1.169",
+       "xy": [
+        1.0833333335,
+        57.0
+       ],
+       "face": "top"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 0.5242155925733392,
+       "element": 162,
+       "label": "Coupon-1.163",
+       "xy": [
+        1.0833333335,
+        55.0
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -8.179574800385348,
+       "element": 87,
+       "label": "Coupon-1.88",
+       "xy": [
+        7.5833333335,
+        28.999999999999996
+       ],
+       "face": "top"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": -1.830137650166848,
+       "element": 83,
+       "label": "Coupon-1.84",
+       "xy": [
+        11.916666665000001,
+        27.0
+       ],
+       "face": "top"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 75.47561973684223,
+       "element": 78,
+       "label": "Coupon-1.79",
+       "xy": [
+        1.0833333335,
+        27.0
+       ],
+       "face": "top"
+      }
+     }
+    },
+    {
+     "ply": 6,
+     "angle": -45.0,
+     "S11": {
+      "tension": {
+       "value": 53.08192188593506,
+       "element": 23,
+       "label": "Coupon-1.24",
+       "xy": [
+        11.916666665000001,
+        7.0
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -186.54640134878508,
+       "element": 92,
+       "label": "Coupon-1.93",
+       "xy": [
+        5.4166666665,
+        31.0
+       ],
+       "face": "top"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 0.25577355271050445,
+       "element": 162,
+       "label": "Coupon-1.163",
+       "xy": [
+        1.0833333335,
+        55.0
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -8.271234596824895,
+       "element": 93,
+       "label": "Coupon-1.94",
+       "xy": [
+        7.5833333335,
+        31.0
+       ],
+       "face": "top"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": -11.8766554784187,
+       "element": 96,
+       "label": "Coupon-1.97",
+       "xy": [
+        1.0833333335,
+        33.0
+       ],
+       "face": "top"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 183.38485698425163,
+       "element": 92,
+       "label": "Coupon-1.93",
+       "xy": [
+        5.4166666665,
+        31.0
+       ],
+       "face": "top"
+      }
+     }
+    },
+    {
+     "ply": 7,
+     "angle": 0.0,
+     "S11": {
+      "tension": {
+       "value": 27.22740091665629,
+       "element": 162,
+       "label": "Coupon-1.163",
+       "xy": [
+        1.0833333335,
+        55.0
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -458.1653376138012,
+       "element": 87,
+       "label": "Coupon-1.88",
+       "xy": [
+        7.5833333335,
+        28.999999999999996
+       ],
+       "face": "top"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 5.963496781091896,
+       "element": 78,
+       "label": "Coupon-1.79",
+       "xy": [
+        1.0833333335,
+        27.0
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -5.354635088630713,
+       "element": 87,
+       "label": "Coupon-1.88",
+       "xy": [
+        7.5833333335,
+        28.999999999999996
+       ],
+       "face": "top"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": 5.490412950500541,
+       "element": 83,
+       "label": "Coupon-1.84",
+       "xy": [
+        11.916666665000001,
+        27.0
+       ],
+       "face": "top"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 455.56826125997225,
+       "element": 87,
+       "label": "Coupon-1.88",
+       "xy": [
+        7.5833333335,
+        28.999999999999996
+       ],
+       "face": "top"
+      }
+     }
+    },
+    {
+     "ply": 8,
+     "angle": 45.0,
+     "S11": {
+      "tension": {
+       "value": 6.685050756794735,
+       "element": 161,
+       "label": "Coupon-1.162",
+       "xy": [
+        11.916666665000001,
+        53.0
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -196.4527488670491,
+       "element": 93,
+       "label": "Coupon-1.94",
+       "xy": [
+        7.5833333335,
+        31.0
+       ],
+       "face": "top"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 5.202116526733578,
+       "element": 23,
+       "label": "Coupon-1.24",
+       "xy": [
+        11.916666665000001,
+        7.0
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -23.56444521249945,
+       "element": 92,
+       "label": "Coupon-1.93",
+       "xy": [
+        5.4166666665,
+        31.0
+       ],
+       "face": "top"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": 23.753310956837417,
+       "element": 96,
+       "label": "Coupon-1.97",
+       "xy": [
+        1.0833333335,
+        33.0
+       ],
+       "face": "top"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 189.2403777508237,
+       "element": 93,
+       "label": "Coupon-1.94",
+       "xy": [
+        7.5833333335,
+        31.0
+       ],
+       "face": "top"
+      }
+     }
+    }
+   ],
+   "overall": {
+    "S11": {
+     "tension": {
+      "value": 458.16533761380117,
+      "element": 87,
+      "label": "Coupon-1.88",
+      "xy": [
+       7.5833333335,
+       28.999999999999996
+      ],
+      "ply": 2,
+      "angle": 0.0,
+      "face": "bottom"
+     },
+     "compression": {
+      "value": -458.1653376138012,
+      "element": 87,
+      "label": "Coupon-1.88",
+      "xy": [
+       7.5833333335,
+       28.999999999999996
+      ],
+      "ply": 7,
+      "angle": 0.0,
+      "face": "top"
+     }
+    },
+    "S22": {
+     "tension": {
+      "value": 23.56444521249945,
+      "element": 92,
+      "label": "Coupon-1.93",
+      "xy": [
+       5.4166666665,
+       31.0
+      ],
+      "ply": 1,
+      "angle": 45.0,
+      "face": "bottom"
+     },
+     "compression": {
+      "value": -23.56444521249945,
+      "element": 92,
+      "label": "Coupon-1.93",
+      "xy": [
+       5.4166666665,
+       31.0
+      ],
+      "ply": 8,
+      "angle": 45.0,
+      "face": "top"
+     }
+    },
+    "S12": {
+     "largest": {
+      "value": -23.753310956837417,
+      "element": 96,
+      "label": "Coupon-1.97",
+      "xy": [
+       1.0833333335,
+       33.0
+      ],
+      "ply": 1,
+      "angle": 45.0,
+      "face": "bottom"
+     }
+    },
+    "mises": {
+     "largest": {
+      "value": 455.56826125997225,
+      "element": 87,
+      "label": "Coupon-1.88",
+      "xy": [
+       7.5833333335,
+       28.999999999999996
+      ],
+      "ply": 7,
+      "angle": 0.0,
+      "face": "top"
+     }
+    }
+   },
+   "basis": "whole"
+  },
   "convergence": {
    "studied": false,
    "reason": "the study covers gripped in-plane coupons; three point bending is a later step",

@@ -12,7 +12,7 @@ from anisotropy_engine.units import INCH, PSI
 from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.calculix_summary import calculix_test_method
-from anisotropy_fea.explain import fact_sheet, numbers_in, result_sentences
+from anisotropy_fea.explain import fact_sheet, method_sentences, numbers_in, result_sentences
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.fields import field_data
 from anisotropy_fea.intake import check_form, designation_for, read_values, spec_from_values
@@ -128,7 +128,8 @@ def test_every_number_the_method_sentences_print_is_a_fact(which, request):
                 printed.update({f"{v:.4g}", str(v), f"{v:g}"})
             elif isinstance(v, str):
                 printed.add(v)
-    method = [s for s in sentences if s.startswith(("As ASTM", "Through the hole", "The extensometer", "By "))]
+    method = method_sentences(facts)  # the standard's own sentences, after the answer's (ADR-0085)
+    assert sentences[-len(method):] == method
     assert len(method) == (4 if which == "specimen_b" else 3)
     for sentence in sentences:
         for token in numbers_in(sentence):

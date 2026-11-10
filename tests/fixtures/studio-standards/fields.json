@@ -95608,7 +95608,15 @@
     "xy": [
      2.0833333335,
      58.56818182
-    ]
+    ],
+    "fails": false,
+    "at_failure": {
+     "applied": 1.019086538972871,
+     "unit": "mm",
+     "reaction": 16531.39004045818,
+     "reaction_unit": "N",
+     "every_load": false
+    }
    },
    "tsai_hill": {
     "factor": 1.004294077424327,
@@ -95628,11 +95636,20 @@
     "xy": [
      2.0833333335,
      58.56818182
-    ]
+    ],
+    "fails": false,
+    "at_failure": {
+     "applied": 1.0042940774243272,
+     "unit": "mm",
+     "reaction": 16291.43009381427,
+     "reaction_unit": "N",
+     "every_load": false
+    }
    }
   },
   "equilibrium_residual": 7.8580342233181e-10,
   "free_residual": 6.548361852765083e-11,
+  "isotropic": false,
   "ply_peaks": [
    {
     "ply": 1,
@@ -96035,7 +96052,15 @@
     "xy": [
      10.416666666500001,
      181.15909090000002
-    ]
+    ],
+    "fails": false,
+    "at_failure": {
+     "applied": 1.0592515235100908,
+     "unit": "mm",
+     "reaction": 17182.93728395624,
+     "reaction_unit": "N",
+     "every_load": false
+    }
    },
    "tsai_hill": {
     "factor": 1.0332623776666228,
@@ -96055,10 +96080,578 @@
     "xy": [
      10.416666666500001,
      181.15909090000002
-    ]
+    ],
+    "fails": false,
+    "at_failure": {
+     "applied": 1.033262377666623,
+     "unit": "mm",
+     "reaction": 16761.347271404662,
+     "reaction_unit": "N",
+     "every_load": false
+    }
    }
   },
   "earliest_gauge": "tsai_hill",
+  "verdict": {
+   "basis": "gauge",
+   "earliest": "tsai_hill",
+   "factor": 1.0332623776666228,
+   "fails": false,
+   "outside_earlier": {
+    "criterion": "tsai_hill",
+    "factor": 1.004294077424327,
+    "fails": false,
+    "element": 66,
+    "label": "Strip-1.67",
+    "ply": 4,
+    "angle": 90.0,
+    "face": null,
+    "mode": "interactive",
+    "place": "at the edge of a gripped tab",
+    "touches_grip": true,
+    "xy": [
+     2.0833333335,
+     58.56818182
+    ]
+   }
+  },
+  "ply_extremes": {
+   "plies": [
+    {
+     "ply": 1,
+     "angle": 45.0,
+     "S11": {
+      "tension": {
+       "value": 495.12888391756087,
+       "element": 76,
+       "label": "Strip-1.77",
+       "xy": [
+        18.750000000000004,
+        63.70454545500001
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S22": {
+      "tension": {
+       "value": 33.86416247045322,
+       "element": 226,
+       "label": "Strip-1.227",
+       "xy": [
+        18.750000000000004,
+        186.29545455000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S12": {
+      "largest": {
+       "value": -45.8189657224307,
+       "element": 212,
+       "label": "Strip-1.213",
+       "xy": [
+        10.416666666500001,
+        176.02272729999999
+       ],
+       "face": null
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 486.4305130644534,
+       "element": 76,
+       "label": "Strip-1.77",
+       "xy": [
+        18.750000000000004,
+        63.70454545500001
+       ],
+       "face": null
+      }
+     }
+    },
+    {
+     "ply": 2,
+     "angle": 0.0,
+     "S11": {
+      "tension": {
+       "value": 1201.3422991204975,
+       "element": 218,
+       "label": "Strip-1.219",
+       "xy": [
+        10.416666666500001,
+        181.15909090000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S22": {
+      "tension": {
+       "value": 5.322665670535981,
+       "element": 224,
+       "label": "Strip-1.225",
+       "xy": [
+        10.416666666500001,
+        186.29545455000002
+       ],
+       "face": null
+      },
+      "compression": {
+       "value": -0.33626645941344263,
+       "element": 92,
+       "label": "Strip-1.93",
+       "xy": [
+        10.416666666500001,
+        79.11363636499999
+       ],
+       "face": null
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": 2.7430161371608097,
+       "element": 76,
+       "label": "Strip-1.77",
+       "xy": [
+        18.750000000000004,
+        63.70454545500001
+       ],
+       "face": null
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 1200.7734610787634,
+       "element": 218,
+       "label": "Strip-1.219",
+       "xy": [
+        10.416666666500001,
+        181.15909090000002
+       ],
+       "face": null
+      }
+     }
+    },
+    {
+     "ply": 3,
+     "angle": -45.0,
+     "S11": {
+      "tension": {
+       "value": 495.1288839213115,
+       "element": 226,
+       "label": "Strip-1.227",
+       "xy": [
+        18.750000000000004,
+        186.29545455000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S22": {
+      "tension": {
+       "value": 33.864162469437055,
+       "element": 223,
+       "label": "Strip-1.224",
+       "xy": [
+        6.25,
+        186.29545455000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S12": {
+      "largest": {
+       "value": 45.81896572243071,
+       "element": 212,
+       "label": "Strip-1.213",
+       "xy": [
+        10.416666666500001,
+        176.02272729999999
+       ],
+       "face": null
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 486.4305130609155,
+       "element": 226,
+       "label": "Strip-1.227",
+       "xy": [
+        18.750000000000004,
+        186.29545455000002
+       ],
+       "face": null
+      }
+     }
+    },
+    {
+     "ply": 4,
+     "angle": 90.0,
+     "S11": {
+      "tension": null,
+      "compression": {
+       "value": -364.49937908006734,
+       "element": 86,
+       "label": "Strip-1.87",
+       "xy": [
+        10.416666666500001,
+        73.97727273
+       ],
+       "face": null
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 60.469391667945835,
+       "element": 218,
+       "label": "Strip-1.219",
+       "xy": [
+        10.416666666500001,
+        181.15909090000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S12": {
+      "largest": {
+       "value": -2.7430161371608044,
+       "element": 76,
+       "label": "Strip-1.77",
+       "xy": [
+        18.750000000000004,
+        63.70454545500001
+       ],
+       "face": null
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 397.92067784458106,
+       "element": 86,
+       "label": "Strip-1.87",
+       "xy": [
+        10.416666666500001,
+        73.97727273
+       ],
+       "face": null
+      }
+     }
+    },
+    {
+     "ply": 5,
+     "angle": 90.0,
+     "S11": {
+      "tension": null,
+      "compression": {
+       "value": -364.49937908006734,
+       "element": 86,
+       "label": "Strip-1.87",
+       "xy": [
+        10.416666666500001,
+        73.97727273
+       ],
+       "face": null
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 60.469391667945835,
+       "element": 218,
+       "label": "Strip-1.219",
+       "xy": [
+        10.416666666500001,
+        181.15909090000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S12": {
+      "largest": {
+       "value": -2.7430161371608044,
+       "element": 76,
+       "label": "Strip-1.77",
+       "xy": [
+        18.750000000000004,
+        63.70454545500001
+       ],
+       "face": null
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 397.92067784458106,
+       "element": 86,
+       "label": "Strip-1.87",
+       "xy": [
+        10.416666666500001,
+        73.97727273
+       ],
+       "face": null
+      }
+     }
+    },
+    {
+     "ply": 6,
+     "angle": -45.0,
+     "S11": {
+      "tension": {
+       "value": 495.1288839213115,
+       "element": 226,
+       "label": "Strip-1.227",
+       "xy": [
+        18.750000000000004,
+        186.29545455000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S22": {
+      "tension": {
+       "value": 33.864162469437055,
+       "element": 223,
+       "label": "Strip-1.224",
+       "xy": [
+        6.25,
+        186.29545455000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S12": {
+      "largest": {
+       "value": 45.81896572243071,
+       "element": 212,
+       "label": "Strip-1.213",
+       "xy": [
+        10.416666666500001,
+        176.02272729999999
+       ],
+       "face": null
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 486.4305130609155,
+       "element": 226,
+       "label": "Strip-1.227",
+       "xy": [
+        18.750000000000004,
+        186.29545455000002
+       ],
+       "face": null
+      }
+     }
+    },
+    {
+     "ply": 7,
+     "angle": 0.0,
+     "S11": {
+      "tension": {
+       "value": 1201.3422991204975,
+       "element": 218,
+       "label": "Strip-1.219",
+       "xy": [
+        10.416666666500001,
+        181.15909090000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S22": {
+      "tension": {
+       "value": 5.322665670535981,
+       "element": 224,
+       "label": "Strip-1.225",
+       "xy": [
+        10.416666666500001,
+        186.29545455000002
+       ],
+       "face": null
+      },
+      "compression": {
+       "value": -0.33626645941344263,
+       "element": 92,
+       "label": "Strip-1.93",
+       "xy": [
+        10.416666666500001,
+        79.11363636499999
+       ],
+       "face": null
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": 2.7430161371608097,
+       "element": 76,
+       "label": "Strip-1.77",
+       "xy": [
+        18.750000000000004,
+        63.70454545500001
+       ],
+       "face": null
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 1200.7734610787634,
+       "element": 218,
+       "label": "Strip-1.219",
+       "xy": [
+        10.416666666500001,
+        181.15909090000002
+       ],
+       "face": null
+      }
+     }
+    },
+    {
+     "ply": 8,
+     "angle": 45.0,
+     "S11": {
+      "tension": {
+       "value": 495.12888391756087,
+       "element": 76,
+       "label": "Strip-1.77",
+       "xy": [
+        18.750000000000004,
+        63.70454545500001
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S22": {
+      "tension": {
+       "value": 33.86416247045322,
+       "element": 226,
+       "label": "Strip-1.227",
+       "xy": [
+        18.750000000000004,
+        186.29545455000002
+       ],
+       "face": null
+      },
+      "compression": null
+     },
+     "S12": {
+      "largest": {
+       "value": -45.8189657224307,
+       "element": 212,
+       "label": "Strip-1.213",
+       "xy": [
+        10.416666666500001,
+        176.02272729999999
+       ],
+       "face": null
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 486.4305130644534,
+       "element": 76,
+       "label": "Strip-1.77",
+       "xy": [
+        18.750000000000004,
+        63.70454545500001
+       ],
+       "face": null
+      }
+     }
+    }
+   ],
+   "overall": {
+    "S11": {
+     "tension": {
+      "value": 1201.3422991204975,
+      "element": 218,
+      "label": "Strip-1.219",
+      "xy": [
+       10.416666666500001,
+       181.15909090000002
+      ],
+      "ply": 2,
+      "angle": 0.0,
+      "face": null
+     },
+     "compression": {
+      "value": -364.49937908006734,
+      "element": 86,
+      "label": "Strip-1.87",
+      "xy": [
+       10.416666666500001,
+       73.97727273
+      ],
+      "ply": 4,
+      "angle": 90.0,
+      "face": null
+     }
+    },
+    "S22": {
+     "tension": {
+      "value": 60.469391667945835,
+      "element": 218,
+      "label": "Strip-1.219",
+      "xy": [
+       10.416666666500001,
+       181.15909090000002
+      ],
+      "ply": 4,
+      "angle": 90.0,
+      "face": null
+     },
+     "compression": {
+      "value": -0.33626645941344263,
+      "element": 92,
+      "label": "Strip-1.93",
+      "xy": [
+       10.416666666500001,
+       79.11363636499999
+      ],
+      "ply": 2,
+      "angle": 0.0,
+      "face": null
+     }
+    },
+    "S12": {
+     "largest": {
+      "value": 45.81896572243071,
+      "element": 212,
+      "label": "Strip-1.213",
+      "xy": [
+       10.416666666500001,
+       176.02272729999999
+      ],
+      "ply": 3,
+      "angle": -45.0,
+      "face": null
+     }
+    },
+    "mises": {
+     "largest": {
+      "value": 1200.7734610787634,
+      "element": 218,
+      "label": "Strip-1.219",
+      "xy": [
+       10.416666666500001,
+       181.15909090000002
+      ],
+      "ply": 2,
+      "angle": 0.0,
+      "face": null
+     }
+    }
+   },
+   "basis": "gauge"
+  },
   "test_method": {
    "designation": "ASTM D3039/D3039M-17",
    "width": 25.0,
@@ -96096,6 +96689,16 @@
      "Strip-1.182"
     ]
    },
+   "reduction": {
+    "area": "gross area",
+    "area_clause": "D3039 §11.2.2, C1869 Eq 2",
+    "stress_clause": "D3039 Eq 6, C1869 Eq 1",
+    "strain_clause": "D3039 Eq 7",
+    "modulus": "chord modulus",
+    "modulus_clause": "D3039 Table 3, Eq 8",
+    "range": "",
+    "poisson_clause": "D3039 Eq 9"
+   },
    "units": {
     "length": "mm",
     "area": "mm²",
@@ -96106,6 +96709,7 @@
    "laminate_theory": {
     "modulus": 60.84853817553844,
     "poisson": 0.3151731176093222,
+    "isotropic": false,
     "note": "the laminate's modulus along the pull and its Poisson's ratio from the engine's ABD (classical laminate theory)"
    },
    "fpf": {
@@ -96300,7 +96904,7 @@
      },
      "nx": 6,
      "ny": 50,
-     "solve_s": 0.63
+     "solve_s": 0.09
     },
     {
      "factor": 2,
@@ -96460,7 +97064,7 @@
      },
      "nx": 12,
      "ny": 100,
-     "solve_s": 2.29
+     "solve_s": 0.16
     },
     {
      "factor": 4,
@@ -96620,7 +97224,7 @@
      },
      "nx": 24,
      "ny": 200,
-     "solve_s": 9.21
+     "solve_s": 0.58
     }
    ],
    "left_out": [],

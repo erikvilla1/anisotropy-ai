@@ -4,6 +4,9 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ## [Unreleased]
 
+### Added
+- A coupon's result answers the engineer's questions (ADR-0085): by each criterion, whether a ply fails at the applied loading and, if not, the loading at first-ply failure (the factor times the applied displacement or force and times the grip's reaction), with the ply, mode, element and position, read in the gauge section, the clamped edge of a grip reported apart (`summary.verdict`, `fails` and `at_failure` on every first-ply-failure entry); the largest ply stresses in the gauge section with tension and compression apart (`summary.ply_extremes`). The explanation says it in those words, every number a fact.
+
 ### Fixed
 - A review of the D638 work against the D638-22 and D638-14 copies (ADR-0075 amendment 1) found every value of Fig. 1 right and fixed what misled. A coupon gripped on its end rows is judged by what its grips hold (D638's distance between the grips, C1869's grip length), and one isotropic material is no D3039 Table 2 class, no ceramic composite for C1869, and a plastic only when the engineer says so under D638. A soft plastic is no unit slip (1 MPa up for one isotropic material; a deck's derived shear modulus is not checked). A dog-bone's extensometer must lie in its narrow section and its grips stay out of it. The page names D638's Type I as such. A standard's Size from leaves with that standard, a dog-bone size clears the tab rows and a strip's size the dog-bone rows. The extensometer clause cites §5.2.2, the grip distance note J, and a coupon stated in inches is told the millimetres govern (§1.5).
 - Christopher Valerio and Erik Villa are named co-founders: the About page's team cards read "Co-founder and CEO" and "Co-founder", and the contact page "Erik Villa, co-founder", as `docs/brain/people.md` now records (Erik, 2026-11-09).

@@ -1,6 +1,7 @@
 {
  "units": "mm-MPa",
  "labels": {
+  "area": "mm²",
   "force": "N",
   "length": "mm",
   "stress": "MPa",
@@ -43081,9 +43082,210 @@
   "fpf": {},
   "equilibrium_residual": 2.0477841644606087e-11,
   "free_residual": 1.5678291998000304e-11,
+  "isotropic": false,
+  "ply_peaks": [
+   {
+    "ply": 1,
+    "angle": 0.0,
+    "S11": {
+     "value": -28.467976451837476,
+     "element": 136,
+     "label": "Coupon-1.137",
+     "xy": [
+      53.12500000000001,
+      53.125
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S22": {
+     "value": -28.46797645188538,
+     "element": 136,
+     "label": "Coupon-1.137",
+     "xy": [
+      53.12500000000001,
+      53.125
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    },
+    "S12": {
+     "value": 18.746307046836776,
+     "element": 240,
+     "label": "Coupon-1.241",
+     "xy": [
+      3.125,
+      96.87499999999999
+     ],
+     "face": "bottom",
+     "touches_grip": false
+    }
+   }
+  ],
+  "clt": null,
   "earliest": null,
   "fpf_gauge": {},
   "earliest_gauge": null,
+  "verdict": null,
+  "ply_extremes": {
+   "plies": [
+    {
+     "ply": 1,
+     "angle": 0.0,
+     "S11": {
+      "tension": {
+       "value": 28.467976451837476,
+       "element": 136,
+       "label": "Coupon-1.137",
+       "xy": [
+        53.12500000000001,
+        53.125
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -28.467976451837476,
+       "element": 136,
+       "label": "Coupon-1.137",
+       "xy": [
+        53.12500000000001,
+        53.125
+       ],
+       "face": "bottom"
+      }
+     },
+     "S22": {
+      "tension": {
+       "value": 28.46797645188538,
+       "element": 136,
+       "label": "Coupon-1.137",
+       "xy": [
+        53.12500000000001,
+        53.125
+       ],
+       "face": "top"
+      },
+      "compression": {
+       "value": -28.46797645188538,
+       "element": 136,
+       "label": "Coupon-1.137",
+       "xy": [
+        53.12500000000001,
+        53.125
+       ],
+       "face": "bottom"
+      }
+     },
+     "S12": {
+      "largest": {
+       "value": 18.746307046836776,
+       "element": 240,
+       "label": "Coupon-1.241",
+       "xy": [
+        3.125,
+        96.87499999999999
+       ],
+       "face": "bottom"
+      }
+     },
+     "mises": {
+      "largest": {
+       "value": 32.4756458847565,
+       "element": 240,
+       "label": "Coupon-1.241",
+       "xy": [
+        3.125,
+        96.87499999999999
+       ],
+       "face": "bottom"
+      }
+     }
+    }
+   ],
+   "overall": {
+    "S11": {
+     "tension": {
+      "value": 28.467976451837476,
+      "element": 136,
+      "label": "Coupon-1.137",
+      "xy": [
+       53.12500000000001,
+       53.125
+      ],
+      "ply": 1,
+      "angle": 0.0,
+      "face": "top"
+     },
+     "compression": {
+      "value": -28.467976451837476,
+      "element": 136,
+      "label": "Coupon-1.137",
+      "xy": [
+       53.12500000000001,
+       53.125
+      ],
+      "ply": 1,
+      "angle": 0.0,
+      "face": "bottom"
+     }
+    },
+    "S22": {
+     "tension": {
+      "value": 28.46797645188538,
+      "element": 136,
+      "label": "Coupon-1.137",
+      "xy": [
+       53.12500000000001,
+       53.125
+      ],
+      "ply": 1,
+      "angle": 0.0,
+      "face": "top"
+     },
+     "compression": {
+      "value": -28.46797645188538,
+      "element": 136,
+      "label": "Coupon-1.137",
+      "xy": [
+       53.12500000000001,
+       53.125
+      ],
+      "ply": 1,
+      "angle": 0.0,
+      "face": "bottom"
+     }
+    },
+    "S12": {
+     "largest": {
+      "value": 18.746307046836776,
+      "element": 240,
+      "label": "Coupon-1.241",
+      "xy": [
+       3.125,
+       96.87499999999999
+      ],
+      "ply": 1,
+      "angle": 0.0,
+      "face": "bottom"
+     }
+    },
+    "mises": {
+     "largest": {
+      "value": 32.4756458847565,
+      "element": 240,
+      "label": "Coupon-1.241",
+      "xy": [
+       3.125,
+       96.87499999999999
+      ],
+      "ply": 1,
+      "angle": 0.0,
+      "face": "bottom"
+     }
+    }
+   },
+   "basis": "whole"
+  },
   "convergence": {
    "studied": false,
    "reason": "the study covers gripped in-plane coupons; plate is a later step",
