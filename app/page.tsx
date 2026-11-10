@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
-import { HeroLens } from "@/components/home/hero-lens";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
@@ -48,7 +47,7 @@ export default function Home() {
           {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
           {heroVideo ? <HeroVideoKeeper /> : null}
         </div>
-        <HeroLens />
+        {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
         <div className="home-hero-grid">
           <h1 className="home-hero-title" id="home-hero-title">
             Composites.

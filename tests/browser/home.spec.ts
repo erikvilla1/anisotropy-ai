@@ -51,30 +51,12 @@ test("the hero's words are only the headline and the two paragraphs (ADR-0077)",
   await expect(page.locator(".site-header")).toHaveCSS("height", "56px");
 });
 
-test("the hero's lens plays our own results with a caption, on wide screens only (ADR-0071)", async ({ page }) => {
+test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }) => {
   await playApi(page, []);
   await page.goto("/");
-  const lens = page.locator("#overview .home-hero-lens");
-  await expect(lens).toBeVisible();
-  await expect(lens).toHaveAttribute("aria-hidden", "true");
-  // The committed recording, offered only to wide screens that have not asked for reduced motion.
-  const source = lens.locator("video source");
-  await expect(source).toHaveAttribute("src", "/assets/hero-lens/lens.mp4");
-  await expect(source).toHaveAttribute("media", "(min-width: 1024px) and (prefers-reduced-motion: no-preference)");
+  await expect(page.locator("#overview .home-hero-lens")).toHaveCount(0);
+  // The recording stays committed, ready for the lens's return.
   expect((await page.request.get("/assets/hero-lens/lens.mp4")).status()).toBe(200);
-  // The caption names a model of the loop, and never a result value.
-  await expect(lens.locator(".home-hero-lens-caption b")).toHaveText(/^(UNNOTCHED TENSION|THREE-POINT BENDING|PLATE UNDER PRESSURE)$/);
-  // The headline stays above the lens.
-  const order = await page.evaluate(() => {
-    const title = document.querySelector(".home-hero-title")!.getBoundingClientRect();
-    const glass = document.querySelector(".home-hero-lens-glass")!.getBoundingClientRect();
-    const x = (Math.max(title.left, glass.left) + Math.min(title.right, glass.right)) / 2;
-    const y = (Math.max(title.top, glass.top) + Math.min(title.bottom, glass.bottom)) / 2;
-    return document.elementFromPoint(x, y)?.closest(".home-hero-title") !== null;
-  });
-  expect(order).toBe(true);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(lens).toBeHidden();
 });
 
 test("the demo sits on its heading's columns, and the engine's answer on the same ones (ADR-0077 amendment 10)", async ({ page }) => {

@@ -1,6 +1,6 @@
 # ADR-0071: The hero lens plays our own public results, recorded from the workspace's viewer in the Turbo spectrum
 
-- Status: Proposed
+- Status: Proposed; the lens is hidden for now (amendment 1)
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 (the lens showing models of different applications; "try spectrum?" for its colours) | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) amendments 3 and 9 (the hero, the first lens and its removal), [ADR-0069](ADR-0069-the-licensed-hero-clip-stays-out-of-the-public-repository-a-script-makes-its-web-copy-and-the-page-plays-it-when-present.md) (the clip under it), [ADR-0045](ADR-0045-abaqus-without-the-gui-odbaccess-reports-and-an-optional-second-reference.md) (the Abaqus licence), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) (what stays off the repository), [ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) (the viewer's shader), `scripts/hero-lens.ts`, `components/home/hero-lens.tsx`, `lib/hero-lens.ts`, `app/home.css`, `tests/hero-lens.test.ts`, `tests/browser/home.spec.ts`
@@ -79,3 +79,11 @@ Options 3, 4c and 5.
 - The lead or a visitor reads the lens's colours as a claim about a result. The caption would then need the values and a run record, or the lens would need to go.
 - The home page's load time or its largest paint gets worse by more than the lens's 767 KB would explain.
 - The team gets a licence that covers marketing renders, or results of its own it can publish, and prefers those.
+
+## Amendment 1, 2026-11-10 (the lens hidden for now)
+
+**Context.** The lead asked to "hide the lens thing for now".
+
+**Decision.** The home page no longer renders the lens. Everything that makes it stays in the repository: the component, its styles, the recording, its poster, the timing file and the script. Adding `<HeroLens />` back to the hero in `app/page.tsx` brings it back. Its browser test now checks that the hero has no lens and that the recording is still served.
+
+**Evidence.** On 2026-11-10, against a build without the hero clip and with the local engine running, `home.spec.ts`, `calculator.spec.ts` and `workspace.spec.ts` passed 19 of 19, including the new check. `npm run typecheck` was clean, and `npm test` passed 196 with 1 skipped (after merging main).
