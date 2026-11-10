@@ -34,6 +34,22 @@ How to take the live numbers, once a service token exists (the walkthrough, "Che
 
 `ANISOTROPY_JOBS_PER_USER_PER_DAY` (off unless set; needs run records on): one running job per person, at most that many a day, UTC, counted in the `jobs` table; 429 with the reason, which the chat shows under "The run could not start". Tests: `api/tests/test_settings.py` (the number, the refusals), `api/tests/test_coupon_jobs_api.py` (a second running job refused naming the first; the fourth job of a day refused by a cap of three; another person not limited; the one-at-a-time 409 unchanged), `api/tests/test_run_records_db.py` (the two counts, by email or by actor). Results in the pull request.
 
+## Measured on the live site, 2026-11-07
+
+The service token exists and the Access application carries its Service Auth policy (the founder made both in the Zero Trust dashboard; the token sits in the root `.env`, never in the repository). With it:
+
+| Quantity | How | Value | Status |
+| --- | --- | --- | --- |
+| Cold start of the container | the first `GET /api/healthz` after the policy took, the container asleep: 503 at 0 s and at 15 s, 200 at 30 s | between 30 and 45 s, at the 15 s grain of the probe | measured |
+| Warm answer | three `GET /api/healthz` in a row, the container awake | 0.66, 0.52, 0.75 s from this machine | measured |
+| The live browser test | `PREVIEW_URL=https://anisotropy.dev npx playwright test --config playwright.studio-live.config.ts` with the token, 01:47 to 01:49 UTC | 1 passed (1.6 min end to end, the page included) | measured |
+| Job time on Cloudflare (standard-3), the public coupon, PDF included | `GET /api/v1/coupon-jobs`: the job's `started_at` to `finished_at` | 80 s; 12 files; "57 of 57 recorded values agree with CalculiX; our reaction +0.35 % from CalculiX's" | measured |
+| The project store on the hosted tier (ADR-0062 part 6) | `GET /api/v1/projects` with the token (no email: the actor owns it) | one project, kind fea, designation `IM78552-UNT-L1`, form version 0.6; the job's row names it | measured |
+| Peak memory on Cloudflare | the Containers dashboard | not read in this session | UNVERIFIED |
+| Cost per job | the billing page | not read in this session | UNVERIFIED |
+
+Seen in the hosted jobs list and worth a fix: two jobs of 2026-11-06, started by the founder signed in, were refused with "IM7-UNT-L2: ours/runs/ holds attempt-02_2026-11-06 but the attempt log ends at row 01; add the missing rows to the README first (ADR-0039)". The hosted store's copy of that coupon holds a run folder whose row never reached the coupon's README: the two were written out of step, most likely a job that stored its run folder and stopped before the README went to the bucket, or a restore that brought one back without the other. Until the coupon's README is repaired (a row for attempt 02) that coupon refuses every new run on the hosted tier; a fresh coupon, as the live test's, runs. Not fixed here.
+
 ## After the secrets, 2026-11-07, 22:30 UTC
 
 The founder set the four secrets (`versions secret put`, since a preview version sat above the deployed one) and ran the deploy workflow by hand (3 min 21 s, green). Then, through the service token:
