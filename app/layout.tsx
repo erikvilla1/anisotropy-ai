@@ -7,6 +7,7 @@ import "./globals.css";
 import "./expansion.css";
 import "./research.css";
 import "./provenance.css";
+import "./sections.css";
 import { SiteHeader, SiteFooter } from "@/components/site-shell";
 import { PageTransition } from "@/components/page-transition";
 

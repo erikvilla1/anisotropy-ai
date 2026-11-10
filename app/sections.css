@@ -1,0 +1,134 @@
+/* The section kit (ADR-0077 amendment 11): the parts every page's sections are set with, after PhysicsX's sections as measured
+ * for the home demo (amendment 7). A band is a full-width section, 88 px above and below and 32 px at the sides, like the hero and
+ * the header. It is dark by default; `is-light` sets the site's colour variables to their light values for the band, so
+ * anything inside that reads the variables follows. A band's head is a 12-column grid: a monospace label with a tick in columns
+ * 1 to 3, and the statement (the heading, then an optional paragraph) from column 4 behind a 1 px rule that sits in the middle
+ * of the gutter, so the text starts exactly on the column. `band-grid` gives a band's content the same 12 columns. */
+.band {
+  padding: 88px 32px;
+  background: var(--bg);
+  color: var(--text);
+}
+.band + .band:not(.is-light),
+.band.is-light + .band.is-light {
+  border-top: 1px solid var(--line);
+}
+.band.is-light {
+  --bg: #ffffff;
+  --panel: #f6f6f6;
+  --raised: #efefef;
+  --line: #e1e1e1;
+  --text: #111111;
+  --muted: #666666;
+  --accent: #111111;
+}
+.band-head {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  margin-bottom: 64px;
+}
+.band-label {
+  grid-column: 1 / 4;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.band-label::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 11px;
+  background: currentColor;
+}
+.band-statement {
+  grid-column: 4 / 11;
+  display: grid;
+  gap: 16px;
+  margin-left: -16px;
+  padding-left: 15px;
+  border-left: 1px solid currentColor;
+}
+.band-statement h2 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 41px;
+  letter-spacing: -0.01em;
+}
+.band-statement p {
+  max-width: 36em;
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  color: var(--muted);
+}
+.band-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 32px;
+}
+/* A plain card on either ground: it reads the band's variables. */
+.band-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 24px;
+  min-width: 0;
+}
+/* The filled button is the accent colour, which is near black on a light band, so its words turn white there. */
+.band.is-light .button.primary {
+  color: #ffffff;
+}
+.band.is-light .button.primary:hover {
+  background: #333333;
+  border-color: #333333;
+}
+@media (max-width: 1023px) {
+  .band-head {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
+    margin-bottom: 48px;
+  }
+  .band-label,
+  .band-statement {
+    grid-column: 1;
+  }
+  .band-statement {
+    margin-left: 0;
+  }
+  .band-statement h2 {
+    font-size: 30px;
+    line-height: 34px;
+  }
+}
+@media (max-width: 760px) {
+  .band {
+    padding: 64px 20px;
+  }
+  .band-head {
+    margin-bottom: 36px;
+  }
+  .band-statement h2 {
+    font-size: 24px;
+    line-height: 28px;
+  }
+  .band-statement p {
+    font-size: 16px;
+    line-height: 24px;
+  }
+  .band-label {
+    font-size: 13px;
+  }
+  .band-grid {
+    gap: 20px;
+  }
+}
