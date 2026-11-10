@@ -586,6 +586,24 @@ class CouponCheckResponse(Contract):
     preview: dict[str, Any] | None
 
 
+class LiveSolveResponse(Contract):
+    """The live solve (ADR-0086): the setup check and, when nothing blocks, our kernel's fields with the answer (ADR-0085) and their
+    explanation, as the fea package wrote them; a preview, with no mesh study and no CalculiX. `fields`, `explanation` and `preview` are
+    null when nothing was solved or drawn. `seconds` is the API's, from the request to the files read; `timings` the tool's stages."""
+
+    run_id: str | None
+    state: str
+    designation: str | None
+    solver: str
+    warm: bool
+    seconds: float
+    timings: dict[str, float]
+    checklist: dict[str, Any]
+    preview: dict[str, Any] | None
+    fields: dict[str, Any] | None
+    explanation: dict[str, Any] | None
+
+
 class TowTestRequest(CouponCheckRequest):
     """A fibre tow record under ASTM D4018 (ADR-0074): the tow test's rows and its specimens as one JSON object, the way the studio states
     them; `test` is "fibre tow tension". The record keeps the values' digest, as a check does, never the rows."""

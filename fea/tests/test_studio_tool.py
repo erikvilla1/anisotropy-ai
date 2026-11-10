@@ -87,7 +87,7 @@ def test_fixtures_hold_a_solved_public_coupon(tmp_path):
     out = tmp_path / "fixtures"
     done = run_tool("--root", str(tmp_path / "root"), "fixtures", str(values_file(tmp_path)), "--out", str(out))
     assert done.returncode == 0, done.stderr
-    assert sorted(p.name for p in out.iterdir()) == [f"{DESIGNATION}-abaqus.inp", "checklist.json", "explanation.json", "fields.json", "preview.json"]
+    assert sorted(p.name for p in out.iterdir()) == ["checklist.json", "explanation.json", "fields.json", "preview.json"]  # the deck is solved in a folder of its own
     fields = json.loads((out / "fields.json").read_text(encoding="utf-8"))
     explanation = json.loads((out / "explanation.json").read_text(encoding="utf-8"))
     assert fields["coupon"]["designation"] == DESIGNATION and fields["summary"]["reaction"]["value"] > 0 and set(fields["summary"]["fpf"]) == {"max_stress", "tsai_hill"}
@@ -106,3 +106,52 @@ def test_the_form_definition_the_website_imports_is_the_packages():
     assert len(keys) == len(set(keys)) and "criteria" in keys and "f12_star" in keys and keys[0] == "filled_by"
     assert data["tests"]["unnotched tension"] == "unnotched_tension" and data["criteria"][0] == "all"
     assert data["library"][0]["Id"] and "E1 (MPa)" in data["library"][0] and len(data["glossary"]) >= 7
+
+
+# --- the live solve (ADR-0086) ---------------------------------------------------------------------------------------------------
+
+
+def test_live_writes_the_kernels_answer_and_its_seconds_but_no_mesh_study(tmp_path):
+    out = tmp_path / "live"
+    done = run_tool("--root", str(tmp_path / "root"), "live", str(values_file(tmp_path)), "--out", str(out))
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.startswith(f"ready: {DESIGNATION}, solved by our kernel in")
+    assert sorted(p.name for p in out.iterdir()) == ["checklist.json", "explanation.json", "fields.json", "preview.json", "summary.json", "timings.json"]
+    text = (out / "fields.json").read_text(encoding="utf-8")
+    fields, summary = json.loads(text), json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    assert fields["summary"] == summary and "convergence" not in summary, "a preview carries no mesh study (ADR-0068)"
+    assert summary["verdict"]["basis"] == "gauge" and summary["fpf_gauge"], "the answer of ADR-0085"
+    assert text.count("\n") == 1, "the fields are written compactly, the largest file by far"
+    timings = json.loads((out / "timings.json").read_text(encoding="utf-8"))
+    assert {"imports", "check", "deck", "solve", "fields", "write", "total"} <= set(timings) and all(v >= 0 for v in timings.values())
+    assert timings["total"] >= timings["check"] + timings["solve"]
+
+
+def test_live_on_a_blocked_setup_writes_the_checklist_and_solves_nothing(tmp_path):
+    values = {"form_version": FORM_VERSION, **{k: v for k, v in PUBLIC_FILL.items() if k != "length"}}
+    path = tmp_path / "values.json"
+    path.write_text(json.dumps(values), encoding="utf-8")
+    out = tmp_path / "live"
+    done = run_tool("--root", str(tmp_path / "root"), "live", str(path), "--out", str(out))
+    assert done.returncode == 0 and done.stdout.startswith("blocked: nothing solved"), done.stdout + done.stderr
+    assert "fields.json" not in {p.name for p in out.iterdir()} and json.loads((out / "checklist.json").read_text(encoding="utf-8"))["state"] == "blocked"
+
+
+def test_serve_answers_one_request_per_line_and_outlives_a_bad_one(tmp_path):
+    worker = subprocess.Popen([sys.executable, str(STUDIO), "--root", str(tmp_path / "root"), "serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
+    try:
+        assert json.loads(worker.stdout.readline())["ready"] is True
+        values = values_file(tmp_path)
+        answers = []
+        for request in (json.dumps({"values": str(values), "out": str(tmp_path / "a")}), "not json", json.dumps({"values": str(values), "out": str(tmp_path / "b")})):
+            worker.stdin.write(request + "\n")
+            worker.stdin.flush()
+            answers.append(json.loads(worker.stdout.readline()))
+        assert answers[0] == {"state": "ready"} and "JSONDecodeError" in answers[1]["error"] and answers[2] == {"state": "ready"}
+        assert (tmp_path / "b" / "fields.json").is_file()
+        assert "imports" not in json.loads((tmp_path / "b" / "timings.json").read_text(encoding="utf-8")), "a warm worker imported once, before"
+        worker.stdin.close()
+        assert worker.wait(timeout=60) == 0
+    finally:
+        worker.kill()
