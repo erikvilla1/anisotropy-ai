@@ -232,6 +232,24 @@ export async function checkSetup(apiBase: string, values: StudioValues, signal?:
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview };
 }
 
+/** The live solve (ADR-0086): the setup check and, when nothing blocks, our kernel's fields and explanation, a preview with no mesh study
+ * and no CalculiX; `seconds` at the API, `warm` when a warm worker answered. Every number is the fea package's (ADR-0051). */
+export type LiveAnswer = CheckAnswer & { fields: Fields | null; explanation: Explanation | null; seconds: number; warm: boolean;
+  timings: Record<string, number> };
+
+export async function liveSolve(apiBase: string, values: StudioValues, signal?: AbortSignal, projectId: string | null = null): Promise<LiveAnswer> {
+  const body = { values, ...(projectId ? { project_id: projectId } : {}) };
+  const payload = await call(`${base(apiBase)}/v1/coupon-jobs/live`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the live solve");
+  if (!isObject(payload)) throw new StudioError("The live solve answered with an unexpected shape.");
+  const checklist = readChecklist(payload.checklist);
+  const preview = payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview);
+  const fields = payload.fields === null || payload.fields === undefined ? null : readFields(payload.fields);
+  const explanation = payload.explanation === null || payload.explanation === undefined ? null : readExplanation(payload.explanation);
+  const timings = isObject(payload.timings) ? Object.fromEntries(Object.entries(payload.timings).filter(([, v]) => typeof v === "number")) as Record<string, number> : {};
+  return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview,
+    fields, explanation, seconds: typeof payload.seconds === "number" ? payload.seconds : 0, warm: payload.warm === true, timings };
+}
+
 /** A fibre tow record's answer (ADR-0074): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
  * g/cm³, mm², microstrain). Every number is the engine's; the page shows them as they come. */
 export type TowStats = { n: number; mean: number; sd: number; cv: number };

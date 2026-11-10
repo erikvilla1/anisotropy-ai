@@ -11,7 +11,8 @@ const pickStandard = (page: Page, designation: string) => page.getByTestId("ques
 const standardChoice = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`);
 
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
-async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[] }, options: { missFirstFieldsRead?: boolean } = {}) {
+async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[] },
+  options: { missFirstFieldsRead?: boolean; live?: boolean } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
@@ -27,6 +28,16 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
       (calls.tows ??= []).push(request.postDataJSON());
       const answer = fixture("tow", "studio-tow");
       return json(route, { run_id: "run-6", state: answer.checklist.state, checklist: answer.checklist, result: answer.result });
+    }
+    if (path === "/v1/coupon-jobs/live" && request.method() === "POST") { // our kernel's live answer (ADR-0086), played from the same fixtures
+      (calls.lives ??= []).push(request.postDataJSON());
+      const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
+      const d = values.test === BENDING ? "studio-bending" : values.test === "plate" ? "studio-plate" : "studio";
+      const answer = { run_id: "run-live", state: "ready", designation: fixture("checklist", d).designation, solver: "kernel", warm: true, seconds: 0.6,
+        timings: { check: 0.18, solve: 0.01 }, checklist: fixture("checklist", d), preview: fixture("preview", d) };
+      // by default it answers like a check, so the scenarios below keep to what they test; `live` plays the kernel's fields too
+      return json(route, options.live ? { ...answer, fields: fixture("fields", d), explanation: fixture("explanation", d) }
+        : { ...answer, fields: null, explanation: null });
     }
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
@@ -715,4 +726,32 @@ test("the fibre tow test swaps the panels for the tow's, and Calculate shows eac
   await rail.getByTestId("question-test").locator('input[value="unnotched tension"]').check(); // back to a coupon: its panels, the tow's standard cleared
   await expect(page.getByTestId("tow-form")).toHaveCount(0);
   await expect(rail.getByTestId("question-standard").locator("input:checked")).toHaveValue("none");
+});
+
+test("every settled edit is answered by our kernel live, labelled a preview, and a full run replaces it (ADR-0086)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[], lives: [] as unknown[] };
+  await mockApi(page, calls, { live: true });
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  // no Run pressed: the complete example is answered by the live solve, with the answer card and the banner
+  await expect(page.getByTestId("results")).toHaveAttribute("data-source", "live", { timeout: 10_000 });
+  await expect(page.getByTestId("live-banner")).toContainText("Preview: our kernel, answered in 0.6 s; not yet checked by CalculiX or the mesh study.");
+  await expect(page.getByTestId("answer-headline")).toContainText("Holds at the applied loading in the gauge section");
+  await expect(page.getByTestId("solve-button")).toHaveText("Run full analysis");
+  expect(calls.lives.length).toBe(1);
+  expect(calls.solves.length).toBe(0);
+  // a value typed key by key is one settled edit: one live solve, with the rows as they stand
+  const value = page.getByLabel("Value (mm or N)", { exact: true });
+  await value.fill("");
+  await value.pressSequentially("0.75", { delay: 60 });
+  await expect.poll(() => calls.lives.length, { timeout: 10_000 }).toBe(2);
+  await page.waitForTimeout(1500);
+  expect(calls.lives.length).toBe(2);
+  expect((calls.lives[1] as { values: Record<string, unknown> }).values.value).toBe(0.75);
+  // the full run: CalculiX, the mesh study and the package; its fields replace the preview and the banner goes
+  await page.getByLabel("Run by", { exact: true }).fill("A. Tester");
+  await page.getByTestId("solve-button").click();
+  await expect(page.getByTestId("results")).toHaveAttribute("data-source", "run", { timeout: 20_000 });
+  await expect(page.getByTestId("live-banner")).toHaveCount(0);
+  expect(calls.solves.length).toBe(1);
 });

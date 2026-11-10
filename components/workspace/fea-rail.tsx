@@ -228,7 +228,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
           <span className="studio-hint">Named in the attempt log and the CalculiX record; remembered in this browser.</span>
         </div>
         <div className="studio-buttons">
-          <button type="button" className="studio-button studio-button-primary" onClick={solve} disabled={busy || !apiBaseUrl || (checked !== null && checked.state !== "ready")} data-testid="solve-button">Run analysis</button>
+          <button type="button" className="studio-button studio-button-primary" onClick={solve} disabled={busy || !apiBaseUrl || (checked !== null && checked.state !== "ready")} data-testid="solve-button">Run full analysis</button>
         </div>
         {job ? <p className="studio-hint">{job.state === "queued" ? `Queued: ${job.message ?? "waiting for a free solver"}.` : job.state === "running" ? `Running: ${job.stage ?? "starting"}.` : job.state === "done" ? "Done. The results are in the centre, the files under Outputs." : `${job.state}: ${job.message ?? ""}`}</p> : null}
       </StepPanel>

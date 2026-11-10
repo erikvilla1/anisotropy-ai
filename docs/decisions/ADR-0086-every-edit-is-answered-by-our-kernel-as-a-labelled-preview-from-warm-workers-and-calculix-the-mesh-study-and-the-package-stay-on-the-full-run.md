@@ -55,7 +55,7 @@ How the fields reach the page:
 - **API:**
   - `api/src/anisotropy_api/live.py` (`LiveSolver`); `POST /v1/coupon-jobs/live` in `main.py`; `LiveSolveResponse` (for the documentation); `GZipMiddleware`; the setting `ANISOTROPY_LIVE_WORKERS`.
   - `api/tests/test_live_api.py`: ready, blocked, one warm worker kept, a worker that errs kept, one that stops replaced, slow is 504 and replaced, busy is 429, no workers, no uv, the setting, and the record.
-- **The page's use of it is part 4.**
+- Part 4 (the page): once the setup has every row but the engineer's name, each settled edit, on a panel or in the chat, asks for a live solve 800 ms after it, the previous one aborted, never while a full run goes and never for the fibre tow (`lib/studio-live.ts` `shouldSolveLive`, `setupComplete`; `components/studio/use-live-solve.ts`, mounted once in the project provider; `useCouponRun` keeps the answer and takes the check from it). The centre shows the newer of the live answer and the full run's fields: the live one under a banner, "Preview: our kernel, answered in 0.6 s; not yet checked by CalculiX or the mesh study", dimmed while a newer one is on its way. The rail's button reads Run full analysis.
 
 ## Why (evidence)
 
