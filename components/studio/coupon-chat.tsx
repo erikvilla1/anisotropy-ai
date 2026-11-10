@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { couponValues, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
+import { assistantInfo, couponValues, isActive, listCoupons, proposeRows, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type ProposalAnswer } from "@/lib/studio-api";
+import { couponOffer, couponRowsFrom } from "@/lib/proposals";
+import { ProposalCard, type ProposalLine } from "./proposal-card";
 import {
   blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "@/lib/studio-form";
 import {
-  applyMessage, COMMON_MATERIALS, couponLines, isBending, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
+  applyMessage, COMMON_MATERIALS, couponLines, isBending, isSwitchRequest, unitsNamed, labelOf, libraryConstants, LAYUP_CHOICES, layupNotation, layupRows, libraryThickness, LOAD_CHIPS,
   missingIn, nextStep, parseLayup, PUSH_CHIPS, SIZE_CHIPS, stepOfKey, switchUnits, TEST_CHOICES, type ChatStep,
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
@@ -27,7 +29,8 @@ type Entry =
   | { id: number; role: "assistant"; kind: "ask"; step: ChatStep | "reopen" }
   | { id: number; role: "assistant"; kind: "check"; answer: CheckAnswer }
   | { id: number; role: "assistant"; kind: "job"; job: string }
-  | { id: number; role: "assistant"; kind: "result"; job: string };
+  | { id: number; role: "assistant"; kind: "result"; job: string }
+  | { id: number; role: "assistant"; kind: "proposal"; answer: ProposalAnswer };
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
 type NewEntry = Without<Entry>;
 
@@ -89,6 +92,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
   const [input, setInput] = useState("");
   const [coupons, setCoupons] = useState<CouponSummary[]>([]);
+  const [model, setModel] = useState<AssistantInfo | null>(null); // a model that reads messages, when the API has one (ADR-0088)
+  const [reading, setReading] = useState(false);
   const nextId = useRef(1);
   const body = useRef<HTMLDivElement>(null);
   const formRef = useRef(form);
@@ -132,12 +137,19 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   useEffect(() => {
     if (!apiBaseUrl) return;
+    let current = true;
+    void assistantInfo(apiBaseUrl).then((info) => { if (current) setModel(info); });
+    return () => { current = false; };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    if (!apiBaseUrl) return;
     const controller = new AbortController();
     listCoupons(apiBaseUrl, controller.signal).then(setCoupons).catch(() => setCoupons([]));
     return () => controller.abort("replaced");
   }, [apiBaseUrl]);
 
-  useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight, behavior: "smooth" }); }, [entries, checking, fields]);
+  useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight, behavior: "smooth" }); }, [entries, checking, fields, reading]);
 
   // a row typed on a panel answers the open question: move on, and when nothing is missing offer the check
   useEffect(() => {
@@ -270,12 +282,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }, [fields, job, add]);
 
   /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
-  function redirect(text: string) {
+  function redirect(text: string, echoed = false) {
     const step = nextStep(formRef.current);
     const id = panelOfStep(step);
     const title = panel(id).title;
     const named = toolNamed(text) === "coupon";
-    add({ role: "user", text }, { role: "assistant", kind: "text", title: "Pick a step on the left, or describe one thing",
+    add(...(echoed ? [] : [{ role: "user", text } as NewEntry]), { role: "assistant", kind: "text", title: "Pick a step on the left, or describe one thing",
       body: <div data-testid="chat-redirect" data-panel={id}>
         <p>{named ? "This is the coupon workspace: a test coupon set up, checked and solved by finite elements. " : ""}
           {step === "review" ? "Everything is stated: check the setup under Validate, or say “check”." : `The next thing to state is ${QUESTIONS[step].title.toLowerCase().replace(/\?$/, "")}, under the ${title} panel.`} Or
@@ -296,13 +308,60 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
     if (step === "name" && !/\d/.test(text)) { answer(text, { filled_by: text }); return; }
+    // another unit system named: the chat's own switch handles it (ADR-0061), since a proposal is read in the coupon's system
+    const named = unitsNamed(text);
+    if (model?.proposes && apiBaseUrl && !isSwitchRequest(text) && (named === null || named === unitsOf(formRef.current))) { void readWithModel(text); return; }
+    readWithPatterns(text);
+  }
+
+  /** The model reads the message into the rows on offer (ADR-0088); what the source guard keeps waits in a card for the engineer's tick.
+   * With nothing kept, or no answer, the page's own patterns read it, as they do with no model. */
+  async function readWithModel(text: string) {
+    add({ role: "user", text });
+    setReading(true);
+    let answer: ProposalAnswer | null = null;
+    let failed: string | null = null;
+    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current) }); }
+    catch (error) { failed = error instanceof StudioError ? error.message : "the model did not answer"; }
+    finally { setReading(false); }
+    if (answer && (answer.proposals.length || answer.question)) { add({ role: "assistant", kind: "proposal", answer }); return; }
+    const reason = failed ?? answer?.reason;
+    if (reason) { // a model that does not answer is not asked again this session: each message would wait for it and fail the same way
+      setModel(null);
+      add({ role: "assistant", kind: "text", title: "Read by the page instead",
+        body: <p className="chat-note">{reason}. The page reads your messages with its own patterns from here on; reload to ask the model again.</p> });
+    }
+    readWithPatterns(text, true);
+  }
+
+  /** The proposals the engineer ticked go into the rows, and the conversation moves on. */
+  function applyProposals(answer: ProposalAnswer, ticked: Set<string>) {
+    const { rows, notes } = couponRowsFrom(answer.proposals.filter((p) => ticked.has(p.key)));
+    if (notes.length) add({ role: "assistant", kind: "text", tone: "problem", title: "Not applied", body: <ul className="chat-understood">{notes.map((n) => <li key={n}>{n}</li>)}</ul> });
+    if (!Object.keys(rows).length) return;
+    const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
+    setForm(next); clearRun();
+    proceed(next);
+  }
+
+  /** The card's lines: each value with the unit it goes in with, and how it was written when the API converted it within the system. */
+  function proposalLines(answer: ProposalAnswer): ProposalLine[] {
+    return answer.proposals.map((p) => ({
+      id: p.key, label: p.label.replace(/ \([^)]*\)$/, ""), value: p.key === "library" ? materialName(p.value) : p.value, unit: p.unit ?? "", quote: p.quote,
+      note: p.written_unit && p.written_unit !== p.unit ? `written ${p.written_value} ${p.written_unit}` : undefined,
+    }));
+  }
+
+  /** The message read by the page's fixed patterns (ADR-0055); `echoed` when the user's words are already in the conversation. */
+  function readWithPatterns(text: string, echoed = false) {
+    const you: NewEntry[] = echoed ? [] : [{ role: "user", text }];
     const { rows, understood, note } = applyMessage(formRef.current, text);
     if (!understood.length) {
-      if (note) add({ role: "user", text }, { role: "assistant", kind: "text", title: "Another unit system", tone: "problem", body: <p>{note}</p> });
-      else redirect(text);
+      if (note) add(...you, { role: "assistant", kind: "text", title: "Another unit system", tone: "problem", body: <p>{note}</p> });
+      else redirect(text, echoed);
       return;
     }
-    add({ role: "user", text }, { role: "assistant", kind: "text", title: "Got it", body: <>
+    add(...you, { role: "assistant", kind: "text", title: "Got it", body: <>
       <ul className="chat-understood">{understood.map((u) => <li key={u}><Check size={13} /> {u}</li>)}</ul>{note ? <p className="chat-note">{note}</p> : null}</> });
     const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
     setForm(next); clearRun();
@@ -524,6 +583,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
     else if (entry.kind === "check") content = checkMessage(entry.answer, entry.id === latestCheck && checked === entry.answer);
     else if (entry.kind === "job") content = job?.job_id === entry.job ? <JobProgress job={job} /> : <p className="chat-note">An earlier run.</p>;
+    else if (entry.kind === "proposal") {
+      content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
+        dropped={entry.answer.dropped} model={entry.answer.model} onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
+    }
     else content = resultMessage(entry.job);
     return (
       <div className="chat-assistant" key={entry.id}>
@@ -545,6 +608,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       </div>
       <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
         {entries.map((e) => render(e, latestCheck))}
+        {reading ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
         {checking ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing">Checking the setup against the run's rules…</p></div></div> : null}
         {problem ? <p className="studio-alert" role="alert">{problem}</p> : null}
       </div>

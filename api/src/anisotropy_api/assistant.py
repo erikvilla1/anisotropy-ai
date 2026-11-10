@@ -44,6 +44,47 @@ LAMINATE_SYSTEM = (
     "there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio that is not in the "
     "sheet. Say nothing the sheet does not support. Do not use markdown."
 )
+PROPOSE_MAX_TOKENS = 8000
+PROPOSE_SYSTEM = (
+    "You read an engineer's message in a composite analysis workspace and propose which of the offered rows it states, so the engineer can "
+    "confirm them. You are given the message, the rows on offer (each with its key, label and kind, the unit it is stated in or the dimension "
+    "of the units it takes, and for a choice its choices), the conditions on offer, and the rows already filled. Propose a row only when the "
+    "message states its value. For each proposal give: the row's key; the value exactly as the message writes it, digit for digit, never "
+    "converted, computed, rounded, completed or guessed (a cooling or a drop is a negative change, so you may add a minus sign); the unit "
+    "copied exactly as the message writes it beside the value, or null when it writes none; and the quote, the shortest span of the message, "
+    "copied character for character, that states the value and its unit. For a choice row the value is one of the row's choice values. For "
+    "a notation row the value is the notation as written. Propose a condition only when the message asks for its physics, quoting the words "
+    "that ask. When a value is ambiguous, propose nothing for it and ask one short question; otherwise the question is null. Never propose a "
+    "row that is not on offer and never state a value the message does not write."
+)
+# The model's answer: a fixed schema, so the API compiles it once (structured outputs, `output_config.format`).
+PROPOSAL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "proposals": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"key": {"type": "string"}, "value": {"type": "string"}, "unit": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                           "quote": {"type": "string"}},
+            "required": ["key", "value", "unit", "quote"], "additionalProperties": False}},
+        "conditions": {"type": "array", "items": {
+            "type": "object", "properties": {"id": {"type": "string"}, "quote": {"type": "string"}},
+            "required": ["id", "quote"], "additionalProperties": False}},
+        "question": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+    "required": ["proposals", "conditions", "question"],
+    "additionalProperties": False,
+}
+
+
+@dataclass(frozen=True)
+class Reading:
+    """What a writer read from a message (ADR-0088): the model's answer as parsed, before the source guard; None when no model read it,
+    with the reason when one was asked."""
+
+    raw: dict[str, Any] | None
+    writer: str
+    model: str | None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +115,8 @@ class Assistant(Protocol):
     def explain_result(self, facts: dict[str, Any], template: list[str]) -> Draft: ...
 
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft: ...
+
+    def propose(self, view: dict[str, Any]) -> Reading: ...
 
 
 def numbers_in(text: str) -> list[str]:
@@ -150,6 +193,10 @@ class TemplateAssistant:
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft:
         return Draft(tuple(template), "template", None)
 
+    def propose(self, view: dict[str, Any]) -> Reading:
+        """The template reads nothing: the page's own patterns read the message (ADR-0055)."""
+        return Reading(None, "template", None)
+
 
 def _sentences(text: str) -> tuple[str, ...]:
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+|\n+", text.strip()) if p.strip()]
@@ -177,13 +224,16 @@ class ClaudeAssistant:
                 self._client = anthropic.Anthropic()
         return self._client
 
-    def _ask(self, system: str, user: str) -> tuple[str | None, str | None]:
-        """The model's text, or None with the reason it gave none."""
+    def _ask(self, system: str, user: str, schema: dict[str, Any] | None = None, max_tokens: int = MAX_TOKENS) -> tuple[str | None, str | None]:
+        """The model's text, or None with the reason it gave none; with a schema, the text is JSON in that schema (structured outputs)."""
         import anthropic
 
+        output_config: dict[str, Any] = {"effort": "low"}
+        if schema is not None:
+            output_config["format"] = {"type": "json_schema", "schema": schema}
         try:
             response = self.client.beta.messages.create(
-                model=self.model, max_tokens=MAX_TOKENS, system=system, output_config={"effort": "low"},
+                model=self.model, max_tokens=max_tokens, system=system, output_config=output_config,
                 betas=[FALLBACK_BETA], fallbacks="default", messages=[{"role": "user", "content": user}],
             )
         except anthropic.AuthenticationError as exc:
@@ -196,6 +246,8 @@ class ClaudeAssistant:
             return None, "the model could not be reached; the template's prose stands"
         if response.stop_reason == "refusal":
             return None, "the model declined the request; the template's prose stands"
+        if response.stop_reason == "max_tokens":
+            return None, "the model's answer was cut short; the template's prose stands"
         text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text").strip()
         if not text:
             return None, "the model answered with no text; the template's prose stands"
@@ -227,6 +279,20 @@ class ClaudeAssistant:
         view = model_view_of_facts(facts)
         user = "The fact sheet:\n" + json.dumps(view, ensure_ascii=False, indent=1) + "\n\nThe template's sentences:\n" + "\n".join(template)
         return self._draft(LAMINATE_SYSTEM, user, view, template)
+
+    def propose(self, view: dict[str, Any]) -> Reading:
+        """The model's reading of a message (ADR-0088): proposals in the fixed schema, which the source guard then reads. `view` is what the
+        model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11)."""
+        text, reason = self._ask(PROPOSE_SYSTEM, json.dumps(view, ensure_ascii=False, indent=1), schema=PROPOSAL_SCHEMA, max_tokens=PROPOSE_MAX_TOKENS)
+        if text is None:
+            return Reading(None, "template", None, (reason or "the model gave no answer").replace("; the template's prose stands", ""))
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            return Reading(None, "template", None, "the model's answer was not the JSON asked for")
+        if not isinstance(raw, dict):
+            return Reading(None, "template", None, "the model's answer was not the JSON asked for")
+        return Reading(raw, self.name, self.model)
 
 
 def assistant_for(provider: str | None, model: str | None) -> Assistant:

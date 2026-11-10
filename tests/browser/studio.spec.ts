@@ -527,6 +527,85 @@ test("one typed line fills the coupon and the chat asks only for what is missing
   expect(calls.checks).toHaveLength(0);
 });
 
+test("with a model on, a message is read into a card the engineer ticks: what is ticked goes in, an unticked value does not (ADR-0088)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const asked: Record<string, unknown>[] = [];
+  await mockApi(page, calls);
+  await page.route(API, async (route) => { // a model behind the API: its reading, as the source guard would keep it
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    asked.push(request.postDataJSON() as Record<string, unknown>);
+    const take = (key: string, label: string, value: string, unit: string | null, quote: string, written = value, writtenUnit = unit) =>
+      ({ key, label, value, unit, written_value: written, written_unit: writtenUnit, quote });
+    return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", conditions: [], question: null, reason: null,
+      proposals: [take("test", "Test", "open-hole tension", null, "open hole tension"), take("library", "Library material", "as4-8552", null, "AS4/8552"),
+        take("layup", "Layup", "[45/0/-45/90]s", null, "[45/0/-45/90]s"), take("width", "Width (mm)", "36", "mm", "36 mm wide"),
+        take("length", "Length (mm)", "250", "mm", "250 mm long"), take("hole_diameter", "Hole diameter (mm)", "6", "mm", "a 6 mm hole"),
+        take("force", "Force applied (N)", "10000", "N", "pulled to 10 kN", "10", "kN")],
+      dropped: [{ key: "tab_length", reason: "2.2 is not a number the quoted words write" }] });
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("an open hole tension coupon in AS4/8552, [45/0/-45/90]s, 36 mm wide and 250 mm long with a 6 mm hole, pulled to 10 kN");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("claude-stand-in");
+  await expect(card.locator("li[data-key='force']")).toContainText("10000 N");
+  await expect(card.locator("li[data-key='force']")).toContainText("written 10 kN");
+  await expect(card.locator("li[data-key='force']")).toContainText("pulled to 10 kN");
+  await expect(card.getByTestId("proposal-dropped")).toContainText("tab_length");
+  // nothing has gone in before the tick
+  await expect(page.getByTestId("chat-spec")).not.toContainText("open-hole tension");
+  await expect(page.getByTestId("chat-spec")).not.toContainText("10000 N");
+  await card.locator("li[data-key='width'] input").uncheck(); // a value the engineer does not take
+  await card.getByTestId("proposal-apply").click();
+  await expect(card.getByTestId("proposal-done")).toContainText("Applied 6 of 7");
+  await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveValue("6");
+  await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Ply 2", { exact: true })).toHaveValue("0");
+  await expect(page.getByTestId("chat-spec")).toContainText("10000 N force");
+  // the model was offered the rows in the coupon's units, and saw no name
+  const sent = asked[0] as { product: string; rows: { key: string; unit?: string }[]; form: Record<string, string> };
+  expect(sent.product).toBe("coupon");
+  expect(sent.rows.find((r) => r.key === "length")?.unit).toBe("mm");
+  expect(sent.rows.find((r) => r.key === "force")?.unit).toBe("N");
+  expect(sent.form.filled_by).toBeUndefined();
+  expect(calls.checks).toHaveLength(0);
+});
+
+test("a model that does not answer leaves the message to the page's patterns, and is not asked again that session (ADR-0088)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  let asked = 0;
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    asked += 1;
+    return json({ run_id: "run-p", writer: "template", model: null, proposals: [], conditions: [], question: null, dropped: [],
+      reason: "the model could not be reached" });
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
+  await message.press("Enter");
+  await expect(page.getByText("Read by the page instead")).toBeVisible();
+  await expect(page.getByText("Got it").last()).toBeVisible();
+  await expect(page.getByTestId("chat-spec")).toContainText("10000 N force");
+  await message.fill("make it [0/90]2s");
+  await message.press("Enter");
+  await expect(page.getByLabel("Ply 2", { exact: true })).toHaveValue("90");
+  expect(asked).toBe(1);
+  await expect(page.getByTestId("proposal-card")).toHaveCount(0);
+});
+
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
@@ -799,4 +878,33 @@ test("a temperature change named in the laminate chat brings up its condition, i
   await rail.getByTestId("remove-temperature").click();
   await expect(rail.getByTestId("panel-temperature")).toHaveCount(0);
   await expect(rail.getByTestId("add-condition")).toContainText("+ Temperature change");
+});
+
+test("with a model on, the laminate chat's card proposes a temperature change and its condition, and the panel opens once applied (ADR-0088)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", question: null, reason: null, dropped: [],
+      proposals: [{ key: "delta_T", label: "Temperature change, uniform (a cooling is negative)", value: "-150", unit: "degC", written_value: "-150",
+        written_unit: "°C", quote: "cooled by 150 °C" }],
+      conditions: [{ id: "temperature", title: "Temperature change", quote: "cooled by 150 °C after cure" }] });
+  });
+  await page.goto("/workspace/laminate");
+  await page.locator("button[data-system='SI']").click();
+  const rail = page.getByTestId("laminate-rail");
+  const message = page.getByLabel("Message the laminate assistant", { exact: true });
+  await message.fill("the laminate is cooled by 150 °C after cure");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card");
+  await expect(card.locator("li[data-key='delta_T']")).toContainText("-150 °C");
+  await expect(card.locator("li[data-key='condition:temperature']")).toContainText("Add a temperature change");
+  await expect(rail.getByTestId("panel-temperature")).toHaveCount(0); // nothing opens before the tick
+  await card.getByTestId("proposal-apply").click();
+  await expect(rail.getByTestId("panel-temperature")).toBeVisible();
+  await expect(page.locator("#lam-delta-t")).toHaveValue("-150");
 });

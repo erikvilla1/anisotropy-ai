@@ -449,3 +449,56 @@ export async function solveLaminate(apiBaseUrl: string, problem: unknown, signal
   const payload = await call(`${base(apiBaseUrl)}/v1/laminates/solve`, { method: "POST", headers, body: JSON.stringify(problem), signal }, "the laminate solve");
   return readLaminateAnswer(payload);
 }
+
+// ----------------------------------------------------------------------------------------------- the model proposes (ADR-0088)
+
+/** A row a message may fill: a coupon's number names the unit it is stated in, a laminate's the dimension of its units; a pure number neither. */
+export type OfferedRow = {
+  key: string; label: string; kind: "number" | "choice" | "notation";
+  unit?: string; dimension?: string; choices?: { value: string; label: string }[];
+};
+export type ProposalRequest = {
+  product: "coupon" | "laminate"; message: string; rows: OfferedRow[];
+  conditions: { id: string; title: string; detail: string }[]; form: Record<string, string>;
+};
+/** A value the engineer wrote, for an offered row: as the row takes it, as written, and the words it came from. */
+export type Proposal = { key: string; label: string; value: string; unit: string | null; written_value: string; written_unit: string | null; quote: string };
+export type ProposalAnswer = {
+  run_id: string | null; writer: string; model: string | null; proposals: Proposal[];
+  conditions: { id: string; title: string; quote: string }[]; question: string | null; dropped: { key: string; reason: string }[]; reason: string | null;
+};
+export type AssistantInfo = { proposes: boolean; provider: string | null; model: string | null };
+
+const isText = (v: unknown): v is string => typeof v === "string";
+const isTextOrNull = (v: unknown): v is string | null => v === null || typeof v === "string";
+
+export function readProposalAnswer(payload: unknown): ProposalAnswer {
+  const bad = () => new StudioError("The proposals answered with an unexpected shape.");
+  if (!isObject(payload) || !isText(payload.writer) || !isTextOrNull(payload.model) || !isTextOrNull(payload.question) || !isTextOrNull(payload.reason)
+    || !Array.isArray(payload.proposals) || !Array.isArray(payload.conditions) || !Array.isArray(payload.dropped)) throw bad();
+  for (const p of payload.proposals) {
+    if (!isObject(p) || !isText(p.key) || !isText(p.label) || !isText(p.value) || !isTextOrNull(p.unit) || !isText(p.written_value) || !isTextOrNull(p.written_unit)
+      || !isText(p.quote)) throw bad();
+  }
+  for (const c of payload.conditions) if (!isObject(c) || !isText(c.id) || !isText(c.title) || !isText(c.quote)) throw bad();
+  for (const d of payload.dropped) if (!isObject(d) || !isText(d.key) || !isText(d.reason)) throw bad();
+  return payload as unknown as ProposalAnswer;
+}
+
+/** The model's reading of a message, kept by the source guard; nothing in it has entered the problem until the engineer applies it. */
+export async function proposeRows(apiBase: string, request: ProposalRequest, signal?: AbortSignal): Promise<ProposalAnswer> {
+  const payload = await call(`${base(apiBase)}/v1/workspace/proposals`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the proposals");
+  return readProposalAnswer(payload);
+}
+
+const assistantInfos = new Map<string, Promise<AssistantInfo | null>>();
+/** Whether a model reads messages here, asked once per API address; null when the API does not say (an older API, or none). */
+export function assistantInfo(apiBase: string): Promise<AssistantInfo | null> {
+  const key = base(apiBase);
+  if (!assistantInfos.has(key)) {
+    assistantInfos.set(key, call(`${key}/v1/workspace/assistant`, { method: "GET", headers }, "the assistant")
+      .then((payload) => (isObject(payload) && typeof payload.proposes === "boolean" ? payload as unknown as AssistantInfo : null))
+      .catch(() => null));
+  }
+  return assistantInfos.get(key)!;
+}

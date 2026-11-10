@@ -76,6 +76,12 @@ export type LaminateStep = "units" | "material" | "layup" | "loads" | "temperatu
 export const STEP_ORDER: LaminateStep[] = ["units", "material", "layup", "loads", "temperature", "review"];
 export const hasCondition = (draft: LaminateDraft, id: string): boolean => (draft.conditions ?? []).includes(id);
 
+/** A typed material with nothing stated yet: each constant blank, its unit to be picked. */
+export const blankOwn = (): OwnConstants => ({
+  name: "", source: "", E1: { value: "", unit: "" }, E2: { value: "", unit: "" }, G12: { value: "", unit: "" }, nu12: "",
+  F1t: { value: "", unit: "" }, F1c: { value: "", unit: "" }, F2t: { value: "", unit: "" }, F2c: { value: "", unit: "" }, F6: { value: "", unit: "" },
+});
+
 export function blankDraft(): LaminateDraft {
   return { system: "", material: null, layup: null, thickness: null, loads: null, f12_star: "", strain_limits: false };
 }
