@@ -2,13 +2,13 @@
 
 - Status: Proposed
 - Date: 2026-11-10
-- Decided by: Founder, 2026-11-10 ("how about if you learn about D638", choosing ASTM D638 next over the composite standards D6641, D3518, D7264 and D5766; the founder supplied the D638-14 copy the same day) | Drafted by: Claude Code
+- Decided by: Founder, 2026-11-10 ("how about if you learn about D638", choosing ASTM D638 next over the composite standards D6641, D3518, D7264 and D5766; the founder supplied the D638-14 copy the same day, and the active D638-22 copy soon after) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/dogbone.py`, `fea/src/anisotropy_fea/mesher.py` (`structured_dogbone`), `fea/src/anisotropy_fea/spec.py`, `fea/src/anisotropy_fea/write_abaqus.py`, `fea/src/anisotropy_fea/write_calculix.py`, `fea/src/anisotropy_fea/standards/astm_d638.py`, `fea/checks/d638-type-i-plastic/`, `fea/tests/test_dogbone.py`, [ADR-0018](ADR-0018-source-rights-classes.md) (amendment 1), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0065](ADR-0065-coupon-ply-angles-are-counted-from-the-coupons-length-axis.md), [ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md)
 
 ## Context
 
 - ASTM D638 measures the tensile properties of plastics, unreinforced and reinforced, on a dumbbell specimen (§1.1). Fig. 1 names five flat types by thickness: I and II up to 7 mm, III over 7 to 14 mm, IV and V up to 4 mm. Each has a narrow section (width W, length L) joined to the overall width WO by a fillet of radius R; Type IV adds an outer radius RO. A resin-matrix composite with oriented fibres stiffer than 20 GPa is sent to D3039/D3039M (Note 4).
-- The copy read is D638-14, supplied by the founder on 2026-11-10 and kept in `.local/sources/astm/D638-14.pdf`. A later edition, D638-22, is active and has not been read. Its SI values are the standard; the inch-pound values are for information only (§1.5).
+- The founder supplied two copies on 2026-11-10, both kept in `.local/sources/astm/`: D638-14, read first, and D638-22, the active edition. The profile is written to D638-22. Every clause and value it holds is the same in D638-14. D638-22's summary of changes names Sections 3, 13 and A3.12 only, and none of those is a requirement here. The SI values are the standard; the inch-pound values are for information only (§1.5).
 - Until now every coupon was a straight strip of plies. The spec required a `[layup]` and a `[material.transverse]`, and the decks wrote a composite shell section. An isotropic plate was stated as one ply with E1 = E2 and transverse isotropy (`fea/checks/open-hole-isotropic-kirsch/`).
 - Under ADR-0072 a test standard is a profile of clause-tagged requirements. The tests require every row a profile names to be a form row (`fea/tests/test_standards.py`).
 
@@ -56,9 +56,9 @@ Options 2 and 4, delivered in two parts.
 - **The mesh.** Its area meets the outline's within 1e-4, and every row's outer nodes lie on the outline. The Type IV arcs meet with one tangent, and each type's fillet meets the full width where the circle says (sqrt(447) mm past the narrow section for Type I).
 - **The profile.** The Type I check meets 15 of 15 judged requirements that apply. A fibre laminate is outside its scope and is held to Type I. Each band and range misses where Fig. 1 says.
 - **Test runs.** `cd fea && uv run pytest -q -ra tests ../engine/tests` on 2026-11-10 gave 1208 passed and 9 skipped before this change. After it, see the pull request.
-- **The publisher's page** for the copy read: https://store.astm.org/d0638-14.html.
+- **The publisher's page** for the copy read: https://store.astm.org/d0638-22.html.
 - **Not yet checked:**
-  - that D638-22 keeps D638-14's values: UNVERIFIED;
+  - D638-22 against D638-14: every clause the profile cites and Fig. 1's and Table 1's values compared on 2026-11-10, and found the same;
   - any test data for a plastic coupon: none;
   - the legal review of individual values (R-25): no evidence yet.
 
@@ -70,10 +70,10 @@ Options 2 and 4, delivered in two parts.
 - **Harder:**
   - Every reader of a spec must allow for no `[layup]`. The intake's values-from-spec is extended in part 2, before any such coupon can reach it.
   - Our virtual extensometer reports D3039's chord range. For a linear model this is the same slope as D638's initial modulus. The document's words for D638 are part 2.
-- **We now depend on** the founder's D638-14 copy being read clause by clause, and on the "individual values" position (R-25).
+- **We now depend on** the founder's D638-22 copy being read clause by clause, and on the "individual values" position (R-25).
 
 ## How we will know it was wrong
 
 - A plastic's deck from us is read by the team as something other than their own isotropic shell model.
 - A fillet's chords between rows move a result that a finer row spacing settles. The convergence study of ADR-0068 is the place to see it.
-- D638-22 changes a value of Fig. 1 that the profile holds.
+- A later edition of D638 changes a value of Fig. 1 that the profile holds.

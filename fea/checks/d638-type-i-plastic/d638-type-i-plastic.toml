@@ -1,17 +1,17 @@
-# A plastic dog-bone in the size of ASTM D638-14 (ADR-0075): the Type I specimen of Fig. 1, 165 mm long and 19 mm wide, narrowing to 13 mm
+# A plastic dog-bone in the size of ASTM D638-22 (ADR-0075): the Type I specimen of Fig. 1, 165 mm long and 19 mm wide, narrowing to 13 mm
 # over its 57 mm narrow section with 76 mm fillets; grips 115 mm apart (25 mm at each end) and an extensometer over the 50 mm gage length.
 # The material is nominal, not a cited dataset: one isotropic plastic, E = 3000 MPa and nu = 0.35, 3.2 mm thick (Fig. 1 note A's molded
 # thickness). In the narrow section the stress is the force over 13 by 3.2 mm, so the extensometer reads E back: the closed form this check is
 # held to. Node rows on the grip lines, where the fillets meet the full width and the narrow section, and at the extensometer's ends; an even
 # count across puts the extensometer's two nodes on the centre line. Units mm-MPa.
-title = "PLASTIC-UNT-L1, unnotched tension: a nominal isotropic plastic as the ASTM D638-14 Type I dog-bone, 3.2 mm thick, nodal grips 115 mm apart, 0.5 mm pull, 50 mm extensometer"
+title = "PLASTIC-UNT-L1, unnotched tension: a nominal isotropic plastic as the ASTM D638-22 Type I dog-bone, 3.2 mm thick, nodal grips 115 mm apart, 0.5 mm pull, 50 mm extensometer"
 kind = "unnotched_tension"
 units = "mm-MPa"
 
 [coupon]
 designation = "PLASTIC-UNT-L1"
-standard = "none"  # ASTM D638-14 joins the Standard list with the form's dog-bone rows (ADR-0075, part 2); until then the size is cited, not checked
-size_from = "ASTM D638-14, Fig. 1: Type I, at its least overall width and length; the 3.2 mm thickness is note A's for a molded specimen"
+standard = "none"  # ASTM D638-22 joins the Standard list with the form's dog-bone rows (ADR-0075, part 2); until then the size is cited, not checked
+size_from = "ASTM D638-22, Fig. 1: Type I, at its least overall width and length; the 3.2 mm thickness is note A's for a molded specimen"
 team_model = "not built yet"
 test_data = "none: a public check of the dog-bone and the isotropic material against the closed form and CalculiX"
 

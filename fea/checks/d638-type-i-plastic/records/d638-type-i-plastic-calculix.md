@@ -1,4 +1,4 @@
-# Reading: a plastic dog-bone in the size of ASTM D638-14 Type I, CalculiX 2.21 S8R against the kernel
+# Reading: a plastic dog-bone in the size of ASTM D638-22 Type I, CalculiX 2.21 S8R against the kernel
 
 The reading note of the record with the same name. Numbers quoted here are the ones in the record and the run of 2026-11-10 in a cloud container (CalculiX 2.21 from Ubuntu's `calculix-ccx`); the document's own tables are recomputed at every build.
 

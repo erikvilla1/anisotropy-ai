@@ -235,7 +235,7 @@ def states(s) -> dict[str, str]:
 def test_the_profile_names_each_clause_level_and_rule_and_waits_for_the_form():
     ids = [r.id for r in D638.requirements]
     assert len(ids) == len(set(ids)) and D638.id not in PROFILES, "D638 joins the registry with the form's rows (ADR-0075 part 2)"
-    assert D638.catalog_url.startswith("https://store.astm.org/") and D638.rights == "licensed-reference" and "D638-14" in D638.edition_note
+    assert D638.catalog_url.startswith("https://store.astm.org/") and D638.rights == "licensed-reference" and "D638-22" in D638.edition_note and "D638-14" in D638.edition_note
     for r in D638.requirements:
         assert r.clause and r.text.endswith(".") and r.level in LEVELS and (r.rule is None) == (r.level == "lab"), r.id
     assert [v.key for v in VARIANTS] == list(TYPES) == list(D638.variant_words) and D638.variant_noun == "Type"
