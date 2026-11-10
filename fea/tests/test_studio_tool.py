@@ -115,7 +115,7 @@ def test_live_writes_the_kernels_answer_and_its_seconds_but_no_mesh_study(tmp_pa
     out = tmp_path / "live"
     done = run_tool("--root", str(tmp_path / "root"), "live", str(values_file(tmp_path)), "--out", str(out))
     assert done.returncode == 0, done.stderr
-    assert done.stdout.startswith(f"ready: {DESIGNATION}, solved by our kernel in")
+    assert f": {DESIGNATION}, solved by our kernel in" in done.stdout  # ready, or blocked only for the full run on a machine without CalculiX
     assert sorted(p.name for p in out.iterdir()) == ["checklist.json", "explanation.json", "fields.json", "preview.json", "summary.json", "timings.json"]
     text = (out / "fields.json").read_text(encoding="utf-8")
     fields, summary = json.loads(text), json.loads((out / "summary.json").read_text(encoding="utf-8"))
@@ -148,10 +148,27 @@ def test_serve_answers_one_request_per_line_and_outlives_a_bad_one(tmp_path):
             worker.stdin.write(request + "\n")
             worker.stdin.flush()
             answers.append(json.loads(worker.stdout.readline()))
-        assert answers[0] == {"state": "ready"} and "JSONDecodeError" in answers[1]["error"] and answers[2] == {"state": "ready"}
-        assert (tmp_path / "b" / "fields.json").is_file()
+        assert "state" in answers[0] and "JSONDecodeError" in answers[1]["error"] and "state" in answers[2]  # the worker outlived the bad one
+        assert (tmp_path / "a" / "fields.json").is_file() and (tmp_path / "b" / "fields.json").is_file()
         assert "imports" not in json.loads((tmp_path / "b" / "timings.json").read_text(encoding="utf-8")), "a warm worker imported once, before"
         worker.stdin.close()
         assert worker.wait(timeout=60) == 0
     finally:
         worker.kill()
+
+
+def test_live_solves_with_our_kernel_when_only_the_full_runs_tools_are_missing(tmp_path):
+    """Without CalculiX and the document builder the full run is blocked, but our kernel needs neither: the preview is answered and the
+    checklist still names what the full run lacks (ADR-0086)."""
+    import os
+    env = {k: v for k, v in os.environ.items() if k not in ("ANISOTROPY_CCX", "ANISOTROPY_TECTONIC")}
+    env["PATH"] = str(Path(sys.executable).parent)  # nothing else on the path: no ccx, no tectonic
+    out = tmp_path / "live"
+    done = subprocess.run([sys.executable, str(STUDIO), "--root", str(tmp_path / "root"), "live", str(values_file(tmp_path)), "--out", str(out)],
+                          capture_output=True, text=True, encoding="utf-8", env=env)
+    assert done.returncode == 0, done.stderr
+    checklist = json.loads((out / "checklist.json").read_text(encoding="utf-8"))
+    items = {item["id"]: item["state"] for item in checklist["items"]}
+    assert items["solver"] == "fail" and checklist["state"] == "blocked", "the full run is blocked without CalculiX"
+    assert (out / "fields.json").is_file() and done.stdout.startswith(f"blocked: {DESIGNATION}, solved by our kernel in")
+    assert {k for k, v in items.items() if v in ("fail", "missing")} <= {"solver", "document"}
