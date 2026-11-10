@@ -132,22 +132,58 @@ def constraint_map(deck: Deck, mesh: Mesh) -> DofMap:
                   size=size, prescribed=prescribed, loads=loads)
 
 
-def assemble(mesh: Mesh, dofmap: DofMap) -> csr_matrix:
-    """The reduced global stiffness: every element's k scattered through the dof map."""
-    rows, cols, values = [], [], []
-    for e in range(mesh.element_count):
-        nodes = mesh.connectivity[e]
-        try:
-            k = element_stiffness(mesh.xy[nodes], mesh.sections[mesh.element_section[e]].A)
-        except KernelError as exc:
+def strain_displacement_all(mesh: Mesh, points, prefix: bool) -> tuple[np.ndarray, np.ndarray]:
+    """`strain_displacement` for every element at each natural point at once (ADR-0073): B (points, ne, 3, 8) and det J (points, ne),
+    the same operations as one call per element and point. The first element, and in it the first point, with det J <= 0 is refused
+    as one call would refuse it; `prefix` names the element as `assemble` does."""
+    xy = mesh.xy[mesh.connectivity]  # (ne, 4, 2)
+    jacobians, dets = [], []
+    for xi, eta in points:
+        J = shape_derivatives(xi, eta) @ xy  # (ne, 2, 2)
+        jacobians.append(J)
+        dets.append(np.linalg.det(J) if len(J) else np.zeros(0))
+    det = np.array(dets).reshape(len(points), mesh.element_count)
+    bad = det <= 0.0
+    if bad.any():
+        e = int(np.flatnonzero(bad.any(axis=0))[0])
+        g = int(np.flatnonzero(bad[:, e])[0])
+        xi, eta = points[g]
+        message = (f"element has det J = {float(det[g, e]):.3g} <= 0 at (xi, eta) = ({xi:.3g}, {eta:.3g}): "
+                   "its nodes are listed clockwise or it is degenerate")
+        if prefix:
             instance, label = mesh.element_keys[e]
-            raise KernelError(f"element {instance}.{label}: {exc}") from None
-        full = np.repeat(2 * nodes, 2) + np.tile([0, 1], 4)
-        r = dofmap.reduced[full]
-        rows.append(np.repeat(r, 8))
-        cols.append(np.tile(r, 8))
-        values.append(k.ravel())
-    K = coo_matrix((np.concatenate(values), (np.concatenate(rows), np.concatenate(cols))), shape=(dofmap.size, dofmap.size))
+            message = f"element {instance}.{label}: {message}"
+        raise KernelError(message)
+    B = np.zeros((len(points), mesh.element_count, 3, 8))
+    for g, (xi, eta) in enumerate(points):
+        if not mesh.element_count:
+            break
+        dN = np.linalg.solve(jacobians[g], np.broadcast_to(shape_derivatives(xi, eta), (mesh.element_count, 2, 4)))  # rows dN/dx, dN/dy
+        B[g, :, 0, 0::2] = dN[:, 0]
+        B[g, :, 1, 1::2] = dN[:, 1]
+        B[g, :, 2, 0::2] = dN[:, 1]
+        B[g, :, 2, 1::2] = dN[:, 0]
+    return B, det
+
+
+def element_A(mesh: Mesh) -> np.ndarray:
+    """Every element's membrane stiffness A (ne, 3, 3), from its section."""
+    return np.array([section.A for section in mesh.sections])[np.asarray(mesh.element_section, dtype=int)].reshape(mesh.element_count, 3, 3)
+
+
+def assemble(mesh: Mesh, dofmap: DofMap) -> csr_matrix:
+    """The reduced global stiffness: every element's k scattered through the dof map. Every element's k is formed at once, the same sum
+    over Gauss points as `element_stiffness` (ADR-0073)."""
+    B, det = strain_displacement_all(mesh, GAUSS_POINTS, prefix=True)
+    A = element_A(mesh)
+    k = np.zeros((mesh.element_count, 8, 8))
+    for g, weight in enumerate(GAUSS_WEIGHTS):
+        k += (weight * det[g])[:, None, None] * (B[g].transpose(0, 2, 1) @ A @ B[g])
+    full = (np.repeat(2 * mesh.connectivity, 2, axis=1) + np.tile([0, 1], 4)).astype(int)  # (ne, 8): u1, v1, ..., u4, v4
+    r = dofmap.reduced[full]
+    rows = np.repeat(r, 8, axis=1).ravel()
+    cols = np.tile(r, (1, 8)).ravel()
+    K = coo_matrix((k.reshape(mesh.element_count, 64).ravel(), (rows, cols)), shape=(dofmap.size, dofmap.size))
     return K.tocsr()
 
 
@@ -193,22 +229,15 @@ def solve_membrane(deck: Deck, mesh: Mesh | None = None) -> MembraneSolution:
 
 
 def element_strains(mesh: Mesh, displacement: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Membrane strain eps = B u_e at each element's centroid (ne, 3) and at its four Gauss points (ne, 4, 3)."""
-    centroid = np.zeros((mesh.element_count, 3))
-    gauss = np.zeros((mesh.element_count, 4, 3))
-    for e in range(mesh.element_count):
-        nodes = mesh.connectivity[e]
-        xy = mesh.xy[nodes]
-        u_e = displacement[nodes].ravel()
-        centroid[e] = strain_displacement(xy, 0.0, 0.0)[0] @ u_e
-        for g, (xi, eta) in enumerate(GAUSS_POINTS):
-            gauss[e, g] = strain_displacement(xy, xi, eta)[0] @ u_e
-    return centroid, gauss
+    """Membrane strain eps = B u_e at each element's centroid (ne, 3) and at its four Gauss points (ne, 4, 3), every element at once
+    (ADR-0073)."""
+    points = [(0.0, 0.0), *[(float(xi), float(eta)) for xi, eta in GAUSS_POINTS]]
+    B, _ = strain_displacement_all(mesh, points, prefix=False)
+    u = displacement[mesh.connectivity].reshape(mesh.element_count, 8, 1)  # u1, v1, ..., u4, v4 per element
+    strain = (B @ u)[..., 0]  # (points, ne, 3)
+    return strain[0].copy(), strain[1:].transpose(1, 0, 2).copy()
 
 
 def section_forces(mesh: Mesh, strain: np.ndarray) -> np.ndarray:
     """N = A eps per element (ne, 3), N/m: the membrane resultants Abaqus reports as SF."""
-    forces = np.zeros_like(strain)
-    for e in range(mesh.element_count):
-        forces[e] = mesh.sections[mesh.element_section[e]].A @ strain[e]
-    return forces
+    return (element_A(mesh) @ np.asarray(strain)[:, :, None])[:, :, 0]

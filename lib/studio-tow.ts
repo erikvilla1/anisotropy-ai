@@ -119,9 +119,10 @@ export function failureCodeWords(code: string): string | null {
 }
 
 /** The tow's panels, each with its rows and the checklist items that judge them. */
-export type TowPanelId = "tow-project" | "tow-fibre" | "tow-mass" | "tow-strand" | "tow-test" | "tow-specimens" | "tow-calculate";
+export type TowPanelId = "tow-standard" | "tow-project" | "tow-fibre" | "tow-mass" | "tow-strand" | "tow-test" | "tow-specimens" | "tow-calculate";
 export const TOW_PANELS: { id: TowPanelId; title: string; keys: string[]; items: string[] }[] = [
-  { id: "tow-project", title: "Project", keys: ["test", "standard", "filled_by", "date", "notes"], items: ["standard"] },
+  { id: "tow-standard", title: "Test and standard", keys: ["test", "standard"], items: ["standard"] },
+  { id: "tow-project", title: "Project", keys: ["filled_by", "date", "notes"], items: [] },
   { id: "tow-fibre", title: "The fibre tow", keys: towSections[0].fields.map((f) => f.key), items: ["identity"] },
   { id: "tow-mass", title: "Mass per unit length and density", keys: towSections[1].fields.map((f) => f.key), items: ["fibre"] },
   { id: "tow-strand", title: "The impregnated strand", keys: towSections[2].fields.map((f) => f.key), items: ["fibre"] },
@@ -129,6 +130,10 @@ export const TOW_PANELS: { id: TowPanelId; title: string; keys: string[]; items:
   { id: "tow-specimens", title: "Specimens tested", keys: [], items: ["specimens"] },
   { id: "tow-calculate", title: "Calculate", keys: [], items: ["results"] },
 ];
+
+/** A tow panel's step number, as the coupon's steps are numbered (ADR-0062 amendment 1): the first is the same Test and standard step;
+ * Calculate is the action, not a step. */
+export const towStepNumber = (id: TowPanelId): number | null => (id === "tow-calculate" ? null : TOW_PANELS.findIndex((p) => p.id === id) + 1);
 
 const SEVERITY: Record<Exclude<PanelState, "none">, number> = { pass: 0, pending: 1, warn: 2, fail: 3, missing: 3 };
 

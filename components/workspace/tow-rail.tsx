@@ -5,14 +5,17 @@ import { isUuid } from "@/lib/project-store";
 import { StudioError, towTest } from "@/lib/studio-api";
 import { withStandard, withTest, type StudioForm } from "@/lib/studio-form";
 import {
-  failureCodeWords, nextSpecimen, pastedSpecimens, specimenFields, TOW_PANELS, towDefaults, towFieldByKey, towPanelState, towRowErrors, towValues, type TowPanelId,
+  failureCodeWords, nextSpecimen, pastedSpecimens, specimenFields, TOW_PANELS, towDefaults, towFieldByKey, towPanelState, towRowErrors, towStepNumber, towValues,
+  type TowPanelId,
   type TowSpecimenRow,
 } from "@/lib/studio-tow";
 import { ChecklistPanel } from "@/components/studio/checklist-panel";
 import { Field, FieldGrid } from "@/components/studio/coupon-form";
 import { useProject } from "@/components/studio/project-context";
 import { StandardCard } from "@/components/studio/standard-card";
+import { SetupLine } from "./panels/step-standard";
 import { showPanel, StepPanel } from "./panels/step-panel";
+import { TestStep } from "./panels/test-step";
 
 const SHARED = ["test", "standard", "filled_by", "date", "notes"];
 
@@ -87,7 +90,8 @@ function SpecimenList({ rows, disabled, error, onRows }: { rows: TowSpecimenRow[
 }
 
 /** The left column for a fibre tow record (ADR-0074): the coupon form's Test list picked "fibre tow tension", so its panels give way to the
- * tow's: the fibre, its mass and density, the impregnated strand, the tensile set-up, the specimens and Calculate. The record goes to
+ * tow's after the same first step, Test and standard (ADR-0062 amendment 1): the project, the fibre, its mass and density, the impregnated
+ * strand, the tensile set-up, the specimens and Calculate. The record goes to
  * `POST /v1/tow-tests` as typed; the fea package judges it and the engine computes every number, so this column only keeps the text. */
 export function TowRail({ apiBaseUrl }: { apiBaseUrl: string }) {
   const { project, form, specimens, setForm, setSpecimens, towAnswer, setTowAnswer } = useProject();
@@ -131,21 +135,26 @@ export function TowRail({ apiBaseUrl }: { apiBaseUrl: string }) {
   const panelOf = (item: string) => TOW_PANELS.find((p) => p.items.includes(item));
   const failing = checklist?.items.filter((item) => item.state === "fail" || item.state === "missing") ?? [];
   const grid = (id: TowPanelId) => <TowGrid form={form} keys={TOW_PANELS.find((p) => p.id === id)?.keys ?? []} errors={errors} disabled={busy} onChange={edit} />;
+  const step = (id: TowPanelId) => ({ id, step: towStepNumber(id), title: TOW_PANELS.find((p) => p.id === id)?.title ?? id, state: state(id) });
 
   return (
     <div className="studio-form ws-rail-panels" data-testid="tow-form">
       {!apiBaseUrl ? <p className="studio-alert">The page was built without the API&apos;s address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be calculated.</p> : null}
-      <StepPanel id="tow-project" title="Project" state={state("tow-project")} note="ASTM D4018: a fibre tow, no model">
+      <div className="ws-rail-head"><SetupLine form={form} /></div>
+      <StepPanel {...step("tow-standard")} note="ASTM D4018: a fibre tow, no model">
+        <TestStep form={form} disabled={busy} onChange={edit} />
+        <StandardCard form={form} checklist={checklist} tow />
+      </StepPanel>
+      <StepPanel {...step("tow-project")}>
         <p className="studio-hint">A resin-impregnated carbon or graphite fibre tow, pulled to failure: its strength and chord modulus come from the forces and the
           fibre&apos;s mass per unit length and density, with no finite element model. The rows are in the standard&apos;s units (SI only).</p>
         {grid("tow-project")}
-        <StandardCard form={form} checklist={checklist} tow />
       </StepPanel>
-      <StepPanel id="tow-fibre" title="The fibre tow" state={state("tow-fibre")}>{grid("tow-fibre")}</StepPanel>
-      <StepPanel id="tow-mass" title="Mass per unit length and density" state={state("tow-mass")}>{grid("tow-mass")}</StepPanel>
-      <StepPanel id="tow-strand" title="The impregnated strand" state={state("tow-strand")}>{grid("tow-strand")}</StepPanel>
-      <StepPanel id="tow-test" title="The tensile test" state={state("tow-test")}>{grid("tow-test")}</StepPanel>
-      <StepPanel id="tow-specimens" title="Specimens tested" state={state("tow-specimens")} note={`${specimens.length} listed`}>
+      <StepPanel {...step("tow-fibre")}>{grid("tow-fibre")}</StepPanel>
+      <StepPanel {...step("tow-mass")}>{grid("tow-mass")}</StepPanel>
+      <StepPanel {...step("tow-strand")}>{grid("tow-strand")}</StepPanel>
+      <StepPanel {...step("tow-test")}>{grid("tow-test")}</StepPanel>
+      <StepPanel {...step("tow-specimens")} note={`${specimens.length} listed`}>
         <SpecimenList rows={specimens} disabled={busy} error={errors.specimens} onRows={editSpecimens} />
       </StepPanel>
       <StepPanel id="tow-calculate" title="Calculate" state={checklist ? (checklist.state === "ready" ? "pass" : "fail") : "none"}>

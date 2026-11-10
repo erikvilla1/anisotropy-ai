@@ -97,7 +97,11 @@ export type TestMethod = {
   designation: string | null; width: number; thickness: number; area: number; force: number; stress: number;
   units: { length: string; area: string; force: string; stress: string; modulus: string };
   hole: { diameter: number; net_area: number; net_stress: number; width_to_hole: number; hole_to_thickness: number } | null;
-  laminate_theory: { modulus: number; poisson: number; note: string };
+  laminate_theory: { modulus: number; poisson: number; note: string; isotropic?: boolean };
+  /** The standard's own words for the shared formulas (D3039's chord over the gross area, D638's modulus of elasticity over the narrow
+   * section); absent from a package written before ADR-0075 part 2, which read D3039's. */
+  reduction?: { area: string; area_clause: string; stress_clause: string; strain_clause: string; modulus: string; modulus_clause: string; range: string;
+    poisson_clause: string };
   strain: { device: string; gauge_length: number; modelled_length: number; nodes: string[]; x: number[]; value: number; microstrain: number; poisson: number | null;
     chord: { from: number; to: number; stress_from: number; stress_to: number; force_from: number; force_to: number; modulus: number } } | null;
   fpf: Record<string, { factor: number; force: number; stress: number; net_stress?: number; strain?: number; microstrain?: number; place: string | null }>;

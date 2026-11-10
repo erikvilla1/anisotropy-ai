@@ -70,6 +70,7 @@ from anisotropy_fea import paths  # noqa: E402
 from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
 from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
 from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
+from anisotropy_fea.convergence import convergence_study  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.fields import field_data  # noqa: E402
@@ -186,14 +187,21 @@ def material_file(spec) -> tuple[str, str] | None:
 
 
 def own_material_rows(material, units: str) -> list[tuple[str, float, str]]:
-    """The team's own constants, in the stated units, as (property, value, unit) rows: E1, E2, G12, nu12, the strengths when given, G13, G23."""
+    """The team's own constants, in the stated units, as (property, value, unit) rows: E1, E2, G12, nu12, the strengths when given, G13, G23;
+    for an isotropic material (ADR-0075), E and nu, the two it is stated by."""
     stress_unit = documents.UNIT_LABEL[units]["stress"]
     stress = lambda v: from_si(v, "stress", units)  # noqa: E731
+    if material.isotropic:
+        return [("E", stress(material.E1), stress_unit), ("nu", material.nu12, "")]
     rows = [("E1", stress(material.E1), stress_unit), ("E2", stress(material.E2), stress_unit), ("G12", stress(material.G12), stress_unit),
             ("nu12", material.nu12, "")]
     if material.strengths is not None:
         rows += [(role, stress(getattr(material.strengths, role)), stress_unit) for role in ("F1t", "F1c", "F2t", "F2c", "F6")]
     return rows + [("G13", stress(material.G13), stress_unit), ("G23", stress(material.G23), stress_unit)]
+
+
+ISOTROPIC_SYMBOLS = ("The material is isotropic, alike in every direction, with no plies (ADR-0075): E is its Young's modulus, nu its Poisson's ratio "
+                     "and G its shear modulus. Our decks write it as Abaqus's isotropic *Elastic and a homogeneous shell section.")
 
 
 def material_section(spec, units: str, spec_path: Path) -> str:
@@ -205,13 +213,17 @@ def material_section(spec, units: str, spec_path: Path) -> str:
     if mat.library is None:
         material = spec_material(spec)
         rows = [[escape(name), f"{number(value, 6)} {escape(unit)}", "as given by the team"] for name, value, unit in own_material_rows(material, units)]
+        if material.isotropic:  # one isotropic material: its shear modulus follows from E and nu
+            stress_unit = documents.UNIT_LABEL[units]["stress"]
+            rows.append(["G", f"{number(from_si(material.G12, 'stress', units), 6)} {escape(stress_unit)}", "derived: E / (2 (1 + nu))"])
         return "\n\n".join([
             rf"The team gave this material's constants on the coupon input form, under the name {code(material.name)}; it is not a record of "
             r"our material library. The source, as the team states it:",
             rf"\begin{{quote}}{escape(mat.source)}.\end{{quote}}",
             escape(OWN_CONSTANTS.format(rights=material.rights)),
             team.table(["Property", "Value", "Origin"], rows, r">{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{3.6cm}Y"),
-            escape(team.SYMBOLS),
+            escape(ISOTROPIC_SYMBOLS if material.isotropic else team.SYMBOLS),
+            "The material is isotropic: its yield and failure are not modelled yet, so the engine predicts no failure." if material.isotropic else
             "No strengths were given, so the engine predicts no first-ply failure." if material.strengths is None else
             "With the strengths given, the engine predicts first-ply failure (Chapter~\\ref{ch:results}).",
         ])
@@ -260,7 +272,7 @@ def problem_chapter(spec, card: dict[str, str], c, units: str, figures: Path, sp
                 f"Loading: {spec.loading.control}, {from_si(spec.loading.value, 'length' if spec.loading.control == 'displacement' else 'force', units):g} "
                 f"{labels['length' if spec.loading.control == 'displacement' else 'force']} at the top grip"
                 + (f" ({'a pull' if spec.loading.value > 0 else 'a shortening'})" if spec.loading.control == "displacement" else "") + ". "
-                "The analysis is linear and static, in the plane of the laminate (a membrane: no bending, no buckling).")
+                f"The analysis is linear and static, in the plane of the {'coupon' if spec.layup is None else 'laminate'} (a membrane: no bending, no buckling).")
          + r" Figure~\ref{fig:model} shows the model.") if grips else
         (escape("Supports and loads as the spec lists them over the plate's regions: " + "; ".join(
             f"{s.region} holds dofs {', '.join(str(d) for d in s.dofs)}" + (f" at {s.value:g}" if s.value else "") for s in spec.supports)
@@ -528,9 +540,10 @@ def test_method_section(spec, deck, solution, units: str, calculix: dict | None)
     def row(name: str, value, unit: str, how: str) -> None:
         q.append(rf"{escape(name)} & {number(value, 3)} & {escape(unit)} & {escape(how)} \\")
 
-    row("Gross area A", tm["area"], u["area"], f"width {three(tm['width'])} times thickness {three(tm['thickness'])} (D3039 §11.2.2, C1869 Eq 2)")
+    red = tm["reduction"]
+    row(f"{red['area'][:1].upper()}{red['area'][1:]} A", tm["area"], u["area"], f"width {three(tm['width'])} times thickness {three(tm['thickness'])} ({red['area_clause']})")
     row("Force along the coupon P", abs(tm["force"]), u["force"], "the moving grip's reaction, or the applied force")
-    row("Stress P/A", abs(tm["stress"]), u["stress"], "D3039 Eq 6, C1869 Eq 1")
+    row("Stress P/A", abs(tm["stress"]), u["stress"], red["stress_clause"])
     if tm.get("hole"):
         h = tm["hole"]
         row("Net area through the hole", h["net_area"], u["area"], "(width less the hole) times thickness (C1869 Eq 5)")
@@ -540,22 +553,27 @@ def test_method_section(spec, deck, solution, units: str, calculix: dict | None)
     s = tm.get("strain")
     lt = tm["laminate_theory"]
     if s:
-        row(f"Strain over the {s['device']}", abs(s["value"]) * 1e6, "microstrain", f"two nodes {three(s['modelled_length'])} {u['length']} apart on the centre line (D3039 Eq 7)")
-        row("Stress at 1000 microstrain", abs(s["chord"]["stress_from"]), u["stress"], f"force {three(abs(s['chord']['force_from']))} {u['force']}")
-        row("Stress at 3000 microstrain", abs(s["chord"]["stress_to"]), u["stress"], f"force {three(abs(s['chord']['force_to']))} {u['force']}")
-        row("Chord modulus, 1000 to 3000 microstrain", s["chord"]["modulus"], u["modulus"], "D3039 Table 3, Eq 8; a linear model gives the same chord over any range")
+        c = s["chord"]
+        low, high = three(c["from"] * 1e6), three(c["to"] * 1e6)
+        name = f"{red['modulus'][:1].upper()}{red['modulus'][1:]}"
+        row(f"Strain over the {s['device']}", abs(s["value"]) * 1e6, "microstrain", f"two nodes {three(s['modelled_length'])} {u['length']} apart on the centre line ({red['strain_clause']})")
+        row(f"Stress at {low} microstrain", abs(c["stress_from"]), u["stress"], f"force {three(abs(c['force_from']))} {u['force']}")
+        row(f"Stress at {high} microstrain", abs(c["stress_to"]), u["stress"], f"force {three(abs(c['force_to']))} {u['force']}")
+        row(f"{name}, {low} to {high} microstrain", c["modulus"], u["modulus"], "; ".join(filter(None, (red["modulus_clause"], red["range"], "a linear model gives the same slope over any range"))))
         if calculix:
-            row("Chord modulus, CalculiX", calculix["calculix"]["modulus"], u["modulus"],
+            row(f"{name}, CalculiX", calculix["calculix"]["modulus"], u["modulus"],
                 f"its reaction and its displacements at the same two nodes; ours on the twin {three(calculix['ours']['modulus'])}, {calculix['difference']}")
-        row("Laminate modulus along the pull", lt["modulus"], u["modulus"], "classical laminate theory, the engine's ABD")
+        own = lt.get("isotropic", False)
+        row("The material's E" if own else "Laminate modulus along the pull", lt["modulus"], u["modulus"],
+            "as stated, through the engine's ABD of its one layer" if own else "classical laminate theory, the engine's ABD")
         if s.get("poisson") is not None:
-            row("Poisson's ratio", s["poisson"], "-", "minus the strain across the width over the strain along it, at mid-length (D3039 Eq 9)")
-            row("Laminate Poisson's ratio", lt["poisson"], "-", "classical laminate theory")
+            row("Poisson's ratio", s["poisson"], "-", f"minus the strain across the width over the strain along it, at mid-length ({red['poisson_clause']})")
+            row("The material's nu" if own else "Laminate Poisson's ratio", lt["poisson"], "-", "as stated" if own else "classical laminate theory")
     earliest = tm.get("earliest")
     if earliest:
         first = tm["fpf"][earliest]
         basis = tm["fpf_basis"]
-        row(f"First-ply-failure stress, gross ({CRITERION.get(earliest, earliest)})", abs(first["stress"]), u["stress"], f"over {basis}, {first.get('place') or ''}")
+        row(f"First-ply-failure stress, {'gross' if red['area'] == 'gross area' else 'on the ' + red['area']} ({CRITERION.get(earliest, earliest)})", abs(first["stress"]), u["stress"], f"over {basis}, {first.get('place') or ''}")
         if "net_stress" in first:
             row("First-ply-failure stress, net", abs(first["net_stress"]), u["stress"], "the same load over the net area")
         if "strain" in first:
@@ -699,8 +717,87 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
     return "\n\n".join(out)
 
 
+def percent_change(change: float | None) -> str:
+    """A change from the previous mesh as the page prints it: signed, two figures under 1 %, one decimal above (`percentChange`)."""
+    if change is None:
+        return DASH
+    magnitude = abs(100.0 * change)
+    text = "0.00" if magnitude < 1e-3 else f"{magnitude:.2g}" if magnitude < 1 else f"{magnitude:.1f}"
+    return ("$-$" if change < 0 and magnitude >= 1e-3 else "+") + text + r"\,\%"
+
+
+def worst_change(changes: list[float | None] | None) -> float | None:
+    """The largest |change| of a triple's components, the one its row reports."""
+    finite = [c for c in (changes or []) if c is not None]
+    return max(finite, key=abs) if finite else None
+
+
+def convergence_section(spec, units: str) -> str:
+    """The mesh convergence study (ADR-0068), computed while the document is built as every number here is: one column per mesh, each
+    cell the value and its change from the previous mesh, a last column saying whether the quantity has settled, and the words."""
+    study = convergence_study(spec)
+    out = [r"\section{Mesh convergence: what settles as the mesh is refined}\label{sec:convergence}"]
+    if not study["studied"]:
+        out.append(escape(f"Not studied: {study['reason']}."))
+        return "\n\n".join(out)
+    labels = documents.UNIT_LABEL[units]
+    meshes, changes, flags, below = study["meshes"], study["changes"], study["settled"], study["settled_below"]
+    last = len(meshes) - 1
+
+    def verdict(change: float | None) -> str:
+        if change is None:
+            return DASH
+        return percent_change(change) + (", settled" if abs(change) < below else ", still moving")
+
+    def cells(values: list[str], steps: list[float | None]) -> list[str]:
+        return [v + (f" ({percent_change(c)})" if i > 0 and c is not None else "") for i, (v, c) in enumerate(zip(values, steps))] + [verdict(steps[last])]
+
+    def row(name: str, values: list[str], steps: list[float | None]) -> str:
+        return " & ".join([name, *cells(values, steps)]) + r" \\"
+
+    def triple(values: list[float]) -> str:  # the triples print as the validation table does: the noise beside the real values as 0 (`settled`)
+        return " / ".join(number(v, 5) for v in settled(values))
+
+    table = [row(f"Reaction force, {escape(labels['force'])}", [number(m["reaction"], 5) for m in meshes], changes["reaction"]),
+             row(f"Gauge centre {documents.MATH['eps_x']} / {documents.MATH['eps_y']} / {documents.MATH['gamma_xy']}",
+                 [triple(m["gauge_strain"]) for m in meshes], [worst_change(c) for c in changes["gauge_strain"]])]
+    for k, p in enumerate(meshes[0]["plies"]):
+        table.append(row(f"Ply {p['ply']} ({p['angle']:g}°) {documents.MATH['sigma_1']} / {documents.MATH['sigma_2']} / {documents.MATH['tau_12']} at the gauge centre, "
+                         f"{escape(labels['stress'])}", [triple(m["plies"][k]["stress_12"]) for m in meshes], [worst_change(c) for c in changes["plies"][k]["stress_12"]]))
+    for k, p in enumerate(meshes[0]["peaks"]):
+        table.append(row(rf"Ply {p['ply']} ({p['angle']:g}°) largest $|\sigma_1|$ over the mesh{', clamped edge' if p['touches_grip'] else ''}, {escape(labels['stress'])}",
+                         [number(m["peaks"][k]["s1"], 5) for m in meshes], changes["peaks"][k]["s1"]))
+    for criterion, steps in changes["fpf"].items():
+        table.append(row(f"First-ply failure $R$, {escape(CRITERION.get(criterion, criterion))}, over the mesh", [number(m["fpf"][criterion], 5) for m in meshes], steps))
+    for criterion, steps in changes["fpf_gauge"].items():
+        table.append(row(f"First-ply failure $R$, {escape(CRITERION.get(criterion, criterion))}, over the gauge section",
+                         [number(m["fpf_gauge"][criterion], 5) for m in meshes], steps))
+    header = ["Quantity", *[rf"{m['factor']}$\times$: {m['nx']} by {m['ny']}, {m['elements']} elements" for m in meshes],
+              rf"Last step (settled under {100 * below:g}\,\%)"]
+    gauge = list(dict.fromkeys(m["gauge_element"] for m in meshes))
+    settled_names = [name for key, name in (("reaction", "the reaction"), ("gauge_strain", "the gauge-centre strain"), ("plies", "every ply's gauge stresses")) if flags[key]]
+    moving_names = [name for key, name in (("peaks", "the clamped-edge peaks"), ("fpf", "the first-ply-failure factor over the mesh"),
+                                           ("fpf_gauge", "the factor over the gauge section")) if not flags[key]]
+    words = (f"Our engine solved the coupon on its own mesh and on refinements that split every element along both axes, and read the same quantities at the "
+             f"gauge-centre element (element {', then '.join(str(e) for e in gauge)}{', the one nearest the probe on each mesh' if len(gauge) > 1 else ''}); a cell's "
+             f"percentage is the change from the previous mesh, a triple's the largest of its components against its largest value.")
+    def listed(names: list[str]) -> str:  # "a", "a and b", "a, b and c"
+        return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+    if settled_names:
+        words += f" Between the two finest meshes, {listed(settled_names)} moved by less than {100 * below:g} %: these are the numbers a finer mesh confirms."
+    if moving_names:
+        moving = listed(moving_names)
+        words += (f" {moving[0].upper() + moving[1:]} still moved by more than {100 * below:g} % at the last refinement: where a gripped tab ends at a free edge "
+                  "the elastic solution is singular, so a value read there grows with every refinement and is a trend, not a validation value.")
+    for o in study["left_out"]:
+        words += f" The {o['factor']}x mesh ({o['elements']} elements) was left out: past the study's cap of {study['cap']}."
+    out += [escape(words), documents.long_table(header, table, "Y" + "r" * len(meshes) + "l", r"\footnotesize")]
+    return "\n\n".join(out)
+
+
 def verification_chapter(src: Sources, deck, solution, record: dict, rows, problems, summaries, units: str, map_drawn: bool, full_tables: bool, c,
-                         figures: Path, coupled_reaction: float | None = None) -> str:
+                         figures: Path, coupled_reaction: float | None = None, spec=None) -> str:
     solver = record["solver"]
     twin = next((r.kernel for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
     same = ""
@@ -721,6 +818,7 @@ def verification_chapter(src: Sources, deck, solution, record: dict, rows, probl
            + r". Elsewhere Chapter~\ref{ch:results} is our engine's alone." + escape(same) + r" The record and the solver's conventions file are kept with us; this "
            r"chapter and Appendix~\ref{app:record} print them.",
            validation_section(deck, solution, record, rows, c, units),
+           *([convergence_section(spec, units)] if spec is not None else []),
            r"\section{CalculiX: every group of compared numbers}",
            documents.summary_section(record, rows, problems, summaries, units, METHOD),
            r"To see it yourself in PrePoMax 2.6: File, Import the CalculiX deck from the package (\texttt{2-our-model/calculix/}), run it, then File, "
@@ -822,9 +920,10 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
     if summary.get("test_method", {}).get("designation"):
         tm = summary["test_method"]
         s = tm.get("strain")
-        verdict.append(rf"\textbf{{Test method.}} Checked against {escape(tm['designation'])} (Section~\ref{{sec:test-method}}): the stress on the gross "
-                       rf"area is {number(abs(tm['stress']), 3)} {escape(tm['units']['stress'])}"
-                       + (rf", the chord modulus {number(s['chord']['modulus'], 3)} {escape(tm['units']['modulus'])}" if s else "") + ".")
+        red = tm["reduction"]
+        verdict.append(rf"\textbf{{Test method.}} Checked against {escape(tm['designation'])} (Section~\ref{{sec:test-method}}): the stress on the "
+                       rf"{escape(red['area'])} is {number(abs(tm['stress']), 3)} {escape(tm['units']['stress'])}"
+                       + (rf", the {escape(red['modulus'])} {number(s['chord']['modulus'], 3)} {escape(tm['units']['modulus'])}" if s else "") + ".")
     agreeing = sum(r.agrees for r in rows)
     expected = record["expected"]
     verdict.append(rf"\textbf{{Verified against CalculiX}} {escape(str(solver['version']))} ({escape(solver['element_type'])}) at "
@@ -996,7 +1095,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\chapter{Results from our engine}\label{ch:results}", results,
         r"\chapter{Verification against other solvers}\label{ch:verification}",
         verification_chapter(src, deck, solution, record, rows, problems, summaries, deck_units, map_drawn, full_tables, c, figures,
-                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None),
+                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None, spec),
         r"\chapter{What this shows and what it does not}\label{ch:reading}", reading_chapter(src, card, c),
         r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, audited + compared, form, deck_units, escape, code, team.table, documents.kv_table,
                                                                     team_built=c is not None),

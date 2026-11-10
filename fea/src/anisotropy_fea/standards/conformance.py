@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from anisotropy_engine.library import find_dataset
 
-from ..spec import CouponSpec, full_angles, normalised_angle, spec_ply_thickness
+from ..spec import CouponSpec, full_angles, is_isotropic, normalised_angle, spec_ply_thickness
 from . import PROFILES
 from .profile import Preset, Profile, Requirement, Subject
 
@@ -56,7 +56,7 @@ class Conformance:
         """What the coupon is held to beyond the standard itself: its specimen or its laminate's class."""
         s = self.subject
         if self.profile.variants:
-            return f"Specimen {s.variant}" if s.variant else "no specimen named"
+            return f"{self.profile.variant_noun} {s.variant}" if s.variant else "no specimen named"
         if self.profile.classes:
             return f"{self.preset.label} class ({self.preset.clause})" if self.preset is not None else "no class of Table 2"
         return ""
@@ -94,13 +94,15 @@ def subject_of(spec: CouponSpec) -> Subject:
     if mat.library is not None:
         record = find_dataset(mat.library, mat.dataset)
         family, architecture = record.get("family"), record.get("architecture")
-    method, strain, tabs = spec.test_method, spec.strain, spec.tabs
+    method, strain, tabs, d = spec.test_method, spec.strain, spec.tabs, g.dogbone
     return Subject(kind=spec.kind, units=spec.units, length=g.length, width=g.width, tab_length=g.tab_length or 0.0, hole_diameter=g.hole_diameter,
                    angles=tuple(normalised_angle(a) for a in full_angles(spec)), ply_thickness=spec_ply_thickness(spec), family=family,
                    architecture=architecture, variant=method.variant if method is not None else None,
                    strain_device=strain.device if strain is not None else None, strain_length=strain.gauge_length if strain is not None else None,
                    tab_thickness=tabs.thickness if tabs is not None else None, tab_bevel=tabs.bevel if tabs is not None else None,
-                   tab_material=tabs.material if tabs is not None else None)
+                   tab_material=tabs.material if tabs is not None else None, isotropic=is_isotropic(spec),
+                   narrow_width=d.narrow_width if d is not None else None, narrow_length=d.narrow_length if d is not None else None,
+                   fillet_radius=d.radius if d is not None else None, outer_radius=d.outer_radius if d is not None else None)
 
 
 def judge(requirement: Requirement, subject: Subject) -> Judged:

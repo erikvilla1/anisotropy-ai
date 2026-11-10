@@ -53,10 +53,19 @@ class Subject:
     tab_thickness: float | None = None  # bonded tabs, when given
     tab_bevel: float | None = None  # degrees
     tab_material: str | None = None
+    isotropic: bool = False  # one isotropic material with no plies (ADR-0075): `angles` is (0,) and `ply_thickness` the coupon's thickness
+    narrow_width: float | None = None  # a dog-bone's narrow section, its fillet and its outer radius (ADR-0075); None for a straight strip
+    narrow_length: float | None = None
+    fillet_radius: float | None = None
+    outer_radius: float | None = None
 
     @property
     def thickness(self) -> float:
         return len(self.angles) * self.ply_thickness
+
+    @property
+    def dogbone(self) -> bool:
+        return self.narrow_width is not None
 
     @property
     def gauge_length(self) -> float:
@@ -144,6 +153,7 @@ class Profile:
     requirements: tuple[Requirement, ...]
     variants: tuple[Preset, ...] = ()  # specimens the form's Specimen row names
     variant_words: tuple[str, ...] = ()  # the words the Specimen row takes for this standard (the variants' keys, and "other" when allowed)
+    variant_noun: str = "Specimen"  # what the standard calls its specimens: C1869's Specimen A, D638's Type I
     classes: tuple[Preset, ...] = ()  # sizes recommended per class of laminate, the class read from the layup
     classify: Callable[[Subject], Preset | None] | None = None
     requires_strain: bool = False  # the standard counts the strain measurement in its rules, so the form requires it

@@ -5,7 +5,7 @@ import { towTest, type ProjectRecord } from "../lib/studio-api";
 import { readMessage } from "../lib/studio-chat";
 import { blankForm, fieldByKey, FORM_VERSION, mergeRows, NO_STANDARD, standardsFor, withTest, wordsFor } from "../lib/studio-form";
 import {
-  failureCodeWords, nextSpecimen, pastedSpecimens, specimenFields, TOW_PANELS, TOW_TEST, towDefaults, towFields, towPanelState, towRowErrors, towValues,
+  failureCodeWords, nextSpecimen, pastedSpecimens, specimenFields, TOW_PANELS, TOW_TEST, towDefaults, towFields, towPanelState, towRowErrors, towStepNumber, towValues,
 } from "../lib/studio-tow";
 
 /** The fibre tow test in the studio (ADR-0074): offered on the coupon form's Test list, its own rows and specimens, the values object the API
@@ -21,6 +21,13 @@ test("the tow test is on the coupon form's Test list and has its own standard", 
   const back = withTest({ ...form, standard: "ASTM D4018-23" }, "unnotched tension");
   assert.equal(back.form.standard, NO_STANDARD);
   assert.match(back.note, /covers fibre tow tension, not unnotched tension/);
+});
+
+test("the tow's rail opens on the coupon's first step, Test and standard, and numbers its steps as the coupon's are (ADR-0062 amendment 1)", () => {
+  assert.deepEqual(TOW_PANELS[0].keys, ["test", "standard"]);
+  assert.equal(TOW_PANELS[0].title, "Test and standard");
+  assert.deepEqual(TOW_PANELS.map((p) => towStepNumber(p.id)), [1, 2, 3, 4, 5, 6, 7, null]);
+  assert.deepEqual(TOW_PANELS.flatMap((p) => p.keys).filter((k) => !towFields.some((f) => f.key === k)), ["test", "standard", "filled_by", "date", "notes"]);
 });
 
 test("every tow row has a panel and the rows carry the standard's units, no Units row", () => {
@@ -81,7 +88,8 @@ test("the checklist's rows come back to the tow's rows and panels", () => {
   assert.deepEqual(towRowErrors(checklist), { fibre: "Fibre: required", filled_by: "Fibre: required", tow_gauge_length: "Gauge length (mm): a number is needed",
     specimens: "Specimens: required" });
   assert.equal(towPanelState("tow-fibre", checklist), "missing");
-  assert.equal(towPanelState("tow-project", checklist), "warn");
+  assert.equal(towPanelState("tow-standard", checklist), "warn");
+  assert.equal(towPanelState("tow-project", checklist), "none");
   assert.equal(towPanelState("tow-calculate", checklist), "none");
   assert.equal(towPanelState("tow-fibre", null), "none");
 });

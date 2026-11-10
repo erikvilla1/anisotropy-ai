@@ -93,6 +93,14 @@ export function printed(value: number | null | undefined): string {
   return String(Number(value.toPrecision(4)));
 }
 
+/** A change from the previous mesh as the convergence table prints it (ADR-0068): signed, two figures under 1 %, one decimal above, a dash for none. */
+export function percentChange(change: number | null | undefined): string {
+  if (change === null || change === undefined || !Number.isFinite(change)) return "–";
+  const magnitude = Math.abs(100 * change);
+  const text = magnitude < 0.001 ? "0.00" : magnitude < 1 ? magnitude.toPrecision(2) : magnitude.toFixed(1);
+  return `${change < 0 && magnitude >= 0.001 ? "−" : "+"}${text} %`;
+}
+
 /** A set of components read together, with the ones that are numerical noise beside the others set to zero: a component below a billionth of the
  *  set's largest magnitude is the solver's arithmetic, not a value (a 4e-15 MPa shear in a 0° ply is zero, and a table that prints it reads
  *  as a difference). A set with no finite value is returned as it is. */

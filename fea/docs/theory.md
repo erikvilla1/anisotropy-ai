@@ -288,9 +288,9 @@ The chord modulus between the strains $`\varepsilon_1 = 1000`$ and $`\varepsilon
 E^{\mathrm{chord}} = \frac{\sigma(\varepsilon_2) - \sigma(\varepsilon_1)}{\varepsilon_2 - \varepsilon_1}, \qquad \nu = -\frac{\varepsilon_t}{\varepsilon_l} .
 ```
 
-Both are set beside the laminate's $`E_y`$ and $`\nu_{yx}`$ from the engine's ABD, where the coupon's length is $`y`$ (ADR-0065). The first-ply-failure factor of Section 7 scales the force, the stresses and the strain to the load at which the first ply fails; that stress on the gross and the net area is a first-ply-failure stress, never the ultimate strength the standards take at a test's maximum force (D3039 Eq. 5, C1869 Eq. 3 and 4), which a linear model does not reach. The block, in the stated units, is computed by `method_summary`.
+ASTM D638 reduces the same record by the same formulas in its own words, the standard's words computed by `reduction_of` from the standard the coupon names (ADR-0075): its modulus of elasticity is the slope of the initial straight line over any segment of it (§11.4), read here between $`\varepsilon_1 = 500`$ and $`\varepsilon_2 = 2500`$ microstrain, the axial strains of its A3.9.8; its area is the least original cross-section (§11.2), on a dog-bone the narrow section's width times the thickness; its Poisson's ratio is A3.10's, the same ratio. On a linear model the slope is $`\sigma/\varepsilon`$ whichever standard reads it. Both are set beside the laminate's $`E_y`$ and $`\nu_{yx}`$ from the engine's ABD, where the coupon's length is $`y`$ (ADR-0065); for an isotropic material these are its own $`E`$ and $`\nu`$. The first-ply-failure factor of Section 7 scales the force, the stresses and the strain to the load at which the first ply fails; that stress on the gross and the net area is a first-ply-failure stress, never the ultimate strength the standards take at a test's maximum force (D3039 Eq. 5, C1869 Eq. 3 and 4), which a linear model does not reach. The block, in the stated units, is computed by `method_summary`.
 
-<!-- code: gross_area, net_area, engineering_stress, extensometer_strain, chord_modulus, poisson_ratio, method_summary -->
+<!-- code: gross_area, net_area, engineering_stress, extensometer_strain, chord_modulus, poisson_ratio, reduction_of, method_summary -->
 
 ## Checks
 

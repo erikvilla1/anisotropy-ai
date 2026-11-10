@@ -28,7 +28,7 @@ from anisotropy_fea.standards.profile import OTHER_FAMILIES, POLYMER_FAMILIES, i
 from public_coupon import PUBLIC_COUPON
 from test_intake import PUBLIC_FILL
 
-D3039, C1869, D4018 = "ASTM D3039/D3039M-17", "ASTM C1869-18(2023)", "ASTM D4018-23"
+D3039, C1869, D638, D4018 = "ASTM D3039/D3039M-17", "ASTM C1869-18(2023)", "ASTM D638-22", "ASTM D4018-23"
 TOOLS = dict(ccx=lambda: Path("ccx"), tectonic=lambda: "tectonic", gmsh=lambda: "4.15")
 STRIP = {**PUBLIC_FILL, "mesh_nx": None, "mesh_partitions": None, "mesh_seeds": None, "element_size": 5.0}  # the public coupon, coarsely meshed
 D3039_STRIP = {**STRIP, "standard": D3039, "strain_device": "extensometer", "strain_length": 25.0}
@@ -74,7 +74,7 @@ def judged(spec) -> dict:
 # --------------------------------------------------------------------------------------------- the registry
 
 def test_every_requirement_names_its_clause_level_and_rule():
-    assert STANDARD_WORDS == (NONE, *BY_DESIGNATION) and set(BY_DESIGNATION) == {D3039, C1869, D4018}
+    assert STANDARD_WORDS == (NONE, *BY_DESIGNATION) and set(BY_DESIGNATION) == {D3039, D638, C1869, D4018}
     for profile in PROFILES.values():
         rows = TOW_ROWS if TOW_KIND in profile.kinds else FIELDS  # the tow's record has rows of its own (ADR-0074)
         ids = [r.id for r in profile.requirements]
@@ -86,7 +86,7 @@ def test_every_requirement_names_its_clause_level_and_rule():
             assert all(row in rows for row in r.rows), f"{profile.id}.{r.id}: a row the form does not have"
         for preset in (*profile.variants, *profile.classes):
             assert all(row in FIELDS for row in preset.si), f"{profile.id}.{preset.key}: a row the form does not have"
-    assert profiles_for("unnotched_tension") == [PROFILES["astm-d3039"]] and profiles_for("open_hole_tension") == [PROFILES["astm-c1869"]]
+    assert profiles_for("unnotched_tension") == [PROFILES["astm-d3039"], PROFILES["astm-d638"]] and profiles_for("open_hole_tension") == [PROFILES["astm-c1869"]]
     assert profiles_for(TOW_KIND) == [PROFILES["astm-d4018"]]
     assert profiles_for("three_point_bending") == [] and profile_of_word("none") is None and profile_of_word("astm d3039/d3039m-17") is PROFILES["astm-d3039"]
 
@@ -190,7 +190,7 @@ def test_c1869_other_is_a_variation_judged_by_its_annex(tmp_path):
     ({**STRIP, "standard": C1869, "specimen": "A"}, "standard", "covers open-hole tension, not unnotched tension"),
     ({**B_STRIP, "specimen": None}, "specimen", "required for ASTM C1869-18(2023); one of A, B, other"),
     ({**STRIP, "specimen": "A"}, "specimen", "belongs to a standard that names its specimens"),
-    ({**STRIP, "standard": "ASTM D3039"}, "standard", "is not one of none, ASTM D3039/D3039M-17, ASTM C1869-18(2023)"),
+    ({**STRIP, "standard": "ASTM D3039"}, "standard", "is not one of none, ASTM D3039/D3039M-17, ASTM D638-22, ASTM C1869-18(2023)"),
     ({**STRIP, "standard": D3039}, "strain_device", "required for ASTM D3039/D3039M-17, whose minimum length counts the gauge length"),
     ({**STRIP, "tab_thickness": 1.5}, "tab_thickness", "give both for bonded tabs"),
     ({**STRIP, "tab_thickness": 1.5, "tab_bevel": 95.0}, "tab_bevel", "at most 90"),

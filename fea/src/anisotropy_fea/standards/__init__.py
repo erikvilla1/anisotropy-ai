@@ -7,11 +7,13 @@ the spec can import it.
 
 from __future__ import annotations
 
-from . import astm_c1869, astm_d3039, astm_d4018
+from . import astm_c1869, astm_d3039, astm_d638, astm_d4018
 from .profile import INCH_POUND_SYSTEMS, LEVELS, STATES, Finding, Preset, Profile, Requirement, Subject
 
 NONE = "none"  # the Standard row's word for a coupon that follows no standard
-PROFILES: dict[str, Profile] = {profile.id: profile for profile in (astm_d3039.PROFILE, astm_c1869.PROFILE, astm_d4018.PROFILE)}
+PROFILES: dict[str, Profile] = {
+    profile.id: profile for profile in (astm_d3039.PROFILE, astm_d638.PROFILE, astm_c1869.PROFILE, astm_d4018.PROFILE)
+}
 BY_DESIGNATION: dict[str, Profile] = {profile.designation: profile for profile in PROFILES.values()}
 VARIANT_WORDS: tuple[str, ...] = tuple(dict.fromkeys(word for profile in PROFILES.values() for word in profile.variant_words))  # the Specimen row's words
 STANDARD_WORDS: tuple[str, ...] = (NONE, *BY_DESIGNATION)  # the Standard row's words

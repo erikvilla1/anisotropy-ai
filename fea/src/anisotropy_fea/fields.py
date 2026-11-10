@@ -33,7 +33,7 @@ from .mesh import KernelError
 from .model import Deck, all_boundaries, node_name, resolve_elements, resolve_nodes
 from .quality import QualityField, quality_summary
 from .recovery import FACES, FailureField, PlyField, deck_f12_star, element_ply_states, ply_mises, ply_ratio_per_ply, strength_ratios
-from .report import fpf_place, gripped_groups
+from .report import edge_widths, fpf_place, gripped_groups
 from .results import ShellSolution, Solution
 from .test_quantities import MethodInputs, method_summary
 from .units import UNIT_LABEL, from_si
@@ -188,16 +188,21 @@ def elements_touching_grips(deck: Deck, solution: Solution) -> set[int]:
     return {e for e in range(mesh.element_count) if gripped & set(mesh.connectivity[e, :4].tolist())}
 
 
-def classical_laminate_check(solution: Solution, applied: dict[str, Any], reaction_si: float, angles: np.ndarray, units: str) -> dict[str, Any] | None:
+def classical_laminate_check(solution: Solution, applied: dict[str, Any], reaction_si: float, angles: np.ndarray, units: str,
+                             deck: Deck | None = None) -> dict[str, Any] | None:
     """Classical laminate theory for a gripped coupon pulled or pushed along its length (ADR-0066): the reaction over the width as N_y with
     N_x = N_xy = 0 (free edges), the mid-plane strain from the laminate's ABD and every ply's stresses in its fibre axes at its middle, so
     the engineer's hand check sits beside the two solvers in the fields' units. None for another loading (a plate, a bending coupon) or
-    a mesh of more than one laminate; the same column the Summary leaves empty."""
+    a mesh of more than one laminate; the same column the Summary leaves empty. A coupon that narrows (a dog-bone, ADR-0075, read from the
+    deck's edge rows) carries the reaction over its narrowest width, where the gauge is."""
     mesh = solution.mesh
     if applied.get("dof") != 2 or applied.get("set") != "the top grip" or len(mesh.sections) != 1:
         return None
     section = mesh.sections[0]
     width = float(mesh.xy[:, 0].max() - mesh.xy[:, 0].min())
+    rows = edge_widths(deck, solution) if deck is not None else None
+    if rows is not None:
+        width = min(width, float(rows[1].min()))
     if width <= 0.0:
         return None
     eps0, kappa = midplane_response(section.plies, Loads(Ny=reaction_si / width))
@@ -245,6 +250,13 @@ def failures_of(deck: Deck, solution: Solution, field: PlyField, criteria: tuple
             if criteria is not None:
                 raise
     return out
+
+
+def isotropic_only(deck: Deck) -> bool:
+    """Every section is one layer of an isotropic material (ADR-0075): a plastic, whose "ply" is the coupon itself, axis 1 along its length."""
+    sections = [section for part in deck.parts.values() for section in part.sections]
+    return bool(sections) and all(len(section.layers) == 1 and (material := deck.materials.get(section.layers[0].material)) is not None
+                                  and material.elastic is not None and material.elastic.kind == "ISOTROPIC" for section in sections)
 
 
 def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, ...] | None = None, quality: QualityField | None = None,
@@ -330,6 +342,7 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     }
     if "total_force" in applied:
         summary["applied"]["total_force"] = float(from_si(applied["total_force"], "force", units))
+    summary["isotropic"] = isotropic_only(deck)
 
     def place_of(flat_index: int, array: np.ndarray) -> dict[str, Any]:
         where = np.unravel_index(flat_index, array.shape)
@@ -358,7 +371,7 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
             peak[name] = {"value": float(stress(component.reshape(-1)[flat])), "element": e, "label": element_name(mesh.element_keys[e]),
                           "xy": length(centroids[e]).tolist(), "face": FACES[int(where[1])] if shell else None, "touches_grip": e in gripped}
         summary["ply_peaks"].append(peak)
-    summary["clt"] = classical_laminate_check(solution, applied, reaction_value, angles, units)
+    summary["clt"] = classical_laminate_check(solution, applied, reaction_value, angles, units, deck)
     for criterion, found in failures.items():
         e = mesh.element_keys.index(found.element)
         place, touches_grip, tied = fpf_place(deck, solution, found, units)

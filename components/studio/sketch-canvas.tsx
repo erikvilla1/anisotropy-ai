@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Edges, Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -48,8 +48,24 @@ function TabBlock({ y0, dir, z0, up, length, thickness, bevel, width }: {
   );
 }
 
-/** The typed rows as a sketch (ADR-0062): a slab the size of the coupon, its tab bands, its hole, the support and nose lines of a
- * bending coupon and a plate's drawn boxes. Not meshed: the package's preview replaces it after the check. */
+/** A dog-bone's slab (ADR-0075): its outline, from `outlinePoints`, extruded through the thickness and centred on the mid-plane. */
+function DogboneSlab({ outline, thickness }: { outline: [number, number][]; thickness: number }) {
+  const geometry = useMemo(() => {
+    const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
+    const extruded = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 1 });
+    extruded.translate(0, 0, -thickness / 2);
+    return extruded;
+  }, [outline, thickness]);
+  return (
+    <mesh geometry={geometry} name="dogbone">
+      <meshPhysicalMaterial {...PRESENTATION_MATERIAL} side={THREE.DoubleSide} />
+      <Edges color={EDGE_COLOR} threshold={20} />
+    </mesh>
+  );
+}
+
+/** The typed rows as a sketch (ADR-0062): a slab the size of the coupon or its dog-bone outline (ADR-0075), its tab bands, its hole, the
+ * support and nose lines of a bending coupon and a plate's drawn boxes. Not meshed: the package's preview replaces it after the check. */
 export function SketchCanvas({ sketch }: { sketch: Sketch }) {
   const [webgl, setWebgl] = useState<boolean | null>(null);
   useEffect(() => { setWebgl(webglAvailable()); }, []);
@@ -57,6 +73,7 @@ export function SketchCanvas({ sketch }: { sketch: Sketch }) {
   const size = Math.max(w, l, 1);
   const top = t / 2 + LIFT * size;
   const centre = [w / 2, l / 2] as const;
+  const across = sketch.dogbone?.narrowWidth ?? w; // the knife edges sit within the narrow section of a dog-bone
   if (webgl === false) return <WebGLMissing />;
   if (webgl === null) return <div className="studio-scene-loading" role="status">Loading the 3D view…</div>;
   return (
@@ -64,11 +81,13 @@ export function SketchCanvas({ sketch }: { sketch: Sketch }) {
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }} camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}>
         <color attach="background" args={["#0c0e0d"]} />
         <PresentationLighting size={size} centre={centre} floor={-t / 2 - 0.004 * size} />
-        <mesh position={[centre[0], centre[1], 0]}>
-          <boxGeometry args={[w, l, t]} />
-          <meshPhysicalMaterial {...PRESENTATION_MATERIAL} side={THREE.DoubleSide} />
-          <Edges color={EDGE_COLOR} />
-        </mesh>
+        {sketch.dogbone !== null ? <DogboneSlab outline={sketch.dogbone.outline} thickness={t} /> : (
+          <mesh position={[centre[0], centre[1], 0]}>
+            <boxGeometry args={[w, l, t]} />
+            <meshPhysicalMaterial {...PRESENTATION_MATERIAL} side={THREE.DoubleSide} />
+            <Edges color={EDGE_COLOR} />
+          </mesh>
+        )}
         {sketch.tabs !== null ? (
           <>
             <Line points={frame(0, 0, w, sketch.tabs, top)} color={HELD} lineWidth={2} />
@@ -85,8 +104,8 @@ export function SketchCanvas({ sketch }: { sketch: Sketch }) {
         ) : null}
         {sketch.hole !== null ? <Line points={circle(centre[0], centre[1], sketch.hole / 2, top)} color={EDGE_COLOR} lineWidth={2} /> : null}
         {sketch.strain !== null ? ([-1, 1] as const).map((side) => (
-          <Line key={`k${side}`} points={[[0.3 * w, centre[1] + side * (sketch.strain as { length: number }).length / 2, top],
-            [0.7 * w, centre[1] + side * (sketch.strain as { length: number }).length / 2, top]]} color={GAUGE_COLOR} lineWidth={3} />
+          <Line key={`k${side}`} points={[[centre[0] - 0.2 * across, centre[1] + side * (sketch.strain as { length: number }).length / 2, top],
+            [centre[0] + 0.2 * across, centre[1] + side * (sketch.strain as { length: number }).length / 2, top]]} color={GAUGE_COLOR} lineWidth={3} />
         )) : null}
         {sketch.supports.map((y, i) => <Line key={`s${i}`} points={[[0, y, -top], [w, y, -top]]} color={HELD} lineWidth={3} />)}
         {sketch.noses.map((y, i) => (
