@@ -3,6 +3,7 @@ elements sharing a node, the summary's extremes are the arrays' extremes, the fi
 explanation's sentences quote the facts and nothing else. On the public IM7/8552 check decks, nothing under .local/."""
 
 import json
+import math
 
 import numpy as np
 import pytest
@@ -143,9 +144,24 @@ def test_every_number_in_a_sentence_is_a_fact(data):
         for token in numbers_in(sentence):
             assert token in printed or token.lstrip("-+") in printed, (token, sentence)
     assert sentences[0].startswith("IM7-UNT-L1, unnotched tension, under a displacement of 1 mm along the coupon: the top grip carries")
-    assert "The largest displacement is" in sentences[1] and "S11 =" in sentences[2] and "von Mises" in sentences[2]
+    assert "The largest displacement is" in sentences[1]
+    # the ply stresses are said with their symbols, not the CAE names a viewer's global S11 collides with (ADR-0066), and no ply von Mises
+    assert "sigma_1 along the fibres =" in sentences[2] and "tau_12 in-plane shear =" in sentences[2] and "in the ply's axes" in sentences[2]
+    assert "S11 =" not in sentences[2] and "von Mises" not in sentences[2] and "max_mises" not in facts
     assert any("criterion at the applied loading" in s for s in sentences) and sentences[-1].startswith("The earliest of the criteria is")
     assert any(MODE_WORDS[facts[f"{c}_mode"]] in s for c in facts["criteria"] for s in sentences)
+
+
+def test_a_float_fact_holds_the_digits_the_sentences_print(data):
+    """ADR-0052 amendment 1: a writer that copies a number from the sheet copies the sentences' four significant figures."""
+    facts = fact_sheet(data["summary"], data["coupon"], UNITS, data["labels"])
+    floats = {key: value for key, value in facts.items() if isinstance(value, float)}
+    assert {"reaction", "max_displacement", "max_S11", "max_S11_angle"} <= set(floats)
+    for key, value in floats.items():
+        assert value == float(f"{value:.4g}"), (key, value)  # no digit beyond the fourth
+    exact = abs(float(data["summary"]["reaction"]["value"]))  # the engine's value, as the summary keeps it
+    assert f"{facts['reaction']:.4g}" == f"{exact:.4g}"  # the same four digits the sentence prints
+    assert abs(facts["reaction"] - exact) <= 0.5 * 10 ** (math.floor(math.log10(exact)) - 3)  # within half a unit of the fourth digit
 
 
 def test_the_limiting_ply_is_named_with_its_place_and_mode(data):
@@ -175,3 +191,53 @@ def test_the_setup_sentences_follow_the_checklist():
     ready = setup_sentences({"items": [item for item in checklist["items"] if item["state"] in ("pass", "warn")]})
     assert ready[0] == "The setup is ready to solve, with 1 warning."
     assert numbers_in("ply 3 (-45 degrees) at element 16, 2.1e+03 MPa, f12") == ["3", "-45", "16", "2.1e+03"]
+
+
+def test_the_gauge_sections_first_ply_failure_sits_away_from_the_tabs(data):
+    public_fields = data
+    # the grip-edge factor is the model's smallest; the gauge section's is what a test coupon, which breaks in its gauge, is compared with
+    summary = public_fields["summary"]
+    assert set(summary["fpf_gauge"]) == set(summary["fpf"]) and summary["earliest_gauge"] in summary["fpf_gauge"]
+    for criterion, grip in summary["fpf"].items():
+        gauge = summary["fpf_gauge"][criterion]
+        assert gauge["factor"] >= grip["factor"] - 1e-9 and gauge["touches_grip"] is False and gauge["place"].endswith("from the nearer tab line")
+        assert gauge["index"] == pytest.approx(1.0 / gauge["factor"]) and gauge["mode"] and 1 <= gauge["ply"] <= public_fields["mesh"]["plies"]
+        assert gauge["element"] in public_fields["mesh"]["element_sets"]["Gauge"]
+
+
+def test_every_ply_has_its_own_peaks_and_the_clamped_edge_is_marked(solved, data):
+    # ADR-0066: one entry per ply, each component's largest magnitude over the elements, the element named, the grip row marked
+    deck, solution = solved
+    summary = data["summary"]
+    stress = np.asarray(data["element"]["ply"]["stress_12"])  # (ne, plies, 3)
+    peaks = summary["ply_peaks"]
+    assert [p["ply"] for p in peaks] == list(range(1, stress.shape[1] + 1)) and [p["angle"] for p in peaks] == [45.0, 0.0, -45.0, 90.0, 90.0, -45.0, 0.0, 45.0]
+    for k, p in enumerate(peaks):
+        for i, name in enumerate(("S11", "S22", "S12")):
+            e = p[name]["element"]
+            assert abs(p[name]["value"]) == pytest.approx(np.abs(stress[:, k, i]).max()) and p[name]["value"] == pytest.approx(stress[e, k, i])
+            assert p[name]["label"] == f"Coupon-1.{solution.mesh.element_keys[e][1]}" and p[name]["face"] is None
+    fibre = peaks[1]["S11"]  # the stated 0-degree ply carries the largest fibre stress, at the tab line (ADR-0065)
+    assert fibre["value"] == pytest.approx(summary["max_ply"]["S11"]["value"]) and fibre["element"] == summary["max_ply"]["S11"]["element"] and fibre["touches_grip"] is True
+    assert peaks[3]["S11"]["touches_grip"] is False  # the 90-degree ply's largest |sigma_1| is a compression in the gauge section
+
+
+def test_classical_laminate_theory_sits_beside_the_gauge_centre(solved, data):
+    # ADR-0066: N_y = reaction / width, N_x = N_xy = 0, each ply at its middle; on a straight coupon it equals the kernel's gauge-centre element
+    from anisotropy_fea.fields import classical_laminate_check
+
+    deck, solution = solved
+    summary = data["summary"]
+    clt = summary["clt"]
+    assert clt["width"] == pytest.approx(25.0) and clt["Ny"] == pytest.approx(summary["reaction"]["value"] / 25.0)
+    assert clt["strain"][1] > 0 > clt["strain"][0] and abs(clt["strain"][2]) < 1e-12  # a quasi-isotropic laminate under a pull: no shear coupling
+    centre = solution.mesh.element(deck.elsets["Probe-centre"][0])
+    stress = np.asarray(data["element"]["ply"]["stress_12"])[centre]  # (plies, 3), MPa
+    assert [p["ply"] for p in clt["plies"]] == list(range(1, 9)) and clt["plies"][1]["angle"] == 0.0
+    for p in clt["plies"]:
+        assert np.allclose(p["stress_12"], stress[p["ply"] - 1], rtol=1e-3, atol=0.5)
+    assert clt["plies"][1]["stress_12"][0] == pytest.approx(1180.76, abs=0.05)  # the fibre stress of the 0-degree ply, as the public record's CalculiX value within 0.01 %
+    # another loading (a plate's pressure, a bending coupon's push) has no laminate-theory column
+    applied = applied_loading(deck, solution)
+    assert classical_laminate_check(solution, {**applied, "dof": 3}, 1.0, np.zeros(8), UNITS) is None
+    assert classical_laminate_check(solution, {**applied, "set": "the supports"}, 1.0, np.zeros(8), UNITS) is None

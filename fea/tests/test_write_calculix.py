@@ -32,7 +32,11 @@ def test_the_deck_has_calculix_syntax_and_is_deterministic():
     assert "*ELASTIC, TYPE=ENGINEERING CONSTANTS\n162095.744, 8963.184481, 8963.184481, 0.316, 0.316, 0.45, 4688.434959, 4688.43\n3000., 293." in text
     for name in ("Ori-m45", "Ori-0", "Ori-45", "Ori-90"):
         assert f"*ORIENTATION, NAME={name}\n" in text
-    assert "*ORIENTATION, NAME=Ori-45\n0.7071067812, 0.7071067812, 0., -0.7071067812, 0.7071067812, 0." in text
+    # Ori-45 is named by the stated angle; its axes are the fibre direction from x, 45 + 90 = 135 degrees, written as the same line -45 degrees
+    # (a fibre has no arrow, and fibre_angles brings every angle into (-90, 90]): a = (cos -45, sin -45), b = z cross a (ADR-0065).
+    assert "*ORIENTATION, NAME=Ori-45\n0.7071067812, -0.7071067812, 0., 0.7071067812, 0.7071067812, 0." in text
+    assert "*ORIENTATION, NAME=Ori-0\n6.123233996e-17, 1., 0., -1., 6.123233996e-17, 0." in text  # the stated 0 ply has its fibres along y
+    assert "named by the ply angle the coupon states, counted from its length axis" in text
     section = text[text.index("*SHELL SECTION, ELSET=All, COMPOSITE"):text.index("*BOUNDARY")]
     layers = [line for line in section.splitlines()[1:] if line.strip()]
     assert layers == [f"0.18288, , IM7-8552, {name}" for name in ("Ori-45", "Ori-0", "Ori-m45", "Ori-90", "Ori-90", "Ori-m45", "Ori-0", "Ori-45")]

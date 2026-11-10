@@ -1,0 +1,66 @@
+# Unnotched tension coupon checked against ASTM D3039/D3039M-17 (ADR-0072): 250 mm by 25 mm, Table 2's size for a balanced and symmetric
+# laminate; the 56 mm grip length is ours (Table 2 grips this class through emery cloth and gives none). IM7/8552 quasi-isotropic
+# [45/0/-45/90]s from the engine library (open publisher), 1.46 mm thick against Table 2's suggested 2.5 mm: an advisory, not a deviation.
+# A 25 mm extensometer at mid-length; node rows at its ends and an even count across put its two nodes on the centre line. Grips as
+# direct constraints, so one spec serves our engine and CalculiX. Units mm-MPa.
+title = "IM7-UNT-L1, unnotched tension: IM7/8552 [45/0/-45/90]s under ASTM D3039/D3039M-17, nodal grips on 56 mm tabs, 1 mm pull, 25 mm extensometer"
+kind = "unnotched_tension"
+units = "mm-MPa"
+
+[coupon]
+designation = "IM7-UNT-L1"
+standard = "ASTM D3039/D3039M-17"
+size_from = "ASTM D3039/D3039M-17, Table 2: balanced and symmetric, 25 by 250 mm; the 56 mm grip length is ours"
+team_model = "not built yet"
+test_data = "none: a public check of the test-method quantities against CalculiX and laminate theory"
+
+[test_method]
+id = "astm-d3039"
+
+[geometry]
+length = 250.0
+width = 25.0
+tab_length = 56.0
+
+[mesh]
+mesher = "structured"
+element_order = 1
+nx = 12                                   # an even count across: a node column on the centre line, where the extensometer sits
+y_partitions = [56.0, 112.5, 137.5, 194.0]  # the tab lines and the extensometer's ends
+y_seeds = [28, 28, 12, 28, 28]            # about 2 mm rows; an even count over the gauge length puts a node row at mid-length
+
+[layup]
+angles = [45, 0, -45, 90]
+angles_from = "length"  # counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)
+symmetric = true
+ply_thickness = "library"
+
+[material]
+library = "im7-8552"
+dataset = "ncamp-im7-8552-2019-rtd-measured-v1"
+[material.transverse]
+G13 = 4688.43       # set equal to G12: a stated choice, the dataset gives no G13
+G23 = 3000.0        # nominal, no source: only CalculiX's brick reads it
+plane_stress = true  # nu13 = nu23 = 0 for CalculiX, the plane stress our engine assumes (the form's convention)
+transverse_isotropy = true
+
+[grips]
+kind = "nodal"
+region = "tabs"
+
+[loading]
+control = "displacement"
+value = 1.0
+
+[probes]
+nodes = { centre = [12.5, 125.0], extensometer_bottom = [12.5, 112.5], extensometer_top = [12.5, 137.5] }
+elements = { centre = [12.5, 125.0] }
+
+[strain]
+device = "extensometer"
+gauge_length = 25.0  # within §7.3.2's 10 to 50 mm
+
+[output]
+fpf_criteria = ["max_stress", "tsai_hill"]
+abaqus = { field_preselect = true, node_print = true, el_print = true }
+calculix = { node_print = true, el_print = true, frd = true, el_print_global = true }

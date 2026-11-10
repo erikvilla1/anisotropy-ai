@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  BUSY_RETRY_S, ERROR_RETRY_S, JOB_TIMEOUT_MS, LOST_AFTER_ERRORS, POLL_MS, RETRY_CAP_S, STOP_GRACE_MS, firstWatch, jobIdOf, retryDelay,
-  startJob, watchJob, type SolverAnswer, type SolverCall, type WatchStep,
+  BUSY_RETRY_S, ERROR_RETRY_S, JOB_TIMEOUT_MS, LOST_AFTER_ERRORS, POLL_MS, RETRY_CAP_S, SOLVER_POOL, STOP_GRACE_MS, firstWatch, jobIdOf,
+  retryDelay, solverNames, startInPool, startJob, watchJob, type SolverAnswer, type SolverCall, type StartVerdict, type WatchStep,
 } from "../worker/solver-queue";
 
 const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
@@ -134,4 +134,22 @@ test("an error in place of the job (the container's proxy answering 5xx) is a fa
   // a 4xx or 2xx without a state is an answer: the job is looked at again and the count starts afresh
   const odd = await watchJob({ ...firstWatch(ID, 0), errors: 2 }, solver(taken, [{ status: 200, body: "?" }]).call, POLL_MS);
   assert.deepEqual(odd, { kind: "again", watch: firstWatch(ID, 0), reason: "the solver answered 200 without a state" });
+});
+
+test("a busy solver answers 423 and the consumer asks the pool's next one; every solver busy brings the message back", async () => {
+  const busy = { status: 423, body: { detail: "this solver runs coupon job x" } };
+  assert.deepEqual(await startJob({ job_id: ID }, solver(busy).call), { kind: "busy", reason: "this solver runs another job" });
+  assert.deepEqual(solverNames(3), ["solver-0", "solver-1", "solver-2"]);
+  assert.equal(solverNames().length, SOLVER_POOL);
+  const asked: string[] = [];
+  const begin = async (name: string): Promise<StartVerdict> => {
+    asked.push(name);
+    return name === "solver-2" ? { kind: "ack", watch: true, reason: "the job started" } : { kind: "busy", reason: "this solver runs another job" };
+  };
+  const picked = await startInPool(begin, solverNames(4));
+  assert.deepEqual(picked, { verdict: { kind: "ack", watch: true, reason: "the job started" }, solver: "solver-2" });
+  assert.deepEqual(asked, ["solver-0", "solver-1", "solver-2"]);  // the fourth was not asked
+  const allBusy = await startInPool(async () => ({ kind: "busy", reason: "this solver runs another job" }), solverNames(2), 3);
+  assert.equal(allBusy.solver, null);
+  assert.deepEqual(allBusy.verdict, { kind: "retry", delaySeconds: retryDelay(3), reason: "every solver of the pool (2) runs a job; the job waits in the queue" });
 });

@@ -37,7 +37,7 @@ test("the hole rows show only for open-hole tension", () => {
   assert.ok(!sections.some((s) => s.fields.some((f) => HOLE_KEYS.includes(f.key))));
   const withHole = sectionsFor({ ...blankForm(), test: "open-hole tension" });
   assert.ok(withHole.some((s) => s.fields.some((f) => f.key === "hole_diameter")));
-  assert.equal(withHole.length, formDefinition.sections.length - 1); // every section but the bending one
+  assert.equal(withHole.length, formDefinition.sections.length - 2); // every section but the bending one and the dog-bone's
   assert.ok(!sections.some((s) => s.fields.some((f) => BENDING_KEYS.includes(f.key))));
 });
 

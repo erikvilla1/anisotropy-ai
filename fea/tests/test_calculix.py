@@ -10,7 +10,7 @@ from anisotropy_engine.response import ply_surfaces
 from anisotropy_engine.rotation import stress_transformation
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.model import section_plies
-from anisotropy_fea.calculix import ENV_VARIABLE, CalculixError, find_ccx, parse_dat, run_calculix
+from anisotropy_fea.calculix import ENV_VARIABLE, KNOWN_FATALS, CalculixError, diagnose, find_ccx, parse_dat, run_calculix, solver_environment
 from anisotropy_fea.compare import layer_values, load_conventions
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.membrane import solve_membrane
@@ -123,7 +123,8 @@ def test_calculix_runs_the_small_coupon_in_equilibrium_and_the_conventions_hold(
     for k, ply in enumerate(plies):
         engine = engine_plies[k].stress_xy / 1e6
         assert layers[k] == pytest.approx(engine, abs=0.03 * scale), f"ply {k + 1} ({ply.angle_deg} deg): first line is the bottom ply and orientations are honoured"
-        assert stress_transformation(ply.angle_deg) @ layers[k] == pytest.approx(engine_plies[k].stress_12 / 1e6, abs=0.03 * scale)
+        # global xy to the ply's 1-2 axes by the fibre angle from x, the stated angle plus 90 (ADR-0065)
+        assert stress_transformation(ply.fibre_deg) @ layers[k] == pytest.approx(engine_plies[k].stress_12 / 1e6, abs=0.03 * scale)
     # the coarse 2 by 8 mesh with 20 mm tabs: the element types agree on the axial strain within a few percent; the transverse
     # strain, a Poisson effect constrained by the nearby rigid tabs, differs more (12 % seen) and is not a conventions matter
     field = element_ply_states(solution)
@@ -202,6 +203,22 @@ def test_calculix_prints_tensor_shear_strain(tmp_path):
     assert dat.stresses("EALL").values[:, 3] == pytest.approx(np.full(len(strains), G * 0.01), rel=1e-6)
 
 
+def test_the_equation_solver_runs_on_one_thread_whatever_the_assembly_gets():
+    """SPOOLES on several threads answers differently on each run, now and then 1 % off (ADR-0056 amendment 7)."""
+    env = solver_environment(4)
+    assert env["OMP_NUM_THREADS"] == "4" and env["CCX_NPROC_EQUATION_SOLVER"] == "1"
+    assert solver_environment(0)["OMP_NUM_THREADS"] == "1"
+
+
+@needs_ccx
+def test_calculix_gives_the_same_answer_on_every_run_of_a_deck(tmp_path):
+    """The public coupon's CalculiX twin, run three times on four threads: the .dat is the same, byte for byte. With SPOOLES on four
+    threads, three runs on a four-core machine gave three different files, one with the reaction 0.7 % low (2026-11-09)."""
+    deck = paths.FEA / "checks" / "unnotched-im7-8552" / "decks" / "unnotched-im7-8552-nodal-ccx.inp"
+    texts = {run_calculix(deck, workdir=tmp_path / f"run-{k}", threads=4).dat_text for k in range(3)}
+    assert len(texts) == 1
+
+
 def test_the_environment_variable_is_documented():
     assert ENV_VARIABLE == "ANISOTROPY_CCX" and "ANISOTROPY_CCX" in (Path(__file__).parents[2] / "docs" / "installation-fea-tools.md").read_text(encoding="utf-8")
     assert os.environ.get(ENV_VARIABLE) is None or find_ccx() is not None
@@ -242,3 +259,14 @@ def test_plane_stress_removes_the_through_thickness_coupling_of_calculix_composi
     else:
         assert szz_ratio < 0.005
         assert top == pytest.approx(ours, rel=0.02)  # 4686 against 4724 N on the coarse 2 by 8 mesh: S8R against Q4
+
+
+def test_a_known_fatal_text_gets_our_words():
+    # SPOOLES's ordering failure prints no *ERROR paragraph; CalculiX 2.21 (the image) and 2.22 (PrePoMax's build) both printed it on
+    # 2026-11-08 for a 4000-element, 6-ply coupon (55,733 equations), whatever G13 and G23; PaStiX solved the same deck (ADR-0030 amendment 5)
+    console = " Factoring the system of equations using the symmetric spooles solver\n Using up to 1 cpu(s) for spooles.\n\n\n" \
+              " fatal error in GPart_makeYCmap(0x5c4f2d4590d0,0x5c4f22420d30)\n bad input\n\n YVmapIV\n IV : integer vector object :  size = 0, maxsize = 0, owned = 0\n"
+    words = diagnose(console)
+    assert words is not None and words.startswith("the SPOOLES solver stopped while ordering the equations") and "a coarser mesh solves" in words
+    assert diagnose(" Job finished\n") is None
+    assert [marker for marker, _ in KNOWN_FATALS] == ["GPart_makeYCmap"]

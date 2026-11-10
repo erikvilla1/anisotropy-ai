@@ -37,9 +37,12 @@ def test_a_code_means_one_thing_and_one_thing_has_one_code():
         spec = load_spec(specs[0])
         material, test, layup = DESIGNATION_RULE.match(spec.coupon.designation).group("material", "test", "layup")
         m = spec.material
-        own = None if m.library is not None else ("own", round(m.E1, 3), round(m.E2, 3), round(m.G12, 3), round(m.nu12, 6))  # ADR-0046, SI
+        if m.E is not None:  # one isotropic material, a plastic: its E and nu, and no plies (ADR-0075)
+            own, stacking = ("isotropic", round(m.E, 3), round(m.nu, 6)), ()
+        else:
+            own, stacking = ("own", round(m.E1, 3), round(m.E2, 3), round(m.G12, 3), round(m.nu12, 6)), tuple(full_angles(spec))  # ADR-0046, SI
         for kind, code, meaning in (("material", material, (m.library, m.dataset) if m.library is not None else own), ("test", test, spec.kind),
-                                    ("layup", layup, tuple(full_angles(spec)))):
+                                    ("layup", layup, stacking)):
             assert seen[kind].setdefault(code, meaning) == meaning, f"the {kind} code {code} names two different things"
     for kind, codes in seen.items():
         assert len(set(codes.values())) == len(codes), f"one {kind} has two codes: {codes}"

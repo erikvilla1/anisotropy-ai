@@ -115,6 +115,10 @@ class JobRow(Base):
     options: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     heartbeat_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     peak_memory_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    # Where a job's time goes (ADR-0056 amendment 6, migration 0009): when its solver took it up, and the seconds of each of the tool's
+    # stages and of the solver's own phases (restore_s, lock_wait_s, gate_s, upload_s).
+    claimed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    timings: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
 
     __table_args__ = (CheckConstraint(f"state IN ({_sql_list(JOB_STATES)})", name="jobs_state_known"),)
 
@@ -147,15 +151,19 @@ class ProjectRow(Base):
 
 
 CONNECT_TIMEOUT_S = 5
+# TCP keepalives and the user timeout, libpq's own parameters: a connection whose network went away under it (a container's can,
+# ADR-0056 amendment 5) fails within about half a minute instead of waiting for an answer that never comes. A system without one of
+# them ignores it.
+KEEPALIVE = {"keepalives": 1, "keepalives_idle": 15, "keepalives_interval": 5, "keepalives_count": 3, "tcp_user_timeout": 30_000}
 
 
 def connect(database_url: str) -> Engine:
     """A connection pool for the API process.
 
     `pool_pre_ping` drops connections the server closed; the connect timeout makes an unreachable
-    server a startup error within seconds instead of a long wait.
+    server a startup error within seconds instead of a long wait; KEEPALIVE bounds a wait on a dead connection.
     """
-    return create_engine(database_url, pool_pre_ping=True, connect_args={"connect_timeout": CONNECT_TIMEOUT_S})
+    return create_engine(database_url, pool_pre_ping=True, connect_args={"connect_timeout": CONNECT_TIMEOUT_S, **KEEPALIVE})
 
 
 def check_ready(engine: Engine) -> None:

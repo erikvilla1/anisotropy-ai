@@ -1,0 +1,80 @@
+title = "PLASTIC-UNT-L1, unnotched tension: a nominal isotropic plastic as the ASTM D638-22 Type I dog-bone, 3.2 mm thick, nodal grips 115 mm apart, 0.5 mm pull, 50 mm extensometer: CalculiX 2.21 S8R against the kernel"
+units = "mm-MPa"
+spec = "../d638-type-i-plastic.toml"
+deck_kernel = "../decks/d638-type-i-plastic-abaqus.inp"
+deck_reference = "../decks/d638-type-i-plastic-ccx.inp"
+deck_kernel_sha256 = "5b4f17995fa5141b81ea62970999d50d0804c8dd9a708d8344387160c8fc19ed"
+deck_reference_sha256 = "417a71d7b1dde23feb35c3fc272be5efa22f44442230e6207488f3a145772d5a"
+
+[solver]
+name = "calculix"
+version = "2.21"
+element_type = "S8R"
+run_by = "Claude Code for Erik Villa"
+run_date = "2026-11-10"
+machine = "cloud container, Ubuntu 24.04, calculix-ccx 2.21 from apt"
+source = "dat"
+conventions = "../../calculix-conventions.toml"
+notes = "The ASTM D638-22 Type I size (ADR-0075): the first dog-bone and the first isotropic material written as a homogeneous shell section in both decks. The extensometer's two nodes on the centre line at 57.5 and 107.5 mm are recorded beside the centre, so CalculiX's modulus sits beside ours and the material's E."
+
+[known_differences]
+kernel = "bilinear four-node membrane element, full 2 by 2 integration, membrane only (B = 0), no transverse shear, strain at the element centroid"
+reference = "S8R expanded to a C3D20R brick, reduced integration, three-dimensional constitutive law with E3, nu13, nu23, transverse shear, drilling rotation removed, values averaged over the element's integration points"
+
+[frd]
+nodes = 11811
+axes = "global"
+layers = "one brick per element and ply, values extrapolated to the nodes and averaged within a ply"
+mises_max = 14.99
+mises_max_node = 8786
+mises_max_xyz = [2.9733, 113.014, -1.6]
+sxx_max = 2.8667
+sxx_max_node = 11273
+sxx_max_xyz = [9.5, 25.9822, -1.6]
+sxx_min = -1.483
+sxx_min_node = 5588
+sxx_min_xyz = [0.0, 26.9644, -1.6]
+syy_max = 14.983
+syy_max_node = 6446
+syy_max_xyz = [2.9733, 51.9864, -1.6]
+syy_min = -0.46963
+syy_min_node = 11171
+syy_min_xyz = [0.0, 24.0385, -1.6]
+sxy_max_abs = 2.4482
+sxy_max_abs_node = 5549
+sxy_max_abs_xyz = [0.0, 25.0, -1.6]
+gauge_from = 36.5
+gauge_to = 128.5
+gauge_nodes = 8073
+gauge_mises_max = 14.99
+gauge_mises_max_node = 8786
+gauge_mises_max_xyz = [2.9733, 113.014, -1.6]
+gauge_syy_max = 14.983
+gauge_syy_max_node = 6446
+gauge_syy_max_xyz = [2.9733, 51.9864, -1.6]
+gauge_sxx_max_abs = 0.53486
+gauge_sxx_max_abs_node = 6308
+gauge_sxx_max_abs_xyz = [9.5, 47.9593, -1.6]
+plies = [{ply = 1, angle = 0.0, fibre = 90.0, nodes = 11811, s1_max = 14.983, s1_max_node = 6446, s1_max_xyz = [2.9733, 51.9864, -1.6], s2_max = 2.8667, s2_max_node = 11273, s2_max_xyz = [9.5, 25.9822, -1.6], t12_max_abs = 2.4482, t12_max_abs_node = 5585, t12_max_abs_xyz = [19.0, 25.0, -1.6], gauge_s1_max = 14.983, gauge_s1_max_node = 6446}]
+
+[expected]
+tolerance = 0.03
+floor = 0.02
+
+[expected.rf]
+"Grip-Top" = [-9.262018e-12, 595.2753]
+"Grip-Bottom" = [-7.488232e-12, -595.2753]
+
+[expected.u]
+"Coupon-1.865" = [1.044964e-11, 0.25]
+"Coupon-1.540" = [1.268525e-11, 0.1307752]
+"Coupon-1.1190" = [1.26676e-11, 0.3692248]
+
+[expected.strain]
+"Coupon-1.798" = [-0.00166944, 0.00476982175, 4.427743275e-10]
+
+[expected.ply_stress_local."Coupon-1.798"]
+1 = [14.30946, -7.866284625e-06, -4.919714753737978e-07]
+
+[expected.ply_strain_local."Coupon-1.798"]
+1 = [0.00476982175, -0.0016694399999999997, -4.4277432671141786e-10]

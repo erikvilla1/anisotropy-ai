@@ -15,6 +15,7 @@ export const BUSY_RETRY_S = 30;  // a job whose coupon another job holds is deli
 export const ERROR_RETRY_S = 15;  // a solver that could not be started is tried again this much later, and this much more each time
 export const RETRY_CAP_S = 45;  // ... up to this: with the consumer's 100 retries a waiting job outlasts the API's one-hour sweep
 export const LOST_AFTER_ERRORS = 3;  // this many failed looks in a row and the timer lets the job go; the API sweeps its row
+export const SOLVER_POOL = 10;  // the warm solvers, `solver-0` to `solver-9`: keep equal to SolverContainer's max_instances in wrangler.jsonc
 
 const ENDED = new Set(["done", "stopped", "refused"]);
 
@@ -22,8 +23,28 @@ export type SolverAnswer = { status: number; body: unknown };
 /** One request to the job's solver container: a method and a path of its API. Throws when the container cannot be reached. */
 export type SolverCall = (method: "GET" | "POST", path: string) => Promise<SolverAnswer>;
 
-/** What the consumer does with the message: `ack` (with `watch` when the solver's timer is to watch the job) or `retry`. */
-export type StartVerdict = { kind: "ack"; watch: boolean; reason: string } | { kind: "retry"; delaySeconds: number; reason: string };
+/** What the consumer does with the message: `ack` (with `watch` when the solver's timer is to watch the job), `retry`, or `busy` when
+ * this solver runs another job and the pool's next one is to be asked (ADR-0056 amendment 6). */
+export type StartVerdict =
+  | { kind: "ack"; watch: boolean; reason: string }
+  | { kind: "retry"; delaySeconds: number; reason: string }
+  | { kind: "busy"; reason: string };
+
+/** The pool's solver names, in the order the consumer asks them (ADR-0056 amendment 6): a finished job's container stays warm with its
+ * coupons on disk, so the next job starts without a cold start and syncs only what changed. */
+export function solverNames(size = SOLVER_POOL): string[] {
+  return Array.from({ length: size }, (_, i) => `solver-${i}`);
+}
+
+/** Ask the pool's solvers in turn to take the job up, until one does or answers anything but `busy`; when every one is busy the message
+ * comes back after `retryDelay(attempts)`. Returns the verdict and the solver that gave it. */
+export async function startInPool(begin: (name: string) => Promise<StartVerdict>, names: string[], attempts = 1): Promise<{ verdict: StartVerdict; solver: string | null }> {
+  for (const name of names) {
+    const verdict = await begin(name);
+    if (verdict.kind !== "busy") return { verdict, solver: name };
+  }
+  return { verdict: { kind: "retry", delaySeconds: retryDelay(attempts), reason: `every solver of the pool (${names.length}) runs a job; the job waits in the queue` }, solver: null };
+}
 
 /** The timer's state between two looks, kept by the solver's Durable Object (JSON). */
 export type Watch = { jobId: string; startedAt: number; stoppedAt: number | null; errors: number };
@@ -55,9 +76,10 @@ export function retryDelay(attempts: number): number {
   return Math.min(ERROR_RETRY_S * Math.max(1, Math.floor(attempts)), RETRY_CAP_S);
 }
 
-/** The consumer's step, at the message's `attempts`-th delivery: ask the job's solver to take it up. 202 (taken here) or 200 (this
+/** The consumer's step, at the message's `attempts`-th delivery: ask a solver to take the job up. 202 (taken here) or 200 (this
  * solver has it already) is acked with a watch unless the job has ended; 409 (not queued: another solver took it, it ended, or
- * there is none) is acked without one; any other answer, or no answer, brings the message back after `retryDelay(attempts)`. */
+ * there is none) is acked without one; 423 (this solver runs another job) is `busy`, for the pool's next solver; any other answer,
+ * or no answer, brings the message back after `retryDelay(attempts)`. */
 export async function startJob(body: unknown, call: SolverCall, attempts = 1): Promise<StartVerdict> {
   const id = jobIdOf(body);
   if (id === null) return { kind: "ack", watch: false, reason: "the message names no coupon job" };
@@ -68,6 +90,7 @@ export async function startJob(body: unknown, call: SolverCall, attempts = 1): P
     return { kind: "retry", delaySeconds: retryDelay(attempts), reason: `the solver could not be started: ${String(error)}` };
   }
   if (answer.status === 409) return { kind: "ack", watch: false, reason: "the job is not queued: another solver took it, or it ended" };
+  if (answer.status === 423) return { kind: "busy", reason: "this solver runs another job" };
   if (answer.status !== 200 && answer.status !== 202) {
     return { kind: "retry", delaySeconds: retryDelay(attempts), reason: `the solver answered ${answer.status} to the start` };
   }

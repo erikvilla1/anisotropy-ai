@@ -7,7 +7,7 @@ export const metadata = {
   description: "Write to Anisotropy about a composite coupon, a material or a question about the platform.",
 };
 
-/** The contact page (audit of 2026-10-31, item 15): one address for now, the founder's; an anisotropy.dev address follows.
+/** The contact page (audit of 2026-10-31, item 15): one address for now, a co-founder's; an anisotropy.dev address follows.
  * The site is a static export, so there is no form; the address is a plain mailto link. */
 export default function Contact() {
   return (
@@ -30,7 +30,7 @@ export default function Contact() {
             <span className="status-dot" />
             <span>ONE ADDRESS, FOR NOW</span>
             <p>
-              Erik Villa, founder.
+              Erik Villa, co-founder.
               <br />
               An anisotropy.dev address will follow.
             </p>

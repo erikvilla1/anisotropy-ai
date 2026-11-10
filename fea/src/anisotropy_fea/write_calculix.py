@@ -59,17 +59,28 @@ def write_calculix(model: FEModel, units: str | None = None, el_print_coord: boo
         out.append(f"*ELSET, ELSET={name}")
         out += _rows([int(i) + 1 for i in indices])
     out.append(f"*MATERIAL, NAME={material.name}")
-    out.append("*ELASTIC, TYPE=ENGINEERING CONSTANTS")
-    out.append(", ".join(number(stress(v)) for v in (material.E1, material.E2, material.E3)) + f", {number(material.nu12)}, {number(material.nu13)}, "
-               f"{number(material.nu23)}, " + ", ".join(number(stress(v)) for v in (material.G12, material.G13)))
-    out.append(f"{number(stress(material.G23))}, {number(REFERENCE_TEMPERATURE)}")
-    for angle in model.orientation_angles:
-        c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    if material.isotropic:  # ADR-0075
+        out.append("*ELASTIC, TYPE=ISO")
+        out.append(f"{number(stress(material.E1))}, {number(material.nu12)}, {number(REFERENCE_TEMPERATURE)}")
+    else:
+        out.append("*ELASTIC, TYPE=ENGINEERING CONSTANTS")
+        out.append(", ".join(number(stress(v)) for v in (material.E1, material.E2, material.E3)) + f", {number(material.nu12)}, {number(material.nu13)}, "
+                   f"{number(material.nu23)}, " + ", ".join(number(stress(v)) for v in (material.G12, material.G13)))
+        out.append(f"{number(stress(material.G23))}, {number(REFERENCE_TEMPERATURE)}")
+    out.append("** Each *ORIENTATION is named by the ply angle the coupon states, counted from its length axis (y, ADR-0065); its axes are the fibre "
+               "direction from global x, the stated angle plus 90 degrees.")
+    for angle, fibre in zip(model.orientation_angles, model.orientation_fibres):
+        c, s = math.cos(math.radians(fibre)), math.sin(math.radians(fibre))
         out.append(f"*ORIENTATION, NAME={orientation_name(angle)}")
         out.append(f"{number(c)}, {number(s)}, 0., {number(-s)}, {number(c)}, 0.")
-    out.append(f"*SHELL SECTION, ELSET={section.elset}, COMPOSITE")
-    for ply in section.plies:
-        out.append(f"{number(length(ply.thickness_m))}, , {ply.material}, {orientation_name(ply.angle_deg)}")
+    if section.homogeneous:  # one isotropic material (ADR-0075): a homogeneous section, its axis 1 along the length as a 0-degree layer's
+        ply = section.plies[0]
+        out.append(f"*SHELL SECTION, ELSET={section.elset}, MATERIAL={ply.material}, ORIENTATION={orientation_name(ply.angle_deg)}")
+        out.append(f"{number(length(ply.thickness_m))}")
+    else:
+        out.append(f"*SHELL SECTION, ELSET={section.elset}, COMPOSITE")
+        for ply in section.plies:
+            out.append(f"{number(length(ply.thickness_m))}, , {ply.material}, {orientation_name(ply.angle_deg)}")
     fixed = [b for b in model.boundaries if b.value == 0.0]
     moving = [b for b in model.boundaries if b.value != 0.0]
     if fixed:

@@ -3,17 +3,19 @@
  * the Worker; the request reaches here with Access's `Cf-Access-Jwt-Assertion` header, which is forwarded untouched so the API can
  * check it (api/src/anisotropy_api/access.py).
  *
- * The job queue (ADR-0056 stage 3, amendments 3 and 4): with the `JOB_QUEUE` binding, the API's container files each coupon job and
- * answers with its id in a header; the Worker sends the id to the queue. The queue's consumer, this Worker's `queue` handler, starts
- * each job in a solver container of its own (`SolverContainer`, named by the job's id, from the same image) and returns; the solver's
- * Durable Object watches the job on a timer until it ends (worker/solver-queue.ts). Nothing here computes a result (ADR-0001). */
+ * The job queue (ADR-0056 stage 3, amendments 3, 4 and 6): with the `JOB_QUEUE` binding, the API's container files each coupon job and
+ * answers with its id in a header; the Worker sends the id to the queue. The queue's consumer, this Worker's `queue` handler, asks the
+ * warm pool's solvers (`SolverContainer`, `solver-0` to `solver-9`, from the same image) in turn until one takes the job, and returns;
+ * that solver's Durable Object watches the job on a timer until it ends (worker/solver-queue.ts). A solver that runs a job answers
+ * busy; a finished job's container stays warm for a while with its coupons on disk, so the next job starts without a cold start.
+ * Nothing here computes a result (ADR-0001). */
 
 import { Container, getContainer } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
 
 import { ENQUEUE_HEADER, apiEnvironment, apiPath, isSolverPath, solverEnvironment, type ContainerVariable } from "./routing";
-import { POLL_MS, firstWatch, jobIdOf, retryDelay, startJob, watchJob, type SolverCall, type StartVerdict, type Watch,
-         type WatchStep } from "./solver-queue";
+import { POLL_MS, firstWatch, jobIdOf, retryDelay, solverNames, startInPool, startJob, watchJob, type SolverCall, type StartVerdict,
+         type Watch, type WatchStep } from "./solver-queue";
 
 type WorkerEnv = Env & Partial<Record<ContainerVariable, string>>;
 
@@ -31,13 +33,13 @@ export class ApiContainer extends Container<WorkerEnv> {
 /** The solver's timer runs this method (the Container class's `schedule`, kept in the Durable Object's storage). */
 const WATCH = "watch";
 
-/** One coupon job's container: the same image as the API's, in the role `solver`. The consumer starts the job here (`begin`) and
- * returns; this object's timer then asks the container for the job's state every POLL_MS until it ends (`watch`), which keeps the
- * container awake, applies the per-job limit and sends a job whose coupon is busy back to the queue. Once the job has ended the
- * container sleeps after a few idle minutes. */
+/** One of the pool's solver containers: the same image as the API's, in the role `solver`, running one coupon job at a time. The
+ * consumer starts a job here (`begin`) and returns; this object's timer then asks the container for the job's state every POLL_MS
+ * until it ends (`watch`), which keeps the container awake, applies the per-job limit and sends a job whose coupon is busy back to
+ * the queue. After a job the container stays warm for sleepAfter, its coupons on disk, for the next job (ADR-0056 amendment 6). */
 export class SolverContainer extends Container<WorkerEnv> {
   defaultPort = 8080;
-  sleepAfter = "3m";
+  sleepAfter = "15m";
   enableInternet = true;  // the database and the object store
 
   constructor(ctx: DurableObject["ctx"], env: WorkerEnv) {
@@ -119,16 +121,20 @@ export default {
     for (const message of batch.messages) {  // one message a batch (max_batch_size 1 in wrangler.jsonc); a loop all the same
       const id = jobIdOf(message.body);
       let verdict: StartVerdict;
+      let solver: string | null = null;
       if (id === null) {
         verdict = { kind: "ack", watch: false, reason: "the message names no coupon job" };
       } else {
-        try {
-          verdict = await getContainer(env.SOLVER, id).begin(id, message.attempts);
-        } catch (error) {
-          verdict = { kind: "retry", delaySeconds: retryDelay(message.attempts), reason: `the solver's object could not be reached: ${String(error)}` };
-        }
+        const begin = async (name: string): Promise<StartVerdict> => {
+          try {
+            return await getContainer(env.SOLVER, name).begin(id, message.attempts);
+          } catch (error) {
+            return { kind: "retry", delaySeconds: retryDelay(message.attempts), reason: `the solver's object ${name} could not be reached: ${String(error)}` };
+          }
+        };
+        ({ verdict, solver } = await startInPool(begin, solverNames(), message.attempts));
       }
-      console.log(`coupon job ${id ?? "(none)"}: ${verdict.reason}`);
+      console.log(`coupon job ${id ?? "(none)"}${solver ? ` on ${solver}` : ""}: ${verdict.reason}`);
       if (verdict.kind === "retry") message.retry({ delaySeconds: verdict.delaySeconds });
       else message.ack();
     }

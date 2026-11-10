@@ -47,6 +47,7 @@ The full method is in `docs/documentation-guide.md`; the index is `docs/README.m
 - SI units inside the engine; convert only where values enter and leave (ADR-0002).
 - Reject invalid input; never add silent defaults (ADR-0003).
 - Engineering shear strain, angles counterclockwise from x to the fibers, plies listed from the bottom face up (ADR-0004).
+- Coupon angles are counted from the coupon's length axis, the direction it is pulled, so a stated 0° ply runs along the load; the engine still counts from x, and the spec's `fibre_angles` carries the 90° between them (ADR-0065).
 
 ## Data and sources
 

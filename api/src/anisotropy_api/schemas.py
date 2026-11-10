@@ -495,7 +495,9 @@ class CouponJobOutput(Contract):
     """A coupon job as it stands (ADR-0050). `outputs` are paths from the repository root, by key: the files made so far while it
     runs (ADR-0051), every file once it is done; `stage` is the step the tool is at and `stages_done` the steps behind it;
     `run_id` names the job's receipt once it has ended (null while it runs, or when recording is switched off). With the job queue
-    (ADR-0056 amendment 3) a job is `queued` until a solver takes it up, its message saying what it waits for."""
+    (ADR-0056 amendment 3) a job is `queued` until a solver takes it up, its message saying what it waits for. `result` is the
+    result's one line as soon as the solve and the CalculiX record are done, while the job still draws and builds the package
+    (ADR-0064); `documents` is then "building", and once the job is done "written" or what is missing and why."""
 
     job_id: str
     state: Literal["queued", "running", "done", "stopped", "refused"]
@@ -513,19 +515,32 @@ class CouponJobOutput(Contract):
     log_tail: list[str]
     user_email: str | None = None  # the signed-in email of the request that started it (ADR-0056); null with Access off
     project_id: str | None = None  # the workspace project it was started for (ADR-0062 part 6)
+    result: str | None = None
+    documents: str | None = None
+    claimed_at: str | None = None  # when a solver took the queued job up (ADR-0056 amendment 6)
+    timings: dict[str, float] = {}  # the seconds of each stage of the tool and of the solver's phases around it, as far as the job got
 
     @classmethod
     def of(cls, job) -> "CouponJobOutput":
         outcome = job.outcome or {}
         progress = job.progress() or {}
         outputs = outcome.get("outputs") if outcome else progress.get("outputs", {})
+        if outcome:
+            result = (outcome.get("result") or outcome.get("message")) if outcome.get("status") == "done" else None
+            documents = outcome.get("documents")
+        else:
+            result = progress.get("result")
+            documents = None if result is None else "building"
         return cls(job_id=str(job.id), state=job.state, actor=job.actor, started_at=job.started_at.isoformat(), user_email=job.user_email,
                    finished_at=None if job.finished_at is None else job.finished_at.isoformat(), coupon=outcome.get("coupon") or progress.get("coupon"),
-                   attempt=outcome.get("attempt") or progress.get("attempt"), message=outcome.get("message") if outcome else progress.get("message"),
+                   attempt=outcome.get("attempt") or progress.get("attempt"), message=outcome.get("message") if outcome else (result or progress.get("message")),
+                   result=result, documents=documents,
                    stage=progress.get("stage"),
                    stages_done=list(progress.get("done", [])), stages=list(progress.get("stages", [])), outputs=outputs or {},
                    run_id=None if job.run_id is None else str(job.run_id), log_tail=job.log_tail(),
-                   project_id=None if getattr(job, "project_id", None) is None else str(job.project_id))
+                   project_id=None if getattr(job, "project_id", None) is None else str(job.project_id),
+                   claimed_at=None if getattr(job, "claimed_at", None) is None else job.claimed_at.isoformat(),
+                   timings=job.all_timings() if hasattr(job, "all_timings") else {})
 
 
 class CouponCheckReceipt(Contract):
@@ -569,6 +584,22 @@ class CouponCheckResponse(Contract):
     designation: str | None
     checklist: dict[str, Any]
     preview: dict[str, Any] | None
+
+
+class TowTestRequest(CouponCheckRequest):
+    """A fibre tow record under ASTM D4018 (ADR-0074): the tow test's rows and its specimens as one JSON object, the way the studio states
+    them; `test` is "fibre tow tension". The record keeps the values' digest, as a check does, never the rows."""
+
+
+class TowTestResponse(Contract):
+    """What the tow record gives: its checklist as fea/src/anisotropy_fea/tow_test.py writes it and, when nothing blocks, the result: the
+    fibre's area, each specimen's strength and chord modulus, their statistics, the planning loads and, under the standard, each clause
+    judged. Every number is the engine's (anisotropy_engine.tow). Recorded as a run (ADR-0026)."""
+
+    run_id: str | None
+    state: Literal["ready", "blocked"]
+    checklist: dict[str, Any]
+    result: dict[str, Any] | None
 
 
 class ExplainRequest(Contract):

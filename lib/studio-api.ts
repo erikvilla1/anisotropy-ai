@@ -14,6 +14,12 @@ export type JobStatus = {
   job_id: string; state: JobState; actor: string; started_at: string; finished_at: string | null; coupon: string | null; attempt: string | null;
   message: string | null; stage: string | null; stages_done: string[]; stages: string[]; outputs: Record<string, string>; run_id: string | null;
   log_tail: string[];
+  /** The result's one line once the solve and the CalculiX record are done, while the drawings and the package are still made
+   * (ADR-0064); `documents` is then "building", and once the job is done "written" or what is missing and why. */
+  result?: string | null; documents?: string | null;
+  /** When a solver took the queued job up, and the seconds of each of the tool's stages and of the solver's phases around it
+   * (restore_s, lock_wait_s, gate_s, upload_s), as far as the job got (ADR-0056 amendment 6). */
+  claimed_at?: string | null; timings?: Record<string, number>;
 };
 export type CheckAnswer = { run_id: string | null; state: "ready" | "blocked"; designation: string | null; checklist: Checklist; preview: Preview | null };
 export type Preview = {
@@ -59,8 +65,63 @@ export type Fields = {
   ranges?: Record<string, Record<string, unknown>>; ranges_note?: string;
   summary: { max_displacement: { value: number; node: number; label: string; xy: number[]; components: number[]; axis?: string };
     reaction: { set: string; value: number; sense: string; dof?: number }; applied: { control: string; value: number; unit: string; dof?: number; direction?: string; total_force?: number };
-    max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number };
+    max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number;
+    /** The same over the gauge section alone (the Gauge elements that touch no gripped node): what a test is compared with. Absent on older jobs. */
+    fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null;
+    /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */
+    calculix?: CalculixBeside | null;
+    /** Every ply's own peaks at the element centroids, each marked when its element touches a gripped node (ADR-0066); absent on older jobs. */
+    ply_peaks?: PlyPeak[];
+    /** Classical laminate theory for a gripped coupon: the reaction over the width as N_y, every ply at its middle (ADR-0066); null when it does not apply. */
+    clt?: CltCheck | null;
+    /** The mesh convergence study (ADR-0068): the kernel on the spec's mesh and its refinements, the validation quantities and the peaks on each; absent on older jobs. */
+    convergence?: Convergence | null;
+    /** The quantities the coupon's test standard reduces a test to (ADR-0072); absent without a standard or a strain measurement, and on older jobs. */
+    test_method?: TestMethod };
   quality?: QualitySummary;
+};
+export type PlyPeak = { ply: number; angle: number } & Record<"S11" | "S22" | "S12", { value: number; element: number; label: string; xy: number[]; face: string | null; touches_grip: boolean }>;
+/** One mesh of the convergence study: its size, the solve's seconds, and ADR-0066's quantities on it (ADR-0068). */
+export type ConvergenceMesh = { factor: number; nx: number; ny: number; elements: number; nodes: number; solve_s: number; reaction: number; reaction_set: string;
+  gauge_element: number; gauge_xy: number[]; gauge_strain: number[]; plies: { ply: number; angle: number; stress_12: number[] }[];
+  peaks: { ply: number; angle: number; s1: number; element: number; touches_grip: boolean }[]; fpf: Record<string, number>; fpf_gauge: Record<string, number> };
+/** The study: `studied` false with the reason when it does not cover the coupon; else the meshes, each quantity's change from the previous mesh
+ * (null for the first; a fraction of the finer value, of a triple's largest component) and whether each group settled (last change under `settled_below`). */
+export type Convergence = { studied: boolean; reason?: string; units: string | null; factors: number[]; cap: number; settled_below: number; meshes: ConvergenceMesh[];
+  left_out: { factor: number; elements: number; reason: string }[]; kernel?: string; note?: string;
+  changes?: { reaction: (number | null)[]; gauge_strain: ((number | null)[] | null)[]; plies: { ply: number; stress_12: ((number | null)[] | null)[] }[];
+    peaks: { ply: number; s1: (number | null)[] }[]; fpf: Record<string, (number | null)[]>; fpf_gauge: Record<string, (number | null)[]> };
+  settled?: Record<"reaction" | "gauge_strain" | "plies" | "peaks" | "fpf" | "fpf_gauge", boolean> };
+/** A test standard's quantities from the solved coupon (ADR-0072), every number in the stated units, written by the package. */
+export type TestMethod = {
+  designation: string | null; width: number; thickness: number; area: number; force: number; stress: number;
+  units: { length: string; area: string; force: string; stress: string; modulus: string };
+  hole: { diameter: number; net_area: number; net_stress: number; width_to_hole: number; hole_to_thickness: number } | null;
+  laminate_theory: { modulus: number; poisson: number; note: string; isotropic?: boolean };
+  /** The standard's own words for the shared formulas (D3039's chord over the gross area, D638's modulus of elasticity over the narrow
+   * section); absent from a package written before ADR-0075 part 2, which read D3039's. */
+  reduction?: { area: string; area_clause: string; stress_clause: string; strain_clause: string; modulus: string; modulus_clause: string; range: string;
+    poisson_clause: string };
+  strain: { device: string; gauge_length: number; modelled_length: number; nodes: string[]; x: number[]; value: number; microstrain: number; poisson: number | null;
+    chord: { from: number; to: number; stress_from: number; stress_to: number; force_from: number; force_to: number; modulus: number } } | null;
+  fpf: Record<string, { factor: number; force: number; stress: number; net_stress?: number; strain?: number; microstrain?: number; place: string | null }>;
+  fpf_basis: string; earliest: string | null; note_b: boolean;
+};
+export type CltCheck = { Ny: number; width: number; strain: number[]; plies: { ply: number; angle: number; stress_12: number[] }[]; note: string };
+/** One ply's peaks in its own fibre axes read from the `.frd`'s bricks: nodal, extrapolated, as a viewer would show them per ply (ADR-0066). */
+export type FrdPly = { ply: number; angle: number; fibre: number; nodes: number; s1_max?: number; s1_max_node?: number; s1_max_xyz?: number[]; s2_max?: number; s2_max_node?: number;
+  t12_max_abs?: number; t12_max_abs_node?: number; gauge_s1_max?: number; gauge_s1_max_node?: number };
+export type CalculixBeside = {
+  record: string; units: string; tolerance: number; agree: string;
+  reaction: { calculix: number; ours: number; difference: string; agrees: boolean } | null;
+  gauge_element: string | null;
+  gauge: { ply: number; ours: (number | null)[]; calculix: (number | null)[]; agrees: (boolean | null)[] }[];
+  /** The gauge element's mean strain [eps_x, eps_y, gamma_xy], ours and CalculiX's (ADR-0066); absent on a record without the strain group. */
+  gauge_strain?: { ours: (number | null)[]; calculix: (number | null)[]; agrees: (boolean | null)[] };
+  /** CalculiX's strain at the strain measurement and its chord modulus, beside ours on the same twin (ADR-0072); absent without one. */
+  test_method?: { calculix: { strain: number; modulus: number }; ours: { strain: number; modulus: number }; agrees: boolean; difference: string; nodes: string[] } | null;
+  frd: (Record<string, unknown> & { nodes: number; mises_max: number; mises_max_node: number; mises_max_xyz: number[]; syy_max: number; syy_max_node: number;
+    sxx_max: number; sxx_min: number; gauge_mises_max?: number; gauge_syy_max?: number; gauge_from?: number; gauge_to?: number; plies?: FrdPly[] }) | null;
 };
 export type Explanation = { writer: string; facts: Record<string, unknown>; sentences: string[]; setup_sentences: string[] };
 export type CouponSummary = { name: string; designation: string | null; kind: string; test: string; title: string; layup: string; status: string | null;
@@ -154,6 +215,37 @@ export async function checkSetup(apiBase: string, values: StudioValues, signal?:
   const checklist = readChecklist(payload.checklist);
   const preview = payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview);
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview };
+}
+
+/** A fibre tow record's answer (ADR-0074): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
+ * g/cm³, mm², microstrain). Every number is the engine's; the page shows them as they come. */
+export type TowStats = { n: number; mean: number; sd: number; cv: number };
+export type TowSpecimenResult = {
+  id: string; status: "valid" | "rejected"; note: string; max_force: number | null; force_lower: number | null; force_upper: number | null;
+  strength: number | null; modulus: number | null; failure_code: string | null; failure_words: string | null;
+};
+export type TowResult = {
+  test: string; designation: string | null; fibre: string; lot: string | null; units: Record<string, string>;
+  fibre_properties: { mul: number; mul_from: string; bundles: number; specimen_mul: number; density: number; density_from: string; area: number;
+    resin_content: number | null; resin_content_from: string | null };
+  strains: { failure: number; preload: number; chord: [number, number]; chord_table: [number, number]; chord_from: string };
+  specimens: TowSpecimenResult[];
+  strength: TowStats | null; modulus: TowStats | null;
+  counts: { specimens: number; valid: number; strength: number; modulus: number };
+  planning: { preload_force: number | null; force_lower: number | null; force_upper: number | null; failure_force: number | null; from: string[] };
+  conformance: { designation: string; words: string; deviations: number; advisories: number } | null;
+  report: { clause: string; item: string; rows: string[]; shown: boolean }[];
+  note: string;
+};
+export type TowAnswer = { run_id: string | null; state: "ready" | "blocked"; checklist: Checklist; result: TowResult | null };
+
+export async function towTest(apiBase: string, values: Record<string, unknown>, signal?: AbortSignal, projectId: string | null = null): Promise<TowAnswer> {
+  const body = { values, ...(projectId ? { project_id: projectId } : {}) };
+  const payload = await call(`${base(apiBase)}/v1/tow-tests`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the tow calculation");
+  if (!isObject(payload)) throw new StudioError("The tow calculation answered with an unexpected shape.");
+  const checklist = readChecklist(payload.checklist);
+  const result = isObject(payload.result) && Array.isArray(payload.result.specimens) ? (payload.result as unknown as TowResult) : null;
+  return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, checklist, result };
 }
 
 export async function startSolve(apiBase: string, values: StudioValues, runBy: string, replace: boolean, signal?: AbortSignal, projectId: string | null = null): Promise<JobStatus> {
@@ -265,12 +357,14 @@ export async function explainJob(apiBase: string, jobId: string, kind: "setup" |
   return readExplainAnswer(payload);
 }
 
-/** The downloadable files of a job, in the order the page lists them, with the words of fea/tools/run_coupon.py. */
+/** The files of a job the page offers for download, in the order it lists them: the package, its PDF and the decks; the `.frd` stays so
+ * the CalculiX twin can be checked in PrePoMax. The other outputs (the fields, the explanation, the record, the summary, the `.vtu`,
+ * the setup check, the preview) remain job outputs the viewer and the explanation read; they are not offered as files (the founder,
+ * 2026-11-08: "don't need JSON files"). */
 export const DOWNLOADS: [string, string][] = [
   ["package", "The package for the team (zip)"], ["document", "The document (PDF)"], ["abaqus_deck", "Our Abaqus deck (.inp)"],
-  ["prepomax_deck", "The CalculiX twin for PrePoMax (.inp)"], ["prepomax_results", "Its results for PrePoMax (.frd)"],
-  ["kernel_summary", "Our engine's summary (text)"], ["kernel_vtu", "Every ply's stresses for ParaView (.vtu)"], ["fields", "Every field (JSON)"],
-  ["explanation", "The explanation (JSON)"], ["record", "The CalculiX record (TOML)"], ["checklist", "The setup check (JSON)"], ["preview", "The preview (JSON)"],
+  ["prepomax_deck", "The CalculiX twin for PrePoMax (.inp)"],
+  ["prepomax_results", "CalculiX's results for PrePoMax (.frd): global axes, one brick per ply, nodal grips"],
 ];
 
 // ----------------------------------------------------------------------------------------------- laminate problems (ADR-0060)

@@ -10,13 +10,17 @@ The deck is valid Abaqus/Standard input as written (ADR-0045 amendment 2): every
 Abaqus reads, so a longer heading comment is wrapped. Abaqus counts bytes of the UTF-8 file, not characters: it truncated a
 389-character comment on 2026-10-24, and on 2026-10-25 a 253-character line holding five two-byte "·" (258 bytes). Every
 `*El Print` table holds one variable, because Abaqus/Standard refused the combined tables `SF, SE` and `S, E` of a composite
-shell ("THERE ARE MORE THAN 9 OUTPUT REQUESTS IN A SINGLE TABLE").
+shell ("THERE ARE MORE THAN 9 OUTPUT REQUESTS IN A SINGLE TABLE"). The `S` and `E` tables of a membrane coupon list every
+layer's middle section point on their first data line, because without the list Abaqus printed the bottom of ply 1 and the top of
+the last ply only (2026-11-08), and the validation table needs every ply at its centroid (ADR-0066).
 """
 
 from __future__ import annotations
 
 from .femodel import FEModel
 from .units import deck_units_of, from_si
+
+SECTION_POINTS = 3  # Simpson integration points per layer, Abaqus's default for a composite shell; the middle of layer k is point 3k - 1
 
 PER_LINE = 16
 MAX_LINE = 256  # bytes in one line of an Abaqus input file, in the UTF-8 the deck is written in
@@ -75,13 +79,20 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
         out.append(f"{index}, " + ", ".join(str(int(n) + 1) for n in nodes))
     out.append(f"*Elset, elset={model.section.elset}, generate")
     out.append(f"1, {mesh.element_count}, 1")
+    # The layup's local direction 1 is global +y, the coupon's length axis, so the layer lines carry the angles as the coupon states them
+    # (ADR-0065): a = (0, 1, 0), b = z cross a = (-1, 0, 0), a right-handed frame with axis 3 along +z, and no extra rotation.
     out.append("*Orientation, name=Ori-1")
-    out.append("1., 0., 0., 0., 1., 0.")
+    out.append("0., 1., 0., -1., 0., 0.")
     out.append("3, 0.")
     section = model.section
-    out.append(f"*Shell Section, elset={section.elset}, composite, orientation=Ori-1, layup={section.layup}" + (", symmetric" if section.symmetric else ""))
-    for ply in section.listed:
-        out.append(f"{number(length(ply.thickness_m))}, 3, {ply.material}, {number(ply.angle_deg)}, {ply.name}")
+    if section.homogeneous:  # one isotropic material (ADR-0075): its thickness and the layer's section points; axis 1 along the length as above
+        ply = section.plies[0]
+        out.append(f"*Shell Section, elset={section.elset}, material={ply.material}, orientation=Ori-1")
+        out.append(f"{number(length(ply.thickness_m))}, {SECTION_POINTS}")
+    else:
+        out.append(f"*Shell Section, elset={section.elset}, composite, orientation=Ori-1, layup={section.layup}" + (", symmetric" if section.symmetric else ""))
+        for ply in section.listed:
+            out.append(f"{number(length(ply.thickness_m))}, {SECTION_POINTS}, {ply.material}, {number(ply.angle_deg)}, {ply.name}")
     out.append("*End Part")
 
     out.append("*Assembly, name=Assembly")
@@ -108,9 +119,13 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
     out.append("*End Assembly")
 
     out.append(f"*Material, name={material.name}")
-    out.append("*Elastic, type=LAMINA")
-    out.append(", ".join(number(stress(v)) for v in (material.E1, material.E2)) + f", {number(material.nu12)}, "
-               + ", ".join(number(stress(v)) for v in (material.G12, material.G13, material.G23)))
+    if material.isotropic:
+        out.append("*Elastic")
+        out.append(f"{number(stress(material.E1))}, {number(material.nu12)}")
+    else:
+        out.append("*Elastic, type=LAMINA")
+        out.append(", ".join(number(stress(v)) for v in (material.E1, material.E2)) + f", {number(material.nu12)}, "
+                   + ", ".join(number(stress(v)) for v in (material.G12, material.G13, material.G23)))
     if material.strengths is not None:
         s = material.strengths
         line = ", ".join(number(stress(v)) for v in (s.F1t, -s.F1c, s.F2t, -s.F2c, s.F6))
@@ -149,9 +164,15 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
             out.append(f"*Node Print, nset=Probe-{name}")
             out.append("U")
     if requests.el_print:
+        # a composite's *El Print writes the two outer section points unless the first data line lists the points wanted (seen on
+        # 2026-11-08: points 1 and 24 of 8 layers); a membrane coupon lists the middle of every layer, the ply's centroid value the
+        # validation table compares (ADR-0066); a bending coupon keeps the default, the faces, where its stresses are largest
+        points = "" if model.bending else ", ".join(str(SECTION_POINTS * k + (SECTION_POINTS + 1) // 2) for k in range(len(model.section.plies)))
         for name in model.probe_elements:
             for variable in ("SF", "SE", "S", "E"):
                 out.append(f"*El Print, elset=Probe-{name}, position=CENTROIDAL")
+                if points and variable in ("S", "E"):
+                    out.append(points)
                 out.append(variable)
     out.append("*End Step")
     return "\n".join(out) + "\n"

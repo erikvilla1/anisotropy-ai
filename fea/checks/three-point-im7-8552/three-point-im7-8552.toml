@@ -26,6 +26,7 @@ ny = 30             # 2 mm rows: the support lines at 6 and 54 mm and the nose l
 
 [layup]
 angles = [45, 0, -45, 90]
+angles_from = "length"  # counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)
 symmetric = true
 ply_thickness = "library"
 
