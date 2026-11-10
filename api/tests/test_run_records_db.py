@@ -10,7 +10,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from anisotropy_api.main import app
-from anisotropy_api.records import ACTORS, Run, check_ready, connect
+from anisotropy_api.records import ACTORS, CONNECT_TIMEOUT_S, KEEPALIVE, Run, check_ready, connect
 from anisotropy_api.settings import DATABASE_VARIABLE, RECORDING_VARIABLE
 from conftest import TEST_URL, alembic_config, needs_test_database
 
@@ -143,6 +143,19 @@ def test_check_ready_needs_the_table(engine):
         command.upgrade(alembic_config(TEST_URL), "head")
 
 
+def test_the_pool_connects_with_the_keepalive_parameters(engine):
+    """libpq takes the keepalive parameters (ADR-0056 amendment 5) and the pool's connections carry them."""
+    pool = connect(TEST_URL)
+    try:
+        with pool.connect() as connection:
+            assert connection.execute(text("SELECT 1")).scalar() == 1
+            parameters = connection.connection.dbapi_connection.info.get_parameters()
+        assert parameters.get("connect_timeout") == str(CONNECT_TIMEOUT_S)
+        assert {key: parameters.get(key) for key in KEEPALIVE} == {key: str(value) for key, value in KEEPALIVE.items()}
+    finally:
+        pool.dispose()
+
+
 def test_check_ready_names_an_unreachable_server_without_the_password():
     engine = connect("postgresql+psycopg://anisotropy:secret-word@127.0.0.1:1/anisotropy")
     with pytest.raises(RuntimeError, match="Cannot reach") as excinfo:
@@ -218,6 +231,7 @@ def test_migration_0006_creates_the_jobs_table_and_refuses_to_drop_it_over_rows(
         "id", "actor", "user_email", "state", "stage", "stages_done", "stages", "coupon", "attempt", "message", "inputs", "outputs", "stored",
         "started_at", "finished_at", "run_id", "log_tail", "process", "project_id",  # project_id since migration 0007
         "source", "options", "heartbeat_at", "peak_memory_bytes",  # since migration 0008
+        "claimed_at", "timings",  # since migration 0009 (ADR-0056 amendment 6)
     }
     assert {index["name"] for index in inspect(engine).get_indexes("jobs")} == {"jobs_started_at_idx", "jobs_state_idx",
                                                                                 "jobs_one_running_job_per_coupon"}  # since 0008

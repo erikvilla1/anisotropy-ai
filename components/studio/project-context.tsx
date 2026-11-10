@@ -1,9 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { couponProjects, isUuid, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
+import type { TowAnswer } from "@/lib/studio-api";
 import type { StudioForm } from "@/lib/studio-form";
 import type { PlateLists } from "@/lib/studio-plate";
+import type { TowSpecimenRow } from "@/lib/studio-tow";
 import { useNewestFromServer, useProjectSync } from "./project-sync";
 import { useCouponRun, type CouponRun } from "./use-coupon-run";
 
@@ -14,10 +16,15 @@ export type ProjectContextValue = {
   project: CouponProject;
   form: StudioForm;
   plate: PlateLists;
+  /** A fibre tow record's specimens (ADR-0074), and the last answer of its calculation, which belongs to the page, not the project. */
+  specimens: TowSpecimenRow[];
+  towAnswer: TowAnswer | null;
   /** True when the project came back from this browser's storage rather than starting blank. */
   restored: boolean;
   setForm(next: StudioForm | ((form: StudioForm) => StudioForm)): void;
   setPlate(next: PlateLists): void;
+  setSpecimens(next: TowSpecimenRow[]): void;
+  setTowAnswer(next: TowAnswer | null): void;
   rename(name: string): void;
   replace(project: CouponProject): void;
   run: CouponRun;
@@ -56,6 +63,8 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
     else dispatch({ type: "form", form: next });
   }, []);
   const setPlate = useCallback((next: PlateLists) => dispatch({ type: "plate", plate: next }), []);
+  const setSpecimens = useCallback((next: TowSpecimenRow[]) => dispatch({ type: "specimens", specimens: next }), []);
+  const [towAnswer, setTowAnswer] = useState<TowAnswer | null>(null);
   const rename = useCallback((name: string) => dispatch({ type: "rename", name }), []);
   const replace = useCallback((next: CouponProject) => dispatch({ type: "replace", project: next }), []);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
@@ -63,8 +72,9 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
     (found) => { if (found.kind === "fea") replace(found); });
 
   const value = useMemo<ProjectContextValue>(() => ({
-    apiBaseUrl, project, form: project.form, plate: project.plate, restored: start.current?.restored ?? false, setForm, setPlate, rename, replace, run,
-  }), [apiBaseUrl, project, setForm, setPlate, rename, replace, run]);
+    apiBaseUrl, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
+    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run,
+  }), [apiBaseUrl, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 

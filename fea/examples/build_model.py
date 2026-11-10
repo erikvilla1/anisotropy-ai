@@ -6,7 +6,9 @@ Writes into the output folder: <spec>-abaqus.inp (the complete model in our Abaq
 and sets before solving), summary.txt (counts, sets, layup, material citation, boundary table, SHA-256 of the deck),
 and when --solve is kept (default) <spec>-solved.png, <spec>.vtu, <spec>-fields.json (every field and the summary the
 studio's viewer reads, ADR-0051) and <spec>-explanation.json (the template's sentences about the result) from our membrane
-kernel. Pass --no-solve to only generate. The deck for CalculiX is written with --target.
+kernel. Pass --no-solve to only generate. The deck for CalculiX is written with --target. --drawings without leaves out the two
+pictures and the .vtu; --drawings only writes just them, from the deck the earlier run wrote: tools/run_coupon.py reports the
+result first and draws afterwards (ADR-0064).
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
+from anisotropy_fea.test_quantities import method_inputs
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.femodel import build_model
@@ -31,8 +34,6 @@ from anisotropy_fea.recovery import deck_f12_star, element_ply_states, strength_
 from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
 from anisotropy_fea.units import deck_units_of, from_si
 from anisotropy_fea.write_abaqus import write_abaqus
-
-from plot_model import plot_model  # noqa: E402  (examples share a folder)
 
 
 def summary(model, deck_text: str, units: str) -> str:
@@ -54,6 +55,39 @@ def summary(model, deck_text: str, units: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def solved(deck):
+    try:
+        return solve_deck(deck)
+    except KernelError as exc:
+        raise SystemExit(f"the kernel refused the generated deck: {exc}") from None
+
+
+def draw_model(model, stem: Path) -> None:
+    """The model's picture before the solve; matplotlib loads only here (examples share a folder)."""
+    from plot_model import plot_model  # noqa: E402
+
+    print("written", plot_model(model, stem.with_name(f"{stem.name}-model.png")))
+
+
+def draw_solution(deck, solution, units: str, stem: Path) -> None:
+    """The solved model's picture and the ParaView file; matplotlib and the VTK writer load only here."""
+    from export_vtk import write_vtu  # noqa: E402
+    from plot_deck import plot_solution  # noqa: E402
+
+    print("written", plot_solution(deck, solution, units, stem.with_name(f"{stem.name}-solved.png")))
+    print("written", write_vtu(deck, solution, units, stem.with_name(f"{stem.name}.vtu")))
+
+
+def draw(model, deck_path: Path, units: str, stem: Path) -> None:
+    """--drawings only: the model's picture, then the deck an earlier run wrote solved again and drawn, so the pictures show the
+    deck the result came from."""
+    if not deck_path.is_file():
+        raise SystemExit(f"no {deck_path.name} in {deck_path.parent}: --drawings only draws the deck an earlier run wrote there")
+    draw_model(model, stem)
+    deck = read_deck(deck_path, units)
+    draw_solution(deck, solved(deck), units, stem)
+
+
 def main() -> None:
     # the report quotes the library's units (10⁻⁶/°C), which cp1252, Windows's encoding for piped or redirected output, cannot encode
     sys.stdout.reconfigure(encoding="utf-8")
@@ -63,6 +97,9 @@ def main() -> None:
     parser.add_argument("--no-solve", action="store_true")
     parser.add_argument("--target", choices=["kernel", "calculix", "both"], default="kernel",
                         help="which decks to write: the Abaqus-dialect deck our kernel reads, the CalculiX deck (S8R; the mesh is promoted to order 2), or both")
+    parser.add_argument("--drawings", choices=["with", "without", "only"], default="with",
+                        help="the pictures and the ParaView file (<spec>-model.png, <spec>-solved.png, <spec>.vtu): with the rest (default), "
+                             "without them, or only them, from the deck an earlier run wrote in --out")
     args = parser.parse_args()
     try:
         spec = load_spec(args.spec)
@@ -73,10 +110,14 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.spec.stem
     deck_path = args.out / f"{stem}-abaqus.inp"
+    if args.drawings == "only":
+        draw(model, deck_path, units, args.out / stem)
+        return
     text = write_abaqus(model)
     deck_path.write_text(text, encoding="utf-8", newline="\n")
     print("written", deck_path)
-    print("written", plot_model(model, args.out / f"{stem}-model.png"))
+    if args.drawings == "with":
+        draw_model(model, args.out / stem)
     report = summary(model, text, units)
     if args.target in ("calculix", "both"):
         from anisotropy_fea.write_calculix import CalculixWriterError, write_calculix  # noqa: E402
@@ -91,16 +132,10 @@ def main() -> None:
         print("written", ccx_path, "(S8R; open it in PrePoMax or run examples/run_calculix.py)")
         report += f"calculix deck sha256 {hashlib.sha256(ccx_text.encode('utf-8')).hexdigest()} (mesh promoted to order 2: S8R)\n"
     if not args.no_solve and args.target != "calculix":
-        from export_vtk import write_vtu  # noqa: E402
-        from plot_deck import plot_solution  # noqa: E402
-
         deck = read_deck(deck_path, units)
-        try:
-            solution = solve_deck(deck)
-        except KernelError as exc:
-            raise SystemExit(f"the kernel refused the generated deck: {exc}") from None
-        print("written", plot_solution(deck, solution, units, args.out / f"{stem}-solved.png"))
-        print("written", write_vtu(deck, solution, units, args.out / f"{stem}.vtu"))
+        solution = solved(deck)
+        if args.drawings == "with":
+            draw_solution(deck, solution, units, args.out / stem)
         if model.plate:  # first: a plate under pressure or out-of-plane loads is solved as a bending shell too, and has no nose
             components = 3 if model.bending else 2
             parts = []
@@ -143,7 +178,8 @@ def main() -> None:
                 report += f"first-ply failure, {criterion}: not available ({exc})\n"
         coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
                   "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
-        data = field_data(deck, solution, spec.units, criteria=tuple(available), quality=element_quality(model.mesh.xy, model.mesh.corners), coupon=coupon)
+        data = field_data(deck, solution, spec.units, criteria=tuple(available), quality=element_quality(model.mesh.xy, model.mesh.corners), coupon=coupon,
+                          method=method_inputs(spec))  # the test standard's quantities, when the spec names one (ADR-0072)
         fields_path = args.out / f"{stem}-fields.json"
         fields_path.write_text(json.dumps(data), encoding="utf-8")
         print("written", fields_path)

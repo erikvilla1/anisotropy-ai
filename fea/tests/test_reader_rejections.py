@@ -18,8 +18,10 @@ CASES = [
     ("one", "type=S4R", "type=S8R", "element type 'S8R' is not supported"),
     ("one", "nlgeom=NO", "nlgeom=YES", "nlgeom=YES"),
     ("one", "*Instance, name=Coupon-1, part=Coupon\n", "*Instance, name=Coupon-1, part=Coupon\n5., 0., 0.\n", "translated or rotated instance"),
-    ("one", "1., 0., 0., 0., 1., 0.", "0., 1., 0., -1., 0., 0.", "not the global axes"),
-    ("one", "3, 0.\n*Shell", "3, 30.\n*Shell", "not the global axes"),
+    ("one", "1., 0., 0., 0., 1., 0.", "0., 0., 1., 0., 1., 0.", "out of the plate's plane"),
+    ("one", "1., 0., 0., 0., 1., 0.", "1., 0., 0., 0., -1., 0.", "not z cross a"),
+    ("one", "1., 0., 0., 0., 1., 0.", "2., 0., 0., 0., 2., 0.", "write a unit vector"),
+    ("one", "3, 0.\n*Shell", "1, 30.\n*Shell", "rotates about axis 1"),
     ("one", "layup=Layup-1, symmetric", "layup=Layup-1, symmetric, offset=0.5", "offset=0.5 is not supported"),
     ("one", "*End Step\n", "*End Step\n*Step, name=Step-2\n*Static\n*End Step\n", "second \\*Step"),
     ("one", "*Fail Stress\n2558.51", "*Density\n1.6e-9\n*Fail Stress\n2558.51", "\\*density is not supported by anisotropy_fea"),
@@ -68,6 +70,22 @@ def test_every_refusal_names_a_line_number(tmp_path):
             read_deck(deck, "mm-MPa")
         text = str(excinfo.value)
         assert text.startswith(("line ", "part ")) or " names " in text, text
+
+
+@pytest.mark.parametrize("axes, rotation, expected", [
+    ("1., 0., 0., 0., 1., 0.", "3, 0.", 0.0),  # the global axes: the deck counts its angles from x
+    ("0., 1., 0., -1., 0., 0.", "3, 0.", 90.0),  # local 1 along +y: the frame our generated decks write (ADR-0065)
+    ("1., 0., 0., 0., 1., 0.", "3, 30.", 30.0),  # the global axes turned about the normal
+    ("0., 1., 0., -1., 0., 0.", "3, -15.", 75.0),  # both at once
+], ids=["global", "y-aligned", "rotated-30", "y-aligned-minus-15"])
+def test_an_in_plane_right_handed_frame_is_read_and_becomes_the_sections_rotation(tmp_path, axes, rotation, expected):
+    text = ONE.replace("1., 0., 0., 0., 1., 0.", axes, 1).replace("3, 0.\n*Shell", f"{rotation}\n*Shell", 1)
+    deck = tmp_path / "deck.inp"
+    deck.write_text(text, encoding="utf-8")
+    read = read_deck(deck, "mm-MPa")
+    section = read.parts["Coupon"].sections[0]
+    assert section.orientation == "Ori-1" and section.rotation_deg == pytest.approx(expected, abs=1e-9)
+    assert [layer.angle_deg for layer in section.layers] == [0.0, 30.0, -30.0, 30.0, 0.0]  # the layer lines stay as written
 
 
 def test_units_must_be_stated():

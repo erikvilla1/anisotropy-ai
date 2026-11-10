@@ -20,13 +20,14 @@ from pydantic import BaseModel, ConfigDict
 from anisotropy_engine.lamina import Lamina, Strengths
 from anisotropy_engine.laminate import Ply, abd_matrices
 
+from .spec import normalised_angle
 from .units import deck_unit_factors
 
 NodeKey = tuple[str | None, int]  # (instance name, label); None means an assembly-level node (a reference point)
 ElementKey = tuple[str, int]  # (instance name, label)
 
 SUPPORTED_ELEMENT_TYPES = ("S4", "S4R", "S4R5")
-GLOBAL_AXES = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+GLOBAL_AXES = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))  # the *Orientation of a deck whose layer angles are counted from global x (rotation 0)
 IN_PLANE_DOFS = (1, 2)
 ROTATION_DOFS = (4, 5, 6)
 PLAUSIBLE_MODULUS_PA = (1e9, 1e12)  # a modulus outside this range after conversion usually means the wrong unit system
@@ -64,6 +65,9 @@ class ShellSection(Record):
     layup_name: str | None
     symmetric: bool
     layers: tuple[Layer, ...]  # as listed in the deck; `expanded_layers` applies `symmetric`
+    # The angle from global x to the section's local direction 1, the axis the layer angles are counted from: set by the reader from the
+    # section's *Orientation (its a axis plus its rotation about axis 3), 0 when the section names none (ADR-0065). `fibre_angles` adds it.
+    rotation_deg: float
     section_integration: str | None = None
     line: int
 
@@ -235,13 +239,19 @@ def lamina_of(material: Material) -> Lamina:
     return Lamina(E1=e.E1, E2=e.E2, G12=e.G12, nu12=e.nu12, strengths=strengths)
 
 
+def fibre_angles(section: ShellSection) -> list[float]:
+    """The engine's angle of every ply of a section, bottom-first: the layer angle plus the section's rotation, so counted from global x as
+    ADR-0004 does, brought into (-90, 90] (ADR-0065). The layer angles themselves stay what the deck states; labels print those."""
+    return [normalised_angle(layer.angle_deg + section.rotation_deg) for layer in expanded_layers(section)]
+
+
 def section_plies(section: ShellSection, materials: dict[str, Material]) -> list[Ply]:
-    """The engine plies of a section, bottom-first, for a deck already in SI."""
+    """The engine plies of a section, bottom-first, for a deck already in SI; each ply's angle is its fibre angle from global x."""
     plies = []
-    for layer in expanded_layers(section):
+    for layer, angle in zip(expanded_layers(section), fibre_angles(section)):
         if layer.material not in materials:
             raise DeckError(f"line {section.line}: layer names material {layer.material!r}, which the deck does not define")
-        plies.append(Ply(material=lamina_of(materials[layer.material]), angle_deg=layer.angle_deg, thickness_m=layer.thickness))
+        plies.append(Ply(material=lamina_of(materials[layer.material]), angle_deg=angle, thickness_m=layer.thickness))
     return plies
 
 

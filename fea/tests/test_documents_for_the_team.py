@@ -151,7 +151,9 @@ def test_the_cover_names_the_points_the_record_compares(coupon):
     record = load_record(OPEN_HOLE)
     rows, _ = comparison_rows(record)
     points = coupon.record_points(rows)
-    assert points.startswith("the grips, our node ") and ", our element " in points and "hole" not in points
+    # the open-hole record holds the grips and the far element since 2026-11-08 (ADR-0065's regeneration left the gauge node out: its lateral
+    # displacement is the expanded brick's asymmetry against the kernel's exact zero; the record's reading note says so)
+    assert points.startswith("the grips, our element ") and "node" not in points and "hole" not in points
     named = coupon.record_points(rows, {name: "far" for name in {r.name for r in rows if r.group == "strain"}})
     assert "(far probe)" in named  # a point the spec names as a probe says which
 

@@ -255,6 +255,112 @@ def face_strength_ratio(criterion: str, material: Lamina, held: PlySurface, scal
     return tsai_wu_ratio_combined(held.stress_12, scaled.stress_12, material.strengths, f12_star), "interactive"
 
 
+def _finite_states(value, name: str) -> np.ndarray:
+    """Require an (n, 3) array of states, [1, 2, 12] components per row, with no NaN or infinity."""
+    states = np.asarray(value, dtype=float)
+    if states.ndim != 2 or states.shape[1] != 3:
+        raise ValueError(f"{name} must be an array of shape (n, 3)")
+    if not np.all(np.isfinite(states)):
+        raise ValueError(f"{name} must contain only finite numbers")
+    return states
+
+
+def _limit_ratios(variable: np.ndarray, bounds, modes) -> tuple[np.ndarray, list[str]]:
+    """`max_stress_ratio_combined` or `max_strain_ratio_combined` with nothing held, for n states at once: per component,
+    tension / v when v > 0 and -compression / v when v < 0; the smallest governs, the earlier component on a tie."""
+    n = variable.shape[0]
+    ratios = np.full((n, 3), math.inf)
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+        for j, (tension, compression) in enumerate(bounds):
+            v = variable[:, j]
+            ratios[:, j] = np.where(v > 0, (tension - 0.0) / v, np.where(v < 0, (-compression - 0.0) / v, math.inf))
+    present = variable != 0
+    first_present = np.argmax(present, axis=1)
+    j = np.argmin(ratios, axis=1)
+    ratio = ratios[np.arange(n), j]
+    j = np.where(np.isfinite(ratio), j, first_present)  # every limit overflowed: the scalar function keeps the first present one
+    names = np.array([name for pair in modes for name in pair] + ["none"], dtype=object)
+    index = np.where(present.any(axis=1), 2 * j + (variable[np.arange(n), j] < 0), len(names) - 1)
+    return ratio, names[index].tolist()
+
+
+STRESS_MODES = (("longitudinal tension", "longitudinal compression"), ("transverse tension", "transverse compression"),
+                ("in-plane shear", "in-plane shear"))
+STRAIN_MODES = (("longitudinal tensile strain", "longitudinal compressive strain"),
+                ("transverse tensile strain", "transverse compressive strain"), ("in-plane shear strain", "in-plane shear strain"))
+
+
+def _tsai_hill_quadratic_rows(x: np.ndarray, y: np.ndarray, X: float, Y: float, S: float) -> np.ndarray:
+    """`_tsai_hill_quadratic` row by row, the same operations in the same order."""
+    return x[:, 0] * y[:, 0] / X**2 - (x[:, 0] * y[:, 1] + x[:, 1] * y[:, 0]) / (2 * X**2) + x[:, 1] * y[:, 1] / Y**2 + x[:, 2] * y[:, 2] / S**2
+
+
+def _tsai_hill_ratios(v: np.ndarray, st: Strengths) -> np.ndarray:
+    """`tsai_hill_ratio_combined` with nothing held, for n states at once: the four sign choices of X and Y, each root kept only
+    when the state at that root has the signs assumed, and the smallest kept root."""
+    s = np.zeros_like(v)
+    best = np.full(v.shape[0], math.inf)
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+        for X, sign1 in ((st.F1t, 1), (st.F1c, -1)):
+            for Y, sign2 in ((st.F2t, 1), (st.F2c, -1)):
+                a = _tsai_hill_quadratic_rows(v, v, X, Y, st.F6)
+                b = 2 * _tsai_hill_quadratic_rows(s, v, X, Y, st.F6)
+                c = _tsai_hill_quadratic_rows(s, s, X, Y, st.F6) - 1
+                disc = b * b - 4 * a * c
+                quadratic = (a > 0) & (disc >= 0)
+                linear = ~(a > 0) & (b > 0)
+                r = np.where(quadratic, (-b + np.sqrt(np.where(quadratic, disc, 0.0))) / (2 * a), np.where(linear, -c / b, np.nan))
+                at_failure = s + r[:, None] * v
+                signs = (((at_failure[:, 0] * sign1 >= 0) | (at_failure[:, 0] == 0))
+                         & ((at_failure[:, 1] * sign2 >= 0) | (at_failure[:, 1] == 0)))
+                kept = (quadratic | linear) & ~(r < 0) & signs
+                best = np.where(kept, np.minimum(best, r), best)
+    return best
+
+
+def _tsai_wu_ratios(v: np.ndarray, st: Strengths, f12_star: float) -> np.ndarray:
+    """`tsai_wu_ratio_combined` with nothing held, for n states at once, the same operations in the same order."""
+    if not -1 < f12_star < 1:
+        raise ValueError(f"f12_star must be between -1 and 1, got {f12_star}")
+    s = np.zeros_like(v)
+    f1 = 1 / st.F1t - 1 / st.F1c
+    f2 = 1 / st.F2t - 1 / st.F2c
+    f11 = 1 / (st.F1t * st.F1c)
+    f22 = 1 / (st.F2t * st.F2c)
+    f66 = 1 / st.F6**2
+    f12 = f12_star * math.sqrt(f11 * f22)
+
+    def quadratic(x, y):
+        return f11 * x[:, 0] * y[:, 0] + f22 * x[:, 1] * y[:, 1] + f66 * x[:, 2] * y[:, 2] + f12 * (x[:, 0] * y[:, 1] + x[:, 1] * y[:, 0])
+
+    a = quadratic(v, v)
+    b = f1 * v[:, 0] + f2 * v[:, 1] + 2 * quadratic(s, v)
+    c = f1 * s[:, 0] + f2 * s[:, 1] + quadratic(s, s) - 1
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+        denominator = b + np.sqrt(b * b - 4 * a * c)
+        ratio = np.where(denominator > 0, -2 * c / denominator, math.inf)
+    return np.where(c >= 0, 0.0, ratio)
+
+
+def scaled_strength_ratios(criterion: str, material: Lamina, stress_12: np.ndarray, f12_star: float | None) -> tuple[np.ndarray, list[str]]:
+    """`face_strength_ratio` with nothing held, for n ply states of one material at once: the same equations, operation by operation,
+    so a finite element kernel can check every element's plies without a Python call per ply (ADR-0073). `stress_12` is (n, 3),
+    [sigma1, sigma2, tau12] per row; the result is each row's ratio and governing mode."""
+    stress = _finite_states(stress_12, "variable_12")
+    if criterion == "max_stress":
+        st = material.strengths
+        return _limit_ratios(stress, ((st.F1t, st.F1c), (st.F2t, st.F2c), (st.F6, st.F6)), STRESS_MODES)
+    if criterion == "max_strain":
+        lim = material.strain_limits
+        strain = (reduced_compliance(material) @ stress[:, :, None])[:, :, 0]  # `_mechanical_strain_12` row by row
+        return _limit_ratios(strain, ((lim.eps1t, lim.eps1c), (lim.eps2t, lim.eps2c), (lim.gamma12, lim.gamma12)), STRAIN_MODES)
+    if criterion == "tsai_hill":
+        return _tsai_hill_ratios(stress, material.strengths), ["interactive"] * stress.shape[0]
+    if criterion == "tsai_wu":
+        return _tsai_wu_ratios(stress, material.strengths, f12_star), ["interactive"] * stress.shape[0]
+    raise ValueError(f"Unknown criterion {criterion!r}; use one of {CRITERIA}")
+
+
 # Earlier names, kept so nothing that imported them breaks.
 _check_criterion = check_criterion
 _face_ratio = face_strength_ratio

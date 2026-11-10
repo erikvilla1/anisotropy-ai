@@ -6,9 +6,12 @@
 
 Runs the steps of the case page's Rebuild section in order, with its placeholders filled: reads the input (as coupon_from_form.py),
 writes the decks (as regenerate_decks.py --ccx), starts the next attempt (as new_attempt.py), solves the coupon with our engine
-(build_model.py), runs the CalculiX twin (run_calculix.py), writes the CalculiX record (record_from_dat.py) and builds the package
-(as docs/models/coupon.py). Then it adds the attempt's row to the case page's attempt log, a failed try included, refreshes the
-page's result and lists the files to open. It stops at the first step that fails and names it. Nothing is written before CalculiX
+(build_model.py, without its drawings), runs the CalculiX twin (run_calculix.py) and writes the CalculiX record (record_from_dat.py).
+That is the result: the progress file says it (`result`) before anything else is made, so the studio shows it while the rest is
+built (ADR-0064). Then the documents: the engine's drawings (build_model.py --drawings only) and the package (as
+docs/models/coupon.py). Last it adds the attempt's row to the case page's attempt log, a failed try included, refreshes the page's
+result and lists the files to open. It stops at the first step before the result that fails and names it; a document that fails
+after the result leaves the result standing, and the row and the outcome say which document is missing and why. Nothing is written before CalculiX
 is found (ANISOTROPY_CCX or ccx on PATH) and the coupon's case page reads. An input that the setup check blocks is refused with the
 failing items named, before anything is written.
 
@@ -34,8 +37,11 @@ from datetime import date
 from pathlib import Path
 
 from anisotropy_fea import __version__, paths
+from anisotropy_fea.standards.conformance import conformance
+from anisotropy_fea.test_quantities import STRAIN_PROBES
 from anisotropy_fea.attempts import AttemptError, attempt_number, attempts, start_attempt
 from anisotropy_fea.calculix import CalculixError, ccx_version, find_ccx
+from anisotropy_fea.calculix_summary import calculix_summary, extensometer_of
 from anisotropy_fea.case_pages import ATTEMPT_ROW, CasePageError, fill, page_blocks, read_case, record_summary, rel, signed
 from anisotropy_fea.checks import setup_checklist
 from anisotropy_fea.femodel import build_model
@@ -53,7 +59,9 @@ LEFT_OUT = {  # why the record keeps the gauge probes only, in the words the cou
 }
 COUPON_DOCUMENT = "anisotropy_models_coupon"  # docs/models/coupon.py, loaded under the name its tests use
 INPUT_SUFFIXES = (".xlsx", VALUES_SUFFIX)
-STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the package", "the outputs")
+STAGES = ("the setup check", "the input", "the decks", "the attempt", "our engine", "the convergence study", "CalculiX", "the CalculiX record", "the result",
+          "the drawings", "the package", "the outputs")
+DOCUMENT_STAGES = STAGES[STAGES.index("the drawings"):]  # after the result: made in the background of the studio's view (ADR-0064)
 STUDIO = "studio"  # the attempt's run/studio/: the checklist and the preview the studio showed before the run
 GATE_GO = "go"  # the word at the gate that lets a held run go on
 GATE_POLL_S = 0.1
@@ -79,6 +87,9 @@ class Outcome:
     attempt: Path
     result: str
     outputs: dict[str, Path]
+    documents: str = "written"  # "written", or what is missing and why: a document can fail after the result stands (ADR-0064)
+    result_at: float | None = None  # time.perf_counter() when the result was reported
+    standard: dict | None = None  # the test standard named and the check's words on it (ADR-0072); None when the coupon names none
 
 
 class Progress:
@@ -92,13 +103,26 @@ class Progress:
         self.coupon: str | None = None
         self.attempt: Path | None = None
         self.held = False  # waiting at the gate (--gate)
+        self.result: str | None = None  # the result's one line, once the solve and the record are done (ADR-0064)
+        self.timings: dict[str, float] = {}  # the seconds each finished stage took, the evidence of where a job's time goes (ADR-0056 amendment 6)
+        self._since: float | None = None
 
     def start(self, stage: str) -> None:
+        now = time.monotonic()
         if self.stage is not None:
             self.done.append(self.stage)
+            self.timings[self.stage] = round(now - (self._since if self._since is not None else now), 1)
+        self._since = now
         self.stage = stage
-        print(f"\n== {stage}", flush=True)
+        took = f" ({self.timings[self.done[-1]]:.1f} s for {self.done[-1]})" if self.done else ""
+        print(f"\n== {stage}{took}", flush=True)
         self.write()
+
+    def finish(self) -> None:
+        """The last stage's time, once the run has ended one way or the other."""
+        if self.stage is not None and self._since is not None and self.stage not in self.timings:
+            self.timings[self.stage] = round(time.monotonic() - self._since, 1)
+            self.write()
 
     def made(self, **outputs: Path) -> None:
         self.outputs.update({key: path for key, path in outputs.items() if path.exists()})
@@ -108,7 +132,8 @@ class Progress:
         if self.path is None:
             return
         data = {"stage": self.stage, "done": list(self.done), "stages": list(STAGES), "outputs": {key: rel(p) for key, p in self.outputs.items()},
-                "coupon": self.coupon, "attempt": None if self.attempt is None else rel(self.attempt), "held": self.held}
+                "coupon": self.coupon, "attempt": None if self.attempt is None else rel(self.attempt), "held": self.held, "result": self.result,
+                "timings": dict(self.timings)}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -148,9 +173,11 @@ def check_setup(source: str):
 
 
 def wait_at_gate(gate: Path | None, progress: Progress) -> None:
-    """With a gate file: the coupon is named and its specs are written, and no attempt is numbered yet. The progress says `held`, and
-    the run waits until the file appears: `go` goes on; any other text refuses the run with that text. The hosted tier's solver
-    claims the coupon here, so two jobs never number attempts of one coupon at once (ADR-0056 amendment 3)."""
+    """With a gate file, the run holds twice: once before the coupon is named (the progress says `held` with no coupon), so the hosted
+    tier's solver can bring its coupons level with the store under its naming lock before the naming reads them, and once when the
+    coupon is named and its specs are written, before any attempt is numbered (ADR-0056 amendments 3 and 6). Each time the run waits
+    until the file appears and reads it once: `go` goes on; any other text refuses the run with that text. The solver claims the
+    coupon at the second hold, so two jobs never number attempts of one coupon at once."""
     if gate is None:
         return
     progress.held = True
@@ -161,6 +188,7 @@ def wait_at_gate(gate: Path | None, progress: Progress) -> None:
             raise Refused(f"no word at the gate {gate.name} in {GATE_WAIT_S:g} s; the run was not continued")
         time.sleep(GATE_POLL_S)
     word = gate.read_text(encoding="utf-8").strip()
+    gate.unlink(missing_ok=True)  # read once: the next hold waits for a fresh word
     progress.held = False
     progress.write()
     if word != GATE_GO:
@@ -168,10 +196,20 @@ def wait_at_gate(gate: Path | None, progress: Progress) -> None:
 
 
 def script(step: str, args: list[str], cwd: Path) -> None:
-    """One of our scripts under this Python, its output straight to the console; a nonzero exit stops the run at `step`."""
-    done = subprocess.run([sys.executable, *args], cwd=cwd, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, check=False)
-    if done.returncode:
-        raise StepFailed(f"{step}: {Path(args[0]).name} exited with code {done.returncode}")
+    """One of our scripts under this Python, its output echoed to the console line by line; a nonzero exit stops the run at `step`,
+    and the message carries the script's own last words, so the job's message says what happened, not only the exit code."""
+    process = subprocess.Popen([sys.executable, *args], cwd=cwd, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+    last = ""
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="", flush=True)
+        if line.strip():
+            last = line.strip()
+    process.wait()
+    if process.returncode:
+        words = f": {last[:300]}" if last else ""
+        raise StepFailed(f"{step}: {Path(args[0]).name} exited with code {process.returncode}{words}")
 
 
 def package(name: str, pdf: bool, theory: bool) -> Path:
@@ -188,6 +226,30 @@ def package(name: str, pdf: bool, theory: bool) -> Path:
     except SystemExit as exc:  # the document code stops with a message, as a script does
         raise StepFailed(f"the package: {exc}") from None
     return folder
+
+
+def beside(fields_path: Path, record: Path, twin: Path | None = None) -> None:
+    """CalculiX's reaction, gauge ply stresses and .frd peaks written into the fields file's summary as `calculix`, so the page shows
+    them beside ours from the one file it reads (ADR-0030 amendment 6); with the twin's spec, its chord modulus too (ADR-0072)."""
+    try:
+        data = json.loads(fields_path.read_text(encoding="utf-8"))
+        data["summary"]["calculix"] = calculix_summary(record, data["units"], extensometer_of(load_spec(twin)) if twin is not None else None)
+        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        print(f"written    {rel(fields_path)} (CalculiX's numbers beside ours)")
+    except (OSError, ValueError, KeyError) as exc:  # the page then shows ours alone, and says nothing of CalculiX's; the record itself stands
+        print(f"CalculiX's numbers were not written beside ours in {rel(fields_path)}: {str(exc).splitlines()[0]}")
+
+
+def convergence_into(fields_path: Path, study_path: Path) -> None:
+    """The mesh convergence study written into the fields file's summary as `convergence` (ADR-0068), so the page shows which numbers
+    settle as the mesh is refined from the one file it reads."""
+    try:
+        data = json.loads(fields_path.read_text(encoding="utf-8"))
+        data["summary"]["convergence"] = json.loads(study_path.read_text(encoding="utf-8"))
+        fields_path.write_text(json.dumps(data), encoding="utf-8")
+        print(f"written    {rel(fields_path)} (the mesh convergence study in the summary)")
+    except (OSError, ValueError, KeyError) as exc:  # the page then shows the result without the study; the study file itself stands
+        print(f"the convergence study was not written into {rel(fields_path)}: {str(exc).splitlines()[0]}")
 
 
 def add_row(folder: Path, cells: list[str]) -> None:
@@ -236,12 +298,14 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     if source.lower().endswith(INPUT_SUFFIXES):
         progress.start("the setup check")
         checklist, model, quality = check_setup(source)
+        wait_at_gate(gate, progress)  # the first hold: the solver syncs its coupons under the naming lock before the naming reads them
         progress.start("the input")
         intake = convert(source, root=paths.LOCAL, day=day, replace=replace)
         for path in intake.written:
             print(f"written    {rel(path)}")
         name = intake.designation.name
     else:
+        wait_at_gate(gate, progress)  # the first hold, before the coupon's folder is read
         name = source
     progress.coupon = name
     check_coupon(name)
@@ -265,15 +329,20 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     print(f"attempt folder: {rel(attempt)}")
     progress.made(**write_studio(out / STUDIO, checklist, model, quality))
     record = paths.verification(name) / f"{name}-calculix.toml"
-    kind = load_spec(twin).kind
+    twin_spec = load_spec(twin)
+    kind = twin_spec.kind
     nodes, elements = gauge_probes(kind)
+    nodes = (*nodes, *(name for name in STRAIN_PROBES if name in twin_spec.probes.nodes))  # the strain measurement's ends (ADR-0072)
     notes = f"written by fea/tools/run_coupon.py, attempt {number:02d}; {LEFT_OUT.get(kind, LEFT_OUT[None])}"
     steps = [
-        ("our engine", [str(paths.FEA / "examples/build_model.py"), str(spec), "--out", str(out / "kernel")],
-         {"kernel_summary": out / "kernel" / "summary.txt", "kernel_vtu": out / "kernel" / f"{name}.vtu", "fields": out / "kernel" / f"{name}-fields.json",
+        ("our engine", [str(paths.FEA / "examples/build_model.py"), str(spec), "--out", str(out / "kernel"), "--drawings", "without"],
+         {"kernel_summary": out / "kernel" / "summary.txt", "fields": out / "kernel" / f"{name}-fields.json",
           "explanation": out / "kernel" / f"{name}-explanation.json"}),
+        ("the convergence study", [str(paths.FEA / "tools/convergence_study.py"), str(spec), "--out", str(out / "kernel" / f"{name}-convergence.json")],
+         {"convergence": out / "kernel" / f"{name}-convergence.json"}),
         ("CalculiX", [str(paths.FEA / "examples/run_calculix.py"), str(twin), "--out", str(out / "calculix")],
-         {"prepomax_deck": out / "calculix" / f"{name}-nodal-ccx.inp", "prepomax_results": out / "calculix" / f"{name}-nodal-ccx.frd"}),
+         {"prepomax_deck": out / "calculix" / f"{name}-nodal-ccx.inp", "prepomax_results": out / "calculix" / f"{name}-nodal-ccx.frd",
+          "calculix_console": out / "calculix" / f"{name}-nodal-ccx.log", "calculix_status": out / "calculix" / f"{name}-nodal-ccx.sta"}),
         ("the CalculiX record", [str(paths.FEA / "tools/record_from_dat.py"), str(twin), str(out / "calculix" / f"{name}-nodal-ccx.dat"),
                                  "--version", version, "--run-by", run_by, "--machine", machine, "--tolerance", str(TOLERANCE), "--floor", str(FLOOR),
                                  "--node-probes", *nodes, "--element-probes", *elements, "--notes", notes, "--out", str(record)],
@@ -281,60 +350,119 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     ]
     what = (f"`fea/tools/run_coupon.py`, run by {run_by}: the decks, our engine on `{spec.name}`, CalculiX {version} on `{twin.name}`, "
             "the CalculiX record and the package")
+    answer = [  # the result: what the studio shows once it is reported
+        ("prepomax_deck", "open in PrePoMax (File, Import)", out / "calculix" / f"{name}-nodal-ccx.inp"),
+        ("prepomax_results", "its results in PrePoMax (File, Open results)", out / "calculix" / f"{name}-nodal-ccx.frd"),
+        ("kernel_summary", "our engine: the summary, first-ply failure included", out / "kernel" / "summary.txt"),
+        ("fields", "our engine: every field and the summary, for the studio's viewer", out / "kernel" / f"{name}-fields.json"),
+        ("explanation", "our engine: the explanation of the result", out / "kernel" / f"{name}-explanation.json"),
+        ("record", "the CalculiX record", record),
+    ] + [(key, {"checklist": "the setup check of this attempt's input", "preview": "the model the studio showed before the run"}[key], path)
+         for key, path in progress.outputs.items() if key in ("checklist", "preview")]
     try:
         for step, args, made in steps:
             progress.start(step)
-            script(step, args, paths.FEA)
-            progress.made(**made)
-        progress.start("the package")
-        delivered = package(name, pdf, theory)
-        progress.made(package=delivered)
-        progress.start("the outputs")
-        opens = [("package", "the package for the team", delivered)] + (
-            [("document", "its document", delivered / f"{name}.pdf")] if pdf else []) + [
-            ("abaqus_deck", "open in Abaqus/CAE", delivered / "2-our-model" / "abaqus" / f"{name}-abaqus.inp"),
-            ("prepomax_deck", "open in PrePoMax (File, Import)", out / "calculix" / f"{name}-nodal-ccx.inp"),
-            ("prepomax_results", "its results in PrePoMax (File, Open results)", out / "calculix" / f"{name}-nodal-ccx.frd"),
-            ("kernel_summary", "our engine: the summary, first-ply failure included", out / "kernel" / "summary.txt"),
-            ("kernel_vtu", "our engine: every ply's stresses, for ParaView", out / "kernel" / f"{name}.vtu"),
-            ("fields", "our engine: every field and the summary, for the studio's viewer", out / "kernel" / f"{name}-fields.json"),
-            ("explanation", "our engine: the explanation of the result", out / "kernel" / f"{name}-explanation.json"),
-            ("record", "the CalculiX record", record),
-        ] + [(key, {"checklist": "the setup check of this attempt's input", "preview": "the model the studio showed before the run"}[key], path)
-             for key, path in progress.outputs.items() if key in ("checklist", "preview")]
-        missing = [path for _, _, path in opens if not path.exists()]
+            try:
+                try:
+                    script(step, args, paths.FEA)
+                except StepFailed as exc:
+                    if step != "the convergence study":  # the study is a reading beside the result, never a reason to stop the run (ADR-0068)
+                        raise
+                    print(f"{exc}; the run goes on without the convergence study")
+                if step == "the convergence study":
+                    convergence_into(out / "kernel" / f"{name}-fields.json", out / "kernel" / f"{name}-convergence.json")  # into the fields the result shows
+                if step == "the CalculiX record":
+                    beside(out / "kernel" / f"{name}-fields.json", record, twin)  # CalculiX's numbers into the fields the result shows (ADR-0030 amendment 6)
+            finally:  # what the step wrote stays reported, a failed step's deck and console included; a study that was not written is not
+                progress.made(**{key: path for key, path in made.items() if path.exists() or step != "the convergence study"})
+        progress.start("the result")
+        study = out / "kernel" / f"{name}-convergence.json"
+        if study.is_file():
+            answer.append(("convergence", "our engine: the mesh convergence study", study))
+        missing = [path for _, _, path in answer if not path.exists()]
         if missing:
-            hint = " (no Tectonic? run again with --no-pdf)" if delivered / f"{name}.pdf" in missing else ""
-            raise StepFailed(f"the outputs: {', '.join(rel(path) for path in missing)} not written{hint}")
+            raise StepFailed(f"the result: {', '.join(rel(path) for path in missing)} not written")
+        result = outcome_line(folder)
     except StepFailed as exc:
         add_row(folder, [f"{number:02d}", day, what, "--", f"stopped at {exc}", f"`ours/runs/{attempt.name}/run/`"])
         exc.coupon, exc.attempt = name, attempt
         raise
-    rows, _ = record_summary(folder)
-    reaction = [signed(r.reference, r.kernel) for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
-    result = f"{sum(r.agrees for r in rows)} of {len(rows)} recorded values agree with CalculiX" + "".join(
-        f"; our reaction {value} from CalculiX's" for value in reaction)
-    evidence = f"`ours/runs/{attempt.name}/run/`; `ours/{paths.VERIFICATION}/{record.name}`; `{paths.DOCUMENTS}/{delivered.name}/`"
-    add_row(folder, [f"{number:02d}", day, what, result, "package written" if pdf else "package written without its PDF", evidence])
+    progress.result, result_at = result, time.perf_counter()
+    progress.made(**{key: path for key, _, path in answer})
+    print(f"\nResult: attempt {number:02d} of {name}: {result}. The drawings and the package follow.", flush=True)
+    opens, documents, delivered = documents_of(name, out, spec, pdf, theory, progress)
+    evidence = f"`ours/runs/{attempt.name}/run/`; `ours/{paths.VERIFICATION}/{record.name}`" + ("" if delivered is None else f"; `{paths.DOCUMENTS}/{delivered.name}/`")
+    written = ("package written" if pdf else "package written without its PDF") if documents == "written" else documents
+    add_row(folder, [f"{number:02d}", day, what, result, written, evidence])
     refresh_page(folder)
+    opens = [(key, label, path) for key, label, path in opens if path.exists()] + answer
     outputs = {key: path for key, _, path in opens}
+    progress.outputs = {key: path for key, path in progress.outputs.items() if key in outputs or key in ("checklist", "preview")}  # the console and status files are kept only for a run that failed
     progress.made(**outputs)
     print(f"\nDone: attempt {number:02d} of {name}; its row is in {rel(folder / 'README.md')}. {result}.")
+    if documents != "written":
+        print(f"The documents: {documents}")
     for _, label, path in opens:
         print(f"  {label:52} {rel(path)}")
     if not record.with_suffix(".md").is_file():
         print(f"Next, by hand: the record's reading, {rel(record.with_suffix('.md'))}: what the numbers show (ADR-0031); the local tests "
               "name a record without one")
-    return Outcome(name, attempt, result, outputs)
+    judged = conformance(load_spec(spec))
+    standard = None if judged is None else {"designation": judged.profile.designation, "words": judged.words(), "deviations": len(judged.deviations),
+                                            "advisories": len(judged.advisories)}
+    return Outcome(name, attempt, result, outputs, documents, result_at, standard)
+
+
+def outcome_line(folder: Path) -> str:
+    """The result's one line, from the CalculiX record: how many recorded values agree, and our reaction against CalculiX's."""
+    rows, _ = record_summary(folder)
+    reaction = [signed(r.reference, r.kernel) for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1]
+    return f"{sum(r.agrees for r in rows)} of {len(rows)} recorded values agree with CalculiX" + "".join(
+        f"; our reaction {value} from CalculiX's" for value in reaction)
+
+
+def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, progress: Progress) -> tuple[list[tuple[str, str, Path]], str, Path | None]:
+    """After the result (ADR-0064): our engine's drawings and the package. Returns the files to open, "written" or what is missing
+    and why, and the package folder when it was built. A failure here is reported, not raised: the result already stands."""
+    kernel = out / "kernel"
+    opens: list[tuple[str, str, Path]] = []
+    failed: list[str] = []
+    progress.start("the drawings")
+    try:
+        script("the drawings", [str(paths.FEA / "examples/build_model.py"), str(spec), "--out", str(kernel), "--drawings", "only"], paths.FEA)
+    except StepFailed as exc:
+        failed.append(f"the drawings not written ({exc})")
+    opens.append(("kernel_vtu", "our engine: every ply's stresses, for ParaView", kernel / f"{name}.vtu"))
+    progress.made(kernel_vtu=opens[-1][2])
+    progress.start("the package")
+    delivered = None
+    try:
+        delivered = package(name, pdf, theory)
+        progress.made(package=delivered)
+    except StepFailed as exc:
+        failed.append(f"the package not written ({exc})")
+    progress.start("the outputs")
+    if delivered is not None:
+        opens = [("package", "the package for the team", delivered)] + (
+            [("document", "its document", delivered / f"{name}.pdf")] if pdf else []) + [
+            ("abaqus_deck", "open in Abaqus/CAE", delivered / "2-our-model" / "abaqus" / f"{name}-abaqus.inp")] + opens
+    missing = [path for _, _, path in opens if not path.exists()]
+    if missing and delivered is not None:
+        hint = " (no Tectonic? run again with --no-pdf)" if delivered / f"{name}.pdf" in missing else ""
+        failed.append(f"{', '.join(rel(path) for path in missing)} not written{hint}")
+    return opens, "; ".join(failed) or "written", delivered
 
 
 def write_result(path: Path | None, status: str, message: str, coupon: str | None = None, attempt: Path | None = None,
-                 outputs: dict[str, Path] | None = None) -> None:
-    """The run's outcome as JSON, for the API's coupon jobs (ADR-0050): done, stopped or refused, and the files by key."""
+                 outputs: dict[str, Path] | None = None, documents: str | None = None, result: str | None = None, standard: dict | None = None) -> None:
+    """The run's outcome as JSON, for the API's coupon jobs (ADR-0050): done, stopped or refused, and the files by key; for a done
+    run, `result` is the result's one line, `documents` "written" or what is missing and why (ADR-0064), and `standard` the test
+    standard the coupon names with the check's words on it, or None (ADR-0072)."""
     if path is None:
         return
     data = {"status": status, "message": message, "coupon": coupon, "attempt": None if attempt is None else rel(attempt),
-            "outputs": {key: rel(p) for key, p in (outputs or {}).items()}, "fea_version": __version__}
+            "outputs": {key: rel(p) for key, p in (outputs or {}).items()}, "result": result, "documents": documents, "standard": standard,
+            "fea_version": __version__}
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
@@ -356,12 +484,17 @@ def main() -> None:
         done = run(args.source, args.run_by, args.machine, args.replace, pdf=not args.no_pdf, theory=not args.no_theory, progress=progress,
                    gate=args.gate)
     except StepFailed as exc:
+        progress.finish()
         write_result(args.result, "stopped", f"stopped at {exc}", exc.coupon, exc.attempt, progress.outputs)
         sys.exit(f"run_coupon: stopped at {exc}; the step's own message is above")
     except (Refused, IntakeError, AttemptError, CasePageError, CalculixError) as exc:
+        progress.finish()
         write_result(args.result, "refused", str(exc))
         sys.exit(f"run_coupon: {exc}")
-    write_result(args.result, "done", done.result, done.coupon, done.attempt, done.outputs)
+    progress.finish()
+    print("timings: " + ", ".join(f"{stage} {seconds:.1f} s" for stage, seconds in progress.timings.items()), flush=True)
+    message = done.result if done.documents == "written" else f"{done.result}; {done.documents}"
+    write_result(args.result, "done", message, done.coupon, done.attempt, done.outputs, done.documents, done.result, done.standard)
 
 
 if __name__ == "__main__":

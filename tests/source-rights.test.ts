@@ -6,7 +6,8 @@ import { curatedMaterials, exportCitedMaterial, materialDatasets } from "../lib/
 import { materials, materialSource } from "../lib/materials";
 import { schoolCitation } from "../lib/material-analysis";
 import { textbookSource } from "../lib/textbook-source";
-import { handbookReferences, rightsPolicy, sourceRightsClasses, sourceRightsPolicy } from "../lib/source-rights";
+import { handbookReferences, rightsPolicy, sourceRightsClasses, sourceRightsPolicy, testStandardReferences } from "../lib/source-rights";
+import { STANDARDS } from "../lib/studio-form";
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap(name => { const path = join(dir, name); return statSync(path).isDirectory() ? walk(path) : [path]; });
@@ -64,4 +65,15 @@ test("handbooks the site names carry a rights class and are only linked at the p
   }
   assert.equal(handbookReferences.find(r => r.id === "cmh-17-2g")!.rights, "licensed-reference");
   assert.equal(handbookReferences.find(r => r.id === "mil-hdbk-17-2f")!.rights, "public-domain");
+});
+
+test("every test standard the form offers is a licensed reference with its evidence, linked at the publisher (ADR-0072)", () => {
+  assert.deepEqual(STANDARDS.map((p) => p.designation), testStandardReferences.map((r) => r.designation));
+  for (const profile of STANDARDS) {
+    const ref = testStandardReferences.find((r) => r.designation === profile.designation)!;
+    assert.equal(ref.rights, "licensed-reference");
+    assert.equal(profile.rights, ref.rights);
+    assert.equal(profile.catalog_url, ref.url);
+    assert.ok(ref.rightsEvidence.includes("Individual values"));
+  }
 });

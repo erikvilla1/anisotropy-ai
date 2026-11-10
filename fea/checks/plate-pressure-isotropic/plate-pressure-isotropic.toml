@@ -24,6 +24,7 @@ ny = 16
 
 [layup]
 angles = [0]
+angles_from = "length"  # counted from the coupon's length axis, the direction it is pulled: 0 = fibres along the pull (ADR-0065)
 symmetric = false
 ply_thickness = 1.0
 

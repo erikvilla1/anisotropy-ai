@@ -24,7 +24,8 @@ ring_ratio = 2.0
 growth = 1.15
 
 [layup]
-angles = [0]
+angles = [90]  # isotropic, so a labelling only: 90 from the length axis puts the ply's axis 1 along the plate's x, the axes the closed form's components are written in
+angles_from = "length"  # counted from the coupon's length axis (ADR-0065)
 symmetric = false
 ply_thickness = 1.0
 

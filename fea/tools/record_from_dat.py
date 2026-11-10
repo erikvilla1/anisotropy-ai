@@ -19,8 +19,9 @@ from anisotropy_fea import paths
 from anisotropy_fea.calculix import parse_dat
 from anisotropy_fea.compare import format_record, load_conventions, reference_quantities, sha256_of
 from anisotropy_fea.femodel import build_model
+from anisotropy_fea.frd import FrdError, FrdPly, frd_peaks, frd_ply_peaks, read_frd
 from anisotropy_fea.spec import load_spec
-from anisotropy_fea.units import deck_units_of
+from anisotropy_fea.units import deck_units_of, from_si
 
 KNOWN_DIFFERENCES = {
     "kernel": "bilinear four-node membrane element, full 2 by 2 integration, membrane only (B = 0), no transverse shear, strain at the element centroid",
@@ -33,6 +34,18 @@ KNOWN_DIFFERENCES_BENDING = {
     "reference": "S8R expanded to a C3D20R brick, reduced integration, three-dimensional constitutive law with E3, nu13, nu23, transverse shear, "
                  "drilling rotation removed; each ply's face values extrapolated linearly from its two integration levels",
 }
+
+
+def gauge_rows(spec) -> tuple[float, float] | None:
+    """The y range of the gauge section in the deck's units for a gripped coupon: between the tab lines, less a tenth of the gauge
+    length at each end, where the field is uniform; None for a coupon without tabs (a plate, a bending coupon)."""
+    g = spec.geometry
+    if not getattr(g, "tab_length", None) or spec.kind not in ("unnotched_tension", "unnotched_compression"):
+        return None
+    units = deck_units_of(spec.units)
+    low, high = g.tab_length, g.length - g.tab_length
+    margin = 0.1 * (high - low)
+    return from_si(low + margin, "length", units), from_si(high - margin, "length", units)
 
 
 def main() -> None:
@@ -56,6 +69,8 @@ def main() -> None:
     parser.add_argument("--no-reactions", action="store_true",
                         help="leave the reaction totals out: a CalculiX shell node set's printed total can be incomplete (fea/checks/calculix-conventions.toml, shell_set_totals); say so in --notes")
     parser.add_argument("--notes", default="")
+    parser.add_argument("--frd", type=Path, default=None, help="the run's .frd, for the [frd] block (what PrePoMax shows: nodal, global axes); default the .dat's "
+                                                                "neighbour; `--frd none` leaves the block out")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     args.deck_reference = args.deck_reference or paths.deck_path(args.spec, "ccx")
@@ -70,6 +85,17 @@ def main() -> None:
     dat = parse_dat(args.dat.read_text(encoding="utf-8", errors="replace"))
     expected = reference_quantities(model, dat, conventions, element_probes=args.element_probes, node_probes=args.node_probes, reactions=not args.no_reactions)
     expected = {"tolerance": args.tolerance, "floor": args.floor, **expected}
+    frd = None
+    frd_path = args.dat.with_suffix(".frd") if args.frd is None else (None if str(args.frd).lower() == "none" else args.frd)
+    if frd_path is not None and frd_path.is_file():
+        try:
+            frd_file = read_frd(frd_path)
+            frd = frd_peaks(frd_file, gauge_rows(spec))
+            # each ply's peaks in its own fibre axes beside the viewer's global ones (ADR-0066); the thicknesses in the file's units
+            plies = [FrdPly(p.angle_deg, p.fibre_deg, from_si(p.thickness_m, "length", deck_units_of(spec.units))) for p in model.section.plies]
+            frd["plies"] = frd_ply_peaks(frd_file, plies, gauge_rows(spec))
+        except FrdError as exc:
+            print(f"the .frd was not read, so the record has no [frd] block: {exc}")
     out_dir = args.out.parent
     out_dir.mkdir(parents=True, exist_ok=True)  # a coupon started from its input form has no verification/ yet
     record = {
@@ -85,6 +111,7 @@ def main() -> None:
                    "conventions": args.conventions.resolve().relative_to(out_dir.resolve(), walk_up=True).as_posix(), "notes": args.notes},
         "known_differences": KNOWN_DIFFERENCES_BENDING if model.bending else KNOWN_DIFFERENCES,
         "expected": expected,
+        **({"frd": frd} if frd else {}),
     }
     args.out.write_text(format_record(record), encoding="utf-8", newline="\n")
     counts = {k: (len(v) if isinstance(v, dict) else 1) for k, v in expected.items() if k not in ("tolerance", "floor")}

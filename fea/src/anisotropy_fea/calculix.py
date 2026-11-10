@@ -67,6 +67,14 @@ def ccx_version(ccx: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def solver_environment(threads: int) -> dict[str, str]:
+    """The environment CalculiX runs in: `threads` for the assembly, one thread for the equation solver. SPOOLES on more than one
+    thread (CCX_NPROC_EQUATION_SOLVER above 1, CalculiX 2.21 as Ubuntu and our image ship it) gives a different answer on every run of
+    the same deck, now and then a wrong one: the public coupon's reaction 15,989 N instead of 16,097.7 N, its ply stresses 1 % off
+    (ADR-0056 amendment 7). The assembly on many threads gives the same answer every time, as fast."""
+    return {**os.environ, "OMP_NUM_THREADS": str(max(1, int(threads))), "CCX_NPROC_EQUATION_SOLVER": "1"}
+
+
 def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: Path | str | None = None,
                  timeout_s: float = 600.0, threads: int = 1) -> CalculixResult:
     """Copy the deck into the working folder as <job>.inp, run `ccx -i <job>` there, and collect the outputs."""
@@ -80,7 +88,7 @@ def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: 
     target = workdir / f"{job}.inp"
     if target.resolve() != deck_path.resolve():
         shutil.copyfile(deck_path, target)
-    env = {**os.environ, "OMP_NUM_THREADS": str(threads)}
+    env = solver_environment(threads)
     start = time.perf_counter()
     try:
         done = subprocess.run([str(solver), "-i", job], cwd=workdir, capture_output=True, text=True, timeout=timeout_s, env=env, check=False)
@@ -99,12 +107,29 @@ def run_calculix(deck_path: Path | str, ccx: str | Path | None = None, workdir: 
         frd_path=frd if frd.exists() else None, sta_text=sta.read_text(encoding="utf-8", errors="replace") if sta.exists() else None,
         warnings=warnings, errors=errors,
     )
+    (workdir / f"{job}.log").write_text(stdout, encoding="utf-8", newline="\n")  # the console, kept beside the deck for a failed run too
     if errors or done.returncode != 0:
         detail = "\n".join(errors) if errors else stdout[-2000:]
-        raise CalculixError(f"CalculiX failed on {job} (exit {done.returncode}):\n{detail}")
+        known = diagnose(stdout)
+        raise CalculixError(f"CalculiX failed on {job} (exit {done.returncode}):" + (f" {known}\n" if known else "\n") + detail)
     if not result.dat_text.strip():
         raise CalculixError(f"CalculiX wrote no .dat for {job}; the deck has no *NODE PRINT or *EL PRINT request")
     return result
+
+
+KNOWN_FATALS = (  # a text CalculiX prints without an *ERROR paragraph, and what it means in our words (fea/checks/calculix-conventions.toml)
+    ("GPart_makeYCmap", "the SPOOLES solver stopped while ordering the equations (\"fatal error in GPart_makeYCmap: bad input\"); it does so on "
+                        "large expanded composite shells (55,733 equations failed, 41,496 solved, 2026-11-08) whatever the material, so the input "
+                        "is not at fault: a coarser mesh solves, and PaStiX or PARDISO solve the same deck where a CalculiX build has them"),
+)
+
+
+def diagnose(stdout: str) -> str | None:
+    """Our words for a known fatal text in CalculiX's console, or None when none is there."""
+    for marker, words in KNOWN_FATALS:
+        if marker in stdout:
+            return words
+    return None
 
 
 def _paragraphs(text: str, marker: str) -> list[str]:

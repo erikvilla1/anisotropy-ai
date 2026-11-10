@@ -4,9 +4,10 @@
  * `intake.check_form` does, through the setup check (ADR-0001, ADR-0003). A message that names nothing it can read changes nothing.
  */
 import {
-  BENDING_TESTS, blankForm, DEFAULT_UNITS, fieldByKey, fields, FOUR_POINT_TEST, labelFor, libraryConstantsIn, libraryOptions, OPEN_HOLE_TEST, PLATE_TEST, PLY_KEYS,
-  UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
+  BENDING_TESTS, blankForm, DEFAULT_UNITS, DOGBONE_KEYS, fieldByKey, fields, FOUR_POINT_TEST, isIsotropic, labelFor, libraryConstantsIn, libraryOptions, OPEN_HOLE_TEST, PLATE_TEST, PLY_KEYS,
+  STANDARDS, standardOf, STRAIN_KEYS, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "./studio-form";
+import { TOW_TEST } from "./studio-tow";
 
 export type ChatStep = "test" | "material" | "shear" | "layup" | "geometry" | "loading" | "name" | "review";
 export const STEP_ORDER: ChatStep[] = ["test", "material", "shear", "layup", "geometry", "loading", "name", "review"];
@@ -26,7 +27,7 @@ export const LAYUP_CHOICES: { notation: string; title: string }[] = [
   { notation: "[45/0/-45/90]s", title: "Quasi-isotropic" },
   { notation: "[0/90]2s", title: "Cross-ply" },
   { notation: "[45/-45]2s", title: "±45 (shear)" },
-  { notation: "[90]8", title: "Unidirectional, fibres along the load" },
+  { notation: "[0]8", title: "Unidirectional, fibres along the load" },
 ];
 
 /** The library materials offered first; the rest are one menu away. */
@@ -69,15 +70,18 @@ export function libraryThickness(form: StudioForm): number | null {
 export function missingIn(step: ChatStep, form: StudioForm): string[] {
   const need = (keys: string[]) => keys.filter((key) => !filled(form, key));
   switch (step) {
-    case "test": return need(["test"]);
-    case "material": return filled(form, "library") ? [] : need(["own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_source"]);
-    case "shear": return need(["G13", "G23"]);
-    case "layup": return [...need(["ply_1", "symmetric"]), ...(libraryThickness(form) === null ? need(["ply_thickness"]) : [])];
+    case "test": return need(["test", ...((standardOf(form)?.variant_words.length ?? 0) > 0 ? ["specimen"] : [])]);
+    case "material":
+      if (isIsotropic(form)) return need(["thickness", "own_name", "own_E", "own_nu", "own_source"]); // a plastic: one material, no plies (ADR-0075)
+      return filled(form, "library") ? [] : need(["own_name", "own_E1", "own_E2", "own_G12", "own_nu12", "own_source"]);
+    case "shear": return isIsotropic(form) ? [] : need(["G13", "G23"]);
+    case "layup": return isIsotropic(form) ? [] : [...need(["ply_1", "symmetric"]), ...(libraryThickness(form) === null ? need(["ply_thickness"]) : [])];
     case "geometry": {
       const keys = ["length", "width", "size_from"];
       if (isBending(form)) keys.push("span", "overhang", ...(form.test === FOUR_POINT_TEST ? ["load_span"] : []));
       else keys.push("tab_length");
       if (form.test === OPEN_HOLE_TEST) keys.push("hole_diameter");
+      keys.push(...(standardOf(form)?.needs ?? []).filter((key) => STRAIN_KEYS.includes(key))); // D3039 counts the gauge length (ADR-0072)
       return need(keys);
     }
     case "loading": return need(["control", "value"]);
@@ -94,11 +98,12 @@ export function nextStep(form: StudioForm): ChatStep {
 
 /** The step that asks for a row, so a blocked check item can send the engineer back to it; null when only the full form has it. */
 export function stepOfKey(key: string): ChatStep | null {
-  if (["test", "standard", "units"].includes(key)) return "test";
+  if (["test", "standard", "specimen", "units"].includes(key)) return "test";
   if (key === "library" || key.startsWith("own_")) return "material";
   if (["G13", "G23"].includes(key)) return "shear";
   if (PLY_KEYS.includes(key) || ["symmetric", "ply_thickness"].includes(key)) return "layup";
-  if (["length", "width", "tab_length", "size_from", "span", "overhang", "load_span", "hole_diameter"].includes(key)) return "geometry";
+  if (["material_kind", "thickness"].includes(key)) return "material"; // what the coupon is made of: plies, or one isotropic material (ADR-0075)
+  if (["length", "width", "tab_length", "size_from", "span", "overhang", "load_span", "hole_diameter", ...STRAIN_KEYS, ...DOGBONE_KEYS].includes(key)) return "geometry";
   if (["control", "value"].includes(key)) return "loading";
   if (key === "filled_by") return "name"; // who runs it; the codes in the coupon's name are derived (ADR-0038 amendment 1), overrides on the form
   if (["criteria", "f12_star", "element_size", "grips", "region", "date", "notes"].includes(key)) return "review";
@@ -197,7 +202,8 @@ export function readMessage(text: string, units: string = DEFAULT_UNITS): { rows
   const L = `(?:${LENGTH_WORDS[units] ?? LENGTH_WORDS[DEFAULT_UNITS]})`;
   const F = FORCE_WORDS[units] ?? FORCE_WORDS[DEFAULT_UNITS];
 
-  const test = /open[\s-]?hole|\boht\b|d5766/.test(t) ? OPEN_HOLE_TEST
+  const test = /\btows?\b|d4018|fib(?:re|er)\s+tow/.test(t) ? TOW_TEST // the fibre tow test (ADR-0074): its rows are the tow panels'
+    : /open[\s-]?hole|\boht\b|d5766|c1869/.test(t) ? OPEN_HOLE_TEST
     : /four[\s-]?point|4[\s-]?point|\b4pb\b/.test(t) ? FOUR_POINT_TEST
     : /three[\s-]?point|3[\s-]?point|\b3pb\b|d7264|d790/.test(t) ? "three-point bending"
     : /compress|d6641|d3410|d695/.test(t) ? "unnotched compression"
@@ -205,8 +211,10 @@ export function readMessage(text: string, units: string = DEFAULT_UNITS): { rows
     : /\bplate\b/.test(t) ? PLATE_TEST
     : /tension|tensile|d3039|\bunt\b/.test(t) ? "unnotched tension" : "";
   if (test) set("test", test, `test: ${test}`);
-  const standard = /\b(astm\s*)?(d\d{4})\b/i.exec(text);
-  if (standard) set("standard", `ASTM ${standard[2].toUpperCase()}`, `standard: ASTM ${standard[2].toUpperCase()}`);
+  // a standard of our list by its short name (d3039, c1869): the row takes the listed designation, or nothing for one we do not check (ADR-0072)
+  const code = /\b(?:astm\s*)?([cd]\d{4}m?)\b/i.exec(text)?.[1].toLowerCase();
+  const listed = code ? STANDARDS.find((p) => p.aliases.includes(code)) : undefined;
+  if (listed) set("standard", listed.designation, `standard: ${listed.designation}`);
 
   const squashed = squash(text);
   const material = [...libraryOptions].sort((a, b) => b.id.length - a.id.length)
