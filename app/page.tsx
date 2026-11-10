@@ -66,156 +66,158 @@ export default function Home() {
         </div>
       </section>
       <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
-      <div className="principles-strip">
-        <span>
-          <span className="status-dot" /> PHYSICS AT THE CORE
-        </span>
-        <span>LAB DATA AS THE FOUNDATION</span>
-        <span>RESEARCH BEFORE ASSUMPTIONS</span>
-        <span>
-          EVERY RESULT, TRACEABLE <MoveUpRight size={15} />
-        </span>
-      </div>
-      <section className="section home-blurb home-mission" id="mission">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">01 / MISSION</span>
-            <h2>
-              One record,
-              <br />
-              from the layup to the test.
-            </h2>
-          </div>
-        </div>
-        <p className="lead">
-          Composite structures are designed, analyzed, tested and built by different people with different tools, and the
-          evidence gets lost between them. Anisotropy keeps those steps on one record, grounded in composite theory and
-          real mechanical test data, so every answer comes with its assumptions and references.
-        </p>
-        <Link className="text-button" href="/about">
-          What we are building <ArrowUpRight size={15} />
-        </Link>
-      </section>
-      <section className="section home-blurb home-platform" id="platform">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">02 / PLATFORM</span>
-            <h2>
-              Five ways
-              <br />
-              to use it.
-            </h2>
-          </div>
-          <p>
-            The same coupon record feeds every service. Two are built, two exist in part, one is stated as planned; each
-            page says which.
-          </p>
-        </div>
-        <div className="home-platform-grid">
-          {services.map((service) => (
-            <article key={service.slug}>
-              <div>
-                <span className="tiny-label">{service.eyebrow}</span>
-                <span className={`service-status service-status-${service.status}`}>{statusLabel[service.status]}</span>
-              </div>
-              <h3>{service.title}</h3>
-              <p>{service.summary}</p>
-              <Link href={serviceHref(service)}>
-                The page <ArrowUpRight size={13} />
-              </Link>
-            </article>
-          ))}
-        </div>
-      </section>
-      <section className="section home-blurb research-foundation" id="impact">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">03 / IMPACT</span>
-            <h2>
-              Knowledge worth
-              <br />
-              building on.
-            </h2>
-          </div>
-          <p>
-            Research comes first. Explore a growing foundation of reviewed open-source datasets, data from published
-            research studies, and evidence generated in our own lab.
-          </p>
-        </div>
-        <div className="evidence-grid">
-          <article>
-            <span>01 / EVERY NUMBER, A RECORD</span>
-            <h3>Trace it back.</h3>
+      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendment 11), dark and light in
+          turn. Each opens with the kit's head; what follows starts at column 4, under the statement. The four principles close
+          the Mission band as a strip. */}
+      <section className="band home-blurb home-mission" id="mission">
+        <div className="band-head">
+          <p className="band-label">01 / MISSION</p>
+          <div className="band-statement">
+            <h2>One record, from the layup to the test.</h2>
             <p>
-              Each calculation and each coupon job leaves a run record with its inputs, the engine version and the result,
-              so a number in a report can be followed to the run that produced it.
+              Composite structures are designed, analyzed, tested and built by different people with different tools, and the
+              evidence gets lost between them. Anisotropy keeps those steps on one record, grounded in composite theory and
+              real mechanical test data, so every answer comes with its assumptions and references.
             </p>
-          </article>
-          <article>
-            <span>02 / CHECKED AGAINST A REFERENCE</span>
-            <h3>Compared, not assumed.</h3>
-            <p>
-              Our first bending coupon, IM7/8552 in ASTM D7264 proportions, against CalculiX S8R: 100 numbers within 3 %,
-              the nose reaction within 0.12 %. The decks and the record are in the repository.
-            </p>
-          </article>
-          <article className="evidence-library">
-            <span>03 / THE MATERIALS LIBRARY</span>
-            <h3>Keep the evidence close.</h3>
-            <p>
-              Source records for carbon, glass and sandwich cores, each value with its page and unit, alongside the
-              governing equations and topic-by-topic explanations.
-            </p>
-            <Link className="text-button" href="/library">
-              Explore the materials library <ArrowUpRight size={16} />
+            <Link className="home-link" href="/about">
+              What we are building <ArrowUpRight size={16} />
             </Link>
-          </article>
+          </div>
+        </div>
+        <ul className="home-principles">
+          <li>PHYSICS AT THE CORE</li>
+          <li>LAB DATA AS THE FOUNDATION</li>
+          <li>RESEARCH BEFORE ASSUMPTIONS</li>
+          <li>
+            <span>
+              EVERY RESULT, TRACEABLE <MoveUpRight size={15} />
+            </span>
+          </li>
+        </ul>
+      </section>
+      <section className="band is-light home-blurb home-platform" id="platform">
+        <div className="band-head">
+          <p className="band-label">02 / PLATFORM</p>
+          <div className="band-statement">
+            <h2>Five ways to use it.</h2>
+            <p>
+              The same coupon record feeds every service. Two are built, two exist in part, one is stated as planned; each
+              page says which.
+            </p>
+          </div>
+        </div>
+        <div className="band-grid">
+          <div className="home-cards home-platform-grid">
+            {services.map((service) => (
+              <article className="band-card" key={service.slug}>
+                <div className="home-card-top">
+                  <span className="home-tag">{service.eyebrow}</span>
+                  <span className={`home-tag home-status home-status-${service.status}`}>{statusLabel[service.status]}</span>
+                </div>
+                <h3>{service.title}</h3>
+                <p>{service.summary}</p>
+                <Link className="home-link" href={serviceHref(service)}>
+                  The page <ArrowUpRight size={16} />
+                </Link>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
-      <section className="section home-blurb home-team" id="working">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">04 / WORKING AT ANISOTROPY</span>
-            <h2>
-              Five people,
-              <br />
-              two seats each.
-            </h2>
+      <section className="band home-blurb research-foundation" id="impact">
+        <div className="band-head">
+          <p className="band-label">03 / IMPACT</p>
+          <div className="band-statement">
+            <h2>Knowledge worth building on.</h2>
+            <p>
+              Research comes first. Explore a growing foundation of reviewed open-source datasets, data from published
+              research studies, and evidence generated in our own lab.
+            </p>
           </div>
-          <p>
-            One technical seat and one for the company per person. A lead decides alone inside the seat; anything that
-            could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
-            decisions and their reasons with it.
-          </p>
         </div>
-        <div className="home-team-grid">
-          {team.map((person) => (
-            <article key={person.name}>
-              <h3>{person.name}</h3>
+        <div className="band-grid">
+          <div className="home-cards home-evidence-grid">
+            <article className="band-card">
+              <div className="home-card-top">
+                <span className="home-tag">01 / EVERY NUMBER, A RECORD</span>
+              </div>
+              <h3>Trace it back.</h3>
               <p>
-                {person.role ? `${person.role}. ` : ""}
-                {person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}
-                {person.company ? `; ${person.company}` : ""}.
+                Each calculation and each coupon job leaves a run record with its inputs, the engine version and the result,
+                so a number in a report can be followed to the run that produced it.
               </p>
             </article>
-          ))}
-        </div>
-        <Link className="text-button" href="/about#team">
-          The team on the About page <ArrowUpRight size={15} />
-        </Link>
-      </section>
-      <section className="section home-blurb" id="news">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">05 / WHAT IS NEW</span>
-            <h2>Lately.</h2>
+            <article className="band-card">
+              <div className="home-card-top">
+                <span className="home-tag">02 / CHECKED AGAINST A REFERENCE</span>
+              </div>
+              <h3>Compared, not assumed.</h3>
+              <p>
+                Our first bending coupon, IM7/8552 in ASTM D7264 proportions, against CalculiX S8R: 100 numbers within 3&nbsp;%,
+                the nose reaction within 0.12&nbsp;%. The decks and the record are in the repository.
+              </p>
+            </article>
+            <article className="band-card">
+              <div className="home-card-top">
+                <span className="home-tag">03 / THE MATERIALS LIBRARY</span>
+              </div>
+              <h3>Keep the evidence close.</h3>
+              <p>
+                Source records for carbon, glass and sandwich cores, each value with its page and unit, alongside the
+                governing equations and topic-by-topic explanations.
+              </p>
+              <Link className="home-link" href="/library">
+                Explore the materials library <ArrowUpRight size={16} />
+              </Link>
+            </article>
           </div>
-          <p>Three recent changes, as the changelog records them. What was validated against what, and what is still planned, is written there too.</p>
+        </div>
+      </section>
+      <section className="band is-light home-blurb home-team" id="working">
+        <div className="band-head">
+          <p className="band-label">04 / WORKING AT ANISOTROPY</p>
+          <div className="band-statement">
+            <h2>Five people, two seats each.</h2>
+            <p>
+              One technical seat and one for the company per person. A lead decides alone inside the seat; anything that
+              could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
+              decisions and their reasons with it.
+            </p>
+          </div>
+        </div>
+        <div className="band-grid">
+          <div className="home-cards home-team-grid">
+            {team.map((person) => (
+              <article className="band-card" key={person.name}>
+                <h3>{person.name}</h3>
+                <p>
+                  {person.role ? `${person.role}. ` : ""}
+                  {person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}
+                  {person.company ? `; ${person.company}` : ""}.
+                </p>
+              </article>
+            ))}
+            <Link className="home-link" href="/about#team">
+              The team on the About page <ArrowUpRight size={16} />
+            </Link>
+          </div>
+        </div>
+      </section>
+      <section className="band home-blurb" id="news">
+        <div className="band-head">
+          <p className="band-label">05 / WHAT IS NEW</p>
+          <div className="band-statement">
+            <h2>Lately.</h2>
+            <p>
+              Three recent changes, as the changelog records them. What was validated against what, and what is still
+              planned, is written there too.
+            </p>
+          </div>
         </div>
         <div className="home-news">
           {news.map((item) => (
             <article key={item.title}>
-              <span className="tiny-label">{item.when.toUpperCase()}</span>
+              <span className="home-tag">{item.when.toUpperCase()}</span>
               <div>
                 <h3>{item.title}</h3>
                 <p>{item.text}</p>

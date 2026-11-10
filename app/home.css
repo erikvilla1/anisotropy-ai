@@ -496,113 +496,220 @@
   }
 }
 
-/* The product blurbs under the two heroes. */
-.home-blurbs {
-  display: grid;
-  gap: 0;
-}
-.home-blurb {
-  border-top: 1px solid var(--line);
-}
-.home-blurb .section-heading {
-  margin-bottom: 36px;
-}
-.home-mission p.lead {
-  font-size: clamp(18px, 2vw, 24px);
-  line-height: 1.55;
-  letter-spacing: -0.3px;
-  max-width: 820px;
-}
-.home-platform-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-}
-.home-platform-grid article {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-}
-.home-platform-grid article > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.home-platform-grid h3 {
-  margin: 0;
-  font-family: var(--heading);
-  font-size: 19px;
-  font-weight: 500;
-}
-.home-platform-grid p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.65;
-}
-.home-platform-grid a {
-  margin-top: auto;
+/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendment 11): Mission dark, Platform light,
+ * Impact dark, Team light, News dark. Each opens with the kit's head. What follows starts at column 4, under the statement:
+ * cards three columns wide, three to a row. The label column holds only labels, so the news dates sit in it and each item's
+ * words start under the statement. The four principles close the Mission band as a strip on all twelve columns. Every colour
+ * here is one of the band's variables, so one rule serves both grounds. */
+.home-link {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
-  color: var(--accent);
-}
-.home-team-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-}
-.home-team-grid article {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-}
-.home-team-grid h3 {
-  margin: 0 0 4px;
-  font-family: var(--heading);
   font-size: 16px;
-  font-weight: 500;
+  line-height: 24px;
+  color: var(--text);
+  transition: opacity 0.15s;
 }
-.home-team-grid p {
-  margin: 0;
+.home-link:hover {
+  opacity: 0.6;
+}
+.band-statement > .home-link {
+  justify-self: start;
+  margin-top: 8px;
+}
+/* The small label of a card or a row: the head's monospace label, three sizes down. */
+.home-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
+}
+/* The Mission band ends on its strip, so it has no padding of its own under it. */
+.home-mission {
+  padding-bottom: 0;
+}
+.home-mission .band-head {
+  margin-bottom: 0;
+}
+.home-principles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 32px;
+  row-gap: 12px;
+  margin: 88px 0 0;
+  padding: 26px 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+.home-principles li {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.home-principles li::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 11px;
+  background: currentColor;
+}
+/* The arrow closes the strip; it stays with its words when they wrap. */
+.home-principles svg {
+  margin-left: 4px;
+  vertical-align: -2px;
+}
+/* Three cards to a row from column 4: nine columns and eight gutters split in three is three columns and two gutters each,
+ * so the cards' edges fall on the head's columns. */
+.home-cards {
+  grid-column: 4 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+  min-width: 0;
+}
+.home-cards > article {
+  display: flex;
+  flex-direction: column;
+}
+.home-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.home-cards h3,
+.home-news h3 {
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+.home-cards p,
+.home-news p {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+.home-cards h3 + p {
+  margin-top: 12px;
+}
+.home-cards > article > .home-link {
+  align-self: flex-start;
+  margin-top: auto;
+  padding-top: 24px;
+}
+/* How much of a service exists, without a colour: a full dot for built, half for in part, a ring for planned. */
+.home-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.home-status::before {
+  content: "";
+  flex: none;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.home-status-built::before {
+  background: currentColor;
+}
+.home-status-partly::before {
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+/* The link to the team takes the sixth place of the grid, at the foot of the last row. */
+.home-team-grid > .home-link {
+  align-self: end;
+  justify-self: start;
 }
 .home-news {
-  display: grid;
-  gap: 0;
   border-top: 1px solid var(--line);
 }
 .home-news article {
   display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 24px;
-  padding: 22px 0;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  padding: 32px 0;
   border-bottom: 1px solid var(--line);
 }
-.home-news .tiny-label {
-  padding-top: 4px;
+.home-news .home-tag {
+  grid-column: 1 / 4;
+  padding-top: 5px;
 }
-.home-news h3 {
-  margin: 0 0 6px;
-  font-family: var(--heading);
-  font-size: 18px;
-  font-weight: 500;
+.home-news article > div {
+  grid-column: 4 / 11;
+  display: grid;
+  gap: 8px;
 }
 .home-news p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.7;
-  max-width: 70ch;
+  max-width: 36em;
+}
+/* Narrower than 1280 px the cards and the principles go two to a row; under 1024 px the head stacks, so the cards take the
+ * whole width; one to a row on a phone. */
+@media (max-width: 1279px) {
+  .home-cards,
+  .home-principles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1023px) {
+  .home-cards {
+    grid-column: 1 / -1;
+  }
+  .home-principles {
+    margin-top: 64px;
+  }
+  .home-news article > div {
+    grid-column: 4 / -1;
+  }
+}
+@media (max-width: 760px) {
+  .home-cards {
+    gap: 20px;
+  }
+  .home-card-top {
+    margin-bottom: 24px;
+  }
+  .home-principles {
+    margin-top: 48px;
+    padding: 20px 0;
+  }
+  .home-principles li {
+    font-size: 12px;
+  }
+  .home-news article {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 8px;
+    padding: 24px 0;
+  }
+  .home-news .home-tag,
+  .home-news article > div {
+    grid-column: 1;
+  }
+  .home-news .home-tag {
+    padding-top: 0;
+  }
+}
+@media (max-width: 640px) {
+  .home-cards,
+  .home-principles {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 1023px) {
@@ -718,10 +825,6 @@
   }
   .hero-loads-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .home-news article {
-    grid-template-columns: 1fr;
-    gap: 8px;
   }
 }
 

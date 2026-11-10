@@ -160,3 +160,27 @@ On phones it is one column.
   - `npm test`: 168 passed, 1 skipped.
   - `home.spec.ts`, `calculator.spec.ts` and `workspace.spec.ts` against a build without the hero clip: 18 of 18 passed.
   - The new alignment test in `home.spec.ts` passed.
+
+## Amendment 11, 2026-11-10 (one section kit; the home page's lower sections set on it)
+
+**Context.** After the hero and the white demo, the home page went back to the old dark style: a principles strip in 8 px type, then five sections in a 1,440 px container with 64 px side padding, small eyebrows above two-line headings and 13 px body text. The lead asked for one design from top to bottom, after PhysicsX.
+
+**Decision.**
+- **The kit.** `app/sections.css` holds the parts every page's sections are set with:
+  - a full-width band, 88 px above and below and 32 px at the sides, dark by default and light with `is-light`, which sets the colour variables for the band;
+  - the demo's head, a monospace label with a tick in columns 1 to 3 and the statement from column 4 behind a 1 px rule;
+  - a 12-column content grid and a plain card.
+- **The home page.** Mission, Platform, Impact, Team and News are bands, dark and light in turn, starting dark after the white demo.
+  - Each opens with the kit's head. The forced line breaks leave the headings; each fits one line at 38 px.
+  - Content starts at column 4, under the statement, in cards three columns wide and three to a row. The news list is rows between 1 px rules, with the date in the label column and the words from column 4.
+  - The four principles close the Mission band as a strip on all twelve columns.
+  - A service's status is a monospace word with a dot (full, half or ring) in place of the coloured pill.
+  - The copy, links and ids are unchanged.
+
+**Options not chosen.** Cards four columns wide across the full width: five cards leave a larger gap, and the team cards are mostly empty at 1,860 px. Five cards in one row: their edges fall off the head's columns. The principles as a separate thin dark strip above Mission: two rows of monospace labels 88 px apart compete.
+
+**Evidence.** On 2026-11-10, against the dev server:
+- **Measured at 1440 px:** labels at x = 32; statements and card columns at 384, 736 and 1,088; the principles at 32, 384, 736 and 1,088; news dates at 32 and titles at 384.
+- **Overflow:** none sideways at 1860, 1440, 1100, 900 and 390 px.
+- **Checks:** `npm run typecheck` clean, also on this commit's tree alone. `home.spec.ts` and `portfolio.spec.ts`: 12 passed, 1 failed. The failure is the workspace chat test, which does not load the home page and failed before this change.
+- **UNVERIFIED:** the production build of this commit alone, and the look on phones and tablets (rules are written; no visual check yet).
