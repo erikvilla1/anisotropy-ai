@@ -21,7 +21,8 @@ from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesher import structured_dogbone
 from anisotropy_fea.spec import SpecError, load_spec, parse_spec, section_width, spec_material
 from anisotropy_fea.standards import PROFILES
-from anisotropy_fea.standards.astm_d3039 import PROFILE as D3039
+from anisotropy_fea.standards.astm_c1869 import PROFILE as C1869
+from anisotropy_fea.standards.astm_d3039 import PROFILE as D3039, classify
 from anisotropy_fea.standards.astm_d638 import FIG1, PROFILE as D638, TYPES, VARIANTS
 from anisotropy_fea.standards.conformance import judge, subject_of
 from anisotropy_fea.standards.profile import LEVELS, MM
@@ -158,12 +159,22 @@ def edited(old: str, new: str, text: str = TEXT) -> str:
     ("mesher = \"structured\"", "mesher = \"gmsh\"", "mesh.mesher = \"gmsh\" goes with open_hole_tension"),
     ("radius = 76.0", "radius = 2.0", "geometry.dogbone: a fillet of radius 2 cannot step"),
     ("kind = \"unnotched_tension\"", "kind = \"compression\"", "geometry.dogbone belongs to unnotched_tension only"),
+    ("gauge_length = 50.0", "gauge_length = 60.0", "must lie within the dog-bone's narrow section"),  # 60 over a 57 mm narrow section
 ])
 def test_the_spec_refuses_what_this_version_does_not_build(old, new, words):
     text = edited(old, new)
     if "compression" in new:
         text = text.replace("value = 0.5", "value = -0.5").replace("PLASTIC-UNT-L1", "PLASTIC-UNC-L1").replace("unnotched tension:", "unnotched compression:")
     with pytest.raises(SpecError, match=re.escape(words)):
+        parse_spec(text)
+
+
+def test_grips_that_reach_the_narrow_section_are_refused():
+    """Each grip may hold at most (165 - 57) / 2 = 54 mm of a Type I; 56 mm reaches the narrow section, with node rows on its lines."""
+    text = edited("tab_length = 25.0", "tab_length = 56.0")
+    text = edited("y_partitions = [25.0, 32.857626, 54.0, 57.5, 107.5, 111.0, 132.142374, 140.0]",
+                  "y_partitions = [32.857626, 54.0, 56.0, 57.5, 107.5, 109.0, 111.0, 132.142374]", text)
+    with pytest.raises(SpecError, match=re.escape("reaches the dog-bone's narrow section")):
         parse_spec(text)
 
 
@@ -303,8 +314,9 @@ def test_the_type_i_check_meets_every_requirement_a_model_can_meet():
     s = subject(variant="I")
     found = states(s)
     assert {k for k, v in found.items() if v == "deviation"} == set() and {k for k, v in found.items() if v == "advisory"} == set()
-    assert found["composite-type"] == "na" and found["anisotropy"] == "na"
-    assert sum(1 for v in found.values() if v == "met") == 15 and sum(1 for v in found.values() if v == "lab") == 16
+    assert found["composite-type"] == "na" and found["anisotropy"] == "na" and found["si-values"] == "na"
+    assert found["scope-material"] == "na", "one isotropic material may be a plastic or a metal: the engineer states which"
+    assert sum(1 for v in found.values() if v == "met") == 14 and sum(1 for v in found.values() if v == "lab") == 16
 
 
 def test_the_profile_finds_each_miss_by_its_clause():
@@ -341,6 +353,74 @@ def test_d3039_says_a_dog_bone_and_a_plastic_are_not_its_specimen():
     by_id = {r.id: judge(r, s) for r in D3039.requirements}
     assert by_id["section"].state == "deviation" and by_id["section"].value == "a dog-bone"
     assert by_id["scope-matrix"].state == "deviation" and "D638" in by_id["scope-matrix"].value
+
+
+def test_grips_on_the_end_rows_hold_no_length_whatever_the_tab_length():
+    """Grip region "line" holds only the end rows of nodes, so the model's grips are the whole length apart: D638's D, C1869's grip length and
+    the free length read that, while the tab length stays the tab's for D3039 Table 2 (review of ADR-0075, 2026-11-09)."""
+    s = subject(edited('region = "tabs"', 'region = "line"'))
+    assert s.tab_length == pytest.approx(25 * MM) and s.gripped == 0.0 and s.gauge_length == pytest.approx(165 * MM)
+    found = judge(next(r for r in D638.requirements if r.id == "grip-distance"), s)
+    assert found.state == "deviation" and found.value == "165 mm: the model holds only the end rows"
+    held = subject()
+    assert held.gripped == pytest.approx(25 * MM) and judge(next(r for r in D638.requirements if r.id == "grip-distance"), held).state == "met"
+    c1869 = judge(next(r for r in C1869.requirements if r.id == "grip-length"), dataclasses.replace(s, variant="B"))
+    assert c1869.state == "deviation" and c1869.value == "0: the model holds only the end rows"
+
+
+def test_an_isotropic_material_is_no_d3039_class_no_ceramic_composite_and_d638s_scope_is_the_engineers_to_state():
+    s = subject()
+    assert classify(s) is None, "one isotropic material has no plies, so no Table 2 class"
+    d3039 = {r.id: judge(r, s) for r in D3039.requirements}
+    assert d3039["scope-laminate"].state == "na" and "no plies" in d3039["scope-laminate"].value
+    c1869 = {r.id: judge(r, s) for r in C1869.requirements if r.id in ("scope-matrix", "architecture")}  # the others need a hole
+    assert c1869["scope-matrix"].state == "deviation" and "not a ceramic matrix composite" in c1869["scope-matrix"].value
+    assert c1869["architecture"].state == "na"
+    d638 = judge(next(r for r in D638.requirements if r.id == "scope-material"), s)
+    assert d638.state == "na" and "a plastic or a metal" in d638.value
+
+
+def test_type_iv_without_its_outer_radius_says_the_fillet_meets_the_width_at_a_corner():
+    found = judge(next(r for r in D638.requirements if r.id == "outer-radius"), subject(variant="IV"))
+    assert found.state == "deviation" and found.value == "none: the fillet meets the full width at a corner"
+    assert found.limit == "25 mm ± 1 mm for Type IV"
+
+
+def test_an_inch_coupon_is_told_that_the_millimetres_govern():
+    note = next(r for r in D638.requirements if r.id == "si-values")
+    assert note.level == "note" and note.clause == "§1.5"
+    assert judge(note, subject()).state == "na"
+    inch = judge(note, subject(units="in-psi"))
+    assert inch.state == "note" and "converted exactly" in inch.value
+
+
+def test_an_isotropic_deck_is_checked_on_e_alone_from_1_mpa(tmp_path):
+    """A plastic of 2.5 GPa has G = 0.93 GPa: no warning, as its shear modulus is derived; 0.5 MPa is no plastic and is flagged."""
+    import warnings
+    deck_text = (CHECK.parent / "decks" / "d638-type-i-plastic-abaqus.inp").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert "*Elastic\n3000., 0.35" in deck_text
+    for modulus, flagged in (("2500.", False), ("0.5", True)):
+        path = tmp_path / f"plastic-{modulus}.inp"
+        path.write_text(deck_text.replace("*Elastic\n3000., 0.35", f"*Elastic\n{modulus}, 0.35"), encoding="utf-8")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            read_deck(path, "mm-MPa")
+        said = [str(w.message) for w in caught if "modulus" in str(w.message)]
+        assert bool(said) == flagged, (modulus, said)
+        if flagged:
+            assert "0.001 GPa to 1000 GPa" in said[0]
+
+
+def test_a_soft_plastic_is_no_unit_slip_on_the_checklist(tmp_path):
+    from anisotropy_fea.checks import setup_checklist
+    from anisotropy_fea.intake import read_values
+    from test_standards import TOOLS
+    for modulus, state in ((200, "pass"), (0.5, "warn")):  # 200 MPa, a low-density polyethylene; 0.5 MPa, a slip
+        path = tmp_path / f"values-{modulus}.json"
+        path.write_text(json.dumps({**PLASTIC, "own_E": modulus}), encoding="utf-8")
+        checklist, _, _ = setup_checklist(read_values(path), tmp_path / "none", **TOOLS)
+        units = next(item for item in checklist.items if item.id == "units")
+        assert units.state == state, (modulus, units.message)
 
 
 def test_an_inch_coupon_is_held_to_the_millimetre_values_converted():

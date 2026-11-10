@@ -25,7 +25,7 @@ export type Sketch = {
   /** The strain measurement: its device and gauge length, drawn as two knife edges centred on the coupon; null when it is not typed or does
    * not fit between the tabs. */
   strain: { device: string; length: number } | null;
-  /** The standard picked and its specimen, for the caption. */
+  /** The standard picked and its specimen in the standard's own word ("Specimen B", "Type I"), for the caption. */
   standard: string | null; specimen: string | null;
   /** A dog-bone (ADR-0075): its narrow section and its outline as a closed polygon of (x, y) points; null for a straight strip or sizes that make
    * no dog-bone, which the check refuses by row. */
@@ -149,7 +149,7 @@ export function sketchOf(form: StudioForm, lists?: PlateLists | null): Sketch | 
   return {
     width, length, thickness, toScale, tabs, hole, supports, noses, boxes, plies, lengthUnit: unitLabels(unitsOf(form)).length,
     tabThickness: tabBevel !== null ? tabThickness : null, tabBevel, strain, standard: profile?.designation ?? null,
-    specimen: profile?.variant_words.length && form.specimen ? form.specimen : null, dogbone, isotropic,
+    specimen: profile?.variant_words.length && form.specimen ? `${profile.variant_noun} ${form.specimen}` : null, dogbone, isotropic,
     ...(isotropic ? { toScale: solid !== null, plies: 0 } : {}),
   };
 }

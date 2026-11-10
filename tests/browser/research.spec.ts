@@ -23,7 +23,15 @@ test("physics topics group transformations, local recovery and failure functions
   await page
     .getByRole("textbox", { name: "Search this physics topic" })
     .fill("Tsai");
-  await expect(page.locator(".method-entry")).toHaveCount(4);
+  // Five cards since 2026-10-10 (ADR-0019): the combined-load card states the Tsai–Wu quadratic.
+  await expect(page.locator(".method-entry")).toHaveCount(5);
+  await expect(page.locator(".method-entry summary strong")).toHaveText([
+    "Tsai–Hill",
+    "Tsai–Wu coefficients",
+    "Tsai–Wu failure index",
+    "Strength ratio & safety margin",
+    "Strength ratio with fixed & variable loads",
+  ]);
   await expect(
     page.locator("details[open]").filter({ hasText: "Tsai–Wu coefficients" }),
   ).toContainText("experimental evidence");

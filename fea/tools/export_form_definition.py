@@ -77,7 +77,7 @@ def standards() -> dict:
         needs = (["specimen"] if p.variant_words else []) + (["strain_device", "strain_length"] if p.requires_strain else [])
         profiles.append({"id": p.id, "designation": p.designation, "title": p.title, "organisation": p.organisation, "catalog_url": p.catalog_url,
                          "edition_note": p.edition_note, "systems": p.systems, "rights": p.rights, "tests": [test_name(k) for k in p.kinds],
-                         "aliases": list(p.aliases), "needs": needs, "variant_words": list(p.variant_words),
+                         "aliases": list(p.aliases), "needs": needs, "variant_noun": p.variant_noun, "variant_words": list(p.variant_words),
                          "variants": [preset_entry(v) for v in p.variants], "classes": [preset_entry(c) for c in p.classes],
                          "requirements": [{"id": r.id, "clause": r.clause, "level": r.level, "text": r.text, "rows": list(r.rows)} for r in p.requirements]})
     return {"none": NONE, "profiles": profiles}
