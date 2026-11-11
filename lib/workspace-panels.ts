@@ -3,7 +3,7 @@
  * form belongs to exactly one panel; `tests/workspace-panels.test.ts` holds that against the definition. */
 import type { ChatStep } from "./studio-chat";
 import {
-  DOGBONE_KEYS, fieldByKey, fields, ISOTROPIC_KEYS, NO_STANDARD, PLY_KEYS, sectionsFor, standardOf, standardsFor, type Checklist, type JudgedRequirement,
+  DOGBONE_KEYS, fieldByKey, fieldByLabel, fields, ISOTROPIC_KEYS, NO_STANDARD, PLY_KEYS, sectionsFor, standardOf, standardsFor, type Checklist, type JudgedRequirement,
   type StandardProfile, type StandardRequirement, type StudioForm,
 } from "./studio-form";
 
@@ -52,6 +52,12 @@ export function panelOfKey(key: string): PanelId | null {
 
 export function panelOfItem(itemId: string): PanelId | null {
   return PANELS.find((p) => p.items.includes(itemId))?.id ?? null;
+}
+
+/** Where a failing item is fixed: the panel holding the first row it names (the strain rows sit on Geometry, though Test standard judges
+ * them), else the panel of the item; null when neither. */
+export function panelToFix(item: { id: string; rows: string[] }): PanelId | null {
+  return item.rows.map((label) => panelOfKey(fieldByLabel[label]?.key ?? "")).find((id): id is PanelId => id !== null) ?? panelOfItem(item.id);
 }
 
 /** The panel that holds what each step of the assistant's conversation asks for (ADR-0062, part 5): what its suggestions open. */

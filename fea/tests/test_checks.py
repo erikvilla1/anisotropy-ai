@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 
 from anisotropy_fea import paths
-from anisotropy_fea.checks import ITEM_OF_KEY, ITEMS, coupon_attempts, setup_checklist, row_label_of, split_problems
+from anisotropy_fea.checks import ITEM_OF_KEY, ITEMS, coupon_attempts, setup_checklist, row_label_of, row_labels_of, split_problems
 from anisotropy_fea.femodel import build_model
-from anisotropy_fea.intake import FIELDS, FORM_VERSION, convert, read_values
+from anisotropy_fea.intake import FIELDS, FORM_VERSION, convert, form_rows_of, read_values
 from anisotropy_fea.mesher import structured_rectangle
 from anisotropy_fea.preview import preview_data
 from anisotropy_fea.quality import THRESHOLDS, element_quality, quality_summary, quality_words
@@ -113,7 +113,8 @@ def test_blank_choices_keep_their_own_words(tmp_path):
 def test_a_short_length_is_refused_by_the_geometry_rows(tmp_path):
     # the founder's third try (2026-10-29): length and width swapped; the spec's mesh rule had named the Abaqus partition rows instead
     items = by_id(checklist(tmp_path, PUBLIC_FILL, length=25, width=250)[0])
-    assert items["geometry"].state == "fail" and items["geometry"].rows == ("Length (mm)",)
+    # "Length (mm) and Tab length (mm): the two tabs ... must be shorter than the length": either row fixes it (ADR-0062 amendment 2)
+    assert items["geometry"].state == "fail" and items["geometry"].rows == ("Length (mm)", "Tab length (mm)")
     assert items["geometry"].message.startswith("Length (mm) and Tab length (mm): the two tabs, 112 mm, must be shorter than the length, 25 mm")
     assert items["mesh"].state == "pending"
 
@@ -216,6 +217,38 @@ def test_every_form_row_belongs_to_an_item():
     assert row_label_of("Your Abaqus mesh: give all three rows (elements across the width, partition lines, rows per segment)") == "Your Abaqus mesh: elements across the width"
     assert row_label_of("Library material or Own material: one of the two is needed") == "Library material"
     assert row_label_of("form_version is required") == ""
+
+
+def test_a_problem_is_split_outside_parentheses_and_names_every_row_it_opens_with():
+    """The studio's chat offers an input for each row a failing item names (ADR-0062 amendment 2). Found 2026-11-10: the dog-bone's
+    "required" problem was cut at the '; ' inside its parentheses, so its tail showed as a Geometry failure of its own, and its two rows,
+    written "A, B: required", were read as none and filed under Who and which coupon."""
+    dogbone = ("Narrow width (mm), Fillet radius (mm): required for a dog-bone (with Narrow width (mm), Narrow length (mm) and Fillet radius (mm) "
+               "together; Outer radius (mm) only for a reverse curve)")
+    strain = "Strain measurement and Strain measurement length (mm): give both, or neither"
+    assert split_problems(f"values.json: {dogbone}; {strain}") == [("Narrow width (mm)", dogbone), ("Strain measurement", strain)]
+    assert row_labels_of(dogbone) == ["Narrow width (mm)", "Fillet radius (mm)"], "rows named in the explanation are not the problem's"
+    assert row_labels_of(strain) == ["Strain measurement", "Strain measurement length (mm)"]
+    assert row_labels_of("Thickness (mm), Own material: E (MPa), Own material: nu: belong to an isotropic material") == [
+        "Thickness (mm)", "Own material: E (MPa)", "Own material: nu"]
+    assert row_labels_of("Narrow width (mm) and the other dog-bone rows: belong to unnotched tension only") == ["Narrow width (mm)"]
+    assert row_labels_of("Length (in): required") == ["Length (in)"] and row_labels_of("form_version is required") == []
+
+
+def test_a_dog_bone_missing_its_rows_names_them_under_geometry_and_nothing_else(tmp_path):
+    from test_dogbone import PLASTIC
+    checked, _, _ = checklist(tmp_path, {k: v for k, v in PLASTIC.items() if k not in ("form_version", "narrow_width", "radius", "strain_length")})
+    items = by_id(checked)
+    assert items["geometry"].state == "missing" and items["geometry"].rows == ("Narrow width (mm)", "Fillet radius (mm)")
+    assert "Outer radius (mm) only for a reverse curve)" in items["geometry"].message and items["identity"].state != "missing"
+    assert items["standard"].state == "fail" and items["standard"].rows == ("Strain measurement", "Strain measurement length (mm)")
+
+
+def test_a_spec_key_names_its_own_row_down_to_the_dog_bones_sizes():
+    message = "strain.gauge_length (44) must lie within the dog-bone's narrow section, geometry.dogbone.narrow_length = 5"
+    assert form_rows_of(message) == ["Strain measurement length (mm)", "Narrow length (mm)"]
+    assert form_rows_of("geometry.dogbone: narrow_length (5) must be less than", "in-psi") == ["Narrow width (in)"]
+    assert form_rows_of("geometry.width (25) and mesh.nx (3)") == ["Width (mm)", "Your Abaqus mesh: elements across the width"]
 
 
 # --------------------------------------------------------------------------------------------- mesh quality

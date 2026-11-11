@@ -493,6 +493,34 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   expect(browserErrors).toEqual([]);
 });
 
+test("a thing to fix takes its rows in the chat, and applying them checks again (ADR-0062 amendment 2)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await message.fill("A. Engineer");
+  await message.press("Enter");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  await expect(page.getByTestId("chat-fix")).toHaveCount(0); // nothing to fix, nothing to type
+  await page.getByLabel("Length (mm)", { exact: true }).fill(""); // emptied on its panel
+  await message.fill("check");
+  await message.press("Enter");
+  const card = page.getByTestId("chat-check").last();
+  await expect(card).toHaveAttribute("data-state", "blocked");
+  const fix = card.getByTestId("chat-fix");
+  const length = fix.locator("li[data-item=geometry]").getByLabel("Length (mm)");
+  await expect(length).toHaveValue("");
+  await expect(fix.getByTestId("chat-fix-apply")).toBeDisabled(); // nothing typed yet
+  await length.fill("250");
+  await fix.getByTestId("chat-fix-apply").click();
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  expect((calls.checks.at(-1) as { values: Record<string, unknown> }).values.length).toBe(250);
+  await expect(page.locator(".chat-user").last()).toHaveText("Length (mm): 250");
+  await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250"); // the panel shows the row the chat filled
+  await expect(page.getByTestId("chat-check").nth(1).getByTestId("chat-fix")).toHaveCount(0); // the earlier card keeps its words and drops its inputs
+});
+
 test("a word that names no value sends the engineer to the panel that asks for the next thing, and a row typed there moves the conversation on (ADR-0062)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);

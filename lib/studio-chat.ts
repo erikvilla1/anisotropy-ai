@@ -227,13 +227,37 @@ export function readMessage(text: string, units: string = DEFAULT_UNITS): { rows
     understood.push(`layup: ${text.match(/\[[^\]]+\]\s*\d*\s*s?/i)?.[0].replace(/\s+/g, "")} (${layup.plies.length * (layup.symmetric ? 2 : 1)} plies)`);
   }
 
-  const size = new RegExp(`${NUM}\\s*${L}?\\s*(?:x|×|by)\\s*${NUM}\\s*${L}`).exec(t);
+  // a dog-bone's narrow section, fillets and outer radius (ADR-0075), and the strain measurement: read before the coupon's size, so that
+  // "narrow section 13 x 57 mm" is not the coupon's width and length
+  const narrow = new RegExp(`narrow(?:\\s*section)?\\s*(?:of|=|:|is)?\\s*${NUM}\\s*${L}?\\s*(?:x|×|by)\\s*${NUM}\\s*${L}?`).exec(t);
+  let rest = t;
+  if (narrow) {
+    const [a, b] = [Number(narrow[1]), Number(narrow[2])];
+    set("narrow_width", String(Math.min(a, b)), `narrow width ${Math.min(a, b)} ${u.length}`);
+    set("narrow_length", String(Math.max(a, b)), `narrow length ${Math.max(a, b)} ${u.length}`);
+    rest = t.replace(narrow[0], " ".repeat(narrow[0].length));
+  }
+  const named = (pattern: string) => new RegExp(pattern).exec(rest)?.slice(1).find(Boolean);
+  const NAMED = String.raw`\s*(?:of|=|:|is)?\s*`;
+  const readOne = (key: string, words: string, pattern: string) => {
+    const value = rows[key] === undefined ? named(pattern) : undefined;
+    if (value) set(key, value, `${words} ${value} ${u.length}`);
+  };
+  readOne("narrow_width", "narrow width", `narrow(?:\\s*section)?\\s*width${NAMED}${NUM}|${NUM}\\s*${L}?\\s*narrow(?:\\s*section)?\\s*width|narrow(?:\\s*section)?${NAMED}${NUM}\\s*${L}?\\s*wide`);
+  readOne("narrow_length", "narrow length", `narrow(?:\\s*section)?\\s*length${NAMED}${NUM}|${NUM}\\s*${L}?\\s*narrow(?:\\s*section)?\\s*length|narrow(?:\\s*section)?${NAMED}${NUM}\\s*${L}?\\s*long`);
+  readOne("radius", "fillet radius", `fillets?(?:\\s*radius)?${NAMED}${NUM}|${NUM}\\s*${L}?\\s*fillets?`);
+  readOne("outer_radius", "outer radius", `outer\\s*radius${NAMED}${NUM}|${NUM}\\s*${L}?\\s*outer\\s*radius`);
+  const device = /extensometer/.test(t) ? "extensometer" : /strain\s*ga(?:u|)ge/.test(t) ? "strain gauge" : "";
+  if (device) set("strain_device", device, `strain measured by ${device === "extensometer" ? "an extensometer" : "a strain gauge"}`);
+  readOne("strain_length", "gauge length", `ga(?:u|)ge\\s*length${NAMED}${NUM}|${NUM}\\s*${L}?\\s*ga(?:u|)ge\\s*length|${NUM}\\s*${L}\\s*extensometer|extensometer${NAMED}${NUM}\\s*${L}|${NUM}\\s*${L}\\s*strain\\s*ga(?:u|)ge|strain\\s*ga(?:u|)ge${NAMED}${NUM}\\s*${L}`);
+
+  const size = new RegExp(`${NUM}\\s*${L}?\\s*(?:x|×|by)\\s*${NUM}\\s*${L}`).exec(rest);
   if (size) {
     const [a, b] = [Number(size[1]), Number(size[2])];
     set("length", String(Math.max(a, b)), `length ${Math.max(a, b)} ${u.length}`);
     set("width", String(Math.min(a, b)), `width ${Math.min(a, b)} ${u.length}`);
   }
-  const single = (pattern: string) => new RegExp(pattern).exec(t)?.slice(1).find(Boolean);
+  const single = named;
   const tab = /no tabs?|without tabs?|tabless/.test(t) ? "0" : single(`${NUM}\\s*${L}\\s*tabs?|tabs?\\s*(?:of|=|:)?\\s*${NUM}`);
   if (tab !== undefined) set("tab_length", tab, tab === "0" ? "no tabs" : `${tab} ${u.length} tabs`);
   const hole = single(`${NUM}\\s*${L}\\s*(?:diameter\\s*)?hole|hole\\s*(?:diameter\\s*)?(?:of|=|:|ø)?\\s*${NUM}|[øØ]\\s*${NUM}`);

@@ -5,6 +5,7 @@ import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, R
 import { assistantInfo, couponValues, isActive, listCoupons, proposeRows, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type ProposalAnswer } from "@/lib/studio-api";
 import { couponOffer, couponRowsFrom } from "@/lib/proposals";
 import { ProposalCard, type ProposalLine } from "./proposal-card";
+import { CheckIssues } from "./check-fix";
 import {
   blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
 } from "@/lib/studio-form";
@@ -14,7 +15,7 @@ import {
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
-import { panel, panelOfItem, panelOfStep, type PanelId } from "@/lib/workspace-panels";
+import { panel, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
@@ -508,19 +509,14 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         <h4>{result.state === "ready" ? <>Ready to run{result.designation ? <> <code>{result.designation}</code></> : null}</> : `${blocking.length} thing${blocking.length === 1 ? "" : "s"} to fix before running`}</h4>
         <p>{passed} of {items.length} checks passed{result.checklist.coupon_exists ? `; this coupon has ${result.checklist.attempts} attempt${result.checklist.attempts === 1 ? "" : "s"} already, so running adds the next one` : result.designation ? "; a new coupon" : ""}. The same rules run before the solve.</p>
         {blocking.length ? (
-          <ul className="chat-issues">
-            {blocking.map((item) => {
-              const target = panelOfItem(item.id);
+          // each item takes its rows in place on the latest check (ADR-0062 amendment 2); its link still opens the panel that holds them
+          <CheckIssues items={blocking} form={form} units={unitsOf(form)} live={latest && !checking} onApply={(rows, echo) => answer(echo, rows)}
+            link={(item) => {
+              const target = panelToFix(item);
               const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);
-              return (
-                <li key={item.id} data-item={item.id}>
-                  <CircleAlert size={14} /> <span><strong>{item.label}:</strong> {item.message}</span>
-                  {latest ? (target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>Fix under {panel(target).title}</button>
-                    : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null) : null}
-                </li>
-              );
-            })}
-          </ul>
+              return target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>Fix under {panel(target).title}</button>
+                : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null;
+            }} />
         ) : null}
         {warnings.length ? (
           <ul className="chat-issues chat-warnings">

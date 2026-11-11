@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { couponValues, DOWNLOADS, fileUrl, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import { buildValues, exampleForm, formFromValues, isIsotropic, PLATE_TEST, rowErrorsFrom, withStandard, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateFromValues, plateValues, type PlateLists } from "@/lib/studio-plate";
-import { MATERIAL_KEYS, NEEDS_TEST, panel, panelOfItem, panelState, stepNumber, visibleKeys, type PanelId } from "@/lib/workspace-panels";
+import { MATERIAL_KEYS, NEEDS_TEST, panel, panelState, panelToFix, stepNumber, visibleKeys, type PanelId } from "@/lib/workspace-panels";
 import { ChecklistPanel } from "@/components/studio/checklist-panel";
 import { FieldGrid } from "@/components/studio/coupon-form";
 import { remember, remembered, RUN_BY_KEY, today } from "@/components/studio/local";
@@ -212,7 +212,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
         {failing.length ? (
           <p className="ws-fix-links">
             {failing.map((item) => {
-              const target = panelOfItem(item.id);
+              const target = panelToFix(item);
               return target ? <button type="button" key={item.id} className="studio-text-button" onClick={() => showPanel(target)}>Fix {item.label.toLowerCase()} under {panel(target).title}</button> : null;
             })}
           </p>
