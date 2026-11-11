@@ -2,6 +2,27 @@
 
 Written for: the team member who builds the Abaqus coupon models (ADR-0029). Our solver reads your `.inp` and solves on your mesh; to compare, we need the numbers Abaqus computed. Today your job writes only `PRESELECT` field output to the `.odb`, and the `.dat` has no result tables, so there is nothing to compare yet. Either route below works; the first needs no Abaqus/CAE steps.
 
+## The tension workflow: comparing every output with Abaqus (ADR-0089, 2026-11-11)
+
+Written for: whoever checks our tension coupon against Abaqus, the founder now and the team later. The reference is the public D3039 check, `fea/checks/d3039-im7-8552`; a coupon built on the studio's tension screen writes the same deck.
+
+**Round (a): our deck, run in Abaqus.** Same mesh, so the comparison is element by element.
+
+1. Take the deck: the studio's Files ("Our Abaqus deck"), or `fea/checks/d3039-im7-8552/decks/d3039-im7-8552-abaqus.inp`. It asks Abaqus for every layer's middle section point (`*Element Output` with the points listed first), so CAE shows every ply.
+2. Run it: `abaqus job=d3039 input=d3039-im7-8552-abaqus.inp interactive`, in a folder under `.local/fea/checks/d3039-im7-8552/runs/`.
+3. Read every output from the ODB: `abaqus python fea/tools/abaqus_every_output.py d3039.odb --out every-output`.
+4. Compare: `cd fea && uv run python tools/abaqus_compare.py checks/d3039-im7-8552/d3039-im7-8552.toml <folder>/every-output/d3039-every-output.csv --json <folder>/compare.json`. It prints, per zone (gauge, free length, band, tab line, gripped) and per quantity (S11, S22, S12, Mises, Tresca, the pressure, the three principal stresses, E11, E22, E12), how many values agree within 1 % and 3 % and the worst, and the reaction.
+
+**Round (b): the coupon built by hand in Abaqus/CAE.** The modelling check, the team's own way.
+
+1. Build it from the package's Chapter 4 (the rebuild guide): a 250 by 25 mm shell, the layup [45/0/-45/90]s from the bottom with the layer axis 1 along the coupon (the length, y), S4R, partitions at 56, 112.5, 137.5 and 194 mm, seeds 12 across and 28, 28, 12, 28, 28 along, both tabs clamped, the top one pulled 1 mm.
+2. In the Field Output request, ask for each layer's middle section point (Output at shell, beam and layered section points: Specify, the middle point of every layer).
+3. Compare the decks first: our `equivalence.deck_equivalence` on the job's `.inp` against ours must find the same items; then steps 3 and 4 of round (a) on the job's ODB.
+
+**Reading a value in CAE the way our page shows it.** Query > Probe Values on the element by its number, the layer's middle section point, Result Options > Averaging off (CAE averages at nodes, 75 % by default), the layer's material axes (CAE's default for a composite layer). Our studio's probe table for a clicked element lists the same numbers. S13 and S23 are not in a shell layer's S: Abaqus reports the transverse shear as TSHR13 and TSHR23; our membrane kernel does not model it.
+
+What Abaqus 2025 showed about its own output is in `fea/checks/abaqus-conventions.toml`; what round (a) showed is in `fea/checks/d3039-im7-8552/README.md`.
+
 ## Reading a composite result the way the page reads it (ADR-0066, 2026-11-08)
 
 The page's validation table and the `.frd` in PrePoMax and a layer in Abaqus/CAE are one result read three ways, and the three only agree when the same ply, the same axes and the same point are read. What the page prints, and how to see the same number in each viewer:

@@ -1726,8 +1726,11 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
         criteria = [*FPF_CRITERIA, *(["tsai_wu"] if values.f12_star is not None else [])] if strengths else []
     else:
         criteria = list(values.criteria)
+    abaqus_output = {"field_preselect": True, "node_print": True, "el_print": True}
+    if values.kind == "unnotched_tension" and values.isotropic is None:  # every ply in the ODB, for the comparison with Abaqus (ADR-0089 part 7)
+        abaqus_output["every_layer"] = True
     data["output"] = {"fpf_criteria": criteria,
-                      "abaqus": {"field_preselect": True, "node_print": True, "el_print": True},
+                      "abaqus": abaqus_output,
                       "calculix": {"node_print": True, "el_print": True, "frd": True, "el_print_global": True}}
     if values.isotropic is None:
         comments["layup.angles"] = "bottom ply first; the lower half when symmetric"

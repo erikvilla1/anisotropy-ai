@@ -150,7 +150,9 @@ def test_the_public_coupon_reads_back_into_its_values(tmp_path):
     values, again = round_trip(tmp_path, public)
     assert values["test"] == "unnotched tension" and values["material_code"] == "IM7" and values["layup_code"] == "L1" and values["criteria"] == "all"
     assert values["mesh_nx"] == 10 and values["mesh_partitions"] == [56.0, 110.0, 140.0, 194.0] and values["name_part"] == "Strip"
-    assert again.model_dump(exclude=SKIP) == public.model_dump(exclude=SKIP)
+    # a tension coupon the form writes asks Abaqus for every layer (ADR-0089 amendment 1), an output request the hand-written spec predates
+    expected = public.model_copy(update={"output": public.output.model_copy(update={"abaqus": public.output.abaqus.model_copy(update={"every_layer": True})})})
+    assert again.model_dump(exclude=SKIP) == expected.model_dump(exclude=SKIP)
     assert values_of_spec(to_si(public)) == values_of_spec(public)  # a loaded spec gives the same rows as the file's text
 
 

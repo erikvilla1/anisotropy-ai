@@ -203,6 +203,9 @@ class AbaqusOutput(Record):
     field_preselect: bool
     node_print: bool
     el_print: bool
+    # field output at the middle of every layer, so Abaqus/CAE contours show each ply and tools/abaqus_every_output.py reads every element
+    # and ply for the comparison with our kernel (ADR-0089 part 7; Abaqus 2025 accepted it on 2026-11-11); off unless a spec asks for it
+    every_layer: bool = False
 
 
 class CalculixOutput(Record):
