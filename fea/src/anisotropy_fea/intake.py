@@ -29,7 +29,7 @@ from typing import Any
 
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
 
-from . import __version__, enabled, forms, paths
+from . import __version__, enabled, forms, paths, tension_input
 from .dogbone import OutlineError, dogbone_outline
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
 from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
@@ -673,6 +673,7 @@ class FormInput:
     version: str
     cells: dict[str, Any]
     lists: dict[str, list] = field(default_factory=dict)  # supports, loads, regions of a plate, as sent
+    built: tuple = ()  # the rows the tension screen's input left to us, each with its value and reason (ADR-0090)
 
     @property
     def units(self) -> str:
@@ -747,6 +748,12 @@ def read_values(path: Path | str) -> FormInput:
     if str(version) not in READ_VERSIONS:
         raise IntakeError(f"{path.name}: form_version {version!r} is not one this tool reads ({', '.join(READ_VERSIONS)}); the current form is "
                           f"{FORM_VERSION} and the rows follow its definition")
+    built: tuple = ()
+    screen = data.pop("input", None)
+    if screen is not None:  # the tension screen sends the material and the layup; the rest is chosen, each choice stated (ADR-0090)
+        if screen != tension_input.INPUT:
+            raise IntakeError(f"{path.name}: input {screen!r} is not one this tool reads; the tension screen sends {tension_input.INPUT!r}")
+        data, built = tension_input.complete_tension(data)
     lists: dict[str, list] = {}
     for name in PLATE_LISTS:
         if name in data:
@@ -777,7 +784,7 @@ def read_values(path: Path | str) -> FormInput:
         elif isinstance(value, dict):
             raise IntakeError(f"{path.name}: {key} holds an object; a row holds one value")
         cells[key] = None if value is None or (isinstance(value, str) and not value.strip()) else value
-    return FormInput(path, str(version), cells, lists)
+    return FormInput(path, str(version), cells, lists, built)
 
 
 def read_input(path: Path | str) -> FormInput:

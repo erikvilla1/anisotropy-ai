@@ -17,6 +17,15 @@ test.beforeEach(async ({ page }) => {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: Number(process.env.THROTTLE) });
 });
 
+/** What the package chooses for IM7/8552 [45/0/-45/90]s on the tension screen (anisotropy_fea.tension_input), as the check lists it. */
+const TENSION_BUILT = [
+  { row: "width", value: 25, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
+  { row: "length", value: 250, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
+  { row: "tab_length", value: 56, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric grips through emery cloth and gives no grip length: 56 mm is ours, as in the public D3039 check" },
+  { row: "strain_length", value: 25, reason: "25 mm, within ASTM D3039/D3039M-17 §7.3.2's 10 to 50 mm, centred on the coupon" },
+  { row: "value", value: 1, reason: "1 mm: the model is linear, so the answer, the loading at first-ply failure, does not depend on it" },
+];
+
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
 async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[] },
   options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean } = {}) {
@@ -28,8 +37,9 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
-    // one workflow first (ADR-0089): the API says whether every test is offered; the scenarios of a hidden test turn the switch on
-    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: Boolean(options.allTests) });
+    // one workflow first (ADR-0089): the API says whether every test is offered. The scenarios below test the full panels, development's
+    // view, so the switch is on unless a scenario turns it off for the tension screen (ADR-0090), the product's view
+    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true });
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) return json(route, { detail: "Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read" }, 503); // no project store: the browser keeps the project alone
     if (path === "/v1/coupons/IM7-UNT-L1/values") return json(route, { name: "IM7-UNT-L1", values: fixture("values") });
@@ -52,6 +62,11 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
       const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
+      if (values.input === "tension") { // the tension screen (ADR-0090): the package chooses the rest and lists its choices, played here
+        dir = "studio-standards";
+        return json(route, { run_id: "run-7", state: "ready", designation: "IM78552-UNT-L1", checklist: { ...fixture("checklist", "studio-standards"), built: TENSION_BUILT },
+          preview: fixture("preview", "studio-standards") });
+      }
       dir = values.test === BENDING ? "studio-bending" : values.test === "plate" ? "studio-plate" : "studio";
       if (values.standard === "ASTM D3039/D3039M-17") { // the public coupon under D3039, judged by the package (ADR-0072)
         dir = "studio-standards";
@@ -373,25 +388,39 @@ test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, 
   expect([sent.ply_1, sent.library, sent.G13, sent.criteria]).toEqual([undefined, undefined, undefined, undefined]); // hidden rows are not sent
 });
 
-test("one workflow first: only unnotched tension, under D3039 or no standard, is offered, and a hidden test is not available yet (ADR-0089)", async ({ page }) => {
+test("the tension screen takes the material and the layup, builds the model, says how it chose the rest, and lists the files (ADR-0089, ADR-0090)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls); // the switch is off, as on the hosted tier
+  await mockApi(page, calls, { allTests: false }); // the switch off, as on the hosted tier: the product's view
   await page.goto("/workspace/fea");
-  const tests = page.getByTestId("question-test").locator("input[type=radio]");
-  await expect(tests).toHaveCount(1);
-  await expect(tests.first()).toHaveAttribute("value", "unnotched tension");
-  await page.getByRole("button", { name: "Load example" }).click();
-  await expect(page.getByTestId("question-standard").locator(".ws-choice-title")).toHaveText(["ASTM D3039/D3039M-17", "No standard"]); // D638 waits
-  await expect(page.getByLabel("Narrow width (mm)", { exact: true })).toHaveCount(0); // no dog-bone rows
-  await expect(page.getByLabel("Material kind", { exact: true })).toHaveCount(0); // a laminate of plies only
-  const chat = page.getByTestId("ws-assistant");
-  await expect(chat.getByRole("button", { name: /Open-hole tension/ })).toHaveCount(0);
-  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, 6 mm hole, 36 x 250 mm");
+  const screen = page.getByTestId("tension-screen");
+  await expect(screen).toBeVisible();
+  await expect(page.getByTestId("question-test")).toHaveCount(0); // one test: no test to pick, no other standard than D3039 or none
+  await expect(screen.locator("input[name=tension-standard]")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Load example" })).toHaveCount(0);
+  await expect(page.getByText(/Abaqus name|Your Abaqus mesh/)).toHaveCount(0); // no Abaqus row on the page
+  await expect(page.getByTestId("build-button")).toBeDisabled();
+  await expect(page.getByTestId("tension-missing")).toContainText("the material, the layup");
+
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, 6 mm hole");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
   await expect(page.getByTestId("chat-not-available").last()).toContainText("Open-hole tension is not available yet");
-  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("36"); // what the studio offers still goes in
-  await expect(page.getByTestId("question-test").locator("input[value='unnotched tension']")).toBeChecked();
-  await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveCount(0);
+
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await expect(page.getByTestId("tension-missing")).toHaveCount(0);
+  await page.getByTestId("build-button").click();
+  await expect.poll(() => calls.solves.length).toBe(1); // ready, so Build goes on to the full analysis
+  const sent = (calls.checks.at(-1) as { values: Record<string, unknown> }).values;
+  expect(sent.input).toBe("tension");
+  expect(sent.library).toBe("im7-8552");
+  expect([sent.ply_1, sent.ply_2, sent.ply_3, sent.ply_4, sent.symmetric]).toEqual([45, 0, -45, 90, "yes"]);
+  for (const key of ["length", "width", "tab_length", "grips", "element_size", "G13", "G23", "test", "units"]) expect(sent[key], key).toBeUndefined(); // the package chooses them
+  const built = page.getByTestId("tension-built");
+  await expect(built.locator("tr[data-row=width]")).toContainText("ASTM D3039/D3039M-17, Table 2, balanced and symmetric");
+  await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm is ours");
+  await expect(page.getByTestId("tension-files")).toContainText("Our Abaqus deck (.inp)", { timeout: 20_000 });
+  await expect(page.getByTestId("tension-files")).toContainText("The document (PDF)");
 });
 
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {

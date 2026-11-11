@@ -330,7 +330,8 @@
   "coupon_exists": false,
   "attempts": 0,
   "state": "ready",
-  "problems": []
+  "problems": [],
+  "built": []
  },
  "result": {
   "test": "fibre tow tension",

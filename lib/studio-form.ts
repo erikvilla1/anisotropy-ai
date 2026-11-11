@@ -269,7 +269,11 @@ export type JudgedRequirement = StandardRequirement & { state: "met" | "deviatio
 export type CheckItem = {
   id: string; label: string; state: "pass" | "warn" | "fail" | "missing" | "pending"; message: string; rows: string[]; requirements?: JudgedRequirement[];
 };
-export type Checklist = { items: CheckItem[]; designation: string | null; coupon_exists: boolean; attempts: number; state: "ready" | "blocked"; problems: string[] };
+export type Checklist = {
+  items: CheckItem[]; designation: string | null; coupon_exists: boolean; attempts: number; state: "ready" | "blocked"; problems: string[];
+  /** The rows the tension screen left to the software, each with its value and reason (ADR-0090); absent or empty for every other input. */
+  built?: { row: string; value: unknown; reason: string }[];
+};
 
 /** The rows a checklist names, by field key, with the item's message: what the form highlights. */
 export function rowErrorsFrom(checklist: Checklist): Record<string, string> {

@@ -2,6 +2,7 @@
 stand-in as a coupon the team has not built, and a fixture coupon with a team comparison. The coupon models themselves are local
 (ADR-0042): the command line is run on one when this machine has it."""
 
+import json
 import importlib.util
 import re
 import subprocess
@@ -386,3 +387,22 @@ def test_the_regression_check_compares_with_the_newest_returned_audit(coupon, tm
     returned_form(package, tmp_path / paths.TEAM_FILES / "2026-10-25", changes={"B5": "Pass"})  # an earlier engine passed B5
     assert coupon.check(src) == ["B5"]
     assert "REGRESSION" in capsys.readouterr().out
+
+
+def test_the_document_says_how_the_tension_screen_built_the_coupon(coupon, tmp_path):
+    from anisotropy_fea.intake import FORM_VERSION
+
+    """ADR-0090: the rows the software chose for a coupon set up on the tension screen, read again from the values file the job filed."""
+    team = tmp_path / "team"
+    (team / "2026-11-11").mkdir(parents=True)
+    (team / "2026-11-11" / "values-job.json").write_text(json.dumps({"form_version": FORM_VERSION, "input": "tension", "library": "im7-8552",
+                                                                      "angles": [45, 0, -45, 90], "symmetric": "yes"}), encoding="utf-8")
+    built = coupon.tension_choices(team)
+    rows = {b.row: b for b in built}
+    assert rows["width"].value == 25.0 and rows["date"].value == "2026-11-11"  # the folder's day, so a rebuild writes the same table
+    section = coupon.built_section(built, "mm-MPa")
+    assert r"\section{How we built it}" in section and "Width (mm)" in section and "Table 2, balanced and symmetric" in section
+    (team / "2026-11-12").mkdir()
+    (team / "2026-11-12" / "values-panels.json").write_text(json.dumps({"form_version": FORM_VERSION, "test": "unnotched tension"}), encoding="utf-8")
+    assert coupon.tension_choices(team) == ()  # the latest delivery came from the panels: nothing was chosen for it
+    assert coupon.built_section((), "mm-MPa") == ""

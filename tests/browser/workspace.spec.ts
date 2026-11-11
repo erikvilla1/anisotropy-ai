@@ -42,9 +42,9 @@ test("the workspace opens on three tiles and the projects, the server's among th
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   const shell = page.getByTestId("workspace-shell");
   await expect(shell).toHaveAttribute("data-assistant", "open");
-  await expect(page.getByTestId("ws-rail").getByRole("button", { name: "Load example" })).toBeVisible();
+  await expect(page.getByTestId("ws-rail").getByTestId("tension-screen")).toBeVisible(); // the product's view: the material and the layup (ADR-0090)
   await expect(page.getByTestId("ws-stage").getByTestId("empty-scene")).toBeVisible();
-  await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "test");
+  await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "material");
   await page.getByTestId("project-name").fill("OHT study");
   await expect.poll(() => Object.values(store).some((p) => p.name === "OHT study" && p.kind === "fea"), { timeout: 10_000 }).toBe(true); // PUT to the server a moment after the change
   await page.getByTestId("assistant-toggle").click();
