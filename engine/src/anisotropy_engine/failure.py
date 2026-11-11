@@ -436,6 +436,43 @@ def first_ply_failure(
     )
 
 
+def first_ply_failure_thermal(
+    plies: list[Ply], delta_T: float, criterion: Criterion = "max_stress", f12_star: float | None = None,
+) -> FirstPlyFailure:
+    """First-ply failure of a temperature change alone, no load applied: the factor R on delta_T at which the first ply fails.
+
+    With no load, the laminate is free and every ply's stress is the residual stress of delta_T, proportional to it (thermal.py):
+    the mid-plane strain and curvature, and so the mechanical strain in each ply, all scale with delta_T. So the strength ratio
+    of that stress is the factor on the temperature change itself, and the first ply fails at R * delta_T. Both faces of every
+    ply are checked; each check's stress_12 is the stress when that face reaches the criterion, R times its stress at delta_T, as in
+    the other first-ply-failure functions. failure_loads are zero: nothing is loaded.
+    """
+    check_criterion(plies, criterion, f12_star)
+    if not math.isfinite(delta_T) or delta_T == 0.0:
+        raise ValueError("Give a nonzero, finite temperature change")
+    none = Loads(Nx=0.0, Ny=0.0, Nxy=0.0, Mx=0.0, My=0.0, Mxy=0.0)
+    eps0, kappa = thermomechanical_response(plies, none, delta_T)
+    surfaces = thermal_ply_surfaces(plies, eps0, kappa, delta_T)
+    # A laminate whose plies all expand alike (one angle, one material) is free and unstressed; round-off leaves stresses some 1e-17 of
+    # what the same change would cause in a restrained ply, which would read as an absurd R. Measured against that scale, it is none.
+    restrained = max(max(p.material.E1, p.material.E2) * max(abs(p.material.thermal_expansion.alpha1), abs(p.material.thermal_expansion.alpha2))
+                     for p in plies if p.material.thermal_expansion is not None) * abs(delta_T)
+    if max(float(np.max(np.abs(s.stress_12))) for s in surfaces) <= 1e-9 * restrained:
+        raise ValueError("The temperature change leaves every ply unstressed: a free laminate whose plies all expand alike")
+    zero = np.zeros(3)
+    checks = []
+    for surface in surfaces:
+        unloaded = PlySurface(surface.ply_index, surface.angle_deg, surface.z_m, zero, zero, zero, zero)
+        ratio, mode = face_strength_ratio(criterion, plies[surface.ply_index].material, unloaded, surface, f12_star)
+        stress = ratio * surface.stress_12 if math.isfinite(ratio) else surface.stress_12
+        checks.append(PlyCheck(ply_index=surface.ply_index, angle_deg=surface.angle_deg, z_m=surface.z_m,
+                               stress_12=stress, strength_ratio=ratio, mode=mode))
+    governing = min(checks, key=lambda check: check.strength_ratio)
+    if not math.isfinite(governing.strength_ratio):
+        raise ValueError("The temperature change leaves every ply unstressed: a free laminate whose plies all expand alike")
+    return FirstPlyFailure(criterion=criterion, strength_ratio=governing.strength_ratio, governing=governing, failure_loads=none, checks=checks)
+
+
 def first_ply_failure_combined(
     plies: list[Ply], fixed: Loads, variable: Loads, delta_T: float | None,
     criterion: Criterion = "max_stress", f12_star: float | None = None,

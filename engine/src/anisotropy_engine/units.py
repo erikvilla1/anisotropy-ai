@@ -67,10 +67,15 @@ UNITS: dict[str, tuple[str, float]] = {
     "kN/mm": ("force_per_length", 1e6), "lb/in": ("force_per_length", LBF / INCH), "kip/in": ("force_per_length", 1e3 * LBF / INCH),
     "N*m/m": ("moment_per_length", 1.0), "N*mm/mm": ("moment_per_length", 1.0), "kN*m/m": ("moment_per_length", 1e3),
     "lb*in/in": ("moment_per_length", LBF), "kip*in/in": ("moment_per_length", 1e3 * LBF),
+    # a temperature change, never a temperature: a change of 1 degC is 1 K, of 1 degF is 5/9 K, and no offset applies
+    "degC": ("temperature_change", 1.0), "K": ("temperature_change", 1.0), "degF": ("temperature_change", DEG_F),
+    "1/degC": ("expansion", 1.0), "1/K": ("expansion", 1.0), "1/degF": ("expansion", 1 / DEG_F),
+    "1e-6/degC": ("expansion", 1e-6), "1e-6/K": ("expansion", 1e-6), "1e-6/degF": ("expansion", 1e-6 / DEG_F),
 }
 
 # The dimension each quantity kind of UNIT_SYSTEMS takes when a value enters with its own unit.
-QUANTITY_DIMENSIONS = {"modulus": "pressure", "stress": "pressure", "length": "length", "N": "force_per_length", "M": "moment_per_length"}
+QUANTITY_DIMENSIONS = {"modulus": "pressure", "stress": "pressure", "length": "length", "N": "force_per_length", "M": "moment_per_length",
+                       "delta_T": "temperature_change", "alpha": "expansion"}
 
 
 def units_of(kind: str) -> tuple[str, ...]:

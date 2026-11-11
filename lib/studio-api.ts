@@ -46,7 +46,20 @@ export type Faced<T> = T | T[];
 export type Span = [number | null, number | null];
 export type Extreme = { value: number; element: number; label: string; ply: number; angle: number; xy: number[]; face?: string | null };
 export type FirstPlyFailure = { factor: number; index: number; element: number; label: string; ply: number; angle: number; mode: string; place: string;
-  touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null };
+  touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null;
+  /** ADR-0085: whether a ply fails at the applied loading (R at or below 1), and the loading at first-ply failure, R times the applied value and the
+   * reaction, as the package wrote them; absent on older jobs. */
+  fails?: boolean; at_failure?: AtFailure | null };
+export type AtFailure = { applied: number; unit: string; reaction: number; reaction_unit: string; every_load: boolean };
+/** The answer's basis (ADR-0085): the gauge section when the coupon has one, the whole model otherwise; an earlier failure outside it apart. */
+export type Verdict = { basis: "gauge" | "whole"; earliest: string; factor: number; fails: boolean; outside_earlier: OutsideEarlier | null };
+export type OutsideEarlier = { criterion: string; factor: number; fails: boolean; element: number; label: string; ply: number; angle: number; face: string | null;
+  mode: string; place: string; touches_grip: boolean; xy: number[] };
+/** A ply stress at its largest of one sign (or magnitude), with where it is; `ply` and `angle` on the extremes over every ply. Null when never reached. */
+export type PlyExtreme = { value: number; element: number; label: string; xy: number[]; face: string | null; ply?: number; angle?: number } | null;
+export type ExtremeSet = { S11: { tension: PlyExtreme; compression: PlyExtreme }; S22: { tension: PlyExtreme; compression: PlyExtreme };
+  S12: { largest: PlyExtreme }; mises: { largest: PlyExtreme } };
+export type PlyExtremes = { basis: "gauge" | "whole"; plies: ({ ply: number; angle: number } & ExtremeSet)[]; overall: ExtremeSet };
 export type Fields = {
   units: string; labels: Record<string, string>; coupon: Partial<Preview["coupon"]>; kernel?: string;
   mesh: { nodes: number[][]; quads: number[][]; node_labels: string[]; element_labels: string[]; node_sets: Record<string, number[]>;
@@ -68,6 +81,8 @@ export type Fields = {
     max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number;
     /** The same over the gauge section alone (the Gauge elements that touch no gripped node): what a test is compared with. Absent on older jobs. */
     fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null;
+    /** The answer (ADR-0085): its basis, earliest criterion and verdict, and the largest ply stresses on that basis; absent on older jobs. */
+    verdict?: Verdict | null; ply_extremes?: PlyExtremes;
     /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */
     calculix?: CalculixBeside | null;
     /** Every ply's own peaks at the element centroids, each marked when its element touches a gripped node (ADR-0066); absent on older jobs. */
@@ -215,6 +230,24 @@ export async function checkSetup(apiBase: string, values: StudioValues, signal?:
   const checklist = readChecklist(payload.checklist);
   const preview = payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview);
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview };
+}
+
+/** The live solve (ADR-0086): the setup check and, when nothing blocks, our kernel's fields and explanation, a preview with no mesh study
+ * and no CalculiX; `seconds` at the API, `warm` when a warm worker answered. Every number is the fea package's (ADR-0051). */
+export type LiveAnswer = CheckAnswer & { fields: Fields | null; explanation: Explanation | null; seconds: number; warm: boolean;
+  timings: Record<string, number> };
+
+export async function liveSolve(apiBase: string, values: StudioValues, signal?: AbortSignal, projectId: string | null = null): Promise<LiveAnswer> {
+  const body = { values, ...(projectId ? { project_id: projectId } : {}) };
+  const payload = await call(`${base(apiBase)}/v1/coupon-jobs/live`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the live solve");
+  if (!isObject(payload)) throw new StudioError("The live solve answered with an unexpected shape.");
+  const checklist = readChecklist(payload.checklist);
+  const preview = payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview);
+  const fields = payload.fields === null || payload.fields === undefined ? null : readFields(payload.fields);
+  const explanation = payload.explanation === null || payload.explanation === undefined ? null : readExplanation(payload.explanation);
+  const timings = isObject(payload.timings) ? Object.fromEntries(Object.entries(payload.timings).filter(([, v]) => typeof v === "number")) as Record<string, number> : {};
+  return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview,
+    fields, explanation, seconds: typeof payload.seconds === "number" ? payload.seconds : 0, warm: payload.warm === true, timings };
 }
 
 /** A fibre tow record's answer (ADR-0074): the checklist and, when nothing blocks, the result in the standard's report units (N, MPa, GPa, g/m,
@@ -415,4 +448,57 @@ export function readLaminateAnswer(payload: unknown): LaminateAnswer {
 export async function solveLaminate(apiBaseUrl: string, problem: unknown, signal?: AbortSignal): Promise<LaminateAnswer> {
   const payload = await call(`${base(apiBaseUrl)}/v1/laminates/solve`, { method: "POST", headers, body: JSON.stringify(problem), signal }, "the laminate solve");
   return readLaminateAnswer(payload);
+}
+
+// ----------------------------------------------------------------------------------------------- the model proposes (ADR-0088)
+
+/** A row a message may fill: a coupon's number names the unit it is stated in, a laminate's the dimension of its units; a pure number neither. */
+export type OfferedRow = {
+  key: string; label: string; kind: "number" | "choice" | "notation";
+  unit?: string; dimension?: string; choices?: { value: string; label: string }[];
+};
+export type ProposalRequest = {
+  product: "coupon" | "laminate"; message: string; rows: OfferedRow[];
+  conditions: { id: string; title: string; detail: string }[]; form: Record<string, string>;
+};
+/** A value the engineer wrote, for an offered row: as the row takes it, as written, and the words it came from. */
+export type Proposal = { key: string; label: string; value: string; unit: string | null; written_value: string; written_unit: string | null; quote: string };
+export type ProposalAnswer = {
+  run_id: string | null; writer: string; model: string | null; proposals: Proposal[];
+  conditions: { id: string; title: string; quote: string }[]; question: string | null; dropped: { key: string; reason: string }[]; reason: string | null;
+};
+export type AssistantInfo = { proposes: boolean; provider: string | null; model: string | null };
+
+const isText = (v: unknown): v is string => typeof v === "string";
+const isTextOrNull = (v: unknown): v is string | null => v === null || typeof v === "string";
+
+export function readProposalAnswer(payload: unknown): ProposalAnswer {
+  const bad = () => new StudioError("The proposals answered with an unexpected shape.");
+  if (!isObject(payload) || !isText(payload.writer) || !isTextOrNull(payload.model) || !isTextOrNull(payload.question) || !isTextOrNull(payload.reason)
+    || !Array.isArray(payload.proposals) || !Array.isArray(payload.conditions) || !Array.isArray(payload.dropped)) throw bad();
+  for (const p of payload.proposals) {
+    if (!isObject(p) || !isText(p.key) || !isText(p.label) || !isText(p.value) || !isTextOrNull(p.unit) || !isText(p.written_value) || !isTextOrNull(p.written_unit)
+      || !isText(p.quote)) throw bad();
+  }
+  for (const c of payload.conditions) if (!isObject(c) || !isText(c.id) || !isText(c.title) || !isText(c.quote)) throw bad();
+  for (const d of payload.dropped) if (!isObject(d) || !isText(d.key) || !isText(d.reason)) throw bad();
+  return payload as unknown as ProposalAnswer;
+}
+
+/** The model's reading of a message, kept by the source guard; nothing in it has entered the problem until the engineer applies it. */
+export async function proposeRows(apiBase: string, request: ProposalRequest, signal?: AbortSignal): Promise<ProposalAnswer> {
+  const payload = await call(`${base(apiBase)}/v1/workspace/proposals`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the proposals");
+  return readProposalAnswer(payload);
+}
+
+const assistantInfos = new Map<string, Promise<AssistantInfo | null>>();
+/** Whether a model reads messages here, asked once per API address; null when the API does not say (an older API, or none). */
+export function assistantInfo(apiBase: string): Promise<AssistantInfo | null> {
+  const key = base(apiBase);
+  if (!assistantInfos.has(key)) {
+    assistantInfos.set(key, call(`${key}/v1/workspace/assistant`, { method: "GET", headers }, "the assistant")
+      .then((payload) => (isObject(payload) && typeof payload.proposes === "boolean" ? payload as unknown as AssistantInfo : null))
+      .catch(() => null));
+  }
+  return assistantInfos.get(key)!;
 }

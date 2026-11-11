@@ -510,6 +510,16 @@ These are the equations of Daniel and Ishai Chapter 8 (printed pp. 212-217) with
 
 Failure ratios with a temperature change hold the residual stress fixed and scale only the mechanical loads, as described under "Fixed and variable loading" (ADR-0017).
 
+With a temperature change and no load at all, there is no mechanical load to scale. The laminate is free, and with $`\mathbf{N} = \mathbf{M} = \mathbf{0}`$ the mid-plane strain and curvature, the mechanical strain $`\boldsymbol{\varepsilon} - \boldsymbol{\alpha}\,\Delta T`$ in every ply and so its stress are all proportional to $`\Delta T`$. The strength ratio of that residual stress is then the factor on the temperature change itself, and the first ply fails at
+
+```math
+\Delta T_{\mathrm{FPF}} = R\,\Delta T ,
+```
+
+computed by `first_ply_failure_thermal`. A laminate whose plies all expand alike (one material at one angle) is free and unstressed; its stress, a round-off of some $`10^{-17}`$ of what a restrained ply would carry, is refused rather than read as a factor.
+
+<!-- code: first_ply_failure_thermal -->
+
 ## 8. Plate buckling (`buckling.py`)
 
 A midplane-symmetric laminate ($`\mathbf{B} = 0`$) as a rectangular plate $`0 \le x \le a`$, $`0 \le y \le b`$, simply supported on all four edges, under uniform in-plane resultants. The engine reports the load factor $`\lambda`$ on reference resultants $`(N_x, N_y, N_{xy})`$, tension positive, at which a slightly bent shape is first in equilibrium. Unsymmetric laminates are refused (Whitney, *Structural Analysis of Laminated Anisotropic Plates*, 1987, Chapter 7 treats specific classes; not implemented).

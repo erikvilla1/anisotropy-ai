@@ -114,10 +114,12 @@ export function LaminateResults({ answer, busy, onReport }: { answer: LaminateAn
         <h3>First-ply failure</h3>
         {answer.criteria.length ? (
           <>
-            <p className="studio-muted">Every load scales together until the first ply fails; R is the factor on the applied loads. Highlighted: the lowest R.</p>
+            <p className="studio-muted">{f.thermal_only ? `No load: the temperature change of ${shown(f.delta_T)} ${printedUnit(u.delta_T ?? "")} itself grows until the first ply fails; R is the factor on it. Highlighted: the lowest R.`
+              : typeof f.delta_T === "number" ? `Every load scales together until the first ply fails, the temperature change of ${shown(f.delta_T)} ${printedUnit(u.delta_T ?? "")} held at its value; R is the factor on the applied loads. Highlighted: the lowest R.`
+              : "Every load scales together until the first ply fails; R is the factor on the applied loads. Highlighted: the lowest R."}</p>
             <div className="calc-table-scroll">
               <table className="studio-table" data-testid="lam-fpf-table">
-                <thead><tr><th>Criterion</th><th>R</th><th>Ply</th><th>Loads at failure</th></tr></thead>
+                <thead><tr><th>Criterion</th><th>R</th><th>Ply</th><th>{f.thermal_only ? "Temperature change at failure" : "Loads at failure"}</th></tr></thead>
                 <tbody>
                   {answer.criteria.map((criterion) => {
                     const forces = r[`fpf_forces_${criterion}`] as number[];
@@ -128,7 +130,8 @@ export function LaminateResults({ answer, busy, onReport }: { answer: LaminateAn
                         <td>{CRITERION_WORDS[criterion] ?? criterion}{criterion === "tsai_wu" && typeof answer.case.f12_star === "number" ? ` (f12* = ${answer.case.f12_star})` : ""}{criterion === "max_strain" ? " (limits from the strengths)" : ""}</td>
                         <td data-testid={`lam-ratio-${criterion}`}>{shown(r[`fpf_ratio_${criterion}`])}</td>
                         <td>{shown(r[`fpf_ply_${criterion}`])} ({shown(f[`${criterion}_angle`])}°){typeof f[`${criterion}_mode`] === "string" && f[`${criterion}_mode`] !== "interactive" ? `, ${f[`${criterion}_mode`]}` : ""}</td>
-                        <td>{at.length ? at.map((item) => `${item.name} = ${shown(item.v)} ${printedUnit(item.unit)}`).join(", ") : "–"}</td>
+                        <td data-testid={`lam-at-failure-${criterion}`}>{f.thermal_only ? `ΔT = ${shown(r[`fpf_delta_T_${criterion}`])} ${printedUnit(u.delta_T ?? "")}`
+                          : at.length ? at.map((item) => `${item.name} = ${shown(item.v)} ${printedUnit(item.unit)}`).join(", ") : "–"}</td>
                       </tr>
                     );
                   })}

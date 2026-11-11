@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
+import { answerOf, BASIS_WORDS, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { Scene } from "./scene";
@@ -50,6 +51,8 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
         </>
       ) : <OlderPeaks fields={fields} onShow={onShow} />}
       {s.convergence ? <ConvergenceTable study={s.convergence} lab={lab} /> : null}
+      <details className="studio-fpf-details" data-testid="fpf-details" open={answerOf(fields) === null}>
+      <summary>First-ply failure by every criterion, over the whole model{s.fpf_gauge && Object.keys(s.fpf_gauge).length ? " and over the gauge section" : ""}</summary>
       <h4>First-ply failure</h4>
       {Object.keys(s.fpf).length === 0 ? <p className="studio-muted">No failure criterion was asked for.</p> : (
         <FailureTable fpf={s.fpf} earliest={s.earliest} testId="fpf-table" factorPrefix="fpf-factor" onShow={onShow} />
@@ -64,6 +67,7 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
             section, is compared with.</p>
         </>
       ) : null}
+      </details>
       {s.test_method ? <TestMethodCard tm={s.test_method} cx={cx?.test_method ?? null} /> : null}
     </div>
   );
@@ -336,6 +340,101 @@ function OlderPeaks({ fields, onShow }: { fields: Fields; onShow: (element: numb
   );
 }
 
+const where = (xy: number[], unit: string) => `(${xy.map((v) => printed(v)).join(", ")} ${unit})`;
+
+/** The answer to "does it fail, at what load, where" (ADR-0085), as the package wrote it: per criterion in the gauge section (the whole model for a
+ * coupon without one), fails or holds at the applied loading, the factor R, the loading at first-ply failure, the ply, mode and position; the
+ * earlier failure at a clamped edge apart; the largest ply stresses with their sign. Every number is the package's (ADR-0051). */
+export function AnswerCard({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
+  const a = answerOf(fields);
+  if (!a) return null;
+  const L = fields.labels.length ?? "";
+  const e = a.earliest;
+  const loading = (r: AnswerRow) => r.applied === null ? "–"
+    : `${printed(Math.abs(r.applied))} ${a.appliedUnit}` + (a.control !== "force" && r.reaction !== null ? `, ${printed(Math.abs(r.reaction))} ${a.forceUnit}` : "");
+  const times = a.everyLoad ? "every applied load" : "the applied loading";
+  const who = (r: { ply: number; angle: number; face: string | null }) => `ply ${r.ply} (${r.angle}°)${r.face ? `, ${r.face} face` : ""}`;
+  const extremes = fields.summary.ply_extremes;
+  return (
+    <div className="studio-panel studio-answer" data-testid="answer" data-basis={a.basis} data-fails={e.fails}>
+      <h3>The answer <span className="studio-badge">{a.basisWords}</span></h3>
+      <p className="studio-answer-headline" data-testid="answer-headline">
+        <strong>{e.fails ? "Fails" : "Holds"} at the applied loading</strong> in {a.basisWords}, by {e.name}.{" "}
+        {e.fails ? `The first ply fails at ${printed(e.factor)} of ${times}` : `The first ply would fail at ${printed(e.factor)} × ${times}`}
+        {e.applied !== null ? ` (${loading(e)}${a.control !== "force" ? ` at ${a.reactionSet}` : ""})` : ""}: {who(e)}, by {modeWords(e.mode)}, at element {e.label.split(".").pop()} {where(e.xy, L)}, {e.place}.
+      </p>
+      <table className="studio-table" data-testid="answer-table">
+        <thead><tr><th>Criterion</th><th>At the applied loading</th><th>R</th><th>First ply fails at</th><th>First ply, by</th><th>Where</th><th></th></tr></thead>
+        <tbody>
+          {a.rows.map((r) => (
+            <tr key={r.criterion} data-criterion={r.criterion} data-fails={r.fails} className={r.earliest ? "studio-earliest" : undefined}>
+              <td>{r.name}{r.earliest ? " (earliest)" : ""}</td>
+              <td data-testid={`answer-verdict-${r.criterion}`}><span className={`studio-badge studio-badge-${r.fails ? "fail" : "pass"}`}>{r.fails ? "fails" : "holds"}</span></td>
+              <td data-testid={`answer-factor-${r.criterion}`}>{printed(r.factor)}</td>
+              <td data-testid={`answer-loading-${r.criterion}`}>{loading(r)}</td>
+              <td>{who(r)}{r.tied.length ? `, tied with ${r.tied.join(", ")}` : ""}; {modeWords(r.mode)}</td>
+              <td>element {r.label.split(".").pop()} {where(r.xy, L)}, {r.place}</td>
+              <td><button type="button" className="studio-text-button" onClick={() => onShow(r.element, r.ply, r.criterion, r.face)}>show</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="studio-muted">R is the factor on {times} at which the first ply fails: at or below 1 the ply fails at the applied loading. A linear model scales every
+        stress with the loading, so the loading at first-ply failure is R times what is applied{a.control !== "force" ? `, and the force ${a.reactionSet} carries then is R times its reaction` : ""}.
+        First-ply failure is the onset of damage in one ply, not the coupon&apos;s ultimate strength.</p>
+      {a.outside ? (
+        <p className="studio-answer-outside" data-testid="answer-outside">
+          Outside {a.basisWords}, {a.outside.name} is reached earlier, at {printed(a.outside.factor)} × {times}: {who(a.outside)}, by {modeWords(a.outside.mode)}, at element{" "}
+          {a.outside.label.split(".").pop()} {where(a.outside.xy, L)}, {a.outside.place}.
+          {a.outside.touches_grip ? " That is the clamped edge of a grip, where the stress grows as the mesh is refined, so it is reported apart from the answer." : ""}{" "}
+          <button type="button" className="studio-text-button" onClick={() => onShow(a.outside!.element, a.outside!.ply, a.outside!.criterion, a.outside!.face)}>show</button>
+        </p>
+      ) : null}
+      {extremes ? <ExtremesTable extremes={extremes} basis={BASIS_WORDS[extremes.basis]} unit={fields.labels.stress ?? ""} lengthUnit={L} criterion={e.criterion} onShow={onShow} /> : null}
+    </div>
+  );
+}
+
+const EXTREME_HEADS = ["σ₁ tension", "σ₁ compression", "σ₂ tension", "σ₂ compression", "τ₁₂ largest"];
+
+function ExtremesTable({ extremes, basis, unit, lengthUnit, criterion, onShow }: {
+  extremes: NonNullable<Fields["summary"]["ply_extremes"]>; basis: string; unit: string; lengthUnit: string; criterion: string;
+  onShow: (element: number, ply: number, criterion: string, face?: string | null) => void;
+}) {
+  const rows = extremeRows(extremes.overall);
+  return (
+    <>
+      <h4>Largest ply stresses in {basis}</h4>
+      <table className="studio-table" data-testid="answer-extremes">
+        <thead><tr><th>Stress</th><th>Value ({unit})</th><th>Ply</th><th>Where</th><th></th></tr></thead>
+        <tbody>
+          {rows.map(({ key, words, extreme }) => (
+            <tr key={key} data-extreme={key}>
+              <td>{words}</td><td>{printed(extreme.value)}</td><td>{extreme.ply} ({extreme.angle}°){extreme.face ? `, ${extreme.face} face` : ""}</td>
+              <td>element {extreme.label.split(".").pop()} {where(extreme.xy, lengthUnit)}</td>
+              <td><button type="button" className="studio-text-button" onClick={() => onShow(extreme.element, extreme.ply ?? 1, criterion, extreme.face)}>show</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <details className="studio-answer-plies">
+        <summary>Each ply&apos;s largest stresses</summary>
+        <table className="studio-table" data-testid="answer-extremes-plies">
+          <thead><tr><th>Ply</th>{EXTREME_HEADS.map((h) => <th key={h}>{h} ({unit})</th>)}</tr></thead>
+          <tbody>
+            {extremes.plies.map((p) => (
+              <tr key={p.ply}><td>{p.ply} ({p.angle}°)</td>
+                {[p.S11.tension, p.S11.compression, p.S22.tension, p.S22.compression, p.S12.largest].map((x, i) => <td key={i}>{x ? printed(x.value) : "–"}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+      <p className="studio-muted">Each ply&apos;s stresses in its own fibre axes at element centroids; tension and compression apart, since a ply fails differently in each.</p>
+    </>
+  );
+}
+
 function FailureTable({ fpf, earliest, testId, factorPrefix, onShow }: {
   fpf: Record<string, FirstPlyFailure>; earliest: string | null; testId: string; factorPrefix: string;
   onShow: (element: number, ply: number, criterion: string, face?: string | null) => void;
@@ -387,8 +486,20 @@ export function Downloads({ apiBase, job }: { apiBase: string; job: JobStatus })
   );
 }
 
-export function ResultsView({ fields, explanation, job, apiBase, preview }: {
+/** The element the viewer frames: the answer's first failure, in the gauge section when the coupon has one (ADR-0085); the whole model's earliest on an
+ * older job. */
+function criticalElement(fields: Fields): number | null {
+  const answer = answerOf(fields);
+  if (answer) return answer.earliest.element;
+  return fields.summary.earliest ? fields.summary.fpf[fields.summary.earliest].element : null;
+}
+
+export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false }: {
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
+  /** our kernel's live answer (ADR-0086), shown with its seconds until a full run checks it; null for a full run's result */
+  live?: { seconds: number; warm: boolean } | null;
+  /** a newer live answer is on its way: the numbers shown are the last rows' */
+  updating?: boolean;
 }) {
   const [choice, setChoice] = useState<FieldChoice>(() => DEFAULT_CHOICE(fields));
   const [scale, setScale] = useState<number>(() => suggestedScale(fields.mesh.nodes, fields.nodal.magnitude));
@@ -396,7 +507,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
   const [wireframe, setWireframe] = useState(true);
   const [contours, setContours] = useState(DEFAULT_CONTOURS);
   const [picked, setPicked] = useState<number | null>(null);
-  const [highlight, setHighlight] = useState<number | null>(() => (fields.summary.earliest ? fields.summary.fpf[fields.summary.earliest].element : null));
+  const [highlight, setHighlight] = useState<number | null>(() => criticalElement(fields));
   const [answer, setAnswer] = useState<ExplainAnswer | null>(null);
   useEffect(() => {
     // once our engine has written the explanation, the API's writer (the template, or a model behind a setting) rephrases it (ADR-0052)
@@ -406,7 +517,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
       .catch((error) => { if (!cancelled && !(error instanceof StudioError && error.status === 409)) setAnswer(null); });
     return () => { cancelled = true; };
   }, [job?.job_id, job?.state, "explanation" in (job?.outputs ?? {}), apiBase]);
-  useEffect(() => { setChoice(DEFAULT_CHOICE(fields)); setScale(suggestedScale(fields.mesh.nodes, fields.nodal.magnitude)); }, [fields]);
+  useEffect(() => { setChoice(DEFAULT_CHOICE(fields)); setScale(suggestedScale(fields.mesh.nodes, fields.nodal.magnitude)); setHighlight(criticalElement(fields)); }, [fields]);
   const options = useMemo(() => fieldOptions(fields), [fields]);
   const option = options.find((o) => o.id === choice.id) ?? options[0];
   const values = useMemo(() => valuesFor(fields, choice), [fields, choice]);
@@ -424,7 +535,13 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
     setChoice((c) => ({ ...c, ply, criterion: criterion || c.criterion, face: faceIndex ?? c.face }));
   };
   return (
-    <div className="studio-results" data-testid="results">
+    <div className="studio-results" data-testid="results" data-source={live ? "live" : "run"} data-updating={updating}>
+      {live ? (
+        <p className="studio-live-banner" data-testid="live-banner">
+          <strong>Preview</strong>: our kernel, answered in {live.seconds < 10 ? live.seconds.toFixed(1) : Math.round(live.seconds)} s{live.warm ? "" : " by a fresh solver"}; not yet checked by
+          CalculiX or the mesh study. Run full analysis to check it and write the package.{updating ? " Updating for your last edit…" : ""}
+        </p>
+      ) : updating ? <p className="studio-live-banner" data-testid="live-banner">Updating for your last edit…</p> : null}
       <div className="studio-scene-block">
         <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} field={field}
           displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={held} loaded={loaded} highlight={highlight} picked={picked}
@@ -477,6 +594,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
           </select>
         </label>
       </div>
+      <AnswerCard fields={fields} onShow={show} />
       {readout ? (
         <div className="studio-panel studio-readout" data-testid="readout">
           <h3>{readout.title}{highlight === picked ? " (the critical element)" : ""}</h3>

@@ -586,6 +586,24 @@ class CouponCheckResponse(Contract):
     preview: dict[str, Any] | None
 
 
+class LiveSolveResponse(Contract):
+    """The live solve (ADR-0086): the setup check and, when nothing blocks, our kernel's fields with the answer (ADR-0085) and their
+    explanation, as the fea package wrote them; a preview, with no mesh study and no CalculiX. `fields`, `explanation` and `preview` are
+    null when nothing was solved or drawn. `seconds` is the API's, from the request to the files read; `timings` the tool's stages."""
+
+    run_id: str | None
+    state: str
+    designation: str | None
+    solver: str
+    warm: bool
+    seconds: float
+    timings: dict[str, float]
+    checklist: dict[str, Any]
+    preview: dict[str, Any] | None
+    fields: dict[str, Any] | None
+    explanation: dict[str, Any] | None
+
+
 class TowTestRequest(CouponCheckRequest):
     """A fibre tow record under ASTM D4018 (ADR-0074): the tow test's rows and its specimens as one JSON object, the way the studio states
     them; `test` is "fibre tow tension". The record keeps the values' digest, as a check does, never the rows."""
@@ -654,6 +672,14 @@ class OwnMaterial(Contract):
     source: Annotated[str, Field(min_length=1, pattern=r"\S")] | None = Field(default=None, description="Where the numbers come from, when stated")
     strain_limits: Literal["from-strengths"] | None = Field(
         default=None, description="Ask for maximum strain with limits derived from the strengths (strength divided by modulus, linear to failure, ADR-0021)")
+    alpha1: Quantity | None = Field(default=None, description="Thermal expansion along the fibres, with its unit (1/degC, 1/K, 1/degF or their 1e-6 forms)")
+    alpha2: Quantity | None = Field(default=None, description="Thermal expansion across the fibres; alpha1 and alpha2 come together or not at all")
+
+    @model_validator(mode="after")
+    def _alphas_together(self) -> Self:
+        if (self.alpha1 is None) != (self.alpha2 is None):
+            raise ValueError("give alpha1 and alpha2 together, or neither")
+        return self
 
     @model_validator(mode="after")
     def all_five_strengths_or_none(self) -> Self:
@@ -713,6 +739,8 @@ class LaminateProblem(Contract):
     ply_thickness: Quantity | None = None
     loads: ProblemLoads
     f12_star: FiniteFloat | None = None
+    delta_T: Quantity | None = Field(default=None, description="A uniform temperature change, with its unit (degC, K or degF); the material "
+                                     "needs alpha1 and alpha2. With loads, it is held and the loads scale to failure; alone, it scales itself")
     report_units: ReportUnits
 
 
@@ -739,6 +767,111 @@ class LaminateAnswer(Contract):
     withheld: bool
     reason: str | None
     facts: dict[str, Any]
+
+
+Key = Annotated[str, Field(min_length=1, max_length=48, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")]
+ShortText = Annotated[str, Field(min_length=1, max_length=200)]
+Dimension = Literal["pressure", "length", "force_per_length", "moment_per_length", "temperature_change", "expansion"]
+CouponUnit = Literal["m", "cm", "mm", "in", "N", "kN", "lbf", "kip", "Pa", "kPa", "MPa", "GPa", "psi", "ksi", "Msi"]
+
+
+class OfferedChoice(Contract):
+    value: ShortText
+    label: ShortText
+
+
+class OfferedRow(Contract):
+    """A row the page offers a message to fill (ADR-0088): a number, a choice or a notation. A coupon's number names the unit it is stated
+    in, and a value written in another unit of the same system is converted to it; a laminate's number names the dimension of its units,
+    and the value keeps the unit written (the engine converts, ADR-0060). A pure number names neither."""
+
+    key: Key
+    label: ShortText
+    kind: Literal["number", "choice", "notation"]
+    unit: CouponUnit | None = None
+    dimension: Dimension | None = None
+    choices: Annotated[list[OfferedChoice], Field(min_length=1, max_length=120)] | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.kind == "choice" and not self.choices:
+            raise ValueError(f"{self.key}: a choice row lists its choices")
+        if self.kind != "choice" and self.choices is not None:
+            raise ValueError(f"{self.key}: only a choice row lists choices")
+        if self.kind != "number" and (self.unit or self.dimension):
+            raise ValueError(f"{self.key}: only a number carries a unit")
+        if self.unit and self.dimension:
+            raise ValueError(f"{self.key}: a row names its unit (a coupon) or its dimension (a laminate), not both")
+        return self
+
+
+class OfferedCondition(Contract):
+    id: Key
+    title: ShortText
+    detail: Annotated[str, Field(max_length=400)] = ""
+
+
+class ProposalRequest(Contract):
+    """A message to read into rows (ADR-0088): the product, the message, the rows and conditions on offer, and the rows already filled.
+    The model sees these, with every name, note and source taken out (R-11); never a file, a deck or a result."""
+
+    product: Literal["coupon", "laminate"]
+    message: Annotated[str, Field(min_length=1, max_length=2000)]
+    rows: Annotated[list[OfferedRow], Field(min_length=1, max_length=200)]
+    conditions: Annotated[list[OfferedCondition], Field(max_length=20)] = []
+    form: Annotated[dict[str, Annotated[str, Field(max_length=400)]], Field(max_length=400)] = {}
+
+    @model_validator(mode="after")
+    def _distinct(self) -> Self:
+        keys = [row.key for row in self.rows]
+        if len(set(keys)) != len(keys):
+            raise ValueError("each row is offered once")
+        return self
+
+
+class Proposal(Contract):
+    """A value the engineer wrote, for a row the page offered: as the row takes it (`value`, `unit`), as written, and the words it came from."""
+
+    key: str
+    label: str
+    value: str
+    unit: str | None
+    written_value: str
+    written_unit: str | None
+    quote: str
+
+
+class ConditionProposal(Contract):
+    id: str
+    title: str
+    quote: str
+
+
+class DroppedProposal(Contract):
+    key: str
+    reason: str
+
+
+class ProposalResponse(Contract):
+    """What the model read and the source guard kept (ADR-0088), for the engineer to tick; nothing here has entered the problem. `writer` is
+    `template` when no model read the message, with the reason when one was asked; the page then reads it with its own patterns."""
+
+    run_id: str | None
+    writer: str
+    model: str | None
+    proposals: list[Proposal]
+    conditions: list[ConditionProposal]
+    question: str | None
+    dropped: list[DroppedProposal]
+    reason: str | None
+
+
+class AssistantInfo(Contract):
+    """Whether a model reads messages here (ADR-0088): the page asks once, and with none it reads with its own patterns."""
+
+    proposes: bool
+    provider: str | None
+    model: str | None
 
 
 class CouponSummary(Contract):

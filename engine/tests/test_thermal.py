@@ -242,3 +242,45 @@ def test_us_units_convert_expansion_and_temperature_change_consistently():
     us["units"] = "US"
     us["laminate"] = {"layup": [0, 90], "ply_thickness": 0.125e-3 / 0.0254}
     np.testing.assert_allclose(engine_results(us)["strain_global"][0], engine_results(si)["strain_global"][0], rtol=1e-9)
+
+
+# --- a temperature change alone, to first-ply failure ------------------------------------------------------------------------------
+
+STRONG = MATERIAL.model_copy(update={"strengths": Strengths(F1t=2000e6, F1c=1500e6, F2t=50e6, F2c=200e6, F6=70e6)})
+
+
+def test_a_temperature_change_alone_fails_its_first_ply_at_r_times_the_change():
+    """No load: the residual stress scales with delta_T, so R is the factor on the change itself, and it equals the strength ratio of
+    the residual stress at delta_T, face by face (Daniel & Ishai Eqs. 8.16-8.18)."""
+    from anisotropy_engine.failure import face_strength_ratio, first_ply_failure_thermal
+    from anisotropy_engine.response import PlySurface
+    plies = stack([0, 90, 90, 0], STRONG)
+    found = first_ply_failure_thermal(plies, DELTA_T, "max_stress")
+    eps0, kappa = thermomechanical_response(plies, NO_LOAD, DELTA_T)
+    zero = np.zeros(3)
+    ratios = [face_strength_ratio("max_stress", STRONG, PlySurface(s.ply_index, s.angle_deg, s.z_m, zero, zero, zero, zero), s, None)[0]
+              for s in thermal_ply_surfaces(plies, eps0, kappa, DELTA_T)]
+    assert found.strength_ratio == pytest.approx(min(ratios), rel=1e-12)
+    assert found.governing.mode == "transverse tension" and not np.any(found.failure_loads.as_vector())
+    twice = first_ply_failure_thermal(plies, 2 * DELTA_T, "max_stress")
+    assert twice.strength_ratio == pytest.approx(found.strength_ratio / 2, rel=1e-12), "the same failure temperature, R * delta_T"
+    assert found.strength_ratio * DELTA_T == pytest.approx(twice.strength_ratio * 2 * DELTA_T, rel=1e-12)
+
+
+def test_a_temperature_change_alone_is_refused_when_zero_or_when_it_stresses_nothing():
+    from anisotropy_engine.failure import first_ply_failure_thermal
+    with pytest.raises(ValueError, match="nonzero, finite temperature change"):
+        first_ply_failure_thermal(stack([0, 90, 90, 0], STRONG), 0.0)
+    with pytest.raises(ValueError, match="leaves every ply unstressed"):
+        first_ply_failure_thermal(stack([0, 0, 0, 0], STRONG), DELTA_T)  # every ply expands alike: free, unstressed
+
+
+def test_a_case_cooled_with_no_load_reports_the_temperature_at_failure():
+    case = {"units": "SI", "material": {"E1": 140.0, "E2": 10.0, "G12": 7.0, "nu12": 0.3, "F1t": 2000.0, "F1c": 1500.0, "F2t": 50.0,
+                                         "F2c": 200.0, "F6": 70.0, "alpha1": -0.5e-6, "alpha2": 30e-6},
+            "laminate": {"layup": [0, 90, 90, 0], "ply_thickness": 0.125}, "applied": {"loads": [0, 0, 0, 0, 0, 0], "delta_T": DELTA_T}}
+    results = engine_results(case)
+    ratio = results["fpf_ratio_max_stress"][0]
+    assert results["fpf_delta_T_max_stress"][0] == pytest.approx(ratio * DELTA_T, rel=1e-12)
+    loaded = engine_results({**case, "applied": {"loads": [1e5, 0, 0, 0, 0, 0], "delta_T": DELTA_T}})
+    assert "fpf_delta_T_max_stress" not in loaded, "with a load, R scales the load and the temperature change is held (ADR-0017)"

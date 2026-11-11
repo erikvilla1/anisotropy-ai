@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { missingIn, REPORT_SYSTEMS, type LaminateStep, type ReportUnits } from "@/lib/laminate-chat";
+import { hasCondition, missingIn, REPORT_SYSTEMS, type LaminateStep, type ReportUnits } from "@/lib/laminate-chat";
+import { CONDITIONS } from "@/lib/conditions";
 import type { PanelState } from "@/lib/workspace-panels";
 import { useLaminate } from "@/components/studio/laminate-context";
-import { LayupFields, LoadsFields, MaterialFields } from "./panels/laminate-fields";
-import { StepPanel } from "./panels/step-panel";
+import { LayupFields, LoadsFields, MaterialFields, TemperatureFields } from "./panels/laminate-fields";
+import { showPanel, StepPanel } from "./panels/step-panel";
 
 /** The left column of the laminate workspace (ADR-0062, part 5): one panel per step of the problem, Units, Material, Layup, Loads, and
  * Solve, each editing the one draft the assistant and the stack share. A panel is "checked" once its step is stated; the engine judges
@@ -16,6 +17,11 @@ export function LaminateRail() {
   const [errors, setErrors] = useState<string[]>([]);
   const [status, setStatus] = useState("State the units, the material, the layup and the loads, then solve.");
   const state = (step: LaminateStep): PanelState => (missingIn(step, draft).length ? "none" : "pass");
+  const offered = CONDITIONS.filter((c) => c.product === "laminate" && !hasCondition(draft, c.id));
+  const addCondition = (id: string, panel: string) => {
+    setDraft((d) => ({ ...d, conditions: [...(d.conditions ?? []), id] }));
+    window.setTimeout(() => showPanel(panel), 0);  // the panel exists once the draft has the condition
+  };
 
   async function run() {
     const outcome = await solve();
@@ -48,6 +54,22 @@ export function LaminateRail() {
       <StepPanel id="loads" title="Loads" state={state("loads")}>
         <LoadsFields loads={draft.loads} system={system} disabled={solving} onChange={(loads) => setDraft((d) => ({ ...d, loads }))} />
       </StepPanel>
+
+      {hasCondition(draft, "temperature") ? (
+        <StepPanel id="temperature" title="Temperature change" state={state("temperature")} note="a condition">
+          <TemperatureFields draft={draft} system={system} disabled={solving} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} />
+          <div className="studio-buttons"><button type="button" className="studio-text-button" disabled={solving} data-testid="remove-temperature"
+            onClick={() => setDraft((d) => ({ ...d, conditions: (d.conditions ?? []).filter((c) => c !== "temperature"), delta_T: null }))}>Remove the temperature change</button></div>
+        </StepPanel>
+      ) : null}
+
+      {offered.length ? (
+        <div className="lam-conditions" data-testid="add-condition">
+          <span className="studio-hint">Add a condition:</span>
+          {offered.map((c) => <button key={c.id} type="button" className="studio-text-button" title={c.detail} disabled={solving}
+            onClick={() => addCondition(c.id, c.panel)}>+ {c.title}</button>)}
+        </div>
+      ) : null}
 
       <StepPanel id="solve" title="Solve" state={answer ? "pass" : "none"}>
         <div className="chat-inline lam-solve-options">

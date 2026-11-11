@@ -21,6 +21,7 @@ Every number comes from the solve; a non-finite one is refused.
 from __future__ import annotations
 
 import dataclasses
+import math
 from typing import Any
 
 import numpy as np
@@ -252,6 +253,74 @@ def failures_of(deck: Deck, solution: Solution, field: PlyField, criteria: tuple
     return out
 
 
+def answer_of(factor: float, applied: dict[str, Any], reaction: float, force_unit: str, every_load: bool) -> dict[str, Any]:
+    """Whether a ply fails at the applied loading by one criterion, and the loading at its first-ply failure (ADR-0085): the factor R
+    times the applied value and times the reaction, in the fields' units. R at or below 1 fails: the failure index 1/R has reached 1. A
+    plate's every load scales with R together."""
+    if not math.isfinite(factor):
+        return {"fails": False, "at_failure": None}
+    return {"fails": bool(factor <= 1.0),
+            "at_failure": {"applied": float(factor * applied["value"]), "unit": applied["unit"], "reaction": float(factor * reaction),
+                           "reaction_unit": force_unit, "every_load": every_load}}
+
+
+def verdict_of(whole: dict[str, dict[str, Any]], gauge: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    """The answer's basis and its earliest criterion (ADR-0085): the gauge section, away from the clamped edge, when the coupon has one
+    (the number a test coupon that breaks in its gauge is compared with), the whole model otherwise (a plate, a bending coupon). A failure
+    elsewhere that comes earlier, at the clamped edge of a grip, is reported apart as `outside_earlier`. None without a criterion."""
+    table, basis = (gauge, "gauge") if gauge else (whole, "whole")
+    if not table:
+        return None
+    earliest = min(table, key=lambda c: table[c]["factor"])
+    factor = float(table[earliest]["factor"])
+    out: dict[str, Any] = {"basis": basis, "earliest": earliest, "factor": factor, "fails": bool(factor <= 1.0), "outside_earlier": None}
+    if basis == "gauge" and whole:
+        first = min(whole, key=lambda c: whole[c]["factor"])
+        w = whole[first]
+        if w["factor"] < factor:
+            out["outside_earlier"] = {"criterion": first, "factor": float(w["factor"]), "fails": bool(w["factor"] <= 1.0), "element": w["element"],
+                                      "label": w["label"], "ply": w["ply"], "angle": w["angle"], "face": w["face"], "mode": w["mode"],
+                                      "place": w["place"], "touches_grip": w["touches_grip"], "xy": w["xy"]}
+    return out
+
+
+def ply_extremes(stress_12: np.ndarray, mises: np.ndarray, elements: np.ndarray, angles: np.ndarray, shell: bool,
+                 label: Any, xy: Any, stress: Any) -> dict[str, Any]:
+    """The largest ply stresses over `elements` (the gauge section's, or every element), each ply's in its own fibre axes (ADR-0085):
+    sigma_1 and sigma_2 at their largest tension and largest compression apart, tau_12 and von Mises at their largest magnitude, each
+    with its element, centroid and face; and the same over every ply. A sign never reached (a ply in pure compression has no tension)
+    is None: within 1e-9 of the component's largest magnitude counts as zero."""
+    picked = stress_12[elements]  # (n, plies, 3) or (n, plies, 2, 3)
+    picked_mises = mises[elements]  # (n, plies) or (n, plies, 2)
+
+    def entry(values: np.ndarray, pick: str, with_ply: bool) -> dict[str, Any] | None:
+        flat = int(np.argmax(values) if pick == "tension" else np.argmin(values) if pick == "compression" else np.argmax(np.abs(values)))
+        value = float(values.reshape(-1)[flat])
+        tiny = 1e-9 * float(np.max(np.abs(values))) if values.size else 0.0
+        if (pick == "tension" and value <= tiny) or (pick == "compression" and value >= -tiny) or (pick == "largest" and abs(value) <= 0.0):
+            return None
+        where = np.unravel_index(flat, values.shape)
+        e = int(elements[where[0]])
+        out: dict[str, Any] = {"value": float(stress(value)), "element": e, "label": label(e), "xy": xy(e)}
+        if with_ply:
+            k = int(where[1])
+            out.update(ply=k + 1, angle=float(angles[k]))
+        out["face"] = FACES[int(where[-1])] if shell else None
+        return out
+
+    def of(component: np.ndarray, picks: tuple[str, ...], with_ply: bool) -> dict[str, Any]:
+        return {pick: entry(component, pick, with_ply) for pick in picks}
+
+    plies: list[dict[str, Any]] = []
+    for k in range(picked.shape[1]):
+        plies.append({"ply": k + 1, "angle": float(angles[k]),
+                      "S11": of(picked[:, k, ..., 0], ("tension", "compression"), False), "S22": of(picked[:, k, ..., 1], ("tension", "compression"), False),
+                      "S12": of(picked[:, k, ..., 2], ("largest",), False), "mises": of(picked_mises[:, k], ("largest",), False)})
+    overall = {"S11": of(picked[..., 0], ("tension", "compression"), True), "S22": of(picked[..., 1], ("tension", "compression"), True),
+               "S12": of(picked[..., 2], ("largest",), True), "mises": of(picked_mises, ("largest",), True)}
+    return {"plies": plies, "overall": overall}
+
+
 def isotropic_only(deck: Deck) -> bool:
     """Every section is one layer of an isotropic material (ADR-0075): a plastic, whose "ply" is the coupon itself, axis 1 along its length."""
     sections = [section for part in deck.parts.values() for section in part.sections]
@@ -390,6 +459,17 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
                                            "face": found.face, "mode": found.governing_mode, "place": place, "touches_grip": touches_grip,
                                            "tied_plies": list(tied), "xy": length(centroids[e]).tolist()}
     summary["earliest_gauge"] = min(summary["fpf_gauge"], key=lambda c: summary["fpf_gauge"][c]["factor"]) if summary["fpf_gauge"] else None
+    # the answer (ADR-0085): per criterion, whether a ply fails at the applied loading, and the loading at which the first one would; a
+    # linear model scales every stress with the loading, so the loading at first-ply failure is the factor times what is applied
+    every_load = applied["set"] in ("the supports", "the moved region")  # a plate: every load scales together
+    for table in (summary["fpf"], summary["fpf_gauge"]):
+        for entry in table.values():
+            entry.update(answer_of(entry["factor"], summary["applied"], summary["reaction"]["value"], lab["force"], every_load))
+    summary["verdict"] = verdict_of(summary["fpf"], summary["fpf_gauge"])
+    inside = gauge_elements(deck, solution)
+    summary["ply_extremes"] = ply_extremes(stress_12, mises, np.asarray(inside if inside else range(ne), dtype=int), angles, shell,
+                                           lambda e: element_name(mesh.element_keys[e]), lambda e: length(centroids[e]).tolist(), stress)
+    summary["ply_extremes"]["basis"] = "gauge" if inside else "whole"
     if method is not None and applied["dof"] == 2 and len(mesh.sections) == 1:
         # the force along the coupon: the moving grip's reaction under a displacement, the applied total under a force (ADR-0072)
         force = reaction_value if applied["set"] == "the top grip" else float(applied["value"])

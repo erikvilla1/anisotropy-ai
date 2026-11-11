@@ -4,8 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { libraryOptions } from "@/lib/studio-form";
 import {
   CONSTANT_NAMES, libraryThicknessOf, LOAD_NAMES, loadsWithZeros, printedUnit, readLayupLine, systemUnit, unitsOf,
-  type ConstantName, type Kind, type LaminateDraft, type LoadName, type OwnConstants, type Quantity, type ReportUnits,
-} from "@/lib/laminate-chat";
+  type ConstantName, type Kind, type LaminateDraft, type LoadName, type OwnConstants, type Quantity, type ReportUnits, blankOwn } from "@/lib/laminate-chat";
 
 /** The fields of the laminate workspace's panels (ADR-0062, part 5): each value with its own unit menu, the unit list the engine's table
  * gives for the kind (ADR-0060). Edits write the draft as they are typed; nothing here converts a unit or judges a value. */
@@ -27,10 +26,7 @@ export function QuantityField({ id, label, kind, quantity, system, onChange, dis
   );
 }
 
-export const blankOwn = (): OwnConstants => ({
-  name: "", source: "", E1: { value: "", unit: "" }, E2: { value: "", unit: "" }, G12: { value: "", unit: "" }, nu12: "",
-  F1t: { value: "", unit: "" }, F1c: { value: "", unit: "" }, F2t: { value: "", unit: "" }, F2c: { value: "", unit: "" }, F6: { value: "", unit: "" },
-});
+export { blankOwn };
 const KIND_OF: Record<ConstantName, Kind | null> = { E1: "modulus", E2: "modulus", G12: "modulus", nu12: null, F1t: "stress", F1c: "stress", F2t: "stress", F2c: "stress", F6: "stress" };
 const LABELS: Record<ConstantName, string> = { E1: "E₁", E2: "E₂", G12: "G₁₂", nu12: "ν₁₂", F1t: "F1t", F1c: "F1c", F2t: "F2t", F2c: "F2c", F6: "F6" };
 
@@ -134,6 +130,33 @@ export function LoadsFields({ loads, system, disabled, onChange }: {
         </div>
       ) : null}
       <p className="studio-hint">N are forces per unit width, M moments per unit width; compression and reversed moments are negative. Every one of the six is stated; nothing is assumed.</p>
+    </div>
+  );
+}
+
+/** The temperature condition's rows (ADR-0087): the uniform change, and, for a typed material, both expansion coefficients; a library
+ * dataset brings its own when it records them, and the solve says so when it does not. Each value keeps the unit it was typed in. */
+export function TemperatureFields({ draft, system, disabled, onChange }: {
+  draft: LaminateDraft; system: ReportUnits; disabled?: boolean;
+  onChange: (patch: Pick<LaminateDraft, "delta_T" | "alphas">) => void;
+}) {
+  const delta = draft.delta_T ?? { value: "", unit: systemUnit(system, "delta_T") };
+  const own = Boolean(draft.material && "own" in draft.material);
+  const alphaUnit = systemUnit(system, "alpha").replace(/^1\//, "1e-6/");
+  const alphas = draft.alphas ?? { alpha1: { value: "", unit: alphaUnit }, alpha2: { value: "", unit: alphaUnit } };
+  return (
+    <div className="lam-fields" data-testid="lam-temperature">
+      <QuantityField id="lam-delta-t" label="Temperature change ΔT" kind="delta_T" quantity={delta} system={system} disabled={disabled}
+        onChange={(q) => onChange({ delta_T: q, alphas: draft.alphas ?? null })} />
+      <p className="studio-hint">Negative for cooling, as after a cure. With loads it is held at its value while they grow to failure; with none, the change itself grows to failure.</p>
+      {own ? (
+        <>
+          <QuantityField id="lam-alpha1" label="α₁ along the fibres" kind="alpha" quantity={alphas.alpha1} system={system} disabled={disabled}
+            onChange={(q) => onChange({ delta_T: draft.delta_T ?? null, alphas: { ...alphas, alpha1: q } })} />
+          <QuantityField id="lam-alpha2" label="α₂ across the fibres" kind="alpha" quantity={alphas.alpha2} system={system} disabled={disabled}
+            onChange={(q) => onChange({ delta_T: draft.delta_T ?? null, alphas: { ...alphas, alpha2: q } })} />
+        </>
+      ) : <p className="studio-hint">A library material uses its dataset&apos;s α₁ and α₂ when the dataset records them; when it does not, the solve says so, and your own constants with their expansion are the way to go.</p>}
     </div>
   );
 }

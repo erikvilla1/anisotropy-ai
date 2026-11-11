@@ -10,8 +10,16 @@ const pickTest = (page: Page, test: string) => page.getByTestId("question-test")
 const pickStandard = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`).check();
 const standardChoice = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`);
 
+// THROTTLE=4 npm run test:studio slows the browser's CPU fourfold, to find on this machine the timing a slower CI runner meets
+test.beforeEach(async ({ page }) => {
+  if (!process.env.THROTTLE) return;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: Number(process.env.THROTTLE) });
+});
+
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
-async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[] }, options: { missFirstFieldsRead?: boolean } = {}) {
+async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[] },
+  options: { missFirstFieldsRead?: boolean; live?: boolean } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
@@ -27,6 +35,17 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
       (calls.tows ??= []).push(request.postDataJSON());
       const answer = fixture("tow", "studio-tow");
       return json(route, { run_id: "run-6", state: answer.checklist.state, checklist: answer.checklist, result: answer.result });
+    }
+    if (path === "/v1/coupon-jobs/live" && request.method() === "POST") { // our kernel's live answer (ADR-0086), played from the same fixtures
+      (calls.lives ??= []).push(request.postDataJSON());
+      const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
+      const d = values.test === BENDING ? "studio-bending" : values.test === "plate" ? "studio-plate" : "studio";
+      const answer = { run_id: "run-live", state: "ready", designation: fixture("checklist", d).designation, solver: "kernel", warm: true, seconds: 0.6,
+        timings: { check: 0.18, solve: 0.01 }, checklist: fixture("checklist", d), preview: fixture("preview", d) };
+      // by default it never answers, as a kernel slower than the scenario: the scenarios below keep to the check and the run they test, at
+      // any speed (on CI a live answer used to land mid-scenario and take the stage); `live` plays the kernel's answer
+      if (!options.live) return;
+      return json(route, { ...answer, fields: fixture("fields", d), explanation: fixture("explanation", d) });
     }
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
@@ -132,7 +151,20 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("convergence-words")).toContainText("The clamped-edge peaks, the first-ply-failure factor over the mesh and the factor over the gauge section still moved");
   await expect(page.getByTestId("fpf-factor-tsai_hill")).toHaveText("1.013");
   await expect(page.getByTestId("fpf-gauge-factor-tsai_hill")).toHaveText("1.032");  // the gauge section's own first-ply failure, away from the clamped edge
-  await expect(page.getByTestId("explanation")).toContainText("does not exceed the Tsai-Hill criterion");
+  await expect(page.getByTestId("explanation")).toContainText("By the Tsai-Hill criterion the laminate holds at the applied loading, in the gauge section");
+  await expect(page.getByTestId("explanation")).toContainText("Outside the gauge section, Tsai-Hill is reached earlier, at 1.013 times the applied loading"); // the clamped edge apart (ADR-0085)
+  // the answer card (ADR-0085): fails or holds per criterion in the gauge section, the loading at first-ply failure, the clamped edge apart
+  const answer = page.getByTestId("answer");
+  await expect(answer).toHaveAttribute("data-basis", "gauge");
+  await expect(answer).toHaveAttribute("data-fails", "false");
+  await expect(page.getByTestId("answer-headline")).toContainText("Holds at the applied loading in the gauge section, by Tsai-Hill.");
+  await expect(page.getByTestId("answer-headline")).toContainText("The first ply would fail at 1.032 × the applied loading (1.032 mm,");
+  await expect(page.getByTestId("answer-verdict-tsai_hill")).toHaveText("holds");
+  await expect(page.getByTestId("answer-factor-tsai_hill")).toHaveText("1.032");
+  await expect(page.getByTestId("answer-loading-tsai_hill")).toContainText("1.032 mm");
+  await expect(page.getByTestId("answer-outside")).toContainText("Outside the gauge section, Tsai-Hill is reached earlier, at 1.013 × the applied loading");
+  await expect(page.getByTestId("answer-extremes").locator("tbody tr")).toHaveCount(5);
+  await expect(page.getByTestId("fpf-details")).not.toHaveAttribute("open", ""); // the per-criterion tables of the whole model fold away under the answer
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "template", { timeout: 15_000 }); // the API answered the explain call
   // the result before the documents (ADR-0064): the agreement line while the job still draws and builds the package
   await expect(page.getByTestId("job-progress")).toContainText("The result is in; the drawings and the package are still being made", { timeout: 15_000 });
@@ -155,7 +187,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("legend")).toHaveAttribute("data-bands", "0");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "0");
   await page.getByLabel("Contours", { exact: true }).selectOption("8");
-  await page.getByTestId("fpf-table").locator("tr[data-criterion=tsai_hill] button").click();
+  await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click(); // the answer's own row, in the gauge section (ADR-0085)
   await expect(page.getByTestId("readout")).toContainText("the critical element");
   await expect(page.getByTestId("readout")).toContainText("tsai hill: ply");
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -193,6 +225,8 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await expect(page.getByTestId("summary")).toContainText("the deflection w");
   await expect(page.getByTestId("convergence-not-studied")).toContainText("three point bending is a later step");  // ADR-0068: a bending coupon says so
   await expect(page.getByTestId("fpf-table")).toContainText("bottom face");
+  await expect(page.getByTestId("answer")).toHaveAttribute("data-basis", "whole"); // no gauge section: the whole model answers (ADR-0085)
+  await expect(page.getByTestId("answer-table")).toContainText("bottom face");
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (z)");
   await page.getByLabel("Field", { exact: true }).selectOption("S11");
@@ -501,6 +535,85 @@ test("one typed line fills the coupon and the chat asks only for what is missing
   expect(calls.checks).toHaveLength(0);
 });
 
+test("with a model on, a message is read into a card the engineer ticks: what is ticked goes in, an unticked value does not (ADR-0088)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const asked: Record<string, unknown>[] = [];
+  await mockApi(page, calls);
+  await page.route(API, async (route) => { // a model behind the API: its reading, as the source guard would keep it
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    asked.push(request.postDataJSON() as Record<string, unknown>);
+    const take = (key: string, label: string, value: string, unit: string | null, quote: string, written = value, writtenUnit = unit) =>
+      ({ key, label, value, unit, written_value: written, written_unit: writtenUnit, quote });
+    return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", conditions: [], question: null, reason: null,
+      proposals: [take("test", "Test", "open-hole tension", null, "open hole tension"), take("library", "Library material", "as4-8552", null, "AS4/8552"),
+        take("layup", "Layup", "[45/0/-45/90]s", null, "[45/0/-45/90]s"), take("width", "Width (mm)", "36", "mm", "36 mm wide"),
+        take("length", "Length (mm)", "250", "mm", "250 mm long"), take("hole_diameter", "Hole diameter (mm)", "6", "mm", "a 6 mm hole"),
+        take("force", "Force applied (N)", "10000", "N", "pulled to 10 kN", "10", "kN")],
+      dropped: [{ key: "tab_length", reason: "2.2 is not a number the quoted words write" }] });
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("an open hole tension coupon in AS4/8552, [45/0/-45/90]s, 36 mm wide and 250 mm long with a 6 mm hole, pulled to 10 kN");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("claude-stand-in");
+  await expect(card.locator("li[data-key='force']")).toContainText("10000 N");
+  await expect(card.locator("li[data-key='force']")).toContainText("written 10 kN");
+  await expect(card.locator("li[data-key='force']")).toContainText("pulled to 10 kN");
+  await expect(card.getByTestId("proposal-dropped")).toContainText("tab_length");
+  // nothing has gone in before the tick
+  await expect(page.getByTestId("chat-spec")).not.toContainText("open-hole tension");
+  await expect(page.getByTestId("chat-spec")).not.toContainText("10000 N");
+  await card.locator("li[data-key='width'] input").uncheck(); // a value the engineer does not take
+  await card.getByTestId("proposal-apply").click();
+  await expect(card.getByTestId("proposal-done")).toContainText("Applied 6 of 7");
+  await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveValue("6");
+  await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250");
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Ply 2", { exact: true })).toHaveValue("0");
+  await expect(page.getByTestId("chat-spec")).toContainText("10000 N force");
+  // the model was offered the rows in the coupon's units, and saw no name
+  const sent = asked[0] as { product: string; rows: { key: string; unit?: string }[]; form: Record<string, string> };
+  expect(sent.product).toBe("coupon");
+  expect(sent.rows.find((r) => r.key === "length")?.unit).toBe("mm");
+  expect(sent.rows.find((r) => r.key === "force")?.unit).toBe("N");
+  expect(sent.form.filled_by).toBeUndefined();
+  expect(calls.checks).toHaveLength(0);
+});
+
+test("a model that does not answer leaves the message to the page's patterns, and is not asked again that session (ADR-0088)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  let asked = 0;
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    asked += 1;
+    return json({ run_id: "run-p", writer: "template", model: null, proposals: [], conditions: [], question: null, dropped: [],
+      reason: "the model could not be reached" });
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
+  await message.press("Enter");
+  await expect(page.getByText("Read by the page instead")).toBeVisible();
+  await expect(page.getByText("Got it").last()).toBeVisible();
+  await expect(page.getByTestId("chat-spec")).toContainText("10000 N force");
+  await message.fill("make it [0/90]2s");
+  await message.press("Enter");
+  await expect(page.getByLabel("Ply 2", { exact: true })).toHaveValue("90");
+  expect(asked).toBe(1);
+  await expect(page.getByTestId("proposal-card")).toHaveCount(0);
+});
+
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
@@ -700,4 +813,106 @@ test("the fibre tow test swaps the panels for the tow's, and Calculate shows eac
   await rail.getByTestId("question-test").locator('input[value="unnotched tension"]').check(); // back to a coupon: its panels, the tow's standard cleared
   await expect(page.getByTestId("tow-form")).toHaveCount(0);
   await expect(rail.getByTestId("question-standard").locator("input:checked")).toHaveValue("none");
+});
+
+test("every settled edit is answered by our kernel live, labelled a preview, and a full run replaces it (ADR-0086)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[], lives: [] as unknown[] };
+  await mockApi(page, calls, { live: true });
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  // no Run pressed: the complete example is answered by the live solve, with the answer card and the banner
+  await expect(page.getByTestId("results")).toHaveAttribute("data-source", "live", { timeout: 10_000 });
+  await expect(page.getByTestId("live-banner")).toContainText("Preview: our kernel, answered in 0.6 s; not yet checked by CalculiX or the mesh study.");
+  await expect(page.getByTestId("answer-headline")).toContainText("Holds at the applied loading in the gauge section");
+  await expect(page.getByTestId("solve-button")).toHaveText("Run full analysis");
+  expect(calls.lives.length).toBe(1);
+  expect(calls.solves.length).toBe(0);
+  // a settled edit is one live solve, with the rows as they stand (a value filled at once: typing key by key on a slow machine can pause past
+  // the debounce, which is the debounce working, not a second edit)
+  const value = page.getByLabel("Value (mm or N)", { exact: true });
+  await value.fill("0.75");
+  await expect.poll(() => calls.lives.length, { timeout: 10_000 }).toBe(2);
+  await page.waitForTimeout(1500);
+  expect(calls.lives.length).toBe(2);
+  expect((calls.lives[1] as { values: Record<string, unknown> }).values.value).toBe(0.75);
+  // the full run: CalculiX, the mesh study and the package; its fields replace the preview and the banner goes
+  await page.getByLabel("Run by", { exact: true }).fill("A. Tester");
+  await page.getByTestId("solve-button").click();
+  await expect(page.getByTestId("results")).toHaveAttribute("data-source", "run", { timeout: 20_000 });
+  await expect(page.getByTestId("live-banner")).toHaveCount(0);
+  expect(calls.solves.length).toBe(1);
+});
+
+test("a temperature change named in the laminate chat brings up its condition, its panel and its values, and goes with the problem (ADR-0087)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const problems: Record<string, unknown>[] = [];
+  await mockApi(page, calls);
+  await page.route(API, async (route) => { // the laminate solve, answered from the captured fixture
+    const request = route.request();
+    if (new URL(request.url()).pathname !== "/v1/laminates/solve" || request.method() !== "POST") return route.fallback();
+    problems.push(request.postDataJSON() as Record<string, unknown>);
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixture("laminate-answer")) });
+  });
+  await page.goto("/workspace/laminate");
+  await page.locator("button[data-system='SI']").click();
+  const message = page.getByLabel("Message the laminate assistant", { exact: true });
+  const rail = page.getByTestId("laminate-rail");
+  await expect(rail.getByTestId("panel-temperature")).toHaveCount(0); // never shown before it is asked for
+  await expect(rail.getByTestId("add-condition")).toContainText("+ Temperature change");
+  // words that name the condition without a value: it is offered, nothing opens unasked
+  await message.fill("there are residual stresses from the cure");
+  await message.press("Enter");
+  await expect(page.locator("button[data-condition='temperature']")).toBeVisible();
+  await expect(rail.getByTestId("panel-temperature")).toHaveCount(0);
+  // a value states it: the condition comes on with it, read with its sign and unit
+  await message.fill("E1 147 GPa, E2 10.3 GPa, G12 7 GPa, nu12 0.27, F1t 2280 MPa, F1c 1725 MPa, F2t 57 MPa, F2c 228 MPa, F6 76 MPa");
+  await message.press("Enter");
+  await message.fill("[0/90]s, 0.25 mm plies, Nx = 0 N/m, the rest zero");
+  await message.press("Enter");
+  await message.fill("it is cooled by 150 °C after cure, alpha1 = -1e-6 /°C, alpha2 = 25e-6 /°C");
+  await message.press("Enter");
+  await expect(page.getByText("temperature change -150 °C")).toBeVisible();
+  await expect(rail.getByTestId("panel-temperature")).toBeVisible();
+  await expect(page.locator("#lam-delta-t")).toHaveValue("-150");
+  await expect(page.locator("#lam-alpha2")).toHaveValue("25e-6");
+  await expect(rail.getByTestId("add-condition")).toHaveCount(0); // the only condition is on
+  await expect(page.getByTestId("laminate-spec")).toContainText("-150 °C");
+  await page.getByTestId("laminate-solve").click();
+  await expect(page.getByTestId("laminate-answer")).toBeVisible({ timeout: 15_000 });
+  const sent = problems[0] as { delta_T: unknown; material: Record<string, unknown> };
+  expect(sent.delta_T).toEqual({ value: -150, unit: "degC" });
+  expect([sent.material.alpha1, sent.material.alpha2]).toEqual([{ value: -1e-6, unit: "1/degC" }, { value: 25e-6, unit: "1/degC" }]);
+  // removed, it sends nothing thermal and the menu offers it again
+  await rail.getByTestId("remove-temperature").click();
+  await expect(rail.getByTestId("panel-temperature")).toHaveCount(0);
+  await expect(rail.getByTestId("add-condition")).toContainText("+ Temperature change");
+});
+
+test("with a model on, the laminate chat's card proposes a temperature change and its condition, and the panel opens once applied (ADR-0088)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", question: null, reason: null, dropped: [],
+      proposals: [{ key: "delta_T", label: "Temperature change, uniform (a cooling is negative)", value: "-150", unit: "degC", written_value: "-150",
+        written_unit: "°C", quote: "cooled by 150 °C" }],
+      conditions: [{ id: "temperature", title: "Temperature change", quote: "cooled by 150 °C after cure" }] });
+  });
+  await page.goto("/workspace/laminate");
+  await page.locator("button[data-system='SI']").click();
+  const rail = page.getByTestId("laminate-rail");
+  const message = page.getByLabel("Message the laminate assistant", { exact: true });
+  await message.fill("the laminate is cooled by 150 °C after cure");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card");
+  await expect(card.locator("li[data-key='delta_T']")).toContainText("-150 °C");
+  await expect(card.locator("li[data-key='condition:temperature']")).toContainText("Add a temperature change");
+  await expect(rail.getByTestId("panel-temperature")).toHaveCount(0); // nothing opens before the tick
+  await card.getByTestId("proposal-apply").click();
+  await expect(rail.getByTestId("panel-temperature")).toBeVisible();
+  await expect(page.locator("#lam-delta-t")).toHaveValue("-150");
 });

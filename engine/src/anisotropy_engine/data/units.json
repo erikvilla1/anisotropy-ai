@@ -30,6 +30,19 @@
    "kN*m/m",
    "lb*in/in",
    "kip*in/in"
+  ],
+  "temperature_change": [
+   "degC",
+   "K",
+   "degF"
+  ],
+  "expansion": [
+   "1/degC",
+   "1/K",
+   "1/degF",
+   "1e-6/degC",
+   "1e-6/K",
+   "1e-6/degF"
   ]
  },
  "kinds": {
@@ -37,7 +50,9 @@
   "stress": "pressure",
   "length": "length",
   "N": "force_per_length",
-  "M": "moment_per_length"
+  "M": "moment_per_length",
+  "delta_T": "temperature_change",
+  "alpha": "expansion"
  },
  "systems": {
   "SI": {
@@ -46,11 +61,8 @@
    "length": "mm",
    "N": "N/m",
    "M": "N*m/m",
-   "kappa": "1/m",
-   "A": "MN/m",
-   "B": "kN",
-   "D": "N*m",
-   "areal_mass": "kg/m^2"
+   "delta_T": "degC",
+   "alpha": "1/degC"
   },
   "mm-MPa": {
    "modulus": "MPa",
@@ -58,11 +70,8 @@
    "length": "mm",
    "N": "N/mm",
    "M": "N*mm/mm",
-   "kappa": "1/mm",
-   "A": "N/mm",
-   "B": "N",
-   "D": "N*mm",
-   "areal_mass": "kg/m^2"
+   "delta_T": "degC",
+   "alpha": "1/degC"
   },
   "US": {
    "modulus": "Msi",
@@ -70,11 +79,8 @@
    "length": "in",
    "N": "lb/in",
    "M": "lb*in/in",
-   "kappa": "1/in",
-   "A": "10^6 lb/in",
-   "B": "10^3 lb",
-   "D": "lb*in",
-   "areal_mass": "lb/in^2"
+   "delta_T": "degF",
+   "alpha": "1/degF"
   },
   "psi": {
    "modulus": "psi",
@@ -82,11 +88,8 @@
    "length": "in",
    "N": "lb/in",
    "M": "lb*in/in",
-   "kappa": "1/in",
-   "A": "lb/in",
-   "B": "lb",
-   "D": "lb*in",
-   "areal_mass": "lb/in^2"
+   "delta_T": "degF",
+   "alpha": "1/degF"
   }
  }
 }

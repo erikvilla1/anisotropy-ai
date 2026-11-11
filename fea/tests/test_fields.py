@@ -140,15 +140,19 @@ def test_every_number_in_a_sentence_is_a_fact(data):
                 printed.update({f"{v:.4g}", str(v), f"{v:g}"})
             elif isinstance(v, str):
                 printed.add(v)  # a node or element number is a name the facts carry as text
+                printed.update(numbers_in(v))  # and a place says its distance in words ("3.5 mm from the nearer tab line"), as the API's guard reads it
     for sentence in sentences:
         for token in numbers_in(sentence):
             assert token in printed or token.lstrip("-+") in printed, (token, sentence)
     assert sentences[0].startswith("IM7-UNT-L1, unnotched tension, under a displacement of 1 mm along the coupon: the top grip carries")
     assert "The largest displacement is" in sentences[1]
-    # the ply stresses are said with their symbols, not the CAE names a viewer's global S11 collides with (ADR-0066), and no ply von Mises
-    assert "sigma_1 along the fibres =" in sentences[2] and "tau_12 in-plane shear =" in sentences[2] and "in the ply's axes" in sentences[2]
-    assert "S11 =" not in sentences[2] and "von Mises" not in sentences[2] and "max_mises" not in facts
-    assert any("criterion at the applied loading" in s for s in sentences) and sentences[-1].startswith("The earliest of the criteria is")
+    # the ply stresses are said with their symbols, not the CAE names a viewer's global S11 collides with (ADR-0066), and no ply von Mises;
+    # in the gauge section, tension and compression apart (ADR-0085)
+    assert sentences[2].startswith("In the gauge section, each ply in its own fibre axes: the largest tension along the fibres (sigma_1) is")
+    assert "the largest compression along the fibres (sigma_1)" in sentences[2] and "the largest in-plane shear (tau_12)" in sentences[2]
+    assert "in the ply's axes" in sentences[2] and "S11 =" not in sentences[2] and "von Mises" not in sentences[2] and "max_mises" not in facts
+    assert any("criterion the laminate" in s and "at the applied loading, in the gauge section" in s for s in sentences)
+    assert any(s.startswith("The earliest of the criteria is") for s in sentences)
     assert any(MODE_WORDS[facts[f"{c}_mode"]] in s for c in facts["criteria"] for s in sentences)
 
 
@@ -169,7 +173,9 @@ def test_the_limiting_ply_is_named_with_its_place_and_mode(data):
     earliest = facts["earliest"]
     sentence = next(s for s in result_sentences(facts) if f"the {facts[earliest + '_mode']}" in s or MODE_WORDS[facts[earliest + "_mode"]] in s)
     assert f"ply {facts[earliest + '_ply']} ({facts[earliest + '_angle']:.4g} degrees)" in sentence and facts[earliest + "_place"] in sentence
-    assert ("does not exceed" in sentence) == (facts[earliest + "_factor"] >= 1.0)
+    assert ("holds at the applied loading" in sentence) == (facts[earliest + "_factor"] > 1.0) == (not facts[earliest + "_fails"])
+    loading = f"{facts[earliest + '_applied_at_failure']:.4g} {facts['applied_unit']}, {facts[earliest + '_reaction_at_failure']:.4g} N at the top grip"
+    assert loading in sentence and f"({facts[earliest + '_x']:.4g}, {facts[earliest + '_y']:.4g} mm)" in sentence
 
 
 def test_without_criteria_the_explanation_says_so(solved):
@@ -241,3 +247,71 @@ def test_classical_laminate_theory_sits_beside_the_gauge_centre(solved, data):
     applied = applied_loading(deck, solution)
     assert classical_laminate_check(solution, {**applied, "dof": 3}, 1.0, np.zeros(8), UNITS) is None
     assert classical_laminate_check(solution, {**applied, "set": "the supports"}, 1.0, np.zeros(8), UNITS) is None
+
+
+# --- the answer (ADR-0085) ----------------------------------------------------------------------------
+
+
+def test_each_criterion_says_whether_a_ply_fails_and_at_what_loading(data):
+    """R at or below 1 fails; the loading at first-ply failure is R times the applied pull, and R times the grip's reaction."""
+    summary = data["summary"]
+    for table in (summary["fpf"], summary["fpf_gauge"]):
+        assert table, "the public coupon has criteria and a gauge section"
+        for entry in table.values():
+            at = entry["at_failure"]
+            assert entry["fails"] == (entry["factor"] <= 1.0)
+            assert at["applied"] == pytest.approx(entry["factor"] * summary["applied"]["value"], rel=1e-12) and at["unit"] == "mm"
+            assert at["reaction"] == pytest.approx(entry["factor"] * summary["reaction"]["value"], rel=1e-12) and at["reaction_unit"] == "N"
+            assert at["every_load"] is False
+
+
+def test_the_answer_reads_the_gauge_section_and_reports_the_grip_edge_apart(data):
+    summary = data["summary"]
+    verdict = summary["verdict"]
+    assert verdict["basis"] == "gauge" and verdict["earliest"] == summary["earliest_gauge"]
+    assert verdict["factor"] == summary["fpf_gauge"][verdict["earliest"]]["factor"] and verdict["fails"] == (verdict["factor"] <= 1.0)
+    whole = summary["fpf"][summary["earliest"]]
+    outside = verdict["outside_earlier"]
+    if whole["factor"] < verdict["factor"]:
+        assert outside["criterion"] == summary["earliest"] and outside["factor"] == whole["factor"] and outside["touches_grip"] is True
+        assert outside["element"] not in data["mesh"]["element_sets"]["Gauge"] or outside["touches_grip"]
+    else:
+        assert outside is None
+
+
+def test_the_largest_ply_stresses_come_with_their_sign_and_place(data):
+    """Over the gauge elements, each ply's sigma_1 and sigma_2 at their largest tension and compression apart, tau_12 at its largest
+    magnitude, each the element's own value; and over every ply, the largest of them with its ply."""
+    summary = data["summary"]
+    extremes = summary["ply_extremes"]
+    assert extremes["basis"] == "gauge"
+    stress = np.asarray(data["element"]["ply"]["stress_12"])  # (ne, plies, 3), mm-MPa
+    inside = sorted({e["element"] for p in extremes["plies"] for name in ("S11", "S22", "S12") for e in p[name].values() if e})
+    gauge = set(data["mesh"]["element_sets"]["Gauge"])
+    assert set(inside) <= gauge, "every extreme lies in the gauge section"
+    for k, p in enumerate(extremes["plies"]):
+        assert p["ply"] == k + 1
+        for i, name in enumerate(("S11", "S22")):
+            for pick, sign in (("tension", 1.0), ("compression", -1.0)):
+                e = p[name][pick]
+                if e is None:
+                    continue
+                assert sign * e["value"] > 0.0 and e["value"] == pytest.approx(stress[e["element"], k, i], rel=1e-6, abs=1e-6)  # the arrays are written rounded
+        shear = p["S12"]["largest"]
+        assert abs(shear["value"]) == pytest.approx(abs(stress[shear["element"], k, 2]), rel=1e-6, abs=1e-6)
+    overall = extremes["overall"]["S11"]["tension"]
+    assert overall["value"] == max(p["S11"]["tension"]["value"] for p in extremes["plies"] if p["S11"]["tension"])
+    assert overall["ply"] == next(p["ply"] for p in extremes["plies"] if p["S11"]["tension"] and p["S11"]["tension"]["value"] == overall["value"])
+
+
+def test_a_coupon_without_a_gauge_section_answers_on_the_whole_model():
+    """A bending coupon has no grips and no gauge set: the answer is the whole model's, on the plate-like kernel (ADR-0053)."""
+    from anisotropy_fea.kernel import solve_deck
+    deck = read_deck(paths.deck_path(paths.spec_path("three-point-im7-8552"), "abaqus"), UNITS)
+    summary = field_data(deck, solve_deck(deck), UNITS)["summary"]
+    assert summary["fpf_gauge"] == {} and summary["verdict"]["basis"] == "whole" and summary["verdict"]["outside_earlier"] is None
+    assert summary["verdict"]["earliest"] == summary["earliest"] and summary["ply_extremes"]["basis"] == "whole"
+    for entry in summary["fpf"].values():
+        assert entry["at_failure"]["applied"] == pytest.approx(entry["factor"] * summary["applied"]["value"], rel=1e-12)
+    facts = fact_sheet(summary, {"designation": "IM7-3PB-L1", "test": "three-point bending", "layup": ""}, UNITS, UNIT_LABEL[UNITS])
+    assert facts["basis"] == "the whole model" and any("in the whole model" in s for s in result_sentences(facts))

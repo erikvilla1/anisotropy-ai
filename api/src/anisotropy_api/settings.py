@@ -47,6 +47,10 @@ JOBS_PER_DAY_VARIABLE = "ANISOTROPY_JOBS_PER_USER_PER_DAY"
 # queued job a request names, in a container of that job's own. Either needs the jobs table and the store.
 JOB_ROLE_VARIABLE = "ANISOTROPY_JOB_ROLE"
 JOB_ROLES = ("queue", "solver")
+# The live solve (ADR-0086): how many warm `studio_tool.py serve` workers answer edits with our kernel, each holding the fea package
+# imported (about 2 s of imports a cold call would pay). 0 starts a fresh `studio_tool.py live` per call instead. Default 1.
+LIVE_WORKERS_VARIABLE = "ANISOTROPY_LIVE_WORKERS"
+LIVE_WORKERS_DEFAULT = 1
 LOCAL_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001")
 
 
@@ -111,6 +115,7 @@ class Settings:
     storage: StorageSettings = StorageSettings(None, None, None, None)
     jobs_per_user_per_day: int | None = None  # None: no per-user limit, as locally
     job_role: str | None = None  # None: jobs run in this process; "queue" or "solver" with the job queue (ADR-0056 amendment 3)
+    live_workers: int = LIVE_WORKERS_DEFAULT  # warm live-solve workers (ADR-0086); 0: a fresh process per live solve
 
 
 def environment() -> Mapping[str, str]:
@@ -140,7 +145,8 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     return Settings(database_url=url, run_records=switch == "on", assistant=assistant_settings(environ), access=access_settings(environ),
                     allowed_origins=allowed_origins(environ), storage=storage_settings(environ),
                     jobs_per_user_per_day=jobs_per_user_per_day(environ, records_on=switch == "on"),
-                    job_role=job_role(environ, records_on=switch == "on", storage_on=storage_settings(environ).on))
+                    job_role=job_role(environ, records_on=switch == "on", storage_on=storage_settings(environ).on),
+                    live_workers=live_workers(environ))
 
 
 def job_role(environ: Mapping[str, str], *, records_on: bool, storage_on: bool) -> str | None:
@@ -157,6 +163,17 @@ def job_role(environ: Mapping[str, str], *, records_on: bool, storage_on: bool) 
         raise RuntimeError(f"{JOB_ROLE_VARIABLE}={raw} passes jobs between containers through the jobs table and the object store; "
                            f"it needs {' and '.join(missing)}")
     return raw
+
+
+def live_workers(environ: Mapping[str, str]) -> int:
+    """The warm live-solve workers, a whole number from 0 (a fresh process per solve) to 8, or the default when unset; anything else is
+    refused, not read as the default (ADR-0003)."""
+    raw = environ.get(LIVE_WORKERS_VARIABLE, "").strip()
+    if not raw:
+        return LIVE_WORKERS_DEFAULT
+    if not raw.isdigit() or int(raw) > 8:
+        raise RuntimeError(f"{LIVE_WORKERS_VARIABLE} must be a whole number of warm workers from 0 to 8, not {raw!r}; unset it for {LIVE_WORKERS_DEFAULT}")
+    return int(raw)
 
 
 def jobs_per_user_per_day(environ: Mapping[str, str], *, records_on: bool) -> int | None:
