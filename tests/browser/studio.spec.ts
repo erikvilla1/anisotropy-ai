@@ -10,6 +10,13 @@ const pickTest = (page: Page, test: string) => page.getByTestId("question-test")
 const pickStandard = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`).check();
 const standardChoice = (page: Page, designation: string) => page.getByTestId("question-standard").locator(`input[value="${designation}"]`);
 
+// THROTTLE=4 npm run test:studio slows the browser's CPU fourfold, to find on this machine the timing a slower CI runner meets
+test.beforeEach(async ({ page }) => {
+  if (!process.env.THROTTLE) return;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: Number(process.env.THROTTLE) });
+});
+
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
 async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[] },
   options: { missFirstFieldsRead?: boolean; live?: boolean } = {}) {
@@ -35,9 +42,10 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
       const d = values.test === BENDING ? "studio-bending" : values.test === "plate" ? "studio-plate" : "studio";
       const answer = { run_id: "run-live", state: "ready", designation: fixture("checklist", d).designation, solver: "kernel", warm: true, seconds: 0.6,
         timings: { check: 0.18, solve: 0.01 }, checklist: fixture("checklist", d), preview: fixture("preview", d) };
-      // by default it answers like a check, so the scenarios below keep to what they test; `live` plays the kernel's fields too
-      return json(route, options.live ? { ...answer, fields: fixture("fields", d), explanation: fixture("explanation", d) }
-        : { ...answer, fields: null, explanation: null });
+      // by default it never answers, as a kernel slower than the scenario: the scenarios below keep to the check and the run they test, at
+      // any speed (on CI a live answer used to land mid-scenario and take the stage); `live` plays the kernel's answer
+      if (!options.live) return;
+      return json(route, { ...answer, fields: fixture("fields", d), explanation: fixture("explanation", d) });
     }
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
@@ -740,10 +748,10 @@ test("every settled edit is answered by our kernel live, labelled a preview, and
   await expect(page.getByTestId("solve-button")).toHaveText("Run full analysis");
   expect(calls.lives.length).toBe(1);
   expect(calls.solves.length).toBe(0);
-  // a value typed key by key is one settled edit: one live solve, with the rows as they stand
+  // a settled edit is one live solve, with the rows as they stand (a value filled at once: typing key by key on a slow machine can pause past
+  // the debounce, which is the debounce working, not a second edit)
   const value = page.getByLabel("Value (mm or N)", { exact: true });
-  await value.fill("");
-  await value.pressSequentially("0.75", { delay: 60 });
+  await value.fill("0.75");
   await expect.poll(() => calls.lives.length, { timeout: 10_000 }).toBe(2);
   await page.waitForTimeout(1500);
   expect(calls.lives.length).toBe(2);
