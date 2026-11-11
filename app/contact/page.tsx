@@ -45,8 +45,8 @@ export default function Contact() {
               <Mail size={28} strokeWidth={1.4} /> erikvilla947@gmail.com
             </a>
             <p>
-              What helps us answer quickly: the material and where its data comes from, the test (tension, open hole,
-              bending, a plate), the dimensions and the layup, and what you need back.
+              What helps us answer quickly: the material and where its data comes from, the test (unnotched tension
+              for now; the others follow), the dimensions and the layup, and what you need back.
             </p>
           </div>
         </div>

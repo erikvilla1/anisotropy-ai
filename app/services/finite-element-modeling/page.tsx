@@ -20,11 +20,11 @@ export default function FiniteElementModeling() {
           <em>solved and shown ply by ply.</em>
         </>
       }
-      lede="Describe the test in words or fill the form. The studio checks the setup, solves it with our finite element kernel and with CalculiX, and shows the stresses, the displacement and the first ply to fail on a model you can turn."
+      lede="Give the material and the layup, or describe the coupon in words. The studio builds the unnotched tension coupon of ASTM D3039, checks it, solves it with our finite element kernel and with CalculiX, and shows the stresses, the displacement and the first ply to fail on a model you can turn."
       exists={[
         {
-          title: "Six test kinds and a plate",
-          text: "Unnotched tension and compression, open-hole tension, in-plane shear, three- and four-point bending, in the proportions of ASTM D3039, D6641, D5766, D3518 and D7264, the tension coupon checked clause by clause against ASTM D3039/D3039M when you pick it, the open hole against ASTM C1869 for ceramic composites; and a plate held and loaded on regions you name.",
+          title: "Unnotched tension first",
+          text: "One test while it is compared with Abaqus output by output: the unnotched tension coupon of ASTM D3039/D3039M, sized from Table 2 by its layup and checked clause by clause. Compression, open-hole tension, in-plane shear, bending and plates are built and come back one at a time, each through the same comparison.",
         },
         {
           title: "A checklist before any run",
@@ -45,10 +45,10 @@ export default function FiniteElementModeling() {
       ]}
       demonstration={{
         intro:
-          "Our first bending coupon, IM7/8552 in ASTM D7264 proportions, against CalculiX S8R: 100 numbers within 3 %, the nose reaction within 0.12 %. The decks and the record are in the repository.",
+          "The IM7/8552 tension coupon of ASTM D3039 against CalculiX S8R: 61 numbers within 3 %, the grip reaction within 0.78 %. The decks and the record are in the repository.",
         media: (
           <>
-            <MediaSlot label="A solved open-hole coupon in the studio: the critical ply and its failure index" ratio="16/9" />
+            <MediaSlot label="A solved D3039 tension coupon in the studio: the critical ply and its failure index" ratio="16/9" />
             <div className="kit-figure">
               <div className="kit-figure-top">
                 <span>COUPON / STRESS FIELD</span>
