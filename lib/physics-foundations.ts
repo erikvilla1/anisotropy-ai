@@ -97,6 +97,10 @@ export const thermalExtensions: Method[] = [
     "ᾱ = ε⁰ at ΔT = 1 with N = M = 0",
     "Solve the thermomechanical system with a unit temperature change and no load; the mid-plane strains are the laminate's in-plane expansion coefficients. The book gives the closed form for balanced symmetric laminates; the engine takes them from the general solve, so unsymmetric laminates also report their curvature per kelvin.",
     "Eq. 8.33, p. 217, balanced symmetric form", "ᾱ: 1/K; the corresponding curvature: 1/(m·K)."),
+  method("First-ply failure under ΔT alone",
+    "N = M = 0: σₖ ∝ ΔT\nR = min over plies and faces of the ratio of σₖ(ΔT)\nΔT_FPF = R ΔT",
+    "With no load the laminate is free and every ply carries only the residual stress of the temperature change, which scales with ΔT; so the strength ratio of that stress is the factor on the change itself, and the first ply fails at R ΔT (first_ply_failure_thermal). With loads, the change is held and the loads scale instead. A laminate whose plies all expand alike is unstressed and is refused, not given a factor.",
+    "Eq. 8.16, p. 213, the residual stress; the ratio as for a single loading, Eqs. 6.57–6.59", "ΔT and ΔT_FPF: K (or °C, °F as stated); R: dimensionless."),
 ];
 
 export const maximumStrain = method("Maximum strain",

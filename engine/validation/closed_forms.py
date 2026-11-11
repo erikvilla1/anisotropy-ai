@@ -132,6 +132,25 @@ def cross_ply_cooling_first_ply_failure(case: dict) -> dict:
     }
 
 
+def cross_ply_cooling_alone_first_ply_failure(case: dict) -> dict:
+    """The same cross-ply cooled with no load at all: every ply's stress is the residual stress of the temperature change, which scales
+    with it, so the strength ratio of that stress is the factor on the temperature change at which the first ply fails."""
+    u = UNITS[case["units"]]
+    plies, dt = plies_of(case), case["applied"]["delta_T"]
+    response = membrane(plies, np.zeros(3), dt)
+    zero = np.zeros(3)
+    pairs = [(zero, response["stress_local"][k] / u["stress"], plies[k]["values"]) for k in range(len(plies))]
+    ratio_ms = min(max_stress_ratio(s, v, values) for s, v, values in pairs)
+    ratio_tw = min(tsai_wu_ratio(s, v, values, case["f12_star"]) for s, v, values in pairs)
+    return {
+        "N_T": response["N_T"] / u["line_load"],
+        "strain_global": response["eps0"],
+        "ply_stress_local": {str(k + 1): response["stress_local"][k] / u["stress"] for k in range(len(plies))},
+        "fpf_ratio_max_stress": ratio_ms, "fpf_ratio_tsai_wu": ratio_tw,
+        "fpf_delta_T_max_stress": ratio_ms * dt, "fpf_delta_T_tsai_wu": ratio_tw * dt,
+    }
+
+
 def mixed_angle_lamina(case: dict) -> dict:
     """One lamina off axis with sigma_x, eps_y and tau_xy known: rows 1 and 3 of sigma = Q-bar eps give eps_x and gamma_xy,
     row 2 then gives sigma_y."""
@@ -164,6 +183,7 @@ def two_material_laminate_cooling(case: dict) -> dict:
 
 CASES = {
     "constructed-cross-ply-cooling-first-ply-failure": cross_ply_cooling_first_ply_failure,
+    "constructed-cross-ply-cooling-alone-first-ply-failure": cross_ply_cooling_alone_first_ply_failure,
     "constructed-mixed-angle-lamina": mixed_angle_lamina,
     "constructed-two-material-laminate-cooling": two_material_laminate_cooling,
 }

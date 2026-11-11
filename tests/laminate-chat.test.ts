@@ -155,3 +155,48 @@ test("the card beside the chat states only what is given", () => {
   assert.deepEqual(problemLines({ ...blankDraft(), material: { library: "im7-8552" }, layup: { notation: "[0/90]s", angles: [0, 90, 90, 0], symmetric: true } })[2],
     ["Layup", "[0/90]s, 4 plies, 0.1829 mm plies (library)"]);
 });
+
+// --- the temperature condition (ADR-0087) ---------------------------------------------------------------------------------------
+
+test("a temperature change is read with its sign and unit, as engineers say it", async () => {
+  const { readTemperature, temperatureUnit } = await import("../lib/laminate-chat");
+  assert.deepEqual(readTemperature("the laminate is cooled by 150 °C after cure").delta_T, { value: "-150", unit: "degC" });
+  assert.deepEqual(readTemperature("heated 80 C in service").delta_T, { value: "80", unit: "degC" });
+  assert.deepEqual(readTemperature("ΔT = -270 °F").delta_T, { value: "-270", unit: "degF" });
+  assert.deepEqual(readTemperature("a temperature change of −100 K").delta_T, { value: "-100", unit: "K" });
+  assert.deepEqual(readTemperature("a drop of 120 deg C").delta_T, { value: "-120", unit: "degC" });
+  assert.equal(readTemperature("cooled down a lot").delta_T, undefined, "no number, no value: the condition is offered instead");
+  const alphas = readTemperature("alpha1 = -0.9e-6 /°C, α2 27 x10^-6 per °C");
+  assert.deepEqual([alphas.alpha1, alphas.alpha2], [{ value: "-0.9e-6", unit: "1/degC" }, { value: "27", unit: "1e-6/degC" }]);
+  assert.equal(temperatureUnit("°F"), "degF");
+  assert.equal(temperatureUnit("MPa"), null);
+});
+
+test("the temperature step asks only once the condition is on, and the problem carries what it states", () => {
+  const own: OwnConstants = { name: "typed", source: "", E1: { value: "147", unit: "GPa" }, E2: { value: "10.3", unit: "GPa" }, G12: { value: "7", unit: "GPa" },
+    nu12: "0.27", F1t: { value: "", unit: "" }, F1c: { value: "", unit: "" }, F2t: { value: "", unit: "" }, F2c: { value: "", unit: "" }, F6: { value: "", unit: "" } };
+  const draft: LaminateDraft = { ...blankDraft(), system: "SI", material: { own }, layup: { notation: "[0/90]s", angles: [0, 90, 90, 0], symmetric: true },
+    thickness: { value: "0.25", unit: "mm" }, loads: loadsWithZeros({}, "SI") };
+  assert.deepEqual(missingIn("temperature", draft), []);
+  assert.equal(nextStep(draft), "review", "no condition, no temperature step");
+  const on = { ...draft, conditions: ["temperature"] };
+  assert.deepEqual(missingIn("temperature", on), ["temperature change", "alpha1 and alpha2"]);
+  assert.equal(nextStep(on), "temperature");
+  const stated: LaminateDraft = { ...on, delta_T: { value: "-150", unit: "degC" }, alphas: { alpha1: { value: "-1", unit: "1e-6/degC" }, alpha2: { value: "25", unit: "1e-6/degC" } } };
+  assert.equal(nextStep(stated), "review");
+  const built = buildProblem(stated);
+  assert.ok(built.problem, JSON.stringify(built.errors));
+  assert.deepEqual(built.problem!.delta_T, { value: -150, unit: "degC" });
+  assert.ok("name" in built.problem!.material && built.problem!.material.alpha1?.unit === "1e-6/degC" && built.problem!.material.alpha2?.value === 25);
+  assert.equal(buildProblem(draft).problem!.delta_T, undefined, "without the condition nothing thermal is sent");
+  assert.deepEqual(problemLines(stated).at(-1), ["Temperature change", "-150 °C"]);
+});
+
+test("the words of a temperature change call the condition up", async () => {
+  const { conditionsNamed } = await import("../lib/conditions");
+  for (const text of ["there is a temperature change", "it is cooled after cure", "what are the residual stresses", "thermal loading too", "ΔT of 100"]) {
+    assert.deepEqual(conditionsNamed(text, "laminate").map((c) => c.id), ["temperature"], text);
+  }
+  assert.deepEqual(conditionsNamed("Nx = 100 N/mm, the rest zero", "laminate"), []);
+  assert.deepEqual(conditionsNamed("there is a temperature change", "fea"), [], "the coupon's temperature condition comes later (ADR-0087)");
+});

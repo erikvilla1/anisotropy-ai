@@ -8,9 +8,9 @@ import unitTable from "../engine/src/anisotropy_engine/data/units.json";
 import { expandLayup } from "./layup";
 import { libraryOptions } from "./studio-form";
 
-export type Dimension = "pressure" | "length" | "force_per_length" | "moment_per_length";
+export type Dimension = "pressure" | "length" | "force_per_length" | "moment_per_length" | "temperature_change" | "expansion";
 export type ReportUnits = "SI" | "mm-MPa" | "US" | "psi";
-export type Kind = "modulus" | "stress" | "length" | "N" | "M";
+export type Kind = "modulus" | "stress" | "length" | "N" | "M" | "delta_T" | "alpha";
 export const LOAD_NAMES = ["Nx", "Ny", "Nxy", "Mx", "My", "Mxy"] as const;
 export type LoadName = (typeof LOAD_NAMES)[number];
 export const CONSTANT_NAMES = ["E1", "E2", "G12", "nu12", "F1t", "F1c", "F2t", "F2c", "F6"] as const;
@@ -36,8 +36,9 @@ export function systemUnit(system: ReportUnits, kind: Kind | "kappa" | "A" | "B"
 }
 export const dimensionOf = (kind: Kind): Dimension => KIND_DIMENSION[kind];
 export const unitsOf = (kind: Kind): string[] => UNIT_NAMES[dimensionOf(kind)];
-/** A unit name as the page prints it: the engine writes N*m/m, the page N·m/m. */
-export const printedUnit = (unit: string) => unit.replace(/\*/g, "·").replace("^2", "²").replace("10^6 ", "10⁶ ").replace("10^3 ", "10³ ");
+/** A unit name as the page prints it: the engine writes N*m/m, degC and 1e-6/degC, the page N·m/m, °C and 10⁻⁶/°C. */
+export const printedUnit = (unit: string) => unit.replace(/\*/g, "·").replace("^2", "²").replace("10^6 ", "10⁶ ").replace("10^3 ", "10³ ")
+  .replace(/^1e-6\//, "10⁻⁶/").replace(/deg([CF])/g, "°$1");
 
 const squashUnit = (text: string) => text.toLowerCase().replace(/[·×]/g, "*").replace(/\s+/g, "").replace(/lbf/g, "lb").replace(/-/g, "/");
 const UNIT_SYNONYMS: Record<string, string> = { "n/mm": "N/mm", "nmm/mm": "N*mm/mm", "nm/m": "N*m/m", "knm/m": "kN*m/m", "lbin/in": "lb*in/in", "kipin/in": "kip*in/in", "inch": "in", "inches": "in" };
@@ -64,9 +65,16 @@ export type LaminateDraft = {
   f12_star: string;
   /** Maximum strain with limits derived from the strengths (strength over modulus, linear to failure, ADR-0021): a stated choice. */
   strain_limits: boolean;
+  /** The conditions switched on (`lib/conditions.ts`, ADR-0087): a temperature change today. Absent in a project saved before. */
+  conditions?: string[];
+  /** A uniform temperature change, with its unit (degC, K or degF), when the temperature condition is on. */
+  delta_T?: Quantity | null;
+  /** A typed material's thermal expansion, both or neither; a library dataset brings its own when it records them. */
+  alphas?: { alpha1: Quantity; alpha2: Quantity } | null;
 };
-export type LaminateStep = "units" | "material" | "layup" | "loads" | "review";
-export const STEP_ORDER: LaminateStep[] = ["units", "material", "layup", "loads", "review"];
+export type LaminateStep = "units" | "material" | "layup" | "loads" | "temperature" | "review";
+export const STEP_ORDER: LaminateStep[] = ["units", "material", "layup", "loads", "temperature", "review"];
+export const hasCondition = (draft: LaminateDraft, id: string): boolean => (draft.conditions ?? []).includes(id);
 
 export function blankDraft(): LaminateDraft {
   return { system: "", material: null, layup: null, thickness: null, loads: null, f12_star: "", strain_limits: false };
@@ -91,6 +99,13 @@ export function missingIn(step: LaminateStep, draft: LaminateDraft): string[] {
       return fromLibrary || (draft.thickness && draft.thickness.value.trim()) ? [] : ["ply thickness"];
     }
     case "loads": return draft.loads && LOAD_NAMES.every((n) => draft.loads![n].value.trim() !== "") ? [] : ["loads"];
+    case "temperature": {  // asked only once the condition is on (ADR-0087)
+      if (!hasCondition(draft, "temperature")) return [];
+      const need: string[] = draft.delta_T && draft.delta_T.value.trim() ? [] : ["temperature change"];
+      const own = draft.material && "own" in draft.material;
+      if (own && !(draft.alphas && draft.alphas.alpha1.value.trim() && draft.alphas.alpha2.value.trim())) need.push("alpha1 and alpha2");
+      return need;
+    }
     case "review": return [];
   }
 }
@@ -208,6 +223,47 @@ export function readLoads(text: string, system: ReportUnits): { loads: Partial<R
   return { loads, othersZero, understood, refused };
 }
 
+/** A temperature unit as typed (°C, deg C, C, K, °F) as the engine's table names it; null when it is none. */
+export function temperatureUnit(typed: string): "degC" | "degF" | "K" | null {
+  const s = typed.toLowerCase().replace(/°|º|degrees?|deg|\s/g, "");
+  return s === "c" || s === "celsius" ? "degC" : s === "f" || s === "fahrenheit" ? "degF" : s === "k" || s === "kelvin" ? "K" : null;
+}
+
+const TEMP_UNIT = String.raw`(°\s*[CFcf]\b|º\s*[CFcf]\b|deg(?:rees?)?\s*[CFcf]\b|[CFcf]\b|K\b|kelvin\b|celsius\b|fahrenheit\b)`;
+const COOL = new RegExp(String.raw`\b(cool(?:ed|s|ing)?|chill(?:ed|s)?|heat(?:ed|s|ing)?|warm(?:ed|s|ing)?)\s+(?:it\s+|down\s+|up\s+)*(?:by\s+)?(\d+(?:\.\d+)?)\s*${TEMP_UNIT}`, "i");
+const SHIFT = new RegExp(String.raw`\b(drop|fall|decrease|rise|increase)\s+(?:in\s+temperature\s+)?(?:of\s+|by\s+)?(\d+(?:\.\d+)?)\s*${TEMP_UNIT}`, "i");
+const EXPLICIT = new RegExp(String.raw`(?:delta[\s_-]?t|Δ\s*t|temperature\s+change|change\s+in\s+temperature)\s*(?:of|is|=|:)?\s*([-+−]?\d+(?:\.\d+)?)\s*${TEMP_UNIT}`, "i");
+const ALPHA = new RegExp(String.raw`(?:alpha|α)\s*_?\s*([12])\s*(?:=|:|is|of)?\s*([-+−]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[-+−]?\d+)?)\s*(?:(?:x|×|\*)\s*10\s*\^?\s*\(?\s*[-−]\s*6\s*\)?|(?:x|×|\*)?\s*10⁻⁶|e[-−]6|µ|micro(?:strain)?)?\s*(?:\/|per\s+|1\/)\s*${TEMP_UNIT}`, "gi");
+
+/** A temperature change and the expansion coefficients a message states (ADR-0087): "cooled by 150 °C", "a drop of 270 °F", "ΔT = -100 C",
+ * "alpha1 = -0.9e-6 /°C", "α2 27 x10^-6 per °C". Cooling and a drop are negative, as the engine counts a change. Each value keeps the unit it
+ * was typed in; a coefficient written with its 10⁻⁶ takes the 1e-6 unit. Nothing is converted here (ADR-0002). */
+export function readTemperature(text: string): { delta_T?: Quantity; alpha1?: Quantity; alpha2?: Quantity; understood: string[] } {
+  const understood: string[] = [];
+  const out: { delta_T?: Quantity; alpha1?: Quantity; alpha2?: Quantity; understood: string[] } = { understood };
+  const minus = (s: string) => s.replace("−", "-");
+  const explicit = EXPLICIT.exec(text);
+  const cool = COOL.exec(text);
+  const shift = SHIFT.exec(text);
+  if (explicit && temperatureUnit(explicit[2])) {
+    out.delta_T = { value: minus(explicit[1]), unit: temperatureUnit(explicit[2])! };
+  } else if (cool && temperatureUnit(cool[3])) {
+    out.delta_T = { value: (/^(cool|chill)/i.test(cool[1]) ? "-" : "") + cool[2], unit: temperatureUnit(cool[3])! };
+  } else if (shift && temperatureUnit(shift[3])) {
+    out.delta_T = { value: (/^(drop|fall|decrease)/i.test(shift[1]) ? "-" : "") + shift[2], unit: temperatureUnit(shift[3])! };
+  }
+  if (out.delta_T) understood.push(`temperature change ${out.delta_T.value} ${printedUnit(out.delta_T.unit)}`);
+  for (const match of text.matchAll(ALPHA)) {
+    const unit = temperatureUnit(match[3]);
+    if (!unit) continue;
+    const micro = /10|µ|micro|e[-−]6/i.test(match[0].slice(match[0].indexOf(match[2]) + match[2].length));
+    const name = match[1] === "1" ? "alpha1" : "alpha2";
+    out[name] = { value: minus(match[2]), unit: `${micro ? "1e-6" : "1"}/${unit}` };
+    understood.push(`${name} ${out[name]!.value} ${printedUnit(out[name]!.unit)}`);
+  }
+  return out;
+}
+
 /** Six loads from the ones stated, the rest zero in the system's units, for a click or an "everything else zero". */
 export function loadsWithZeros(given: Partial<Record<LoadName, Quantity>>, system: ReportUnits): Record<LoadName, Quantity> {
   return Object.fromEntries(LOAD_NAMES.map((name) => [name, given[name] ?? { value: "0", unit: systemUnit(system, name.startsWith("N") ? "N" : "M") }])) as Record<LoadName, Quantity>;
@@ -218,13 +274,15 @@ export function loadsWithZeros(given: Partial<Record<LoadName, Quantity>>, syste
 export type QuantityJson = { value: number; unit: string };
 export type LaminateProblem = {
   title?: string;
-  material: ({ library: string } | { name: string; E1: QuantityJson; E2: QuantityJson; G12: QuantityJson; nu12: number; source?: string }
+  material: ({ library: string } | { name: string; E1: QuantityJson; E2: QuantityJson; G12: QuantityJson; nu12: number; source?: string;
+      alpha1?: QuantityJson; alpha2?: QuantityJson }
     & Partial<Record<"F1t" | "F1c" | "F2t" | "F2c" | "F6", QuantityJson>>) & { strain_limits?: "from-strengths" };
   layup: number[];
   layup_notation?: string;
   ply_thickness?: QuantityJson;
   loads: Record<LoadName, QuantityJson>;
   f12_star?: number;
+  delta_T?: QuantityJson;
   report_units: ReportUnits;
 };
 
@@ -261,6 +319,7 @@ export function buildProblem(draft: LaminateDraft, reportUnits?: ReportUnits): {
       nu12: number(typeof own.nu12 === "string" ? own.nu12 : own.nu12?.value ?? "", "nu12"),
       ...(own.source.trim() ? { source: own.source.trim() } : {}),
       ...(strengths.length === 5 ? Object.fromEntries(STRENGTH_NAMES.map((k) => [k, quantity(own[k], k)])) : {}),
+      ...(hasCondition(draft, "temperature") ? { alpha1: quantity(draft.alphas?.alpha1, "alpha1"), alpha2: quantity(draft.alphas?.alpha2, "alpha2") } : {}),
       ...limits,
     };
   }
@@ -272,6 +331,7 @@ export function buildProblem(draft: LaminateDraft, reportUnits?: ReportUnits): {
     ...(draft.thickness && draft.thickness.value.trim() ? { ply_thickness: quantity(draft.thickness, "ply thickness") } : {}),
     loads: Object.fromEntries(LOAD_NAMES.map((name) => [name, loads ? quantity(loads[name], name) : { value: NaN, unit: "" }])) as Record<LoadName, QuantityJson>,
     ...(draft.f12_star.trim() ? { f12_star: number(draft.f12_star, "f12*") } : {}),
+    ...(hasCondition(draft, "temperature") ? { delta_T: quantity(draft.delta_T ?? undefined, "temperature change") } : {}),
     report_units: system,
   };
   if (draft.layup) problem.title = `${draft.layup.notation} under ${LOAD_NAMES.filter((n) => loads && Number(loads[n].value) !== 0).map((n) => `${n} = ${loads![n].value} ${printedUnit(loads![n].unit)}`).join(", ") || "no load"}`;
@@ -294,5 +354,6 @@ export function problemLines(draft: LaminateDraft): [string, string][] {
     ["Material", material],
     ["Layup", draft.layup ? `${draft.layup.notation}, ${draft.layup.angles.length} plies${thickness ? `, ${thickness}` : ""}` : ""],
     ["Loads", loads],
+    ...(hasCondition(draft, "temperature") ? [["Temperature change", draft.delta_T?.value ? `${draft.delta_T.value} ${printedUnit(draft.delta_T.unit)}` : ""] as [string, string]] : []),
   ];
 }

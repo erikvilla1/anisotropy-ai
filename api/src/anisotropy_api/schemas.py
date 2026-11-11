@@ -672,6 +672,14 @@ class OwnMaterial(Contract):
     source: Annotated[str, Field(min_length=1, pattern=r"\S")] | None = Field(default=None, description="Where the numbers come from, when stated")
     strain_limits: Literal["from-strengths"] | None = Field(
         default=None, description="Ask for maximum strain with limits derived from the strengths (strength divided by modulus, linear to failure, ADR-0021)")
+    alpha1: Quantity | None = Field(default=None, description="Thermal expansion along the fibres, with its unit (1/degC, 1/K, 1/degF or their 1e-6 forms)")
+    alpha2: Quantity | None = Field(default=None, description="Thermal expansion across the fibres; alpha1 and alpha2 come together or not at all")
+
+    @model_validator(mode="after")
+    def _alphas_together(self) -> Self:
+        if (self.alpha1 is None) != (self.alpha2 is None):
+            raise ValueError("give alpha1 and alpha2 together, or neither")
+        return self
 
     @model_validator(mode="after")
     def all_five_strengths_or_none(self) -> Self:
@@ -731,6 +739,8 @@ class LaminateProblem(Contract):
     ply_thickness: Quantity | None = None
     loads: ProblemLoads
     f12_star: FiniteFloat | None = None
+    delta_T: Quantity | None = Field(default=None, description="A uniform temperature change, with its unit (degC, K or degF); the material "
+                                     "needs alpha1 and alpha2. With loads, it is held and the loads scale to failure; alone, it scales itself")
     report_units: ReportUnits
 
 

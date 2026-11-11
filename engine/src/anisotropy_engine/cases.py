@@ -20,7 +20,7 @@ import numpy as np
 from ._validation import finite_vector
 from .buckling import BucklingResult, plate_buckling
 from .engineering import engineering_constants
-from .failure import FirstPlyFailure, first_ply_failure_combined
+from .failure import FirstPlyFailure, first_ply_failure_combined, first_ply_failure_thermal
 from .lamina import Lamina, StrainLimits, Strengths, ThermalExpansion, reduced_compliance, reduced_stiffness, strain_limits_from_strengths
 from .library import LibraryMaterial, library_material
 from .laminate import Ply, abd_matrices
@@ -438,6 +438,12 @@ def failure_loads(case: dict, solution: CaseSolution) -> tuple[Loads, Loads] | N
     return Loads(**dict.fromkeys(LOAD_NAMES, 0.0)), solution.loads
 
 
+def thermal_only(case: dict, solution: CaseSolution) -> bool:
+    """A temperature change and no load at all, nor a [failure] table: first-ply failure is then the factor on delta_T."""
+    return ("failure" not in case and solution.delta_T is not None and not np.any(solution.loads.as_vector())
+            and all(ply.material.strengths is not None for ply in solution.plies))
+
+
 def first_ply_failures(case: dict, solution: CaseSolution) -> dict[str, FirstPlyFailure]:
     """First-ply failure for each criterion the case supports.
 
@@ -445,7 +451,8 @@ def first_ply_failures(case: dict, solution: CaseSolution) -> dict[str, FirstPly
     ply (explicit, or from strengths by stated choice); Tsai-Wu needs f12_star as well.
     """
     loads = failure_loads(case, solution)
-    if loads is None:
+    thermal = thermal_only(case, solution)  # no load: the ratio is on the temperature change itself
+    if loads is None and not thermal:
         return {}
     criteria = ["max_stress"]
     if all(ply.material.strain_limits is not None for ply in solution.plies):
@@ -453,6 +460,8 @@ def first_ply_failures(case: dict, solution: CaseSolution) -> dict[str, FirstPly
     criteria.append("tsai_hill")
     if "f12_star" in case:
         criteria.append("tsai_wu")
+    if thermal:
+        return {criterion: first_ply_failure_thermal(solution.plies, solution.delta_T, criterion, case.get("f12_star")) for criterion in criteria}
     return {criterion: first_ply_failure_combined(solution.plies, *loads, solution.delta_T, criterion,
                                                   case.get("f12_star"))
             for criterion in criteria}
@@ -575,6 +584,8 @@ def engine_results(case: dict) -> dict:
         add(f"fpf_moments_{criterion}", shown(fpf.failure_loads.as_vector()[3:], "M"))
         results[f"fpf_ply_{criterion}"] = (float(fpf.governing.ply_index + 1), 0.0)
         results[f"fpf_z_{criterion}"] = (float(shown(fpf.governing.z_m, "length")), float(shown(h / 2, "length")))
+        if thermal_only(case, solution):  # the temperature change at which the first ply fails, R * delta_T
+            results[f"fpf_delta_T_{criterion}"] = (float(shown(fpf.strength_ratio * solution.delta_T, "delta_T")), 0.0)
     return results
 
 

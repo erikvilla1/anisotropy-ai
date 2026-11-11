@@ -79,7 +79,7 @@ def test_the_answer_equals_the_case_runner_on_the_same_problem_in_si():
     expected = engine_results(SI_CASE)
     answer = solve(homework())
     assert answer["report_units"] == "SI" and answer["units"] == {"modulus": "GPa", "stress": "MPa", "length": "mm", "N": "N/m", "M": "N*m/m",
-                                                                    "kappa": "1/m", "A": "MN/m", "B": "kN", "D": "N*m", "areal_mass": "kg/m^2"}
+                                                                    "kappa": "1/m", "A": "MN/m", "B": "kN", "D": "N*m", "areal_mass": "kg/m^2", "delta_T": "degC"}
     for key in ("A11", "A12", "A66", "D11", "D16", "Ex", "nu_xy", "total_thickness", "fpf_ratio_max_stress", "fpf_ratio_tsai_hill", "fpf_ratio_tsai_wu"):
         assert answer["results"][key] == pytest.approx(float(expected[key][0]), rel=1e-12), key
     assert answer["results"]["strain_global"] == pytest.approx([float(v) for v in expected["strain_global"][0]], rel=1e-12)
@@ -112,7 +112,7 @@ def test_the_same_problem_reported_in_each_system_is_the_same_answer_converted()
     mm = solve(homework("mm-MPa"))
     assert mm["case"]["material"]["E1"] == pytest.approx(147e3) and mm["case"]["applied"]["loads"][0] == pytest.approx(100.0)
     assert mm["units"] == {"modulus": "MPa", "stress": "MPa", "length": "mm", "N": "N/mm", "M": "N*mm/mm", "kappa": "1/mm", "A": "N/mm", "B": "N",
-                           "D": "N*mm", "areal_mass": "kg/m^2"}
+                           "D": "N*mm", "areal_mass": "kg/m^2", "delta_T": "degC"}
 
 
 def test_maximum_strain_is_evaluated_only_when_limits_from_the_strengths_are_asked_for():
@@ -252,3 +252,65 @@ def test_the_app_uses_the_assistant_the_settings_name():
     finally:
         del app.state.assistant
     assert answer["writer"] == "anthropic" and answer["model"] == "claude-opus-5-5" and answer["prose"] == ["The stack of 8 plies is quasi-isotropic and 1 mm thick."]
+
+
+# ------------------------------------------------------------------------------------------------ a temperature change (ADR-0017)
+
+# The constructed cooling case of engine/validation/cases/constructed-cross-ply-cooling-alone-first-ply-failure.toml, typed as the chat
+# types it: alpha in 1e-6 per degree, the change in degC or degF, no load.
+def cooled(delta_T: dict, **changes) -> dict:
+    problem = homework(layup=[0, 90, 90, 0], layup_notation="[0/90]s", ply_thickness=quantity(0.25, "mm"), loads=zero_loads(), delta_T=delta_T)
+    problem["material"] = {**problem["material"], "alpha1": quantity(-1.0, "1e-6/degC"), "alpha2": quantity(25.0, "1e-6/degC")}
+    problem.update(changes)
+    return problem
+
+
+def test_a_temperature_change_alone_fails_its_first_ply_at_r_times_the_change_as_the_case_runner_says():
+    answer = solve(cooled(quantity(-120.0, "degC")))
+    case = {"title": "the cooling case", "units": "SI", "f12_star": -0.5, "laminate": {"layup": [0, 90, 90, 0], "ply_thickness": 0.25},
+            "material": {"E1": 147.0, "E2": 10.3, "G12": 7.0, "nu12": 0.27, "F1t": 2280.0, "F1c": 1725.0, "F2t": 57.0, "F2c": 228.0, "F6": 76.0,
+                         "alpha1": -1.0e-6, "alpha2": 25.0e-6},
+            "applied": {"loads": [0, 0, 0, 0, 0, 0], "delta_T": -120.0}}
+    validate_case_inputs(case)
+    expected = engine_results(case)
+    assert answer["results"]["fpf_delta_T_max_stress"] == pytest.approx(expected["fpf_delta_T_max_stress"][0], rel=1e-12)
+    assert answer["results"]["fpf_delta_T_max_stress"] == pytest.approx(-235.8124400, rel=1e-8)  # the constructed case's closed form
+    facts = answer["facts"]
+    assert facts["thermal_only"] is True and facts["delta_T"] == -120.0 and facts["max_stress_delta_T_at_failure"] == -235.8
+    assert answer["units"]["delta_T"] == "degC"
+    assert answer["prose"][1].startswith("Under no load and a temperature change of -120 degC the mid-plane strain is eps_x = -130.6 microstrain")
+    assert "when the temperature change reaches 1.93 times its value: -231.5 degC." in answer["prose"][3]  # Tsai-Wu governs
+    guard = number_guard(" ".join(answer["prose"]), facts)
+    assert guard.ok, guard.offending
+
+
+def test_a_change_in_fahrenheit_is_the_same_change_and_reports_in_its_system():
+    celsius = solve(cooled(quantity(-120.0, "degC")))
+    fahrenheit = solve(cooled(quantity(-216.0, "degF")))
+    assert fahrenheit["results"]["fpf_delta_T_max_stress"] == pytest.approx(celsius["results"]["fpf_delta_T_max_stress"], rel=1e-12)
+    in_us = solve(cooled(quantity(-120.0, "degC"), report_units="US"))
+    assert in_us["units"]["delta_T"] == "degF" and in_us["results"]["fpf_delta_T_max_stress"] == pytest.approx(-235.8124400 * 9 / 5, rel=1e-8)
+
+
+def test_with_a_load_the_temperature_change_is_held_while_the_loads_grow():
+    answer = solve(cooled(quantity(-120.0, "degC"), loads=zero_loads(Nx=quantity(100.0, "kN/m"))))
+    assert answer["facts"]["thermal_only"] is False and not any("delta_T" in key for key in answer["results"] if key.startswith("fpf"))
+    assert answer["prose"][3].endswith("The temperature change of -120 degC is held at its value while the loads grow.")
+
+
+@pytest.mark.parametrize("material, delta_T, words", [
+    ({"alpha2": None}, quantity(-120.0, "degC"), "give alpha1 and alpha2 together"),
+    ({"alpha1": quantity(-1.0, "1e-6/degC"), "alpha2": quantity(25.0, "MPa")}, quantity(-120.0, "degC"), "material.alpha2"),
+])
+def test_half_an_expansion_or_one_of_the_wrong_dimension_is_refused(material, delta_T, words):
+    problem = cooled(delta_T)
+    problem["material"] = {k: v for k, v in {**problem["material"], **material}.items() if v is not None}
+    refused = client.post(ENDPOINT, json=problem)
+    assert refused.status_code == 422 and words in str(refused.json()["detail"])
+
+
+def test_a_temperature_change_needs_the_materials_expansion():
+    refused = client.post(ENDPOINT, json=homework(delta_T=quantity(-120.0, "degC")))  # typed constants without alpha
+    assert refused.status_code == 422 and "needs alpha1 and alpha2" in str(refused.json()["detail"])
+    wrong = client.post(ENDPOINT, json=cooled(quantity(-120.0, "MPa")))
+    assert wrong.status_code == 422 and "delta_T" in str(wrong.json()["detail"])
