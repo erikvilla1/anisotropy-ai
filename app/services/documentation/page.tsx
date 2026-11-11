@@ -1,5 +1,6 @@
 import { MediaSlot } from "@/components/media-slot";
 import { ServicePage } from "@/components/services/service-page";
+import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {

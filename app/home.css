@@ -1,41 +1,106 @@
-/* The home page after the audit of 2026-10-31: the laminate calculator up front, then the product blurbs. */
+/* The home page: the hero first, the laminate calculator under it as the demonstration (ADR-0076), then the product blurbs. */
 .hero-laminate {
   position: relative;
   border-bottom: 1px solid var(--line);
   background:
-    radial-gradient(60% 50% at 70% 20%, #1a2417 0%, transparent 60%),
-    radial-gradient(40% 40% at 20% 80%, #141b12 0%, transparent 60%),
+    radial-gradient(60% 50% at 70% 20%, #212121 0%, transparent 60%),
+    radial-gradient(40% 40% at 20% 80%, #191919 0%, transparent 60%),
     var(--bg);
 }
+/* The section's head is set as PhysicsX sets its white sections (ADR-0077 amendment 7, measured 2026-11-07): a 16 px monospace
+ * label with a short tick in the first column, and the heading from column 4, 38/41 px, with its instructions as an 18 px caption,
+ * behind a 1 px rule that sits in the middle of the gutter so the text starts exactly on the column. 88 px above and below, the hero's 32 px margins. */
 .hero-laminate-inner {
-  max-width: 1440px;
-  margin: auto;
-  padding: 64px 64px 56px;
+  padding: 88px 32px;
 }
 .hero-laminate-head {
-  max-width: 720px;
-  margin-bottom: 36px;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  margin-bottom: 64px;
 }
-.hero-laminate-head h2 {
-  font-size: clamp(34px, 4vw, 56px);
-  letter-spacing: -2px;
-  line-height: 1.1;
-  margin: 18px 0 14px;
+.hero-laminate-label {
+  grid-column: 1 / 4;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
-.hero-laminate-head p {
-  color: #b4bab3;
-  font-size: 15px;
-  line-height: 1.8;
+.hero-laminate-label::before {
+  content: "";
+  width: 1px;
+  height: 11px;
+  background: currentColor;
 }
+.hero-laminate-statement {
+  grid-column: 4 / 10;
+  display: grid;
+  gap: 16px;
+  margin-left: -16px;
+  padding-left: 15px;
+  border-left: 1px solid currentColor;
+}
+.hero-laminate-statement h2 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 41px;
+  letter-spacing: -0.01em;
+}
+/* The instructions read as a caption to the heading, at the hero copy's size, not as a second statement. */
+.hero-laminate-statement p {
+  max-width: 36em;
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  color: var(--muted);
+}
+/* The demo on the head's 12 columns (ADR-0077 amendment 10): the inputs under the label (columns 1 to 3), the 3D view under the
+ * statement (4 to 9), so the view starts where the heading's text does, and the plies with the view's caption beside it (10 to 12).
+ * The view fills the row's height, so no column leaves a gap under it. The engine's answer is one band under all three, its parts
+ * on the same columns. Under 1280 px the columns regroup (below). */
 .hero-laminate-grid {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(300px, 3fr) minmax(320px, 4fr);
-  gap: 24px;
-  align-items: start;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 32px;
+  align-items: stretch;
+}
+.hero-laminate-inputs {
+  grid-column: 1 / 4;
+  grid-row: 1;
 }
 .hero-laminate-view {
-  position: sticky;
-  top: 90px;
+  grid-column: 4 / 10;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+}
+.hero-laminate-stack {
+  grid-column: 10 / 13;
+  grid-row: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.hero-laminate-view > .hero-laminate-canvas,
+.hero-laminate-view > .hero-laminate-loading,
+.hero-laminate-view > .studio-webgl-missing {
+  flex: 1 1 0;
+  aspect-ratio: auto;
+  min-height: 420px;
+}
+.hero-laminate-caption {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 .hero-laminate-canvas {
   position: relative;
@@ -45,7 +110,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
-  background: linear-gradient(160deg, #10150f, #0c0e0d 70%);
+  background: linear-gradient(160deg, #131313, #0d0d0d 70%);
   touch-action: pan-y;
 }
 .hero-laminate-canvas canvas {
@@ -66,16 +131,15 @@
   overflow-x: auto;
 }
 .hero-laminate-hover {
-  margin: 12px 0 0;
+  margin: 0;
   min-height: 20px;
   font-size: 13px;
   color: var(--accent);
 }
 .hero-laminate-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-top: 8px;
+  flex-direction: column;
+  gap: 6px;
   font-size: 11px;
   color: var(--muted);
 }
@@ -90,7 +154,7 @@
 .hero-laminate-results {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 22px;
+  padding: 24px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -98,9 +162,44 @@
 }
 .hero-laminate-inputs {
   background: var(--panel);
+  container-type: inline-size;
+}
+/* The answer's band takes the section's columns as its own (subgrid; a plain 12-column grid where subgrid is missing), so its
+ * description sits under the inputs, its matrices under the view and its next step under the plies. */
+.hero-laminate-results {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: subgrid;
+  column-gap: 32px; /* the section's gutter, or the subgrid's tracks shift off the columns above */
+  align-items: start;
+}
+.hero-results-side,
+.hero-results-main,
+.hero-results-end {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.hero-results-side {
+  grid-column: 1 / 4;
+}
+.hero-results-main {
+  grid-column: 4 / 10;
+}
+.hero-results-end {
+  grid-column: 10 / 13;
+}
+.hero-results-end .calc-scope {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
 }
 .hero-laminate-results {
-  background: linear-gradient(150deg, #182017, var(--panel) 35%);
+  background: linear-gradient(150deg, #1d1d1d, var(--panel) 35%);
   transition: opacity 0.2s;
 }
 .hero-laminate-results.is-stale {
@@ -120,7 +219,7 @@
   width: 100%;
   min-width: 0;
   background: var(--bg);
-  border: 1px solid #3c433c;
+  border: 1px solid #414141;
   border-radius: 4px;
   color: var(--text);
   padding: 10px 12px;
@@ -146,7 +245,7 @@
   margin: 0;
 }
 .hero-properties > div {
-  background: #10170f;
+  background: #151515;
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 8px 8px;
@@ -206,8 +305,8 @@
   cursor: default;
 }
 .hero-stack li.is-hovered {
-  border-color: #4d5a46;
-  background: #161c15;
+  border-color: #555555;
+  background: #1a1a1a;
 }
 .hero-stack-swatch {
   width: 14px;
@@ -222,9 +321,9 @@
 }
 .hero-results-head {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 .hero-specs {
   display: grid;
@@ -233,7 +332,7 @@
   margin: 0;
 }
 .hero-specs > div {
-  background: #10170f;
+  background: #151515;
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 10px 12px;
@@ -327,137 +426,607 @@
   align-self: flex-start;
 }
 .hero-empty {
-  min-height: 220px;
+  min-height: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  text-align: left;
+  gap: 16px;
+}
+.hero-empty svg {
+  flex: none;
 }
 .hero-empty p {
-  max-width: 340px;
+  max-width: 440px;
+  margin: 0;
   font-size: 13px;
 }
+/* The plies beside the view: a short label, then one row per ply, top face first. */
+.hero-stack-head {
+  margin: 0 0 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hero-laminate-stack .hero-stack li {
+  grid-template-columns: 10px 22px 1fr auto;
+  gap: 10px;
+  padding: 5px 8px;
+}
+.hero-laminate-stack .hero-stack-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+/* The inputs held compact, so the row stays about as tall as a good view of the stack: the citation and the hints as small print,
+ * the material's constants three to a row where they fit, and, in a narrow column, the layup above the ply thickness. */
+.hero-laminate-inputs {
+  gap: 16px;
+}
+.hero-laminate-inputs .calc-hint,
+.hero-laminate-inputs .calc-field-error {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hero-laminate-inputs .hero-properties > div {
+  padding: 6px 8px;
+}
+@container (min-width: 250px) {
+  .hero-properties {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 340px) {
+  .hero-field-row {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@container (max-width: 260px) {
+  .hero-field-row {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+@container (max-width: 200px) {
+  .hero-field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
-/* The product blurbs under the two heroes. */
-.home-blurbs {
-  display: grid;
-  gap: 0;
+/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11 and 14): Mission dark, the
+ * supporters' strip light, Platform dark, About light, News dark. Each numbered band opens with the kit's head. Platform's
+ * cards start at column 4, under the statement, three columns wide and three to a row. The label column holds only labels, so
+ * the news dates sit in it and each item's words start under the statement. The four principles close the Mission band as a
+ * strip on all twelve columns, and About's five face cards take the whole width. Every colour here is one of the band's
+ * variables, so one rule serves both grounds; only the supporters' logos keep their own colours. */
+.home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--text);
+  transition: opacity 0.15s;
 }
-.home-blurb {
+.home-link:hover {
+  opacity: 0.6;
+}
+.band-statement > .home-link {
+  justify-self: start;
+  margin-top: 8px;
+}
+/* The small label of a card or a row: the head's monospace label, three sizes down. */
+.home-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* The Mission band ends on its strip, so it has no padding of its own under it. */
+.band.home-mission {
+  padding-bottom: 0;
+}
+.home-mission .band-head {
+  margin-bottom: 0;
+}
+.home-principles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 32px;
+  row-gap: 12px;
+  margin: 88px 0 0;
+  padding: 26px 0;
   border-top: 1px solid var(--line);
+  list-style: none;
 }
-.home-blurb .section-heading {
-  margin-bottom: 36px;
+.home-principles li {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
-.home-mission p.lead {
-  font-size: clamp(18px, 2vw, 24px);
-  line-height: 1.55;
-  letter-spacing: -0.3px;
-  max-width: 820px;
+.home-principles li::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 11px;
+  background: currentColor;
 }
-.home-platform-grid {
+/* The arrow closes the strip; it stays with its words when they wrap. */
+.home-principles svg {
+  margin-left: 4px;
+  vertical-align: -2px;
+}
+/* The supporters' strip, after PhysicsX's logo strip (measured there on 2026-11-10: a 16 px grey monospace label, 32 px
+ * under it one row of logos 22 to 44 px tall, drifting left at about 40 px a second). It is a shorter band than the others.
+ * With one logo the row is the logo in the label's columns and its sentence from column 4, where every statement starts;
+ * with more, the logos take the whole row and the sentence sits under them. */
+.band.home-supporters {
+  padding-top: 64px;
+  padding-bottom: 64px;
+}
+.home-supporters .band-label {
+  margin-bottom: 32px;
+  color: var(--muted);
+}
+.home-supporters-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  row-gap: 32px;
+  align-items: center;
 }
-.home-platform-grid article {
+.home-supporters-row > .logo-strip {
+  grid-column: 1 / 4;
+}
+.home-supporters-row.is-many > .logo-strip {
+  grid-column: 1 / -1;
+}
+.home-supporters-row > p {
+  grid-column: 4 / -1;
+  font-size: 18px;
+  line-height: 26px;
+  color: var(--muted);
+  text-wrap: balance;
+}
+/* The logo row (components/home/logo-strip.tsx). A logo is its owner's mark: it keeps its colours and its proportions, 40 px
+ * tall and at most 200 px wide. The row moves only once the component finds the logos wider than it: then the set and its
+ * copy drift left by one set's width, each set ending on a gap, so the loop has no seam. It stops under the pointer and
+ * while it has the keyboard's focus. */
+.logo-strip {
+  --logo-strip-gap: 96px;
+  min-width: 0;
+  overflow: hidden;
+}
+.logo-strip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
+.logo-strip-track {
+  display: flex;
+  width: max-content;
+}
+.logo-strip-set {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--logo-strip-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.logo-strip-set li {
+  flex: none;
+}
+.logo-strip-set img {
+  width: auto;
+  height: 40px;
+  max-width: 200px;
+  object-fit: contain;
+}
+.logo-strip.is-moving .logo-strip-set {
+  padding-right: var(--logo-strip-gap);
+}
+.logo-strip.is-moving .logo-strip-track {
+  animation: logo-strip-drift var(--logo-strip-pass, 60s) linear infinite;
+}
+.logo-strip.is-moving:hover .logo-strip-track,
+.logo-strip.is-moving:focus-within .logo-strip-track {
+  animation-play-state: paused;
+}
+@keyframes logo-strip-drift {
+  to {
+    transform: translateX(-50%);
+  }
+}
+/* No drift for a visitor who asked for less motion: the copy goes and the logos wrap onto as many rows as they need. */
+@media (prefers-reduced-motion: reduce) {
+  .logo-strip.is-moving .logo-strip-track {
+    width: auto;
+    animation: none;
+  }
+  .logo-strip.is-moving .logo-strip-set {
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    row-gap: 24px;
+    padding-right: 0;
+  }
+  .logo-strip.is-moving .logo-strip-set[aria-hidden] {
+    display: none;
+  }
+}
+/* Three cards to a row from column 4: nine columns and eight gutters split in three is three columns and two gutters each,
+ * so the cards' edges fall on the head's columns. */
+.home-cards {
+  grid-column: 4 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+  min-width: 0;
+}
+.home-cards > article {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 20px;
+}
+.home-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.home-cards h3,
+.home-face h3,
+.home-news h3 {
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+.home-cards p,
+.home-face p,
+.home-news p {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+.home-cards h3 + p {
+  margin-top: 12px;
+}
+.home-cards > article > .home-link {
+  align-self: flex-start;
+  margin-top: auto;
+  padding-top: 24px;
+}
+/* How much of a service exists, without a colour: a full dot for built, half for in part, a ring for planned. */
+.home-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.home-status::before {
+  content: "";
+  flex: none;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.home-status-built::before {
+  background: currentColor;
+}
+.home-status-partly::before {
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+/* About says the one fact about the programme again, as a small monospace line under its statement: the strip above has the
+ * logo and the sentence, so this is neither. */
+.band-statement > .home-about-cohort {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: none;
+  margin-top: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.band-statement > .home-about-cohort::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 11px;
+  background: currentColor;
+}
+/* The face cards: a 4:5 frame ready for a portrait, holding the person's initials until there is one, then the name and the
+ * seats. Five to a row across the band's whole width. The frame is the card, so it carries the border, the radius and the
+ * ground. A name that links to a profile (lib/team.ts) takes the whole card as its target. */
+.home-faces {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 32px;
+}
+.home-face {
+  position: relative;
+  min-width: 0;
+}
+.home-face-frame {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 5;
+  margin-bottom: 20px;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
 }
-.home-platform-grid article > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.home-platform-grid h3 {
-  margin: 0;
-  font-family: var(--heading);
-  font-size: 19px;
-  font-weight: 500;
-}
-.home-platform-grid p {
-  margin: 0;
+.home-face-frame span {
+  font-size: clamp(36px, 4.4vw, 64px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.04em;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.65;
+  opacity: 0.5;
 }
-.home-platform-grid a {
-  margin-top: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--accent);
+.home-face-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.home-team-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+.home-face h3 + p {
+  margin-top: 8px;
 }
-.home-team-grid article {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
+.home-face h3 a {
+  transition: opacity 0.15s;
 }
-.home-team-grid h3 {
-  margin: 0 0 4px;
-  font-family: var(--heading);
-  font-size: 16px;
-  font-weight: 500;
+.home-face h3 a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
 }
-.home-team-grid p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
+.home-face h3 a:hover {
+  opacity: 0.6;
+}
+.home-face h3 svg {
+  margin-left: 2px;
+  vertical-align: -1px;
+}
+.home-about-link {
+  margin-top: 48px;
 }
 .home-news {
-  display: grid;
-  gap: 0;
   border-top: 1px solid var(--line);
 }
 .home-news article {
   display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 24px;
-  padding: 22px 0;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  padding: 32px 0;
   border-bottom: 1px solid var(--line);
 }
-.home-news .tiny-label {
-  padding-top: 4px;
+.home-news .home-tag {
+  grid-column: 1 / 4;
+  padding-top: 5px;
 }
-.home-news h3 {
-  margin: 0 0 6px;
-  font-family: var(--heading);
-  font-size: 18px;
-  font-weight: 500;
+.home-news article > div {
+  grid-column: 4 / 11;
+  display: grid;
+  gap: 8px;
 }
 .home-news p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.7;
-  max-width: 70ch;
+  max-width: 36em;
+}
+/* Narrower than 1280 px the cards and the principles go two to a row and the faces three; under 1024 px the head stacks, so
+ * the cards take the whole width and the supporters' sentence goes under its logo; on a phone the cards go one to a row and
+ * the faces two. */
+@media (max-width: 1279px) {
+  .home-cards,
+  .home-principles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .home-faces {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1023px) {
+  .home-cards {
+    grid-column: 1 / -1;
+  }
+  .home-principles {
+    margin-top: 64px;
+  }
+  .home-news article > div {
+    grid-column: 4 / -1;
+  }
+  .home-supporters-row {
+    row-gap: 24px;
+  }
+  .home-supporters-row > .logo-strip,
+  .home-supporters-row > p {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 760px) {
+  .home-cards {
+    gap: 20px;
+  }
+  .home-card-top {
+    margin-bottom: 24px;
+  }
+  .home-principles {
+    margin-top: 48px;
+    padding: 20px 0;
+  }
+  .home-principles li {
+    font-size: 12px;
+  }
+  .band.home-supporters {
+    padding-top: 48px;
+    padding-bottom: 48px;
+  }
+  .home-supporters .band-label {
+    margin-bottom: 24px;
+  }
+  .home-supporters-row > p {
+    font-size: 16px;
+    line-height: 24px;
+  }
+  .logo-strip {
+    --logo-strip-gap: 56px;
+  }
+  .logo-strip-set img {
+    height: 32px;
+    max-width: 160px;
+  }
+  .home-faces {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+  .home-face-frame {
+    margin-bottom: 14px;
+  }
+  .home-face h3 {
+    font-size: 18px;
+    line-height: 24px;
+  }
+  .home-about-link {
+    margin-top: 32px;
+  }
+  .home-news article {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 8px;
+    padding: 24px 0;
+  }
+  .home-news .home-tag,
+  .home-news article > div {
+    grid-column: 1;
+  }
+  .home-news .home-tag {
+    padding-top: 0;
+  }
+}
+@media (max-width: 640px) {
+  .home-cards,
+  .home-principles {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-@media (max-width: 1200px) {
-  .hero-laminate-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+@media (max-width: 1023px) {
+  .hero-laminate-head {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
+    margin-bottom: 48px;
+  }
+  .hero-laminate-label,
+  .hero-laminate-statement {
+    grid-column: 1;
+  }
+  .hero-laminate-statement {
+    margin-left: 0;
+  }
+  .hero-laminate-statement h2 {
+    font-size: 30px;
+    line-height: 34px;
+  }
+}
+/* Under 1280 px: the heading stacks; the view runs across the top, the inputs and the plies sit side by side under it, and the
+ * answer runs across the bottom, its description and next step side by side over its matrices. */
+@media (max-width: 1279px) {
+  .hero-laminate-head {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
+    margin-bottom: 48px;
+  }
+  .hero-laminate-label,
+  .hero-laminate-statement {
+    grid-column: 1;
+  }
+  .hero-laminate-statement {
+    margin-left: 0;
   }
   .hero-laminate-view {
     grid-column: 1 / -1;
-    position: static;
+    grid-row: 1;
+  }
+  .hero-laminate-inputs {
+    grid-column: 1 / 8;
+    grid-row: 2;
+  }
+  .hero-laminate-stack {
+    grid-column: 8 / 13;
+    grid-row: 2;
+  }
+  .hero-laminate-results {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hero-results-side {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .hero-results-end {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .hero-results-main {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .hero-laminate-view > .hero-laminate-canvas,
+  .hero-laminate-view > .hero-laminate-loading,
+  .hero-laminate-view > .studio-webgl-missing {
+    flex: none;
+    aspect-ratio: 16 / 10;
+    min-height: 260px;
   }
 }
 @media (max-width: 760px) {
   .hero-laminate-inner {
-    padding: 40px 16px 40px;
+    padding: 64px 20px;
+  }
+  .hero-laminate-statement h2 {
+    font-size: 24px;
+    line-height: 28px;
+  }
+  .hero-laminate-statement p {
+    font-size: 16px;
+    line-height: 24px;
+  }
+  .hero-laminate-label {
+    font-size: 13px;
   }
   .hero-laminate-grid {
     grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .hero-laminate-view,
+  .hero-laminate-inputs,
+  .hero-laminate-stack,
+  .hero-laminate-results {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .hero-laminate-results {
+    display: flex;
   }
   .hero-laminate-inputs,
   .hero-laminate-results {
@@ -474,8 +1043,284 @@
   .hero-loads-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .home-news article {
-    grid-template-columns: 1fr;
-    gap: 8px;
+}
+
+/* The hero after PhysicsX's home page (ADR-0077): the material photo full-bleed, only the headline on columns 1 to 6 and two
+ * short paragraphs from column 7 of a 12-column grid (32 px gutters and margins, as measured there on 2026-11-07). The header
+ * (app/globals.css) lies over the hero on this page and scrolls away with it. */
+.home-hero {
+  position: relative;
+  min-height: max(640px, 100svh);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 104px 32px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #080808;
+}
+.home-hero-media {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: url("/assets/images/carbon-weave.jpg") 68% center / cover;
+  filter: grayscale(1);
+}
+/* The clip (ADR-0069) covers the still when its web copy is present; the shades lie over both so the copy reads the same. */
+.home-hero-video,
+.home-hero-video video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.home-hero-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(90deg, #080808f2 0%, #080808cc 34%, #08080899 66%, #080808b3 100%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 26%),
+    linear-gradient(180deg, #080808b3 0%, transparent 22%);
+}
+/* The clip is already dark footage, so it takes lighter shades than the bright still, and a lift of its own; the left keeps
+ * enough shade for the headline, the bottom still fades into the page. */
+.home-hero-media.has-video::after {
+  background-image:
+    linear-gradient(90deg, #080808a6 0%, #08080873 36%, #08080826 68%, #08080840 100%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 22%),
+    linear-gradient(180deg, #08080880 0%, transparent 16%);
+}
+.home-hero-video video {
+  filter: brightness(1.17) contrast(1.05);
+}
+.home-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: center;
+  width: 100%;
+}
+.home-hero-title {
+  grid-column: 1 / 7;
+  position: relative;
+  z-index: 2;
+}
+.home-hero-copy {
+  grid-column: 7 / 13;
+  position: relative;
+  z-index: 2;
+}
+.home-hero h1 {
+  font-family: var(--font);
+  font-weight: 400;
+  font-size: clamp(48px, 5.9vw, 85px);
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+.home-hero-copy > p {
+  max-width: 440px;
+  font-size: 18px;
+  line-height: 24px;
+  color: #f4f4f4;
+}
+.home-hero-copy > p + p {
+  margin-top: 16px;
+}
+/* The lens (ADR-0071): a 4:3 window over the clip, its right edge on the gutter before the copy and its foot just above the
+ * headline's middle, under the words. Through it the clip is dimmed and blurred like glass, and our results play in colour on
+ * top, screen-blended so the recording's black background drops out. The lens itself makes no stacking context (no z-index,
+ * no transform), so the blend reaches the clip; its parts drift together a few pixels, slowly, as PhysicsX's lens does. The
+ * caption above names the model on screen. Wide screens only. */
+.home-hero-lens {
+  position: absolute;
+  right: calc(50% + 16px);
+  bottom: calc(50% + 12px);
+  /* a quarter of the width, but short enough on a low window to keep its caption clear of the header */
+  width: clamp(240px, min(25vw, calc(66svh - 190px)), 440px);
+  aspect-ratio: 4 / 3;
+}
+.home-hero-lens-glass,
+.home-hero-lens video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.home-hero-lens-glass {
+  border: 1px solid #efefef73;
+  -webkit-backdrop-filter: blur(6px) brightness(0.4);
+  backdrop-filter: blur(6px) brightness(0.4);
+}
+.home-hero-lens video {
+  display: block;
+  object-fit: cover;
+  mix-blend-mode: screen;
+}
+.home-hero-lens-caption {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 12px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 17px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: #efefefcc;
+  text-shadow: 0 0 12px #080808;
+}
+.home-hero-lens-caption b {
+  font-weight: 500;
+}
+.home-hero-lens-caption span {
+  color: #efefef8c;
+}
+.home-hero-lens-glass,
+.home-hero-lens video,
+.home-hero-lens-caption {
+  animation: home-hero-lens-drift 26s ease-in-out infinite alternate;
+}
+.home-hero-lens-caption > span,
+.home-hero-lens-caption > b {
+  animation: home-hero-lens-caption 0.6s ease-out;
+}
+@keyframes home-hero-lens-drift {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(-14px, 8px); }
+  100% { transform: translate(6px, -10px); }
+}
+@keyframes home-hero-lens-caption {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-lens-glass,
+  .home-hero-lens video,
+  .home-hero-lens-caption,
+  .home-hero-lens-caption > span,
+  .home-hero-lens-caption > b {
+    animation: none;
   }
+}
+@media (max-width: 1023px) {
+  .home-hero-lens {
+    display: none;
+  }
+}
+/* The programme badge (ADR-0081): a small monospace line over UC San Diego's The Basement mark in white, in the hero's bottom
+ * left corner, on the page's 32 px margin. */
+.home-hero-backed {
+  position: absolute;
+  z-index: 2;
+  left: 32px;
+  bottom: 32px;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #efefefa6;
+}
+.home-hero-backed img {
+  display: block;
+  width: auto;
+  height: 40px;
+}
+@media (max-width: 1023px) {
+  .home-hero {
+    padding: 120px 24px 96px;
+  }
+  .home-hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 40px;
+  }
+  .home-hero-title,
+  .home-hero-copy {
+    grid-column: 1;
+  }
+}
+@media (max-width: 640px) {
+  .home-hero {
+    padding: 104px 20px 80px;
+  }
+  .home-hero-backed {
+    left: 20px;
+    bottom: 20px;
+  }
+  .home-hero-backed img {
+    height: 32px;
+  }
+  .home-hero-grid {
+    row-gap: 32px;
+  }
+  .home-hero h1 {
+    font-size: clamp(40px, 12.3vw, 52px);
+    letter-spacing: -0.02em;
+  }
+  .home-hero-copy > p {
+    font-size: 17px;
+  }
+}
+
+/* The demo section on white (ADR-0077 amendment 6): after the dark hero, the calculator sits on a white page, as PhysicsX's sections do.
+ * The section sets the site's colour variables for itself, then corrects the few colours written out for a dark page. The 3D
+ * view stays a dark viewport, since its axes and dust are drawn for a dark ground. */
+.hero-laminate {
+  --bg: #ffffff;
+  --panel: #f6f6f6;
+  --raised: #efefef;
+  --line: #e1e1e1;
+  --text: #111111;
+  --muted: #666666;
+  --accent: #111111;
+  background: #ffffff;
+  color: var(--text);
+}
+.hero-laminate-canvas {
+  border-color: #1b1b1b;
+}
+.hero-laminate-results {
+  background: var(--panel);
+}
+.hero-field input,
+.hero-field select {
+  border-color: #cfcfcf;
+}
+.hero-field [aria-invalid="true"] {
+  border-color: #c4532f;
+}
+.hero-properties > div,
+.hero-specs > div {
+  background: #ffffff;
+}
+.hero-stack li.is-hovered {
+  border-color: #bdbdbd;
+  background: #efefef;
+}
+.hero-laminate-legend i {
+  box-shadow: 0 0 0 1px #00000040;
+}
+.hero-laminate .calc-matrix th {
+  background: #f1f1f1;
+}
+.hero-laminate .calc-field-error {
+  color: #b4401f;
+}
+.hero-laminate .calc-alert {
+  border-color: #e2b4a4;
+  color: #8a2f12;
+  background: #fdf1ec;
+}
+.hero-laminate .button.primary {
+  color: #ffffff;
+}
+.hero-laminate .button.primary:hover {
+  background: #333333;
+  border-color: #333333;
 }

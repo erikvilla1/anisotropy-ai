@@ -8,7 +8,9 @@ import {
   Factory,
   GraduationCap,
 } from "lucide-react";
+import { ClosingBand } from "@/components/closing-band";
 import { MediaSlot } from "@/components/media-slot";
+import "../inner-pages.css";
 export const metadata = { title: "Industries — Anisotropy" };
 const priorities = [
   {
@@ -73,25 +75,24 @@ const potential = [
 ];
 export default function Industries() {
   return (
-    <main id="main" className="inner-page">
-      <section className="section page-intro">
-        <span className="eyebrow">INDUSTRIES / A FOCUSED START</span>
-        <div className="intro-grid">
-          <div>
-            <h1>
-              Built for research.
-              <br />
-              <em>Directed toward flight.</em>
-            </h1>
+    <main id="main" className="kit-page industries-page">
+      <section className="page-opening">
+        <p className="page-opening-label">INDUSTRIES / A FOCUSED START</p>
+        <h1 className="page-opening-title">
+          Built for research.
+          <br />
+          <em>Directed toward flight.</em>
+        </h1>
+        <div className="page-opening-grid">
+          <div className="page-opening-copy">
             <p>
               Aerospace is our primary industry. Research and education are
               immediate priorities, with a composites material library at the
               center of the experience.
             </p>
           </div>
-          <div className="intro-aside">
-            <span className="status-dot" />
-            <span>COUPONS FIRST</span>
+          <div className="page-opening-note">
+            <p className="page-opening-note-label">COUPONS FIRST</p>
             <p>
               Understand the material.
               <br />
@@ -102,75 +103,73 @@ export default function Industries() {
           </div>
         </div>
       </section>
-      <section className="section industry-section">
-        <span className="eyebrow">OUR PRIORITIES</span>
-        <div className="industry-grid priority-grid">
+      <section className="band is-light industry-priorities-band">
+        <div className="band-head is-label-only">
+          <p className="band-label">OUR PRIORITIES</p>
+        </div>
+        <div className="industry-priorities">
           {priorities.map((s) => (
-            <article className="industry-card" key={s.title}>
+            <article className="industry-priority" key={s.title}>
               <MediaSlot label={s.media.label} kind={s.media.kind} src={s.media.src} alt={s.media.alt} ratio="16/9" />
-              <div className="industry-top">
-                <s.icon size={34} strokeWidth={1.2} />
-                <span>{s.label}</span>
+              <div className="industry-priority-body">
+                <div className="industry-priority-top">
+                  <s.icon size={32} strokeWidth={1.2} />
+                  <span className="kit-mono">{s.label}</span>
+                </div>
+                <h2>{s.title}</h2>
+                <p className="kit-text">{s.text}</p>
+                <ul className="industry-uses">
+                  {s.use.map((u) => (
+                    <li key={u}>{u}</li>
+                  ))}
+                </ul>
+                <Link className="kit-link" href={s.href}>
+                  {s.action}
+                  <ArrowUpRight size={16} />
+                </Link>
               </div>
-              <h2>{s.title}</h2>
-              <p>{s.text}</p>
-              <ul>
-                {s.use.map((u) => (
-                  <li key={u}>{u}</li>
-                ))}
-              </ul>
-              <Link href={s.href}>
-                {s.action}
-                <ArrowUpRight size={15} />
-              </Link>
             </article>
           ))}
         </div>
       </section>
-      <section className="section potential-section">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">BEYOND THE INITIAL FOCUS</span>
+      <section className="band industry-potentials-band">
+        <div className="band-head">
+          <p className="band-label">BEYOND THE INITIAL FOCUS</p>
+          <div className="band-statement">
             <h2>Potential industries.</h2>
+            <p>
+              The same need to understand composites appears in other sectors.
+              These are future opportunities, each requiring its own applicable
+              physics and validation.
+            </p>
           </div>
-          <p>
-            The same need to understand composites appears in other sectors.
-            These are future opportunities, each requiring its own applicable
-            physics and validation.
-          </p>
         </div>
-        <div className="potential-grid">
+        <div className="industry-potentials">
           {potential.map((s) => (
-            <article key={s.title}>
+            <article className="industry-potential" key={s.title}>
               <MediaSlot label={s.media} kind="clip" ratio="16/9" />
-              <s.icon size={27} strokeWidth={1.3} />
-              <span className="tiny-label">POTENTIAL INDUSTRY</span>
-              <h3>{s.title}</h3>
-              <p>{s.text}</p>
+              <div className="industry-potential-body">
+                <s.icon size={26} strokeWidth={1.3} />
+                <span className="kit-mono">POTENTIAL INDUSTRY</span>
+                <h3 className="kit-title">{s.title}</h3>
+                <p>{s.text}</p>
+              </div>
             </article>
           ))}
         </div>
-        <div className="industry-note">
-          <p>
+        <div className="kit-note">
+          <p className="kit-note-text">
             The current product concept is a coupon-scale research workflow.
             Structural applications describe our direction; they are not
             existing component-level validation or certification.
           </p>
         </div>
       </section>
-      <section className="section closing-section">
-        <span className="eyebrow">BEGIN WITH THE ENGINEERING QUESTION</span>
-        <div>
-          <h2>
-            What does your
-            <br />
-            material need to do?
-          </h2>
-          <Link className="button primary" href="/workspace/fea">
-            Define a scope <ArrowUpRight size={17} />
-          </Link>
-        </div>
-      </section>
+      <ClosingBand
+        label="BEGIN WITH THE ENGINEERING QUESTION"
+        heading={["What does your", "material need to do?"]}
+        action={{ label: "Define a scope", href: "/workspace/fea" }}
+      />
     </main>
   );
 }

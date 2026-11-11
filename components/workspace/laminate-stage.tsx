@@ -30,7 +30,7 @@ export function LaminateStage() {
             <LaminateScene plies={plies} hovered={hovered} onHover={setHovered} reducedMotion={true} decor={false} />
           </div>
           <p className="studio-muted">{hovered !== null && angles[hovered] !== undefined ? `Ply ${hovered + 1}: ${angles[hovered]}°. ` : "Hover a ply for its angle. "}
-            Stripes follow the fibres; the drawn thickness is a shape, not a scale.</p>
+            The grain follows the fibres; the drawn thickness is a shape, not a scale.</p>
         </div>
       ) : (
         <div className="studio-empty" data-testid="empty-stack">

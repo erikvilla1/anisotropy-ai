@@ -1,0 +1,20 @@
+{
+  "duration": 15,
+  "segments": [
+    {
+      "id": "tension",
+      "start": 0,
+      "end": 4.5
+    },
+    {
+      "id": "bending",
+      "start": 4.5,
+      "end": 9.5
+    },
+    {
+      "id": "plate",
+      "start": 9.5,
+      "end": 14.5
+    }
+  ]
+}

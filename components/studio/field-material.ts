@@ -63,7 +63,9 @@ const fragmentShader = /* glsl */ `
       float pixel = max(fwidth(f), 1.0e-7);
       float halfWidth = 0.5 * uIsoline * pixel;
       float line = 1.0 - smoothstep(halfWidth, halfWidth + pixel, toBoundary);
-      if (f < halfWidth + pixel || f > uBands - halfWidth - pixel) line = 0.0;
+      // No line at the scale's two ends. The 1e-3 of a band keeps a face whose value sits exactly at an end (a gripped tab at the
+      // largest displacement) from catching rounding noise as a speckle of line pixels.
+      if (f < halfWidth + pixel + 1.0e-3 || f > uBands - halfWidth - pixel - 1.0e-3) line = 0.0;
       color = mix(color, uIsoColor, line * flatFace);
     } else {
       color = rampAt(t);

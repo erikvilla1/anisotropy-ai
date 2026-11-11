@@ -1,10 +1,27 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import Link from "next/link";
-import { ArrowDown, ArrowUpRight, MoveUpRight } from "lucide-react";
-import { HomeComposer } from "@/components/home-composer";
+import { ArrowUpRight, MoveUpRight } from "lucide-react";
+import { ClosingBand } from "@/components/closing-band";
+import { DemoTour } from "@/components/home/demo-tour";
+import { EngineAnswersProvider } from "@/components/home/engine-answers";
+import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
+import { LogoStrip } from "@/components/home/logo-strip";
+import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { serviceHref, services, statusLabel } from "@/lib/services";
+import { supporters } from "@/lib/supporters";
 import { team } from "@/lib/team";
 import "./home.css";
+
+/** The hero clip's web copy (ADR-0069), written by scripts/hero-video.sh into the git-ignored public/media. A build without it,
+ * such as one from the public repository, shows the still photo instead. */
+const heroVideo = existsSync(join(process.cwd(), "public", "media", "hero.mp4"));
+// Plain HTML so the browser sees "muted" before React runs, which autoplay requires; visitors who ask for reduced motion get no
+// source, so the poster frame stays.
+const heroVideoHtml =
+  '<video autoplay muted loop playsinline preload="auto" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
+  '<source src="/media/hero.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)"></video>';
 
 /** What shipped lately, in words a visitor can check against the changelog; no number without a record behind it. */
 const news = [
@@ -25,176 +42,162 @@ const news = [
   },
 ];
 
-/** The home page after the audit of 2026-10-31: the laminate calculator up front, the chat block under it, then short
- * blurbs on the mission, the platform, the evidence, the team and what is new. The workflow and the roadmap live on About. */
+/** The home page: the hero first (ADR-0076, ADR-0077), a scroll-driven tour of one calculation (ADR-0084), the laminate
+ * calculator as the demonstration, then bands on the mission, the supporters, the platform, the team and what is new, and the
+ * closing band. The workflow and the roadmap live on About. */
 export default function Home() {
   return (
     <main id="main">
-      <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
-      <section className="hero" id="overview">
-        <div className="hero-image" />
-        <div className="hero-grid" />
-        <div className="hero-content">
-          <span className="eyebrow">
-            <span className="status-dot" /> ENGINEERING INTELLIGENCE, GROUNDED IN EVIDENCE
-          </span>
-          <h1>
-            From material
+      <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
+        <div className={heroVideo ? "home-hero-media has-video" : "home-hero-media"} aria-hidden="true">
+          {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
+          {heroVideo ? <HeroVideoKeeper /> : null}
+        </div>
+        {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
+        <div className="home-hero-grid">
+          {/* The load-in (ADR-0070 amendment 1): the headline rises, the paragraphs are typed in (components/intro-text.ts). */}
+          <h1 className="home-hero-title" id="home-hero-title" data-intro="rise">
+            Composites.
             <br />
-            to <span>understanding.</span>
+            Calculated.
           </h1>
-          <p>
-            A clearer path from composite coupon to confident design.
-            <br className="desktop-break" /> Connecting physics, physical testing, and research—one layer at a time.
-          </p>
-          <HomeComposer />
-          <div className="hero-footnote">
-            <span className="hero-line" />
-            <span>COUPONS FIRST. EVIDENCE ALWAYS.</span>
+          <div className="home-hero-copy">
+            <p data-intro="type">
+              We&apos;re bringing composite theory and real test data into one engineering platform, changing how laminates
+              and coupons are set up, analyzed and documented.
+            </p>
+            <p data-intro="type">
+              Spend less time on setup and reports. Spend more time on the structure. Trace every number back to its source.
+            </p>
           </div>
         </div>
-        <div className="hero-annotation">
-          <span className="annotation-cross">+</span>
-          <span>
-            CARBON FIBER
-            <br />
-            <span className="muted">The material is the starting point.</span>
-          </span>
-        </div>
-        <div className="hero-bottom">
-          <span>01 — THE FIRST CHAPTER</span>
-          <a href="#mission">
-            SCROLL TO DISCOVER <ArrowDown size={13} />
-          </a>
-          <span>BUILT TO BE TESTED.</span>
-        </div>
-      </section>
-      <div className="principles-strip">
-        <span>
-          <span className="status-dot" /> PHYSICS AT THE CORE
-        </span>
-        <span>LAB DATA AS THE FOUNDATION</span>
-        <span>RESEARCH BEFORE ASSUMPTIONS</span>
-        <span>
-          EVERY RESULT, TRACEABLE <MoveUpRight size={15} />
-        </span>
-      </div>
-      <section className="section home-blurb home-mission" id="mission">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">01 / MISSION</span>
-            <h2>
-              One record,
-              <br />
-              from the layup to the test.
-            </h2>
-          </div>
-        </div>
-        <p className="lead">
-          Composite structures are designed, analyzed, tested and built by different people with different tools, and the
-          evidence gets lost between them. Anisotropy keeps those steps on one record, grounded in composite theory and
-          real mechanical test data, so every answer comes with its assumptions and references.
+        {/* The programme the team is part of, in the hero's bottom left corner (ADR-0081). */}
+        <p className="home-hero-backed">
+          <span>Part of the Fall 2026 Launchpad cohort</span>
+          <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
         </p>
-        <Link className="text-button" href="/about">
-          What we are building <ArrowUpRight size={15} />
-        </Link>
+        {/* "Scroll to explore", in the hero's bottom right corner: one press scrolls to the tour's first step. */}
+        <ScrollToExplore />
       </section>
-      <section className="section home-blurb home-platform" id="platform">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">02 / PLATFORM</span>
-            <h2>
-              Five ways
-              <br />
-              to use it.
-            </h2>
-          </div>
-          <p>
-            The same coupon record feeds every service. Two are built, two exist in part, one is stated as planned; each
-            page says which.
-          </p>
-        </div>
-        <div className="home-platform-grid">
-          {services.map((service) => (
-            <article key={service.slug}>
-              <div>
-                <span className="tiny-label">{service.eyebrow}</span>
-                <span className={`service-status service-status-${service.status}`}>{statusLabel[service.status]}</span>
-              </div>
-              <h3>{service.title}</h3>
-              <p>{service.summary}</p>
-              <Link href={serviceHref(service)}>
-                The page <ArrowUpRight size={13} />
-              </Link>
-            </article>
-          ))}
-        </div>
-      </section>
-      <section className="section home-blurb research-foundation" id="impact">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">03 / IMPACT</span>
-            <h2>
-              Knowledge worth
-              <br />
-              building on.
-            </h2>
-          </div>
-          <p>
-            Research comes first. Explore a growing foundation of reviewed open-source datasets, data from published
-            research studies, and evidence generated in our own lab.
-          </p>
-        </div>
-        <div className="evidence-grid">
-          <article>
-            <span>01 / EVERY NUMBER, A RECORD</span>
-            <h3>Trace it back.</h3>
+      {/* The tour of the calculator (components/home/demo-tour.tsx): the scroll takes a visitor through one real run, then leaves
+          them at the live calculator. The provider renders no element; it lets the tour show the answer the calculator asked for. */}
+      <EngineAnswersProvider>
+        <DemoTour apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
+        <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
+      </EngineAnswersProvider>
+      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11 and 14), dark and
+          light in turn: Mission, the supporters' strip, Platform, About, What is new. Each numbered band opens with the kit's
+          head. The four principles close the Mission band as a strip. */}
+      <section className="band home-blurb home-mission" id="mission">
+        <div className="band-head">
+          <p className="band-label">01 / MISSION</p>
+          <div className="band-statement">
+            <h2>One record, from the layup to the test.</h2>
             <p>
-              Each calculation and each coupon job leaves a run record with its inputs, the engine version and the result,
-              so a number in a report can be followed to the run that produced it.
+              Composite structures are designed, analyzed, tested and built by different people with different tools, and the
+              evidence gets lost between them. Anisotropy keeps those steps on one record, grounded in composite theory and
+              real mechanical test data, so every answer comes with its assumptions and references.
             </p>
-          </article>
-          <article>
-            <span>02 / CHECKED AGAINST A REFERENCE</span>
-            <h3>Compared, not assumed.</h3>
-            <p>
-              Our first bending coupon, IM7/8552 in ASTM D7264 proportions, against CalculiX S8R: 100 numbers within 3 %,
-              the nose reaction within 0.12 %. The decks and the record are in the repository.
-            </p>
-          </article>
-          <article className="evidence-library">
-            <span>03 / THE MATERIALS LIBRARY</span>
-            <h3>Keep the evidence close.</h3>
-            <p>
-              Source records for carbon, glass and sandwich cores, each value with its page and unit, alongside the
-              governing equations and topic-by-topic explanations.
-            </p>
-            <Link className="text-button" href="/library">
-              Explore the materials library <ArrowUpRight size={16} />
+            <Link className="home-link" href="/about">
+              What we are building <ArrowUpRight size={16} />
             </Link>
-          </article>
+          </div>
+        </div>
+        <ul className="home-principles">
+          <li>PHYSICS AT THE CORE</li>
+          <li>LAB DATA AS THE FOUNDATION</li>
+          <li>RESEARCH BEFORE ASSUMPTIONS</li>
+          <li>
+            <span>
+              EVERY RESULT, TRACEABLE <MoveUpRight size={15} />
+            </span>
+          </li>
+        </ul>
+      </section>
+      {/* The supporters' strip, after PhysicsX's logo strip: the logos come from lib/supporters.ts. One logo stands beside its
+          sentence; more take the whole row, and drift once they are wider than it (components/home/logo-strip.tsx). */}
+      <section className="band is-light home-blurb home-supporters" id="supporters" aria-labelledby="supporters-label">
+        <p className="band-label" id="supporters-label">
+          SUPPORTED BY
+        </p>
+        <div className={supporters.length > 1 ? "home-supporters-row is-many" : "home-supporters-row"}>
+          <LogoStrip supporters={supporters} label="Supported by" />
+          <p>Anisotropy is part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego.</p>
         </div>
       </section>
-      <section className="section home-blurb home-team" id="working">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">04 / WORKING AT ANISOTROPY</span>
-            <h2>
-              Five people,
-              <br />
-              two seats each.
-            </h2>
+      <section className="band home-blurb home-platform" id="platform">
+        <div className="band-head">
+          <p className="band-label">02 / PLATFORM</p>
+          <div className="band-statement">
+            <h2>Five ways to use it.</h2>
+            <p>
+              The same coupon record feeds every service. Two are built, two exist in part, one is stated as planned; each
+              page says which.
+            </p>
           </div>
-          <p>
-            One technical seat and one for the company per person. A lead decides alone inside the seat; anything that
-            could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
-            decisions and their reasons with it.
-          </p>
         </div>
-        <div className="home-team-grid">
+        <div className="band-grid">
+          <div className="home-cards home-platform-grid">
+            {services.map((service) => (
+              <article className="band-card" key={service.slug}>
+                <div className="home-card-top">
+                  <span className="home-tag">{service.eyebrow}</span>
+                  <span className={`home-tag home-status home-status-${service.status}`}>{statusLabel[service.status]}</span>
+                </div>
+                <h3>{service.title}</h3>
+                <p>{service.summary}</p>
+                <Link className="home-link" href={serviceHref(service)}>
+                  The page <ArrowUpRight size={16} />
+                </Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+      {/* About keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
+          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. */}
+      <section className="band is-light home-blurb home-about" id="working">
+        <div className="band-head">
+          <p className="band-label">03 / ABOUT</p>
+          <div className="band-statement">
+            <h2>Five people, two seats each.</h2>
+            <p>
+              One technical seat and one for the company per person. A lead decides alone inside the seat; anything that
+              could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
+              decisions and their reasons with it.
+            </p>
+            <p className="home-about-cohort">Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego</p>
+          </div>
+        </div>
+        <div className="home-faces">
           {team.map((person) => (
-            <article key={person.name}>
-              <h3>{person.name}</h3>
+            <article className="home-face" key={person.name}>
+              <div className="home-face-frame">
+                {person.photo ? (
+                  <img src={person.photo} alt={`Portrait of ${person.name}`} loading="lazy" decoding="async" />
+                ) : (
+                  <span aria-hidden="true">
+                    {person.name
+                      .split(" ")
+                      .map((part) => part.charAt(0))
+                      .join("")}
+                  </span>
+                )}
+              </div>
+              <h3>
+                {person.linkedin ? (
+                  <a
+                    href={person.linkedin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
+                  >
+                    {person.name} <ArrowUpRight size={16} />
+                  </a>
+                ) : (
+                  person.name
+                )}
+              </h3>
               <p>
                 {person.role ? `${person.role}. ` : ""}
                 {person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}
@@ -203,22 +206,25 @@ export default function Home() {
             </article>
           ))}
         </div>
-        <Link className="text-button" href="/about#team">
-          The team on the About page <ArrowUpRight size={15} />
+        <Link className="home-link home-about-link" href="/about#team">
+          The team on the About page <ArrowUpRight size={16} />
         </Link>
       </section>
-      <section className="section home-blurb" id="news">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">05 / WHAT IS NEW</span>
+      <section className="band home-blurb" id="news">
+        <div className="band-head">
+          <p className="band-label">04 / WHAT IS NEW</p>
+          <div className="band-statement">
             <h2>Lately.</h2>
+            <p>
+              Three recent changes, as the changelog records them. What was validated against what, and what is still
+              planned, is written there too.
+            </p>
           </div>
-          <p>Three recent changes, as the changelog records them. What was validated against what, and what is still planned, is written there too.</p>
         </div>
         <div className="home-news">
           {news.map((item) => (
             <article key={item.title}>
-              <span className="tiny-label">{item.when.toUpperCase()}</span>
+              <span className="home-tag">{item.when.toUpperCase()}</span>
               <div>
                 <h3>{item.title}</h3>
                 <p>{item.text}</p>
@@ -227,28 +233,18 @@ export default function Home() {
           ))}
         </div>
       </section>
-      <section className="closing-section section">
-        <span className="eyebrow">THE NEXT LAYER STARTS WITH A QUESTION.</span>
-        <div>
-          <h2>
-            Let’s define what
-            <br />
-            comes next.
-          </h2>
-          <Link className="button primary" href="/workspace/fea">
-            Start a conversation <ArrowUpRight size={18} />
-          </Link>
-        </div>
-        <div className="document-links">
-          <span>EXPLORE THE RESEARCH</span>
-          <Link href="/library">
-            Materials & physics library <ArrowUpRight size={15} />
-          </Link>
-          <Link href="/about">
-            Our research approach <ArrowUpRight size={15} />
-          </Link>
-        </div>
-      </section>
+      <ClosingBand
+        label="THE NEXT LAYER STARTS WITH A QUESTION."
+        heading={["Let’s define what", "comes next."]}
+        action={{ label: "Start a conversation", href: "/workspace/fea" }}
+        links={{
+          label: "EXPLORE THE RESEARCH",
+          items: [
+            { label: "Materials & physics library", href: "/library" },
+            { label: "Our research approach", href: "/about" },
+          ],
+        }}
+      />
     </main>
   );
 }

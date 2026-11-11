@@ -1,6 +1,7 @@
 import { CouponVisual } from "@/components/coupon-visual";
 import { MediaSlot } from "@/components/media-slot";
 import { ServicePage } from "@/components/services/service-page";
+import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
@@ -39,10 +40,10 @@ export default function ComputerAidedDesign() {
         media: (
           <>
             <MediaSlot label="The studio's mesh of an open-hole coupon" ratio="16/9" />
-            <div className="concept-panel">
-              <div className="concept-top">
+            <div className="kit-figure">
+              <div className="kit-figure-top">
                 <span>COUPON / GEOMETRY</span>
-                <span className="sample-badge">ILLUSTRATIVE</span>
+                <span className="kit-badge">ILLUSTRATIVE</span>
               </div>
               <CouponVisual mode="geometry" />
               <p>An illustration of a strip coupon with a central hole.</p>

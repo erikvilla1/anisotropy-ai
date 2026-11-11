@@ -30,7 +30,7 @@ export function MediaSlot({ label, caption, src, alt = "", poster, ratio = "16/9
           )
         ) : (
           <div className="media-slot-placeholder" role="img" aria-label={`${word.toLowerCase()} slot: ${label}`}>
-            <span className="tiny-label">{word} SLOT</span>
+            <span className="tiny-label media-slot-kind">{word} SLOT</span>
             <strong>{label}</strong>
           </div>
         )}

@@ -3,21 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ArrowUpRight, Menu, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Menu, X } from "lucide-react";
 import { primaryNav } from "@/lib/site-nav";
 import { ServicesMenu } from "@/components/services-menu";
 
+/** The logo (ADR-0080): the triangle, then the name, both drawn by `app/brand.css` from the vector files in
+ * `public/assets/brand/`. The word itself stays in the link, hidden from view, for screen readers and search engines. */
 function Wordmark({ onClick }: { onClick?: () => void }) {
   return (
     <Link className="wordmark" href="/" aria-label="Anisotropy home" onClick={onClick}>
-      <img
-        className="brand-symbol"
-        src="/assets/brand/anisotropy-mark.svg"
-        alt=""
-        width="40"
-        height="40"
-      />
-      <span>Anisotropy</span>
+      <span className="brand-mark" aria-hidden="true" />
+      <span className="brand-name" aria-hidden="true" />
+      <span className="brand-text">Anisotropy</span>
     </Link>
   );
 }
@@ -35,8 +32,9 @@ export function SiteHeader() {
         </Link>
       </header>
     );
+  // On the home page the header lies over the hero and scrolls away with it (ADR-0077); elsewhere it stays sticky.
   return (
-    <header className="site-header">
+    <header className={pathname === "/" ? "site-header is-home" : "site-header"}>
       <Wordmark onClick={close} />
       <nav
         className={`main-nav ${open ? "open" : ""}`}
@@ -78,20 +76,65 @@ export function SiteHeader() {
   );
 }
 
+/** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and the tagline in the left half, and the header's own
+ * navigation (`lib/site-nav.ts`) as columns of links from the halfway line: the plain pages and the workspace in the first
+ * column, then each item with children as a column of its own under its landing page. Under a rule, the copyright line, the
+ * version and the way back to the top, on the same columns. Absent in the workspace, which is an app. */
 export function SiteFooter() {
   const pathname = usePathname();
   if (pathname === "/chat" || pathname.startsWith("/workspace")) return null;
+  const current = (href: string) => (pathname === href ? "page" : undefined);
   return (
     <footer className="site-footer">
-      <Wordmark />
-      <span>Engineered from evidence.</span>
-      <span>
-        © {new Date().getFullYear()} Anisotropy{" "}
-        <span className="footer-divider">/</span> Research preview v.01
-      </span>
-      <a href="#">
-        Back to top <ArrowUpRight size={14} />
-      </a>
+      <div className="site-footer-top">
+        <div className="site-footer-brand">
+          <Wordmark />
+          <p>Engineered from evidence.</p>
+        </div>
+        <nav className="site-footer-nav" aria-label="Footer">
+          <ul>
+            {primaryNav
+              .filter((item) => !item.children)
+              .map((item) => (
+                <li key={item.href}>
+                  <Link href={item.href} aria-current={current(item.href)}>
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            <li>
+              <Link href="/workspace">
+                Workspace <ArrowUpRight size={16} />
+              </Link>
+            </li>
+          </ul>
+          {primaryNav
+            .filter((item) => item.children)
+            .map((item) => (
+              <ul key={item.href}>
+                <li>
+                  <Link href={item.href} aria-current={current(item.href)}>
+                    {item.label}
+                  </Link>
+                </li>
+                {item.children?.map((child) => (
+                  <li key={child.href} className="site-footer-child">
+                    <Link href={child.href} aria-current={current(child.href)}>
+                      {child.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ))}
+        </nav>
+      </div>
+      <div className="site-footer-bottom">
+        <span>© {new Date().getFullYear()} Anisotropy</span>
+        <span>Research preview v.01</span>
+        <a href="#">
+          Back to top <ArrowUp size={16} />
+        </a>
+      </div>
     </footer>
   );
 }

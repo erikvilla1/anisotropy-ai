@@ -27,7 +27,7 @@ export type SceneProps = {
   onPick?: (element: number | null) => void;
 };
 
-const EDGE_COLOR = "#50574f";
+const EDGE_COLOR = "#555555";
 const LIFT = 1e-3; // frames sit this fraction of the plate's size above the top face so they are not hidden by it
 
 function frame(box: { min: number[]; max: number[] }, z: number): [number, number, number][] {
@@ -99,7 +99,7 @@ export function SceneCanvas(props: SceneProps) {
       <Canvas frameloop="demand" dpr={[1, 2]} gl={{ toneMapping: THREE.ACESFilmicToneMapping }}
         camera={{ position: [centre[0] + 0.9 * size, centre[1] - 1.1 * size, 0.9 * size], up: [0, 0, 1], fov: 32, near: size / 1000, far: size * 40 }}
         onPointerMissed={() => onPick?.(null)}>
-        <color attach="background" args={["#0c0e0d"]} />
+        <color attach="background" args={["#0d0d0d"]} />
         {field ? null : <PresentationLighting size={size} centre={centre} floor={-thickness / 2 - 0.004 * size} />}
         <Plate nodes={nodes} quads={quads} thickness={thickness} field={field} xy={xy} heights={heights} wireframe={wireframe} onPick={onPick} />
         {held.map((marker, i) => {
@@ -127,7 +127,7 @@ export function SceneCanvas(props: SceneProps) {
           <Line points={[...elementLoop(xy, quads[highlight], top, heights), elementLoop(xy, quads[highlight], top, heights)[0]] as [number, number, number][]} color={CRITICAL} lineWidth={3} />
         ) : null}
         {picked !== null && picked >= 0 && picked < quads.length && picked !== highlight ? (
-          <Line points={[...elementLoop(xy, quads[picked], top, heights), elementLoop(xy, quads[picked], top, heights)[0]] as [number, number, number][]} color="#eef0e9" lineWidth={2} />
+          <Line points={[...elementLoop(xy, quads[picked], top, heights), elementLoop(xy, quads[picked], top, heights)[0]] as [number, number, number][]} color="#efefef" lineWidth={2} />
         ) : null}
         <OrbitControls makeDefault target={[centre[0], centre[1], 0]} enableDamping={false} />
       </Canvas>

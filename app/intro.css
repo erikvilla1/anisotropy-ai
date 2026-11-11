@@ -1,0 +1,94 @@
+/* The load-in moves (ADR-0070 amendment 1), after Anduril's; components/intro-text.ts runs them and documents the attributes
+ * (data-intro="type" | "rise" | "fade", data-intro-delay). While a move runs, the element's own text is transparent, not
+ * removed, so it keeps its place and a screen reader still reads it; the copy that moves lies over it, out of the flow. */
+[data-intro-run="text"] {
+  position: relative;
+}
+[data-intro-run^="text"],
+[data-intro-run^="text"] > :not(.intro-overlay),
+[data-intro-run^="text"] > :not(.intro-overlay) * {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+[data-intro-run="fade"] {
+  opacity: 0;
+}
+.intro-overlay {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  display: block;
+  padding: inherit;
+  color: var(--intro-ink, inherit);
+  text-indent: 0;
+  text-align: left;
+  pointer-events: none;
+  user-select: none;
+}
+.intro-line {
+  position: relative;
+  display: flow-root;
+  white-space: pre;
+}
+.intro-line-in {
+  display: block;
+}
+/* The windows (components/intro-text.ts). A window is a plain box that cuts off what overflows it, which is cheap to draw;
+ * padding with an equal negative margin makes it a little larger than the line, so ascenders, descenders and a first letter
+ * that leans left are whole. The script gives that size in whole pixels (--intro-pad), because a box that starts between two
+ * pixels would draw its text soft.
+ *
+ * A rising line comes up into its window from below it. A typed line has three, as wide as the line, that slide so an edge
+ * sits on a character boundary while what they hold slides back and stays still: the first shows the text up to its right
+ * edge; the front one, over it, shows random letters up to its right edge, and inside it the "after" one hides them up to
+ * its left edge. */
+.intro-win {
+  display: block;
+  overflow: hidden;
+  margin: calc(-1 * var(--intro-pad, 6px)) 0 calc(-1 * var(--intro-pad, 6px)) calc(-1 * var(--intro-pad, 6px));
+  padding: var(--intro-pad, 6px) 0 var(--intro-pad, 6px) var(--intro-pad, 6px);
+}
+.intro-overlay[data-kind="type"] .intro-line {
+  width: max-content;
+}
+.intro-win-in {
+  position: relative;
+  display: flow-root;
+}
+.intro-win.is-front {
+  position: absolute;
+  inset: 0;
+}
+.intro-win.is-after {
+  margin-left: 0;
+  padding-left: 0;
+}
+.intro-win.is-front .intro-win,
+.intro-win.is-front .intro-win-in {
+  height: 100%;
+}
+.intro-roll {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.intro-cell {
+  position: absolute;
+  top: 0;
+  display: block;
+  text-align: center;
+  white-space: pre;
+}
+/* Before the moves start: a rising line is below its window, and every window of a typed line is closed. */
+.intro-overlay[data-kind="rise"][data-armed] .intro-line-in {
+  transform: translateY(125%);
+}
+.intro-overlay[data-kind="type"][data-armed] .intro-win:not(.is-after) {
+  transform: translateX(-102%);
+}
+.intro-overlay[data-armed] .intro-line-in,
+.intro-overlay[data-kind="type"][data-armed] .intro-win,
+.intro-overlay[data-armed] .intro-win-in,
+.intro-overlay[data-armed] .intro-roll {
+  will-change: transform, opacity;
+}

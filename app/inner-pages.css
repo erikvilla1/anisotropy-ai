@@ -1,0 +1,521 @@
+/* The inner pages (About, Industries, Services and its five pages, Contact) set as the home page is (ADR-0077 amendment 12).
+ * Each opens on the dark page ground under the header, with the hero's type: a monospace label with a tick, the headline, and
+ * the introduction from the halfway line (column 7, where the header's links start). Every section after it is a band of the
+ * section kit (`app/sections.css`), light first and then alternating. This file holds the parts those pages share and the
+ * Industries page's own; `app/about/about.css` and `app/services/services.css` hold the rest. A page's stylesheet stays loaded
+ * after a visit, so every name here is new (`kit-`, `page-opening`, `industry-`) and nothing restyles a class another page uses,
+ * except the media slot, which only these pages use. */
+.kit-page {
+  overflow: clip;
+}
+
+/* The page opening. 32 px margins as the header has, so the label and the headline start under the logo. */
+.page-opening {
+  padding: 88px 32px 104px;
+  background: var(--bg);
+  color: var(--text);
+}
+.page-opening-label {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin: 0 0 40px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.page-opening-label::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 11px;
+  background: currentColor;
+}
+.page-opening-title {
+  margin: 0;
+  font-family: var(--font);
+  font-size: clamp(44px, 5vw, 72px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+}
+.page-opening-title em {
+  font-style: normal;
+}
+.page-opening-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  margin-top: 72px;
+}
+.page-opening-copy {
+  grid-column: 7 / 13;
+  grid-row: 1;
+}
+.page-opening-copy p {
+  max-width: 36em;
+  font-size: 18px;
+  line-height: 26px;
+  color: var(--text);
+}
+.page-opening-copy p + p {
+  margin-top: 16px;
+}
+/* The short note that stood beside the old introduction: under the headline's left edge, in the label's columns. */
+.page-opening-note {
+  grid-column: 1 / 5;
+  grid-row: 1;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.page-opening-note-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.page-opening-note-label::before {
+  content: "";
+  flex: none;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* On a service page the note is the service's state, so its dot is the state's mark (see `kit-status`). */
+.page-opening-note-label.is-partly::before {
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+.page-opening-note-label.is-planned::before {
+  background: none;
+}
+.page-opening-note p:not(.page-opening-note-label) {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+
+/* Small parts on either ground: they read the band's variables. */
+.kit-title {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+.kit-text {
+  max-width: 36em;
+  font-size: 18px;
+  line-height: 26px;
+  color: var(--muted);
+}
+.kit-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.kit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--text);
+  transition: opacity 0.15s;
+}
+.kit-link:hover {
+  opacity: 0.6;
+}
+/* How much of a thing exists (lib/services.ts), without a colour, as the home page's cards mark it: a full dot for built,
+ * half for in part, a ring for planned. The word names the state. */
+.kit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text);
+}
+.kit-status::before {
+  content: "";
+  flex: none;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.kit-status-built::before {
+  background: currentColor;
+}
+.kit-status-partly::before {
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+.kit-badge {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* A band's head with a label and no statement. */
+.band-head.is-label-only {
+  margin-bottom: 40px;
+}
+
+/* A list of rows on the head's columns: the row's name under the label (columns 1 to 3), its text under the statement (4 to
+ * 9), and a link or a mark in the last three. 1 px rules between the rows. */
+.kit-row {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  padding: 32px 0;
+  border-top: 1px solid var(--line);
+}
+.kit-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.kit-row-head {
+  grid-column: 1 / 4;
+  min-width: 0;
+}
+.kit-row-body {
+  grid-column: 4 / 10;
+  min-width: 0;
+}
+.kit-row-aside {
+  grid-column: 10 / 13;
+  min-width: 0;
+}
+.kit-row-aside.kit-link,
+.kit-row-aside.kit-status {
+  justify-self: start;
+  margin-top: 2px;
+}
+/* A note under a band's content, behind a 1 px rule: its mark under the label, its text under the statement. */
+.kit-note {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.kit-note-lead {
+  grid-column: 1 / 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  color: var(--text);
+}
+.kit-note-text {
+  grid-column: 4 / 11;
+  max-width: 44em;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+.kit-note-text strong {
+  font-weight: 500;
+  color: var(--text);
+}
+.kit-note-text.has-icon {
+  display: flex;
+  gap: 12px;
+}
+.kit-note-text.has-icon svg {
+  margin-top: 3px;
+  color: var(--text);
+}
+
+/* The illustration panel: the coupon drawing is drawn for a dark ground, so the panel stays a dark viewport on a light band,
+ * as the home demo's 3D view does. It sets the dark values of the variables for itself. */
+.kit-figure {
+  --bg: #0d0d0d;
+  --panel: #141414;
+  --line: #2d2d2d;
+  --text: #efefef;
+  --muted: #a0a0a0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+}
+.kit-figure > svg {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.kit-figure-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.kit-figure > p {
+  padding: 4px 20px 20px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+
+/* The media slot (components/media-slot.tsx) on either ground. A photo sits in a 1 px frame. An empty slot is the same frame
+ * on the band's panel colour with a faint hatch in the band's line colour, and says in the corner what belongs there, in the
+ * label's type. */
+.kit-page .media-slot {
+  min-width: 0;
+}
+.kit-page .media-slot-frame {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.kit-page .media-slot-placeholder {
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 20px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: repeating-linear-gradient(135deg, transparent 0 13px, var(--line) 13px 14px) var(--panel);
+}
+.kit-page .media-slot-kind {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+  font-weight: 400;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.kit-page .media-slot-kind::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 9px;
+  background: currentColor;
+}
+.kit-page .media-slot-placeholder strong {
+  max-width: 30ch;
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--text);
+}
+.kit-page .media-slot figcaption {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted);
+}
+
+/* Industries. The two priorities are two cards of six columns, the picture across the top of each; the four potential
+ * industries are four cards of three columns. */
+.industry-priorities,
+.industry-potentials {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 32px;
+}
+.industry-priority,
+.industry-potential {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.industry-priority {
+  grid-column: span 6;
+}
+.industry-potential {
+  grid-column: span 3;
+}
+.kit-page .industry-priority .media-slot-frame,
+.kit-page .industry-potential .media-slot-frame {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.industry-priority-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 32px;
+}
+.industry-priority-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.kit-page .industry-priority h2 {
+  margin: 0 0 16px;
+  font-family: var(--font);
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 41px;
+  letter-spacing: -0.01em;
+}
+.industry-uses {
+  display: grid;
+  margin: 32px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 16px;
+  line-height: 24px;
+}
+.industry-uses li {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.industry-uses li:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.industry-priority .kit-link {
+  align-self: flex-start;
+  margin-top: auto;
+}
+.industry-potential-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+}
+.industry-potential-body svg {
+  margin-bottom: 12px;
+}
+.industry-potential-body p {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+
+@media (max-width: 1279px) {
+  .industry-potential {
+    grid-column: span 6;
+  }
+}
+@media (max-width: 1023px) {
+  .page-opening {
+    padding: 72px 32px 88px;
+  }
+  .page-opening-grid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 40px;
+    margin-top: 48px;
+  }
+  .page-opening-copy,
+  .page-opening-note {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .kit-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+    padding: 24px 0;
+  }
+  .kit-row-head,
+  .kit-row-body,
+  .kit-row-aside {
+    grid-column: 1;
+  }
+  .kit-note {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+    margin-top: 40px;
+  }
+  .kit-note-lead,
+  .kit-note-text {
+    grid-column: 1;
+  }
+  .industry-priority {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 760px) {
+  .page-opening {
+    padding: 56px 20px 64px;
+  }
+  .page-opening-label {
+    margin-bottom: 28px;
+    font-size: 13px;
+  }
+  .page-opening-title {
+    font-size: clamp(34px, 9.4vw, 44px);
+    letter-spacing: -0.02em;
+  }
+  .page-opening-grid {
+    row-gap: 32px;
+    margin-top: 36px;
+  }
+  .page-opening-copy p,
+  .kit-text {
+    font-size: 16px;
+    line-height: 24px;
+  }
+  .kit-title {
+    font-size: 20px;
+    line-height: 26px;
+  }
+  .industry-priorities,
+  .industry-potentials {
+    gap: 20px;
+  }
+  .industry-potential {
+    grid-column: 1 / -1;
+  }
+  .industry-priority-body {
+    padding: 24px;
+  }
+  .kit-page .industry-priority h2 {
+    font-size: 30px;
+    line-height: 34px;
+  }
+}

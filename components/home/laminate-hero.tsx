@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Layers3 } from "lucide-react";
 import { LaminateScene } from "./scene";
 import { AbdGrid, FailurePanel, PropertyRow, SpecsList, StackList } from "./laminate-panels";
+import { useEngineAnswers } from "./engine-answers";
 import {
   buildAnalysisRequest, CalculationError, loadNames, requestAnalysis, type AnalysisResult, type FieldErrors, type LoadName,
 } from "@/lib/laminate-api";
@@ -38,6 +39,8 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
   const lastSent = useRef<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const sequence = useRef(0);
+  // The page's shared answers (components/home/engine-answers.tsx): the tour above shows the answer asked for here.
+  const shared = useEngineAnswers();
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -73,24 +76,31 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
       lastSent.current = requestJson;
       setPending(true);
       setMessage("");
+      shared?.report(requestJson, { state: "pending" });
       const timeout = window.setTimeout(() => mine.abort("timeout"), TIMEOUT_MS);
       try {
         const answer = await requestAnalysis(apiBaseUrl, JSON.parse(requestJson), mine.signal);
+        shared?.report(requestJson, { state: "answer", result: answer });
         if (seq === sequence.current) setResult(answer);
       } catch (error) {
-        if (mine.signal.reason === "superseded" || mine.signal.reason === "unmount" || seq !== sequence.current) return;
+        if (mine.signal.reason === "superseded" || mine.signal.reason === "unmount" || seq !== sequence.current) {
+          shared?.report(requestJson, { state: "dropped" });
+          return;
+        }
         setResult(null);
         lastSent.current = null;
-        setMessage(mine.signal.aborted
+        const text = mine.signal.aborted
           ? "The calculation timed out. Edit the layup to try again."
-          : error instanceof CalculationError ? error.message : "Cannot reach the calculation service. The view still draws your stack.");
+          : error instanceof CalculationError ? error.message : "Cannot reach the calculation service. The view still draws your stack.";
+        setMessage(text);
+        shared?.report(requestJson, { state: "failed", message: text });
       } finally {
         window.clearTimeout(timeout);
         if (seq === sequence.current) setPending(false);
       }
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [apiBaseUrl, requestJson]);
+  }, [apiBaseUrl, requestJson, shared]);
 
   function update(next: Partial<HeroState>) {
     setState((current) => ({ ...current, ...next }));
@@ -108,26 +118,18 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
     <section className="hero-laminate" id="laminate" aria-labelledby="laminate-title">
       <div className="hero-laminate-inner">
         <div className="hero-laminate-head">
-          <span className="eyebrow"><span className="status-dot" /> LAMINATE CALCULATOR / LIVE</span>
-          <h2 id="laminate-title">Your layup, calculated.</h2>
-          <p>
-            Pick a material from the library, type the stacking, and the engine returns what your laminate is and how stiff
-            it is as you type. Add loads to see the first ply to fail.
-          </p>
+          <p className="hero-laminate-label">LAMINATE CALCULATOR / LIVE</p>
+          <div className="hero-laminate-statement">
+            <h2 id="laminate-title">Your layup, calculated.</h2>
+            <p>
+              Pick a material from the library, type the stacking, and the engine returns what your laminate is and how
+              stiff it is as you type. Add loads to see the first ply to fail.
+            </p>
+          </div>
         </div>
         <div className="hero-laminate-grid">
           <div className="hero-laminate-view">
             <LaminateScene plies={plies} hovered={hovered} onHover={setHovered} reducedMotion={reducedMotion} />
-            <p className="hero-laminate-hover" role="status" data-testid="hover-label">
-              {hoveredPly !== null
-                ? `Ply ${hovered! + 1} of ${angles.length} · ${hoveredPly > 0 ? `+${hoveredPly}` : hoveredPly}° · ${state.thickness_mm} mm`
-                : "Hover a ply to read its angle. Drag to turn the stack."}
-            </p>
-            <div className="hero-laminate-legend">
-              <span><i style={{ background: "#c1deb5" }} /> x, along the 0° fiber</span>
-              <span><i style={{ background: "#8fbb80" }} /> y, across</span>
-              <span><i style={{ background: "#eef0e9" }} /> z, through the thickness (not to scale)</span>
-            </div>
           </div>
           <form className="hero-laminate-inputs" onSubmit={(event) => event.preventDefault()} aria-label="Laminate inputs">
             <div className="hero-field">
@@ -174,32 +176,55 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
               </div>
               <span className="calc-hint">First-ply failure is evaluated only when a load is given; every load scales together.</span>
             </details>
-            <StackList angles={angles} thickness_mm={state.thickness_mm} colors={colors} hovered={hovered} onHover={setHovered} />
           </form>
-          <div className={`hero-laminate-results ${fresh ? "" : "is-stale"}`} aria-busy={pending} aria-live="polite">
-            <div className="hero-results-head">
-              <span className="eyebrow">THE ENGINE SAYS</span>
-              <span className="calc-hint" title={result?.run_id ?? undefined}>
-                {!apiBaseUrl ? "Calculations are unavailable on this site." : pending ? "Calculating…" : result && fresh ? `Engine ${result.engine_version}${result.run_id ? ` · run ${result.run_id.slice(0, 8)}` : ""}` : inputError ? "" : "Waiting for the engine."}
-              </span>
+          <div className="hero-laminate-stack">
+            <p className="hero-stack-head" aria-hidden="true">Plies, top face first</p>
+            <StackList angles={angles} thickness_mm={state.thickness_mm} colors={colors} hovered={hovered} onHover={setHovered} />
+            <div className="hero-laminate-caption">
+              <p className="hero-laminate-hover" role="status" data-testid="hover-label">
+                {hoveredPly !== null
+                  ? `Ply ${hovered! + 1} of ${angles.length} · ${hoveredPly > 0 ? `+${hoveredPly}` : hoveredPly}° · ${state.thickness_mm} mm`
+                  : "Hover a ply to read its angle. Drag to turn the stack."}
+              </p>
+              <div className="hero-laminate-legend">
+                <span><i style={{ background: "#d4d4d4" }} /> x, along the 0° fiber</span>
+                <span><i style={{ background: "#acacac" }} /> y, across</span>
+                <span><i style={{ background: "#efefef" }} /> z, through the thickness (not to scale)</span>
+              </div>
             </div>
-            {inputError ? <p className="calc-alert" role="alert">{inputError}</p> : message ? <p className="calc-alert" role="alert">{message}</p> : null}
+          </div>
+          <div className={`hero-laminate-results ${fresh ? "" : "is-stale"}`} aria-busy={pending} aria-live="polite">
+            <div className="hero-results-side">
+              <div className="hero-results-head">
+                <span className="eyebrow">THE ENGINE SAYS</span>
+                <span className="calc-hint" title={result?.run_id ?? undefined}>
+                  {!apiBaseUrl ? "Calculations are unavailable on this site." : pending ? "Calculating…" : result && fresh ? `Engine ${result.engine_version}${result.run_id ? ` · run ${result.run_id.slice(0, 8)}` : ""}` : inputError ? "" : "Waiting for the engine."}
+                </span>
+              </div>
+              {inputError ? <p className="calc-alert" role="alert">{inputError}</p> : message ? <p className="calc-alert" role="alert">{message}</p> : null}
+              {result && !inputError && result.summary ? <SpecsList summary={result.summary} /> : null}
+            </div>
+            <div className="hero-results-main">
+              {result && !inputError ? (
+                <>
+                  {showLoads && result.first_ply_failure ? <FailurePanel failure={result.first_ply_failure} /> : null}
+                  <AbdGrid result={result} />
+                </>
+              ) : !inputError ? (
+                <div className="calc-empty hero-empty">
+                  <Layers3 size={30} strokeWidth={1} />
+                  <p>{apiBaseUrl ? "The description, the matrices and the failure check appear here." : "Without a calculation service the view still draws your stack; the numbers need the engine."}</p>
+                </div>
+              ) : null}
+            </div>
             {result && !inputError ? (
-              <>
-                {result.summary ? <SpecsList summary={result.summary} /> : null}
-                {showLoads && result.first_ply_failure ? <FailurePanel failure={result.first_ply_failure} /> : null}
-                <AbdGrid result={result} />
+              <div className="hero-results-end">
                 <Link className="button primary hero-check" href="/calculator" onClick={handOff}>
                   Want to check the math? <ArrowUpRight size={16} />
                 </Link>
                 <p className="calc-scope">
                   Flat laminate, one material, linear elastic classical laminate theory. The full page shows the strains, the curvatures and every cited value.
                 </p>
-              </>
-            ) : !inputError ? (
-              <div className="calc-empty hero-empty">
-                <Layers3 size={30} strokeWidth={1} />
-                <p>{apiBaseUrl ? "The description, the matrices and the failure check appear here." : "Without a calculation service the view still draws your stack; the numbers need the engine."}</p>
               </div>
             ) : null}
           </div>

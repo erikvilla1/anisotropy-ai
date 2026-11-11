@@ -1,31 +1,5 @@
 import { test, expect } from "@playwright/test";
 
-test("homepage hands its message once to the coupon assistant (ADR-0055 amendment 1; ADR-0062)", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await expect(
-    page.getByRole("button", { name: "Start chat", exact: true }),
-  ).toBeDisabled();
-  const input = page.getByRole("textbox", {
-    name: "Describe your engineering question",
-  });
-  await input.fill("Open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm");
-  await input.press("Shift+Enter");
-  await expect(page).toHaveURL(/\/$/);
-  await input.press("Enter");
-  await expect(page).toHaveURL(/\/workspace\/fea\/?$/); // the assistant's page since ADR-0058 amendment 1
-  await expect(page.locator(".chat-user")).toHaveCount(1);
-  await expect(page.getByTestId("chat-spec")).toContainText("open-hole tension");
-  await expect(page.getByTestId("chat-spec")).toContainText("[45/0/-45/90]s, 8 plies");
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear");
-  await page.reload();
-  // The message is not handed over again, but the project is kept across the reload (ADR-0062 part 1).
-  await expect(page.locator(".chat-user")).toHaveCount(0);
-  await expect(page.getByTestId("chat-spec")).toContainText("[45/0/-45/90]s, 8 plies");
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "shear");
-});
-
 test("physics topics group transformations, local recovery and failure functions", async ({
   page,
 }) => {
@@ -77,18 +51,14 @@ test("physics topics group transformations, local recovery and failure functions
 test("research positioning is explicit without an AI implementation pitch on About", async ({
   page,
 }) => {
+  // The home page's Impact section, which stated the research foundation, left it (ADR-0077 amendment 14).
   await page.goto("/");
-  await expect(page.locator(".research-foundation")).toContainText(
-    "open-source datasets",
-  );
-  await expect(page.locator(".research-foundation")).toContainText(
-    "published research studies",
-  );
+  await expect(page.locator(".research-foundation")).toHaveCount(0);
   await page.goto("/about");
   await expect(page.locator("main")).not.toContainText(
     /machine learning|scikit-learn|PyTorch|surrogate|FastAPI/i,
   );
   await page.goto("/industries");
-  await expect(page.locator(".priority-grid .industry-card")).toHaveCount(2);
-  await expect(page.locator(".potential-grid article")).toHaveCount(4);
+  await expect(page.locator(".industry-priorities .industry-priority")).toHaveCount(2);
+  await expect(page.locator(".industry-potentials .industry-potential")).toHaveCount(4);
 });

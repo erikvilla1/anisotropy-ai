@@ -1,108 +1,289 @@
-/* The About page after the audit of 2026-10-31: what we are building, the workflow and the roadmap moved from the home
-   page, the lab sections, and the team. */
-.about-building .section-heading {
-  margin-bottom: 40px;
+/* The About page on the section kit (ADR-0077 amendment 12; the content is the audit's of 2026-10-31): what we are building,
+ * the workflow, the roadmap, the lab, the research context, what the model describes, and the team. The shared parts
+ * (`kit-row`, `kit-note`, `kit-figure`, the page opening) are in `app/inner-pages.css`. */
+
+/* What we are building: the five parts as rows on the head's columns, then the photograph under the statement (columns 4 to
+ * 9) with its caption beside it (10 to 12), as the home demo's view and caption sit. */
+.about-pillar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
 }
-.about-building-grid {
+.about-figure {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
-  gap: 32px;
-  align-items: start;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: end;
+  margin-top: 64px;
 }
-.about-pillars {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+.about-figure .media-slot-frame {
+  grid-column: 4 / 10;
 }
-.about-pillars article {
+.kit-page .about-figure figcaption {
+  grid-column: 10 / 13;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+/* The workflow: four cards of three columns. */
+.about-step {
+  grid-column: span 3;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--panel);
+  min-height: 300px;
 }
-.about-pillars article > div {
+.about-step-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-}
-.about-pillars h3 {
-  margin: 0;
-  font-family: var(--heading);
-  font-size: 20px;
-  font-weight: 500;
-}
-.about-pillars p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.7;
-}
-.about-pillars a {
-  margin-top: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--accent);
-}
-.about-workflow .section-heading,
-.about-direction .section-heading {
-  margin-bottom: 44px;
-}
-.about-workflow .core-rule {
-  margin-top: 36px;
-}
-.about-direction .validation-gate {
-  margin-top: 32px;
-}
-.team-section .section-heading {
   margin-bottom: 40px;
 }
-.team-grid {
+.about-step .kit-title {
+  margin-bottom: 12px;
+}
+.about-step p {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+.about-step-tag {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 32px;
+}
+
+/* The roadmap: four columns under a 1 px rule each; the current stage's rule and marks are in the text colour. */
+.about-stage {
+  grid-column: span 3;
+  display: flex;
+  flex-direction: column;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.about-stage.is-current {
+  border-top-color: var(--text);
+}
+.about-stage-number {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 20px;
+  margin-bottom: 40px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted);
+}
+.about-stage.is-current .about-stage-number,
+.about-stage.is-current .about-stage-status {
+  color: var(--text);
+}
+.about-stage-dot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.about-stage-plus {
+  font-size: 18px;
+  line-height: 20px;
+}
+.about-stage .kit-title {
+  margin: 6px 0 12px;
+}
+.about-stage p {
+  flex: 1;
+  max-width: 30em;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+.about-stage-status {
+  margin-top: 32px;
+}
+
+/* The lab: the picture in the left half, the loop's four steps as rows from the halfway line. */
+.about-lab-media {
+  grid-column: 1 / 7;
+}
+.about-lab-cycle {
+  grid-column: 7 / 13;
+  align-self: stretch;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 18px;
+  grid-auto-rows: 1fr;
+}
+.about-lab-cycle article {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.about-lab-cycle article:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.about-lab-cycle article > svg:last-child {
+  margin-left: auto;
+  color: var(--muted);
+}
+.about-lab-cycle p {
+  margin-top: 4px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+
+/* The research context: the illustration in the left half, the three notes as rows from the halfway line. */
+.about-context-figure {
+  grid-column: 1 / 7;
+  align-self: start;
+}
+.about-context-notes {
+  grid-column: 7 / 13;
+  display: grid;
+  align-content: start;
+}
+.about-context-notes article {
+  display: grid;
+  gap: 8px;
+  padding: 24px 0;
+  border-top: 1px solid var(--line);
+}
+.about-context-notes article:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.about-context-notes p {
+  max-width: 36em;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
+}
+
+/* What the model describes: its four subjects as four columns under a rule, then the closing paragraph under the statement. */
+.about-model-tags {
+  margin-bottom: 48px;
+}
+.about-model-tags span {
+  grid-column: span 3;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+.about-model-text {
+  grid-column: 4 / 11;
+}
+
+/* The team: cards of three columns under the statement, the note about the repository in the sixth place. */
+.team-grid {
+  grid-column: 4 / 13;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
 }
 .team-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 18px;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
 }
-.team-card .media-slot {
-  margin-bottom: 8px;
+.kit-page .team-card .media-slot-frame {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
 }
-.team-card h3 {
-  margin: 0;
-  font-family: var(--heading);
-  font-size: 18px;
-  font-weight: 500;
+.team-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 24px 24px;
 }
 .team-card .team-role {
-  color: var(--accent);
+  color: var(--text);
 }
 .team-card p {
-  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
+}
+.team-card .team-role + p {
+  margin-top: 4px;
 }
 .team-note {
-  margin-top: 28px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.7;
-  max-width: 70ch;
+  align-self: start;
+  padding-top: 24px;
+  border-top: 1px solid var(--text);
+  font-size: 18px;
+  line-height: 26px;
 }
-@media (max-width: 900px) {
-  .about-building-grid {
-    grid-template-columns: 1fr;
+
+/* Between 1024 and 1279 px four of three columns are too narrow: they pair up, and the team's cards go two to a row. */
+@media (max-width: 1279px) {
+  .about-step,
+  .about-stage,
+  .about-model-tags span {
+    grid-column: span 6;
+  }
+  .about-step {
+    min-height: 0;
+  }
+  .about-step-top,
+  .about-stage-number {
+    margin-bottom: 28px;
+  }
+  .team-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1023px) {
+  .about-figure {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+    margin-top: 48px;
+  }
+  .about-figure .media-slot-frame,
+  .kit-page .about-figure figcaption {
+    grid-column: 1;
+  }
+  .kit-page .about-figure figcaption {
+    padding-top: 0;
+    border-top: 0;
+  }
+  .about-lab-media,
+  .about-lab-cycle,
+  .about-context-figure,
+  .about-context-notes,
+  .about-model-text,
+  .team-grid {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 760px) {
+  .about-step,
+  .about-stage,
+  .about-model-tags span {
+    grid-column: 1 / -1;
+  }
+  .about-step-top,
+  .about-stage-number {
+    margin-bottom: 24px;
+  }
+  .about-model-tags span {
+    font-size: 20px;
+    line-height: 26px;
+  }
+  .team-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
   }
 }

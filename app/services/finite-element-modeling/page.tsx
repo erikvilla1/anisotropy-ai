@@ -1,6 +1,7 @@
 import { CouponVisual } from "@/components/coupon-visual";
 import { MediaSlot } from "@/components/media-slot";
 import { ServicePage } from "@/components/services/service-page";
+import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
@@ -48,10 +49,10 @@ export default function FiniteElementModeling() {
         media: (
           <>
             <MediaSlot label="A solved open-hole coupon in the studio: the critical ply and its failure index" ratio="16/9" />
-            <div className="concept-panel">
-              <div className="concept-top">
+            <div className="kit-figure">
+              <div className="kit-figure-top">
                 <span>COUPON / STRESS FIELD</span>
-                <span className="sample-badge">ILLUSTRATIVE</span>
+                <span className="kit-badge">ILLUSTRATIVE</span>
               </div>
               <CouponVisual mode="stress" />
               <p>An illustration of the field the studio shows; the studio draws the computed one.</p>
