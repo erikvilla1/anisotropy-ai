@@ -207,6 +207,15 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click(); // the answer's own row, in the gauge section (ADR-0085)
   await expect(page.getByTestId("readout")).toContainText("the critical element");
   await expect(page.getByTestId("readout")).toContainText("tsai hill: ply");
+  // every ply of the picked element, as CAE's Probe Values reads it (ADR-0066 amendment 2): its number, each ply's stresses and invariants
+  const probe = page.getByTestId("probe");
+  await expect(probe).toContainText("as Abaqus/CAE's Probe Values reads it");
+  await expect(probe.getByTestId("probe-table").locator("tbody tr")).toHaveCount(8);
+  await expect(probe.getByTestId("probe-table").locator("thead")).toContainText("Tresca");
+  await expect(probe).toContainText("S13 and S23: not modelled (membrane state)");
+  await expect(probe.getByTestId("probe-csv")).toHaveAttribute("download", /^probe-element-\d+\.csv$/);
+  await page.getByLabel("Field", { exact: true }).selectOption("tresca");
+  await expect(page.getByLabel("Shown as", { exact: true })).toHaveCount(0); // element values only: no display averages for an invariant
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: ".local/website/screenshots/studio-results.png", fullPage: true });
   expect(browserErrors).toEqual([]);

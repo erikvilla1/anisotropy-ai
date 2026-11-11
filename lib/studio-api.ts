@@ -71,7 +71,11 @@ export type Fields = {
     averages_note: string };
   element: { strain: number[][]; section_force: number[][]; centroids: number[][];
     curvature?: number[][]; moment?: number[][]; shear_force?: number[][]; shear_strain?: number[][];
-    ply: { stress_12: Faced<number[]>[][]; stress_xy: Faced<number[]>[][]; strain_12: Faced<number[]>[][]; mises: Faced<number>[][] };
+    ply: {
+      stress_12: Faced<number[]>[][]; stress_xy: Faced<number[]>[][]; strain_12: Faced<number[]>[][]; mises: Faced<number>[][];
+      /** Tresca, the three principal stresses and the pressure of each ply (ADR-0066 amendment 2); absent from a job solved before them. */
+      invariants?: Record<string, Faced<number>[][]>;
+    };
     failure: Record<string, { ratio: Faced<number | null>[][]; index: Faced<number>[][]; mode: Faced<number>[][]; worst_ply: number[]; worst_face?: string[];
       element_index: number[] }>; modes: string[] };
   /** Per field (ADR-0063): `element` and `nodal` spans; a list per ply, and per ply and face, for the ply fields; per criterion for the failure index. */

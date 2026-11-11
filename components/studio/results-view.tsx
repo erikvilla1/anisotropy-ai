@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DOWNLOADS, explainJob, fileUrl, isActive, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
-import { DEFAULT_CHOICE, elementReadout, fieldOptions, valuesFor, type FieldChoice } from "@/lib/studio-fields";
+import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
 import { answerOf, BASIS_WORDS, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
@@ -494,6 +494,32 @@ function criticalElement(fields: Fields): number | null {
   return fields.summary.earliest ? fields.summary.fpf[fields.summary.earliest].element : null;
 }
 
+/** Every ply of the picked element, as Abaqus/CAE's Query > Probe Values shows it for a composite shell (ADR-0066 amendment 2): the same
+ * element number, the centroid, no averaging, each ply in its material axes; with a CSV of the same numbers. */
+function ProbePanel({ fields, table }: { fields: import("@/lib/studio-api").Fields; table: ProbeTable }) {
+  const lab = fields.labels;
+  const faces = table.rows.some((r) => r.face);
+  const href = `data:text/csv;charset=utf-8,${encodeURIComponent(probeCsv(fields, table))}`;
+  return (
+    <details className="studio-probe" data-testid="probe" open>
+      <summary>Every ply at element {table.label}{table.instance ? ` of ${table.instance}` : ""}, as Abaqus/CAE&apos;s Probe Values reads it</summary>
+      <p className="studio-muted">{table.note}</p>
+      <div className="studio-table-scroll">
+        <table className="studio-table" data-testid="probe-table">
+          <thead><tr><th scope="col">Ply</th>{faces ? <th scope="col">Face</th> : null}
+            {PROBE_COLUMNS.map((c, i) => <th key={c} scope="col">{c}<br /><span className="studio-muted">{i < 9 ? lab.stress : "-"}</span></th>)}</tr></thead>
+          <tbody>{table.rows.map((r) => (
+            <tr key={`${r.ply}-${r.face ?? ""}`} data-ply={r.ply}><th scope="row">{r.ply} ({r.angle}°)</th>{faces ? <td>{r.face}</td> : null}
+              {r.values.map((v, i) => <td key={PROBE_COLUMNS[i]}>{v === null || v === undefined ? "–" : printed(v)}</td>)}</tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <p className="studio-muted">S13 and S23: not modelled (membrane state). Mises, Tresca and the principal stresses are what Abaqus shows, comparison quantities, not a composite&apos;s failure criterion.
+        {" "}<a href={href} download={`probe-element-${table.label}.csv`} data-testid="probe-csv">Download this table (CSV)</a></p>
+    </details>
+  );
+}
+
 export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false }: {
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
   /** our kernel's live answer (ADR-0086), shown with its seconds until a full run checks it; null for a full run's result */
@@ -577,7 +603,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
             </select>
           </label>
         ) : null}
-        {!option.nodalOnly && option.id !== "failure_index_ply" ? (
+        {!option.nodalOnly && !option.elementOnly && option.id !== "failure_index_ply" ? (
           <label>Shown as
             <select value={choice.averaged ? "average" : "element"} onChange={(e) => setChoice({ ...choice, averaged: e.target.value === "average" })} aria-label="Shown as">
               <option value="element">element values (the result)</option>
@@ -600,6 +626,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
           <h3>{readout.title}{highlight === picked ? " (the critical element)" : ""}</h3>
           <dl>{readout.rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
           <p className="studio-muted">Click an element on the plate to read it; click the background to clear.</p>
+          {picked !== null ? <ProbePanel fields={fields} table={probeTable(fields, picked)} /> : null}
         </div>
       ) : <p className="studio-muted studio-pick-hint">Click an element on the plate to read its values. The critical element is framed in red.</p>}
       <SummaryPanel fields={fields} onShow={show} />
