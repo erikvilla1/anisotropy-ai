@@ -1,6 +1,7 @@
 {
  "units": "mm-MPa",
  "labels": {
+  "area": "mm²",
   "force": "N",
   "length": "mm",
   "stress": "MPa",

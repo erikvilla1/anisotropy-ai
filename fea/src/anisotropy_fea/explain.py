@@ -32,6 +32,11 @@ AXIS_WORDS = {"x": "across the coupon", "y": "along the coupon", "z": "out of th
 STRESS_WORDS = {"S11": "sigma_1 along the fibres", "S22": "sigma_2 across the fibres", "S12": "tau_12 in-plane shear"}
 # an isotropic material is one layer whose axis 1 runs along the coupon (ADR-0075): no fibres to name
 ISOTROPIC_WORDS = {"S11": "sigma_1 along the coupon", "S22": "sigma_2 across it", "S12": "tau_12 in-plane shear"}
+# where the answer is read (ADR-0085): the gauge section away from the clamped edges, or the whole model of a coupon without one
+BASIS_WORDS = {"gauge": "the gauge section", "whole": "the whole model"}
+EXTREME_WORDS = {("S11", "tension"): "the largest tension along the fibres (sigma_1)", ("S11", "compression"): "the largest compression along the fibres (sigma_1)",
+                 ("S22", "tension"): "the largest tension across the fibres (sigma_2)", ("S22", "compression"): "the largest compression across the fibres (sigma_2)",
+                 ("S12", "largest"): "the largest in-plane shear (tau_12)"}
 DIGITS = 4
 
 
@@ -68,19 +73,47 @@ def fact_sheet(summary: dict[str, Any], coupon: dict[str, Any], units: str, labe
         facts[f"max_{name}_angle"] = printed(float(m["angle"]))
         facts[f"max_{name}_element"] = m["label"].rsplit(".", 1)[-1]
         facts[f"max_{name}_face"] = m.get("face")
-    facts["criteria"] = list(summary["fpf"])
-    facts["earliest"] = summary.get("earliest")
-    for criterion, f in summary["fpf"].items():
+    # the answer is given on the verdict's basis (ADR-0085): the gauge section when the coupon has one, the whole model otherwise
+    verdict = summary.get("verdict")
+    gauge = bool(verdict and verdict["basis"] == "gauge")
+    table = summary.get("fpf_gauge", {}) if gauge else summary["fpf"]
+    facts["basis"] = BASIS_WORDS["gauge" if gauge else "whole"]
+    facts["criteria"] = list(table)
+    facts["earliest"] = verdict["earliest"] if verdict else summary.get("earliest")
+    for criterion, f in table.items():
         facts[f"{criterion}_factor"] = printed(float(f["factor"]))
         facts[f"{criterion}_index"] = printed(float(f["index"]))
         facts[f"{criterion}_ply"] = int(f["ply"])
         facts[f"{criterion}_angle"] = printed(float(f["angle"]))
         facts[f"{criterion}_face"] = f.get("face")
         facts[f"{criterion}_element"] = f["label"].rsplit(".", 1)[-1]
+        facts[f"{criterion}_x"] = printed(float(f["xy"][0]))
+        facts[f"{criterion}_y"] = printed(float(f["xy"][1]))
         facts[f"{criterion}_mode"] = f["mode"]
         facts[f"{criterion}_place"] = f["place"]
         facts[f"{criterion}_tied"] = [int(p) for p in f["tied_plies"] if int(p) != int(f["ply"])]
         facts[f"{criterion}_touches_grip"] = bool(f["touches_grip"])
+        facts[f"{criterion}_fails"] = bool(f.get("fails", float(f["factor"]) <= 1.0))
+        at = f.get("at_failure")
+        if at:
+            facts[f"{criterion}_applied_at_failure"] = printed(abs(float(at["applied"])))
+            facts[f"{criterion}_reaction_at_failure"] = printed(abs(float(at["reaction"])))
+            facts["every_load"] = bool(at.get("every_load", False))
+    outside = verdict.get("outside_earlier") if verdict else None
+    if outside:  # earlier than the gauge section's answer, at the clamped edge of a grip: reported apart, never as the answer
+        facts.update(outside_criterion=outside["criterion"], outside_factor=printed(float(outside["factor"])),
+                     outside_element=outside["label"].rsplit(".", 1)[-1], outside_place=outside["place"], outside_touches_grip=bool(outside["touches_grip"]))
+    extremes = summary.get("ply_extremes")
+    if extremes:  # the largest ply stresses on the same basis, tension and compression apart (ADR-0085)
+        for name, picks in (("S11", ("tension", "compression")), ("S22", ("tension", "compression")), ("S12", ("largest",))):
+            for pick in picks:
+                e = extremes["overall"][name][pick]
+                if e is None:
+                    continue
+                key = f"ext_{name}_{pick}"
+                facts.update({key: printed(float(e["value"])), f"{key}_ply": int(e["ply"]), f"{key}_angle": printed(float(e["angle"])),
+                              f"{key}_element": e["label"].rsplit(".", 1)[-1], f"{key}_x": printed(float(e["xy"][0])), f"{key}_y": printed(float(e["xy"][1])),
+                              f"{key}_face": e.get("face")})
     method = summary.get("test_method")
     if method:  # the quantities of the test standard, as the standard computes them from a test (ADR-0072)
         u = method["units"]
@@ -129,27 +162,40 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
         out.append("No failure criterion was asked for, so first-ply failure is not reported.")
         return out + method_sentences(facts)
     ordered = sorted(facts["criteria"], key=lambda c: facts[f"{c}_factor"])
+    L = facts["length_unit"]
+    loads = "every applied load" if facts.get("every_load") else "the applied loading"
     for criterion in ordered:
         name = CRITERION.get(criterion, criterion)
         factor, ply, angle = facts[f"{criterion}_factor"], facts[f"{criterion}_ply"], facts[f"{criterion}_angle"]
         mode = MODE_WORDS.get(facts[f"{criterion}_mode"], facts[f"{criterion}_mode"])
         tied = facts[f"{criterion}_tied"]
-        where = facts[f"{criterion}_place"]
+        where = (f"element {facts[f'{criterion}_element']} ({number(facts[f'{criterion}_x'])}, {number(facts[f'{criterion}_y'])} {L}), "
+                 f"{facts[f'{criterion}_place']}")
         who = (f"ply {ply} ({number(angle)} degrees){_face(facts[f'{criterion}_face'])}"
                + (f", tied with {'ply' if len(tied) == 1 else 'plies'} {', '.join(str(p) for p in tied)}" if tied else ""))
-        if factor >= 1.0:
-            text = (f"The laminate does not exceed the {name} criterion at the applied loading: the first ply to fail would be {who}, at element "
-                    f"{facts[f'{criterion}_element']}, {where}, by {mode}, at {number(factor)} times the applied loading "
-                    f"(failure index {number(facts[f'{criterion}_index'])}).")
+        at = ""
+        if f"{criterion}_applied_at_failure" in facts:
+            at = f"{number(facts[f'{criterion}_applied_at_failure'])} {facts['applied_unit']}"
+            if facts["control"] != "force":
+                at += f", {number(facts[f'{criterion}_reaction_at_failure'])} {facts['force_unit']} at {facts['reaction_set']}"
+            at += "; "
+        if facts[f"{criterion}_fails"]:
+            text = (f"By the {name} criterion the laminate fails at the applied loading, in {facts['basis']}: {who} fails first, at {where}, by {mode}, "
+                    f"at {number(factor)} of {loads} ({at}failure index {number(facts[f'{criterion}_index'])}); the stresses shown are those of a "
+                    "linear model past that point.")
         else:
-            text = (f"The laminate exceeds the {name} criterion at the applied loading: {who} fails first, at element {facts[f'{criterion}_element']}, "
-                    f"{where}, by {mode}, at {number(factor)} of the applied loading (failure index {number(facts[f'{criterion}_index'])}); the stresses "
-                    "shown are those of a linear model past that point.")
+            text = (f"By the {name} criterion the laminate holds at the applied loading, in {facts['basis']}: the first ply to fail would be {who}, at "
+                    f"{where}, by {mode}, at {number(factor)} times {loads} ({at}failure index {number(facts[f'{criterion}_index'])}).")
         if facts[f"{criterion}_touches_grip"]:
             text += " That element touches a gripped tab, where the stress is not expected to settle as the mesh is refined: read it as first damage at the grip."
         out.append(text)
     if len(ordered) > 1:
         out.append(f"The earliest of the criteria is {CRITERION.get(ordered[0], ordered[0])}.")
+    if "outside_criterion" in facts:
+        out.append(f"Outside {facts['basis']}, {CRITERION.get(facts['outside_criterion'], facts['outside_criterion'])} is reached earlier, at "
+                   f"{number(facts['outside_factor'])} times {loads}, at element {facts['outside_element']}, {facts['outside_place']}"
+                   + (": the clamped edge of a grip, where the stress grows as the mesh is refined, so it is reported apart from the answer."
+                      if facts["outside_touches_grip"] else "."))
     return out + method_sentences(facts)
 
 
@@ -160,6 +206,15 @@ def ply_stress_sentence(facts: dict[str, Any]) -> str:
                 + ", ".join(f"{ISOTROPIC_WORDS[name]} = {number(facts[f'max_{name}'])} {facts['stress_unit']}{_face(facts[f'max_{name}_face'])} "
                             f"at element {facts[f'max_{name}_element']}" for name in ("S11", "S22", "S12"))
                 + "; these are element centroids, not the nodal values a viewer such as PrePoMax shows.")
+    found = [(name, pick) for name, pick in EXTREME_WORDS if f"ext_{name}_{pick}" in facts]
+    if found:  # on the answer's basis, tension and compression apart (ADR-0085)
+        L = facts["length_unit"]
+        return (f"In {facts['basis']}, each ply in its own fibre axes: "
+                + "; ".join(f"{EXTREME_WORDS[(name, pick)]} is {number(facts[f'ext_{name}_{pick}'])} {facts['stress_unit']} in ply "
+                            f"{facts[f'ext_{name}_{pick}_ply']} ({number(facts[f'ext_{name}_{pick}_angle'])} degrees){_face(facts[f'ext_{name}_{pick}_face'])} "
+                            f"at element {facts[f'ext_{name}_{pick}_element']} ({number(facts[f'ext_{name}_{pick}_x'])}, {number(facts[f'ext_{name}_{pick}_y'])} {L})"
+                            for name, pick in found)
+                + "; these are element centroids in the ply's axes, not the global-axis values a viewer such as PrePoMax shows.")
     return ("The largest ply stresses, each in its own ply's fibre axes, are "
             + ", ".join(f"{STRESS_WORDS[name]} = {number(facts[f'max_{name}'])} {facts['stress_unit']} in ply {facts[f'max_{name}_ply']} "
                         f"({number(facts[f'max_{name}_angle'])} degrees){_face(facts[f'max_{name}_face'])} at element {facts[f'max_{name}_element']}"

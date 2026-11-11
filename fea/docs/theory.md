@@ -161,6 +161,16 @@ computed by `strength_ratios`, which also returns every ratio and governing mode
 
 <!-- code: strength_ratios, deck_f12_star -->
 
+The answer a result gives is read from these factors (ADR-0085). By each criterion a ply fails at the applied loading when its factor is at most one, the failure index $`1/\lambda_{\mathrm{FPF}}`$ having reached one; otherwise the loading at first-ply failure is the factor times what is applied, and the force the grip carries then is the factor times its reaction, since every quantity of a linear model scales with the loading (a plate's every load together),
+
+```math
+u_{\mathrm{FPF}} = \lambda_{\mathrm{FPF}}\,u_{\mathrm{applied}}, \qquad F_{\mathrm{FPF}} = \lambda_{\mathrm{FPF}}\,F_{\mathrm{reaction}} ,
+```
+
+computed by `answer_of`. The answer is read over the gauge section when the coupon has one, the elements of its `Gauge` set that touch no gripped node, since a test coupon is accepted when it breaks there; a failure that comes earlier at the clamped edge of a grip, where the stress grows as the mesh is refined, is reported beside it, never as the answer. A coupon without a gauge section, a plate or a bending coupon, is answered over the whole model. The basis and its earliest criterion, and the largest ply stresses on the same basis, each ply's in its fibre axes with tension and compression apart, are computed by `verdict_of` and `ply_extremes`.
+
+<!-- code: answer_of, verdict_of, ply_extremes -->
+
 ## 8. The flat shell: bending, transverse shear and pressure (`shell.py`)
 
 The membrane of Sections 1 to 7 stays the kernel for the in-plane coupons; every result it gives is pinned by the cases and records above. A deck that bends, carries a pressure, prescribes or loads a degree of freedom out of the plane, or has an unsymmetric layup goes to the flat shell of this section (ADR-0053), which keeps the same mesh, the same four-node element and the same engine laminate law. Which kernel a deck gets is computed by `needs_shell`, the dispatch is computed by `solve_deck`, and what the membrane refuses when it is asked directly is checked by `membrane_limits`.
