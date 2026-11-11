@@ -65,6 +65,31 @@ def is_material_kind_enabled(word: str | None, every: bool) -> bool:
     return every or not word or word.strip().lower() in MATERIAL_KINDS
 
 
+def offered_words(key: str, words: tuple[str, ...] | list[str], every: bool) -> tuple[str, ...]:
+    """A list row's words as offered: the Test, Standard and Material kind rows filtered by the list, every other row as it is."""
+    if key == "test":
+        return tuple(w for w in words if is_test_enabled(w, every))
+    if key == "standard":
+        return tuple(w for w in words if is_standard_enabled(w, every))
+    if key == "material_kind":
+        return tuple(w for w in words if is_material_kind_enabled(w, every))
+    return tuple(words)
+
+
+def refuse_hidden_kind(kind: str, name: str, every: bool | None = None) -> None:
+    """Refuse a stored coupon of a hidden test (reopening it, running it by name): NotOffered names the coupon and the test."""
+    from .spec import TEST_CODES  # the spec imports the standards; imported here so this module stays importable on its own
+
+    every = all_tests() if every is None else every
+    test = TEST_CODES[kind][1] if kind in TEST_CODES else kind
+    if not is_test_enabled(test, every):
+        raise NotOffered(f"{name}: its test, {test}, is {NOT_AVAILABLE}; the coupon is kept")
+
+
+class NotOffered(ValueError):
+    """A coupon of a test the studio does not offer yet (ADR-0089). Its message holds the words "not available yet"."""
+
+
 def definition() -> dict:
     """The `enabled` block of the form's definition: the list itself, never the switch, so the page's file is the same however the
     process was started; the page asks the API whether the switch is on (`GET /v1/coupon-tests`)."""

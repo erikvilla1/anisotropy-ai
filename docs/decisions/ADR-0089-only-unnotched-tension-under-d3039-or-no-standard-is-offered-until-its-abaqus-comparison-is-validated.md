@@ -1,6 +1,6 @@
 # ADR-0089: Only unnotched tension, under ASTM D3039 or no standard, is offered until its comparison with Abaqus is validated
 
-- Status: Proposed
+- Status: Proposed (parts 1 and 2 built)
 - Date: 2026-11-11
 - Decided by: Founder, 2026-11-11 ("we are going to take a step back and focus on one workflow ... we will need to hide not delete all the other type of tests until we have established the first workflow and have validated so that we scale with the same workflow"; in answer to the plan's questions: the reference coupon is the D3039 IM7/8552 check, hidden "everywhere, with a switch", tension keeps "D3039 + No standard") | Drafted by: Claude Code
 - Related: [ADR-0066](ADR-0066-solver-results-are-compared-as-one-set-of-quantities-in-the-ply-axes-at-stated-places-and-peaks-are-reported-apart.md) (the quantities compared), [ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md) (standard profiles), [ADR-0075](ADR-0075-a-plastic-coupon-is-one-isotropic-material-with-no-plies-cut-as-a-dog-bone-the-structured-mesh-follows-and-astm-d638-is-its-profile.md) (D638, the dog-bone), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (the workspace), [ADR-0056](ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md) (hosted tier); `fea/src/anisotropy_fea/enabled.py`, `lib/enabled-tests.ts`, `api/src/anisotropy_api/settings.py`, `fea/checks/d3039-im7-8552/`
@@ -43,6 +43,22 @@ What a test list looked like before this record:
 - API: `ALL_TESTS_VARIABLE` and `Settings.all_tests` in `settings.py`, `GET /v1/coupon-tests` in `main.py`, `CouponTests` in `schemas.py`, `api/tests/test_coupon_tests.py`; `.env.example`.
 - Page: `lib/enabled-tests.ts`; `allCouponTests` in `lib/studio-api.ts`; `allTests` in the project context (`useAllTests`); filtered at the Test step and its standards, the standard card, the rail's rows and reopen list, the tow rail, the chat's test buttons, its message reader (a hidden test is answered "not available yet") and the rows offered to the model (`couponOffer(form, all)`), the check's fix-in selects, the project list, and the live solve.
 - Tests: `tests/enabled-tests.test.ts`; `tests/worker-routing.test.ts` (the hosted container never gets the switch); a browser scenario of the closed list in `tests/browser/studio.spec.ts`; the nine scenarios of hidden tests turn the switch on in their stand-in API; `tests/browser/workspace.spec.ts` sees the server's open-hole project listed as not available yet.
+
+## As built (2026-11-11, part 2)
+
+- The setup check (`intake.check_form`) refuses, with the switch off, a hidden test on the Test row, a standard other than D3039 on the
+  Standard row, one isotropic material on the Material kind row and a dog-bone on its rows, each "... is not available yet: the studio
+  offers the unnotched tension coupon, under ASTM D3039 or no standard, until its comparison with Abaqus is validated". Every input passes
+  through it (the Excel form, a values file, the studio's check, live solve and warm workers, `run_coupon` on a form or values file), so a
+  hidden test is a blocked checklist with the row named, as any other refusal is.
+- The paths that never reach the check refuse the same way: the tow calculation (`tow_test.tow_answer`, a blocked checklist),
+  reopening a stored coupon (`studio_tool.py values`, which the API answers with a 422 through `coupon_jobs.NotOffered`) and a run by
+  name (`run_coupon.refuse_hidden`, before anything is written). `enabled.refuse_hidden_kind` and `enabled.NotOffered` carry the rule.
+- The blank Excel form lists the offered tests, standards and material kinds only (`enabled.offered_words`).
+- Not gated, on purpose: `load_spec`, `spec_from_values`, the coupon names, `build_model` and `regenerate_decks`, so the committed checks,
+  records and stored coupons of every kind keep loading.
+- `fea/tests/conftest.py` turns the switch on for every fea test, so the hidden tests stay tested; `fea/tests/test_enabled.py` turns it off
+  for the refusals. The studio's fixtures of hidden tests (`studio_tool.py fixtures`) are written with `ANISOTROPY_ALL_TESTS=on`.
 
 ## Why (evidence)
 

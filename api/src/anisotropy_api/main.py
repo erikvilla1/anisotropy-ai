@@ -34,7 +34,7 @@ from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .proposals import model_view_of_form, source_guard
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
-from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
+from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, NotOffered, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
                           studio_command)
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
                       owns_project, project_jobs, record_run, stop_orphans, update_project, upsert_project)
@@ -716,6 +716,8 @@ def coupon_values(name: str, request: Request) -> CouponValuesOutput:
         return CouponValuesOutput(name=name, values=jobs.coupon_values(name))
     except UnknownCoupon as exc:
         raise HTTPException(status_code=404, detail=exc.args[0]) from exc
+    except NotOffered as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except CheckTimedOut as exc:
         raise HTTPException(status_code=504, detail=str(exc)) from exc
     except JobRefused as exc:

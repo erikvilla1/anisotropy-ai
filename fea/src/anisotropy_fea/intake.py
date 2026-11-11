@@ -29,7 +29,7 @@ from typing import Any
 
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
 
-from . import __version__, forms, paths
+from . import __version__, enabled, forms, paths
 from .dogbone import OutlineError, dogbone_outline
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
 from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
@@ -500,6 +500,7 @@ def write_blank_form(path: Path | str) -> Path:
 
     path = Path(path)
     records = library_records()
+    offer_all = enabled.all_tests()
     book = Workbook()
     book.properties.creator = "Anisotropy AI"
     book.properties.title = "Coupon input form"
@@ -528,8 +529,9 @@ def write_blank_form(path: Path | str) -> Path:
             help_text = ("required" + ("; " if f.help else "") if f.required else "") + f.help
             sheet.cell(row, 3, help_text or None).font = forms.font(muted=True)
             sheet.cell(row, 3).alignment = forms.wrap()
-            if f.kind == "list" and f.words:
-                forms.listing(sheet, f.words, [cell.coordinate])
+            words = enabled.offered_words(f.key, f.words, offer_all)  # the tests the studio offers until the first is validated (ADR-0089)
+            if f.kind == "list" and words:
+                forms.listing(sheet, words, [cell.coordinate])
             elif f.key == "library":
                 library_cell = cell
             elif f.kind in ("number", "whole", "angle"):
@@ -1034,10 +1036,14 @@ def check_form(form: FormInput) -> Values:
                 problems.append(f"Date: {day!r} is not a date (write YYYY-MM-DD)")
     test_name = forms.text_of(cells.get("test"))
     kind = TESTS.get(test_name.lower() if test_name else "", "")
+    offer_all = enabled.all_tests()  # one workflow first: the unnotched tension coupon only, unless the switch says all (ADR-0089)
     if test_name.lower() == TOW_TEST:
-        problems.append(f"Test: {TOW_TEST} is stated and calculated from the studio's tow panels (ADR-0074); this form's rows describe a coupon")
+        problems.append(f"Test: {TOW_TEST} is stated and calculated from the studio's tow panels (ADR-0074); this form's rows describe a coupon"
+                        if offer_all else f"Test: {TOW_TEST} is {enabled.NOT_AVAILABLE}")
     elif not kind:
         problems.append(f"Test: {test_name!r} is not one of {', '.join(TESTS)}" if test_name else f"Test: required; one of {', '.join(TESTS)}")
+    elif not enabled.is_test_enabled(TEST_CODES[kind][1], offer_all):
+        problems.append(f"Test: {TEST_CODES[kind][1]} is {enabled.NOT_AVAILABLE}")
     material_code = text("material_code").upper() or None
     if material_code and not MATERIAL_CODE.match(material_code):
         problems.append(f"Material code: {material_code!r} is not capital letters and digits starting with a letter")
@@ -1046,6 +1052,8 @@ def check_form(form: FormInput) -> Values:
         problems.append(f"Layup code: {layup_code!r} is not L followed by a number, such as L1")
     standard, size_from = word("standard") or NO_STANDARD, text("size_from")  # "none" or a designation of the list (ADR-0072)
     profile = profile_of_word(standard)
+    if profile is not None and not enabled.is_standard_enabled(profile.designation, offer_all):
+        problems.append(f"{L('standard')}: {profile.designation} is {enabled.NOT_AVAILABLE}")
     if profile is not None and kind and kind not in profile.kinds:
         covers = ", ".join(test_word(k) for k in profile.kinds)
         problems.append(f"{L('standard')}: {profile.designation} covers {covers}, not {TEST_CODES[kind][1]}; pick none or the standard of this test")
@@ -1121,6 +1129,8 @@ def check_form(form: FormInput) -> Values:
     dogbone_given = {key: number(key) for key in DOGBONE_KEYS}
     dogbone = None
     if any(cells.get(key) is not None for key in DOGBONE_KEYS):
+        if not (offer_all or enabled.DOGBONE):
+            problems.append(f"{L('narrow_width')} and the other dog-bone rows: a dog-bone is {enabled.NOT_AVAILABLE}; leave them blank")
         if kind and kind != "unnotched_tension":
             problems.append(f"{L('narrow_width')} and the other dog-bone rows: belong to unnotched tension only; leave them blank")
         missing = [L(key) for key in ("narrow_width", "narrow_length", "radius") if cells.get(key) is None]
@@ -1131,6 +1141,8 @@ def check_form(form: FormInput) -> Values:
             dogbone = {key: value for key, value in dogbone_given.items() if value is not None}
 
     material_kind = word("material_kind") or "plies"
+    if not enabled.is_material_kind_enabled(material_kind, offer_all):
+        problems.append(f"{L('material_kind')}: one isotropic material is {enabled.NOT_AVAILABLE}")
     isotropic = None
     angles: list[float] = []
     if material_kind == "isotropic":
