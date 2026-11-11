@@ -73,7 +73,7 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
     out.append("*Node")
     for index, (x, y) in enumerate(mesh.xy, start=1):
         out.append(f"{index}, {number(length(x))}, {number(length(y))}, 0.")
-    element_type = "S4R" if mesh.order == 1 else "S8R"
+    element_type = spec.output.abaqus.element if mesh.order == 1 else "S8R"  # S4R unless the spec asks for S4 (ADR-0089 amendment 2)
     out.append(f"*Element, type={element_type}")
     for index, nodes in enumerate(mesh.connectivity(), start=1):
         out.append(f"{index}, " + ", ".join(str(int(n) + 1) for n in nodes))

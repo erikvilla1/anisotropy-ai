@@ -62,5 +62,5 @@ gauge_length = 25.0  # within §7.3.2's 10 to 50 mm
 
 [output]
 fpf_criteria = ["max_stress", "tsai_hill"]
-abaqus = { field_preselect = true, node_print = true, el_print = true, every_layer = true }  # every ply in the ODB (ADR-0089 part 7)
+abaqus = { field_preselect = true, node_print = true, el_print = true, every_layer = true, element = "S4" }  # every ply in the ODB, S4 (ADR-0089)
 calculix = { node_print = true, el_print = true, frd = true, el_print_global = true }

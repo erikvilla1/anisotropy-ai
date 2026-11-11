@@ -92,3 +92,10 @@ def test_a_tension_spec_asks_for_every_layer_and_the_digest_rule_counts_it_as_ou
     regenerate = load("regenerate_decks", monkeypatch)
     assert regenerate.without_output_requests(deck) == regenerate.without_output_requests(plain)
     assert regenerate.without_output_requests("** a comment\n*Node\n1, 0., 0., 0.") == "*Node\n1, 0., 0., 0."
+
+
+def test_the_tension_deck_writes_s4_and_every_other_deck_keeps_s4r():
+    """ADR-0089 amendment 2: S4 for the tension coupon's deck, full integration as our kernel's element; S4R stays everyone else's."""
+    assert "*Element, type=S4\n" in write_abaqus(build_model(load_spec(SPEC)))
+    other = paths.spec_path("unnotched-im7-8552-nodal")
+    assert load_spec(other).output.abaqus.element == "S4R" and "*Element, type=S4R\n" in write_abaqus(build_model(load_spec(other)))

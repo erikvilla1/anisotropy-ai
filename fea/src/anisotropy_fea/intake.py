@@ -1729,6 +1729,7 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
     abaqus_output = {"field_preselect": True, "node_print": True, "el_print": True}
     if values.kind == "unnotched_tension" and values.isotropic is None:  # every ply in the ODB, for the comparison with Abaqus (ADR-0089 part 7)
         abaqus_output["every_layer"] = True
+        abaqus_output["element"] = "S4"  # full integration, as our kernel's element: the founder's choice of 2026-11-11 (ADR-0089 amendment 2)
     data["output"] = {"fpf_criteria": criteria,
                       "abaqus": abaqus_output,
                       "calculix": {"node_print": True, "el_print": True, "frd": True, "el_print_global": True}}

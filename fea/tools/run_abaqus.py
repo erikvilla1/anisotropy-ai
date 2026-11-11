@@ -5,7 +5,7 @@
         --within 0 10 25 55 [--element-probes centre] [--elements 395 396] [--notes "..."] [--record <path>]
 
 Needs Abaqus (ANISOTROPY_ABAQUS or abaqus on PATH; docs/installation-fea-tools.md) and a licence seat. Writes into --out the deck
-`<spec>-abaqus.inp` (S4R, the same deck our kernel reads), Abaqus's .odb .dat .sta .msg, the CSV field reports and the reactions
+`<spec>-abaqus.inp` (S4R, or S4 when the spec asks for it as the tension coupon does; the same deck our kernel reads), Abaqus's .odb .dat .sta .msg, the CSV field reports and the reactions
 the extraction script makes, and the record `<spec>-abaqus-record.toml` (--record puts it elsewhere); then prints how many of the
 record's numbers the kernel reproduces. The elements recorded are those named (--elements), the spec's element probes
 (--element-probes), or every element whose centroid lies in a box (--within XMIN XMAX YMIN YMAX, deck units): one of the three.
@@ -34,6 +34,9 @@ KNOWN_DIFFERENCES = {
     "reference": "Abaqus S4R: one reduced-integration point with hourglass control, drilling stiffness, transverse shear; values at the centroid, "
                  "section points at the layer faces (SNEG bottom, SPOS top); S11, S22 in the ply's material axes",
 }
+# the reference's words for an S4 deck (ADR-0089 amendment 2): full integration, as our kernel's element, the values at the centroid
+REFERENCE_S4 = ("Abaqus S4: four integration points (full integration, as our kernel's element), drilling stiffness, transverse shear; values "
+                "brought to the centroid by Abaqus; S11, S22 in the ply's material axes")
 
 
 def main() -> None:
@@ -68,7 +71,7 @@ def main() -> None:
     deck_path = args.out / f"{stem}-abaqus.inp"
     # the same text as the spec's deck in decks/ (ADR-0045 amendment 2): the kernel reads this file too, so the record's two digests are its own
     deck_path.write_text(write_abaqus(model), encoding="utf-8", newline="\n")
-    print("written", deck_path, f"({model.mesh.node_count} nodes, {model.mesh.element_count} S4R elements)")
+    print("written", deck_path, f"({model.mesh.node_count} nodes, {model.mesh.element_count} {spec.output.abaqus.element} elements)")
     try:
         result = run_abaqus(deck_path, workdir=args.out, cpus=args.cpus)
         print(f"Abaqus {result.version}: {result.elapsed_s:.1f} s, {len(result.warnings)} warnings; results in {args.out} (.odb, .dat, .sta, .msg)")
@@ -109,7 +112,7 @@ def main() -> None:
     record_dir.mkdir(parents=True, exist_ok=True)
     relative = lambda path: Path(path).resolve().relative_to(record_dir.resolve(), walk_up=True).as_posix()  # noqa: E731
     record = {
-        "title": f"{spec.title}: Abaqus {result.version} S4R against the kernel",
+        "title": f"{spec.title}: Abaqus {result.version} {spec.output.abaqus.element} against the kernel",
         "units": units,
         "spec": relative(args.spec),
         "deck_kernel": relative(deck_path),
@@ -122,7 +125,7 @@ def main() -> None:
                    "odb": provenance["odb"], "created": provenance["created"], "step": f"{provenance['step']}, {provenance['frame']}",
                    "section_points": "; ".join(f"layer {k}: {v}" for k, v in provenance["section_points"].items()),
                    "extraction": f"tools/abaqus_extract_fields.py under abaqus python; {files['json'].name}", "notes": args.notes},
-        "known_differences": KNOWN_DIFFERENCES,
+        "known_differences": KNOWN_DIFFERENCES if spec.output.abaqus.element == "S4R" else {**KNOWN_DIFFERENCES, "reference": REFERENCE_S4},
         "expected": expected,
     }
     record["_dir"] = str(record_dir)
