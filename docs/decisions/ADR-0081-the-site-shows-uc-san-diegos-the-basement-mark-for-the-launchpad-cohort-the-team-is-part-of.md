@@ -1,6 +1,6 @@
 # ADR-0081: The site shows UC San Diego's The Basement mark for the Launchpad cohort the team is part of
 
-- Status: Proposed
+- Status: Proposed; the mark is shown once, in white on the hero (amendment 1)
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead (marketing and communications), 2026-11-10 | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the home page), [ADR-0018](ADR-0018-source-rights-classes.md) (rights of what we publish), `app/page.tsx`, `app/home.css`, `public/assets/partners/`
@@ -41,3 +41,11 @@ Option 3.
 
 - The Basement or UC San Diego asks for the mark to be removed or shown differently.
 - The team leaves the programme, or the cohort ends and the line is no longer true as worded.
+
+## Amendment 1, 2026-11-11 (the mark is shown once, in white on the hero)
+
+**Context.** The lead asked for the supporters' strip to be removed (ADR-0077 amendment 16). It was the only place that showed the mark in its own colours.
+
+**Decision.** The mark is shown once, in white, in the hero's bottom left corner. `public/assets/partners/uc-san-diego-the-basement.png`, the colour copy, is deleted because nothing shows it; it is in commit `c28de06`. The About section still names the cohort in words.
+
+**Evidence.** After the change, a search of `app/`, `components/` and `lib/` finds only the white file in use. UNVERIFIED, as before: permission to show the mark, and to show it in white.

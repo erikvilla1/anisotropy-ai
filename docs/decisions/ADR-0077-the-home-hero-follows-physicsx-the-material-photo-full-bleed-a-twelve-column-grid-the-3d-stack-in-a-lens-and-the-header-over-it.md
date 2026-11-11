@@ -259,3 +259,17 @@ On phones it is one column.
 **Decision.** On hover, and on keyboard focus, a white fill sweeps across the Workspace button from the arrow's side in 0.35 s. The words and the arrow turn near-black, the border turns white, and the arrow turns 45°, from up-right to right. It runs back when the pointer leaves. The fill is a pseudo-element under the words, scaled from the right edge, so the markup is unchanged. The button no longer lifts 2 px on hover. Reduced motion gets the same end state with no movement.
 
 **Evidence.** In the browser on 2026-11-10 at 1440 px, on the dev server: at rest the button is outlined with white words and an up-right arrow; hovered, its words are rgb(13, 13, 13), its border white, the fill at full width and the arrow turned 45°; after the pointer leaves it returns to the rest state. Screenshots of each state were looked at. UNVERIFIED: touch screens, where there is no hover.
+
+## Amendment 16, 2026-11-11 (the supporters' strip removed)
+
+**Context.** Going through the draft, the lead showed the "Supported by" strip and asked: "also get rid of this".
+
+**Decision.**
+- The strip leaves the home page. Under the demo the order is Mission and Platform, both dark with a hairline between them, About light, What is new dark. The labels stay 01 to 04.
+- Its component (`components/home/logo-strip.tsx`), its list (`lib/supporters.ts`) and its styles are deleted. They are in commit `a220d18` if a row of logos is wanted later.
+- The Launchpad cohort is still named twice: by the white mark in the hero (ADR-0081) and by About's line.
+
+**Options not chosen.** Hiding the strip with CSS: it would stay in the page. Recolouring the bands to keep dark and light in turn: Platform, About and What is new would each change ground, which the lead did not ask for.
+
+**Evidence.** On 2026-11-11, in the browser against the dev server at 1440 px: the page's sections are the hero, the calculator, Mission, Platform, About, What is new and the closing band; no page errors. A screenshot of Mission into Platform was looked at.
+- **Checks:** run on the same tree as ADR-0080 amendment 1 and recorded there, with the two browser tests that failed and what their re-runs showed.

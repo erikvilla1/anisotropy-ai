@@ -496,12 +496,12 @@
   }
 }
 
-/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11 and 14): Mission dark, the
- * supporters' strip light, Platform dark, About light, News dark. Each numbered band opens with the kit's head. Platform's
- * cards start at column 4, under the statement, three columns wide and three to a row. The label column holds only labels, so
- * the news dates sit in it and each item's words start under the statement. The four principles close the Mission band as a
- * strip on all twelve columns, and About's five face cards take the whole width. Every colour here is one of the band's
- * variables, so one rule serves both grounds; only the supporters' logos keep their own colours. */
+/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 16): Mission and Platform
+ * dark, About light, News dark. Each numbered band opens with the kit's head. Platform's cards start at column 4, under the
+ * statement, three columns wide and three to a row. The label column holds only labels, so the news dates sit in it and each
+ * item's words start under the statement. The four principles close the Mission band as a strip on all twelve columns, and
+ * About's five face cards take the whole width. Every colour here is one of the band's variables, so one rule serves both
+ * grounds. */
 .home-link {
   display: inline-flex;
   align-items: center;
@@ -566,104 +566,6 @@
 .home-principles svg {
   margin-left: 4px;
   vertical-align: -2px;
-}
-/* The supporters' strip, after PhysicsX's logo strip (measured there on 2026-11-10: a 16 px grey monospace label, 32 px
- * under it one row of logos 22 to 44 px tall, drifting left at about 40 px a second). It is a shorter band than the others.
- * With one logo the row is the logo in the label's columns and its sentence from column 4, where every statement starts;
- * with more, the logos take the whole row and the sentence sits under them. */
-.band.home-supporters {
-  padding-top: 64px;
-  padding-bottom: 64px;
-}
-.home-supporters .band-label {
-  margin-bottom: 32px;
-  color: var(--muted);
-}
-.home-supporters-row {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: 32px;
-  row-gap: 32px;
-  align-items: center;
-}
-.home-supporters-row > .logo-strip {
-  grid-column: 1 / 4;
-}
-.home-supporters-row.is-many > .logo-strip {
-  grid-column: 1 / -1;
-}
-.home-supporters-row > p {
-  grid-column: 4 / -1;
-  font-size: 18px;
-  line-height: 26px;
-  color: var(--muted);
-  text-wrap: balance;
-}
-/* The logo row (components/home/logo-strip.tsx). A logo is its owner's mark: it keeps its colours and its proportions, 40 px
- * tall and at most 200 px wide. The row moves only once the component finds the logos wider than it: then the set and its
- * copy drift left by one set's width, each set ending on a gap, so the loop has no seam. It stops under the pointer and
- * while it has the keyboard's focus. */
-.logo-strip {
-  --logo-strip-gap: 96px;
-  min-width: 0;
-  overflow: hidden;
-}
-.logo-strip:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 5px;
-}
-.logo-strip-track {
-  display: flex;
-  width: max-content;
-}
-.logo-strip-set {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--logo-strip-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.logo-strip-set li {
-  flex: none;
-}
-.logo-strip-set img {
-  width: auto;
-  height: 40px;
-  max-width: 200px;
-  object-fit: contain;
-}
-.logo-strip.is-moving .logo-strip-set {
-  padding-right: var(--logo-strip-gap);
-}
-.logo-strip.is-moving .logo-strip-track {
-  animation: logo-strip-drift var(--logo-strip-pass, 60s) linear infinite;
-}
-.logo-strip.is-moving:hover .logo-strip-track,
-.logo-strip.is-moving:focus-within .logo-strip-track {
-  animation-play-state: paused;
-}
-@keyframes logo-strip-drift {
-  to {
-    transform: translateX(-50%);
-  }
-}
-/* No drift for a visitor who asked for less motion: the copy goes and the logos wrap onto as many rows as they need. */
-@media (prefers-reduced-motion: reduce) {
-  .logo-strip.is-moving .logo-strip-track {
-    width: auto;
-    animation: none;
-  }
-  .logo-strip.is-moving .logo-strip-set {
-    flex: 1 1 auto;
-    flex-wrap: wrap;
-    row-gap: 24px;
-    padding-right: 0;
-  }
-  .logo-strip.is-moving .logo-strip-set[aria-hidden] {
-    display: none;
-  }
 }
 /* Three cards to a row from column 4: nine columns and eight gutters split in three is three columns and two gutters each,
  * so the cards' edges fall on the head's columns. */
@@ -834,8 +736,7 @@
   max-width: 36em;
 }
 /* Narrower than 1280 px the cards and the principles go two to a row and the faces three; under 1024 px the head stacks, so
- * the cards take the whole width and the supporters' sentence goes under its logo; on a phone the cards go one to a row and
- * the faces two. */
+ * the cards take the whole width; on a phone the cards go one to a row and the faces two. */
 @media (max-width: 1279px) {
   .home-cards,
   .home-principles {
@@ -855,13 +756,6 @@
   .home-news article > div {
     grid-column: 4 / -1;
   }
-  .home-supporters-row {
-    row-gap: 24px;
-  }
-  .home-supporters-row > .logo-strip,
-  .home-supporters-row > p {
-    grid-column: 1 / -1;
-  }
 }
 @media (max-width: 760px) {
   .home-cards {
@@ -876,24 +770,6 @@
   }
   .home-principles li {
     font-size: 12px;
-  }
-  .band.home-supporters {
-    padding-top: 48px;
-    padding-bottom: 48px;
-  }
-  .home-supporters .band-label {
-    margin-bottom: 24px;
-  }
-  .home-supporters-row > p {
-    font-size: 16px;
-    line-height: 24px;
-  }
-  .logo-strip {
-    --logo-strip-gap: 56px;
-  }
-  .logo-strip-set img {
-    height: 32px;
-    max-width: 160px;
   }
   .home-faces {
     grid-template-columns: repeat(2, minmax(0, 1fr));

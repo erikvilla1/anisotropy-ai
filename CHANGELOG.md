@@ -55,6 +55,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Changed
 - The logo's name is in heavy capitals again (ADR-0080 amendment 1): ANISOTROPY in Archivo at weight 800, as outlines in a vector file drawn through the logo's mask (`scripts/brand-wordmark.py`), so no font is loaded for it. The triangle is unchanged.
+- The "Supported by" strip leaves the home page (ADR-0077 amendment 16, ADR-0081 amendment 1): Platform follows Mission, and the Launchpad cohort stays named in the hero and in About. The strip's component, its list and the colour copy of The Basement's mark are deleted.
 - After a header or footer link is clicked, the next page is requested when the veil's fade to black has ended, not by a timer beside it (ADR-0070 amendment 2). The unused `@fontsource-variable/archivo` package leaves `package.json` (ADR-0080).
 - The workspace's two captions under the laminate view say "The grain follows the fibres", since the view draws tows and fibres, not stripes (ADR-0083).
 - The laminate view draws its plies as unidirectional carbon (ADR-0083, proposed): a procedural fibre pattern at each ply's angle, an anisotropic reflection under a clearcoat, the angle colour as a line on the cut edges, generated studio lighting, a contact shadow and lettered axes, without the dust; a plain look for browsers that draw in software. It takes four optional props for the scroll tour: `laid`, `explode`, `marked`, `azimuth`.

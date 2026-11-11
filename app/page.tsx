@@ -7,10 +7,8 @@ import { DemoTour } from "@/components/home/demo-tour";
 import { EngineAnswersProvider } from "@/components/home/engine-answers";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
-import { LogoStrip } from "@/components/home/logo-strip";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { serviceHref, services, statusLabel } from "@/lib/services";
-import { supporters } from "@/lib/supporters";
 import { team } from "@/lib/team";
 import "./home.css";
 
@@ -43,8 +41,8 @@ const news = [
 ];
 
 /** The home page: the hero first (ADR-0076, ADR-0077), a scroll-driven tour of one calculation (ADR-0084), the laminate
- * calculator as the demonstration, then bands on the mission, the supporters, the platform, the team and what is new, and the
- * closing band. The workflow and the roadmap live on About. */
+ * calculator as the demonstration, then bands on the mission, the platform, the team and what is new, and the closing
+ * band. The workflow and the roadmap live on About. */
 export default function Home() {
   return (
     <main id="main">
@@ -85,9 +83,9 @@ export default function Home() {
         <DemoTour apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
         <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
       </EngineAnswersProvider>
-      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11 and 14), dark and
-          light in turn: Mission, the supporters' strip, Platform, About, What is new. Each numbered band opens with the kit's
-          head. The four principles close the Mission band as a strip. */}
+      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 16):
+          Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
+          close the Mission band as a strip. */}
       <section className="band home-blurb home-mission" id="mission">
         <div className="band-head">
           <p className="band-label">01 / MISSION</p>
@@ -113,17 +111,6 @@ export default function Home() {
             </span>
           </li>
         </ul>
-      </section>
-      {/* The supporters' strip, after PhysicsX's logo strip: the logos come from lib/supporters.ts. One logo stands beside its
-          sentence; more take the whole row, and drift once they are wider than it (components/home/logo-strip.tsx). */}
-      <section className="band is-light home-blurb home-supporters" id="supporters" aria-labelledby="supporters-label">
-        <p className="band-label" id="supporters-label">
-          SUPPORTED BY
-        </p>
-        <div className={supporters.length > 1 ? "home-supporters-row is-many" : "home-supporters-row"}>
-          <LogoStrip supporters={supporters} label="Supported by" />
-          <p>Anisotropy is part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego.</p>
-        </div>
       </section>
       <section className="band home-blurb home-platform" id="platform">
         <div className="band-head">
