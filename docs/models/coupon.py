@@ -71,6 +71,7 @@ from anisotropy_fea.abaqus_reader import parse_deck  # noqa: E402
 from anisotropy_fea.audit import CRITERION, form_tables, gauge_text, load_rubric, our_results, read_form, regressions, score, write_form  # noqa: E402
 from anisotropy_fea.case_pages import CasePageError, calculix_record, read_case  # noqa: E402
 from anisotropy_fea.convergence import convergence_study  # noqa: E402
+from anisotropy_fea.every_output import write_ours as write_every_output  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
 from anisotropy_fea.fields import field_data  # noqa: E402
@@ -1017,13 +1018,50 @@ def package_contents(src: Sources, spec, package: Path) -> list[tuple[str, str]]
     if material_file(spec) is not None:
         out.append(material_file(spec))
     out.append(("4-results/ours-all-plies.csv", "our S11, S22 and S12 in each ply's material axes, and Mises, for every ply of every element"))
+    if every_layer(spec):
+        out += [("4-results/ours-every-output.csv", "every output Abaqus shows, ours: per element and ply, S11, S22, S12, Mises, Tresca, the "
+                                                    "pressure, the three principal stresses, E11, E22, E12, and the zone; the columns of "
+                                                    "abaqus_every_output.py's file"),
+                ("4-results/ours-every-output.json", "what the comparison reads beside it: the zones, our reaction at the top grip, the "
+                                                     "acceptance limits"),
+                (f"{VERIFY}/abaqus_every_output.py", "reads your job's .odb: every element and ply, the same columns, and the reactions "
+                                                     "(abaqus python; uses abaqus_extract_fields.py beside it)"),
+                (f"{VERIFY}/abaqus_extract_fields.py", "its helpers"),
+                (f"{VERIFY}/compare_every_output.py", "puts your values beside ours by zone and gives the verdict (abaqus python, or any "
+                                                      "Python 3)")]
     return out
 
 
-def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, deck, solution) -> None:
-    """Every file of the package except the PDF, compiled into it afterwards, and the audit form."""
+# the scripts the team's engineers run on their own Abaqus job (ADR-0089 amendment 3); fea/tools holds the same files
+VERIFY = "5-verify"
+VERIFY_TOOLS = ("abaqus_every_output.py", "abaqus_extract_fields.py", "compare_every_output.py")
+
+
+def every_layer(spec) -> bool:
+    """Whether the coupon's deck asks Abaqus for every ply's middle (the tension coupon's, ADR-0089): the package then carries every
+    output of ours and the scripts that compare the team's run with it."""
+    return bool(spec.output.abaqus.every_layer)
+
+
+def verify_lines(c: str) -> list[str]:
+    """The README's steps for the engineer who verifies the coupon: run, read the ODB, compare, send back."""
+    return ["How to verify every output (Abaqus 2024 or later: its Python 3 runs the scripts)",
+            f"1. Run our deck 2-our-model/abaqus/{c}-abaqus.inp as a job, or build the coupon in Abaqus/CAE by Chapter 4 of the PDF:",
+            "   S4 elements (Reduced integration unticked), the same partitions and seeds, and S and E at the middle of every ply.",
+            f"2. abaqus python {VERIFY}/abaqus_every_output.py <Job>.odb --out <folder>",
+            "   writes <Job>-every-output.csv (every element and ply) and <Job>-every-output-RF.csv (the reactions).",
+            f"3. abaqus python {VERIFY}/compare_every_output.py 4-results/ours-every-output.csv <folder>/<Job>-every-output.csv "
+            "--out <folder>/<Job>-comparison.csv",
+            "   prints the comparison by zone and the verdict; the CSV holds every value, yours beside ours.",
+            "4. Put back in the folder you received this package in: your job's .inp, the two CSVs of step 2, the printout of step 3 and its CSV,",
+            "   and the audit form filled in. What does not agree is what we fix.", ""]
+
+
+def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, deck, solution, attempt: str | None) -> None:
+    """Every file of the package except the PDF, compiled into it afterwards, and the audit form. `attempt` is the attempt the package
+    delivers."""
     if c is not None:
-        c.attempt = accepted_attempt(src)
+        c.attempt = attempt
         team.fill_share(c, folder)  # the team's deck, our model, the material, the side-by-side files and the README
         return
     lib = library_material(spec.material.library, spec.material.dataset) if spec.material.library else None
@@ -1038,24 +1076,33 @@ def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, d
     if material_file(spec) is not None:
         team.write_material_csv(folder / material_file(spec)[0], lib, spec_material(spec), deck_units)
     team.write_all_plies(folder / "4-results" / "ours-all-plies.csv", solution, deck, deck_units)
+    if every_layer(spec):
+        write_every_output(folder / "4-results" / "ours-every-output.csv", folder / "4-results" / "ours-every-output.json", spec, solution,
+                           deck_units, src.coupon, spec.output.abaqus.element, fea_version)
+        (folder / VERIFY).mkdir()
+        for name in VERIFY_TOOLS:
+            shutil.copy2(paths.FEA / "tools" / name, folder / VERIFY / name)
     contents = package_contents(src, spec, folder)
     width = max(len(path) for path, _ in contents)
     lines = [team.README_MARK, f"{card['Coupon']}, {card['Test']}: our model and its document", "",
              *[f"{label + ':':14} {value}" for label, value in card.items()], "",
-             f"Attempt:       {accepted_attempt(src) or 'none named'} (our attempt this package delivers)",
+             f"Attempt:       {attempt or 'none named'} (our attempt this package delivers)",
              f"Built {date.today().isoformat()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {documents.git_commit()}).",
              f"Start with the PDF. Numbers in the files are in {units_words(deck_units)}"
              + (f"; the PDF states the coupon in {units_words(spec.units)}, as the team did." if deck_units != spec.units else "."),
              "There is no 1-team-model folder: the team has not built this coupon yet.", "",
+             *(verify_lines(src.coupon) if every_layer(spec) else []),
              *[f"{path.ljust(width)}  {what}" for path, what in contents]]
     (folder / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
 # --------------------------------------------------------------------------------------------- the document
 
-def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = False, write_summary: bool = True) -> tuple[Path, Path]:
+def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = False, write_summary: bool = True,
+                   attempt: str | None = None) -> tuple[Path, Path]:
     """The coupon document (its PDF when Tectonic is installed and `pdf` is set, else the LaTeX) and the package folder; with
-    `write_summary`, the team comparison's figures for the case page too (beside the model, so off for a scratch build)."""
+    `write_summary`, the team comparison's figures for the case page too (beside the model, so off for a scratch build). `attempt` is
+    the attempt the package delivers, as `tools/run_coupon.py` names the run that built it; without it, the case page's accepted one."""
     spec = load_spec(src.spec)
     card = dict(coupon_card(spec))
     if not card:
@@ -1093,7 +1140,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
 
     # the audit (ADR-0043): our tools score the rubric; the chapter and the form show the same rows
     rubric = load_rubric()
-    attempt = accepted_attempt(src)
+    attempt = attempt or accepted_attempt(src)
     b1 = next(item for item in rubric.items if item.id == "B1").tolerance.length_m  # the rebuilt deck is held to the model match's tolerance
     rebuilt = audit.compare_rebuilt(audit.rebuilt_deck(src.team_files), deck, deck_units, b1)
     commit = documents.git_commit()
@@ -1156,7 +1203,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     print(f"{src.coupon}: LaTeX written to {tex}")
 
     def fill_package(folder: Path) -> None:
-        fill(folder, src, spec, text, card, c, deck, solution)
+        fill(folder, src, spec, text, card, c, deck, solution, attempt)
         write_form(folder / form, rubric, scored, audited, deck_units, tables=form_tables(rubric, evidence, scored), files=compared, record=build_record)
 
     team.write_package(package, fill_package)
