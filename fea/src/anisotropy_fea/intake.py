@@ -1369,12 +1369,29 @@ def spec_material_meaning(spec) -> tuple:
     return ("own", round(mat.E1, 3), round(mat.E2, 3), round(mat.G12, 3), round(mat.nu12, 6))
 
 
-def existing_coupons(root: Path) -> dict[str, Any]:
-    """Every coupon under `root` with a spec, by name (the rule of paths.model_dirs on another root), loaded in SI."""
+def stored_coupons(root: Path) -> tuple[dict[str, Any], dict[str, str]]:
+    """Every coupon under `root` with a spec, by name (the rule of paths.model_dirs on another root): those that load, in SI, and those
+    whose spec the current rules refuse, with why. A spec written under older rules must not stop every other coupon from being checked,
+    named or listed: one such spec on the hosted store took the whole coupon studio down on 2026-11-10."""
     root = Path(root)
+    loaded: dict[str, Any] = {}
+    refused: dict[str, str] = {}
     if not root.is_dir():
-        return {}
-    return {d.name: load_spec(d / "ours" / f"{d.name}.toml") for d in sorted(root.iterdir()) if d.is_dir() and (d / "ours" / f"{d.name}.toml").is_file()}
+        return loaded, refused
+    for d in sorted(root.iterdir()):
+        path = d / "ours" / f"{d.name}.toml"
+        if not (d.is_dir() and path.is_file()):
+            continue
+        try:
+            loaded[d.name] = load_spec(path)
+        except (SpecError, ValueError, OSError) as exc:  # a TOML or validation error is a ValueError
+            refused[d.name] = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+    return loaded, refused
+
+
+def existing_coupons(root: Path) -> dict[str, Any]:
+    """Every coupon under `root` whose spec loads, by name, in SI (`stored_coupons` lists those that do not)."""
+    return stored_coupons(root)[0]
 
 
 def derived_material_code(meaning: tuple, materials: dict[str, tuple]) -> str:
@@ -1393,11 +1410,21 @@ def derived_material_code(meaning: tuple, materials: dict[str, tuple]) -> str:
     return f"M{n}"
 
 
+UNREADABLE = "a spec the current rules refuse"
+
+
+def _held(row: str, code: str, meaning: tuple) -> str | None:
+    """The refusal for a code held only by a coupon whose spec no longer loads; None for any other meaning."""
+    if len(meaning) == 3 and meaning[0] == UNREADABLE:
+        return f"{row}: {code} is held by {meaning[1]}, whose spec the current rules refuse ({meaning[2]}); give another code"
+    return None
+
+
 def designation_for(values: Values, root: Path) -> Designation:
     """The coupon's name, <material code>-<test code>-<layup code>, by the rules every coupon on this machine follows: a code
     means one thing and one thing has one code. A blank code is reused from the coupons that exist, or, for a layup, proposed."""
     problems = []
-    coupons = existing_coupons(root)
+    coupons, refused = stored_coupons(root)
     materials: dict[str, tuple] = {}
     layups: dict[str, tuple] = {}
     for spec in coupons.values():
@@ -1406,6 +1433,12 @@ def designation_for(values: Values, root: Path) -> Designation:
             continue
         materials.setdefault(match.group("material"), spec_material_meaning(spec))
         layups.setdefault(match.group("layup"), () if spec.layup is None else tuple(full_angles(spec)))  # no plies: no stack (ADR-0075)
+    # a coupon whose spec no longer loads keeps its codes, by its folder's name: no new coupon takes them with another meaning
+    for name, reason in refused.items():
+        match = DESIGNATION.match(name)
+        if match is not None:
+            materials.setdefault(match.group("material"), (UNREADABLE, name, reason))
+            layups.setdefault(match.group("layup"), (UNREADABLE, name, reason))
     meaning = material_meaning(values)
     code = values.material_code
     if code is None:
@@ -1414,7 +1447,7 @@ def designation_for(values: Values, root: Path) -> Designation:
             code = derived_material_code(meaning, materials)  # a new material names itself (ADR-0038 amendment 1)
     else:
         if code in materials and materials[code] != meaning:
-            problems.append(f"Material code: {code} already names another material on this machine; give another code")
+            problems.append(_held("Material code", code, materials[code]) or f"Material code: {code} already names another material on this machine; give another code")
         other = next((c for c, m in materials.items() if m == meaning and c != code), None)
         if other is not None:
             problems.append(f"Material code: this material already has the code {other}; use it")
@@ -1429,7 +1462,7 @@ def designation_for(values: Values, root: Path) -> Designation:
             layup = f"L{n}"
     else:
         if layup in layups and layups[layup] != stacking:
-            problems.append(f"Layup code: {layup} already names another stacking sequence on this machine; give another code")
+            problems.append(_held("Layup code", layup, layups[layup]) or f"Layup code: {layup} already names another stacking sequence on this machine; give another code")
         other = next((c for c, angles in layups.items() if angles == stacking and c != layup), None)
         if other is not None:
             problems.append(f"Layup code: this stacking sequence already has the code {other}; use it")
