@@ -1,6 +1,6 @@
 # ADR-0080: The logo is the lead's triangle and wide wordmark, traced to vectors and drawn through CSS masks
 
-- Status: Proposed
+- Status: Proposed; the name is set in Archivo again, as outlines (amendment 1)
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-10 ("swap the current logos … triangle first then anisotropy") | Drafted by: Claude Code
 - Related: [ADR-0079](ADR-0079-the-wordmark-is-set-in-archivo-at-weight-800-the-nearest-open-licence-match-to-physicsx-s-lettering.md) (the wordmark this replaces), [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the header), `app/brand.css`, `components/site-shell.tsx`, `public/assets/brand/`, `app/layout.tsx`
@@ -44,3 +44,25 @@ Option 3.
 
 - The lead supplies the original vector files and they differ visibly from the traces.
 - The triangle's lines break up or vanish at header size on a common screen.
+
+## Amendment 1, 2026-11-11 (the name in heavy capitals again: Archivo at weight 800, as outlines)
+
+**Context.** Going through the draft on a real screen, the lead asked to "switch the ANISOTROPY text to either the one before or like these", showing Anduril's and PhysicsX's logos: heavy, compact capitals beside the mark. "The one before" is ADR-0079's Archivo at weight 800, chosen there as the nearest open-licence match to PhysicsX's lettering.
+
+**Options.**
+1. Load the Archivo font again and set the name as text, as ADR-0079 did. Not chosen: a font file for ten letters, and the name can show in the fallback font until it arrives.
+2. The same lettering as outlines in a vector file, drawn through the mask the triangle already uses. Chosen.
+
+**Decision.**
+- `scripts/brand-wordmark.py` sets ANISOTROPY in Archivo at weight 800 with the font's own kerning and -0.01 em tracking (ADR-0079's setting) and writes the outlines to `public/assets/brand/anisotropy-wordmark.svg`: 3.3 KB, where the trace was 14 KB.
+- The font file comes from the npm package `@fontsource/archivo` 5.3.0 (SIL Open Font License 1.1). It is not in the repository and the site does not load it.
+- The triangle is unchanged. The name's capitals are two thirds of the triangle's height, and the gap between the two is 0.4 of it.
+- The wide wordmark's trace is no longer used; it is in commit `cde1f69`.
+
+**Evidence.** On 2026-11-11, in the browser against the dev server:
+- **Header at 1440 px:** the triangle 34.1 by 28 px from x = 32, the name 186.4 by 19.3 px from x = 77.3, both centred on y = 27.5, where the header's links are centred.
+- **Footer at 1440 px:** 29.2 by 24 px and 159.7 by 16.5 px, on one centre line.
+- **A 390 px phone:** 26.8 by 22 px and 146.4 by 15.2 px, both centred on y = 34.5; no sideways scroll.
+- Screenshots of the header over the hero, on the About page and on the phone were looked at. The link's text still reads "Anisotropy".
+- **Checks:** `npm run typecheck` clean; `npm test` 221 passed, 1 skipped; the production build without the hero clip exit 0. The browser suite against that build, on the tree that also holds ADR-0077 amendment 16: 77 passed, 2 failed, 1 skipped. The failures were `home.spec.ts` "typing a layup" (two quick fills of the layup were posted separately) and `studio.spec.ts` "the studio checks a setup" (the job still read "running" at the test's 30 s limit); neither test reads the logo or the strip. Re-run, the first passed twice; the second passed alone in 21.7 s and failed twice more beside other tests. UNVERIFIED: that both are only slow in this container; the pull request's CI run decides.
+- UNVERIFIED: the logo on a light ground (no page puts it on one), and the lead's own screen.
