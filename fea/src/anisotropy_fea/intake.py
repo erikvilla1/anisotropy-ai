@@ -293,7 +293,9 @@ ROWS_OF_KEY = {
     "coupon.standard": "standard", "test_method.id": "standard", "test_method.variant": "specimen", "test_method": "standard",
     "tabs.thickness": "tab_thickness", "tabs.bevel": "tab_bevel", "tabs.material": "tab_material", "tabs": "tab_thickness",
     "strain.device": "strain_device", "strain.gauge_length": "strain_length", "strain": "strain_device",
-    "geometry.dogbone": "narrow_width", "geometry.thickness": "thickness", "material.E": "own_E", "material.nu": "own_nu", "layup": "material_kind",
+    "geometry.dogbone": "narrow_width", "geometry.dogbone.narrow_width": "narrow_width", "geometry.dogbone.narrow_length": "narrow_length",
+    "geometry.dogbone.radius": "radius", "geometry.dogbone.outer_radius": "outer_radius",
+    "geometry.thickness": "thickness", "material.E": "own_E", "material.nu": "own_nu", "layup": "material_kind",
 }
 
 HOW_TO = (
@@ -1767,10 +1769,12 @@ def render_toml(data: dict, comments: dict[str, str] | None = None, header: tupl
 
 
 def form_rows_of(message: str, units: str = UNITS) -> list[str]:
-    """The form rows a spec message concerns, by the table.key names it mentions, labelled in the stated units."""
+    """The form rows a spec message concerns, by the table.key names it mentions (the longest one the table knows, so that
+    geometry.dogbone.narrow_length is the Narrow length row), labelled in the stated units."""
     rows = []
-    for key in re.findall(r"\b(?:geometry|mesh|layup|material|grips|loading|probes|names|coupon|output|test_method|tabs|strain)\.[A-Za-z0-9_]+", message):
-        field_key = ROWS_OF_KEY.get(key) or ROWS_OF_KEY.get(key.rsplit(".", 1)[0])
+    for key in re.findall(r"\b(?:geometry|mesh|layup|material|grips|loading|probes|names|coupon|output|test_method|tabs|strain)(?:\.[A-Za-z0-9_]+)+", message):
+        parts = key.split(".")
+        field_key = next((ROWS_OF_KEY[k] for k in (".".join(parts[:n]) for n in range(len(parts), 0, -1)) if k in ROWS_OF_KEY), None)
         if field_key and FIELDS[field_key].label_in(units) not in rows:
             rows.append(FIELDS[field_key].label_in(units))
     for word, label in (("supports", "Supports"), ("loads", "Loads"), ("regions", "Regions")):  # a plate's lists (ADR-0054)

@@ -200,6 +200,14 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .chat-issues { list-style: none; padding: 0; margin: 6px 0 10px; display: grid; gap: 6px; }
 .chat-issues li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 12.5px; padding: 8px 10px; border-radius: 6px; background: #241a17; border: 1px solid #5a3e35; color: #f0d6cc; }
 .chat-issues li svg { color: #e66767; transform: translateY(2px); }
+/* a failing item's rows, typed in place (ADR-0062 amendment 2) */
+.chat-issues li.chat-issue-fill { grid-template-columns: 16px minmax(0, 1fr); }
+.chat-issue-fill > .chat-link { grid-column: 2; justify-self: start; }
+.chat-fix-rows { grid-column: 2 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 10px; margin-top: 4px; }
+.chat-fix-row { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; color: #ececec; }
+.chat-fix-row input, .chat-fix-row select { width: 100%; min-width: 0; background: var(--bg); border: 1px solid #5a3e35; border-radius: 6px; color: var(--text); padding: 7px 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.chat-fix-row input:focus, .chat-fix-row select:focus { outline: none; border-color: #919191; }
+.chat-fix-row small { color: #c9b2a9; font-size: 10.5px; line-height: 1.4; }
 .chat-warnings li { background: #221d12; border-color: #5b4a24; color: #eadcb8; }
 .chat-warnings li svg { color: #c98500; }
 .chat-details { margin: 4px 0 10px; }
