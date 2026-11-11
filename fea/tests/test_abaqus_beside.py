@@ -183,3 +183,15 @@ def test_the_tool_prints_the_table_and_writes_the_summary(solved, tmp_path, caps
     assert written["agree"] == f"{1 + 3 + 3 * plies} of {1 + 3 + 3 * plies}" and written["dat"] == "IM7-UNT-L1-abaqus.dat"
     assert tool.main([str(solved["deck_path"]), str(tmp_path / "missing.dat")]) == 2
     assert "abaqus_beside:" in capsys.readouterr().err
+
+
+def test_a_value_below_1e_minus_99_is_read_as_fortran_prints_it():
+    """Abaqus 2025 prints 1.5633561E-189 as `1.5633561-189`, the letter dropped for the three-digit exponent (seen 2026-11-11 in the D3039
+    detection run): the reader takes it, and still refuses a token that is no number."""
+    from anisotropy_fea.abaqus_dat import NUMBER, _number
+
+    assert _number("1.5633561-189") == pytest.approx(1.5633561e-189, rel=1e-12)
+    assert _number("-3.2-101") == pytest.approx(-3.2e-101, rel=1e-12)
+    assert _number("-1.5049691E-42") == pytest.approx(-1.5049691e-42, rel=1e-12)
+    assert _number("1.0D-03") == pytest.approx(1e-3)
+    assert not NUMBER.match("12-345") and not NUMBER.match("E5") and not NUMBER.match("1.5-12")  # an integer mantissa, a two-digit exponent

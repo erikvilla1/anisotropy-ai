@@ -33,13 +33,16 @@ def write(path, text: str) -> str:
     return "new" if old is None else ("unchanged" if old == text else "CHANGED")
 
 
-OUTPUT_KEYWORDS = ("*output", "*node print", "*el print", "*node file", "*el file", "*restart")
+OUTPUT_KEYWORDS = ("*output", "*element output", "*node output", "*node print", "*el print", "*node file", "*el file", "*restart")
 
 
 def without_output_requests(text: str) -> str:
-    """The deck without its output requests and their data lines: what every solver's numbers depend on."""
+    """The deck without its output requests and their data lines, and without its comments (`**`, such as the header naming the spec's
+    digest): what every solver's numbers depend on."""
     kept, skipping = [], False
     for line in text.splitlines():
+        if line.startswith("**"):
+            continue
         if line.startswith("*"):
             skipping = line.lower().startswith(OUTPUT_KEYWORDS)
         if not skipping:
@@ -90,7 +93,11 @@ def regenerate(spec_path, ccx: bool, writer=write, changed: dict[Path, str] | No
         except CalculixWriterError as exc:
             lines.append(f"{'skipped':9}  {rel(target)}: {exc}")
         else:
-            lines.append(f"{writer(target, text):9}  {rel(target)}")
+            before_ccx = target.read_text(encoding="utf-8").replace("\r\n", "\n") if target.exists() else None
+            status_ccx = writer(target, text)
+            if changed is not None and status_ccx == "CHANGED" and before_ccx is not None:
+                changed[target.resolve()] = before_ccx
+            lines.append(f"{status_ccx:9}  {rel(target)}")
     return lines
 
 

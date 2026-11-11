@@ -3,8 +3,8 @@ units = "mm-MPa"
 spec = "../d3039-im7-8552.toml"
 deck_kernel = "../decks/d3039-im7-8552-abaqus.inp"
 deck_reference = "../decks/d3039-im7-8552-ccx.inp"
-deck_kernel_sha256 = "fdb8486ae97ff3688c42634758140579ff7eb3d8b4da7ec7f1acea3f0f7c7ffa"
-deck_reference_sha256 = "8a55ea88bc5f51844146218538b8801d4dfa81fcbac27298a3d14fa96caa9dfc"
+deck_kernel_sha256 = "74cff25321757889988254932dd2387853382e86b74b932497ebbd7f93d13a9b"
+deck_reference_sha256 = "edb15ed055a5a768b8e1bc4eea2df747322d8788790a1cd157417a4d32cf19df"
 
 [solver]
 name = "calculix"
