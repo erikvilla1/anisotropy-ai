@@ -6,7 +6,7 @@ import { DOWNLOADS, fileUrl, isActive, StudioError } from "@/lib/studio-api";
 import { layupNotation, layupRows, parseLayup } from "@/lib/studio-chat";
 import { libraryOptions, NO_STANDARD, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
 import {
-  builtLines, D3039, isOwnMaterial, LOAD_KEYS, MESH_KEYS, OWN_MATERIAL_KEYS, SIZE_KEYS, tensionMissing, tensionValues, underD3039,
+  builtLines, D3039, isOwnMaterial, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, tensionMissing, tensionValues, underD3039,
 } from "@/lib/tension-screen";
 import { FieldGrid } from "@/components/studio/coupon-form";
 import { remembered, RUN_BY_KEY } from "@/components/studio/local";
@@ -104,6 +104,11 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
           <div data-testid="own-material">
             <p className="studio-hint">Your material&apos;s constants and their source; G13 and G23 may be left blank (taken as stated under How we built it).</p>
             <FieldGrid form={form} keys={OWN_MATERIAL_KEYS} errors={errors} disabled={busy} onChange={(key, value) => edit({ [key]: value })} />
+          </div>
+        ) : needsPlyThickness(form) ? (
+          <div data-testid="library-ply-thickness">
+            <p className="studio-hint">This material&apos;s library record gives no ply thickness: give the cured ply thickness.</p>
+            <FieldGrid form={form} keys={["ply_thickness"]} errors={errors} disabled={busy} onChange={(key, value) => edit({ [key]: value })} />
           </div>
         ) : null}
         <form className="studio-field" onSubmit={(e) => { e.preventDefault(); applyLayup(); }}>

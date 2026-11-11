@@ -1,6 +1,6 @@
 # ADR-0089: Only unnotched tension, under ASTM D3039 or no standard, is offered until its comparison with Abaqus is validated
 
-- Status: Proposed (parts 1 and 2 built); round (a) run and compared, amendment 1; S4 for the tension deck and its CAE build, amendment 2; the team's engineers verify from the package, amendment 3; "verified" against Abaqus, "validated" kept for physical tests, confirmed by the founder
+- Status: Proposed (parts 1 and 2 built); round (a) run and compared, amendment 1; S4 for the tension deck and its CAE build, amendment 2; the team's engineers verify from the package, amendment 3; "verified" against Abaqus, "validated" kept for physical tests, confirmed by the founder; an unsymmetric tension layup waits, amendment 4
 - Date: 2026-11-11
 - Decided by: Founder, 2026-11-11 ("we are going to take a step back and focus on one workflow ... we will need to hide not delete all the other type of tests until we have established the first workflow and have validated so that we scale with the same workflow"; in answer to the plan's questions: the reference coupon is the D3039 IM7/8552 check, hidden "everywhere, with a switch", tension keeps "D3039 + No standard") | Drafted by: Claude Code
 - Related: [ADR-0066](ADR-0066-solver-results-are-compared-as-one-set-of-quantities-in-the-ply-axes-at-stated-places-and-peaks-are-reported-apart.md) (the quantities compared), [ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md) (standard profiles), [ADR-0075](ADR-0075-a-plastic-coupon-is-one-isotropic-material-with-no-plies-cut-as-a-dog-bone-the-structured-mesh-follows-and-astm-d638-is-its-profile.md) (D638, the dog-bone), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (the workspace), [ADR-0056](ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md) (hosted tier); `fea/src/anisotropy_fea/enabled.py`, `lib/enabled-tests.ts`, `api/src/anisotropy_api/settings.py`, `fea/checks/d3039-im7-8552/`
@@ -116,3 +116,24 @@ What a test list looked like before this record:
 - **A part built in CAE.** The same run renumbered and moved by (-12.5, -125) mm, as a part sketched about its centre, is paired by position and gets the same verdict.
 - **Tests.** `fea/tests/test_every_output.py` runs the script under a Python without site packages. `fea/tests/test_coupon_document.py` and `fea/tests/test_run_coupon.py` cover the package and the attempt it names.
 
+## Amendment 4, 2026-11-11 (a tension coupon's layup reads the same from both faces until an unsymmetric one is compared; decided by the founder)
+
+**Context.** Asked whether a coupon can be built from any material and layup, the setup check and the coupon run were tried on the studio's tension input with several of each. Two failures came out of the trial:
+- **An unsymmetric layup**, such as [0/45/-45/90] listed once, is solved by the flat shell kernel, because it bends as it is pulled. Its CalculiX record held no value ("0 of 0 recorded values"), and the document then stopped the whole run with a bare `ValueError` from its differences figure, so no outcome was written. The same input failed the same way before amendment 3. The package's every-output file and the comparison with Abaqus are built for a layup that only stretches, one value per ply.
+- **Nine of the library's eighteen records**, AS4/8552 among them, give no ply thickness. The tension screen shows a thickness box only for the engineer's own material, so the setup tool stopped with "has no ply thickness" instead of asking for it on its row.
+
+**Options.**
+1. **Refuse an unsymmetric layup for the tension coupon while the switch is off, with a sentence on its Symmetric row (chosen by the founder, "do a for right now").** ASTM D3039 is written for balanced and symmetric laminates, and the comparison was built for them.
+2. Build the unsymmetric case through: the CalculiX record and the every-output file from the flat shell's faces, then a round of its own against Abaqus. Left for later.
+
+**Decision.**
+- **The rule.** `enabled.SYMMETRIC_ONLY` and `enabled.is_layup_enabled` read the whole layup, every ply bottom first: a layup that reads the same from both faces is offered, whether it is written with "s" or listed in full. With `ANISOTROPY_ALL_TESTS=on` every layup is judged as before.
+- **Where it is checked.** `intake.check_form` puts the refusal on the Symmetric row of an unnotched tension coupon, so the page, the chat, the API and the Excel form say it alike. The form's definition carries the rule and its sentence.
+- **Ply thickness.** The setup check asks for it on its row when the library's record gives none, and the tension screen shows the box for such a material (`needsPlyThickness`), as the chat already asked.
+- **Package failures.** `tools/run_coupon.py` turns any failure of the document into a failed package step that names the error, so the result stands and the outcome is written (ADR-0064).
+
+**Evidence.** The trial on 2026-11-11 through `tools/studio_tool.py check`, on the tension input:
+- **Ready, with the size from D3039's Table 2:** T650/5320-1 [0]4s and [90]4s, IM7/8552 [30/-30]s, T1100GC/TC380 [45/0/-45/90]s, and AS4/8552 [0/90]s with its ply thickness given.
+- **Asking for width, length and tab length (no class):** an unbalanced layup, such as [0/30]s or [0/45]s.
+- **Full run.** T1100GC/TC380's package, built through `run_coupon.py`, carries the every-output file and the scripts, with 61 of 61 CalculiX values agreeing.
+- **Tests.** `fea/tests/test_enabled.py` pins the refusal with the switch off, an unsymmetric layup judged as before with it on, a symmetric layup listed in full, and the ply thickness row. `fea/tests/test_run_coupon.py` pins the failed package step. `tests/tension-screen.test.ts` and the tension screen's browser scenario pin the box.

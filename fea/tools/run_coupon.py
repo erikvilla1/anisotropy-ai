@@ -237,6 +237,8 @@ def package(name: str, pdf: bool, theory: bool, attempt: str | None = None) -> P
         _, folder = module.build_document(module.sources(name, paths.LOCAL), pdf=pdf, theory=theory, attempt=attempt)
     except SystemExit as exc:  # the document code stops with a message, as a script does
         raise StepFailed(f"the package: {exc}") from None
+    except Exception as exc:  # any other failure of the document is reported on the run, which stands (ADR-0064), and names the error
+        raise StepFailed(f"the package: {type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else 'no message'}") from exc
     return folder
 
 

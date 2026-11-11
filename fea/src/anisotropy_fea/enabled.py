@@ -26,6 +26,11 @@ MATERIAL_KINDS: tuple[str, ...] = ("plies",)  # a laminate of plies; one isotrop
 DOGBONE = False  # the dog-bone's rows (ADR-0075) wait with D638: a tension coupon is a straight strip
 
 NOT_AVAILABLE = "not available yet: the studio offers the unnotched tension coupon, under ASTM D3039 or no standard, until its comparison with Abaqus is validated"
+# a tension coupon's layup reads the same from both faces (the founder, 2026-11-11: "do a for right now"; ADR-0089 amendment 4): an
+# unsymmetric one bends as it is pulled, which the package, its every-output file and the comparison with Abaqus do not cover yet
+SYMMETRIC_ONLY = True
+UNSYMMETRIC = ("an unsymmetric layup is not available yet: it bends as it is pulled, which the comparison with Abaqus does not cover yet; "
+               "use a layup that reads the same from both faces, such as [0/45/-45/90]s")
 
 
 class SwitchError(ValueError):
@@ -65,6 +70,11 @@ def is_material_kind_enabled(word: str | None, every: bool) -> bool:
     return every or not word or word.strip().lower() in MATERIAL_KINDS
 
 
+def is_layup_enabled(angles: list[float] | tuple[float, ...], every: bool) -> bool:
+    """Whether a layup, every ply bottom first, is offered: one that reads the same from both faces, or any with the switch on."""
+    return every or not SYMMETRIC_ONLY or list(angles) == list(reversed(angles))
+
+
 def offered_words(key: str, words: tuple[str, ...] | list[str], every: bool) -> tuple[str, ...]:
     """A list row's words as offered: the Test, Standard and Material kind rows filtered by the list, every other row as it is."""
     if key == "test":
@@ -94,4 +104,4 @@ def definition() -> dict:
     """The `enabled` block of the form's definition: the list itself, never the switch, so the page's file is the same however the
     process was started; the page asks the API whether the switch is on (`GET /v1/coupon-tests`)."""
     return {"tests": list(TESTS), "standards": list(standard_designations()), "material_kinds": list(MATERIAL_KINDS), "dogbone": DOGBONE,
-            "not_available": NOT_AVAILABLE, "switch": ALL_TESTS_VARIABLE}
+            "not_available": NOT_AVAILABLE, "symmetric_only": SYMMETRIC_ONLY, "unsymmetric": UNSYMMETRIC, "switch": ALL_TESTS_VARIABLE}
