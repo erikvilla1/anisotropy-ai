@@ -3,7 +3,7 @@
  * what the software chose. The page computes nothing: the fea package (`anisotropy_fea.tension_input`) chooses every row the engineer was
  * not asked for and says why, in the checklist's `built` list.
  */
-import { FORM_VERSION, fieldByKey, labelFor, NO_STANDARD, PLY_KEYS, unitLabels, type Checklist, type StudioForm, type StudioValues } from "./studio-form";
+import { FORM_VERSION, fieldByKey, labelFor, libraryOptions, NO_STANDARD, PLY_KEYS, unitLabels, type Checklist, type StudioForm, type StudioValues } from "./studio-form";
 
 export const TENSION_INPUT = "tension";
 export const D3039 = "ASTM D3039/D3039M-17";
@@ -24,6 +24,13 @@ const filled = (form: StudioForm, key: string): boolean => Boolean((form[key] ??
 
 /** Whether the coupon is the engineer's own material: no library material picked. */
 export const isOwnMaterial = (form: StudioForm): boolean => !filled(form, "library");
+/** Whether the picked library material's record gives no ply thickness, so the engineer gives it: the screen then shows the box (the
+ * library holds nine such records, AS4/8552 among them). An id the library does not hold is left to the setup check. */
+export function needsPlyThickness(form: StudioForm): boolean {
+  if (isOwnMaterial(form)) return false;
+  const picked = libraryOptions.find((m) => m.id === (form.library ?? "").trim());
+  return picked !== undefined && picked.thickness === null;
+}
 /** Whether the standard is D3039 or none. A form that names no test yet is a new one: D3039, whatever the blank form's Standard row says;
  * the screen's two choices write the test with the standard, so a choice of none is kept. */
 export const underD3039 = (form: StudioForm): boolean => !(form.test ?? "").trim() || (form.standard ?? "").trim() !== NO_STANDARD;
@@ -36,7 +43,7 @@ export function tensionMissing(form: StudioForm): string[] {
   if (isOwnMaterial(form)) {
     if (!OWN_REQUIRED.some((key) => filled(form, key))) missing.push("the material");
     else for (const key of OWN_REQUIRED) if (!filled(form, key)) missing.push(fieldByKey[key]?.label ?? key);
-  }
+  } else if (needsPlyThickness(form) && !filled(form, "ply_thickness")) missing.push(fieldByKey.ply_thickness?.label ?? "ply_thickness");
   if (!filled(form, "ply_1") || !filled(form, "symmetric")) missing.push("the layup");
   if (!underD3039(form)) for (const key of SIZE_KEYS) if (!filled(form, key)) missing.push(fieldByKey[key]?.label ?? key);
   return missing;

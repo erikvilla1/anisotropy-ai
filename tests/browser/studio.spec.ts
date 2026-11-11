@@ -414,7 +414,11 @@ test("the tension screen takes the material and the layup, builds the model, say
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
   await expect(page.getByTestId("chat-not-available").last()).toContainText("Open-hole tension is not available yet");
 
+  await page.getByLabel("Material", { exact: true }).selectOption("as4-8552"); // its library record gives no ply thickness: the screen asks
+  await expect(page.getByTestId("library-ply-thickness")).toBeVisible();
+  await expect(page.getByTestId("tension-missing")).toContainText("Ply thickness (mm)");
   await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await expect(page.getByTestId("library-ply-thickness")).toHaveCount(0); // IM7/8552's record gives one
   await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
   await expect(page.getByTestId("tension-missing")).toHaveCount(0);

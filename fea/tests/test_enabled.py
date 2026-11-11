@@ -191,3 +191,34 @@ def test_the_blank_excel_form_offers_what_the_studio_offers():
     assert offered_words("material_kind", ("plies", "isotropic"), False) == ("plies",)
     assert offered_words("units", ("mm-MPa", "in-psi"), False) == ("mm-MPa", "in-psi")
     assert offered_words("test", ("unnotched tension", "open-hole tension"), True) == ("unnotched tension", "open-hole tension")
+
+
+# --------------------------------------------------------------------------------------------- amendment 4: a layup that only stretches
+
+def test_with_the_switch_off_an_unsymmetric_tension_layup_is_refused_on_its_symmetric_row(tmp_path, closed):
+    unsymmetric = checked(tmp_path / "once", PUBLIC_FILL, symmetric="no")  # [45/0/-45/90] listed once: it bends as it is pulled
+    assert unsymmetric.state == "blocked" and f"Symmetric: {enabled.UNSYMMETRIC}" in "\n".join(unsymmetric.problems)
+    assert "ADR" not in enabled.UNSYMMETRIC and "[0/45/-45/90]s" in enabled.UNSYMMETRIC  # a sentence for the engineer, with a way out
+    listed = checked(tmp_path / "listed", PUBLIC_FILL, angles=[45, 0, -45, 90, 90, -45, 0, 45], symmetric="no")  # every ply, the same both ways
+    assert listed.state == "ready" and not any("unsymmetric" in p for p in listed.problems)
+    assert checked(tmp_path / "s", PUBLIC_FILL).state == "ready"
+
+
+def test_with_the_switch_on_an_unsymmetric_tension_layup_is_judged_as_before(tmp_path):
+    assert not any("unsymmetric" in p for p in checked(tmp_path, PUBLIC_FILL, symmetric="no").problems)
+
+
+def test_the_symmetric_rule_reads_the_whole_layup_and_the_form_definition_carries_its_words():
+    assert enabled.is_layup_enabled([0, 90, 90, 0], False) and enabled.is_layup_enabled([0], False)
+    assert not enabled.is_layup_enabled([0, 45, -45, 90], False) and enabled.is_layup_enabled([0, 45, -45, 90], True)
+    block = export_module().definition()["enabled"]
+    assert block["symmetric_only"] is True and block["unsymmetric"] == enabled.UNSYMMETRIC
+
+
+def test_a_library_material_without_a_ply_thickness_asks_for_it_on_its_row(tmp_path, closed):
+    asked = checked(tmp_path / "asked", PUBLIC_FILL, library="as4-8552")
+    assert asked.state == "blocked"
+    assert any("Ply thickness (mm): required: the library's record of AS4 / 8552 gives no ply thickness" in p for p in asked.problems)
+    given = checked(tmp_path / "given", PUBLIC_FILL, library="as4-8552", ply_thickness=0.19)
+    assert not any("Ply thickness" in p for p in given.problems)
+    assert not any("Ply thickness" in p for p in checked(tmp_path / "im7", PUBLIC_FILL).problems)  # IM7/8552's record gives one

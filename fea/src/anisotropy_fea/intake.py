@@ -1191,6 +1191,10 @@ def check_form(form: FormInput) -> Values:
         problems.append(f"{L('symmetric')}: required; one of {', '.join(YES_NO)}")
     symmetric = word("symmetric") == "yes"
     ply_thickness = number("ply_thickness")
+    if kind == "unnotched_tension" and isotropic is None and angles and forms.text_of(cells.get("symmetric")):
+        every_ply = angles + angles[::-1] if symmetric else angles  # bottom first, as the spec expands it
+        if not enabled.is_layup_enabled(every_ply, offer_all):  # one workflow first: a layup that only stretches (ADR-0089 amendment 4)
+            problems.append(f"{L('symmetric')}: {enabled.UNSYMMETRIC}")
 
     library = forms.text_of(cells.get("library")) or None
     own_given = {key: cells.get(key) for key in OWN_KEYS if cells.get(key) is not None}
@@ -1223,7 +1227,11 @@ def check_form(form: FormInput) -> Values:
     strengths_known: bool | None = None  # whether the material has strengths, when the form says enough to know
     if library and not own_given:
         try:
-            strengths_known = library_material(library).lamina.strengths is not None
+            picked = library_material(library)
+            strengths_known = picked.lamina.strengths is not None
+            if isotropic is None and ply_thickness is None and cells.get("ply_thickness") is None and picked.ply_thickness_m is None:
+                problems.append(f"{L('ply_thickness')}: required: the library's record of {picked.name} gives no ply thickness; give the cured "
+                                "ply thickness")
         except ValueError as exc:
             problems.append(f"{form.label('library')}: {exc}")
     elif own is not None:

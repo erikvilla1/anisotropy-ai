@@ -293,3 +293,20 @@ def test_the_outcome_file_keeps_the_result_apart_from_a_missing_document(tool, t
     outcome = json.loads(result.read_text(encoding="utf-8"))
     assert outcome["status"] == "done" and outcome["result"] == "57 of 57 recorded values agree with CalculiX"
     assert outcome["documents"].startswith("the package not written") and outcome["message"] == f"{outcome['result']}; {outcome['documents']}"
+
+
+def test_any_failure_of_the_document_is_a_failed_package_step_that_names_the_error(tool, monkeypatch):
+    """ADR-0064: the package is built after the result, and its failure is reported, not raised. An unsymmetric tension coupon's empty
+    CalculiX record once stopped the whole run with a bare ValueError from a figure, and the run wrote no outcome."""
+    class Document:
+        @staticmethod
+        def sources(name, root):
+            return name
+
+        @staticmethod
+        def build_document(src, **options):
+            raise ValueError("max() iterable argument is empty\nmore lines")
+
+    monkeypatch.setitem(sys.modules, tool.COUPON_DOCUMENT, Document)
+    with pytest.raises(tool.StepFailed, match=r"^the package: ValueError: max\(\) iterable argument is empty$"):
+        tool.package("IM7-UNT-L1", pdf=False, theory=False, attempt="02")

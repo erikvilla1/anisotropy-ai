@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { blankForm, exampleForm } from "../lib/studio-form";
-import { builtLines, D3039, tensionMissing, tensionReady, tensionValues, underD3039 } from "../lib/tension-screen";
+import { builtLines, D3039, needsPlyThickness, tensionMissing, tensionReady, tensionValues, underD3039 } from "../lib/tension-screen";
 import { missingIn, nextStep } from "../lib/studio-chat";
 
 const reference = { ...blankForm(), library: "im7-8552", ply_1: "45", ply_2: "0", ply_3: "-45", ply_4: "90", symmetric: "yes" };
@@ -33,6 +33,16 @@ test("an own material sends its constants and no library id; a library material 
   assert.deepEqual([own.own_name, own.own_E1, own.ply_thickness], ["X840", 80000, 0.2]);
   assert.equal(tensionValues({ ...reference, own_E1: "80000" }).own_E1, undefined);
   assert.ok(tensionMissing({ ...reference, library: "", own_name: "X840" }).includes("Own material: E1 (MPa)"));
+});
+
+test("a library material whose record gives no ply thickness asks for it, and sends it", () => {
+  const as4 = { ...reference, library: "as4-8552" };
+  assert.equal(needsPlyThickness(as4), true, "AS4/8552's record gives no ply thickness");
+  assert.equal(needsPlyThickness(reference), false, "IM7/8552's does");
+  assert.equal(needsPlyThickness({ ...reference, library: "" }), false, "an own material has its own row");
+  assert.deepEqual(tensionMissing(as4), ["Ply thickness (mm)"]);
+  assert.equal(tensionReady({ ...as4, ply_thickness: "0.19" }), true);
+  assert.equal(tensionValues({ ...as4, ply_thickness: "0.19" }).ply_thickness, 0.19);
 });
 
 test("How we built it reads the checklist's list: the row's label, the value and the reason", () => {
