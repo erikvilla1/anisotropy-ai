@@ -28,7 +28,7 @@ from pathlib import Path
 
 from anisotropy_fea import paths
 from anisotropy_fea.abaqus import find_abaqus
-from anisotropy_fea.abaqus_dat import parse_abaqus_dat
+from anisotropy_fea.abaqus_dat import AbaqusDatError, parse_abaqus_dat
 from anisotropy_fea.femodel import build_model
 from anisotropy_fea.spec import load_spec
 from anisotropy_fea.write_abaqus import SECTION_POINTS, write_abaqus
@@ -92,26 +92,42 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="a run folder under .local (Abaqus writes its files there)")
     parser.add_argument("--run", action="store_true", help="run datacheck and then a full run of each deck (needs Abaqus and a licence seat)")
+    parser.add_argument("--read", action="store_true", help="run nothing: read the .dat each deck's earlier run left in --out")
+    parser.add_argument("--only", nargs="+", default=None, help="these candidates only, by name")
     args = parser.parse_args(argv)
     written = decks(args.out)
+    if args.only:
+        unknown = sorted(set(args.only) - set(written))
+        if unknown:
+            parser.error(f"no candidate {', '.join(unknown)}; the candidates are {', '.join(written)}")
+        written = {name: path for name, path in written.items() if name in args.only}
     for name, path in written.items():
         print(f"written    {path}")
-    if not args.run:
+    if not (args.run or args.read):
         return 0
-    abaqus = find_abaqus()
-    if abaqus is None:
+    abaqus = find_abaqus() if args.run else None
+    if args.run and abaqus is None:
         print("abaqus_detect: Abaqus not found (ANISOTROPY_ABAQUS or abaqus on PATH)", file=sys.stderr)
         return 2
     for name, deck in written.items():
-        accepted, why = run(abaqus, deck, datacheck=True)
-        if not accepted:
-            print(f"{name:13} datacheck REFUSED: {why or 'see ' + deck.stem + '-dc.dat'}")
+        if args.run:
+            accepted, why = run(abaqus, deck, datacheck=True)
+            if not accepted:
+                print(f"{name:13} datacheck REFUSED: {why or 'see ' + deck.stem + '-dc.dat'}")
+                continue
+            solved, why = run(abaqus, deck, datacheck=False)
+            if not solved:
+                print(f"{name:13} run FAILED: {why or 'see ' + deck.stem + '.dat'}")
+                continue
+        dat_path = deck.parent / f"{deck.stem}.dat"
+        if not dat_path.is_file():
+            print(f"{name:13} no {dat_path.name} to read")
             continue
-        solved, why = run(abaqus, deck, datacheck=False)
-        if not solved:
-            print(f"{name:13} run FAILED: {why or 'see ' + deck.stem + '.dat'}")
+        try:
+            dat = parse_abaqus_dat(dat_path.read_text(encoding="utf-8", errors="replace"))
+        except AbaqusDatError as exc:  # one deck's .dat that does not read stops none of the others
+            print(f"{name:13} accepted, but its .dat does not read: {exc}")
             continue
-        dat = parse_abaqus_dat((deck.parent / f"{deck.stem}.dat").read_text(encoding="utf-8", errors="replace"))
         tables = [f"{t.kind} {t.set_name}: {', '.join(t.columns)} ({len(t.rows)} rows)" for t in dat.tables]
         print(f"{name:13} accepted; printed tables: " + (" | ".join(tables) or "none"))
     return 0
