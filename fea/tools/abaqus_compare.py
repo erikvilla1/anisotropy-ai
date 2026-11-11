@@ -26,61 +26,21 @@ import numpy as np
 
 from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
+from anisotropy_fea.every_output import FLOOR, QUANTITIES, ZONES, zones_of
+from anisotropy_fea.every_output import ours_by_element as ours_of_solution
 from anisotropy_fea.kernel import solve_deck
-from anisotropy_fea.recovery import element_ply_states, ply_invariants, ply_mises
 from anisotropy_fea.spec import load_spec
-from anisotropy_fea.units import deck_units_of, from_si, to_si
+from anisotropy_fea.units import deck_units_of, from_si
 
-QUANTITIES = ("S11", "S22", "S12", "Mises", "Tresca", "Pressure", "Max. Principal", "Mid. Principal", "Min. Principal", "E11", "E22", "E12")
-INVARIANT_OF = {"Tresca": "tresca", "Pressure": "pressure", "Max. Principal": "max_principal", "Mid. Principal": "mid_principal",
-                "Min. Principal": "min_principal"}
-ZONES = ("gauge", "free length", "band", "tab line", "gripped")
-FLOOR = 0.02
+# the quantities, the zones and our values per element are `anisotropy_fea.every_output`'s, which the package's file for the team is
+# written from too (ADR-0089 amendment 3): this tool and the team's `compare_every_output.py` judge the same numbers
+__all__ = ("FLOOR", "QUANTITIES", "ZONES", "zones_of", "ours_by_element", "read_abaqus", "compare", "reaction")
 
 
 def ours_by_element(deck, units: str) -> tuple[dict[int, dict[str, np.ndarray]], object]:
-    """Our kernel's values per element label: each quantity as an array over the plies, in the deck's units."""
+    """Our kernel's values per element label on the deck: each quantity as an array over the plies, in the deck's units."""
     solution = solve_deck(deck)
-    field = element_ply_states(solution)
-    mises = ply_mises(field)
-    invariants = ply_invariants(field)
-    stress = lambda v: from_si(np.asarray(v, dtype=float), "stress", units)  # noqa: E731
-    out = {}
-    for e, key in enumerate(solution.mesh.element_keys):
-        s = field.stress_12[e]
-        values = {"S11": stress(s[:, 0]), "S22": stress(s[:, 1]), "S12": stress(s[:, 2]), "Mises": stress(mises[e][:, 0])}
-        for name, inner in INVARIANT_OF.items():
-            values[name] = stress(invariants[inner][e])
-        strain = field.strain_12[e]
-        values.update(E11=strain[:, 0], E22=strain[:, 1], E12=strain[:, 2])
-        out[int(key[1])] = values
-    return out, solution
-
-
-def zones_of(spec, mesh, units: str) -> dict[int, str]:
-    """Each element's zone, by element label, from its corner nodes on the kernel's mesh, in the deck's units."""
-    length = lambda v: float(from_si(v, "length", units))  # noqa: E731
-    g = spec.geometry
-    L, W, tab = length(g.length), length(g.width), length(g.tab_length or 0.0)
-    half = length(spec.strain.gauge_length) / 2 if spec.strain is not None else W / 2
-    corners = np.asarray(mesh.connectivity)[:, :4]
-    out = {}
-    for e, key in enumerate(mesh.element_keys):
-        ys = [length(mesh.xy[n][1]) for n in corners[e]]
-        y = sum(ys) / len(ys)
-        on_line = any(abs(v - tab) < 1e-6 or abs(v - (L - tab)) < 1e-6 for v in ys)
-        if y < tab or y > L - tab:
-            zone = "gripped"
-        elif on_line:
-            zone = "tab line"
-        elif y < tab + W or y > L - tab - W:
-            zone = "band"
-        elif L / 2 - half <= y <= L / 2 + half:
-            zone = "gauge"
-        else:
-            zone = "free length"
-        out[int(key[1])] = zone
-    return out
+    return ours_of_solution(solution, units), solution
 
 
 def read_abaqus(path: Path) -> dict[tuple[int, int], dict[str, float]]:

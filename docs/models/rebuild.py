@@ -100,6 +100,16 @@ def tag(name: str) -> str:
     return r"\evidence{" + name + "}"
 
 
+def layer_middles(path: Path) -> list[int]:
+    """The section points the deck's `*Element Output` lists, the middle of every ply (the tension coupon's deck, ADR-0089), or none."""
+    blocks = keyword_blocks(path, "Element Output", 1, first_only=True)
+    lines = blocks[0].splitlines()[1:] if blocks else []
+    try:
+        return [int(v) for v in lines[0].split(",") if v.strip()] if lines else []
+    except ValueError:
+        return []
+
+
 def keyword_blocks(path: Path, keyword: str, data_lines: int | None = 12, first_only: bool = False) -> list[str]:
     """The deck's lines for a keyword (case-insensitive) with up to `data_lines` data lines each; comments skipped."""
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -644,7 +654,8 @@ def render(ctx: Context, h: Helpers) -> str:
     ]))
     out.append(gui_steps(h, "Abaqus/CAE", [
         e("Mesh module (Object: Part) > Seed > Edges, By number: the counts above on the width edges and on each length segment between partition lines (Seed Part by size gives the same mesh only when the partitions divide evenly)."),
-        e(f"Mesh > Element Type: Standard, Linear, Shell, {element_type}" + (", reduced integration, hourglass control default." if element_type == "S4R" else ".")),
+        e(f"Mesh > Element Type: Standard, Linear, Shell, {element_type}" + (", reduced integration, hourglass control default." if element_type == "S4R"
+          else ": Reduced integration unticked (full integration, as our engine's element)." if element_type == "S4" else ".")),
         e("Mesh > Mesh Part. Check the counts above in the Mesh module's query tool."),
     ] if f.grid else [
         e(f"This mesh cannot be made again in Abaqus/CAE. For the same mesh, import our deck {ctx.kernel_deck.name} (File > Import > Model) "
@@ -662,23 +673,41 @@ def render(ctx: Context, h: Helpers) -> str:
 
     # ---------------------------------------------------------------- job and outputs
     out.append(h.heading(1, "Job and outputs"))
+    middles = layer_middles(ctx.kernel_deck)  # the deck asks for every ply's middle: the team compares every output (ADR-0089 amendment 3)
     outputs = "\n".join(keyword_blocks(ctx.kernel_deck, "Preprint", 0) + keyword_blocks(ctx.kernel_deck, "Restart", 0) + keyword_blocks(ctx.kernel_deck, "Output", 0)
-                        + keyword_blocks(ctx.kernel_deck, "Node Print", 2) + keyword_blocks(ctx.kernel_deck, "El Print", 2))
+                        + keyword_blocks(ctx.kernel_deck, "Element Output", 2) + keyword_blocks(ctx.kernel_deck, "Node Print", 2)
+                        + keyword_blocks(ctx.kernel_deck, "El Print", 2))
     out.append(h.kv_table([
         ("Job", job),
         ("Output requests in the deck", e(", ".join(f.ignored_keywords) + ": skipped by the kernel, since they cannot change the solution; quoted below") + " " + tag("INP")),
-        ("What the comparison needs", e("reactions summed over each grip set, displacements at the probe nodes, stresses and strains at the probe elements per ply") + " " + tag("SPEC" if generated else "INP")),
+        ("What the comparison needs", e("every element at the middle of every ply: S, E and the reactions at the grips, which the package's "
+                                         "5-verify scripts read from the job's .odb" if middles else
+                                         "reactions summed over each grip set, displacements at the probe nodes, stresses and strains at the probe elements per ply")
+         + " " + tag("SPEC" if generated else "INP")),
     ]))
+    failure = any(m.fail_stress for m in ctx.deck.materials.values())
     out.append(gui_steps(h, "Abaqus/CAE", [
         e("Step module > Field Output Requests: Preselected defaults (the deck writes variable=PRESELECT); add S, E, SF at all section points for the comparison"
-          + (", and CFAILURE (the failure indices; it needs the strengths of Fail Stress)" if any(m.fail_stress for m in ctx.deck.materials.values())
-             else "") + "."),
+          + (", and CFAILURE (the failure indices; it needs the strengths of Fail Stress)" if failure else "") + "."),
         e("Step module > History Output Requests: add RF and U at the reference points or grip sets."),
         e("Job module > Create Job, name as above > Submit > Monitor. Check the .msg and .sta files for warnings."),
         e("To send results back: Visualization module, Report > Field Output, written as CSV, one file per quantity: S (S11, S22, S12, in the "
           "axes Abaqus reports for each ply, which we take as its material axes) and E at the element centroids for all section points of every ply, and U and RF at the nodes, the reference "
           "points included. With the strengths in Fail Stress, add the failure indices CFAILURE (MSTRS, TSAIH) at all section points. The audit "
           "form's How to check lines say which values each check needs."),
+    ] if not middles else [
+        e("Step module > Field Output Requests: keep the Preselected defaults (the deck writes variable=PRESELECT: RF among them) and create a "
+          f"second request on the whole model: S and E, with Output at shell, beam, and layered section points: Specify: {', '.join(map(str, middles))} "
+          "(the middle of each ply, bottom ply first, for the thickness integration points of the section above), and Include local coordinate "
+          "directions when available ticked (the deck writes directions=YES)."),
+        e("Job module > Create Job, name as above > Submit > Monitor. Check the .msg and .sta files for warnings."),
+        e("To check every output, with the job's .odb: ") + h.code("abaqus python 5-verify/abaqus_every_output.py Job.odb --out results")
+        + e(", then ") + h.code("abaqus python 5-verify/compare_every_output.py 4-results/ours-every-output.csv results/Job-every-output.csv")
+        + e(" (the package's README.txt gives the lines). It pairs your elements with ours by number, or by position for a coupon built "
+            "here, and judges every value by zone."),
+        e("To read one value by hand: Visualization module, Result > Section Points: the ply (Layer k) and its middle point; Query > Probe "
+          "Values, Probe Elements, on the element: S, S11 in the ply's material axes, the element's own value, not averaged at the nodes. "
+          "The package's 4-results/ours-every-output.csv holds ours at the same element and ply."),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
         e("Step > History Output > Create > Node output: RF, Totals Yes, region the grip node set (one per grip); Node output U at the probe nodes; Element output S, E at the probe elements, Global Yes. ") + tag("MANUAL p.47"),

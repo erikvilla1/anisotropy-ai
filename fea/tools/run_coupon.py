@@ -223,9 +223,10 @@ def script(step: str, args: list[str], cwd: Path) -> None:
         raise StepFailed(f"{step}: {Path(args[0]).name} exited with code {process.returncode}{words}")
 
 
-def package(name: str, pdf: bool, theory: bool) -> Path:
+def package(name: str, pdf: bool, theory: bool, attempt: str | None = None) -> Path:
     """The coupon's document and package, built in this process so that they read the coupon where this run wrote it; returns the
-    package folder, which docs/models/coupon.py names by the day it is built."""
+    package folder, which docs/models/coupon.py names by the day it is built. `attempt` is this run's, which the package names as the one
+    it delivers: its results are this run's, not the case page's accepted attempt (on a new coupon, the reading of its input)."""
     module = sys.modules.get(COUPON_DOCUMENT)
     if module is None:
         spec = importlib.util.spec_from_file_location(COUPON_DOCUMENT, paths.ROOT / "docs" / "models" / "coupon.py")
@@ -233,7 +234,7 @@ def package(name: str, pdf: bool, theory: bool) -> Path:
         sys.modules[COUPON_DOCUMENT] = module
         spec.loader.exec_module(module)
     try:
-        _, folder = module.build_document(module.sources(name, paths.LOCAL), pdf=pdf, theory=theory)
+        _, folder = module.build_document(module.sources(name, paths.LOCAL), pdf=pdf, theory=theory, attempt=attempt)
     except SystemExit as exc:  # the document code stops with a message, as a script does
         raise StepFailed(f"the package: {exc}") from None
     return folder
@@ -402,7 +403,7 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
     progress.result, result_at = result, time.perf_counter()
     progress.made(**{key: path for key, _, path in answer})
     print(f"\nResult: attempt {number:02d} of {name}: {result}. The drawings and the package follow.", flush=True)
-    opens, documents, delivered = documents_of(name, out, spec, pdf, theory, progress)
+    opens, documents, delivered = documents_of(name, out, spec, pdf, theory, progress, f"{number:02d}")
     evidence = f"`ours/runs/{attempt.name}/run/`; `ours/{paths.VERIFICATION}/{record.name}`" + ("" if delivered is None else f"; `{paths.DOCUMENTS}/{delivered.name}/`")
     written = ("package written" if pdf else "package written without its PDF") if documents == "written" else documents
     add_row(folder, [f"{number:02d}", day, what, result, written, evidence])
@@ -433,7 +434,8 @@ def outcome_line(folder: Path) -> str:
         f"; our reaction {value} from CalculiX's" for value in reaction)
 
 
-def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, progress: Progress) -> tuple[list[tuple[str, str, Path]], str, Path | None]:
+def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, progress: Progress,
+                 attempt: str | None = None) -> tuple[list[tuple[str, str, Path]], str, Path | None]:
     """After the result (ADR-0064): our engine's drawings and the package. Returns the files to open, "written" or what is missing
     and why, and the package folder when it was built. A failure here is reported, not raised: the result already stands."""
     kernel = out / "kernel"
@@ -449,7 +451,7 @@ def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, prog
     progress.start("the package")
     delivered = None
     try:
-        delivered = package(name, pdf, theory)
+        delivered = package(name, pdf, theory, attempt)
         progress.made(package=delivered)
     except StepFailed as exc:
         failed.append(f"the package not written ({exc})")

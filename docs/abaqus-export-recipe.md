@@ -4,7 +4,17 @@ Written for: the team member who builds the Abaqus coupon models (ADR-0029). Our
 
 ## The tension workflow: comparing every output with Abaqus (ADR-0089, 2026-11-11)
 
-Written for: whoever checks our tension coupon against Abaqus, the founder now and the team later. The reference is the public D3039 check, `fea/checks/d3039-im7-8552`; a coupon built on the studio's tension screen writes the same deck.
+Written for: the team's engineers, who verify our tension coupon against Abaqus (ADR-0089 amendment 3), and whoever maintains the tools. The reference is the public D3039 check, `fea/checks/d3039-im7-8552`; a coupon built on the studio's tension screen writes the same deck.
+
+**The engineers' way: the package.**
+1. The founder builds the coupon on the studio's tension screen and takes "The package for the team (zip)" from its Files to the team's OneDrive.
+2. The engineer follows the package's `README.txt`, "How to verify every output":
+   - run our deck, or build the coupon in CAE by the PDF's Chapter 4 (S4, the same partitions and seeds, S and E at every ply's middle);
+   - `abaqus python 5-verify/abaqus_every_output.py <Job>.odb --out <folder>`;
+   - `abaqus python 5-verify/compare_every_output.py 4-results/ours-every-output.csv <folder>/<Job>-every-output.csv --out <folder>/<Job>-comparison.csv`.
+3. The engineer puts the job's `.inp`, the CSVs, the printout and the audit form back in the folder the package came in.
+
+The script pairs the engineer's elements with ours by number (our deck) or by position (a coupon built in CAE, moved onto ours by the meshes' corners if placed elsewhere), judges every value by zone, and gives the verdict: the reaction and every gauge value within 1 %, every free-length value within 3 %. What does not agree is what we fix. Rounds (a) and (b) below are the same steps with the repository's own tools.
 
 **Round (a): our deck, run in Abaqus.** Same mesh, so the comparison is element by element.
 
@@ -17,7 +27,7 @@ Written for: whoever checks our tension coupon against Abaqus, the founder now a
 
 1. Build it from the package's Chapter 4 (the rebuild guide): a 250 by 25 mm shell, the layup [45/0/-45/90]s from the bottom with the layer axis 1 along the coupon (the length, y), S4 (Mesh > Element Type: Standard, Linear, Shell, with Reduced integration unticked: full integration, as our deck and our kernel's element; ADR-0089 amendment 2), partitions at 56, 112.5, 137.5 and 194 mm, seeds 12 across and 28, 28, 12, 28, 28 along, both tabs clamped, the top one pulled 1 mm.
 2. In the Field Output request, ask for each layer's middle section point (Output at shell, beam and layered section points: Specify, the middle point of every layer).
-3. Compare the decks first: our `equivalence.deck_equivalence` on the job's `.inp` against ours must find the same items; then steps 3 and 4 of round (a) on the job's ODB.
+3. Compare the decks first: our `equivalence.deck_equivalence` on the job's `.inp` against ours must find the same items. Then read the job's ODB as in step 3 of round (a), and compare with `fea/tools/compare_every_output.py`, which pairs a CAE-built coupon's elements with ours by position (`tools/abaqus_compare.py` pairs by element number only).
 
 **Reading a value in CAE the way our page shows it.** Query > Probe Values on the element by its number, the layer's middle section point, Result Options > Averaging off (CAE averages at nodes, 75 % by default), the layer's material axes (CAE's default for a composite layer). Our studio's probe table for a clicked element lists the same numbers. S13 and S23 are not in a shell layer's S: Abaqus reports the transverse shear as TSHR13 and TSHR23; our membrane kernel does not model it.
 
