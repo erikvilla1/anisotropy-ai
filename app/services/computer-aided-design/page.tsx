@@ -24,7 +24,7 @@ export default function ComputerAidedDesign() {
       exists={[
         {
           title: "Parametric coupons",
-          text: "Strip coupons with or without a hole, with tabs and gauge probes placed from the dimensions; plates with named regions for supports and loads.",
+          text: "The D3039 tension strip, with its tabs and its extensometer placed from the dimensions Table 2 gives for the layup. Holes, bending spans and plates with named regions are built and come back one test at a time.",
         },
         {
           title: "Meshed from the spec",
@@ -39,7 +39,7 @@ export default function ComputerAidedDesign() {
         intro: "The geometry is drawn as the mesh the solvers use, with the supports and the load marked on it.",
         media: (
           <>
-            <MediaSlot label="The studio's mesh of an open-hole coupon" ratio="16/9" />
+            <MediaSlot label="The studio's mesh of a D3039 tension coupon" ratio="16/9" />
             <div className="kit-figure">
               <div className="kit-figure-top">
                 <span>COUPON / GEOMETRY</span>

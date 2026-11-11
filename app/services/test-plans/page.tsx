@@ -23,7 +23,7 @@ export default function TestPlans() {
       exists={[
         {
           title: "The standard, clause by clause",
-          text: "Pick ASTM D3039/D3039M for tension or ASTM C1869 for open-hole tension of ceramic composites, and every requirement the model can meet is judged with its clause: the coupon's value beside what the clause asks, a deviation reported and never hidden, the procedure left to the laboratory. Not a certification. A carbon fibre tow's record under ASTM D4018 is reduced to each specimen's strength and chord modulus and their statistics with no model, and judged against its clauses the same way. Compression, polymer open-hole, shear and bending keep the proportions of D6641, D5766, D3518 and D7264 until those standards are added.",
+          text: "ASTM D3039/D3039M for tension, the one test offered while it is compared with Abaqus: every requirement the model can meet is judged with its clause: the coupon's value beside what the clause asks, a deviation reported and never hidden, the procedure left to the laboratory. Not a certification. A carbon fibre tow's record under ASTM D4018 is reduced to each specimen's strength and chord modulus and their statistics with no model, and judged against its clauses the same way. Compression, polymer open-hole, shear and bending keep the proportions of D6641, D5766, D3518 and D7264 until those standards are added.",
         },
         {
           title: "The checklist",

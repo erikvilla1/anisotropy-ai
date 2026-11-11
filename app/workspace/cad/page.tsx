@@ -21,7 +21,7 @@ export default function CadWorkspacePage() {
       </div>
       <section className="studio-panel" data-testid="cad-placeholder">
         <h3>What exists today</h3>
-        <p>Coupon geometry stated as a few dimensions and meshed from them: strips with tabs, a central hole, bending spans, and plates with named regions. Every deck we write shares that one geometry.</p>
+        <p>Coupon geometry stated as a few dimensions and meshed from them: today the D3039 tension strip with its tabs; a central hole, bending spans and plates with named regions follow test by test. Every deck we write shares that one geometry.</p>
         <h3>What is planned</h3>
         <p>Reading a STEP, IGES or STL file into the viewer, meshing it, and writing a CAD file for the shop and for other tools. The decision on how comes with its own record when the coupon work has been checked against tests.</p>
         <p><Link className="chat-link" href={`${WORKSPACE_ROOT}/fea`}>Open the coupon FEA workspace</Link> · <Link className="chat-link" href="/contact">Contact us</Link></p>
