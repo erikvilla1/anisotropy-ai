@@ -71,3 +71,16 @@ Revisit if two coupons with the same material, test and layup but different size
 **Decision.** `intake.designation_for` derives a blank material code with `derived_material_code`: the library record's id without its punctuation (`im7-8552` gives `IM78552`; an id that starts with a digit gets `M` in front) when that code is free, else the next free `M<n>`, which is also what a set of own constants gets. The reuse-first lookup runs before any derivation, so a material that already has a code (IM7, X840PW, AS4 on the founder's machine) keeps it, and a code still means one thing. The two rows stay on the form as optional overrides with the refusals of this record; the chat no longer asks for them, the example form no longer pre-fills one, and the workspace shows them on its Advanced panel only ([ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md)). A same-name variant (same material, test and layup, another size) is told apart by the project's name and its attempt number; a size code is still deferred, as "How we will know it was wrong" foresaw.
 
 **Evidence.** `cd fea && uv run pytest -q tests/test_intake.py tests/test_checks.py tests/test_values_input.py tests/test_coupon.py tests/test_studio_tool.py` (2026-11-06): a coupon of AS4/8552 without a code is `AS48552-UNT-L1`, one of own constants `M1-UNT-L1`, IM7 and L1 are reused for the public coupon, and a given code that clashes is still refused by name; `lib/coupon-form-definition.json` regenerated with the new help text, held equal to the package by `test_studio_tool.py`.
+
+## Amendment 2, 2026-11-10 (a stored coupon whose spec no longer loads keeps its codes and stops nothing else; found on the hosted site)
+
+**Context.** Naming a coupon reads every stored coupon's spec, and so did the coupon list. On 2026-11-10 the hosted store held a dog-bone saved before ADR-0075 amendment 1 required its extensometer to lie in its narrow section; its spec no longer loaded, and the first refusal stopped every setup check, live solve and list on the site ("strain.gauge_length (44) must lie within the dog-bone's narrow section").
+
+**Options.**
+1. *List it apart and keep its codes* (chosen). `stored_coupons` returns the specs that load and, apart, those the current rules refuse with why; naming reserves a refused coupon's material and layup codes by its folder's name, so no new coupon takes them with another meaning, and the list shows it with its reason.
+2. *Skip it.* Rejected: a new coupon could take its codes with another meaning, and with its name, write into its folder.
+3. *Load it with the newer rules relaxed.* Rejected: every rule would need an old and a new form.
+
+**Decision.** Option 1, in `fea/src/anisotropy_fea/intake.py` (`stored_coupons`, `designation_for`) and `fea/tools/studio_tool.py` (`coupons`, `values`: reopening it says why it cannot be). A code held only by such a coupon is refused with its name and the reason; the engineer gives another code, or the coupon is fixed or removed.
+
+**Evidence.** `fea/tests/test_studio_tool.py`: `test_a_stored_coupon_the_rules_now_refuse_does_not_stop_the_others` and `test_a_refused_coupons_codes_stay_its_own`, on the public D638 spec with its extensometer stretched past the narrow section.

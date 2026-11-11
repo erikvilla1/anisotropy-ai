@@ -217,3 +217,16 @@ If a coupon job needs more than 4 vCPU, 12 GiB or 20 GB, or a cold start or a sl
 **Evidence.** Wall time on the public coupon's twin, this container: 1.0 to 1.2 s with the assembly on 4 threads and SPOOLES on 1 (five runs), 1.0 s with both on 4, 1.9 s with both on 1, so the change costs nothing measurable. New tests: `test_the_equation_solver_runs_on_one_thread_whatever_the_assembly_gets`, and `test_calculix_gives_the_same_answer_on_every_run_of_a_deck` (three runs on four threads, one `.dat`), which fails with amendment 6's setting and passes with this one.
 
 **What it changes.** Amendment 6's CalculiX line: the equation solver runs on one thread. A coupon solved on the hosted tier between amendment 6 and this one may hold a CalculiX record a percent off; running it again gives the right one.
+
+## Amendment 8, 2026-11-10 (only main's newest tested commit is deployed; asked for by the founder: "make sure we are good to keep growing and scaling")
+
+**Context.** Six pull requests were merged within minutes on 2026-11-10. Each merge ran Tests, and each successful Tests run started a deploy of the commit it had tested. The Tests of the fifth merge finished after those of the sixth, so its deploy queued last; in the `deploy-production` group a waiting run cancels the one waiting before it, and the site went out with the fifth merge, one behind main (deploy run 42931790723 shipped `b8f44ac` while main was at `20a598b`).
+
+**Options.**
+1. *Deploy only when the tested commit is still main's newest* (chosen). A first job compares the two; a skipped deploy never enters the group, so an older commit can neither ship nor cancel the newest.
+2. *Always deploy main's head, whatever the run tested.* Rejected: it can ship a commit whose own Tests have not passed.
+3. *Cancel in progress in the group.* Rejected: it does not stop an older commit from deploying last.
+
+**Decision.** `.github/workflows/deploy.yml` gains the `newest` job; `deploy` needs it and runs on a `workflow_dispatch` or when the tested commit is main's head. A commit merged while an older one deploys is deployed by its own Tests run.
+
+**Evidence.** The deploy runs of 2026-11-10 named above. The new job is UNVERIFIED until the next merge to main runs it.

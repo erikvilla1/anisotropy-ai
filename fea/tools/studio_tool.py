@@ -113,7 +113,12 @@ def coupons(root: Path) -> list[dict]:
     folders = [d for d in sorted(root.iterdir()) if d.is_dir() and (d / paths.OURS / f"{d.name}.toml").is_file()] if root.is_dir() else []
     out = []
     for folder in folders:
-        spec = load_spec(folder / paths.OURS / f"{folder.name}.toml")
+        try:
+            spec = load_spec(folder / paths.OURS / f"{folder.name}.toml")
+        except (SpecError, ValueError) as exc:  # listed with why, never taking the list down with it
+            out.append({"name": folder.name, "designation": folder.name, "kind": "unreadable", "test": "", "title": "", "layup": "", "status": None,
+                        "accepted": None, "attempts": 0, "category": None, "problem": f"its spec no longer passes the checks: {str(exc).splitlines()[0]}"})
+            continue
         entry = {"name": folder.name, "designation": spec.coupon.designation if spec.coupon else None, "kind": spec.kind, "test": TEST_CODES[spec.kind][1],
                  "title": spec.title, "layup": layup_text(spec), "status": None, "accepted": None, "attempts": 0, "category": None}
         try:
@@ -129,7 +134,11 @@ def values(name: str, root: Path) -> dict:
     spec_path = root / name / paths.OURS / f"{name}.toml"
     if not spec_path.is_file():
         raise IntakeError(f"{name}: no coupon of that name under {root} (no {paths.OURS}/{name}.toml)")
-    return values_of_spec(load_spec(spec_path))
+    try:
+        spec = load_spec(spec_path)
+    except (SpecError, ValueError) as exc:
+        raise IntakeError(f"{name}: its spec no longer passes the checks, so it cannot be reopened: {str(exc).splitlines()[0]}") from None
+    return values_of_spec(spec)
 
 
 def solved(model, quality, timings: dict[str, float]) -> tuple[dict, dict]:
