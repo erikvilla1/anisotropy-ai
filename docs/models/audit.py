@@ -57,11 +57,11 @@ def compare_rebuilt(path: Path | None, ours, units: str, tolerance_m: float) -> 
 
 def gather(*, test_code: str, units: str, card: list[tuple[str, str]], deck, solution, material: str | None, guide: tuple[int, int], c,
            fpf: tuple[str, float, int, float] | None, rebuilt: DeckEquivalence | str | None = None,
-           fpf_others: tuple[tuple[str, float, int, float], ...] = (), fpf_notes: tuple[str, ...] = ()) -> Evidence:
+           fpf_others: tuple[tuple[str, float, int, float], ...] = (), fpf_notes: tuple[str, ...] = (), every_output: bool = False) -> Evidence:
     """What our tools found for the package; `c` is the team comparison (docs/models/team.py), None when the team has not built
-    the coupon."""
+    the coupon; `every_output`, whether the package carries every output of ours and the scripts that compare the team's run (row C8)."""
     common = dict(test_code=test_code, units=units, card=tuple(card), our_deck=deck, solution=solution, material=material, fpf=fpf, guide=guide,
-                  rebuilt=rebuilt, fpf_others=fpf_others, fpf_notes=fpf_notes)
+                  rebuilt=rebuilt, fpf_others=fpf_others, fpf_notes=fpf_notes, every_output=every_output)
     if c is None:
         return Evidence(**common)
     lo, hi = c.bands["inner"]
@@ -81,7 +81,7 @@ def audited(*, card: dict[str, str], package: str, attempt: str | None) -> list[
 SUB = "  "  # a label that starts with it is a row under the one above: the team's file, then ours, file names only
 
 
-def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str], ...]) -> list[tuple[str, str]]:
+def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str], ...], every_output: bool = False) -> list[tuple[str, str]]:
     """What the audit compares, one row per thing compared and under it one row for the team's file and one for ours, by file name
     (no folder paths, at the founder's request): the cover's block and the chapter's table. `our_deck` and `spec` are package paths;
     only their names are shown; `physics` gives each section D check that applies to the test with who judges it, or that it is not
@@ -95,7 +95,9 @@ def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str
                 ("Other values", "the reaction force, the displacements and strains, the first ply to fail: our engine's values are given, for the team to "
                                  "compare with its own model (section C)"),
                 (SUB + "Our values", "in the Ours column of the Rubric sheet, the numbers behind them on the Results sheet; every ply of every "
-                                     "element in ours-all-plies.csv"),
+                                     "element in ours-all-plies.csv"
+                                     + ("; every output of every element and ply in ours-every-output.csv, which 5-verify/compare_every_output.py "
+                                        "puts beside your run (row C8)" if every_output else "")),
                 physics]
     m = c.manifest.team
     return [("The model", "nodes, elements, layup, section, material, grips, boundary conditions and loads, step (section B)"),

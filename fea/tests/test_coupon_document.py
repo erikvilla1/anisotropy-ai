@@ -268,8 +268,12 @@ def test_a_tension_package_carries_every_output_and_the_scripts_the_engineers_co
     assert "To check every output" in tex and "To send results back" not in tex
     assert "Job.odb --out" not in tex  # code type breaks the two hyphens apart; a bare -- would print as a dash
     assert "ADR-" not in coupon.VERBATIM.sub("", tex)
-    cover = load_workbook(package / f"{package.name}-audit.xlsx")[COVER]
+    form = load_workbook(package / f"{package.name}-audit.xlsx")
+    cover = form[COVER]
     assert any("attempt 02" in str(cell.value) for row in cover.iter_rows() for cell in row if cell.value)
+    rubric = {form[RUBRIC_SHEET].cell(r, 1).value: r for r in range(2, form[RUBRIC_SHEET].max_row + 1)}
+    ours = form[RUBRIC_SHEET].cell(rubric["C8"], RUBRIC_COLUMNS.index("Ours") + 1).value  # every other output, for the engineer to judge
+    assert ours.startswith("Every element and ply: 4-results/ours-every-output.csv") and "compare_every_output.py" in ours
 
 
 def test_the_coupon_document_compiles_where_tectonic_is_installed(coupon, tmp_path):
@@ -335,7 +339,7 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     assert result("C2") is None  # the fixture reports no S12: the row waits for the team, as rows C1, C4 and C7 do
     # the fixture deck types the constants to two decimals in MPa, our library carries more digits: a real difference, sized for the auditor
     assert result("B5") == "Fail" and "Largest relative difference" in form["Rubric"].cell(rows["B5"], RUBRIC_COLUMNS.index("Difference") + 1).value
-    assert r"Audit} (rubric 0.3" in tex
+    assert r"Audit} (rubric 0.4" in tex
     assert coupon.build_document(src, pdf=False, theory=False)[1] == package  # a second build replaces the package it wrote
 
 

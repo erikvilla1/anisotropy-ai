@@ -199,6 +199,7 @@ class Evidence:
     rebuilt: DeckEquivalence | str | None = None  # a deck the auditor built from our guide against ours, or why the two could not be compared
     guide: tuple[int, int] | None = None  # the rebuild guide's open items and ASSUMED tags
     team_reports: tuple[str, ...] = ()  # the file names of the team's field reports, for the "How to check" lines
+    every_output: bool = False  # the package carries ours-every-output.csv and the 5-verify scripts that compare the team's run with it
 
 
 @dataclass(frozen=True)
@@ -674,6 +675,13 @@ def _auditor_evidence(item: Item, ev: Evidence, facts: _Facts) -> Found:
         if ev.equivalence is None:
             return Found(team=(NOT_BUILT_BY_TEAM,))
         return Found(ours=tuple((ev.excluded or "The comparison names no region left out").split("\n")))
+    if item.id == "C8":
+        if not ev.every_output:
+            return Found(ours=("This package has no every-output file: its deck does not ask Abaqus for every ply's middle, so the row is N/A",))
+        return Found(team=("left blank, for the team to fill in",),
+                     ours=("Every element and ply: 4-results/ours-every-output.csv",
+                           "Compared by 5-verify/compare_every_output.py with what 5-verify/abaqus_every_output.py reads from your job's .odb "
+                           "(README.txt, How to verify every output): its line for each quantity and zone, and its Verdict, are the result"))
     if item.id == "C6":
         if not ev.paired:
             return Found(team=(NOT_BUILT_BY_TEAM if ev.equivalence is None else "No field report in the export",))

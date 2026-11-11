@@ -1149,13 +1149,14 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     fpf = summary.get("fpf")  # criterion, factor of the applied loading, ply, angle
     evidence = audit.gather(test_code=TEST_CODES[spec.kind][0], units=deck_units, card=coupon_card(spec), deck=deck, solution=solution, material=lib,
                             guide=audit.guide_counts(abaqus, rebuild.tag), c=c, fpf=fpf, rebuilt=rebuilt, fpf_others=summary.get("fpf_others", ()),
-                            fpf_notes=summary.get("fpf_notes", ()))
+                            fpf_notes=summary.get("fpf_notes", ()), every_output=every_layer(spec))
     scored = score(rubric, evidence)
     audited = audit.audited(card=card, package=package.name, attempt=attempt)
     compared = audit.files_compared(c=c, our_deck=f"2-our-model/abaqus/{c.spec_path.stem if c is not None else src.coupon}-abaqus.inp",
                                     spec=f"2-our-model/spec/{src.spec.name}",
                                     physics=tuple((s.item.check, "the auditor judges" if s.result is None else "not built yet" if s.result == "Not checked"
-                                                   else "our tools judge") for s in scored if s.item.section == "D"))
+                                                   else "our tools judge") for s in scored if s.item.section == "D"),
+                                    every_output=every_layer(spec))
     build_record = audit.build_record(team_deck=c.team_deck_path.name if c is not None else None, team_sha256=evidence.team_deck_sha256,
                                       fea_version=fea_version, commit=commit, run_by=operator(), built=date.today().isoformat())
     form = f"{package.name}-audit.xlsx"
