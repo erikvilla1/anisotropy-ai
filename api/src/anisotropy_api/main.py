@@ -32,6 +32,7 @@ from .access import AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
+from .proposals import model_view_of_form, source_guard
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
                           studio_command)
@@ -40,12 +41,12 @@ from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, 
 from .settings import allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore, sync
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
+    AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     LiveSolveResponse, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
-    ProjectRename, RunOutput, RunSummary, VerificationResponse,
+    ProjectRename, ProposalRequest, ProposalResponse, RunOutput, RunSummary, VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
@@ -805,6 +806,38 @@ def solve_laminate_problem(problem: LaminateProblem, actor: Actor, request: Requ
         )
 
     return _deliver(request, response, actor, problem, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+@app.get("/v1/workspace/assistant", response_model=AssistantInfo)
+def workspace_assistant(request: Request) -> AssistantInfo:
+    """Whether a model reads the chat's messages here (ADR-0088); the page asks once. Not a run: nothing is computed or recorded."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    proposes = assistant.name != "template"
+    return AssistantInfo(proposes=proposes, provider=assistant.name if proposes else None, model=getattr(assistant, "model", None) if proposes else None)
+
+
+@app.post("/v1/workspace/proposals", response_model=ProposalResponse)
+def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, response: Response) -> ProposalResponse:
+    """The model reads a message into the rows the page offers, and the source guard keeps what the engineer's own words hold (ADR-0088):
+    each value as written, in the quote it came from, converted only between the decimal units of the row's own system. The engineer ticks
+    what enters the problem; nothing here computes a result. With no model, or one that does not answer, nothing is proposed and the page
+    reads the message with its own patterns. Recorded with the model's name when one read it (ADR-0026)."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+
+    def compute() -> ProposalResponse:
+        rows = [row.model_dump(mode="json", exclude_none=True) for row in proposal.rows]
+        conditions = [c.model_dump(mode="json") for c in proposal.conditions]
+        view = {"product": proposal.product, "message": proposal.message, "rows": rows, "conditions": conditions,
+                "form": model_view_of_form(proposal.form)}
+        reading = assistant.propose(view)
+        if reading.raw is None:
+            return ProposalResponse(run_id=None, writer=reading.writer, model=None, proposals=[], conditions=[], question=None, dropped=[],
+                                    reason=reading.reason)
+        kept = source_guard(reading.raw, proposal.message, rows, conditions)
+        return ProposalResponse(run_id=None, writer=reading.writer, model=reading.model, proposals=kept.proposals, conditions=kept.conditions,
+                                question=kept.question, dropped=kept.dropped, reason=None)
+
+    return _deliver(request, response, actor, proposal, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
 
 
 @app.post("/v1/laminates/prescribed-curvature", response_model=PrescribedCurvatureResponse)

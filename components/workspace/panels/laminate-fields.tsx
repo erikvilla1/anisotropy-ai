@@ -4,8 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { libraryOptions } from "@/lib/studio-form";
 import {
   CONSTANT_NAMES, libraryThicknessOf, LOAD_NAMES, loadsWithZeros, printedUnit, readLayupLine, systemUnit, unitsOf,
-  type ConstantName, type Kind, type LaminateDraft, type LoadName, type OwnConstants, type Quantity, type ReportUnits,
-} from "@/lib/laminate-chat";
+  type ConstantName, type Kind, type LaminateDraft, type LoadName, type OwnConstants, type Quantity, type ReportUnits, blankOwn } from "@/lib/laminate-chat";
 
 /** The fields of the laminate workspace's panels (ADR-0062, part 5): each value with its own unit menu, the unit list the engine's table
  * gives for the kind (ADR-0060). Edits write the draft as they are typed; nothing here converts a unit or judges a value. */
@@ -27,10 +26,7 @@ export function QuantityField({ id, label, kind, quantity, system, onChange, dis
   );
 }
 
-export const blankOwn = (): OwnConstants => ({
-  name: "", source: "", E1: { value: "", unit: "" }, E2: { value: "", unit: "" }, G12: { value: "", unit: "" }, nu12: "",
-  F1t: { value: "", unit: "" }, F1c: { value: "", unit: "" }, F2t: { value: "", unit: "" }, F2c: { value: "", unit: "" }, F6: { value: "", unit: "" },
-});
+export { blankOwn };
 const KIND_OF: Record<ConstantName, Kind | null> = { E1: "modulus", E2: "modulus", G12: "modulus", nu12: null, F1t: "stress", F1c: "stress", F2t: "stress", F2c: "stress", F6: "stress" };
 const LABELS: Record<ConstantName, string> = { E1: "E₁", E2: "E₂", G12: "G₁₂", nu12: "ν₁₂", F1t: "F1t", F1c: "F1c", F2t: "F2t", F2c: "F2c", F6: "F6" };
 
