@@ -94,7 +94,7 @@ function SpecimenList({ rows, disabled, error, onRows }: { rows: TowSpecimenRow[
  * strand, the tensile set-up, the specimens and Calculate. The record goes to
  * `POST /v1/tow-tests` as typed; the fea package judges it and the engine computes every number, so this column only keeps the text. */
 export function TowRail({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { project, form, specimens, setForm, setSpecimens, towAnswer, setTowAnswer } = useProject();
+  const { project, form, specimens, setForm, setSpecimens, towAnswer, setTowAnswer, allTests } = useProject();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -142,8 +142,8 @@ export function TowRail({ apiBaseUrl }: { apiBaseUrl: string }) {
       {!apiBaseUrl ? <p className="studio-alert">The page was built without the API&apos;s address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be calculated.</p> : null}
       <div className="ws-rail-head"><SetupLine form={form} /></div>
       <StepPanel {...step("tow-standard")} note="ASTM D4018: a fibre tow, no model">
-        <TestStep form={form} disabled={busy} onChange={edit} />
-        <StandardCard form={form} checklist={checklist} tow />
+        <TestStep form={form} disabled={busy} onChange={edit} allTests={allTests} />
+        <StandardCard form={form} checklist={checklist} tow allTests={allTests} />
       </StepPanel>
       <StepPanel {...step("tow-project")}>
         <p className="studio-hint">A resin-impregnated carbon or graphite fibre tow, pulled to failure: its strength and chord modulus come from the forces and the

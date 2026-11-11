@@ -5,7 +5,8 @@
 
 Every row of the form (key, label, kind, what it means, whether it is required, its default, its words, its bounds, and for a row
 with a unit its label and default in each unit system), the sections they sit in, the unit systems a coupon may be stated in with
-their labels, the instructions, the Definitions sheet, the tests offered, the criterion words, and the library materials the form
+their labels, the instructions, the Definitions sheet, the tests offered and, under `enabled`, the ones the studio shows until the first
+workflow is validated (ADR-0089), the criterion words, and the library materials the form
 lists with their constants in MPa and mm and, under `library_constants`, in every system (ADR-0061), and under `standards` the test
 standards the Standard row offers, each with the tests it covers, the rows it needs, its specimens or classes with their sizes in every
 system, and its requirements by clause (ADR-0072). The page converts nothing:
@@ -21,7 +22,7 @@ import json
 import sys
 from pathlib import Path
 
-from anisotropy_fea import __version__, paths
+from anisotropy_fea import __version__, enabled, paths
 from anisotropy_fea.intake import (BLOCKS, CRITERION_WORDS, FORM_VERSION, GLOSSARY, HOW_TO, LIBRARY_COLUMNS, TESTS, UNITS, in_stated, library_records,
                                    library_row)
 from anisotropy_fea.spec import AREA_REGIONS, EDGE_REGIONS, TOW_TEST, test_name
@@ -105,6 +106,7 @@ def definition() -> dict:
         "glossary": [{"group": group, "terms": [{"term": term, "meaning": meaning, "example": example} for term, meaning, example in terms]}
                      for group, terms in GLOSSARY],
         "tests": dict(TESTS),
+        "enabled": enabled.definition(),  # the tests the studio offers until the first workflow is validated (ADR-0089)
         "criteria": list(CRITERION_WORDS),
         "library": library,
         "library_constants": library_constants(),

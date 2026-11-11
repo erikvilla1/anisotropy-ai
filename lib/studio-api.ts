@@ -491,6 +491,20 @@ export async function proposeRows(apiBase: string, request: ProposalRequest, sig
   return readProposalAnswer(payload);
 }
 
+const couponTestAnswers = new Map<string, Promise<boolean>>();
+/** Whether every coupon test is offered here (ADR-0089), asked once per API address. False, the unnotched tension coupon only, unless the
+ * API says all: before it answers, when it does not (an older API) and with no API at all. */
+export function allCouponTests(apiBase: string): Promise<boolean> {
+  if (!apiBase) return Promise.resolve(false);
+  const key = base(apiBase);
+  if (!couponTestAnswers.has(key)) {
+    couponTestAnswers.set(key, call(`${key}/v1/coupon-tests`, { method: "GET", headers }, "the tests offered")
+      .then((payload) => isObject(payload) && payload.all === true)
+      .catch(() => false));
+  }
+  return couponTestAnswers.get(key)!;
+}
+
 const assistantInfos = new Map<string, Promise<AssistantInfo | null>>();
 /** Whether a model reads messages here, asked once per API address; null when the API does not say (an older API, or none). */
 export function assistantInfo(apiBase: string): Promise<AssistantInfo | null> {

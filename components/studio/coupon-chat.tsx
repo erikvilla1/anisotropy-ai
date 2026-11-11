@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { assistantInfo, couponValues, isActive, listCoupons, proposeRows, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type ProposalAnswer } from "@/lib/studio-api";
+import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type ProposalAnswer } from "@/lib/studio-api";
 import { couponOffer, couponRowsFrom } from "@/lib/proposals";
 import { ProposalCard, type ProposalLine } from "./proposal-card";
 import { CheckIssues } from "./check-fix";
@@ -21,6 +21,7 @@ import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
 import { JobProgress } from "./job-progress";
 import { TOW_TEST } from "@/lib/studio-tow";
+import { hiddenReason, isTestEnabled, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
@@ -62,7 +63,7 @@ const estimated = (value: number) => String(Number(value.toPrecision(4)));
 const libraryEntry = (id: string) => libraryOptions.find((m) => m.id === id);
 
 const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> = {
-  test: { title: "What are we working out?", text: "Pick a coupon test, or describe the whole coupon in one line, e.g. “open-hole tension, IM7/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 1 mm pull”. Numbers are read in the units picked below; the results come back in them. A laminate without a coupon, the hand-calculation kind, is the first choice." },
+  test: { title: "What are we working out?", text: "Pick a coupon test, or describe the whole coupon in one line, e.g. “unnotched tension, ASTM D3039, IM7/8552, [45/0/-45/90]s, 1 mm pull”. Numbers are read in the units picked below; the results come back in them. A laminate without a coupon, the hand-calculation kind, is the first choice." },
   material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or give your own under Layup and material." },
   shear: { title: "Out-of-plane shear moduli", text: "The engine needs G13 and G23, which the library does not list. Without measured values, the usual tape estimate is G13 = G12 and G23 = E2 / 3; the choice is noted on the coupon." },
   layup: { title: "What is the layup?", text: "Type it in laminate notation, bottom ply first, or pick one. Angles are counted from the coupon's length, the direction it is pulled: 0° runs along the load, 90° across the width, the same count as the laminate workspace." },
@@ -87,7 +88,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, run: runner, restored } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, run: runner, restored, allTests } = useProject(); // the rows and the run live in the project (ADR-0062)
   const { checking, checked, job, fields, explanation, problem } = runner;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
@@ -180,8 +181,23 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
   }
 
-  /** Ask the next missing thing, or check the setup once nothing is missing. */
+  /** Ask the next missing thing, or check the setup once nothing is missing. A test the studio does not offer yet (ADR-0089) goes on only
+   * when the API says the switch shows every test; it is asked here, once per address, since a restored project may arrive before the
+   * answer. */
   function proceed(next: StudioForm) {
+    const hidden = hiddenReason(next, false);
+    if (!hidden) { proceedWith(next); return; }
+    void allCouponTests(apiBaseUrl).then((all) => {
+      if (all) { proceedWith(next); return; }
+      setActive(null);
+      add({ role: "assistant", kind: "text", tone: "problem", title: "Not available yet",
+        body: <><p data-testid="chat-not-available">{hidden} This project&apos;s rows are kept.</p>
+          <Chips><button type="button" onClick={loadExample}><FlaskConical size={14} /> Start from the IM7/8552 tension example</button>
+            <button type="button" onClick={() => ask("test")}>Pick the test</button></Chips></> });
+    });
+  }
+
+  function proceedWith(next: StudioForm) {
     if (next.test === TOW_TEST) { // a fibre tow record is no coupon: its rows and specimens are the tow panels' (ADR-0074)
       setActive(null);
       add({ role: "assistant", kind: "text", title: "A fibre tow record is filled in on the panels",
@@ -322,7 +338,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     setReading(true);
     let answer: ProposalAnswer | null = null;
     let failed: string | null = null;
-    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current) }); }
+    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, allTests) }); }
     catch (error) { failed = error instanceof StudioError ? error.message : "the model did not answer"; }
     finally { setReading(false); }
     if (answer && (answer.proposals.length || answer.question)) { add({ role: "assistant", kind: "proposal", answer }); return; }
@@ -356,7 +372,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** The message read by the page's fixed patterns (ADR-0055); `echoed` when the user's words are already in the conversation. */
   function readWithPatterns(text: string, echoed = false) {
     const you: NewEntry[] = echoed ? [] : [{ role: "user", text }];
-    const { rows, understood, note } = applyMessage(formRef.current, text);
+    const read = applyMessage(formRef.current, text);
+    const { rows, notes: hiddenNotes, dropped } = withoutHidden(read.rows, allTests); // what the studio does not offer yet stays out (ADR-0089)
+    const understood = understoodWithout(read.understood, dropped);
+    const note = read.note;
+    if (hiddenNotes.length) {
+      add(...you, { role: "assistant", kind: "text", tone: "problem", title: "Not available yet",
+        body: <ul className="chat-understood" data-testid="chat-not-available">{hiddenNotes.map((n) => <li key={n}>{n}</li>)}</ul> });
+      if (!understood.length) return;
+      you.length = 0;
+    }
     if (!understood.length) {
       if (note) add(...you, { role: "assistant", kind: "text", title: "Another unit system", tone: "problem", body: <p>{note}</p> });
       else redirect(text, echoed);
@@ -391,7 +416,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
                 </button>
               ) : null}
               <p className="chat-choice-head" data-testid="coupon-tool"><strong>{chatTool("coupon").title}</strong> <span>{chatTool("coupon").detail}</span></p>
-              {TEST_CHOICES.map((c) => (
+              {TEST_CHOICES.filter((c) => isTestEnabled(c.test, allTests)).map((c) => (
                 <button type="button" key={c.test} className="chat-choice" onClick={() => answer(c.title, { test: c.test })}>
                   <strong>{c.title}</strong><span>{c.detail}</span>
                 </button>
@@ -400,16 +425,20 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             <Chips>
               <button type="button" onClick={loadExample}><FlaskConical size={14} /> Start from the IM7/8552 example</button>
               {coupons.length ? <button type="button" onClick={() => ask("reopen")}><RotateCcw size={14} /> Reopen a saved coupon</button> : null}
-              <PanelLink id="test">A plate, or every row: the panels</PanelLink>
+              <PanelLink id="test">{allTests ? "A plate, or every row: the panels" : "Every row: the panels"}</PanelLink>
             </Chips>
           </>
         );
       case "reopen":
         return (
           <div className="chat-list">
-            {coupons.map((c) => (
+            {coupons.map((c) => isTestEnabled(c.test, allTests) ? (
               <button type="button" key={c.name} onClick={() => reopen(c.name)}>
                 <strong>{c.name}</strong><span>{c.test}, {c.layup}; {c.attempts} attempt{c.attempts === 1 ? "" : "s"}{c.status ? `, ${c.status}` : ""}</span>
+              </button>
+            ) : (
+              <button type="button" key={c.name} disabled data-testid="coupon-not-available">
+                <strong>{c.name}</strong><span>{c.test}: not available yet; kept</span>
               </button>
             ))}
           </div>
@@ -510,7 +539,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         <p>{passed} of {items.length} checks passed{result.checklist.coupon_exists ? `; this coupon has ${result.checklist.attempts} attempt${result.checklist.attempts === 1 ? "" : "s"} already, so running adds the next one` : result.designation ? "; a new coupon" : ""}. The same rules run before the solve.</p>
         {blocking.length ? (
           // each item takes its rows in place on the latest check (ADR-0062 amendment 2); its link still opens the panel that holds them
-          <CheckIssues items={blocking} form={form} units={unitsOf(form)} live={latest && !checking} onApply={(rows, echo) => answer(echo, rows)}
+          <CheckIssues items={blocking} form={form} units={unitsOf(form)} live={latest && !checking} allTests={allTests} onApply={(rows, echo) => answer(echo, rows)}
             link={(item) => {
               const target = panelToFix(item);
               const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);

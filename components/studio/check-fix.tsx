@@ -3,12 +3,15 @@
 import { useState, type ReactNode } from "react";
 import { Check, CircleAlert } from "lucide-react";
 import { changedRows, fixEcho, fixRows } from "@/lib/check-fix";
+import { enabledWords } from "@/lib/enabled-tests";
 import { labelFor, libraryOptions, shortHelp, wordsFor, type CheckItem, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
 
 /** The things to fix before running, each with the rows its check names to type in place when the card is the latest (ADR-0062
  * amendment 2): one Apply puts every row typed into the form, and the conversation checks again. A row left as it was is not sent. */
-export function CheckIssues({ items, form, units, live, link, onApply }: {
+export function CheckIssues({ items, form, units, live, link, onApply, allTests = false }: {
   items: CheckItem[]; form: StudioForm; units: string;
+  /** every test offered (ADR-0089); false: the Test, Standard and Material kind selects offer the enabled words only */
+  allTests?: boolean;
   /** the latest check, with nothing checking: its rows take input */
   live: boolean;
   /** the item's link to its panel or its question */
@@ -28,7 +31,7 @@ export function CheckIssues({ items, form, units, live, link, onApply }: {
             <CircleAlert size={14} /> <span><strong>{item.label}:</strong> {item.message}</span>
             {fields ? (
               <div className="chat-fix-rows">
-                {fields.map((field) => <FixInput key={field.key} field={field} units={units} words={wordsFor(field, form)} value={typed[field.key] ?? form[field.key] ?? ""}
+                {fields.map((field) => <FixInput key={field.key} field={field} units={units} words={enabledWords(field.key, wordsFor(field, form), allTests)} value={typed[field.key] ?? form[field.key] ?? ""}
                   onChange={(value) => setTyped((t) => ({ ...t, [field.key]: value }))} />)}
               </div>
             ) : null}

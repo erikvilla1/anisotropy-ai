@@ -75,6 +75,7 @@ test("the workspace opens on three tiles and the projects, the server's among th
   await expect(rows.first()).toHaveAttribute("data-kind", "laminate");
   await expect(rows.first()).toContainText("ABD check");
   await expect(rows.nth(2)).toContainText("From the server");
+  await expect(rows.nth(2)).toContainText("Open-hole tension: not available yet"); // kept and listed, not offered (ADR-0089)
   await expect.poll(() => Object.values(store).some((p) => p.name === "ABD check" && p.kind === "laminate"), { timeout: 10_000 }).toBe(true);
   await rows.nth(1).getByRole("button", { name: "Open" }).click(); // the coupon project, untouched
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);

@@ -1,4 +1,4 @@
-# Component card: the coupon studio and the workspace | version 0.9 | updated 2026-11-10
+# Component card: the coupon studio and the workspace | version 0.10 | updated 2026-11-11
 
 ## Purpose and intended use
 
@@ -27,6 +27,8 @@ Next.js (static export), React Three Fiber and drei on three.js (MIT), loaded on
 [The studio page](../evaluations/website/2026-10-28-coupon-studio.md): the unit tests of the drawing and form code, the browser test with the API played from the public fixtures, and the live run on the founder's machine. The workspace's parts: the evidence section of [ADR-0062](../decisions/ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) records each part's unit, browser and live runs (parts 3 to 5: 13, 14 and 15 browser scenarios passed, the live coupon run passed each time), and [ADR-0063](../decisions/ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) the viewer's.
 
 ## Out of scope and limits
+
+One test for now (ADR-0089): the page offers the unnotched tension coupon, under ASTM D3039 or no standard, with a laminate of plies, until its comparison with Abaqus is validated. The other tests stay in the code, hidden; `ANISOTROPY_ALL_TESTS=on` on the API shows them for development (the page asks `GET /v1/coupon-tests`). A project or stored coupon of a hidden test is listed as not available yet and is not sent.
 
 One job at a time (ADR-0050). Hosted, the site is behind Cloudflare Access on the invite list (ADR-0056); the projects are kept in the browser only, so clearing the site's data loses them and another machine does not see them, until the server store of ADR-0062 part 6. The 3D view needs WebGL 2; without it the page says so and shows the numbers, the checklist, the summary and the explanation. A job's status is lost when the API stops unless run records are on, where the jobs table keeps it (ADR-0056). The colours carry no number: the legend's ticks and the readout do, and the legend's ends are the package's (ADR-0063). The assistants read fixed phrases; a message that names no value is answered with the panel that asks for the next thing, not with a guess. CAD geometry is a placeholder tile.
 

@@ -1,0 +1,72 @@
+"""The tests the studio offers until the first workflow is validated (ADR-0089).
+
+One workflow first: the unnotched tension coupon, under ASTM D3039 or under no standard, is built in Anisotropy and in Abaqus and
+every output is compared until they match; the other tests wait, hidden and kept, and each comes back through the same workflow.
+This module is the one list. The form's definition carries it to the page (`tools/export_form_definition.py`, the `enabled` block),
+which offers nothing else; the setup check refuses anything else by row (ADR-0089, part 2).
+
+`ANISOTROPY_ALL_TESTS=on` shows every test again, for development: the switch is read on every call, `off` or unset keeps the list,
+and any other value is refused (ADR-0003). The hosted tier never sets it. Nothing here deletes or changes a hidden test's code,
+specs, checks or records: they all stay, and the committed checks of every kind keep running.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Mapping
+
+from .standards import NONE, PROFILES
+
+ALL_TESTS_VARIABLE = "ANISOTROPY_ALL_TESTS"
+SWITCH_WORDS = ("on", "off")
+
+TESTS: tuple[str, ...] = ("unnotched tension",)  # the Test row's words the studio offers
+STANDARDS: tuple[str, ...] = ("astm-d3039",)  # the profiles offered, by id; "none" (no standard) is always offered
+MATERIAL_KINDS: tuple[str, ...] = ("plies",)  # a laminate of plies; one isotropic material (the plastic of ASTM D638) waits
+DOGBONE = False  # the dog-bone's rows (ADR-0075) wait with D638: a tension coupon is a straight strip
+
+NOT_AVAILABLE = "not available yet: the studio offers the unnotched tension coupon, under ASTM D3039 or no standard, until its comparison with Abaqus is validated"
+
+
+class SwitchError(ValueError):
+    """The switch holds a word other than on or off."""
+
+
+def all_tests(environ: Mapping[str, str] | None = None) -> bool:
+    """Whether every test is offered: `ANISOTROPY_ALL_TESTS` is `on`. Unset, blank or `off` keeps the list; any other value is refused."""
+    raw = (os.environ if environ is None else environ).get(ALL_TESTS_VARIABLE)
+    word = (raw or "").strip().lower()
+    if not word:
+        return False
+    if word not in SWITCH_WORDS:
+        raise SwitchError(f"{ALL_TESTS_VARIABLE} must be 'on' or 'off', not {raw!r}; unset it to offer the unnotched tension coupon only (ADR-0089)")
+    return word == "on"
+
+
+def standard_designations() -> tuple[str, ...]:
+    """The designations of the offered standards, as the Standard row writes them ("ASTM D3039/D3039M-17")."""
+    return tuple(PROFILES[profile_id].designation for profile_id in STANDARDS)
+
+
+def is_test_enabled(test: str, every: bool) -> bool:
+    """Whether the Test row's word is offered."""
+    return every or test in TESTS
+
+
+def is_standard_enabled(word: str | None, every: bool) -> bool:
+    """Whether the Standard row's word is offered: no standard always, a designation when its profile is on the list."""
+    if every or not word or word.strip().lower() == NONE:
+        return True
+    return word.strip().lower() in {d.lower() for d in standard_designations()}
+
+
+def is_material_kind_enabled(word: str | None, every: bool) -> bool:
+    """Whether the Material kind row's word is offered; blank means a laminate of plies."""
+    return every or not word or word.strip().lower() in MATERIAL_KINDS
+
+
+def definition() -> dict:
+    """The `enabled` block of the form's definition: the list itself, never the switch, so the page's file is the same however the
+    process was started; the page asks the API whether the switch is on (`GET /v1/coupon-tests`)."""
+    return {"tests": list(TESTS), "standards": list(standard_designations()), "material_kinds": list(MATERIAL_KINDS), "dogbone": DOGBONE,
+            "not_available": NOT_AVAILABLE, "switch": ALL_TESTS_VARIABLE}

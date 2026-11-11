@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { hiddenReason, isRowEnabled, isTestEnabled } from "@/lib/enabled-tests";
 import { couponValues, DOWNLOADS, fileUrl, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
 import { buildValues, exampleForm, formFromValues, isIsotropic, PLATE_TEST, rowErrorsFrom, withStandard, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateFromValues, plateValues, type PlateLists } from "@/lib/studio-plate";
@@ -24,7 +25,7 @@ import { isTow } from "@/lib/studio-tow";
  * coupon is and which standard it follows; the steps after it wait for the test, and each shows what the standard asks of it (amendment 1). The rows, the check and the
  * job live in the project store; this column keeps only what belongs to the page: the row errors, the name, the messages. */
 export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, plate, setForm, setPlate, run: runner } = useProject();
+  const { form, plate, setForm, setPlate, run: runner, allTests } = useProject();
   const { checking, checked, job, fields } = runner;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runBy, setRunBy] = useState("");
@@ -66,6 +67,8 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   async function check(): Promise<CheckAnswer | null> {
     if (!apiBaseUrl) return null;
+    const hidden = hiddenReason(form, allTests); // a test the studio does not offer yet is not sent (ADR-0089)
+    if (hidden) { setMessage(hidden); return null; }
     setMessage(""); setErrors({});
     try {
       const answer = await runner.check(values(named()));
@@ -119,12 +122,16 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
     setStatus("The public IM7/8552 example is loaded: 250 by 25 mm with 56 mm tabs, [45/0/-45/90]s, 1 mm pull.");
   }
 
-  if (isTow(form)) return <TowRail apiBaseUrl={apiBaseUrl} />; // the fibre tow test is no coupon: its own panels (ADR-0074)
+  // the fibre tow test is no coupon: its own panels (ADR-0074), while the switch offers it (ADR-0089)
+  if (isTow(form) && allTests) return <TowRail apiBaseUrl={apiBaseUrl} />;
 
   const busy = checking || isActive(job?.state);
   const checklist = checked?.checklist ?? null;
   const state = (id: PanelId) => panelState(id, checklist);
-  const grid = (id: PanelId, keys = visibleKeys(form, id)) => <FieldGrid form={form} keys={keys} errors={errors} disabled={busy} onChange={edit} />;
+  // the hidden tests' rows (a hole, a span, a dog-bone, one isotropic material) are not shown while the list is closed (ADR-0089)
+  const grid = (id: PanelId, keys = visibleKeys(form, id)) => (
+    <FieldGrid form={form} keys={keys.filter((key) => isRowEnabled(key, allTests))} errors={errors} disabled={busy} onChange={edit} />
+  );
   /** A step whose rows depend on the test waits for the first step's answer, and says so, instead of showing rows that may not apply. */
   const waiting = (id: PanelId) => (!form.test && NEEDS_TEST.includes(id)
     ? <p className="studio-hint" data-testid={`waiting-${id}`}>Pick the test under step 1 first: what this step asks for depends on it.</p> : null);
@@ -143,7 +150,10 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
             <span className="studio-reopen">
               <select value={reopen} onChange={(e) => setReopen(e.target.value)} aria-label="Reopen a coupon" disabled={busy}>
                 <option value="">Reopen a coupon…</option>
-                {coupons.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.status ?? "?"}, {c.attempts} attempt{c.attempts === 1 ? "" : "s"})</option>)}
+                {coupons.map((c) => {
+                  const offered = isTestEnabled(c.test, allTests); // a coupon of a hidden test is listed, kept, and not reopened (ADR-0089)
+                  return <option key={c.name} value={c.name} disabled={!offered}>{c.name} ({offered ? `${c.status ?? "?"}, ${c.attempts} attempt${c.attempts === 1 ? "" : "s"}` : `${c.test}: not available yet`})</option>;
+                })}
               </select>
               <button type="button" className="studio-text-button" onClick={() => loadCoupon(reopen)} disabled={busy || !reopen}>Reopen</button>
             </span>
@@ -152,9 +162,9 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
       </div>
 
       <StepPanel id="test" step={stepNumber("test")} title="Test and standard" state={state("test")}>
-        <TestStep form={form} disabled={busy} onChange={edit} />
+        <TestStep form={form} disabled={busy} onChange={edit} allTests={allTests} />
         {grid("test", visibleKeys(form, "test").filter((key) => key === "specimen"))}
-        <StandardCard form={form} checklist={checklist} />
+        <StandardCard form={form} checklist={checklist} allTests={allTests} />
       </StepPanel>
 
       <StepPanel id="project" step={stepNumber("project")} title="Project" state={state("project")}>

@@ -866,6 +866,13 @@ class ProposalResponse(Contract):
     reason: str | None
 
 
+class CouponTests(Contract):
+    """Whether every coupon test is offered here (ADR-0089): the page asks once, and with no answer offers the unnotched tension
+    coupon only, the list its form definition carries."""
+
+    all: bool
+
+
 class AssistantInfo(Contract):
     """Whether a model reads messages here (ADR-0088): the page asks once, and with none it reads with its own patterns."""
 
