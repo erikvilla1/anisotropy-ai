@@ -89,6 +89,27 @@ def element_ply_states(solution: Solution) -> PlyField:
                     faces=FACES if shell else None)
 
 
+INVARIANTS = ("tresca", "max_principal", "mid_principal", "min_principal", "pressure")
+
+
+def ply_invariants(field: PlyField) -> dict[str, list[np.ndarray]]:
+    """What Abaqus prints beside Mises for a shell section point (ADR-0066 amendment 2), of each ply's in-plane state with the stress
+    through the thickness zero (plane stress), element -> (plies,) or (plies, 2): the three principal stresses ordered with that zero
+    among them, Tresca, the largest less the smallest of the three, and the pressure, minus their mean. Each is an invariant, the same
+    in laminate or material axes; they are comparison quantities, not a composite's failure criterion."""
+    out: dict[str, list[np.ndarray]] = {name: [] for name in INVARIANTS}
+    for s in field.stress_12:
+        s11, s22, s12 = s[..., 0], s[..., 1], s[..., 2]
+        centre, radius = (s11 + s22) / 2.0, np.sqrt(((s11 - s22) / 2.0) ** 2 + s12 ** 2)
+        principals = np.sort(np.stack([centre + radius, centre - radius, np.zeros_like(s11)], axis=-1), axis=-1)
+        out["max_principal"].append(principals[..., 2])
+        out["mid_principal"].append(principals[..., 1])
+        out["min_principal"].append(principals[..., 0])
+        out["tresca"].append(principals[..., 2] - principals[..., 0])
+        out["pressure"].append(-(s11 + s22) / 3.0)
+    return out
+
+
 def ply_mises(field: PlyField) -> list[np.ndarray]:
     """Von Mises stress of each ply's in-plane state, element -> (plies, 1) or (plies, 2, 1): an invariant, so the same in laminate or
     material axes; Abaqus's S-Mises at a shell section point is this plane-stress value."""

@@ -315,3 +315,23 @@ def test_a_coupon_without_a_gauge_section_answers_on_the_whole_model():
         assert entry["at_failure"]["applied"] == pytest.approx(entry["factor"] * summary["applied"]["value"], rel=1e-12)
     facts = fact_sheet(summary, {"designation": "IM7-3PB-L1", "test": "three-point bending", "layup": ""}, UNITS, UNIT_LABEL[UNITS])
     assert facts["basis"] == "the whole model" and any("in the whole model" in s for s in result_sentences(facts))
+
+
+def test_each_ply_carries_what_abaqus_prints_beside_mises(solved, data):
+    """ADR-0066 amendment 2: Tresca, the three principal stresses and the pressure, per element and ply, with their per-ply ranges and no
+    display averages; the same numbers as `ply_invariants` on the solution, in the fields' units."""
+    from anisotropy_fea.recovery import INVARIANTS, element_ply_states, ply_invariants
+
+    deck, solution = solved
+    written = data["element"]["ply"]["invariants"]
+    assert tuple(written) == INVARIANTS
+    ne, plies = len(data["element"]["ply"]["mises"]), len(data["element"]["ply"]["mises"][0])
+    expected = ply_invariants(element_ply_states(solution))
+    for name in INVARIANTS:
+        values = np.array(written[name])
+        assert values.shape == (ne, plies), name
+        assert np.allclose(values, np.stack(expected[name]) / 1e6, rtol=1e-6, atol=1e-6), name  # Pa to MPa, as the fields are written
+        assert set(data["ranges"][name]) == {"element"}, "element values only: no display averages for these"
+        assert name not in data["nodal"]["averages"]
+    tresca, mises = np.array(written["tresca"]), np.array(data["element"]["ply"]["mises"])
+    assert np.all(tresca >= mises - 1e-6)  # Tresca is never below Mises
