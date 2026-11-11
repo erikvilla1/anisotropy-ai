@@ -8,6 +8,7 @@ import type { PlateLists } from "@/lib/studio-plate";
 import type { TowSpecimenRow } from "@/lib/studio-tow";
 import { useNewestFromServer, useProjectSync } from "./project-sync";
 import { useCouponRun, type CouponRun } from "./use-coupon-run";
+import { useLiveSolve } from "./use-live-solve";
 
 /** The project the workspace edits and its run, shared by the chat, the form and the viewer (ADR-0062): the rows live in one place, so
  * switching between them loses nothing, and a reload picks the last project up from this browser. */
@@ -68,6 +69,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const rename = useCallback((name: string) => dispatch({ type: "rename", name }), []);
   const replace = useCallback((next: CouponProject) => dispatch({ type: "replace", project: next }), []);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
+  useLiveSolve(apiBaseUrl, project.form, project.plate, run); // our kernel answers each settled edit (ADR-0086)
   useNewestFromServer(apiBaseUrl, "fea", !start.current.restored && project.updated === project.created,
     (found) => { if (found.kind === "fea") replace(found); });
 

@@ -494,8 +494,12 @@ function criticalElement(fields: Fields): number | null {
   return fields.summary.earliest ? fields.summary.fpf[fields.summary.earliest].element : null;
 }
 
-export function ResultsView({ fields, explanation, job, apiBase, preview }: {
+export function ResultsView({ fields, explanation, job, apiBase, preview, live = null, updating = false }: {
   fields: Fields; explanation: Explanation | null; job: JobStatus | null; apiBase: string; preview: Preview | null;
+  /** our kernel's live answer (ADR-0086), shown with its seconds until a full run checks it; null for a full run's result */
+  live?: { seconds: number; warm: boolean } | null;
+  /** a newer live answer is on its way: the numbers shown are the last rows' */
+  updating?: boolean;
 }) {
   const [choice, setChoice] = useState<FieldChoice>(() => DEFAULT_CHOICE(fields));
   const [scale, setScale] = useState<number>(() => suggestedScale(fields.mesh.nodes, fields.nodal.magnitude));
@@ -531,7 +535,13 @@ export function ResultsView({ fields, explanation, job, apiBase, preview }: {
     setChoice((c) => ({ ...c, ply, criterion: criterion || c.criterion, face: faceIndex ?? c.face }));
   };
   return (
-    <div className="studio-results" data-testid="results">
+    <div className="studio-results" data-testid="results" data-source={live ? "live" : "run"} data-updating={updating}>
+      {live ? (
+        <p className="studio-live-banner" data-testid="live-banner">
+          <strong>Preview</strong>: our kernel, answered in {live.seconds < 10 ? live.seconds.toFixed(1) : Math.round(live.seconds)} s{live.warm ? "" : " by a fresh solver"}; not yet checked by
+          CalculiX or the mesh study. Run full analysis to check it and write the package.{updating ? " Updating for your last edit…" : ""}
+        </p>
+      ) : updating ? <p className="studio-live-banner" data-testid="live-banner">Updating for your last edit…</p> : null}
       <div className="studio-scene-block">
         <Scene nodes={fields.mesh.nodes} quads={fields.mesh.quads} thickness={preview?.geometry.thickness ?? 1} field={field}
           displacement={deformed ? fields.nodal.displacement : null} scale={scale} held={held} loaded={loaded} highlight={highlight} picked={picked}

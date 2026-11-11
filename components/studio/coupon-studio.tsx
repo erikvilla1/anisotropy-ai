@@ -41,19 +41,24 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
  * through the API (ADR-0051); the sketch draws typed rows only. */
 export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const { form, plate, setPlate, run: runner } = useProject();
-  const { checked, job, fields, explanation } = runner;
+  const { checked, job, fields, explanation, live, living, liveAt, fieldsAt } = runner;
+  // the newer of our kernel's live answer and the full run's fields (ADR-0086): an edit after a run is answered live, a run after it replaces it
+  const showLive = Boolean(live?.fields) && (!fields || liveAt > fieldsAt);
+  const shown = showLive ? live?.fields ?? null : fields;
+  const shownExplanation = showLive ? live?.explanation ?? null : explanation;
   const [pickedElement, setPickedElement] = useState<number | null>(null);
   const { clearChecked } = runner;
   const editPlate = useCallback((lists: PlateLists) => { setPlate(lists); clearChecked(); }, [setPlate, clearChecked]);
   const isPlate = form.test === PLATE_TEST;
   const viewerLink = job ? `/workspace/fea/view?job=${encodeURIComponent(job.job_id)}` : null;
-  const sketch = !fields && !checked?.preview ? sketchOf(form, isPlate ? plate : null) : null;
+  const sketch = !shown && !checked?.preview ? sketchOf(form, isPlate ? plate : null) : null;
   return (
     <section className="studio-output">
-      {fields ? (
+      {shown ? (
         <>
-          {viewerLink ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open the viewer in a new window</a></p> : null}
-          <ResultsView fields={fields} explanation={explanation} job={job} apiBase={apiBaseUrl} preview={checked?.preview ?? null} />
+          {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open the viewer in a new window</a></p> : null}
+          <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
+            live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} />
           {job ? <JobProgress job={job} /> : null}
         </>
       ) : (

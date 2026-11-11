@@ -73,6 +73,10 @@
 .studio-table th, .studio-table td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
 .studio-table th { color: var(--muted); font-weight: 400; }
 .studio-earliest td { background: #10170f; }
+/* The live preview (ADR-0086): labelled, and dimmed while a newer answer is on its way. */
+.studio-live-banner { margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; color: var(--muted); }
+.studio-live-banner strong { color: var(--text); }
+.studio-results[data-updating="true"] .studio-scene-block, .studio-results[data-updating="true"] .studio-answer { opacity: 0.55; transition: opacity 0.2s; }
 /* The answer (ADR-0085): fails or holds, the loading at first-ply failure and where, above the summary. */
 .studio-answer-headline { font-size: 15px; line-height: 1.55; margin: 4px 0 10px; }
 .studio-answer[data-fails="true"] .studio-answer-headline strong { color: #f6bba9; }
