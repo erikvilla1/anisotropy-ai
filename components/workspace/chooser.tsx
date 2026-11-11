@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { FolderOpen, Plus } from "lucide-react";
 import { mergeProjects, newLaminateProject, newProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
 import { listProjects, noProjectStore } from "@/lib/studio-api";
-import { browserStorage } from "@/components/studio/project-context";
+import { browserStorage, useAllTests } from "@/components/studio/project-context";
+import { isTestEnabled } from "@/lib/enabled-tests";
 import { problemLines } from "@/lib/laminate-chat";
 import { TEST_CHOICES } from "@/lib/studio-chat";
 import { workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
@@ -20,9 +21,14 @@ function when(stamp: string): string {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** What a project is about, in a few words: a coupon's test, a laminate's layup. */
-function about(project: Project): string {
-  if (project.kind === "fea") return project.form.test ? testTitle(project.form.test) : "–";
+/** What a project is about, in a few words: a coupon's test, a laminate's layup; a coupon of a test the studio does not offer yet (ADR-0089)
+ * says so, and stays listed. */
+function about(project: Project, allTests: boolean): string {
+  if (project.kind === "fea") {
+    const test = project.form.test;
+    if (!test) return "–";
+    return isTestEnabled(test, allTests) ? testTitle(test) : `${testTitle(test)}: not available yet`;
+  }
   const layup = problemLines(project.draft).find(([k]) => k === "Layup")?.[1];
   return layup || "–";
 }
@@ -49,6 +55,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [source, setSource] = useState<Source>(apiBaseUrl ? "checking" : "browser");
+  const allTests = useAllTests(apiBaseUrl);
   useEffect(() => {
     const local = readProjects(browserStorage());
     setProjects(local);
@@ -108,7 +115,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
                 <tr key={p.id} data-project={p.id} data-kind={p.kind}>
                   <td>{projectTitle(p)}</td>
                   <td>{KIND_WORD[p.kind]}</td>
-                  <td>{about(p)}</td>
+                  <td>{about(p, allTests)}</td>
                   <td>{materialOf(p)}</td>
                   <td>{when(p.updated)}</td>
                   <td><button type="button" className="chat-link" onClick={() => open(p)}>Open</button></td>

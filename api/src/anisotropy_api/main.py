@@ -38,10 +38,10 @@ from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, Jo
                           studio_command)
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
                       owns_project, project_jobs, record_run, stop_orphans, update_project, upsert_project)
-from .settings import allowed_origins, environment, load_settings
+from .settings import all_tests, allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore, sync
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
+    AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     LiveSolveResponse, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
@@ -814,6 +814,14 @@ def workspace_assistant(request: Request) -> AssistantInfo:
     assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
     proposes = assistant.name != "template"
     return AssistantInfo(proposes=proposes, provider=assistant.name if proposes else None, model=getattr(assistant, "model", None) if proposes else None)
+
+
+@app.get("/v1/coupon-tests", response_model=CouponTests)
+def coupon_tests(request: Request) -> CouponTests:
+    """Whether every coupon test is offered here (ADR-0089); the page asks once and offers the unnotched tension coupon only unless this
+    says all. Not a run: nothing is computed or recorded. Without the startup's settings (a test client), the environment is read."""
+    settings = getattr(request.app.state, "settings", None)
+    return CouponTests(all=settings.all_tests if settings is not None else all_tests(environment()))
 
 
 @app.post("/v1/workspace/proposals", response_model=ProposalResponse)

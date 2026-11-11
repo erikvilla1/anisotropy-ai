@@ -4,6 +4,7 @@
  * engineer's own words write; nothing here converts a unit or computes a value (ADR-0001, ADR-0002), and a value enters only once ticked.
  */
 import { CONDITIONS, conditionOf } from "./conditions";
+import { enabledWords, isRowEnabled } from "./enabled-tests";
 import {
   blankOwn, CONSTANT_NAMES, hasCondition, isReportUnits, LOAD_NAMES, REPORT_SYSTEMS, systemUnit, type ConstantName, type Kind, type LaminateDraft,
   type LoadName, type Quantity,
@@ -27,19 +28,24 @@ const COUPON_NUMBERS_LEFT = new Set(["value", "hole_ring", "hole_growth", "tab_b
 const testTitle = (word: string) => TEST_CHOICES.find((c) => c.test === word)?.title ?? word;
 
 /** The rows a coupon message is offered: its choices, its numbers each in the unit of the coupon's system, the layup as a notation, and the
- * loading as a displacement or a force (each sets the loading type with the value). */
-export function couponOffer(form: StudioForm): Pick<ProposalRequest, "rows" | "form"> {
+ * loading as a displacement or a force (each sets the loading type with the value). With `all` false (ADR-0089) the choices are the
+ * enabled tests, standards and material kinds only, and the hidden tests' own rows are not offered: the API's guard then drops any
+ * proposal outside them. */
+export function couponOffer(form: StudioForm, all = true): Pick<ProposalRequest, "rows" | "form"> {
   const labels = unitLabels(unitsOf(form));
   const rows: OfferedRow[] = [];
   for (const key of COUPON_CHOICES) {
     const field = fieldByKey[key];
-    if (!field?.words.length) continue;
-    rows.push({ key, label: field.label, kind: "choice", choices: field.words.map((w) => ({ value: w, label: key === "test" ? testTitle(w) : w })) });
+    if (!isRowEnabled(key, all)) continue;
+    if (!field) continue;
+    const words = enabledWords(key, field.words, all);
+    if (!words.length) continue;
+    rows.push({ key, label: field.label, kind: "choice", choices: words.map((w) => ({ value: w, label: key === "test" ? testTitle(w) : w })) });
   }
   rows.push({ key: "library", label: "Library material", kind: "choice", choices: libraryOptions.map((m) => ({ value: m.id, label: m.name })) });
   rows.push({ key: "layup", label: "Layup, in laminate notation, bottom ply first", kind: "notation" });
   for (const field of fields) {
-    if (field.kind !== "number" || COUPON_NUMBERS_LEFT.has(field.key) || hidden(field.key)) continue;
+    if (field.kind !== "number" || COUPON_NUMBERS_LEFT.has(field.key) || hidden(field.key) || !isRowEnabled(field.key, all)) continue;
     if (field.unit === "length" || field.unit === "stress") rows.push({ key: field.key, label: field.labels?.[unitsOf(form)] ?? field.label, kind: "number", unit: labels[field.unit] });
     else if (field.unit === null) rows.push({ key: field.key, label: field.label, kind: "number" });
   }

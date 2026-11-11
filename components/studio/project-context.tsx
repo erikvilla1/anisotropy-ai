@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { couponProjects, isUuid, newProject, readProjects, reduce, upsert, writeProjects, type CouponProject, type ProjectAction } from "@/lib/project-store";
-import type { TowAnswer } from "@/lib/studio-api";
+import { allCouponTests, type TowAnswer } from "@/lib/studio-api";
 import type { StudioForm } from "@/lib/studio-form";
 import type { PlateLists } from "@/lib/studio-plate";
 import type { TowSpecimenRow } from "@/lib/studio-tow";
@@ -14,6 +14,8 @@ import { useLiveSolve } from "./use-live-solve";
  * switching between them loses nothing, and a reload picks the last project up from this browser. */
 export type ProjectContextValue = {
   apiBaseUrl: string;
+  /** Whether every coupon test is offered (ADR-0089): false, the unnotched tension coupon only, until the API says the switch is on. */
+  allTests: boolean;
   project: CouponProject;
   form: StudioForm;
   plate: PlateLists;
@@ -53,6 +55,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   if (start.current === null) start.current = initial();
   const [project, dispatch] = useReducer(projectReducer, start.current.project);
   const run = useCouponRun(apiBaseUrl, isUuid(project.id) ? project.id : null); // the check and the solve name the project (ADR-0062 part 6)
+  const allTests = useAllTests(apiBaseUrl);
 
   useEffect(() => {
     const store = browserStorage();
@@ -69,15 +72,26 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const rename = useCallback((name: string) => dispatch({ type: "rename", name }), []);
   const replace = useCallback((next: CouponProject) => dispatch({ type: "replace", project: next }), []);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
-  useLiveSolve(apiBaseUrl, project.form, project.plate, run); // our kernel answers each settled edit (ADR-0086)
+  useLiveSolve(apiBaseUrl, project.form, project.plate, run, allTests); // our kernel answers each settled edit (ADR-0086)
   useNewestFromServer(apiBaseUrl, "fea", !start.current.restored && project.updated === project.created,
     (found) => { if (found.kind === "fea") replace(found); });
 
   const value = useMemo<ProjectContextValue>(() => ({
-    apiBaseUrl, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
+    apiBaseUrl, allTests, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
     setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run,
-  }), [apiBaseUrl, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run]);
+  }), [apiBaseUrl, allTests, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
+}
+
+/** Whether every coupon test is offered here (ADR-0089), asked once per API address; false until the API answers that it is. */
+export function useAllTests(apiBaseUrl: string): boolean {
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void allCouponTests(apiBaseUrl).then((answer) => { if (current) setAll(answer); });
+    return () => { current = false; };
+  }, [apiBaseUrl]);
+  return all;
 }
 
 export function useProject(): ProjectContextValue {

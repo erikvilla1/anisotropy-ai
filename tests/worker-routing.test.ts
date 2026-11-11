@@ -45,3 +45,8 @@ test("the API's container is told to queue jobs only when the Worker has the que
   for (const path of ["/v1/solver", "/v1/solver/jobs/x", "/v1/solver/jobs/x/stop"]) assert.ok(isSolverPath(path), path);
   for (const path of ["/v1/coupon-jobs", "/v1/solvers", "/v1/coupon-jobs/v1/solver/"]) assert.ok(!isSolverPath(path), path);
 });
+
+test("the hosted container never gets the switch that shows every coupon test (ADR-0089): the hosted tier offers tension only", () => {
+  assert.ok(!(CONTAINER_VARIABLES as readonly string[]).includes("ANISOTROPY_ALL_TESTS"));
+  assert.deepEqual(containerEnvironment({ ANISOTROPY_ALL_TESTS: "on", ANISOTROPY_RUN_RECORDS: "off" }), { ANISOTROPY_RUN_RECORDS: "off" });
+});

@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
 
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
 async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[] },
-  options: { missFirstFieldsRead?: boolean; live?: boolean } = {}) {
+  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
@@ -28,6 +28,8 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    // one workflow first (ADR-0089): the API says whether every test is offered; the scenarios of a hidden test turn the switch on
+    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: Boolean(options.allTests) });
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) return json(route, { detail: "Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read" }, 503); // no project store: the browser keeps the project alone
     if (path === "/v1/coupons/IM7-UNT-L1/values") return json(route, { name: "IM7-UNT-L1", values: fixture("values") });
@@ -199,7 +201,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickTest(page, BENDING);
@@ -242,7 +244,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickTest(page, "plate");
@@ -297,7 +299,7 @@ test("a blocked setup names its rows and the solve stays off", async ({ page }) 
 
 test("a standard is offered by its test, fills its size, and the check judges the specimen clause by clause (ADR-0072)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   const titles = page.getByTestId("question-standard").locator(".ws-choice-title");
@@ -341,7 +343,7 @@ test("a standard is offered by its test, fills its size, and the check judges th
 
 test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, E and nu in place of the plies (ADR-0075)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickStandard(page, "ASTM D638-22");
@@ -371,6 +373,27 @@ test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, 
   expect([sent.ply_1, sent.library, sent.G13, sent.criteria]).toEqual([undefined, undefined, undefined, undefined]); // hidden rows are not sent
 });
 
+test("one workflow first: only unnotched tension, under D3039 or no standard, is offered, and a hidden test is not available yet (ADR-0089)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls); // the switch is off, as on the hosted tier
+  await page.goto("/workspace/fea");
+  const tests = page.getByTestId("question-test").locator("input[type=radio]");
+  await expect(tests).toHaveCount(1);
+  await expect(tests.first()).toHaveAttribute("value", "unnotched tension");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await expect(page.getByTestId("question-standard").locator(".ws-choice-title")).toHaveText(["ASTM D3039/D3039M-17", "No standard"]); // D638 waits
+  await expect(page.getByLabel("Narrow width (mm)", { exact: true })).toHaveCount(0); // no dog-bone rows
+  await expect(page.getByLabel("Material kind", { exact: true })).toHaveCount(0); // a laminate of plies only
+  const chat = page.getByTestId("ws-assistant");
+  await expect(chat.getByRole("button", { name: /Open-hole tension/ })).toHaveCount(0);
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, 6 mm hole, 36 x 250 mm");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
+  await expect(page.getByTestId("chat-not-available").last()).toContainText("Open-hole tension is not available yet");
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue("36"); // what the studio offers still goes in
+  await expect(page.getByTestId("question-test").locator("input[value='unnotched tension']")).toBeChecked();
+  await expect(page.getByLabel("Hole diameter (mm)", { exact: true })).toHaveCount(0);
+});
+
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
@@ -395,7 +418,7 @@ test("a coupon solved under a test standard shows the quantities the standard re
 
 test("a fresh form's choices start blank, not on their first word", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("question-test").locator("input:checked")).toHaveCount(0); // the first step asks; nothing is picked for the engineer
   await expect(page.getByTestId("setup-line")).toContainText("Start with step 1");
@@ -549,7 +572,7 @@ test("a word that names no value sends the engineer to the panel that asks for t
 
 test("one typed line fills the coupon and the chat asks only for what is missing (ADR-0055)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
@@ -566,7 +589,7 @@ test("one typed line fills the coupon and the chat asks only for what is missing
 test("with a model on, a message is read into a card the engineer ticks: what is ticked goes in, an unticked value does not (ADR-0088)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   const asked: Record<string, unknown>[] = [];
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.route(API, async (route) => { // a model behind the API: its reading, as the source guard would keep it
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -617,7 +640,7 @@ test("with a model on, a message is read into a card the engineer ticks: what is
 test("a model that does not answer leaves the message to the page's patterns, and is not asked again that session (ADR-0088)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   let asked = 0;
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.route(API, async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -789,7 +812,7 @@ test("the model is lit for presentation before a run: the sketch and the package
 
 test("the fibre tow test swaps the panels for the tow's, and Calculate shows each specimen and the statistics (ADR-0074)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[], tows: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   const rail = page.getByTestId("ws-rail");

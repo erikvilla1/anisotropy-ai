@@ -1,17 +1,18 @@
 "use client";
 
+import { enabledStandards } from "@/lib/enabled-tests";
 import { standardOf, standardsFor, type Checklist, type StudioForm } from "@/lib/studio-form";
 import { RequirementTable } from "./requirement-table";
 
 /** The standard the coupon follows (ADR-0072): its subject, the copy we read and where the publisher sells it; before a check, what the check
  * will judge, clause by clause; after it, each requirement with this coupon's value and the verdict, and the check's own summary. The model
  * is checked against the standard's specimen, never said to conform: the procedure stays the laboratory's. */
-export function StandardCard({ form, checklist, tow = false }: { form: StudioForm; checklist: Checklist | null; tow?: boolean }) {
+export function StandardCard({ form, checklist, tow = false, allTests = false }: { form: StudioForm; checklist: Checklist | null; tow?: boolean; allTests?: boolean }) {
   // a fibre tow record (ADR-0074) is a test record judged as entered, not a modelled specimen
   const action = tow ? "Calculate" : "Check setup", subject = tow ? "This record" : "This coupon";
   const profile = standardOf(form);
   if (!profile) {
-    const offered = form.test ? standardsFor(form.test) : [];
+    const offered = form.test ? enabledStandards(standardsFor(form.test), allTests) : []; // the standards the studio offers (ADR-0089)
     return offered.length ? (
       <p className="studio-hint" data-testid="standard-card">
         {tow ? "No standard picked: the record is reduced by the tow equations and judged against no clause." : "No standard picked: the size is your own."}{" "}

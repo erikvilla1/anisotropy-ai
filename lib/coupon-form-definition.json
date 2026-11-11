@@ -1702,6 +1702,20 @@
   "four-point bending": "four_point_bending",
   "plate": "plate"
  },
+ "enabled": {
+  "tests": [
+   "unnotched tension"
+  ],
+  "standards": [
+   "ASTM D3039/D3039M-17"
+  ],
+  "material_kinds": [
+   "plies"
+  ],
+  "dogbone": false,
+  "not_available": "not available yet: the studio offers the unnotched tension coupon, under ASTM D3039 or no standard, until its comparison with Abaqus is validated",
+  "switch": "ANISOTROPY_ALL_TESTS"
+ },
  "criteria": [
   "all",
   "maximum stress",
