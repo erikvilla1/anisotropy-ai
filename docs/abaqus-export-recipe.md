@@ -15,7 +15,7 @@ Written for: whoever checks our tension coupon against Abaqus, the founder now a
 
 **Round (b): the coupon built by hand in Abaqus/CAE.** The modelling check, the team's own way.
 
-1. Build it from the package's Chapter 4 (the rebuild guide): a 250 by 25 mm shell, the layup [45/0/-45/90]s from the bottom with the layer axis 1 along the coupon (the length, y), S4R, partitions at 56, 112.5, 137.5 and 194 mm, seeds 12 across and 28, 28, 12, 28, 28 along, both tabs clamped, the top one pulled 1 mm.
+1. Build it from the package's Chapter 4 (the rebuild guide): a 250 by 25 mm shell, the layup [45/0/-45/90]s from the bottom with the layer axis 1 along the coupon (the length, y), S4 (Mesh > Element Type: Standard, Linear, Shell, with Reduced integration unticked: full integration, as our deck and our kernel's element; ADR-0089 amendment 2), partitions at 56, 112.5, 137.5 and 194 mm, seeds 12 across and 28, 28, 12, 28, 28 along, both tabs clamped, the top one pulled 1 mm.
 2. In the Field Output request, ask for each layer's middle section point (Output at shell, beam and layered section points: Specify, the middle point of every layer).
 3. Compare the decks first: our `equivalence.deck_equivalence` on the job's `.inp` against ours must find the same items; then steps 3 and 4 of round (a) on the job's ODB.
 

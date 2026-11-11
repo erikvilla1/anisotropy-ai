@@ -12,8 +12,8 @@ time, step, frame, instance, each file's SHA-256). The ODB path is made absolute
 it: the same ODB gives the same bytes and digests however the script is called. Values are the ODB's own numbers in the deck's units: no conversion, no
 averaging, no transformation (ADR-0002). What is not stated is refused rather than guessed (ADR-0003): the step and the
 instance are taken only when the ODB holds one, the frame only when the step has one after the initial frame; a layer with
-several section points in the field needs --layer-point; an integration point other than 1 (a full-integration shell) is
-refused with the advice to use S4R or centroid output.
+several section points in the field needs --layer-point. Every value is the element's centroid value, as CAE's Probe Values
+reads it: S4R's one integration point, or S4's four brought to the centroid by Abaqus itself (ADR-0089 amendment 2).
 
 The strings were read from a real ODB on 2026-10-24 (Abaqus/Standard 2025, our X840PW-UNT-L1 deck): the frame description is
 padded (`Increment      1: Step Time =    1.000`), a section point reads `SNEG, (fraction = -1.0), Layer = 1` at a face of the
@@ -113,11 +113,15 @@ def choose_layer_points(points: dict[int, SectionPoint], rule: str | None) -> di
         elif rule == "top":
             chosen[layer] = candidates[-1]
         else:
-            interior = candidates[1:-1]
-            if not interior:
-                raise ExtractError(f"layer {layer} has {len(candidates)} section points, none inside it; --layer-point middle needs an interior point")
-            mid = 0.5 * (candidates[0].fraction + candidates[-1].fraction)
-            chosen[layer] = min(interior, key=lambda p: (abs(p.fraction - mid), p.number))
+            # the layer's own middle, from its place in the section: layer k of n spans fractions -1 + 2(k-1)/n to -1 + 2k/n. A deck that lists
+            # each layer's middle (ADR-0089) gives a layer that middle beside the face PRESELECT adds; a point at a layer's face is never taken
+            layers = max(p.layer for p in points.values())
+            mid = -1.0 + (2 * layer - 1) / layers
+            near = [p for p in candidates if not p.face and abs(p.fraction - mid) <= 0.25 * 2.0 / layers]
+            if not near:
+                raise ExtractError(f"layer {layer} has {len(candidates)} section points, none inside it at its middle (fraction {mid:g}); "
+                                   "--layer-point middle needs that point: list each layer's middle section point in the deck's output")
+            chosen[layer] = min(near, key=lambda p: (abs(p.fraction - mid), p.number))
     return chosen
 
 
@@ -235,7 +239,8 @@ def _labels(region) -> list[int]:
 
 
 def read_odb(path: Path, step_name: str | None, frame_index: int | None, instance_name: str | None) -> OdbData:
-    from odbAccess import openOdb  # Abaqus's own module: only here
+    from abaqusConstants import CENTROID  # Abaqus's own modules: only here
+    from odbAccess import openOdb
 
     odb = openOdb(str(path), readOnly=True)
     try:
@@ -265,11 +270,10 @@ def read_odb(path: Path, step_name: str | None, frame_index: int | None, instanc
             for label in _labels(assignment.region):
                 data.materials[label] = layup
         points_seen = set()
-        for value in stress.getSubset(region=instance).values:
+        # the element's centroid value, as CAE's Probe Values reads it: S4R's one integration point, or S4's four brought to the centroid by
+        # Abaqus itself (the tension deck writes S4 since ADR-0089 amendment 2); one value per element and section point either way
+        for value in stress.getSubset(region=instance, position=CENTROID).values:
             label = int(value.elementLabel)
-            if int(value.integrationPoint) != 1:
-                raise ExtractError(f"element {label} reports stress at integration point {value.integrationPoint}: a full-integration shell; "
-                                   "use S4R (one point at the centroid) or request centroid output")
             if value.sectionPoint is None:
                 raise ExtractError(f"element {label} has no section point: not a composite shell section")
             point_number = int(value.sectionPoint.number)

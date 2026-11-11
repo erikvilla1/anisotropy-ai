@@ -164,3 +164,15 @@ def test_the_script_imports_nothing_of_ours_and_odbaccess_only_where_it_reads():
     assert not [line for line in lines if line.startswith(("from anisotropy", "import anisotropy"))]
     imports = [i for i, line in enumerate(lines) if "from odbAccess import" in line]
     assert len(imports) == 1 and lines[imports[0]].startswith("    ") and any("def read_odb" in line for line in lines[: imports[0]])
+
+
+def test_a_layers_middle_is_taken_beside_the_face_preselect_adds():
+    """The tension deck lists each layer's middle (ADR-0089): layer 1 then holds SNEG and its middle, and the middle is the one taken."""
+    middle_1 = X.SectionPoint(2, "fraction = -0.875000, Layer = 1", "", -0.875, 1)
+    middles = {1: SNEG_1, 2: middle_1, 5: X.SectionPoint(5, "fraction = -0.625000, Layer = 2", "", -0.625, 2),
+               8: X.SectionPoint(8, "fraction = -0.375000, Layer = 3", "", -0.375, 3), 11: X.SectionPoint(11, "fraction = -0.125000, Layer = 4", "", -0.125, 4),
+               14: X.SectionPoint(14, "fraction = 0.125000, Layer = 5", "", 0.125, 5), 17: X.SectionPoint(17, "fraction = 0.375000, Layer = 6", "", 0.375, 6),
+               20: X.SectionPoint(20, "fraction = 0.625000, Layer = 7", "", 0.625, 7), 23: X.SectionPoint(23, "fraction = 0.875000, Layer = 8", "", 0.875, 8),
+               24: X.SectionPoint(24, "SPOS, (fraction = 1.0), Layer = 8", "SPOS", 1.0, 8)}
+    chosen = X.choose_layer_points(middles, "middle")
+    assert chosen[1] is middle_1 and chosen[8].number == 23 and len(chosen) == 8

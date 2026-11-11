@@ -2,6 +2,20 @@
 
 Round (a) of ADR-0089: our own deck, `decks/d3039-im7-8552-abaqus.inp`, run in Abaqus/Standard 2025 on 2026-11-11 (the founder's machine and licence, over his VPN), compared element by element and ply by ply with our kernel on the same deck. The deck Abaqus ran is the committed deck, comments aside. Abaqus's own numbers stay with the run, `.local/fea/checks/d3039-im7-8552/runs/abaqus-detect-2026-11-11/` (the teaching licence, ADR-0045); this note gives only counts and differences.
 
+## Our deck since the founder's choice: S4 (ADR-0089 amendment 2)
+
+On 2026-11-11 the founder chose S4 for the tension coupon's deck and for the coupon built in CAE: full integration, as our kernel's element is. The committed deck, `decks/d3039-im7-8552-abaqus.inp`, run again in Abaqus/Standard 2025 the same day:
+
+| Zone | Elements | Values | Within 1 % | Within 3 % | Worst | Worst quantity |
+|---|---|---|---|---|---|---|
+| gauge | 144 | 13824 | 13824 | 13824 | 0.0074 % | E11 |
+| free length | 384 | 36864 | 36864 | 36864 | 0.65 % | E12 |
+| band | 264 | 25344 | 23480 | 24664 | 72.7 % | Mid. Principal |
+| tab line | 24 | 2304 | 1992 | 2224 | 11.1 % | Pressure |
+| gripped | 672 | 64512 | 64512 | 64512 | 0 | |
+
+Reaction at the moving grip: ours +0.007 % of Abaqus's. `tools/abaqus_beside.py` on the same run's `.dat`: 28 of 28 values within 3 %. Every criterion of ADR-0089's proposed acceptance is met for round (a). The S4R runs below are kept as the record of why.
+
 ## How it was compared
 
 - `abaqus python tools/abaqus_every_output.py` read the ODB: for each of the 1488 elements and each of the 8 layers, at the layer's middle section point and the element's centroid, with no averaging, S11, S22, S12 in the layer's material axes, then Mises, Tresca, the pressure and the maximum, middle and minimum principal stresses as odbAccess gives them (what Abaqus/CAE shows), then E11, E22, E12; and the reaction at every node.
@@ -48,4 +62,4 @@ In the gauge every quantity's worst difference is under 0.7 % (S11 0.068 %, Mise
 | Band and tab lines | reported | reported |
 | Laminate theory at the gauge centre | the D3039 record's | the D3039 record's |
 
-Still open: round (b), the coupon built by hand in Abaqus/CAE with the same seeds; the founder's decision on whether our deck writes S4R or S4; TSHR (the transverse shear of a layer) read and judged against a floor.
+Still open: round (b), the coupon built by hand in Abaqus/CAE with the same seeds and S4; TSHR (the transverse shear of a layer) read and judged against a floor.
