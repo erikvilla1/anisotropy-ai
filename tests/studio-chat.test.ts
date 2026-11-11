@@ -55,6 +55,26 @@ test("forces convert kN to the form's N, tabs, spans and standards are read, and
   assert.deepEqual(readMessage("hello there"), { rows: {}, understood: [] });
 });
 
+test("a dog-bone's narrow section, fillets and outer radius and the strain measurement are read without a model (ADR-0062 amendment 2)", () => {
+  const pick = (text: string, units?: string) => {
+    const { rows } = readMessage(text, units);
+    return Object.fromEntries(["narrow_width", "narrow_length", "radius", "outer_radius", "strain_device", "strain_length", "length", "width"]
+      .filter((k) => rows[k] !== undefined).map((k) => [k, rows[k]]));
+  };
+  assert.deepEqual(pick("narrow width 13, fillet radius 76"), { narrow_width: "13", radius: "76" });
+  assert.deepEqual(pick("narrow section 13 x 57 mm, 76 mm fillets, 165 x 19 mm"),
+    { narrow_width: "13", narrow_length: "57", radius: "76", length: "165", width: "19" }, "the narrow section is not the coupon's size");
+  assert.deepEqual(pick("narrow length = 33 mm, outer radius 25"), { narrow_length: "33", outer_radius: "25" });
+  assert.deepEqual(pick("narrow section 6 mm wide"), { narrow_width: "6" });
+  assert.deepEqual(pick("extensometer, gauge length 50 mm"), { strain_device: "extensometer", strain_length: "50" });
+  assert.deepEqual(pick("50 mm extensometer"), { strain_device: "extensometer", strain_length: "50" });
+  assert.deepEqual(pick("strain gage 5 mm"), { strain_device: "strain gauge", strain_length: "5" });
+  assert.deepEqual(pick("gage length 2 in", "in-psi"), { strain_length: "2" });
+  assert.deepEqual(readMessage("narrow width 13, fillet radius 76").understood, ["narrow width 13 mm", "fillet radius 76 mm"]);
+  assert.equal(readMessage("radius 76").rows.radius, undefined, "a bare radius may be a hole's: only a fillet's is read");
+  assert.equal(readMessage("pulled 1 mm with a 25 mm extensometer").rows.value, "1");
+});
+
 test("the chat asks in order and reaches the review only when every step has its rows", () => {
   const blank = { ...blankForm(), date: "2026-10-29" };
   assert.equal(nextStep(blank), "test");
