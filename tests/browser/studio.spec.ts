@@ -134,6 +134,18 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("fpf-gauge-factor-tsai_hill")).toHaveText("1.032");  // the gauge section's own first-ply failure, away from the clamped edge
   await expect(page.getByTestId("explanation")).toContainText("By the Tsai-Hill criterion the laminate holds at the applied loading, in the gauge section");
   await expect(page.getByTestId("explanation")).toContainText("Outside the gauge section, Tsai-Hill is reached earlier, at 1.013 times the applied loading"); // the clamped edge apart (ADR-0085)
+  // the answer card (ADR-0085): fails or holds per criterion in the gauge section, the loading at first-ply failure, the clamped edge apart
+  const answer = page.getByTestId("answer");
+  await expect(answer).toHaveAttribute("data-basis", "gauge");
+  await expect(answer).toHaveAttribute("data-fails", "false");
+  await expect(page.getByTestId("answer-headline")).toContainText("Holds at the applied loading in the gauge section, by Tsai-Hill.");
+  await expect(page.getByTestId("answer-headline")).toContainText("The first ply would fail at 1.032 × the applied loading (1.032 mm,");
+  await expect(page.getByTestId("answer-verdict-tsai_hill")).toHaveText("holds");
+  await expect(page.getByTestId("answer-factor-tsai_hill")).toHaveText("1.032");
+  await expect(page.getByTestId("answer-loading-tsai_hill")).toContainText("1.032 mm");
+  await expect(page.getByTestId("answer-outside")).toContainText("Outside the gauge section, Tsai-Hill is reached earlier, at 1.013 × the applied loading");
+  await expect(page.getByTestId("answer-extremes").locator("tbody tr")).toHaveCount(5);
+  await expect(page.getByTestId("fpf-details")).not.toHaveAttribute("open", ""); // the per-criterion tables of the whole model fold away under the answer
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "template", { timeout: 15_000 }); // the API answered the explain call
   // the result before the documents (ADR-0064): the agreement line while the job still draws and builds the package
   await expect(page.getByTestId("job-progress")).toContainText("The result is in; the drawings and the package are still being made", { timeout: 15_000 });
@@ -156,7 +168,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("legend")).toHaveAttribute("data-bands", "0");
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "0");
   await page.getByLabel("Contours", { exact: true }).selectOption("8");
-  await page.getByTestId("fpf-table").locator("tr[data-criterion=tsai_hill] button").click();
+  await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click(); // the answer's own row, in the gauge section (ADR-0085)
   await expect(page.getByTestId("readout")).toContainText("the critical element");
   await expect(page.getByTestId("readout")).toContainText("tsai hill: ply");
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
@@ -194,6 +206,8 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await expect(page.getByTestId("summary")).toContainText("the deflection w");
   await expect(page.getByTestId("convergence-not-studied")).toContainText("three point bending is a later step");  // ADR-0068: a bending coupon says so
   await expect(page.getByTestId("fpf-table")).toContainText("bottom face");
+  await expect(page.getByTestId("answer")).toHaveAttribute("data-basis", "whole"); // no gauge section: the whole model answers (ADR-0085)
+  await expect(page.getByTestId("answer-table")).toContainText("bottom face");
   await page.getByLabel("Field", { exact: true }).selectOption("u_z");
   await expect(page.getByTestId("legend")).toContainText("Deflection w (z)");
   await page.getByLabel("Field", { exact: true }).selectOption("S11");

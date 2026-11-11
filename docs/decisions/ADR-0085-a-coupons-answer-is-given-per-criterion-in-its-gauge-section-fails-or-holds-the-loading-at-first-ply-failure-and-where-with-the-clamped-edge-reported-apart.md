@@ -34,6 +34,11 @@ The loading at failure:
 - `summary.ply_extremes`: over the same elements, each ply's sigma_1 and sigma_2 at their largest tension and largest compression apart, tau_12 and von Mises at their largest magnitude, each with element, centroid and face; and the same over every ply. A sign never reached is none. `max_ply` and `ply_peaks` stay as they are for the solver comparison (ADR-0066).
 - The explanation's facts and sentences read the verdict's basis: by each criterion, the laminate fails or holds at the applied loading in the gauge section (or the whole model), the first ply to fail, its element and position, its place and mode, the factor and the loading at that factor; the earlier failure outside it in a sentence of its own; the largest ply stresses with their sign and position. Every number is a fact (ADR-0052).
 
+## As built (2026-11-10)
+
+- Part 1 (fea): `answer_of`, `verdict_of` and `ply_extremes` in `fields.py`; the explanation in `explain.py`; fea theory section 7. The plan's `grip_earlier` is named `outside_earlier`, since an earlier failure outside the gauge section need not touch a grip; it says whether it does.
+- Part 2 (page): the answer card under the viewer (`components/studio/results-view.tsx` `AnswerCard`, picked and labelled by `lib/studio-answer.ts` `answerOf` and `extremeRows`, which compute nothing): fails or holds by each criterion in the gauge section, R, the loading at first-ply failure, the ply and mode in words, the element and position, the clamped edge apart with its own show button, and the largest ply stresses with their sign. The viewer frames the answer's element and colours its criterion; the per-criterion tables of the whole model and the gauge section fold under it. An older job without the package's answer shows the tables as before.
+
 ## Why (evidence)
 
 - `fea/tests/test_fields.py`: `test_each_criterion_says_whether_a_ply_fails_and_at_what_loading`, `test_the_answer_reads_the_gauge_section_and_reports_the_grip_edge_apart`, `test_the_largest_ply_stresses_come_with_their_sign_and_place`, `test_a_coupon_without_a_gauge_section_answers_on_the_whole_model`, and the sentences' facts in `test_every_number_in_a_sentence_is_a_fact` (a number inside a place is a fact, as the API's guard already reads it).

@@ -46,7 +46,20 @@ export type Faced<T> = T | T[];
 export type Span = [number | null, number | null];
 export type Extreme = { value: number; element: number; label: string; ply: number; angle: number; xy: number[]; face?: string | null };
 export type FirstPlyFailure = { factor: number; index: number; element: number; label: string; ply: number; angle: number; mode: string; place: string;
-  touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null };
+  touches_grip: boolean; tied_plies: number[]; xy: number[]; face?: string | null;
+  /** ADR-0085: whether a ply fails at the applied loading (R at or below 1), and the loading at first-ply failure, R times the applied value and the
+   * reaction, as the package wrote them; absent on older jobs. */
+  fails?: boolean; at_failure?: AtFailure | null };
+export type AtFailure = { applied: number; unit: string; reaction: number; reaction_unit: string; every_load: boolean };
+/** The answer's basis (ADR-0085): the gauge section when the coupon has one, the whole model otherwise; an earlier failure outside it apart. */
+export type Verdict = { basis: "gauge" | "whole"; earliest: string; factor: number; fails: boolean; outside_earlier: OutsideEarlier | null };
+export type OutsideEarlier = { criterion: string; factor: number; fails: boolean; element: number; label: string; ply: number; angle: number; face: string | null;
+  mode: string; place: string; touches_grip: boolean; xy: number[] };
+/** A ply stress at its largest of one sign (or magnitude), with where it is; `ply` and `angle` on the extremes over every ply. Null when never reached. */
+export type PlyExtreme = { value: number; element: number; label: string; xy: number[]; face: string | null; ply?: number; angle?: number } | null;
+export type ExtremeSet = { S11: { tension: PlyExtreme; compression: PlyExtreme }; S22: { tension: PlyExtreme; compression: PlyExtreme };
+  S12: { largest: PlyExtreme }; mises: { largest: PlyExtreme } };
+export type PlyExtremes = { basis: "gauge" | "whole"; plies: ({ ply: number; angle: number } & ExtremeSet)[]; overall: ExtremeSet };
 export type Fields = {
   units: string; labels: Record<string, string>; coupon: Partial<Preview["coupon"]>; kernel?: string;
   mesh: { nodes: number[][]; quads: number[][]; node_labels: string[]; element_labels: string[]; node_sets: Record<string, number[]>;
@@ -68,6 +81,8 @@ export type Fields = {
     max_ply: Record<string, Extreme>; fpf: Record<string, FirstPlyFailure>; earliest: string | null; equilibrium_residual: number; free_residual: number;
     /** The same over the gauge section alone (the Gauge elements that touch no gripped node): what a test is compared with. Absent on older jobs. */
     fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null;
+    /** The answer (ADR-0085): its basis, earliest criterion and verdict, and the largest ply stresses on that basis; absent on older jobs. */
+    verdict?: Verdict | null; ply_extremes?: PlyExtremes;
     /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */
     calculix?: CalculixBeside | null;
     /** Every ply's own peaks at the element centroids, each marked when its element touches a gripped node (ADR-0066); absent on older jobs. */

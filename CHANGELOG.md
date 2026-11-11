@@ -5,6 +5,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 ## [Unreleased]
 
 ### Added
+- The studio shows the answer first (ADR-0085, part 2): a card under the viewer says whether the coupon fails or holds at the applied loading in the gauge section, by each criterion, with R, the loading at first-ply failure, the ply and mode in words, the element and position, the clamped edge of a grip apart, and the largest ply stresses with tension and compression apart. The viewer frames the answer's element; the per-criterion tables fold under it.
 - A coupon's result answers the engineer's questions (ADR-0085): by each criterion, whether a ply fails at the applied loading and, if not, the loading at first-ply failure (the factor times the applied displacement or force and times the grip's reaction), with the ply, mode, element and position, read in the gauge section, the clamped edge of a grip reported apart (`summary.verdict`, `fails` and `at_failure` on every first-ply-failure entry); the largest ply stresses in the gauge section with tension and compression apart (`summary.ply_extremes`). The explanation says it in those words, every number a fact.
 
 ### Fixed
