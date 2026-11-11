@@ -22,6 +22,7 @@ import { useProject } from "./project-context";
 import { JobProgress } from "./job-progress";
 import { TOW_TEST } from "@/lib/studio-tow";
 import { hiddenReason, isTestEnabled, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
+import { tensionValues } from "@/lib/tension-screen";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
@@ -89,6 +90,11 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   onLaminate?: () => void;
 }) {
   const { form, setForm: storeForm, run: runner, restored, allTests } = useProject(); // the rows and the run live in the project (ADR-0062)
+  // the tension screen's chat (ADR-0090): the material and the layup, the rest chosen by the software; every test's steps with the switch on.
+  // A ref, since the first question waits for the API's answer and is asked before the page renders it
+  const simpleRef = useRef(!allTests);
+  simpleRef.current = !allTests;
+  const valuesOf = (rows: StudioForm) => (simpleRef.current ? tensionValues(rows) : buildValues(rows));
   const { checking, checked, job, fields, explanation, problem } = runner;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
@@ -118,10 +124,18 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    let current = true;
+    void allCouponTests(apiBaseUrl).then((all) => { if (current) begin(all); }); // which chat this is waits for the API's switch (ADR-0089)
+    return () => { current = false; started.current = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function begin(all: boolean) {
+    simpleRef.current = !all;
     const name = remembered(RUN_BY_KEY);
     const start: StudioForm = { ...formRef.current, filled_by: formRef.current.filled_by || name, date: formRef.current.date || today() };
     setForm(start);
-    if (start.test) {
+    const tensionRows = ["library", "ply_1", "own_name"].some((key) => (start[key] ?? "").trim()); // the tension screen names the test itself
+    if (simpleRef.current ? tensionRows : start.test) {
       add({ role: "assistant", kind: "text", title: restored ? "Picked up where you left off" : "Picked up from the panels",
         body: <p>I have the rows you filled in. Here is what is still needed, then I check the setup.</p> });
       proceed(start);
@@ -133,9 +147,9 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       setForm({ ...start, library: handoff.material });
       add({ role: "assistant", kind: "text", title: `Material: ${materialName(handoff.material)}`, body: <p>Taken from the library page; change it any time.</p> });
     }
-    ask("test");
+    ask(simpleRef.current ? nextStep(start, true) : "test");
     if (handoff.prompt) send(handoff.prompt);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   useEffect(() => {
     if (!apiBaseUrl) return;
@@ -158,8 +172,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const current = live.current.entries.find((e) => e.id === live.current.active);
     if (!current || current.role !== "assistant" || current.kind !== "ask" || current.step === "review" || current.step === "reopen") return;
     if (form.test === TOW_TEST) { proceed(form); return; } // a fibre tow picked on a panel: hand over to its panels once (ADR-0074)
-    if (missingIn(current.step, form).length) return;
-    const step = nextStep(form);
+    if (missingIn(current.step, form, simpleRef.current).length) return;
+    const step = nextStep(form, simpleRef.current);
     if (step !== "review") { ask(step); return; }
     setActive(null);
     add({ role: "assistant", kind: "text", title: "Everything is stated",
@@ -174,7 +188,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       return;
     }
     try {
-      const answer = await runner.check(buildValues(values));
+      const answer = await runner.check(valuesOf(values));
       add({ role: "assistant", kind: "check", answer });
     } catch (error) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "The setup check did not answer", body: <p>{error instanceof StudioError ? error.message : "The setup check failed."}</p> });
@@ -213,7 +227,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           <Chips><PanelLink id="loads">Open Loads and supports</PanelLink></Chips></> });
       return;
     }
-    const step = nextStep(next);
+    const step = nextStep(next, simpleRef.current);
     if (step === "review") void check(next);
     else ask(step);
   }
@@ -252,7 +266,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const fresh = { ...blankForm(unitsOf(formRef.current)), date: today(), filled_by: formRef.current.filled_by };
     setForm(fresh); runner.reset();
     setEntries([]);
-    ask("test");
+    ask(simpleRef.current ? "material" : "test");
   }
 
   function loadExample() {
@@ -280,12 +294,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   async function run() {
     const answerNow = checked;
     if (!apiBaseUrl || !answerNow || answerNow.state !== "ready") return;
-    const name = formRef.current.filled_by.trim();
+    const name = formRef.current.filled_by.trim() || (simpleRef.current ? remembered(RUN_BY_KEY) || "studio" : ""); // the tension screen asks no name
     if (!name) { ask("name"); return; }
     setActive(null);
     add({ role: "user", text: "Run the analysis" });
     try {
-      const startedJob = await runner.solve(buildValues(formRef.current), name, answerNow.checklist.coupon_exists);
+      const startedJob = await runner.solve(valuesOf(formRef.current), name, answerNow.checklist.coupon_exists);
       add({ role: "assistant", kind: "job", job: startedJob.job_id });
     } catch (error) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "The run could not start", body: <p>{error instanceof StudioError ? error.message : "Unknown error."}</p> });
@@ -300,7 +314,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
 
   /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
   function redirect(text: string, echoed = false) {
-    const step = nextStep(formRef.current);
+    const step = nextStep(formRef.current, simpleRef.current);
     const id = panelOfStep(step);
     const title = panel(id).title;
     const named = toolNamed(text) === "coupon";

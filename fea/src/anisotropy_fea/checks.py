@@ -87,11 +87,13 @@ class Checklist:
     attempts: int
     state: str  # "ready" when nothing failed or is missing, else "blocked"
     problems: tuple[str, ...]  # every refusal, as the tools word it
+    built: tuple = ()  # the rows the tension screen left to us, each with its value and reason (ADR-0090); () for every other input
 
     def as_dict(self) -> dict[str, Any]:
         return {"items": [{**asdict(item), "rows": list(item.rows), "requirements": list(item.requirements)} for item in self.items],
                 "designation": self.designation, "coupon_exists": self.coupon_exists,
-                "attempts": self.attempts, "state": self.state, "problems": list(self.problems)}
+                "attempts": self.attempts, "state": self.state, "problems": list(self.problems),
+                "built": [b.as_dict() for b in self.built]}
 
 
 DOF_WORDS = {1: "x", 2: "y", 3: "z", 4: "the tilt about x", 5: "the tilt about y", 6: "the rotation about z"}
@@ -489,4 +491,4 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
 
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)
-    return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems)), model, quality
+    return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems), form.built), model, quality

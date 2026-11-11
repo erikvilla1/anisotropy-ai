@@ -86,6 +86,8 @@ from anisotropy_fea.calculix_summary import calculix_test_method, extensometer_o
 from anisotropy_fea.standards.conformance import conformance  # noqa: E402
 from anisotropy_fea.test_quantities import method_inputs  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
+from anisotropy_fea.intake import FIELDS  # noqa: E402
+from anisotropy_fea.tension_input import INPUT as TENSION_INPUT, complete_tension  # noqa: E402
 
 CHAPTER_STYLE = "\n".join([
     r"\titleformat{\chapter}[display]{\sffamily\huge\bfseries\color{ink}}{\color{accent}\large\MakeUppercase{\chaptertitlename}\ \thechapter}{0.6ex}{}",
@@ -120,6 +122,41 @@ def sources(coupon: str, root: Path) -> Sources:
 
 
 # --------------------------------------------------------------------------------------------- chapter 1, the problem
+
+def tension_choices(team_files: Path) -> tuple:
+    """The rows the studio's tension screen left to the software (ADR-0090), with their values and reasons, read again from the latest values
+    file filed under team/<date>/: the same function on the same rows, on the day the folder names. () when the latest delivery came another
+    way (the full panels, an Excel form) or there is none."""
+    import json
+
+    for path in sorted(team_files.glob("*/*.json"), key=lambda p: (p.parent.name, p.name), reverse=True):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict) or "form_version" not in data:
+            continue
+        if data.get("input") != TENSION_INPUT:
+            return ()
+        rows = {key: value for key, value in data.items() if key not in ("input", "form_version")}
+        try:
+            day = date.fromisoformat(path.parent.name)
+        except ValueError:
+            day = None
+        return complete_tension(rows, day)[1]
+    return ()
+
+
+def built_section(built: tuple, units: str) -> str:
+    """How we built it: each row the software chose, its value and why (ADR-0090)."""
+    if not built:
+        return ""
+    lines = [(escape(FIELDS[b.row].label_in(units) if b.row in FIELDS else b.row), escape(f"{b.value}: {b.reason}")) for b in built]
+    return "\n\n".join([r"\section{How we built it}\label{sec:built}",
+                          escape("The coupon was set up on the studio's tension screen from its material and its layup. Every other row was "
+                                 "chosen by the software, as follows; a row the engineer gave is not listed."),
+                          documents.kv_table(lines)])
+
 
 def statement(spec, card: dict[str, str]) -> str:
     units = spec.units
@@ -255,7 +292,7 @@ def material_section(spec, units: str, spec_path: Path) -> str:
     ])
 
 
-def problem_chapter(spec, card: dict[str, str], c, units: str, figures: Path, spec_path: Path) -> str:
+def problem_chapter(spec, card: dict[str, str], c, units: str, figures: Path, spec_path: Path, built: tuple = ()) -> str:
     documents.plot_model_module.plot_model(build_model(spec), figures / "model.png", units)
     grips = spec.grips
     labels = documents.UNIT_LABEL[units]
@@ -265,6 +302,7 @@ def problem_chapter(spec, card: dict[str, str], c, units: str, figures: Path, sp
                + (" " + DECK_UNITS_NOTE.format(stated=units_words(units), deck=units_words(deck_units_of(units))) if deck_units_of(units) != units else "")),
         r"\section{The coupon}\label{sec:coupon}",
         documents.kv_table([(escape(label), escape(value)) for label, value in card.items()]),
+        built_section(built, units),
         rf"\section{{{material_heading(spec)}}}\label{{sec:material}}",
         team.material_section(c) if c is not None else material_section(spec, units, spec_path),
         r"\section{Supports and loading}",
@@ -1087,7 +1125,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\begin{document}",
         title_page(card, record, rows, summary, c, units, scored, rubric.version, probe_names(src)),
         r"\tableofcontents",
-        r"\chapter{The problem}\label{ch:problem}", problem_chapter(spec, card, c, units, figures, src.spec),
+        r"\chapter{The problem}\label{ch:problem}", problem_chapter(spec, card, c, units, figures, src.spec, tension_choices(src.team_files)),
         r"\chapter{The physics: how our engine solves it}\label{ch:physics}",
         physics_chapter(theory, rec_deck, rec_solution, record, rows, deck_units, TEST_CODES[spec.kind][0], tuple(spec.output.fpf_criteria)),
         r"\chapter{Building the part in our engine}\label{ch:engine}", engine_chapter(src, deck, deck_units, committed),

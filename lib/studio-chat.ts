@@ -66,9 +66,15 @@ export function libraryThickness(form: StudioForm): number | null {
   return form.library ? libraryConstantsIn(form.library, unitsOf(form))?.ply_thickness ?? null : null;
 }
 
-/** The rows a step needs before the chat moves on; the setup check still judges them all. */
-export function missingIn(step: ChatStep, form: StudioForm): string[] {
+/** The steps of the tension screen's chat (ADR-0090): the material and the layup, the size only under no standard, then the review; the
+ * software chooses every other row. */
+export const SIMPLE_STEPS: ChatStep[] = ["material", "layup", "geometry", "review"];
+
+/** The rows a step needs before the chat moves on; the setup check still judges them all. `simple` is the tension screen's chat. */
+export function missingIn(step: ChatStep, form: StudioForm, simple = false): string[] {
   const need = (keys: string[]) => keys.filter((key) => !filled(form, key));
+  if (simple && !SIMPLE_STEPS.includes(step)) return [];
+  if (simple && step === "geometry") return (form.test ?? "").trim() && (form.standard ?? "").trim() === "none" ? need(["length", "width", "tab_length"]) : [];
   switch (step) {
     case "test": return need(["test", ...((standardOf(form)?.variant_words.length ?? 0) > 0 ? ["specimen"] : [])]);
     case "material":
@@ -90,9 +96,9 @@ export function missingIn(step: ChatStep, form: StudioForm): string[] {
   }
 }
 
-/** The first step with something missing, or the review. */
-export function nextStep(form: StudioForm): ChatStep {
-  for (const step of STEP_ORDER) if (missingIn(step, form).length) return step;
+/** The first step with something missing, or the review; `simple` walks the tension screen's steps only. */
+export function nextStep(form: StudioForm, simple = false): ChatStep {
+  for (const step of simple ? SIMPLE_STEPS : STEP_ORDER) if (missingIn(step, form, simple).length) return step;
   return "review";
 }
 
