@@ -13,7 +13,7 @@ import type { CouponRun } from "./use-coupon-run";
  * a live solve after LIVE_DEBOUNCE_MS, the previous one aborted; a setup that loses a row drops the last answer, which no longer stands. Not
  * while a full run is going, and never for the fibre tow, which has no model. The page computes nothing: it sends the rows. */
 export function useLiveSolve(apiBaseUrl: string, form: StudioForm, plate: PlateLists, run: CouponRun): void {
-  const { solveLive, dropLive, liveFor, job } = run;
+  const { solveLive, dropLive, cancelLive, liveFor, living, job } = run;
   const running = isActive(job?.state);
   const asked = useRef<string | null>(null); // the rows last sent, answered or not: never sent twice in a row
   useEffect(() => {
@@ -27,8 +27,9 @@ export function useLiveSolve(apiBaseUrl: string, form: StudioForm, plate: PlateL
     const rows = { ...form, filled_by: (form.filled_by ?? "").trim() || remembered(RUN_BY_KEY) }; // as the rail names the file when it solves
     const values = buildValues(rows, form.test === PLATE_TEST ? plateValues(plate) : undefined);
     const key = liveKey(values);
+    if (living && asked.current !== null && asked.current !== key) { cancelLive(); asked.current = null; } // the answer on its way is for rows that no longer stand
     if (!shouldSolveLive({ api: Boolean(apiBaseUrl), complete, running, tow, key, sent: asked.current === key ? key : liveFor })) return;
     const timer = window.setTimeout(() => { asked.current = key; void solveLive(values, key); }, LIVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [apiBaseUrl, form, plate, running, liveFor, solveLive, dropLive]);
+  }, [apiBaseUrl, form, plate, running, liveFor, living, solveLive, dropLive, cancelLive]);
 }

@@ -57,6 +57,8 @@ How the fields reach the page:
   - `api/tests/test_live_api.py`: ready, blocked, one warm worker kept, a worker that errs kept, one that stops replaced, slow is 504 and replaced, busy is 429, no workers, no uv, the setting, and the record.
 - Part 4 (the page): once the setup has every row but the engineer's name, each settled edit, on a panel or in the chat, asks for a live solve 800 ms after it, the previous one aborted, never while a full run goes and never for the fibre tow (`lib/studio-live.ts` `shouldSolveLive`, `setupComplete`; `components/studio/use-live-solve.ts`, mounted once in the project provider; `useCouponRun` keeps the answer and takes the check from it). The centre shows the newer of the live answer and the full run's fields: the live one under a banner, "Preview: our kernel, answered in 0.6 s; not yet checked by CalculiX or the mesh study", dimmed while a newer one is on its way. The rail's button reads Run full analysis.
 
+- Fixed after CI, 2026-11-10: on a slower runner a live answer landed after the engineer had checked or started the full run, replaced the check (so the chat's Run went stale) and could take the stage. Now a live answer for rows already checked, or one sent before the latest check, leaves that check in place; starting the full run cancels a live request on its way; and rows that move on cancel the request for the old ones. The browser mock's live route answers only when a scenario asks (`live`), and `THROTTLE=<n>` slows the browser's CPU to meet CI's timing on this machine: the studio suite passes at six times slower.
+
 ## Why (evidence)
 
 - The measurements: [docs/evaluations/fea/2026-11-10-live-solve.md](../evaluations/fea/2026-11-10-live-solve.md).
