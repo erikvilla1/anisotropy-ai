@@ -32,7 +32,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from anisotropy_fea import paths
+from anisotropy_fea import enabled, paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.case_pages import CasePageError, read_case
 from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, setup_checklist
@@ -138,6 +138,10 @@ def values(name: str, root: Path) -> dict:
         spec = load_spec(spec_path)
     except (SpecError, ValueError) as exc:
         raise IntakeError(f"{name}: its spec no longer passes the checks, so it cannot be reopened: {str(exc).splitlines()[0]}") from None
+    try:
+        enabled.refuse_hidden_kind(spec.kind, name)  # a coupon of a test the studio does not offer yet stays kept, not reopened (ADR-0089)
+    except enabled.NotOffered as exc:
+        raise IntakeError(str(exc)) from None
     return values_of_spec(spec)
 
 

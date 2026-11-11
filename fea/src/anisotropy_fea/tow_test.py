@@ -23,7 +23,7 @@ from typing import Any
 
 from anisotropy_engine import tow as engine
 
-from . import forms
+from . import enabled, forms
 from .checks import CheckItem, Checklist
 from .intake import FORM_VERSION, IntakeError
 from .spec import TOW_TEST, test_name
@@ -597,6 +597,11 @@ def tow_answer(path: Path | str) -> dict:
     except IntakeError as exc:
         note("identity", "fail", str(exc))
         problems = (str(exc),)
+        values = None
+    if not enabled.all_tests():  # one workflow first: the unnotched tension coupon only (ADR-0089); nothing is calculated
+        message = f"Test: {TOW_TEST} is {enabled.NOT_AVAILABLE}"
+        note("identity", "fail", message, label_of("test"))
+        problems = (message, *problems)
         values = None
     if values is not None:
         for item_id in ("identity", "fibre", "test", "specimens"):

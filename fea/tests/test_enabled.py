@@ -80,3 +80,114 @@ def test_the_form_definition_carries_the_list_and_never_the_switch(monkeypatch):
     assert block["tests"] == ["unnotched tension"] and block["standards"] == ["ASTM D3039/D3039M-17"]
     assert block["material_kinds"] == ["plies"] and block["dogbone"] is False and block["switch"] == ALL_TESTS_VARIABLE
     assert "ADR" not in block["not_available"]  # a sentence the page shows the engineer
+
+
+# --------------------------------------------------------------------------------------------- part 2: the software refuses them
+
+import importlib.util as _importlib_util
+import json
+import sys
+from pathlib import Path
+
+from anisotropy_fea.checks import setup_checklist
+from anisotropy_fea.enabled import NotOffered, offered_words, refuse_hidden_kind
+from anisotropy_fea.intake import FORM_VERSION, read_values
+from anisotropy_fea.tow_test import tow_answer
+
+from test_checks import TOOLS, by_id
+from test_intake import OHT_FILL, PUBLIC_FILL
+
+NOT_AVAILABLE = "is not available yet: the studio offers the unnotched tension coupon"
+
+
+@pytest.fixture(autouse=True)
+def versions(monkeypatch):
+    monkeypatch.setattr("anisotropy_fea.checks.ccx_version", lambda ccx: "2.22" if ccx is not None else None)  # as tests/test_checks.py
+
+
+@pytest.fixture
+def closed(monkeypatch):
+    """The switch off, as on the hosted tier (the shared set-up turns it on for every other test)."""
+    monkeypatch.setenv(ALL_TESTS_VARIABLE, "off")
+
+
+def checked(folder: Path, values: dict, **changes):
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "values.json"
+    path.write_text(json.dumps({"form_version": FORM_VERSION, **values, **changes}), encoding="utf-8")
+    return setup_checklist(read_values(path), folder / "none", **TOOLS)[0]
+
+
+def load_tool(name: str, monkeypatch):
+    tools = paths.ROOT / "fea" / "tools"
+    monkeypatch.syspath_prepend(str(tools))  # run_coupon imports regenerate_decks from its own folder
+    spec = _importlib_util.spec_from_file_location(name, tools / f"{name}.py")
+    module = _importlib_util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)  # a dataclass looks its module up there
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_with_the_switch_off_the_tension_coupon_under_no_standard_or_d3039_is_ready(tmp_path, closed):
+    assert checked(tmp_path / "none", PUBLIC_FILL).state == "ready"
+    d3039 = checked(tmp_path / "d3039", PUBLIC_FILL, standard="ASTM D3039/D3039M-17", strain_device="extensometer", strain_length=25.0)
+    assert not any(NOT_AVAILABLE in p for p in d3039.problems)
+
+
+def test_with_the_switch_off_a_hidden_test_is_refused_on_its_test_row(tmp_path, closed):
+    answer = checked(tmp_path, OHT_FILL)
+    assert answer.state == "blocked"
+    assert "Test: open-hole tension " + NOT_AVAILABLE in "\n".join(answer.problems)
+    assert any("not available yet" in item.message for item in answer.items if item.state in ("fail", "missing"))
+
+
+def test_with_the_switch_on_the_same_hidden_test_is_judged_as_before(tmp_path):
+    answer = checked(tmp_path, OHT_FILL)
+    assert not any("not available yet" in p for p in answer.problems)
+
+
+@pytest.mark.parametrize(("changes", "words"), [
+    ({"standard": "ASTM D638-22"}, "ASTM D638-22 " + NOT_AVAILABLE),
+    ({"material_kind": "isotropic", "thickness": 3.2, "own_E": 3000.0, "own_nu": 0.35}, "one isotropic material " + NOT_AVAILABLE),
+    ({"narrow_width": 13.0, "narrow_length": 57.0, "radius": 76.0}, "a dog-bone " + NOT_AVAILABLE),
+])
+def test_with_the_switch_off_d638_its_dogbone_and_one_isotropic_material_are_refused(tmp_path, closed, changes, words):
+    answer = checked(tmp_path, PUBLIC_FILL, **changes)
+    assert answer.state == "blocked"
+    assert words in "\n".join(answer.problems)
+
+
+def test_with_the_switch_off_the_tow_calculation_is_refused(tmp_path, closed):
+    path = tmp_path / "tow.json"
+    path.write_text(json.dumps({"form_version": FORM_VERSION, "test": "fibre tow tension", "filled_by": "A. Tester", "fibre": "a 12K carbon tow",
+                                "specimens": [{"id": "1", "max_force": 2150, "status": "valid"}]}), encoding="utf-8")
+    answer = tow_answer(path)
+    assert answer["checklist"]["state"] == "blocked" and answer["result"] is None
+    identity = next(item for item in answer["checklist"]["items"] if item["id"] == "identity")
+    assert "fibre tow tension " + NOT_AVAILABLE in identity["message"]
+
+
+def test_a_stored_coupon_of_a_hidden_test_is_kept_and_not_reopened_or_run(tmp_path, closed, monkeypatch):
+    with pytest.raises(NotOffered, match="its test, open-hole tension, is not available yet"):
+        refuse_hidden_kind("open_hole_tension", "IM7-OHT-L1", False)
+    refuse_hidden_kind("unnotched_tension", "IM7-UNT-L1", False)
+    refuse_hidden_kind("open_hole_tension", "IM7-OHT-L1", True)
+    name = "IM7-OHT-L9"
+    ours = tmp_path / name / paths.OURS
+    ours.mkdir(parents=True)
+    (ours / f"{name}.toml").write_text((paths.CHECKS / "open-hole-im7-8552" / "open-hole-im7-8552.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    studio = load_tool("studio_tool", monkeypatch)
+    with pytest.raises(studio.IntakeError, match="not available yet"):
+        studio.values(name, tmp_path)
+    run_coupon = load_tool("run_coupon", monkeypatch)
+    monkeypatch.setattr(run_coupon.paths, "ours", lambda coupon: tmp_path / coupon / paths.OURS)
+    with pytest.raises(run_coupon.Refused, match="not available yet"):
+        run_coupon.refuse_hidden(name)
+
+
+def test_the_blank_excel_form_offers_what_the_studio_offers():
+    assert offered_words("test", ("unnotched tension", "open-hole tension"), False) == ("unnotched tension",)
+    assert offered_words("standard", ("none", "ASTM D3039/D3039M-17", "ASTM D638-22"), False) == ("none", "ASTM D3039/D3039M-17")
+    assert offered_words("material_kind", ("plies", "isotropic"), False) == ("plies",)
+    assert offered_words("units", ("mm-MPa", "in-psi"), False) == ("mm-MPa", "in-psi")
+    assert offered_words("test", ("unnotched tension", "open-hole tension"), True) == ("unnotched tension", "open-hole tension")

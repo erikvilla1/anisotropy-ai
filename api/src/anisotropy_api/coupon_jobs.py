@@ -95,6 +95,14 @@ class CheckTimedOut(RuntimeError):
     """The studio tool did not answer in time."""
 
 
+# The words the fea package puts in every refusal of a test the studio does not offer yet (anisotropy_fea.enabled.NOT_AVAILABLE).
+NOT_OFFERED = "not available yet"
+
+
+class NotOffered(ValueError):
+    """A stored coupon of a test the studio does not offer yet (ADR-0089): a 422, not a failure of the tool."""
+
+
 class UnknownCoupon(KeyError):
     """No coupon of that name on this machine."""
 
@@ -728,6 +736,8 @@ class CouponJobs:
             message = (done.stderr.strip().splitlines() or ["no message"])[-1]
             if "no coupon of that name" in message:
                 raise UnknownCoupon(message)
+            if NOT_OFFERED in message:  # a coupon of a test the studio does not offer yet (ADR-0089): kept, not reopened
+                raise NotOffered(message.removeprefix("studio_tool: "))
             raise JobRefused("the studio tool failed: " + message)
         return json.loads(done.stdout)
 

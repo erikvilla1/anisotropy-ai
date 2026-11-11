@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from anisotropy_fea import __version__, paths
+from anisotropy_fea import __version__, enabled, paths
 from anisotropy_fea.standards.conformance import conformance
 from anisotropy_fea.test_quantities import STRAIN_PROBES
 from anisotropy_fea.attempts import AttemptError, attempt_number, attempts, start_attempt
@@ -147,6 +147,17 @@ def calculix() -> str:
     if version is None:
         raise Refused(f"{ccx} printed no version for -v; nothing was written")
     return version
+
+
+def refuse_hidden(name: str) -> None:
+    """A coupon of a test the studio does not offer yet (ADR-0089) is not run: its spec's kind is read before anything is written."""
+    spec_path = paths.ours(name) / f"{name}.toml"
+    if not spec_path.is_file():
+        return  # check_coupon has named what is missing
+    try:
+        enabled.refuse_hidden_kind(load_spec(spec_path).kind, name)
+    except enabled.NotOffered as exc:
+        raise Refused(str(exc)) from None
 
 
 def check_coupon(name: str) -> None:
@@ -309,6 +320,7 @@ def run(source: str, run_by: str, machine: str | None = None, replace: bool = Fa
         name = source
     progress.coupon = name
     check_coupon(name)
+    refuse_hidden(name)  # one workflow first: a stored coupon of a hidden test is kept, not run (ADR-0089)
     wait_at_gate(gate, progress)
     folder = paths.local_test(name)
     spec, twin = paths.ours(name) / f"{name}.toml", paths.ours(name) / f"{name}-nodal.toml"
