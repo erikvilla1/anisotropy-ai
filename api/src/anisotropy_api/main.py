@@ -4,17 +4,20 @@ import datetime as dt
 import hashlib
 import json
 import math
+import tempfile
 import tomllib
 import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from importlib.metadata import version
+from pathlib import Path
 from typing import Annotated, TypeVar
 
 import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
@@ -29,6 +32,7 @@ from .access import AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
+from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
                           studio_command)
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
@@ -37,7 +41,7 @@ from .settings import allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore, sync
 from .schemas import (
     AnalysisRequest, AnalysisResponse, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
-    TowTestRequest, TowTestResponse,
+    LiveSolveResponse, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
@@ -96,9 +100,12 @@ async def lifespan(app: FastAPI):
     app.state.coupon_jobs = CouponJobs(runner_command(), job_recorder(app), studio=studio_command(), store=store, table=app.state.records,
                                        per_day=settings.jobs_per_user_per_day if role != "solver" else None, role=role)
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
+    # our kernel's answer to every edit (ADR-0086): warm workers, started on the first live request
+    app.state.live = LiveSolver(studio_command(), Path(tempfile.gettempdir()) / "anisotropy-live", settings.live_workers)
     # Behind Cloudflare Access, every request but /healthz must carry a valid token (ADR-0056); None means no sign-in, the local API.
     app.state.access_verifier = access_verifier(settings.access) if settings.access.on else None
     yield
+    app.state.live.close()
     app.state.access_verifier = None
     if app.state.records is not None:
         app.state.records.dispose()
@@ -114,6 +121,8 @@ app = FastAPI(
 
 # The Access check sits inside the CORS layer (the last middleware added is the outermost), so a preflight is answered without a
 # token and a refusal still carries the CORS headers the browser needs to show it (ADR-0056).
+# A live solve's fields run to megabytes of JSON (ADR-0086): compressed for the browser that asks, innermost so Access and CORS see it whole.
+app.add_middleware(GZipMiddleware, minimum_size=2048)
 app.add_middleware(AccessMiddleware)
 
 # Only the website origins named in ANISOTROPY_ALLOWED_ORIGINS, or without it the local development origins, may read API
@@ -441,6 +450,36 @@ def check_coupon_setup(problem: CouponCheckRequest, actor: Actor, request: Reque
     if problem.project_id is not None:
         _note_check(request, actor, problem.project_id, body)
     return body
+
+
+@app.post(COUPON_JOBS + "/live", response_model=None, responses={200: {"model": LiveSolveResponse}})
+def live_solve(problem: CouponCheckRequest, actor: Actor, request: Request) -> Response:
+    """Our kernel's answer to the rows as they stand (ADR-0086): the setup check and, when nothing blocks, the kernel's fields with
+    the answer (ADR-0085) and the explanation, a preview with no mesh study, no CalculiX, no attempt and no document; the full run
+    stays `POST /v1/coupon-jobs`. A warm worker answers a strip in under a second. Recorded with its actor (ADR-0026): the record
+    keeps the check's state, the summary and the fields' SHA-256, never the arrays. The fields are passed on as the package wrote
+    them. 429 when every live solver stays busy, 504 when one does not answer in time, 503 when none can run."""
+    live: LiveSolver = request.app.state.live
+    try:
+        found = live.solve(problem.values_bytes())
+    except LiveBusy as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except LiveTimedOut as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except LiveRefused as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    fields = found.raw.get("fields")
+    designation = found.checklist.get("designation")
+    run_id = _record(request, actor, problem.receipt(), response={
+        "state": found.state, "designation": designation, "solver": "kernel", "warm": found.warm, "seconds": round(found.seconds, 3),
+        "timings": found.timings, "summary": found.summary,
+        "fields_sha256": hashlib.sha256(fields).hexdigest() if fields is not None else None})
+    head = {"run_id": None if run_id is None else str(run_id), "state": found.state, "designation": designation, "solver": "kernel",
+            "warm": found.warm, "seconds": round(found.seconds, 3), "timings": found.timings}
+    parts = [json.dumps(head)[1:-1].encode("utf-8")]
+    for name in ("checklist", "preview", "fields", "explanation"):
+        parts.append(f'"{name}":'.encode("utf-8") + (found.raw[name].strip() if name in found.raw else b"null"))
+    return Response(content=b"{" + b",".join(parts) + b"}", media_type="application/json", headers=_run_header(run_id))
 
 
 @app.post("/v1/tow-tests", response_model=TowTestResponse)

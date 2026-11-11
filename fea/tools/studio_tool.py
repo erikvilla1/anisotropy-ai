@@ -3,22 +3,33 @@
     uv run python tools/studio_tool.py check <values.json> --out <dir>     # checklist.json, and preview.json when the inputs build a model
     uv run python tools/studio_tool.py coupons                              # every coupon on this machine, as JSON on stdout
     uv run python tools/studio_tool.py values <coupon>                      # a coupon's rows, as the values JSON the studio edits
-    uv run python tools/studio_tool.py fixtures <values.json> --out <dir>   # check + a kernel solve: the files the browser tests read
+    uv run python tools/studio_tool.py live <values.json> --out <dir>       # check + our kernel, no mesh study or CalculiX: the edit-by-edit preview
+    uv run python tools/studio_tool.py serve                                # `live` again and again, one JSON line per request: the API's warm worker
+    uv run python tools/studio_tool.py fixtures <values.json> --out <dir>   # live + the mesh study: the files the browser tests read
     uv run python tools/studio_tool.py tow <values.json> --out <dir>        # a fibre tow record (ASTM D4018): tow.json, its checklist and result
 
 `check` judges a values file the way `tools/run_coupon.py` will (`checks.setup_checklist`) and exits 0 whatever it finds: the
 checklist says. `coupons` reads each coupon's spec and case page. `values` is the inverse of the form's reading
-(`intake.values_of_spec`). `fixtures` runs the checks and our engine on the public values given and writes checklist.json,
-preview.json, fields.json and explanation.json, so the browser tests need neither CalculiX nor the API. --root moves the coupons'
+(`intake.values_of_spec`). `live` runs the checks and, when nothing blocks, our engine alone (ADR-0086): checklist.json, preview.json,
+fields.json and explanation.json, with the answer (ADR-0085), and timings.json, each stage's seconds; no mesh study, no CalculiX, no attempt,
+no document. `serve` is `live` kept warm (ADR-0086): it imports the package once, prints {"ready": true}, then reads one JSON request
+per line on stdin, {"values": <path>, "out": <folder>}, and answers each with one line, {"state": ...} or {"error": ...}; anything else
+it would print goes to stderr. `fixtures` is `live` and the mesh study a run adds (ADR-0068), on the public values given, so the browser
+tests need neither CalculiX nor the API. --root moves the coupons'
 folder (default .local/fea) for tests. `tow` reads a fibre tow record, which is no coupon (ADR-0074), and writes its checklist and,
 when nothing blocks, its result (`tow_test.tow_answer`); it exits 0 whatever it finds. Nothing here computes a result: the modules named do.
 """
 
 from __future__ import annotations
 
+import time
+
+_STARTED = time.perf_counter()  # the imports below are most of a live solve's start-up (ADR-0086)
+
 import argparse
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 from anisotropy_fea import paths
@@ -38,11 +49,41 @@ from anisotropy_fea.tow_test import tow_answer
 from anisotropy_fea.units import deck_units_of
 from anisotropy_fea.write_abaqus import write_abaqus
 
+IMPORT_SECONDS = time.perf_counter() - _STARTED
+# The full run's own tools: CalculiX, which checks our result, and the document builder. Our kernel needs neither, so a live solve goes
+# ahead without them; the checklist still says so, and the full run stays blocked until they are installed (ADR-0086).
+RUN_ONLY = ("solver", "document")
+
 
 def write_json(path: Path, data) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     return path
+
+
+def write_compact(path: Path, data) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8", newline="\n")
+    return path
+
+
+def serve(root: Path) -> None:
+    """`live` kept warm for the API (ADR-0086): one JSON request per line on stdin, one JSON answer per line on stdout, until stdin closes.
+    A request that fails is answered with its error and the worker stays; everything `live` prints goes to stderr, so stdout carries the
+    answers alone."""
+    answers = sys.stdout
+    sys.stdout = sys.stderr
+    print(json.dumps({"ready": True, "imports": IMPORT_SECONDS}), file=answers, flush=True)
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        started = time.perf_counter()
+        try:
+            request = json.loads(line)
+            answer = {"state": live(Path(request["values"]), Path(request["out"]), root, started=started)}
+        except Exception as exc:  # the worker outlives a bad request: the API reads the error and asks again
+            answer = {"error": f"{type(exc).__name__}: {exc}".splitlines()[0]}
+        print(json.dumps(answer), file=answers, flush=True)
 
 
 def unreadable(path: Path, message: str) -> Checklist:
@@ -91,26 +132,78 @@ def values(name: str, root: Path) -> dict:
     return values_of_spec(load_spec(spec_path))
 
 
-def fixtures(values_path: Path, out: Path, root: Path) -> None:
-    form = read_input(values_path)
-    checklist, model, quality = setup_checklist(form, root)
-    write_json(out / "checklist.json", checklist.as_dict())
-    if model is None:
-        raise IntakeError("the values do not build a model: " + "; ".join(checklist.problems))
-    write_json(out / "preview.json", preview_data(model, quality))
+def solved(model, quality, timings: dict[str, float]) -> tuple[dict, dict]:
+    """Our kernel on the model the check built: the Abaqus deck as a run writes it, read back and solved, and the fields with the answer
+    (ADR-0085). The deck goes to a folder of its own that is removed after, so nothing but the JSON is left behind."""
     spec = model.spec
-    deck_text = write_abaqus(model)
-    deck_path = out / f"{spec.coupon.designation if spec.coupon else 'coupon'}-abaqus.inp"
-    deck_path.write_text(deck_text, encoding="utf-8", newline="\n")
-    deck = read_deck(deck_path, deck_units_of(spec.units))  # the deck is in a deck system; the fields come back in the stated one (ADR-0061)
+    clock = time.perf_counter()
+    with tempfile.TemporaryDirectory(prefix="live-") as folder:
+        deck_path = Path(folder) / f"{spec.coupon.designation if spec.coupon else 'coupon'}-abaqus.inp"
+        deck_path.write_text(write_abaqus(model), encoding="utf-8", newline="\n")
+        deck = read_deck(deck_path, deck_units_of(spec.units))  # the deck is in a deck system; the fields come back in the stated one (ADR-0061)
+    timings["deck"] = time.perf_counter() - clock
+    clock = time.perf_counter()
     solution = solve_deck(deck)
+    timings["solve"] = time.perf_counter() - clock
     coupon = {"designation": spec.coupon.designation if spec.coupon else None, "title": spec.title, "kind": spec.kind,
               "test": TEST_CODES[spec.kind][1], "layup": layup_text(spec)}
+    clock = time.perf_counter()
     data = field_data(deck, solution, spec.units, criteria=tuple(spec.output.fpf_criteria), quality=quality, coupon=coupon, method=method_inputs(spec))
-    data["summary"]["convergence"] = convergence_study(spec)  # as a run writes it into the fields (ADR-0068)
-    write_json(out / "fields.json", data)
-    write_json(out / "explanation.json", explanation(data["summary"], coupon, spec.units, data["labels"], checklist.as_dict()))
-    print(f"written checklist.json, preview.json, {deck_path.name}, fields.json, explanation.json in {out}")
+    timings["fields"] = time.perf_counter() - clock
+    return data, coupon
+
+
+def solvable(checklist: Checklist, model) -> bool:
+    """Our kernel can answer: the model builds, and nothing blocks but the full run's own tools (RUN_ONLY)."""
+    return model is not None and all(item.state not in ("fail", "missing") or item.id in RUN_ONLY for item in checklist.items)
+
+
+def live(values_path: Path, out: Path, root: Path, started: float | None = None) -> str:
+    """The edit-by-edit preview (ADR-0086): the setup check and, when nothing blocks, our kernel's solve with its answer and explanation;
+    the seconds of each stage in timings.json. Returns the checklist's state. Nothing is recorded as an attempt and no file is kept."""
+    timings: dict[str, float] = {"imports": IMPORT_SECONDS} if started is None else {}  # a warm worker imported once, before
+    clock = time.perf_counter()
+    try:
+        form = read_input(values_path)
+    except IntakeError as exc:
+        write_json(out / "checklist.json", unreadable(values_path, str(exc)).as_dict())
+        write_json(out / "timings.json", timings)
+        print(f"blocked: {exc}")
+        return "blocked"
+    checklist, model, quality = setup_checklist(form, root)
+    timings["check"] = time.perf_counter() - clock
+    write_json(out / "checklist.json", checklist.as_dict())
+    if model is not None:
+        write_json(out / "preview.json", preview_data(model, quality))
+    if not solvable(checklist, model):
+        write_json(out / "timings.json", timings)
+        print(f"{checklist.state}: nothing solved")
+        return checklist.state
+    data, coupon = solved(model, quality, timings)
+    clock = time.perf_counter()
+    write_compact(out / "fields.json", data)  # the largest file by far: no indent (ADR-0086)
+    write_json(out / "summary.json", data["summary"])  # what the API records of a live solve, without reading the fields again
+    write_json(out / "explanation.json", explanation(data["summary"], coupon, model.spec.units, data["labels"], checklist.as_dict()))
+    timings["write"] = time.perf_counter() - clock
+    timings["total"] = time.perf_counter() - (_STARTED if started is None else started)
+    write_json(out / "timings.json", timings)
+    print(f"{checklist.state}: {checklist.designation}, solved by our kernel in {timings['solve']:.2f} s, {timings['total']:.2f} s in all")
+    return checklist.state
+
+
+def fixtures(values_path: Path, out: Path, root: Path) -> None:
+    """`live` and the mesh study a run writes into the fields (ADR-0068): the files the browser tests read."""
+    live(values_path, out, root)
+    if not (out / "fields.json").is_file():
+        raise IntakeError("the values do not build a model that can be solved: see checklist.json in " + str(out))
+    (out / "timings.json").unlink()  # a fixture is the result, not one machine's seconds
+    (out / "summary.json").unlink()  # it is inside fields.json
+    _, model, _ = setup_checklist(read_input(values_path), root)
+    fields_path = out / "fields.json"
+    data = json.loads(fields_path.read_text(encoding="utf-8"))
+    data["summary"]["convergence"] = convergence_study(model.spec)  # as a run writes it into the fields (ADR-0068)
+    write_json(fields_path, data)
+    print(f"written checklist.json, preview.json, fields.json, explanation.json in {out}")
 
 
 def main() -> None:
@@ -124,7 +217,11 @@ def main() -> None:
     commands.add_parser("coupons", help="every coupon on this machine, as JSON")
     p = commands.add_parser("values", help="a coupon's rows as the values JSON")
     p.add_argument("coupon")
-    p = commands.add_parser("fixtures", help="the checks and a kernel solve of a values file, for the browser tests")
+    p = commands.add_parser("live", help="the checks and our kernel's solve of a values file, no mesh study or CalculiX (the preview)")
+    p.add_argument("values", type=Path)
+    p.add_argument("--out", type=Path, required=True)
+    commands.add_parser("serve", help="live, kept warm: one JSON request per line on stdin, one answer per line on stdout")
+    p = commands.add_parser("fixtures", help="live and the mesh study of a values file, for the browser tests")
     p.add_argument("values", type=Path)
     p.add_argument("--out", type=Path, required=True)
     p = commands.add_parser("tow", help="a fibre tow record (ASTM D4018): write tow.json, its checklist and result")
@@ -138,6 +235,10 @@ def main() -> None:
             print(json.dumps(coupons(args.root), indent=1, ensure_ascii=False))
         elif args.command == "values":
             print(json.dumps(values(args.coupon, args.root), indent=1, ensure_ascii=False))
+        elif args.command == "live":
+            live(args.values, args.out, args.root)
+        elif args.command == "serve":
+            serve(args.root)
         elif args.command == "tow":
             answer = tow_answer(args.values)
             write_json(args.out / "tow.json", answer)
