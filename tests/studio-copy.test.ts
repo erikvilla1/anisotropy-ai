@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  bannedIn, checkText, customerText, downloadName, DOWNLOAD_LABELS, queueAhead, RUN_STEPS, runHeadline, runProblem, runSteps, shownSentence, verificationLine,
-  withSymbols,
+  bannedIn, checkText, customerText, downloadName, DOWNLOAD_LABELS, queueAhead, RUN_STEPS, runHeadline, runProblem, runStatus, runSteps, shownSentence,
+  verificationOf, withSymbols,
 } from "../lib/studio-copy";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
@@ -20,6 +20,10 @@ test("the pipeline's stages fold into five steps, and a job's state says which i
   assert.equal(states({ state: "done", stage: "the outputs", documents: "the package not written (Tectonic stopped)" }), "done done done done stopped");
   assert.equal(states({ state: "stopped", stage: "CalculiX" }), "done done stopped waiting waiting");
   assert.equal(states({ state: "running", stage: "a stage added later" }), "done done current waiting waiting"); // unknown: solving
+  assert.equal(states({ state: "stopped", stage: null }), "stopped waiting waiting waiting waiting"); // never taken up: it ended in the queue
+  const stored = (outputs: Record<string, string>) => runSteps({ state: "done", stage: "the outputs", documents: null, outputs }).map((s) => s.state).join(" ");
+  assert.equal(stored({ fields: "f" }), "done done done done stopped"); // read back from its row with no package stored: no report
+  assert.equal(stored({ fields: "f", package: "p" }), "done done done done done");
 });
 
 test("the run in a word, and a stopped run in plain language with what to do", () => {
@@ -38,14 +42,23 @@ test("the run in a word, and a stopped run in plain language with what to do", (
   assert.equal(runProblem(job({ state: "refused", message: "the layup is not symmetric" })), "The analysis did not start: the layup is not symmetric. Check the setup and run it again.");
   assert.equal(runProblem(job({ state: "refused", message: "run_coupon.py: CalculiX not found" })), "The analysis did not start. Check the setup and run it again.");
   assert.equal(runProblem(job({ state: "running" })), null);
+  assert.equal(runProblem(job({ state: "stopped", stage: null, message: "the solver could not run the job: gone" })),
+    "The analysis stopped before it started. Run it again; if it stops again, contact us.");
+  assert.equal(runHeadline({ ...job({ state: "done" }), outputs: { fields: "f" } }), "Done, report not written");
+  assert.equal(runStatus(job({ state: "done", documents: "written" }), "Files"), "Done. Results are in the centre, files under Files.");
+  assert.equal(runStatus(job({ state: "queued", message: "queued; 2 ahead" }), "Files"), "Queued (2 ahead).");
+  assert.equal(runStatus(job({ stage: "our engine" }), "Outputs"), "Solving…");
 });
 
-test("the verification line comes from the summary when it is there, else from the result line", () => {
-  assert.equal(verificationLine(null, { agree: "71 of 73", tolerance: 0.03 }), "Verified against reference solver: 71 of 73 values within 3 %");
-  assert.equal(verificationLine("57 of 57 recorded values agree with CalculiX; our reaction +0.31 % from CalculiX's"),
-    "Verified against reference solver: 57 of 57 values agree");
-  assert.equal(verificationLine(null), null);
-  assert.equal(verificationLine("the package not written"), null);
+test("the verification line says verified only when every value agrees, from the summary when it is there, else the result line", () => {
+  assert.deepEqual(verificationOf(null, { agree: "73 of 73", tolerance: 0.03 }), { line: "Verified against reference solver: 73 of 73 values within 3 %", verified: true });
+  assert.deepEqual(verificationOf("57 of 57 recorded values agree with CalculiX; our reaction +0.31 % from CalculiX's"),
+    { line: "Verified against reference solver: 57 of 57 values agree", verified: true });
+  // some values outside the tolerance: the line says how many, and is not a pass
+  assert.deepEqual(verificationOf(null, { agree: "71 of 73", tolerance: 0.03 }), { line: "Reference solver check: 71 of 73 values within 3 %", verified: false });
+  assert.deepEqual(verificationOf("52 of 57 recorded values agree with CalculiX"), { line: "Reference solver check: 52 of 57 values agree", verified: false });
+  assert.equal(verificationOf(null), null);
+  assert.equal(verificationOf("the package not written"), null);
 });
 
 test("a downloaded file is named by the standard and the layup, never by an internal code", () => {
@@ -72,6 +85,11 @@ test("the guard keeps the product's words and drops tools, files, paths and exit
   assert.equal(checkText({ state: "pass", message: "CalculiX 2.22 at C:\\Tools\\PrePoMax v2.6.0\\Solver\\ccx_dynamic.exe: the reference solver that checks our engine's result" }), "Ready.");
   assert.equal(checkText({ state: "fail", message: "CalculiX not found: set ANISOTROPY_CCX" }), "Not available right now. Try again later, or contact us.");
   assert.equal(checkText({ state: "pass", message: "version 2.22, ready" }), "version 2.22, ready");
+  // an item the engineer can act on keeps saying so when its own words cannot be shown
+  assert.equal(checkText({ state: "missing", message: "Your Abaqus mesh: give all three rows", rows: ["Element size (mm)"] }), "Fill in the inputs listed.");
+  assert.equal(checkText({ state: "fail", message: "the CalculiX twin cannot be written", rows: ["Element size (mm)"] }), "Change the inputs listed.");
+  assert.equal(checkText({ state: "pending", message: "CalculiX runs after the check" }), "Not checked yet.");
+  assert.deepEqual(bannedIn("its SPOOLES solver stopped"), ["SPOOLES"]);
 });
 
 test("an explanation sentence loses another viewer's aside, and the ASCII names become symbols", () => {

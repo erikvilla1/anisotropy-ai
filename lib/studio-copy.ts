@@ -13,6 +13,7 @@ export const BANNED_TERMS: { label: string; pattern: RegExp }[] = [
   { label: "Abaqus", pattern: /abaqus/i },
   { label: "PrePoMax", pattern: /prepomax/i },
   { label: "CalculiX", pattern: /calculix|\bccx\b/i },
+  { label: "SPOOLES", pattern: /spooles/i },
   { label: ".py", pattern: /\.py\b/i },
   { label: ".toml", pattern: /\.toml\b/i },
   { label: "the founder", pattern: /\bthe founder\b/i },
@@ -56,11 +57,13 @@ export const sentence = (text: string): string => (text ? text.charAt(0).toUpper
 
 /** A setup-check item's message as the page shows it: the package's words when they are fit to show, else the plain state. The
  * environment items (the reference solver, the document builder) name paths and programs, which stay in the check's record. */
-export function checkText(item: { state: string; message: string }): string {
+export function checkText(item: { state: string; message: string; rows?: string[] }): string {
   const said = customerText(item.message);
   if (said) return said;
   if (item.state === "pass") return "Ready.";
   if (item.state === "warn") return "Review this setting.";
+  if (item.state === "pending") return "Not checked yet.";
+  if (item.rows?.length) return item.state === "missing" ? "Fill in the inputs listed." : "Change the inputs listed.";
   return "Not available right now. Try again later, or contact us.";
 }
 
@@ -84,14 +87,20 @@ const STAGE_STEP: Record<string, RunStepId> = {
   "the package": "report", "the outputs": "report",
 };
 export const stepOfStage = (stage: string | null | undefined): RunStepId => (stage ? STAGE_STEP[stage] ?? "solving" : "meshing");
+/** The step a job is at: a job that ended before any stage (refused at the gate, or never taken up) ended in the queue. */
+const stepOfJob = (job: Pick<JobStatus, "state" | "stage">): RunStepId =>
+  !job.stage && (job.state === "stopped" || job.state === "refused") ? "queued" : stepOfStage(job.stage);
+/** A finished job whose report was not written: the outcome says so, or (a job read back from its row) no package was stored. */
+const reportMissing = (job: Pick<JobStatus, "documents"> & { outputs?: JobStatus["outputs"] }): boolean =>
+  job.documents ? job.documents !== "written" : job.outputs !== undefined && !("package" in job.outputs);
 const order = (id: RunStepId) => RUN_STEPS.findIndex((s) => s.id === id);
 
 export type StepState = "done" | "current" | "waiting" | "stopped";
 /** Each step's state for a job: everything before the job's step done, its step current (or stopped), the rest waiting. */
-export function runSteps(job: Pick<JobStatus, "state" | "stage" | "documents">): { id: RunStepId; label: string; state: StepState }[] {
-  const at = job.state === "queued" ? "queued" : job.state === "done" ? null : stepOfStage(job.stage);
+export function runSteps(job: Pick<JobStatus, "state" | "stage" | "documents"> & { outputs?: JobStatus["outputs"] }): { id: RunStepId; label: string; state: StepState }[] {
+  const at = job.state === "queued" ? "queued" : job.state === "done" ? null : stepOfJob(job);
   return RUN_STEPS.map((s) => {
-    if (at === null) return { ...s, state: s.id === "report" && job.documents && job.documents !== "written" ? "stopped" : "done" };
+    if (at === null) return { ...s, state: s.id === "report" && reportMissing(job) ? "stopped" : "done" };
     const k = order(s.id), here = order(at);
     const state: StepState = k < here ? "done" : k > here ? "waiting" : job.state === "stopped" || job.state === "refused" ? "stopped" : "current";
     return { ...s, state };
@@ -105,29 +114,29 @@ export function queueAhead(message: string | null | undefined): number | null {
 }
 
 /** The run in a few words: "Queued (1 ahead)", "Solving", "Done", "Stopped". */
-export function runHeadline(job: Pick<JobStatus, "state" | "stage" | "message" | "result" | "documents">): string {
+export function runHeadline(job: Pick<JobStatus, "state" | "stage" | "message" | "result" | "documents"> & { outputs?: JobStatus["outputs"] }): string {
   if (job.state === "queued") {
     const ahead = queueAhead(job.message);
     return ahead ? `Queued (${ahead} ahead)` : "Queued";
   }
   if (job.state === "running") return RUN_STEPS[order(stepOfStage(job.stage))].doing;
-  if (job.state === "done") return job.documents && job.documents !== "written" ? "Done, report not written" : "Done";
+  if (job.state === "done") return reportMissing(job) ? "Done, report not written" : "Done";
   if (job.state === "refused") return "Not started";
   return "Stopped";
 }
 
-const STEP_WORDS: Record<RunStepId, string> = { queued: "in the queue", meshing: "while meshing", solving: "while solving", post: "during post-processing", report: "while writing the report" };
+const STEP_WORDS: Record<RunStepId, string> = { queued: "before it started", meshing: "while meshing", solving: "while solving", post: "during post-processing", report: "while writing the report" };
 
 /** What went wrong and what to do next, in plain words; the pipeline's own message only when it is fit to show. */
-export function runProblem(job: Pick<JobStatus, "state" | "stage" | "message" | "documents">): string | null {
+export function runProblem(job: Pick<JobStatus, "state" | "stage" | "message" | "documents"> & { outputs?: JobStatus["outputs"] }): string | null {
   if (job.state === "refused") {
     const said = customerText(job.message);
     return `The analysis did not start${said ? `: ${said.replace(/\.$/, "")}` : ""}. Check the setup and run it again.`;
   }
   if (job.state === "stopped") {
-    return `The analysis stopped ${STEP_WORDS[stepOfStage(job.stage)]}. Run it again; if it stops again, contact us.`;
+    return `The analysis stopped ${STEP_WORDS[stepOfJob(job)]}. Run it again; if it stops again, contact us.`;
   }
-  if (job.state === "done" && job.documents && job.documents !== "written") return "The results are ready, but the report could not be written. Run the analysis again to retry.";
+  if (job.state === "done" && reportMissing(job)) return "The results are ready, but the report could not be written. Run the analysis again to retry.";
   return null;
 }
 
@@ -143,15 +152,25 @@ export function runDetail(job: Pick<JobStatus, "state" | "stage" | "result">): s
 
 // --------------------------------------------------------------------------------------------------------------- verification
 
-/** "Verified against reference solver: 57 of 57 values within 3 %", from the summary the package wrote when it is there, else from
- * the result line the pipeline reported ("57 of 57 recorded values agree with …"); null before the reference solver has run. */
-export function verificationLine(result: string | null | undefined, beside?: { agree: string; tolerance: number } | null): string | null {
-  if (beside && /\d+\s+of\s+\d+/.test(beside.agree)) {
-    const within = Number((100 * beside.tolerance).toPrecision(3));
-    return `Verified against reference solver: ${beside.agree.match(/\d+\s+of\s+\d+/)![0]} values within ${within} %`;
-  }
-  const m = result?.match(/(\d+)\s+of\s+(\d+)\s+recorded values agree/);
-  return m ? `Verified against reference solver: ${m[1]} of ${m[2]} values agree` : null;
+export type Verification = { line: string; verified: boolean };
+/** The reference solver's check in one line, from the summary the package wrote when it is there, else from the result line the
+ * pipeline reported ("57 of 57 recorded values agree with …"); null before the reference solver has run. "Verified" only when every
+ * value agrees; otherwise the line says how many did, and `verified` is false so the page does not show it as a pass. */
+export function verificationOf(result: string | null | undefined, beside?: { agree: string; tolerance: number } | null): Verification | null {
+  const counted = beside && /\d+\s+of\s+\d+/.test(beside.agree) ? beside.agree.match(/(\d+)\s+of\s+(\d+)/)
+    : result?.match(/(\d+)\s+of\s+(\d+)\s+recorded values agree/);
+  if (!counted) return null;
+  const [agree, of] = [Number(counted[1]), Number(counted[2])];
+  const how = beside && /\d+\s+of\s+\d+/.test(beside.agree) ? `within ${Number((100 * beside.tolerance).toPrecision(3))} %` : "agree";
+  return agree === of && of > 0
+    ? { line: `Verified against reference solver: ${agree} of ${of} values ${how}`, verified: true }
+    : { line: `Reference solver check: ${agree} of ${of} values ${how}`, verified: false };
+}
+
+/** The run's state in the side panel: the plain problem when it ended badly, else done with where the files are, else the headline. */
+export function runStatus(job: Parameters<typeof runProblem>[0] & Pick<JobStatus, "result">, filesUnder: string): string {
+  return runProblem(job) ?? (job.state === "done" ? `Done. Results are in the centre, files under ${filesUnder}.`
+    : `${runHeadline(job)}${job.state === "running" ? "…" : "."}`);
 }
 
 // --------------------------------------------------------------------------------------------------------------- the downloads

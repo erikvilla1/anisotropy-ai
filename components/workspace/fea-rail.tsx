@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { hiddenReason, isRowEnabled, isTestEnabled } from "@/lib/enabled-tests";
 import { couponValues, DOWNLOADS, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
-import { runHeadline, runProblem } from "@/lib/studio-copy";
+import { runStatus } from "@/lib/studio-copy";
 import { layupNotation } from "@/lib/studio-chat";
 import { JobFiles, namingOf } from "@/components/studio/job-files";
 import { buildValues, exampleForm, formFromValues, isIsotropic, PLATE_TEST, rowErrorsFrom, withStandard, withTest, type StudioForm } from "@/lib/studio-form";
@@ -243,7 +243,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
         <div className="studio-buttons">
           <button type="button" className="studio-button studio-button-primary" onClick={solve} disabled={busy || !apiBaseUrl || (checked !== null && checked.state !== "ready")} data-testid="solve-button">Run full analysis</button>
         </div>
-        {job ? <p className="studio-hint">{runProblem(job) ?? (job.state === "done" ? "Done. Results are in the centre, files under Outputs." : `${runHeadline(job)}${job.state === "running" ? "…" : "."}`)}</p> : null}
+        {job ? <p className="studio-hint">{runStatus(job, "Outputs")}</p> : null}
       </StepPanel>
 
       <StepPanel id="outputs" title="Outputs">

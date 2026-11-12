@@ -5,7 +5,7 @@ import { DOWNLOADS, explainJob, isActive, StudioError, type Convergence, type Ex
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
 import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
-import { customerText, shownSentence, verificationLine } from "@/lib/studio-copy";
+import { customerText, shownSentence } from "@/lib/studio-copy";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { JobFiles, namingOf } from "./job-files";
@@ -33,15 +33,11 @@ const xyz = (p: number[] | undefined) => (p && p.length === 3 ? ` (${p.map((v) =
 const COMPONENT: Record<string, string> = { S11: "σ₁ (fibre)", S22: "σ₂ (transverse)", S12: "τ₁₂ (in-plane shear)" };
 const criterionName = (criterion: string) => CRITERION_NAMES[criterion] ?? criterion.replace("_", " ");
 
-export function SummaryPanel({ fields, onShow, result = null }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void;
-  /** the run's result line, read for the verification line when the summary carries no reference solve */
-  result?: string | null }) {
+export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (element: number, ply: number, criterion: string, face?: string | null) => void }) {
   const s = fields.summary, lab = fields.labels, cx = s.calculix ?? null;
-  const verified = verificationLine(result, cx);
   return (
     <div className="studio-panel" data-testid="summary">
       <h3>Summary</h3>
-      {verified ? <p className="studio-ok" data-testid="summary-verified">{verified}</p> : null}
       <dl className="studio-summary">
         <div><dt>Applied</dt><dd>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}{s.applied.direction ? `, ${s.applied.direction}` : ""}</dd></div>
         <div><dt>Reaction at {s.reaction.set}</dt><dd data-testid="summary-reaction">{printed(Math.abs(s.reaction.value))} {lab.force} ({s.reaction.sense})
@@ -658,7 +654,7 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
           {picked !== null ? <ProbePanel fields={fields} table={probeTable(fields, picked)} /> : null}
         </div>
       ) : <p className="studio-muted studio-pick-hint">Click an element to read its values. The critical element is outlined in red.</p>}
-      <SummaryPanel fields={fields} onShow={show} result={job?.result ?? null} />
+      <SummaryPanel fields={fields} onShow={show} />
       <ExplanationPanel explanation={explanation} answer={answer} />
       {job && showFiles ? <Downloads apiBase={apiBase} job={job} fields={fields} /> : null}
     </div>

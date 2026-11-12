@@ -327,7 +327,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
                        "or the reverse?)", tuple(row(f"own_{name}") if name in ("E", "E1", "E2", "G12") else row(name) for name in suspicious))
         else:
             notes.note("units", "pass", f"every row in {units_words(units)}; the results come back in the same units"
-                       + (f"; the Abaqus and CalculiX decks are written in {units_words(deck_units)}, as every deck we solve is" if deck_units != units
+                       + (f"; the solver input is written in {units_words(deck_units)}" if deck_units != units
                           else f", and the decks are written in {units}"))
         # transverse shear: our membrane never uses G13 and G23, CalculiX's brick does, so a value far from G12 parts the two solvers
         low, high = material.G12 / TRANSVERSE_SHEAR_RATIO, material.G12 * TRANSVERSE_SHEAR_RATIO
@@ -335,8 +335,8 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         if odd:
             shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in odd)
             notes.note("material", "warn", f"{shown} against G12 = {from_si(material.G12, 'stress', units):g} {lab['stress']}: a transverse shear modulus "
-                       "this far from G12 is unusual for a tape; our membrane does not use it, CalculiX's brick does, so the two will part (on 2026-11-08 a "
-                       "coupon with 100 MPa put CalculiX's reaction 4.6 % from ours, 0.8 % with 4500 MPa)", tuple(row(name) for name in odd))
+                       "this far from G12 is unusual for a tape; the shell model does not use it, the reference solver's solid model does, so the two "
+                       "will differ (a coupon with 100 MPa put the reference reaction 4.6 % away, 0.8 % with 4500 MPa)", tuple(row(name) for name in odd))
         # geometry
         size = f"{length(g.length):g} by {length(g.width):g} {lab['length']}"
         if g.tab_length:
@@ -445,9 +445,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         if spec.mesh.mesher == "structured" and bricks > SPOOLES_LAYER_BRICKS:
             # SPOOLES, the image's only direct solver, stopped on one structured mesh of 24,000 layer bricks (55,733 equations) and ordered 17,850 on the
             # same coupon and an open-hole mesh of about 25,000; the count is where it has failed, not a rule (ADR-0030 amendment 5)
-            notes.note("mesh", "warn", f"the reference solve would be {bricks} layer bricks ({mesh.element_count} elements by {len(plies)} plies); its SPOOLES solver "
-                       f"stopped on a structured mesh of 24000 and ordered {SPOOLES_LAYER_BRICKS - 150} on the same coupon, so this run may stop while "
-                       "verifying; if it does, a coarser mesh solves", (row("element_size"), row("mesh_nx")))
+            notes.note("mesh", "warn", f"the reference solve would need {bricks} solid elements ({mesh.element_count} elements by {len(plies)} plies); "
+                       f"it has stopped at 24000 and run at {SPOOLES_LAYER_BRICKS - 150}, so this run may stop while verifying; if it does, "
+                       "a coarser mesh solves", (row("element_size"), row("mesh_nx")))
         if spec.mesh.mesher == "gmsh":
             version = gmsh()
             notes.note("mesh", "pass" if version else "fail", f"Gmsh {version} meshes the hole" if version else

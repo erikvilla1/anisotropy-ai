@@ -449,7 +449,7 @@ class CouponJobs:
         With `filename`, the link hands the file out under that name (ADR-0091)."""
         if self.store is None or key not in job.stored or (job.state not in ("done", "stopped") and job.folder is not None):
             return None
-        return self.store.link(job.stored[key]) if filename is None else self.store.link(job.stored[key], filename=filename)
+        return self.store.link(job.stored[key], filename=filename)
 
     def output_file(self, job: Job, key: str) -> Path:
         """One of the job's files by its key, from the outcome once it is done or from the progress while it runs: `package` is the

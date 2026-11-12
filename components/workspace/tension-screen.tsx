@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { hiddenReason } from "@/lib/enabled-tests";
 import { DOWNLOADS, isActive, StudioError } from "@/lib/studio-api";
-import { checkText, runHeadline, runProblem } from "@/lib/studio-copy";
+import { checkText, customerText, runStatus } from "@/lib/studio-copy";
 import { layupNotation, layupRows, parseLayup } from "@/lib/studio-chat";
 import { libraryOptions, NO_STANDARD, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
 import {
@@ -133,7 +133,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
         ) : null}
         {message ? <p className="studio-alert" role="alert">{message}</p> : null}
         {job ? <p className={job.state === "stopped" || job.state === "refused" ? "studio-alert" : "studio-status"} role="status" data-testid="status">
-          {runProblem(job) ?? (job.state === "done" ? "Done. Results are in the centre, files below." : `${runHeadline(job)}${job.state === "running" ? "…" : "."}`)}</p> : null}
+          {runStatus(job, "Files")}</p> : null}
       </StepPanel>
 
       <StepPanel id="tension-change" title="Change settings" open={!underD3039(form)} note="load, size, mesh">
@@ -146,7 +146,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
           <table className="studio-table" data-testid="tension-built">
             <thead><tr><th scope="col">Setting</th><th scope="col" className="studio-num-head">Value</th></tr></thead>
             <tbody>{built.map((line) => (
-              <tr key={line.key} data-row={line.key}><th scope="row" className="studio-wrap">{line.label}<span className="studio-muted studio-cell-note">{line.reason}</span></th>
+              <tr key={line.key} data-row={line.key}><th scope="row" className="studio-wrap">{line.label}<span className="studio-muted studio-cell-note">{customerText(line.reason) ?? ""}</span></th>
                 <td className="studio-num">{line.value}</td></tr>
             ))}</tbody>
           </table>

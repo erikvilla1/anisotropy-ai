@@ -397,7 +397,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
-        dropped={entry.answer.dropped} model={entry.answer.model} onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
+        dropped={entry.answer.dropped} onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
     } else content = answerMessage(entry.stamp);
     return (
       <div className="chat-assistant" key={entry.id}>

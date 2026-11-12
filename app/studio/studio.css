@@ -39,6 +39,7 @@
 .studio-muted { color: var(--muted); font-size: 12px; line-height: 1.6; }
 .studio-ok { color: var(--accent); font-size: 13px; }
 .studio-problem { color: #f6bba9; font-size: 13px; }
+.studio-warn { color: #e7c77a; font-size: 13px; }
 .studio-badge { font-family: var(--font); font-size: 11px; font-weight: 400; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
 .studio-badge-ready, .studio-badge-done { color: var(--bg); background: var(--accent); border-color: var(--accent); }
 .studio-badge-blocked, .studio-badge-stopped, .studio-badge-refused { color: #f6bba9; border-color: #785347; }

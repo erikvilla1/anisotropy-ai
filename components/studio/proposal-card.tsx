@@ -10,12 +10,11 @@ export type ProposalLine = { id: string; label: string; value: string; unit: str
 /** The model's reading of a message, for the engineer to confirm (ADR-0088): every value ticked by default except one that cannot go in,
  * the conditions it would turn on, a question when it asks one, and what the source guard did not take, with why. Nothing enters the
  * problem until Apply; the card then keeps what was applied. */
-export function ProposalCard({ lines, conditions, question, dropped, model, onApply }: {
+export function ProposalCard({ lines, conditions, question, dropped, onApply }: {
   lines: ProposalLine[];
   conditions: { id: string; title: string; quote: string }[];
   question: string | null;
   dropped: { key: string; reason: string }[];
-  model: string | null;
   onApply: (ids: Set<string>) => void;
 }) {
   const ids = [...lines.filter((l) => !l.blocked).map((l) => l.id), ...conditions.map((c) => `condition:${c.id}`)];

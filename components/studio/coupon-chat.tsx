@@ -24,7 +24,7 @@ import { useProject } from "./project-context";
 import { TOW_TEST } from "@/lib/studio-tow";
 import { hiddenReason, isTestEnabled, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
 import { tensionValues } from "@/lib/tension-screen";
-import { checkText, runHeadline, runProblem, verificationLine } from "@/lib/studio-copy";
+import { checkText, runHeadline, runProblem, verificationOf } from "@/lib/studio-copy";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
@@ -591,7 +591,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (!fields) return <p className="chat-note">Loading results…</p>;
     const s = fields.summary, lab = fields.labels;
     const earliest = s.earliest ? s.fpf[s.earliest] : null;
-    const verified = job ? verificationLine(job.result, s.calculix ?? null) : null;
+    const check = job ? verificationOf(job.result, s.calculix ?? null) : null;
     return (
       <div data-testid="chat-result">
         <h4>Results</h4>
@@ -604,7 +604,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           ) : <div><span>First-ply failure</span><strong>–</strong><small>no criterion selected</small></div>}
         </div>
         {earliest?.touches_grip ? <p className="chat-note">The first failure is at a grip edge.</p> : null}
-        {verified ? <p className="chat-ok" data-testid="chat-result-line"><Check size={13} /> {verified}</p> : null}
+        {check ? <p className={check.verified ? "chat-ok" : "chat-note"} data-testid="chat-result-line">{check.verified ? <Check size={13} /> : null} {check.line}</p> : null}
         {job && job.state !== "done" ? <p className="chat-note">{runHeadline(job)}{job.state === "running" && job.result ? ". The report follows." : "."}</p> : null}
         <Chips>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
@@ -628,7 +628,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else if (entry.kind === "job") content = job?.job_id === entry.job ? <ChatRun job={job} /> : <p className="chat-note">An earlier run.</p>;
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
-        dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))} model={entry.answer.model}
+        dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}
         onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
     }
     else content = resultMessage(entry.job);

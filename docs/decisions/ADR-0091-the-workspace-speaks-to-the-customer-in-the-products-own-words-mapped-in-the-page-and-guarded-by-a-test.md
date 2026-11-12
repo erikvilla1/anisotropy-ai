@@ -37,13 +37,15 @@ The PDF's contents are not changed: the package and its document are the team's 
 - API: the queued message is "queued" or "queued; N ahead"; `?name=` on `/files/{key}` and `/package`, checked by `storage.download_name`, set as `Content-Disposition` or the store link's `response-content-disposition`; the prompts carry `VOICE`.
 - fea: the setup check's solver and document lines name no program or path, a refused material says "not physically valid", the explanation's aside about another viewer is gone, the default tab length reads "56 mm by default".
 - The development view (`ANISOTROPY_ALL_TESTS=on`) keeps the form's Abaqus row labels under Advanced; the hosted tier never shows it.
+- After an independent review of the pull request (2026-11-12): the reasons the package gives for its default rows (the test, the units, the grips) and the setup check's units, transverse-modulus and mesh-size lines no longer name a program, and a fea test keeps every tension reason free of one; "Verified" is said only when every value agrees; a check item the guard hides still says what to do; a run that ended before any stage stopped "before it started"; a finished job with no stored package shows its report as not written; the verification line appears once, on the run card.
 
 ## Why (evidence)
 
 - The before and after text of the done page, from the same fixtures: 38 banned-term occurrences before, 0 after (screenshots and counts in the pull request).
 - `npm test`: 248 tests, 247 passed, 0 failed, 1 skipped; `npm run typecheck`: clean; `npm run test:studio`: 28 passed, among them the two new tests (no banned term from a fresh start to a finished run; a stopped run in plain words).
 - API, `uv run pytest`: 366 passed, 82 skipped, 2 failed: `test_a_slow_tool_is_a_504_and_a_broken_one_a_503` in the check and tow tests, which fail the same way on unchanged main (cca3928) on this machine. The database tests, the queue's message among them, need `TEST_DATABASE_URL` and are UNVERIFIED locally (CI runs them). The store link's `response-content-disposition` is signed offline in a test; that R2 honours it on a live link is UNVERIFIED.
-- fea and engine, `uv run pytest -q -ra tests ../engine/tests`: 1422 passed, 7 skipped (the team's local coupons), 2 failed. `test_every_number_in_a_sentence_is_a_fact` read the template's words, which were then restored ("in the ply's axes") and pass on a rerun; `test_calculix_gives_the_same_answer_on_every_run_of_a_deck` fails the same way on unchanged main on this machine.
+- fea and engine, `uv run pytest -q -ra tests ../engine/tests`: 1426 passed, 7 skipped (the team's local coupons), 1 failed: `test_calculix_gives_the_same_answer_on_every_run_of_a_deck`, which fails the same way on unchanged main (cca3928) on this machine.
+- CI on the pull request (first commit and the CI-timing fix): every job passed, the API's database tests among them.
 
 ## Consequences
 
