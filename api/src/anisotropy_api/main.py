@@ -34,14 +34,14 @@ from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .proposals import model_view_of_form, source_guard
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
-from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
+from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, NotOffered, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
                           studio_command)
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
                       owns_project, project_jobs, record_run, stop_orphans, update_project, upsert_project)
-from .settings import allowed_origins, environment, load_settings
+from .settings import all_tests, allowed_origins, environment, load_settings
 from .storage import R2Store, content_type, restore, sync
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
+    AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     LiveSolveResponse, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
@@ -716,6 +716,8 @@ def coupon_values(name: str, request: Request) -> CouponValuesOutput:
         return CouponValuesOutput(name=name, values=jobs.coupon_values(name))
     except UnknownCoupon as exc:
         raise HTTPException(status_code=404, detail=exc.args[0]) from exc
+    except NotOffered as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except CheckTimedOut as exc:
         raise HTTPException(status_code=504, detail=str(exc)) from exc
     except JobRefused as exc:
@@ -814,6 +816,14 @@ def workspace_assistant(request: Request) -> AssistantInfo:
     assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
     proposes = assistant.name != "template"
     return AssistantInfo(proposes=proposes, provider=assistant.name if proposes else None, model=getattr(assistant, "model", None) if proposes else None)
+
+
+@app.get("/v1/coupon-tests", response_model=CouponTests)
+def coupon_tests(request: Request) -> CouponTests:
+    """Whether every coupon test is offered here (ADR-0089); the page asks once and offers the unnotched tension coupon only unless this
+    says all. Not a run: nothing is computed or recorded. Without the startup's settings (a test client), the environment is read."""
+    settings = getattr(request.app.state, "settings", None)
+    return CouponTests(all=settings.all_tests if settings is not None else all_tests(environment()))
 
 
 @app.post("/v1/workspace/proposals", response_model=ProposalResponse)

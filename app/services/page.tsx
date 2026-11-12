@@ -19,7 +19,7 @@ const icons: Record<Service["slug"], typeof Layers3> = {
 };
 
 const media: Record<Service["slug"], { label: string; src?: string; alt?: string }> = {
-  "computer-aided-design": { label: "The studio's mesh of an open-hole coupon" },
+  "computer-aided-design": { label: "The studio's mesh of a D3039 tension coupon" },
   "finite-element-modeling": { label: "A solved coupon in the studio: the first ply to fail" },
   "test-plans": { label: "Coupon specimens before a tensile test", src: "/assets/images/coupon-01.jpg", alt: "A composite coupon specimen" },
   documentation: { label: "Pages of a coupon package: model chapter and comparison table" },

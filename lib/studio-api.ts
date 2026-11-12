@@ -71,7 +71,11 @@ export type Fields = {
     averages_note: string };
   element: { strain: number[][]; section_force: number[][]; centroids: number[][];
     curvature?: number[][]; moment?: number[][]; shear_force?: number[][]; shear_strain?: number[][];
-    ply: { stress_12: Faced<number[]>[][]; stress_xy: Faced<number[]>[][]; strain_12: Faced<number[]>[][]; mises: Faced<number>[][] };
+    ply: {
+      stress_12: Faced<number[]>[][]; stress_xy: Faced<number[]>[][]; strain_12: Faced<number[]>[][]; mises: Faced<number>[][];
+      /** Tresca, the three principal stresses and the pressure of each ply (ADR-0066 amendment 2); absent from a job solved before them. */
+      invariants?: Record<string, Faced<number>[][]>;
+    };
     failure: Record<string, { ratio: Faced<number | null>[][]; index: Faced<number>[][]; mode: Faced<number>[][]; worst_ply: number[]; worst_face?: string[];
       element_index: number[] }>; modes: string[] };
   /** Per field (ADR-0063): `element` and `nodal` spans; a list per ply, and per ply and face, for the ply fields; per criterion for the failure index. */
@@ -489,6 +493,20 @@ export function readProposalAnswer(payload: unknown): ProposalAnswer {
 export async function proposeRows(apiBase: string, request: ProposalRequest, signal?: AbortSignal): Promise<ProposalAnswer> {
   const payload = await call(`${base(apiBase)}/v1/workspace/proposals`, { method: "POST", headers, body: JSON.stringify(request), signal }, "the proposals");
   return readProposalAnswer(payload);
+}
+
+const couponTestAnswers = new Map<string, Promise<boolean>>();
+/** Whether every coupon test is offered here (ADR-0089), asked once per API address. False, the unnotched tension coupon only, unless the
+ * API says all: before it answers, when it does not (an older API) and with no API at all. */
+export function allCouponTests(apiBase: string): Promise<boolean> {
+  if (!apiBase) return Promise.resolve(false);
+  const key = base(apiBase);
+  if (!couponTestAnswers.has(key)) {
+    couponTestAnswers.set(key, call(`${key}/v1/coupon-tests`, { method: "GET", headers }, "the tests offered")
+      .then((payload) => isObject(payload) && payload.all === true)
+      .catch(() => false));
+  }
+  return couponTestAnswers.get(key)!;
 }
 
 const assistantInfos = new Map<string, Promise<AssistantInfo | null>>();

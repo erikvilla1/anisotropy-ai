@@ -14,8 +14,27 @@ on:
   pull_request:
 
 jobs:
+  # Only main's newest commit is deployed. Each merge runs Tests, and they can finish out of order: on 2026-11-10 the Tests of an older
+  # merge finished last, its deploy queued last, cancelled the newer commit's waiting deploy, and the site went out one merge behind.
+  # A deploy that is skipped here never enters the deploy-production group, so it cannot cancel the newest one (ADR-0056 amendment 8).
+  newest:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      newest: ${{ steps.main.outputs.newest }}
+    steps:
+      - id: main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESTED: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          head=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)
+          echo "main is at $head; this Tests run tested $TESTED"
+          if [ "$head" = "$TESTED" ]; then echo "newest=true" >> "$GITHUB_OUTPUT"; else echo "newest=false" >> "$GITHUB_OUTPUT"; fi
+
   deploy:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    needs: newest
+    if: always() && (github.event_name == 'workflow_dispatch' || (needs.newest.result == 'success' && needs.newest.outputs.newest == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     concurrency: deploy-production

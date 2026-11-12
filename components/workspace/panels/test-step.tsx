@@ -1,5 +1,6 @@
 "use client";
 
+import { enabledStandards, enabledTests, hiddenReason } from "@/lib/enabled-tests";
 import { fieldByKey, NO_STANDARD, standardsFor, testDescription, type StudioForm } from "@/lib/studio-form";
 import { TEST_CHOICES } from "@/lib/studio-chat";
 
@@ -33,14 +34,21 @@ function Choices({ name, question, hint, options, value, disabled, onPick }: {
 
 /** The first step of the coupon setup (ADR-0062 amendment 1): what test the coupon is, then which of our standards it follows, or none. The
  * standards offered are those that cover the test picked (ADR-0072); a test our list holds no standard for says so instead of offering an
- * empty choice. Picking writes the Test and Standard rows, as the rows did before; the check still judges them (ADR-0051). */
-export function TestStep({ form, disabled, onChange }: { form: StudioForm; disabled: boolean; onChange: (key: string, value: string) => void }) {
-  const tests = (fieldByKey.test?.words ?? []).map((test) => ({ value: test, title: titleOf(test), detail: testDescription(test) }));
-  const offered = form.test ? standardsFor(form.test) : [];
+ * empty choice. Picking writes the Test and Standard rows, as the rows did before; the check still judges them (ADR-0051). Until the first
+ * workflow is validated (ADR-0089) the tests and standards offered are the enabled ones, unless the API says the switch shows all; a
+ * project of a hidden test keeps its rows and says it is not available yet. */
+export function TestStep({ form, disabled, onChange, allTests = false }: {
+  form: StudioForm; disabled: boolean; onChange: (key: string, value: string) => void; allTests?: boolean;
+}) {
+  const tests = enabledTests(fieldByKey.test?.words ?? [], allTests).map((test) => ({ value: test, title: titleOf(test), detail: testDescription(test) }));
+  const offered = form.test ? enabledStandards(standardsFor(form.test), allTests) : [];
+  const hidden = hiddenReason(form, allTests);
   return (
     <div className="ws-test-step" data-testid="test-step">
+      {hidden ? <p className="studio-alert" data-testid="test-not-available">{hidden} Pick unnotched tension below to start one; this project&apos;s rows are kept.</p> : null}
       <Choices name="test" question="What test are you setting up?" options={tests} value={form.test ?? ""} disabled={disabled}
-        hint="The test decides what the next steps ask for: grips and tabs for a pulled strip, supports and a span for bending, regions for a plate."
+        hint={allTests ? "The test decides what the next steps ask for: grips and tabs for a pulled strip, supports and a span for bending, regions for a plate."
+          : "One test for now: the unnotched tension coupon, built here and compared with Abaqus output by output. The others follow, one at a time."}
         onPick={(test) => onChange("test", test)} />
       {!form.test ? null : offered.length ? (
         <Choices name="standard" question={`Which standard does the ${form.test} specimen follow?`} value={form.standard || NO_STANDARD} disabled={disabled}

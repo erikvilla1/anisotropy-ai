@@ -17,9 +17,18 @@ test.beforeEach(async ({ page }) => {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: Number(process.env.THROTTLE) });
 });
 
+/** What the package chooses for IM7/8552 [45/0/-45/90]s on the tension screen (anisotropy_fea.tension_input), as the check lists it. */
+const TENSION_BUILT = [
+  { row: "width", value: 25, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
+  { row: "length", value: 250, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
+  { row: "tab_length", value: 56, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric grips through emery cloth and gives no grip length: 56 mm is ours, as in the public D3039 check" },
+  { row: "strain_length", value: 25, reason: "25 mm, within ASTM D3039/D3039M-17 §7.3.2's 10 to 50 mm, centred on the coupon" },
+  { row: "value", value: 1, reason: "1 mm: the model is linear, so the answer, the loading at first-ply failure, does not depend on it" },
+];
+
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
 async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]; fieldsReads?: number; tows?: unknown[]; lives?: unknown[] },
-  options: { missFirstFieldsRead?: boolean; live?: boolean } = {}) {
+  options: { missFirstFieldsRead?: boolean; live?: boolean; allTests?: boolean } = {}) {
   let polls = 0;
   calls.fieldsReads = 0;
   let dir = "studio"; // the public tension coupon, or the public bending coupon once a check asks for it
@@ -28,6 +37,9 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    // one workflow first (ADR-0089): the API says whether every test is offered. The scenarios below test the full panels, development's
+    // view, so the switch is on unless a scenario turns it off for the tension screen (ADR-0090), the product's view
+    if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true });
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
     if (path.startsWith("/v1/projects")) return json(route, { detail: "Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read" }, 503); // no project store: the browser keeps the project alone
     if (path === "/v1/coupons/IM7-UNT-L1/values") return json(route, { name: "IM7-UNT-L1", values: fixture("values") });
@@ -50,6 +62,11 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     if (path === "/v1/coupon-jobs/check" && request.method() === "POST") {
       calls.checks.push(request.postDataJSON());
       const values = (request.postDataJSON() as { values: Record<string, unknown> }).values;
+      if (values.input === "tension") { // the tension screen (ADR-0090): the package chooses the rest and lists its choices, played here
+        dir = "studio-standards";
+        return json(route, { run_id: "run-7", state: "ready", designation: "IM78552-UNT-L1", checklist: { ...fixture("checklist", "studio-standards"), built: TENSION_BUILT },
+          preview: fixture("preview", "studio-standards") });
+      }
       dir = values.test === BENDING ? "studio-bending" : values.test === "plate" ? "studio-plate" : "studio";
       if (values.standard === "ASTM D3039/D3039M-17") { // the public coupon under D3039, judged by the package (ADR-0072)
         dir = "studio-standards";
@@ -190,6 +207,15 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click(); // the answer's own row, in the gauge section (ADR-0085)
   await expect(page.getByTestId("readout")).toContainText("the critical element");
   await expect(page.getByTestId("readout")).toContainText("tsai hill: ply");
+  // every ply of the picked element, as CAE's Probe Values reads it (ADR-0066 amendment 2): its number, each ply's stresses and invariants
+  const probe = page.getByTestId("probe");
+  await expect(probe).toContainText("as Abaqus/CAE's Probe Values reads it");
+  await expect(probe.getByTestId("probe-table").locator("tbody tr")).toHaveCount(8);
+  await expect(probe.getByTestId("probe-table").locator("thead")).toContainText("Tresca");
+  await expect(probe).toContainText("S13 and S23: not modelled (membrane state)");
+  await expect(probe.getByTestId("probe-csv")).toHaveAttribute("download", /^probe-element-\d+\.csv$/);
+  await page.getByLabel("Field", { exact: true }).selectOption("tresca");
+  await expect(page.getByLabel("Shown as", { exact: true })).toHaveCount(0); // element values only: no display averages for an invariant
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: ".local/website/screenshots/studio-results.png", fullPage: true });
   expect(browserErrors).toEqual([]);
@@ -199,7 +225,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickTest(page, BENDING);
@@ -242,7 +268,7 @@ test("a plate is stated by its regions: hold an edge, press the face, check and 
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickTest(page, "plate");
@@ -297,7 +323,7 @@ test("a blocked setup names its rows and the solve stays off", async ({ page }) 
 
 test("a standard is offered by its test, fills its size, and the check judges the specimen clause by clause (ADR-0072)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   const titles = page.getByTestId("question-standard").locator(".ws-choice-title");
@@ -341,7 +367,7 @@ test("a standard is offered by its test, fills its size, and the check judges th
 
 test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, E and nu in place of the plies (ADR-0075)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   await pickStandard(page, "ASTM D638-22");
@@ -371,6 +397,45 @@ test("a plastic dog-bone is sized by D638's Type I and stated by its thickness, 
   expect([sent.ply_1, sent.library, sent.G13, sent.criteria]).toEqual([undefined, undefined, undefined, undefined]); // hidden rows are not sent
 });
 
+test("the tension screen takes the material and the layup, builds the model, says how it chose the rest, and lists the files (ADR-0089, ADR-0090)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false }); // the switch off, as on the hosted tier: the product's view
+  await page.goto("/workspace/fea");
+  const screen = page.getByTestId("tension-screen");
+  await expect(screen).toBeVisible();
+  await expect(page.getByTestId("question-test")).toHaveCount(0); // one test: no test to pick, no other standard than D3039 or none
+  await expect(screen.locator("input[name=tension-standard]")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Load example" })).toHaveCount(0);
+  await expect(page.getByText(/Abaqus name|Your Abaqus mesh/)).toHaveCount(0); // no Abaqus row on the page
+  await expect(page.getByTestId("build-button")).toBeDisabled();
+  await expect(page.getByTestId("tension-missing")).toContainText("the material, the layup");
+
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, 6 mm hole");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
+  await expect(page.getByTestId("chat-not-available").last()).toContainText("Open-hole tension is not available yet");
+
+  await page.getByLabel("Material", { exact: true }).selectOption("as4-8552"); // its library record gives no ply thickness: the screen asks
+  await expect(page.getByTestId("library-ply-thickness")).toBeVisible();
+  await expect(page.getByTestId("tension-missing")).toContainText("Ply thickness (mm)");
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await expect(page.getByTestId("library-ply-thickness")).toHaveCount(0); // IM7/8552's record gives one
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await expect(page.getByTestId("tension-missing")).toHaveCount(0);
+  await page.getByTestId("build-button").click();
+  await expect.poll(() => calls.solves.length).toBe(1); // ready, so Build goes on to the full analysis
+  const sent = (calls.checks.at(-1) as { values: Record<string, unknown> }).values;
+  expect(sent.input).toBe("tension");
+  expect(sent.library).toBe("im7-8552");
+  expect([sent.ply_1, sent.ply_2, sent.ply_3, sent.ply_4, sent.symmetric]).toEqual([45, 0, -45, 90, "yes"]);
+  for (const key of ["length", "width", "tab_length", "grips", "element_size", "G13", "G23", "test", "units"]) expect(sent[key], key).toBeUndefined(); // the package chooses them
+  const built = page.getByTestId("tension-built");
+  await expect(built.locator("tr[data-row=width]")).toContainText("ASTM D3039/D3039M-17, Table 2, balanced and symmetric");
+  await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm is ours");
+  await expect(page.getByTestId("tension-files")).toContainText("Our Abaqus deck (.inp)", { timeout: 20_000 });
+  await expect(page.getByTestId("tension-files")).toContainText("The document (PDF)");
+});
+
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
@@ -395,7 +460,7 @@ test("a coupon solved under a test standard shows the quantities the standard re
 
 test("a fresh form's choices start blank, not on their first word", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("question-test").locator("input:checked")).toHaveCount(0); // the first step asks; nothing is picked for the engineer
   await expect(page.getByTestId("setup-line")).toContainText("Start with step 1");
@@ -493,6 +558,34 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   expect(browserErrors).toEqual([]);
 });
 
+test("a thing to fix takes its rows in the chat, and applying them checks again (ADR-0062 amendment 2)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls);
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await message.fill("A. Engineer");
+  await message.press("Enter");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  await expect(page.getByTestId("chat-fix")).toHaveCount(0); // nothing to fix, nothing to type
+  await page.getByLabel("Length (mm)", { exact: true }).fill(""); // emptied on its panel
+  await message.fill("check");
+  await message.press("Enter");
+  const card = page.getByTestId("chat-check").last();
+  await expect(card).toHaveAttribute("data-state", "blocked");
+  const fix = card.getByTestId("chat-fix");
+  const length = fix.locator("li[data-item=geometry]").getByLabel("Length (mm)");
+  await expect(length).toHaveValue("");
+  await expect(fix.getByTestId("chat-fix-apply")).toBeDisabled(); // nothing typed yet
+  await length.fill("250");
+  await fix.getByTestId("chat-fix-apply").click();
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+  expect((calls.checks.at(-1) as { values: Record<string, unknown> }).values.length).toBe(250);
+  await expect(page.locator(".chat-user").last()).toHaveText("Length (mm): 250");
+  await expect(page.getByLabel("Length (mm)", { exact: true })).toHaveValue("250"); // the panel shows the row the chat filled
+  await expect(page.getByTestId("chat-check").nth(1).getByTestId("chat-fix")).toHaveCount(0); // the earlier card keeps its words and drops its inputs
+});
+
 test("a word that names no value sends the engineer to the panel that asks for the next thing, and a row typed there moves the conversation on (ADR-0062)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
@@ -521,7 +614,7 @@ test("a word that names no value sends the engineer to the panel that asks for t
 
 test("one typed line fills the coupon and the chat asks only for what is missing (ADR-0055)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, AS4/8552, [45/0/-45/90]s, 36 x 250 mm, 6 mm hole, 10 kN");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
@@ -538,7 +631,7 @@ test("one typed line fills the coupon and the chat asks only for what is missing
 test("with a model on, a message is read into a card the engineer ticks: what is ticked goes in, an unticked value does not (ADR-0088)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   const asked: Record<string, unknown>[] = [];
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.route(API, async (route) => { // a model behind the API: its reading, as the source guard would keep it
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -589,7 +682,7 @@ test("with a model on, a message is read into a card the engineer ticks: what is
 test("a model that does not answer leaves the message to the page's patterns, and is not asked again that session (ADR-0088)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   let asked = 0;
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.route(API, async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -761,7 +854,7 @@ test("the model is lit for presentation before a run: the sketch and the package
 
 test("the fibre tow test swaps the panels for the tow's, and Calculate shows each specimen and the statistics (ADR-0074)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[], tows: [] as unknown[] };
-  await mockApi(page, calls);
+  await mockApi(page, calls, { allTests: true });
   await page.goto("/workspace/fea");
   await page.getByRole("button", { name: "Load example" }).click();
   const rail = page.getByTestId("ws-rail");

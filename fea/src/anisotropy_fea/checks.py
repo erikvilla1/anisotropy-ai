@@ -10,6 +10,7 @@ tools refuse. A failed or missing item blocks the run; a warning does not.
 
 from __future__ import annotations
 
+import re
 import shutil
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -86,11 +87,13 @@ class Checklist:
     attempts: int
     state: str  # "ready" when nothing failed or is missing, else "blocked"
     problems: tuple[str, ...]  # every refusal, as the tools word it
+    built: tuple = ()  # the rows the tension screen left to us, each with its value and reason (ADR-0090); () for every other input
 
     def as_dict(self) -> dict[str, Any]:
         return {"items": [{**asdict(item), "rows": list(item.rows), "requirements": list(item.requirements)} for item in self.items],
                 "designation": self.designation, "coupon_exists": self.coupon_exists,
-                "attempts": self.attempts, "state": self.state, "problems": list(self.problems)}
+                "attempts": self.attempts, "state": self.state, "problems": list(self.problems),
+                "built": [b.as_dict() for b in self.built]}
 
 
 DOF_WORDS = {1: "x", 2: "y", 3: "z", 4: "the tilt about x", 5: "the tilt about y", 6: "the rotation about z"}
@@ -135,10 +138,10 @@ def find_tectonic() -> str | None:
 
 def split_problems(message: str) -> list[tuple[str, str]]:
     """A refusal's message, '<file>: <row>: <problem>; <row>: <problem>', as (row label, problem) pairs; a problem naming no row is
-    paired with ''."""
+    paired with ''. A '; ' inside parentheses belongs to its problem: "A, B: required (with A, B and C together; D only for ...)" is one."""
     body = message.split(": ", 1)[1] if ": " in message and not message.startswith(tuple(ITEM_OF_LABEL)) else message
     pairs = []
-    for problem in body.split("; "):
+    for problem in _outside_parentheses(body):
         label = row_label_of(problem)
         if not label and ": " not in problem and pairs:  # the rest of the previous row's problem: "Test: required; one of a, b"
             pairs[-1] = (pairs[-1][0], pairs[-1][1] + "; " + problem)
@@ -147,18 +150,63 @@ def split_problems(message: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def _outside_parentheses(text: str) -> list[str]:
+    """`text` split at each '; ' that no parenthesis encloses."""
+    parts, depth, start = [], 0, 0
+    for i, char in enumerate(text):
+        depth += (char == "(") - (char == ")")
+        if depth <= 0 and text.startswith("; ", i):
+            parts.append(text[start:i])
+            start = i + 2
+    return [*parts, text[start:]]
+
+
 def row_label_of(problem: str) -> str:
-    """The form row a problem names first: by its label, by the label without its unit ("Element size and Your Abaqus mesh: ..."),
-    or by a group of rows' common head ("Your Abaqus mesh: give all three rows"); '' when it names none."""
+    """The form row a problem names first; '' when it names none (see `row_labels_of`)."""
+    labels = row_labels_of(problem)
+    return labels[0] if labels else ""
+
+
+LIST_SEPARATOR = re.compile(r", | and | or ")
+
+
+def _label_at(problem: str, at: int) -> tuple[str, int]:
+    """The row named at `at` and where its name ends: the longest label written there, else a label written without its unit
+    ("Element size" for Element size (mm)); a name must end the text or be followed by ':', ' ' or ','. ('', at) when none is."""
+    def ends(end: int) -> bool:
+        return end == len(problem) or problem[end] in ":, "
+    written = max((label for label in ITEM_OF_LABEL if problem.startswith(label, at) and ends(at + len(label))), key=len, default="")
+    if written:
+        return written, at + len(written)
     for label in ITEM_OF_LABEL:
-        if problem.startswith(label + ":") or problem.startswith(label + " "):
-            return label
+        stem = label.split(" (", 1)[0]
+        if stem != label and problem.startswith(stem, at) and ends(at + len(stem)):
+            return label, at + len(stem)
+    return "", at
+
+
+def row_labels_of(problem: str) -> list[str]:
+    """Every form row a problem is about: the rows its opening names, one after another, joined by ', ', ' and ' or ' or ' ("Narrow width
+    (mm), Fillet radius (mm): required", "Strain measurement and Strain measurement length (mm): give both", "Element size and Your Abaqus
+    mesh: ..."); failing that, a group of rows' common head ("Your Abaqus mesh: give all three rows"). Rows named only in the explanation
+    that follows are not the problem's. Empty when it names none."""
+    labels: list[str] = []
+    at = 0
+    while True:
+        label, end = _label_at(problem, at)
+        if not label:
+            break
+        if label not in labels:
+            labels.append(label)
+        separator = LIST_SEPARATOR.match(problem, end)
+        if separator is None:
+            break
+        at = separator.end()
+    if labels or ": " not in problem:
+        return labels
     head = problem.split(": ", 1)[0]
-    first = head.split(" and ", 1)[0].split(" or ", 1)[0]
-    for label in ITEM_OF_LABEL:
-        if label.startswith(head + ":") or label.split(" (", 1)[0] == first:
-            return label
-    return ""
+    group = next((label for label in ITEM_OF_LABEL if label.startswith(head + ":")), "")
+    return [group] if group else []
 
 
 def coupon_attempts(root: Path, designation: str | None) -> tuple[bool, int]:
@@ -192,7 +240,7 @@ class _Notes:
     def refused(self, message: str, fallback: str = "identity", rows: tuple[str, ...] = ()) -> None:
         for label, problem in split_problems(message):
             item_id = ITEM_OF_LABEL.get(label, fallback)
-            self.note(item_id, "missing" if ": required" in problem else "fail", problem, (label, *rows))
+            self.note(item_id, "missing" if ": required" in problem else "fail", problem, (label, *row_labels_of(problem), *rows))
 
     def items(self) -> tuple[CheckItem, ...]:
         labels = dict(ITEMS)
@@ -443,4 +491,4 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
 
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)
-    return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems)), model, quality
+    return Checklist(items, designation, exists, attempts, "blocked" if blocked else "ready", tuple(problems), form.built), model, quality

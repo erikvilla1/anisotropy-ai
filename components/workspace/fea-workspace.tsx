@@ -8,6 +8,7 @@ import { ProjectProvider, useProject } from "@/components/studio/project-context
 import { TowStage } from "@/components/studio/tow-stage";
 import { isTow } from "@/lib/studio-tow";
 import { FeaRail } from "./fea-rail";
+import { TensionScreen } from "./tension-screen";
 import { WorkspaceShell } from "./shell";
 
 /** The coupon FEA workspace (ADR-0062): one panel per step on the left, the sketch, the model and the results in the centre, the coupon
@@ -22,13 +23,13 @@ export function FeaWorkspace({ apiBaseUrl }: { apiBaseUrl: string }) {
 }
 
 function FeaColumns({ apiBaseUrl, onLaminate }: { apiBaseUrl: string; onLaminate: () => void }) {
-  const { project, form, rename } = useProject();
+  const { project, form, rename, allTests } = useProject();
   return (
     <WorkspaceShell
       kind="Coupon FEA"
       title={<input type="text" aria-label="Project name" value={project.name} placeholder={projectTitle(project)} onChange={(e) => rename(e.target.value)} data-testid="project-name" />}
-      rail={<FeaRail apiBaseUrl={apiBaseUrl} />}
-      stage={isTow(form) ? <TowStage /> : <><CouponSpec form={form} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>}
+      rail={allTests ? <FeaRail apiBaseUrl={apiBaseUrl} /> : <TensionScreen apiBaseUrl={apiBaseUrl} />}
+      stage={isTow(form) && allTests ? <TowStage /> : <><CouponSpec form={form} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>}
       assistant={<CouponChat apiBaseUrl={apiBaseUrl} onLaminate={onLaminate} />}
     />
   );

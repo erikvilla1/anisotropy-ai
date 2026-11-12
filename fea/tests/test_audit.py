@@ -66,7 +66,9 @@ def test_the_committed_rubric_reads():
     assert [s.id for s in rubric.sections] == ["A", "B", "C", "D"] and all(s.meaning for s in rubric.sections)  # E, documentation, is deferred
     assert not any("ADR" in item.acceptance or "ADR" in item.check for item in rubric.items)  # the rubric's words go to the team unchanged
     assert len({item.id for item in rubric.items}) == len(rubric.items)
-    assert rubric.version == "0.3" and rubric.status == "confirmed", "confirmed by the founder on 2026-10-24 (ADR-0043 amendments 1 and 4)"
+    assert rubric.version == "0.4" and rubric.status == "confirmed", "asked for by the founder on 2026-11-11 (ADR-0043 amendment 7)"
+    c8 = next(item for item in rubric.items if item.id == "C8")  # every other output a ply shows, judged by the team's engineer
+    assert c8.method == "auditor" and c8.required and c8.applies_to == ("UNT",) and c8.tolerance is None and "within 1 %" in c8.acceptance and "compare_every_output" in c8.needs
     assert [item.id for item in rubric.items if item.section == "A"] == ["A1", "A2"]  # the files-identified row left in 0.3: the Record sheet names them
     d1 = next(item for item in rubric.items if item.id == "D1")
     assert d1.tolerance.relative == 0.01 and d1.condition.min_free_length_widths == 3  # the same tolerance as C2; N/A for a short gauge
@@ -159,7 +161,7 @@ def test_the_same_model_with_the_same_stresses_scores_pass_where_our_tools_judge
     found = results(grips)
     assert [item_id for item_id, result in found.items() if result == "Pass"] == ["A1", "A2", "B1", "B2", "B3", "B4", "B5", "B7", "B8", "B9", "C3", "D2"]
     # the auditor's: the auditor items, and C1, C2, C4 and C7, whose team values are not all in the export (our values are stated; C2 lacks S12)
-    assert {item_id for item_id, result in found.items() if result is None} == {"B6", "C1", "C2", "C4", "C5", "C6", "C7", "D5"}
+    assert {item_id for item_id, result in found.items() if result is None} == {"B6", "C1", "C2", "C4", "C5", "C6", "C7", "C8", "D5"}
     assert not any(item_id.startswith("E") for item_id in found)  # section E, documentation, is off the rubric for now
     assert "D3" not in found and "D4" not in found  # open-hole only
 
@@ -176,6 +178,9 @@ def test_the_scores_say_why(grips):
     assert found["B3"].difference == ("Layup, bottom first: the same", "Balance: the same")
     assert found["B3"].ours[0].endswith("from the length axis (Ori-1, local 1 along y)") and found["B3"].team[0].endswith("from x (Ori-1, local 1 along x)")
     assert found["C7"].team == ("left blank, for the team to fill in",) and "ply 1 (0 deg) by maximum stress, at 0.5 of the applied loading" in found["C7"].ours[0]
+    assert found["C8"].ours[0].startswith("This package has no every-output file") and not found["C8"].team  # this fixture's deck asks for no ply's middle
+    every = {s.item.id: s.found for s in score(load_rubric(), dataclasses.replace(grips, every_output=True))}["C8"]
+    assert every.team == ("left blank, for the team to fill in",) and every.ours[0] == "Every element and ply: 4-results/ours-every-output.csv"
     # D5 states the laminate's shear coupling from its stiffness: this IM7 layup, 4 plies at +30 and 2 at -30, has it
     coupling = next(line for line in found["D5"].ours if line.startswith("In-plane shear coupling of the laminate, from our engine's stiffness: A16 = "))
     assert ": present, " in coupling and "of A11" in coupling
@@ -250,7 +255,7 @@ def test_the_form_locks_our_results_and_opens_the_auditors_cells(grips, tmp_path
     record = book[RECORD]
     assert record.sheet_state == "hidden"  # for our tools; the auditor never sees it
     kept = {record.cell(r, 1).value: record.cell(r, 2).value for r in range(1, record.max_row + 1)}
-    assert kept["Rubric"] == "version 0.3 (confirmed)" and len(kept["Our results digest"]) == 64 and record.protection.sheet
+    assert kept["Rubric"] == "version 0.4 (confirmed)" and len(kept["Our results digest"]) == 64 and record.protection.sheet
     sheet = book[RUBRIC_SHEET]
     assert [c.value for c in sheet[1]] == list(RUBRIC_COLUMNS)
     result, observation, cause = (RUBRIC_COLUMNS.index(name) + 1 for name in ("Result", "Observation", "Cause"))
@@ -303,7 +308,7 @@ def test_the_form_computes_the_rule_counts_the_rows_and_shows_the_numbers_behind
     for noise in ("Engine commit", "Team deck SHA-256", "Our results digest", "Run by", "Example finding", "Findings", "ADR", "as filled in", "rule"):
         assert not any(noise in str(cover.cell(r, c).value) for r in range(1, cover.max_row + 1) for c in (1, 2)), noise
     sent = [cover.cell(r, 1).value for r in range(labels[TO_SEND] + 1, cover.max_row + 1) if cover.cell(r, 1).value]
-    assert sent[0].startswith("C1 (Total reaction force): the reaction force") and [line[:2] for line in sent] == ["C1", "C2", "C4", "C7"]
+    assert sent[0].startswith("C1 (Total reaction force): the reaction force") and [line[:2] for line in sent] == ["C1", "C2", "C4", "C7", "C8"]
     sheet = book[RUBRIC_SHEET]
     result = RUBRIC_COLUMNS.index("Result") + 1
     last = len(scored) + len({s.item.section for s in scored}) + 1  # a banner row per section, under the header
@@ -342,7 +347,7 @@ def test_the_form_computes_the_rule_counts_the_rows_and_shows_the_numbers_behind
     assert [c.value for c in values[1]][:6] == ["Team element", "Our element", "x (mm)", "y (mm)", "Layer (1 = bottom)", "Quantity"]
     assert values.cell(2, 7).number_format == "0.00" and values.cell(2, 3).number_format == "0.000"
     kept = {book[RECORD].cell(r, 1).value: book[RECORD].cell(r, 2).value for r in range(1, book[RECORD].max_row + 1)}
-    assert kept["Team deck SHA-256"] == "0" * 64 and kept["Engine"] == "anisotropy-fea 0.1.0, commit abc1234" and kept["Rubric"] == "version 0.3 (confirmed)"
+    assert kept["Team deck SHA-256"] == "0" * 64 and kept["Engine"] == "anisotropy-fea 0.1.0, commit abc1234" and kept["Rubric"] == "version 0.4 (confirmed)"
     assert book[RECORD].sheet_state == "hidden" and not any("ADR" in str(c.value) for row in results.iter_rows() for c in row if c.value is not None)
     assert read_form  # a form with these sheets reads back: test_a_form_with_the_numbers_behind_it_reads_back
 

@@ -15,7 +15,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-NUMBER = re.compile(r"^[-+]?(\d+\.?\d*|\.\d+)([eEdD][-+]?\d+)?$")
+# A printed number: an integer, a decimal, an exponent with E or D, or Fortran's three-digit exponent written with no letter at all
+# ("1.5633561-189" is 1.5633561E-189), which Abaqus prints for a value below 1E-99 (seen 2026-11-11 in a .dat of Abaqus 2025)
+NUMBER = re.compile(r"^[-+]?(?:(?:\d+\.?\d*|\.\d+)(?:[eEdD][-+]?\d+)?|(?:\d+\.\d*|\.\d+)[-+]\d{3})$")
+SHORT_EXPONENT = re.compile(r"^([-+]?(?:\d+\.\d*|\.\d+))([-+]\d{3})$")
 OPENS = "THE FOLLOWING TABLE IS PRINTED"
 SET = re.compile(r"\bSET\s+(\S+)")
 ASSEMBLY = "ASSEMBLY_"
@@ -72,6 +75,9 @@ class AbaqusDat:
 
 
 def _number(token: str) -> float:
+    short = SHORT_EXPONENT.match(token)
+    if short:  # Fortran's "1.5633561-189": the letter dropped to make room for a three-digit exponent
+        return float(f"{short[1]}E{short[2]}")
     return float(token.replace("D", "E").replace("d", "e"))
 
 

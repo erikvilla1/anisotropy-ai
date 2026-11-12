@@ -33,7 +33,7 @@ from .cases import element_name
 from .mesh import KernelError
 from .model import Deck, all_boundaries, node_name, resolve_elements, resolve_nodes
 from .quality import QualityField, quality_summary
-from .recovery import FACES, FailureField, PlyField, deck_f12_star, element_ply_states, ply_mises, ply_ratio_per_ply, strength_ratios
+from .recovery import FACES, FailureField, PlyField, deck_f12_star, element_ply_states, ply_invariants, ply_mises, ply_ratio_per_ply, strength_ratios
 from .report import edge_widths, fpf_place, gripped_groups
 from .results import ShellSolution, Solution
 from .test_quantities import MethodInputs, method_summary
@@ -356,6 +356,9 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     stress_xy = _finite("ply stress", np.stack(field.stress_xy))
     strain_12 = _finite("ply strain", np.stack(field.strain_12))
     mises = _finite("ply Mises", np.stack(ply_mises(field))[..., 0])  # (ne, plies) or (ne, plies, 2)
+    # Tresca, the three principal stresses and the pressure of each ply, what Abaqus prints beside Mises (ADR-0066 amendment 2): element
+    # values only, no display averages, so the file grows by five per-ply arrays
+    invariants = {name: _finite(f"ply {name}", np.stack(values)) for name, values in ply_invariants(field).items()}
     failures = failures_of(deck, solution, field, criteria)
     corners = mesh.connectivity[:, :4]
     centroids = mesh.xy[corners].mean(axis=1)
@@ -490,7 +493,8 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     }
     element: dict[str, Any] = {
         "strain": rounded(strain), "section_force": rounded(section_force_out), "centroids": rounded(length(centroids)),
-        "ply": {"stress_12": rounded(stress_12_out), "stress_xy": rounded(stress(stress_xy)), "strain_12": rounded(strain_12), "mises": rounded(mises_out)},
+        "ply": {"stress_12": rounded(stress_12_out), "stress_xy": rounded(stress(stress_xy)), "strain_12": rounded(strain_12), "mises": rounded(mises_out),
+                "invariants": {name: rounded(stress(values)) for name, values in invariants.items()}},
         "failure": failure, "modes": list(MODES),
     }
     nodal: dict[str, Any] = {"displacement": rounded(displacement_out), "magnitude": rounded(length(magnitude)), "reaction": rounded(reaction)}
@@ -509,6 +513,8 @@ def field_data(deck: Deck, solution: Solution, units: str, criteria: tuple[str, 
     for i, name in enumerate(STRESS_NAMES):
         ranges[name] = {"element": per_ply_spans(stress_12_out[..., i]), "nodal": per_ply_spans(stress_12_average[..., i])}
     ranges["mises"] = {"element": per_ply_spans(mises_out), "nodal": per_ply_spans(mises_average)}
+    for name, values in invariants.items():
+        ranges[name] = {"element": per_ply_spans(stress(values))}
     ranges["failure_index"] = failure_ranges
     ranges["failure_index_ply"] = failure_ply_ranges
 

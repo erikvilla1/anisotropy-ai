@@ -29,7 +29,7 @@ from typing import Any
 
 from anisotropy_engine.library import LibraryMaterial, library_material, list_datasets
 
-from . import __version__, forms, paths
+from . import __version__, enabled, forms, paths, tension_input
 from .dogbone import OutlineError, dogbone_outline
 from .standards import NONE as NO_STANDARD, PROFILES, STANDARD_WORDS, VARIANT_WORDS, profile_of_word
 from .spec import (AREA_REGIONS, EDGE_REGIONS, PLATE_KINDS, BENDING_KINDS, ABAQUS_NAME, DEFAULT_NAMES, DESIGNATION, IN_PLANE_KINDS, TEST_CODES, TOW_TEST, CouponSpec, SpecError, full_angles, load_spec, parse_spec,
@@ -293,7 +293,9 @@ ROWS_OF_KEY = {
     "coupon.standard": "standard", "test_method.id": "standard", "test_method.variant": "specimen", "test_method": "standard",
     "tabs.thickness": "tab_thickness", "tabs.bevel": "tab_bevel", "tabs.material": "tab_material", "tabs": "tab_thickness",
     "strain.device": "strain_device", "strain.gauge_length": "strain_length", "strain": "strain_device",
-    "geometry.dogbone": "narrow_width", "geometry.thickness": "thickness", "material.E": "own_E", "material.nu": "own_nu", "layup": "material_kind",
+    "geometry.dogbone": "narrow_width", "geometry.dogbone.narrow_width": "narrow_width", "geometry.dogbone.narrow_length": "narrow_length",
+    "geometry.dogbone.radius": "radius", "geometry.dogbone.outer_radius": "outer_radius",
+    "geometry.thickness": "thickness", "material.E": "own_E", "material.nu": "own_nu", "layup": "material_kind",
 }
 
 HOW_TO = (
@@ -498,6 +500,7 @@ def write_blank_form(path: Path | str) -> Path:
 
     path = Path(path)
     records = library_records()
+    offer_all = enabled.all_tests()
     book = Workbook()
     book.properties.creator = "Anisotropy AI"
     book.properties.title = "Coupon input form"
@@ -526,8 +529,9 @@ def write_blank_form(path: Path | str) -> Path:
             help_text = ("required" + ("; " if f.help else "") if f.required else "") + f.help
             sheet.cell(row, 3, help_text or None).font = forms.font(muted=True)
             sheet.cell(row, 3).alignment = forms.wrap()
-            if f.kind == "list" and f.words:
-                forms.listing(sheet, f.words, [cell.coordinate])
+            words = enabled.offered_words(f.key, f.words, offer_all)  # the tests the studio offers until the first is validated (ADR-0089)
+            if f.kind == "list" and words:
+                forms.listing(sheet, words, [cell.coordinate])
             elif f.key == "library":
                 library_cell = cell
             elif f.kind in ("number", "whole", "angle"):
@@ -669,6 +673,7 @@ class FormInput:
     version: str
     cells: dict[str, Any]
     lists: dict[str, list] = field(default_factory=dict)  # supports, loads, regions of a plate, as sent
+    built: tuple = ()  # the rows the tension screen's input left to us, each with its value and reason (ADR-0090)
 
     @property
     def units(self) -> str:
@@ -743,6 +748,12 @@ def read_values(path: Path | str) -> FormInput:
     if str(version) not in READ_VERSIONS:
         raise IntakeError(f"{path.name}: form_version {version!r} is not one this tool reads ({', '.join(READ_VERSIONS)}); the current form is "
                           f"{FORM_VERSION} and the rows follow its definition")
+    built: tuple = ()
+    screen = data.pop("input", None)
+    if screen is not None:  # the tension screen sends the material and the layup; the rest is chosen, each choice stated (ADR-0090)
+        if screen != tension_input.INPUT:
+            raise IntakeError(f"{path.name}: input {screen!r} is not one this tool reads; the tension screen sends {tension_input.INPUT!r}")
+        data, built = tension_input.complete_tension(data)
     lists: dict[str, list] = {}
     for name in PLATE_LISTS:
         if name in data:
@@ -773,7 +784,7 @@ def read_values(path: Path | str) -> FormInput:
         elif isinstance(value, dict):
             raise IntakeError(f"{path.name}: {key} holds an object; a row holds one value")
         cells[key] = None if value is None or (isinstance(value, str) and not value.strip()) else value
-    return FormInput(path, str(version), cells, lists)
+    return FormInput(path, str(version), cells, lists, built)
 
 
 def read_input(path: Path | str) -> FormInput:
@@ -1032,10 +1043,14 @@ def check_form(form: FormInput) -> Values:
                 problems.append(f"Date: {day!r} is not a date (write YYYY-MM-DD)")
     test_name = forms.text_of(cells.get("test"))
     kind = TESTS.get(test_name.lower() if test_name else "", "")
+    offer_all = enabled.all_tests()  # one workflow first: the unnotched tension coupon only, unless the switch says all (ADR-0089)
     if test_name.lower() == TOW_TEST:
-        problems.append(f"Test: {TOW_TEST} is stated and calculated from the studio's tow panels (ADR-0074); this form's rows describe a coupon")
+        problems.append(f"Test: {TOW_TEST} is stated and calculated from the studio's tow panels (ADR-0074); this form's rows describe a coupon"
+                        if offer_all else f"Test: {TOW_TEST} is {enabled.NOT_AVAILABLE}")
     elif not kind:
         problems.append(f"Test: {test_name!r} is not one of {', '.join(TESTS)}" if test_name else f"Test: required; one of {', '.join(TESTS)}")
+    elif not enabled.is_test_enabled(TEST_CODES[kind][1], offer_all):
+        problems.append(f"Test: {TEST_CODES[kind][1]} is {enabled.NOT_AVAILABLE}")
     material_code = text("material_code").upper() or None
     if material_code and not MATERIAL_CODE.match(material_code):
         problems.append(f"Material code: {material_code!r} is not capital letters and digits starting with a letter")
@@ -1044,6 +1059,8 @@ def check_form(form: FormInput) -> Values:
         problems.append(f"Layup code: {layup_code!r} is not L followed by a number, such as L1")
     standard, size_from = word("standard") or NO_STANDARD, text("size_from")  # "none" or a designation of the list (ADR-0072)
     profile = profile_of_word(standard)
+    if profile is not None and not enabled.is_standard_enabled(profile.designation, offer_all):
+        problems.append(f"{L('standard')}: {profile.designation} is {enabled.NOT_AVAILABLE}")
     if profile is not None and kind and kind not in profile.kinds:
         covers = ", ".join(test_word(k) for k in profile.kinds)
         problems.append(f"{L('standard')}: {profile.designation} covers {covers}, not {TEST_CODES[kind][1]}; pick none or the standard of this test")
@@ -1119,6 +1136,8 @@ def check_form(form: FormInput) -> Values:
     dogbone_given = {key: number(key) for key in DOGBONE_KEYS}
     dogbone = None
     if any(cells.get(key) is not None for key in DOGBONE_KEYS):
+        if not (offer_all or enabled.DOGBONE):
+            problems.append(f"{L('narrow_width')} and the other dog-bone rows: a dog-bone is {enabled.NOT_AVAILABLE}; leave them blank")
         if kind and kind != "unnotched_tension":
             problems.append(f"{L('narrow_width')} and the other dog-bone rows: belong to unnotched tension only; leave them blank")
         missing = [L(key) for key in ("narrow_width", "narrow_length", "radius") if cells.get(key) is None]
@@ -1129,6 +1148,8 @@ def check_form(form: FormInput) -> Values:
             dogbone = {key: value for key, value in dogbone_given.items() if value is not None}
 
     material_kind = word("material_kind") or "plies"
+    if not enabled.is_material_kind_enabled(material_kind, offer_all):
+        problems.append(f"{L('material_kind')}: one isotropic material is {enabled.NOT_AVAILABLE}")
     isotropic = None
     angles: list[float] = []
     if material_kind == "isotropic":
@@ -1170,6 +1191,10 @@ def check_form(form: FormInput) -> Values:
         problems.append(f"{L('symmetric')}: required; one of {', '.join(YES_NO)}")
     symmetric = word("symmetric") == "yes"
     ply_thickness = number("ply_thickness")
+    if kind == "unnotched_tension" and isotropic is None and angles and forms.text_of(cells.get("symmetric")):
+        every_ply = angles + angles[::-1] if symmetric else angles  # bottom first, as the spec expands it
+        if not enabled.is_layup_enabled(every_ply, offer_all):  # one workflow first: a layup that only stretches (ADR-0089 amendment 4)
+            problems.append(f"{L('symmetric')}: {enabled.UNSYMMETRIC}")
 
     library = forms.text_of(cells.get("library")) or None
     own_given = {key: cells.get(key) for key in OWN_KEYS if cells.get(key) is not None}
@@ -1202,7 +1227,11 @@ def check_form(form: FormInput) -> Values:
     strengths_known: bool | None = None  # whether the material has strengths, when the form says enough to know
     if library and not own_given:
         try:
-            strengths_known = library_material(library).lamina.strengths is not None
+            picked = library_material(library)
+            strengths_known = picked.lamina.strengths is not None
+            if isotropic is None and ply_thickness is None and cells.get("ply_thickness") is None and picked.ply_thickness_m is None:
+                problems.append(f"{L('ply_thickness')}: required: the library's record of {picked.name} gives no ply thickness; give the cured "
+                                "ply thickness")
         except ValueError as exc:
             problems.append(f"{form.label('library')}: {exc}")
     elif own is not None:
@@ -1369,12 +1398,29 @@ def spec_material_meaning(spec) -> tuple:
     return ("own", round(mat.E1, 3), round(mat.E2, 3), round(mat.G12, 3), round(mat.nu12, 6))
 
 
-def existing_coupons(root: Path) -> dict[str, Any]:
-    """Every coupon under `root` with a spec, by name (the rule of paths.model_dirs on another root), loaded in SI."""
+def stored_coupons(root: Path) -> tuple[dict[str, Any], dict[str, str]]:
+    """Every coupon under `root` with a spec, by name (the rule of paths.model_dirs on another root): those that load, in SI, and those
+    whose spec the current rules refuse, with why. A spec written under older rules must not stop every other coupon from being checked,
+    named or listed: one such spec on the hosted store took the whole coupon studio down on 2026-11-10."""
     root = Path(root)
+    loaded: dict[str, Any] = {}
+    refused: dict[str, str] = {}
     if not root.is_dir():
-        return {}
-    return {d.name: load_spec(d / "ours" / f"{d.name}.toml") for d in sorted(root.iterdir()) if d.is_dir() and (d / "ours" / f"{d.name}.toml").is_file()}
+        return loaded, refused
+    for d in sorted(root.iterdir()):
+        path = d / "ours" / f"{d.name}.toml"
+        if not (d.is_dir() and path.is_file()):
+            continue
+        try:
+            loaded[d.name] = load_spec(path)
+        except (SpecError, ValueError, OSError) as exc:  # a TOML or validation error is a ValueError
+            refused[d.name] = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+    return loaded, refused
+
+
+def existing_coupons(root: Path) -> dict[str, Any]:
+    """Every coupon under `root` whose spec loads, by name, in SI (`stored_coupons` lists those that do not)."""
+    return stored_coupons(root)[0]
 
 
 def derived_material_code(meaning: tuple, materials: dict[str, tuple]) -> str:
@@ -1393,11 +1439,21 @@ def derived_material_code(meaning: tuple, materials: dict[str, tuple]) -> str:
     return f"M{n}"
 
 
+UNREADABLE = "a spec the current rules refuse"
+
+
+def _held(row: str, code: str, meaning: tuple) -> str | None:
+    """The refusal for a code held only by a coupon whose spec no longer loads; None for any other meaning."""
+    if len(meaning) == 3 and meaning[0] == UNREADABLE:
+        return f"{row}: {code} is held by {meaning[1]}, whose spec the current rules refuse ({meaning[2]}); give another code"
+    return None
+
+
 def designation_for(values: Values, root: Path) -> Designation:
     """The coupon's name, <material code>-<test code>-<layup code>, by the rules every coupon on this machine follows: a code
     means one thing and one thing has one code. A blank code is reused from the coupons that exist, or, for a layup, proposed."""
     problems = []
-    coupons = existing_coupons(root)
+    coupons, refused = stored_coupons(root)
     materials: dict[str, tuple] = {}
     layups: dict[str, tuple] = {}
     for spec in coupons.values():
@@ -1406,6 +1462,12 @@ def designation_for(values: Values, root: Path) -> Designation:
             continue
         materials.setdefault(match.group("material"), spec_material_meaning(spec))
         layups.setdefault(match.group("layup"), () if spec.layup is None else tuple(full_angles(spec)))  # no plies: no stack (ADR-0075)
+    # a coupon whose spec no longer loads keeps its codes, by its folder's name: no new coupon takes them with another meaning
+    for name, reason in refused.items():
+        match = DESIGNATION.match(name)
+        if match is not None:
+            materials.setdefault(match.group("material"), (UNREADABLE, name, reason))
+            layups.setdefault(match.group("layup"), (UNREADABLE, name, reason))
     meaning = material_meaning(values)
     code = values.material_code
     if code is None:
@@ -1414,7 +1476,7 @@ def designation_for(values: Values, root: Path) -> Designation:
             code = derived_material_code(meaning, materials)  # a new material names itself (ADR-0038 amendment 1)
     else:
         if code in materials and materials[code] != meaning:
-            problems.append(f"Material code: {code} already names another material on this machine; give another code")
+            problems.append(_held("Material code", code, materials[code]) or f"Material code: {code} already names another material on this machine; give another code")
         other = next((c for c, m in materials.items() if m == meaning and c != code), None)
         if other is not None:
             problems.append(f"Material code: this material already has the code {other}; use it")
@@ -1429,7 +1491,7 @@ def designation_for(values: Values, root: Path) -> Designation:
             layup = f"L{n}"
     else:
         if layup in layups and layups[layup] != stacking:
-            problems.append(f"Layup code: {layup} already names another stacking sequence on this machine; give another code")
+            problems.append(_held("Layup code", layup, layups[layup]) or f"Layup code: {layup} already names another stacking sequence on this machine; give another code")
         other = next((c for c, angles in layups.items() if angles == stacking and c != layup), None)
         if other is not None:
             problems.append(f"Layup code: this stacking sequence already has the code {other}; use it")
@@ -1672,8 +1734,12 @@ def spec_data(values: Values, designation: Designation, grips_kind: str, form_na
         criteria = [*FPF_CRITERIA, *(["tsai_wu"] if values.f12_star is not None else [])] if strengths else []
     else:
         criteria = list(values.criteria)
+    abaqus_output = {"field_preselect": True, "node_print": True, "el_print": True}
+    if values.kind == "unnotched_tension" and values.isotropic is None:  # every ply in the ODB, for the comparison with Abaqus (ADR-0089 part 7)
+        abaqus_output["every_layer"] = True
+        abaqus_output["element"] = "S4"  # full integration, as our kernel's element: the founder's choice of 2026-11-11 (ADR-0089 amendment 2)
     data["output"] = {"fpf_criteria": criteria,
-                      "abaqus": {"field_preselect": True, "node_print": True, "el_print": True},
+                      "abaqus": abaqus_output,
                       "calculix": {"node_print": True, "el_print": True, "frd": True, "el_print_global": True}}
     if values.isotropic is None:
         comments["layup.angles"] = "bottom ply first; the lower half when symmetric"
@@ -1767,10 +1833,12 @@ def render_toml(data: dict, comments: dict[str, str] | None = None, header: tupl
 
 
 def form_rows_of(message: str, units: str = UNITS) -> list[str]:
-    """The form rows a spec message concerns, by the table.key names it mentions, labelled in the stated units."""
+    """The form rows a spec message concerns, by the table.key names it mentions (the longest one the table knows, so that
+    geometry.dogbone.narrow_length is the Narrow length row), labelled in the stated units."""
     rows = []
-    for key in re.findall(r"\b(?:geometry|mesh|layup|material|grips|loading|probes|names|coupon|output|test_method|tabs|strain)\.[A-Za-z0-9_]+", message):
-        field_key = ROWS_OF_KEY.get(key) or ROWS_OF_KEY.get(key.rsplit(".", 1)[0])
+    for key in re.findall(r"\b(?:geometry|mesh|layup|material|grips|loading|probes|names|coupon|output|test_method|tabs|strain)(?:\.[A-Za-z0-9_]+)+", message):
+        parts = key.split(".")
+        field_key = next((ROWS_OF_KEY[k] for k in (".".join(parts[:n]) for n in range(len(parts), 0, -1)) if k in ROWS_OF_KEY), None)
         if field_key and FIELDS[field_key].label_in(units) not in rows:
             rows.append(FIELDS[field_key].label_in(units))
     for word, label in (("supports", "Supports"), ("loads", "Loads"), ("regions", "Regions")):  # a plate's lists (ADR-0054)

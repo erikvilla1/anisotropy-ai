@@ -23,10 +23,13 @@
 # (the cofounder does not work on the code side). Version 0.3, the same day, by the founder: the row that named the files by
 # digest and commit is gone (the form's Record sheet and the case page carry that), and an "auto" item whose team value is
 # not in the export (C1, C4, C7; C2 and C3 when a quantity is missing) states our value and is judged by the auditor; the
-# documentation section E is off the rubric for now ("might not be important right now"). The rubric's words go to the team
-# unchanged, so no item names a decision record. Changing an item or a tolerance raises the version again.
+# documentation section E is off the rubric for now ("might not be important right now"). Version 0.4, 2026-11-11, at the
+# founder's request ("update the form"): row C8 judges every other output Abaqus shows for a ply of a tension coupon (Tresca, the
+# pressure, the three principal stresses, the strains), from the comparison the package's 5-verify scripts print for the team's
+# engineer, who verifies (ADR-0089 amendment 3). The rubric's words go to the team unchanged, so no item names a decision record.
+# Changing an item or a tolerance raises the version again.
 
-version = "0.3"
+version = "0.4"
 status = "confirmed"
 
 [[section]]
@@ -228,6 +231,16 @@ required = false  # the cofounder decides whether it is required; the team does 
 source = ["recovery.strength_ratios"]
 tolerance = { relative = 0.01 }
 needs = "Abaqus failure indices (MSTRS, TSAIH or TSAIW) at every section point"
+
+[[item]]
+id = "C8"
+section = "C"
+check = "Every other output per ply: Tresca, the pressure, the three principal stresses and the strains E11, E22, E12"
+acceptance = "In the printout of 5-verify/compare_every_output.py on the team's run, each of these quantities has every gauge value within 1 % and every free-length value within 3 % (a small value within 2 % of the quantity's largest in the gauge); the band, the tab lines and the gripped tabs are reported, not judged"
+method = "auditor"
+required = true
+applies_to = ["UNT"]
+needs = "the two files 5-verify/abaqus_every_output.py writes from the job's .odb, and the printout of 5-verify/compare_every_output.py"
 
 # ------------------------------------------------------------------------------------------------- D. Physics
 

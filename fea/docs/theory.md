@@ -149,6 +149,10 @@ The von Mises stress of a ply's in-plane state, $`\sigma_\mathrm{M} = \sqrt{\sig
 
 <!-- code: ply_mises -->
 
+The other invariants Abaqus prints at a shell section point are taken from the same plane state, with the stress through the thickness zero. The in-plane principal stresses are $`\sigma_\mathrm{I,II} = \tfrac{1}{2}(\sigma_1 + \sigma_2) \pm \sqrt{\tfrac{1}{4}(\sigma_1 - \sigma_2)^2 + \tau_{12}^2}`$; with the zero beside them they are ordered as the maximum, middle and minimum principal stresses. Tresca is the largest of the three less the smallest, so it reaches the zero when both in-plane principals have the same sign, and the pressure is $`p = -\tfrac{1}{3}(\sigma_1 + \sigma_2)`$. They are computed by `ply_invariants` as comparison quantities beside Mises (ADR-0066 amendment 2), never as a ply's failure; Abaqus 2025 orders them the same way at a shell section point, the zero among them, and its Tresca, pressure and Mises at a layer are these (`fea/checks/abaqus-conventions.toml`, detected 2026-11-11).
+
+<!-- code: ply_invariants -->
+
 ## 7. First-ply failure
 
 The strength ratio $`R`$ of a ply is the factor on its stress at which the chosen criterion is met; the engine defines it for maximum stress, maximum strain, Tsai-Hill and Tsai-Wu ([engine theory](../../engine/docs/theory.md), Section 5) and exposes the per-face dispatch as `face_strength_ratio`, which the kernel calls with the ply's stress as the scaled part and nothing held. Over the mesh the smallest ratio is the first-ply-failure factor: the problem is linear, so the applied displacement or load multiplied by this factor fails that ply of that element first,

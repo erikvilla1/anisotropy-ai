@@ -10,6 +10,8 @@ import type { Faced, Fields } from "./studio-api";
 export type FieldOption = {
   id: string; label: string; unit: string; group: string;
   perPly?: boolean; perFace?: boolean; perCriterion?: boolean; signed: boolean; nodalOnly?: boolean;
+  /** element values only: no display averages written (ADR-0066 amendment 2), so the averaging switch does not apply */
+  elementOnly?: boolean;
 };
 export type FieldChoice = { id: string; ply: number; face?: number; criterion: string; averaged: boolean }; // face: 0 bottom, 1 top, when the package wrote faces
 export type FieldValues = { values: (number | null)[]; by: "node" | "element"; label: string; unit: string; signed: boolean;
@@ -76,6 +78,16 @@ export function fieldOptions(fields: Fields): FieldOption[] {
     { id: "S22", label: "Ply stress S22 (across the fibres)", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: true },
     { id: "S12", label: "Ply shear stress S12", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: true },
     { id: "mises", label: "Ply von Mises stress", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: false },
+  );
+  if (fields.element.ply.invariants) { // what Abaqus prints beside Mises (ADR-0066 amendment 2): element values, no display averages
+    for (const [id, label, signed] of INVARIANT_OPTIONS) {
+      options.push({ id, label, unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed, elementOnly: true });
+    }
+  }
+  options.push(
+    { id: "E11", label: "Ply strain E11 (along the fibres)", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
+    { id: "E22", label: "Ply strain E22 (across the fibres)", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
+    { id: "E12", label: "Ply shear strain E12 (engineering)", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
   );
   if (Object.keys(fields.element.failure).length) {
     options.push({ id: "failure_index", label: "Failure index 1/R, worst ply", unit: "-", group: "Failure", perCriterion: true, signed: false });
@@ -161,6 +173,12 @@ function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "ran
         ? nodal(n.averages.ply_stress_12.map((plies) => onFace(fields, plies[k], face)[i]))
         : element(e.ply.stress_12.map((plies) => onFace(fields, plies[k], face)[i]));
     }
+    case "tresca": case "max_principal": case "mid_principal": case "min_principal": case "pressure":
+      return element((e.ply.invariants?.[option.id] ?? []).map((plies) => onFace(fields, plies[k], face)));
+    case "E11": case "E22": case "E12": {
+      const i = ["E11", "E22", "E12"].indexOf(option.id);
+      return element(e.ply.strain_12.map((plies) => onFace(fields, plies[k], face)[i]));
+    }
     case "mises": return choice.averaged
       ? nodal(n.averages.ply_mises.map((plies) => onFace(fields, plies[k], face)))
       : element(e.ply.mises.map((plies) => onFace(fields, plies[k], face)));
@@ -172,6 +190,65 @@ function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "ran
 }
 
 export type Readout = { title: string; rows: [string, string][] };
+
+/** Tresca, the principal stresses and the pressure, with the names Abaqus/CAE gives them under S (ADR-0066 amendment 2): comparison
+ * quantities, not a composite's failure criterion. */
+export const INVARIANT_OPTIONS: [string, string, boolean][] = [
+  ["tresca", "Ply Tresca stress (S, Tresca)", false],
+  ["max_principal", "Ply max. principal stress (S, Max. Principal)", true],
+  ["mid_principal", "Ply mid. principal stress (S, Mid. Principal)", true],
+  ["min_principal", "Ply min. principal stress (S, Min. Principal)", true],
+  ["pressure", "Ply pressure (S, Pressure)", true],
+];
+
+/** The columns of the probe table, as Abaqus/CAE names them: the stresses in each ply's material axes, the invariants, the strains. */
+export const PROBE_COLUMNS = ["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"];
+
+export type ProbeRow = { ply: number; angle: number; face: string | null; values: (number | null)[] };
+export type ProbeTable = { element: string; instance: string; label: string; centroid: [number, number]; rows: ProbeRow[]; note: string };
+
+/** Every ply of one element as Abaqus/CAE's Query > Probe Values shows it for a composite shell: the element's own number in its
+ * instance, the centroid's value (no averaging), each ply in its material axes, S11 S22 S12, Mises, Tresca, the principal stresses, the
+ * pressure and the strains. A membrane coupon has one value per ply, the same at the ply's bottom, middle and top section points; a
+ * bending coupon has its two faces. S13 and S23 are not modelled by the membrane kernel and are not shown as numbers. */
+export function probeTable(fields: Fields, element: number): ProbeTable {
+  const e = fields.element;
+  const [instance, label] = (() => {
+    const full = fields.mesh.element_labels[element];
+    const dot = full.lastIndexOf(".");
+    return dot >= 0 ? [full.slice(0, dot), full.slice(dot + 1)] : ["", full];
+  })();
+  const faces = hasFaces(fields) ? fields.mesh.faces! : [null];
+  const rows: ProbeRow[] = [];
+  for (let k = 0; k < fields.mesh.plies; k += 1) {
+    faces.forEach((faceName, f) => {
+      const stress = onFace(fields, e.ply.stress_12[element][k], f);
+      const strain = onFace(fields, e.ply.strain_12[element][k], f);
+      const invariant = (name: string): number | null => (e.ply.invariants?.[name] ? onFace(fields, e.ply.invariants[name][element][k], f) : null);
+      rows.push({ ply: k + 1, angle: fields.mesh.angles[k], face: faceName, values: [
+        stress[0], stress[1], stress[2], onFace(fields, e.ply.mises[element][k], f),
+        invariant("tresca"), invariant("max_principal"), invariant("mid_principal"), invariant("min_principal"), invariant("pressure"),
+        strain[0], strain[1], strain[2],
+      ] });
+    });
+  }
+  const note = hasFaces(fields)
+    ? "Element centroid, no averaging, each ply in its material axes, at its bottom and top faces."
+    : "Element centroid, no averaging, each ply in its material axes; the membrane state is the same at a ply's bottom, middle and top "
+      + "section points. S13 and S23 are not modelled (membrane state). In Abaqus/CAE: Query > Probe Values, the element by its number, "
+      + "averaging off, the ply's section point.";
+  return { element: fields.mesh.element_labels[element], instance, label, centroid: [e.centroids[element][0], e.centroids[element][1]], rows, note };
+}
+
+/** The probe table as a CSV, the columns in Abaqus/CAE's words with the units, the numbers as the package wrote them. */
+export function probeCsv(fields: Fields, table: ProbeTable): string {
+  const lab = fields.labels;
+  const head = ["Element", "Ply", "Angle (deg)", ...(table.rows.some((r) => r.face) ? ["Face"] : []),
+    ...PROBE_COLUMNS.map((c, i) => `${c} (${i < 9 ? lab.stress : "-"})`)];
+  const cell = (v: number | null) => (v === null || v === undefined ? "" : String(v));
+  const lines = table.rows.map((r) => [table.element, String(r.ply), String(r.angle), ...(r.face ? [r.face] : []), ...r.values.map(cell)].join(","));
+  return [head.join(","), ...lines].join("\n") + "\n";
+}
 
 /** What one element holds, for the readout beside the picked element: its strains, section forces (and, when it bends, its curvatures,
  * moments and shear forces), and the chosen ply's stresses and ratio, on the chosen face when the package wrote faces. */

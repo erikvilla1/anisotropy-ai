@@ -203,6 +203,13 @@ class AbaqusOutput(Record):
     field_preselect: bool
     node_print: bool
     el_print: bool
+    # field output at the middle of every layer, so Abaqus/CAE contours show each ply and tools/abaqus_every_output.py reads every element
+    # and ply for the comparison with our kernel (ADR-0089 part 7; Abaqus 2025 accepted it on 2026-11-11); off unless a spec asks for it
+    every_layer: bool = False
+    # the deck's element for a mesh of order 1: S4R (one reduced-integration point and hourglass control, CAE's default) or S4 (full
+    # integration, as our kernel's element is). The founder chose S4 for the tension coupon's comparison on 2026-11-11 (ADR-0089
+    # amendment 2): with it every gauge value of Abaqus agreed with our kernel within 0.0074 %, against 1.61 % with S4R
+    element: Literal["S4R", "S4"] = "S4R"
 
 
 class CalculixOutput(Record):

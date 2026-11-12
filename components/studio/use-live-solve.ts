@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { hiddenReason } from "@/lib/enabled-tests";
+import { tensionReady, tensionValues } from "@/lib/tension-screen";
 import { isActive } from "@/lib/studio-api";
 import { buildValues, PLATE_TEST, type StudioForm } from "@/lib/studio-form";
 import { LIVE_DEBOUNCE_MS, liveKey, setupComplete, shouldSolveLive } from "@/lib/studio-live";
@@ -11,25 +13,26 @@ import type { CouponRun } from "./use-coupon-run";
 
 /** Our kernel's answer kept current (ADR-0086): once the setup has every row it needs, each settled edit, on a panel or in the chat, asks for
  * a live solve after LIVE_DEBOUNCE_MS, the previous one aborted; a setup that loses a row drops the last answer, which no longer stands. Not
- * while a full run is going, and never for the fibre tow, which has no model. The page computes nothing: it sends the rows. */
-export function useLiveSolve(apiBaseUrl: string, form: StudioForm, plate: PlateLists, run: CouponRun): void {
+ * while a full run is going, and never for the fibre tow, which has no model, nor for a test the studio does not offer (ADR-0089). The page
+ * computes nothing: it sends the rows. */
+export function useLiveSolve(apiBaseUrl: string, form: StudioForm, plate: PlateLists, run: CouponRun, allTests: boolean): void {
   const { solveLive, dropLive, cancelLive, liveFor, living, job } = run;
   const running = isActive(job?.state);
   const asked = useRef<string | null>(null); // the rows last sent, answered or not: never sent twice in a row
   useEffect(() => {
     const tow = isTow(form);
-    const complete = setupComplete(form);
-    if (!complete || tow) {
+    const complete = allTests ? setupComplete(form) : tensionReady(form); // the tension screen sends its own rows; the software chooses the rest (ADR-0090)
+    if (!complete || tow || hiddenReason(form, allTests)) {
       if (liveFor !== null) dropLive();
       asked.current = null;
       return;
     }
     const rows = { ...form, filled_by: (form.filled_by ?? "").trim() || remembered(RUN_BY_KEY) }; // as the rail names the file when it solves
-    const values = buildValues(rows, form.test === PLATE_TEST ? plateValues(plate) : undefined);
+    const values = allTests ? buildValues(rows, form.test === PLATE_TEST ? plateValues(plate) : undefined) : tensionValues(rows);
     const key = liveKey(values);
     if (living && asked.current !== null && asked.current !== key) { cancelLive(); asked.current = null; } // the answer on its way is for rows that no longer stand
     if (!shouldSolveLive({ api: Boolean(apiBaseUrl), complete, running, tow, key, sent: asked.current === key ? key : liveFor })) return;
     const timer = window.setTimeout(() => { asked.current = key; void solveLive(values, key); }, LIVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [apiBaseUrl, form, plate, running, liveFor, living, solveLive, dropLive, cancelLive]);
+  }, [apiBaseUrl, allTests, form, plate, running, liveFor, living, solveLive, dropLive, cancelLive]);
 }

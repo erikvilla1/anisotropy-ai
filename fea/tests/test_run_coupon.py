@@ -75,6 +75,9 @@ def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
     [package] = paths.documents(DESIGNATION).iterdir()  # named by the day it was built
     assert package.name.endswith(f"_{DESIGNATION}") and (package / "2-our-model" / "abaqus" / f"{DESIGNATION}-abaqus.inp").is_file()
     assert (package / "2-our-model" / "calculix" / f"{DESIGNATION}-nodal-ccx.inp").is_file()
+    readme = (package / "README.txt").read_text(encoding="utf-8")
+    assert "Attempt:       02 (our attempt this package delivers)" in readme  # this run's, not row 01, the form's reading
+    assert (package / "5-verify" / "compare_every_output.py").is_file() and (package / "4-results" / "ours-every-output.csv").is_file()
     assert read_case(folder).attempts == 2
     page = (folder / "README.md").read_text(encoding="utf-8")
     row = next(line for line in page.splitlines() if line.startswith("| 02 |"))
@@ -248,8 +251,9 @@ def stand_in_steps(tool, monkeypatch, seen: dict) -> None:
             target.write_text("stand-in", encoding="utf-8")
         seen.setdefault("steps", []).append(step)
 
-    def package(name, pdf, theory):
+    def package(name, pdf, theory, attempt=None):
         seen["result when the package started"] = json.loads(seen["progress"].read_text(encoding="utf-8"))["result"]
+        seen["attempt"] = attempt  # the run's own, which the package names
         raise tool.StepFailed("the package: Tectonic stopped")
 
     monkeypatch.setattr(tool, "script", script)
@@ -268,6 +272,7 @@ def test_the_result_is_reported_before_the_documents_and_a_failed_package_leaves
     assert seen["steps"] == ["our engine", "the convergence study", "CalculiX", "the CalculiX record", "the drawings"]
     assert seen["result when the package started"] == "57 of 57 recorded values agree with CalculiX"
     assert outcome.result == "57 of 57 recorded values agree with CalculiX" and outcome.result_at is not None
+    assert seen["attempt"] == "02"
     assert outcome.documents.startswith("the package not written (the package: Tectonic stopped)")
     assert {"fields", "explanation", "record", "kernel_summary", "kernel_vtu"} <= set(outcome.outputs) and "package" not in outcome.outputs
     row = next(line for line in (paths.LOCAL / DESIGNATION / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 02 |"))
@@ -288,3 +293,20 @@ def test_the_outcome_file_keeps_the_result_apart_from_a_missing_document(tool, t
     outcome = json.loads(result.read_text(encoding="utf-8"))
     assert outcome["status"] == "done" and outcome["result"] == "57 of 57 recorded values agree with CalculiX"
     assert outcome["documents"].startswith("the package not written") and outcome["message"] == f"{outcome['result']}; {outcome['documents']}"
+
+
+def test_any_failure_of_the_document_is_a_failed_package_step_that_names_the_error(tool, monkeypatch):
+    """ADR-0064: the package is built after the result, and its failure is reported, not raised. An unsymmetric tension coupon's empty
+    CalculiX record once stopped the whole run with a bare ValueError from a figure, and the run wrote no outcome."""
+    class Document:
+        @staticmethod
+        def sources(name, root):
+            return name
+
+        @staticmethod
+        def build_document(src, **options):
+            raise ValueError("max() iterable argument is empty\nmore lines")
+
+    monkeypatch.setitem(sys.modules, tool.COUPON_DOCUMENT, Document)
+    with pytest.raises(tool.StepFailed, match=r"^the package: ValueError: max\(\) iterable argument is empty$"):
+        tool.package("IM7-UNT-L1", pdf=False, theory=False, attempt="02")

@@ -51,6 +51,10 @@ JOB_ROLES = ("queue", "solver")
 # imported (about 2 s of imports a cold call would pay). 0 starts a fresh `studio_tool.py live` per call instead. Default 1.
 LIVE_WORKERS_VARIABLE = "ANISOTROPY_LIVE_WORKERS"
 LIVE_WORKERS_DEFAULT = 1
+# One workflow first (ADR-0089): the studio offers the unnotched tension coupon only until its comparison with Abaqus is validated.
+# `on` offers every test again, for development; unset or `off` keeps the list. The fea package reads the same variable from the
+# environment its processes inherit (`anisotropy_fea.enabled`), so a change needs a restart. The hosted tier never sets it.
+ALL_TESTS_VARIABLE = "ANISOTROPY_ALL_TESTS"
 LOCAL_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001")
 
 
@@ -116,6 +120,7 @@ class Settings:
     jobs_per_user_per_day: int | None = None  # None: no per-user limit, as locally
     job_role: str | None = None  # None: jobs run in this process; "queue" or "solver" with the job queue (ADR-0056 amendment 3)
     live_workers: int = LIVE_WORKERS_DEFAULT  # warm live-solve workers (ADR-0086); 0: a fresh process per live solve
+    all_tests: bool = False  # every test offered (ADR-0089); False: the unnotched tension coupon only
 
 
 def environment() -> Mapping[str, str]:
@@ -146,7 +151,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
                     allowed_origins=allowed_origins(environ), storage=storage_settings(environ),
                     jobs_per_user_per_day=jobs_per_user_per_day(environ, records_on=switch == "on"),
                     job_role=job_role(environ, records_on=switch == "on", storage_on=storage_settings(environ).on),
-                    live_workers=live_workers(environ))
+                    live_workers=live_workers(environ), all_tests=all_tests(environ))
 
 
 def job_role(environ: Mapping[str, str], *, records_on: bool, storage_on: bool) -> str | None:
@@ -163,6 +168,17 @@ def job_role(environ: Mapping[str, str], *, records_on: bool, storage_on: bool) 
         raise RuntimeError(f"{JOB_ROLE_VARIABLE}={raw} passes jobs between containers through the jobs table and the object store; "
                            f"it needs {' and '.join(missing)}")
     return raw
+
+
+def all_tests(environ: Mapping[str, str]) -> bool:
+    """Whether every test is offered (ADR-0089): `on`; unset, blank or `off` offers the unnotched tension coupon only. Any other word is
+    refused at startup, not read as off (ADR-0003); the fea package applies the same rule to the same variable."""
+    raw = environ.get(ALL_TESTS_VARIABLE, "").strip().lower()
+    if not raw:
+        return False
+    if raw not in {"on", "off"}:
+        raise RuntimeError(f"{ALL_TESTS_VARIABLE} must be 'on' or 'off', not {raw!r}; unset it to offer the unnotched tension coupon only")
+    return raw == "on"
 
 
 def live_workers(environ: Mapping[str, str]) -> int:

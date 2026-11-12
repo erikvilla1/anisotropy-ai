@@ -2,6 +2,7 @@
 stand-in as a coupon the team has not built, and a fixture coupon with a team comparison. The coupon models themselves are local
 (ADR-0042): the command line is run on one when this machine has it."""
 
+import json
 import importlib.util
 import re
 import subprocess
@@ -240,6 +241,41 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     assert plies[0].startswith("team element,our element,x (mm),y (mm),ply (1 = bottom),angle (deg),S11 (MPa)") and plies[1].startswith(",")  # no team numbers
 
 
+EVERY_LAYER_PUBLIC = D3039_PUBLIC.replace("abaqus = { field_preselect = true, node_print = true, el_print = true }",
+                                          'abaqus = { field_preselect = true, node_print = true, el_print = true, every_layer = true, element = "S4" }')
+
+
+def test_a_tension_package_carries_every_output_and_the_scripts_the_engineers_compare_their_run_with(coupon, tmp_path):
+    """ADR-0089 amendment 3: the team's engineers verify from the package alone. A coupon whose deck asks Abaqus for every ply's
+    middle gets our every output, the two scripts that read their ODB and compare it, the README's steps and the CAE steps for S4; the
+    package names the attempt that built it."""
+    assert EVERY_LAYER_PUBLIC != D3039_PUBLIC
+    tex_path, package = coupon.build_document(public_sources(coupon, tmp_path, EVERY_LAYER_PUBLIC), pdf=False, theory=False, attempt="02")
+    names = files_in(package)
+    for name in ("4-results/ours-every-output.csv", "4-results/ours-every-output.json", "4-results/ours-all-plies.csv",
+                 *(f"5-verify/{tool}" for tool in coupon.VERIFY_TOOLS)):
+        assert name in names, name
+    for tool in coupon.VERIFY_TOOLS:  # the same scripts as the repository's, byte for byte
+        assert (package / "5-verify" / tool).read_bytes() == (paths.FEA / "tools" / tool).read_bytes()
+    readme = (package / "README.txt").read_text(encoding="utf-8")
+    assert "Attempt:       02 (our attempt this package delivers)" in readme
+    assert "How to verify every output" in readme and "abaqus python 5-verify/compare_every_output.py 4-results/ours-every-output.csv" in readme
+    assert all(name in readme for name in names if name.startswith(("4-results/", "5-verify/")))
+    header = (package / "4-results/ours-every-output.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert header.startswith("Element,Layer,Section Point,X,Y,S11,S22,S12,Mises,Tresca,Pressure") and header.endswith(",E11,E22,E12,Zone")
+    tex = tex_path.read_text(encoding="utf-8")
+    assert "Reduced integration unticked" in tex and "Specify: 2, 5, 8, 11, 14, 17, 20, 23" in tex
+    assert "To check every output" in tex and "To send results back" not in tex
+    assert "Job.odb --out" not in tex  # code type breaks the two hyphens apart; a bare -- would print as a dash
+    assert "ADR-" not in coupon.VERBATIM.sub("", tex)
+    form = load_workbook(package / f"{package.name}-audit.xlsx")
+    cover = form[COVER]
+    assert any("attempt 02" in str(cell.value) for row in cover.iter_rows() for cell in row if cell.value)
+    rubric = {form[RUBRIC_SHEET].cell(r, 1).value: r for r in range(2, form[RUBRIC_SHEET].max_row + 1)}
+    ours = form[RUBRIC_SHEET].cell(rubric["C8"], RUBRIC_COLUMNS.index("Ours") + 1).value  # every other output, for the engineer to judge
+    assert ours.startswith("Every element and ply: 4-results/ours-every-output.csv") and "compare_every_output.py" in ours
+
+
 def test_the_coupon_document_compiles_where_tectonic_is_installed(coupon, tmp_path):
     """The other tests write the LaTeX only; a brace too many in the cover reached the PDF build. Skipped where Tectonic is absent (CI)."""
     if coupon.manual.tectonic() is None:
@@ -303,7 +339,7 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     assert result("C2") is None  # the fixture reports no S12: the row waits for the team, as rows C1, C4 and C7 do
     # the fixture deck types the constants to two decimals in MPa, our library carries more digits: a real difference, sized for the auditor
     assert result("B5") == "Fail" and "Largest relative difference" in form["Rubric"].cell(rows["B5"], RUBRIC_COLUMNS.index("Difference") + 1).value
-    assert r"Audit} (rubric 0.3" in tex
+    assert r"Audit} (rubric 0.4" in tex
     assert coupon.build_document(src, pdf=False, theory=False)[1] == package  # a second build replaces the package it wrote
 
 
@@ -386,3 +422,22 @@ def test_the_regression_check_compares_with_the_newest_returned_audit(coupon, tm
     returned_form(package, tmp_path / paths.TEAM_FILES / "2026-10-25", changes={"B5": "Pass"})  # an earlier engine passed B5
     assert coupon.check(src) == ["B5"]
     assert "REGRESSION" in capsys.readouterr().out
+
+
+def test_the_document_says_how_the_tension_screen_built_the_coupon(coupon, tmp_path):
+    from anisotropy_fea.intake import FORM_VERSION
+
+    """ADR-0090: the rows the software chose for a coupon set up on the tension screen, read again from the values file the job filed."""
+    team = tmp_path / "team"
+    (team / "2026-11-11").mkdir(parents=True)
+    (team / "2026-11-11" / "values-job.json").write_text(json.dumps({"form_version": FORM_VERSION, "input": "tension", "library": "im7-8552",
+                                                                      "angles": [45, 0, -45, 90], "symmetric": "yes"}), encoding="utf-8")
+    built = coupon.tension_choices(team)
+    rows = {b.row: b for b in built}
+    assert rows["width"].value == 25.0 and rows["date"].value == "2026-11-11"  # the folder's day, so a rebuild writes the same table
+    section = coupon.built_section(built, "mm-MPa")
+    assert r"\section{How we built it}" in section and "Width (mm)" in section and "Table 2, balanced and symmetric" in section
+    (team / "2026-11-12").mkdir()
+    (team / "2026-11-12" / "values-panels.json").write_text(json.dumps({"form_version": FORM_VERSION, "test": "unnotched tension"}), encoding="utf-8")
+    assert coupon.tension_choices(team) == ()  # the latest delivery came from the panels: nothing was chosen for it
+    assert coupon.built_section((), "mm-MPa") == ""

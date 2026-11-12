@@ -32,7 +32,11 @@ export type FormDefinition = {
   /** The test standards the Standard row offers (ADR-0072): each with its tests, the rows it needs, its specimens or classes with their sizes in
    * every system, and its requirements by clause. The page judges nothing: the checklist's Test standard item carries the judgement. */
   standards: { none: string; profiles: StandardProfile[] };
+  /** The tests the studio offers until the first workflow is validated (ADR-0089): the list, never the switch; the API says whether the
+   * switch shows every test (`GET /v1/coupon-tests`). */
+  enabled: EnabledList;
 };
+export type EnabledList = { tests: string[]; standards: string[]; material_kinds: string[]; dogbone: boolean; not_available: string; switch: string };
 /** A size a standard names: a specimen (C1869 A, B) or a class of laminate (D3039 Table 2), by row, in every unit system. */
 export type StandardPreset = {
   key: string; label: string; clause: string; minimum: string[]; note: string; values: Record<string, Record<string, number>>;
@@ -265,7 +269,11 @@ export type JudgedRequirement = StandardRequirement & { state: "met" | "deviatio
 export type CheckItem = {
   id: string; label: string; state: "pass" | "warn" | "fail" | "missing" | "pending"; message: string; rows: string[]; requirements?: JudgedRequirement[];
 };
-export type Checklist = { items: CheckItem[]; designation: string | null; coupon_exists: boolean; attempts: number; state: "ready" | "blocked"; problems: string[] };
+export type Checklist = {
+  items: CheckItem[]; designation: string | null; coupon_exists: boolean; attempts: number; state: "ready" | "blocked"; problems: string[];
+  /** The rows the tension screen left to the software, each with its value and reason (ADR-0090); absent or empty for every other input. */
+  built?: { row: string; value: unknown; reason: string }[];
+};
 
 /** The rows a checklist names, by field key, with the item's message: what the form highlights. */
 export function rowErrorsFrom(checklist: Checklist): Record<string, string> {

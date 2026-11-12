@@ -37,7 +37,7 @@ export const roadmap: readonly RoadmapStage[] = [
     number: "01",
     subtitle: "The foundation",
     title: "Coupons",
-    text: "Unnotched and open-hole tension, compression, shear and bending. A physics pipeline to be validated against blind lab tests.",
+    text: "Unnotched tension first, compared with Abaqus output by output; then open-hole tension, compression, shear and bending, one at a time through the same comparison. A physics pipeline to be validated against blind lab tests.",
     status: "CURRENT FOCUS",
   },
   {

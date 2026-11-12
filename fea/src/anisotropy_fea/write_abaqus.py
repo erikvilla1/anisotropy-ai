@@ -73,7 +73,7 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
     out.append("*Node")
     for index, (x, y) in enumerate(mesh.xy, start=1):
         out.append(f"{index}, {number(length(x))}, {number(length(y))}, 0.")
-    element_type = "S4R" if mesh.order == 1 else "S8R"
+    element_type = spec.output.abaqus.element if mesh.order == 1 else "S8R"  # S4R unless the spec asks for S4 (ADR-0089 amendment 2)
     out.append(f"*Element, type={element_type}")
     for index, nodes in enumerate(mesh.connectivity(), start=1):
         out.append(f"{index}, " + ", ".join(str(int(n) + 1) for n in nodes))
@@ -174,5 +174,12 @@ def write_abaqus(model: FEModel, units: str | None = None) -> str:
                 if points and variable in ("S", "E"):
                     out.append(points)
                 out.append(variable)
+    if requests.every_layer and not model.section.homogeneous:
+        # every layer's middle section point in the ODB, as the data line before the variables lists them: CAE shows each ply, and the
+        # comparison reads every element and ply (tools/abaqus_every_output.py); Abaqus 2025 accepted this form on 2026-11-11
+        out.append("*Output, field")
+        out.append("*Element Output, directions=YES")
+        out.append(", ".join(str(SECTION_POINTS * k + (SECTION_POINTS + 1) // 2) for k in range(len(model.section.plies))))
+        out.append("S, E, SF, SE")
     out.append("*End Step")
     return "\n".join(out) + "\n"

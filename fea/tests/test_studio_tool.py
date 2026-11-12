@@ -172,3 +172,61 @@ def test_live_solves_with_our_kernel_when_only_the_full_runs_tools_are_missing(t
     assert items["solver"] == "fail" and checklist["state"] == "blocked", "the full run is blocked without CalculiX"
     assert (out / "fields.json").is_file() and done.stdout.startswith(f"blocked: {DESIGNATION}, solved by our kernel in")
     assert {k for k, v in items.items() if v in ("fail", "missing")} <= {"solver", "document"}
+
+
+def refused_coupon(root: Path) -> str:
+    """A stored coupon whose spec the current rules refuse: the public D638 dog-bone with its extensometer stretched past the narrow
+    section, as a spec saved before that rule existed would be."""
+    source = paths.ROOT / "fea" / "checks" / "d638-type-i-plastic" / "d638-type-i-plastic.toml"
+    text = source.read_text(encoding="utf-8")
+    assert "gauge_length = 50.0" in text
+    assert 'designation = "PLASTIC-UNT-L1"' in text
+    name = "PLASTIC-UNT-L9"  # a code of its own: the example's L1 names a stack, and a plastic has none
+    folder = root / name / paths.OURS
+    folder.mkdir(parents=True)
+    broken = text.replace("gauge_length = 50.0", "gauge_length = 70.0").replace('designation = "PLASTIC-UNT-L1"', f'designation = "{name}"')
+    (folder / f"{name}.toml").write_text(broken, encoding="utf-8")
+    return name
+
+
+def test_a_stored_coupon_the_rules_now_refuse_does_not_stop_the_others(tmp_path):
+    """One spec saved under older rules took the hosted studio down on 2026-11-10: every check, live solve and list read every stored
+    spec and the first refusal stopped them all. Now it is listed with why, keeps its codes, and the rest go on."""
+    root = tmp_path / "root"
+    name = refused_coupon(root)
+    [entry] = json.loads(run_tool("--root", str(root), "coupons").stdout)
+    assert entry["name"] == name and entry["kind"] == "unreadable" and "no longer passes the checks" in entry["problem"] and "gauge_length" in entry["problem"]
+    reopened = run_tool("--root", str(root), "values", name)
+    assert reopened.returncode != 0 and "cannot be reopened" in reopened.stderr
+    out = tmp_path / "check"
+    done = run_tool("--root", str(root), "check", str(values_file(tmp_path)), "--out", str(out))
+    assert done.returncode == 0, done.stderr
+    checklist = json.loads((out / "checklist.json").read_text(encoding="utf-8"))
+    assert checklist["designation"] == DESIGNATION and checklist["state"] in ("ready", "blocked")
+    live_out = tmp_path / "live"
+    assert run_tool("--root", str(root), "live", str(values_file(tmp_path)), "--out", str(live_out)).returncode == 0
+    assert (live_out / "fields.json").is_file()
+
+
+def test_a_refused_coupons_codes_stay_its_own(tmp_path):
+    from anisotropy_fea.intake import IntakeError, check_form, designation_for, read_input, stored_coupons
+
+    root = tmp_path / "root"
+    name = refused_coupon(root)
+    loaded, refused = stored_coupons(root)
+    assert loaded == {} and list(refused) == [name] and "gauge_length" in refused[name]
+    values = json.loads(values_file(tmp_path).read_text(encoding="utf-8"))
+    taking = tmp_path / "taking.json"
+    taking.write_text(json.dumps({**values, "material_code": "PLASTIC"}), encoding="utf-8")
+    with pytest.raises(IntakeError) as caught:
+        designation_for(check_form(read_input(taking)), root)
+    assert f"Material code: PLASTIC is held by {name}, whose spec the current rules refuse" in str(caught.value)
+    layup = tmp_path / "layup.json"
+    layup.write_text(json.dumps({**values, "layup_code": "L9"}), encoding="utf-8")
+    with pytest.raises(IntakeError) as caught:
+        designation_for(check_form(read_input(layup)), root)
+    assert f"Layup code: L9 is held by {name}, whose spec the current rules refuse" in str(caught.value)
+    blank = tmp_path / "blank.json"
+    blank.write_text(json.dumps({key: value for key, value in values.items() if key not in ("material_code", "layup_code")}), encoding="utf-8")
+    named = designation_for(check_form(read_input(blank)), root)
+    assert named.material_code != "PLASTIC" and named.layup_code == "L1"  # a blank code never lands on one the refused coupon holds

@@ -21,3 +21,7 @@ The reading note of the record with the same name. Numbers quoted here are the o
 ## What would settle the open items
 
 A tension test of this laminate to D3039 with an extensometer of the same gauge length, reduced by the standard's equations; the cause of CalculiX's reaction being lower than its strains imply.
+
+## Re-run, 2026-11-11 (ADR-0090)
+
+The spec now holds what the studio's tension screen builds for IM7/8552 [45/0/-45/90]s: G23 = E2 / 3 = 2987.73 MPa, the form's estimate for a tape, in place of a nominal 3000 MPa, and a second element probe on the row beside the bottom tab, left out of this record like the other near-grip probes. CalculiX 2.22 ran the regenerated deck; every recorded value moved in its fifth significant figure or later (the grip reaction 16086.37 N against 16086.43 N), and the numbers quoted above stand as printed.

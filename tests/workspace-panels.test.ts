@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  MATERIAL_KEYS, NEEDS_TEST, PANELS, panelOfItem, panelOfKey, panelOfStep, panelState, setupLine, stepNumber, stepRequirements, visibleKeys,
+  MATERIAL_KEYS, NEEDS_TEST, PANELS, panelOfItem, panelOfKey, panelOfStep, panelState, panelToFix, setupLine, stepNumber, stepRequirements, visibleKeys,
 } from "../lib/workspace-panels";
 import { STEP_ORDER, stepOfKey } from "../lib/studio-chat";
 import { blankForm, fieldByKey, fields, NO_STANDARD, testDescription, type Checklist } from "../lib/studio-form";
@@ -22,6 +22,10 @@ test("every row of the form belongs to exactly one panel, and every checklist it
   assert.equal(panelOfKey("standard"), "test");
   assert.equal(panelOfKey("size_from"), "geometry"); // where the size comes from sits beside the sizes a standard names
   assert.equal(panelOfItem("standard"), "test");
+  // a failing item is fixed where its rows are: the strain rows on Geometry, though Test standard judges them (ADR-0062 amendment 2)
+  assert.equal(panelToFix({ id: "standard", rows: ["Strain measurement", "Strain measurement length (mm)"] }), "geometry");
+  assert.equal(panelToFix({ id: "standard", rows: ["Standard"] }), "test");
+  assert.equal(panelToFix({ id: "solver", rows: [] }), "run");
   assert.ok(MATERIAL_KEYS.includes("G13") && !MATERIAL_KEYS.includes("ply_1") && !MATERIAL_KEYS.includes("symmetric"));
 });
 
