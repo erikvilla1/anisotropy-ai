@@ -92,7 +92,7 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     }
     if (path === "/v1/coupon-jobs" && request.method() === "POST") {
       calls.solves.push(request.postDataJSON());
-      return json(route, fixture("job-running"), 202);
+      return json(route, options.jobs ? options.jobs(0) : fixture("job-running"), 202); // a scenario's own jobs start as it says, queued among them
     }
     if (/^\/v1\/coupon-jobs\/[^/]+$/.test(path)) {
       polls += 1;
@@ -440,7 +440,7 @@ test("the tension screen takes the material and the layup, builds the model, say
   const built = page.getByTestId("tension-built");
   await expect(built.locator("tr[data-row=width]")).toContainText("ASTM D3039/D3039M-17, Table 2, balanced and symmetric");
   await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm by default");
-  await expect(page.getByTestId("tension-files")).toContainText("Solver input (.inp)", { timeout: 20_000 });
+  await expect(page.getByTestId("tension-files")).toContainText("Solver input (.inp)", { timeout: 45_000 }); // the job ends at the eighth poll, slower on CI
   await expect(page.getByTestId("tension-files")).toContainText("Report (PDF)");
   await expect(page.getByTestId("tension-files").locator("a[data-key=document]")).toHaveAttribute("download", "D3039_[45-0--45-90]s_report.pdf");
 });
@@ -1032,11 +1032,12 @@ async function shownText(page: Page): Promise<string> {
 const expectNoBannedTerms = async (page: Page, where: string) => expect(bannedIn(await shownText(page)), where).toEqual([]);
 
 test("the customer's workspace never names a tool, a vendor, a model, a script, a record or a person (ADR-0091)", async ({ page }) => {
+  test.setTimeout(120_000); // queued, running, the result and done at the eighth poll: about 20 s here, more on CI
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   const queued = { ...fixture("job-running"), state: "queued", stage: null, stages_done: [], outputs: {}, log_tail: [], message: "queued; 1 ahead" };
   // the oldest words the pipeline still writes come through: stage names, "agree with CalculiX", the record's .toml, the console
   await mockApi(page, calls, { allTests: false, writer: "model",
-    jobs: (poll) => (poll < 3 ? queued : poll < 5 ? fixture("job-running") : poll < 7 ? fixture("job-result-in") : fixture("job-done")) });
+    jobs: (poll) => (poll < 3 ? queued : poll < 5 ? fixture("job-running") : poll < 7 ? fixture("job-result-in") : fixture("job-done")) }); // poll 0: the solve's answer
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await expectNoBannedTerms(page, "a fresh start");
@@ -1044,12 +1045,12 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
   await page.getByTestId("build-button").click();
-  await expect(page.getByTestId("job-progress").first()).toHaveAttribute("data-state", "queued");
+  await expect(page.getByTestId("job-progress").first()).toHaveAttribute("data-state", "queued", { timeout: 15_000 });
   await expect(page.getByTestId("job-state").first()).toHaveText("Queued (1 ahead)");
   await expectNoBannedTerms(page, "queued");
   await expect(page.getByTestId("job-progress").first()).toHaveAttribute("data-state", "running", { timeout: 15_000 });
   await expectNoBannedTerms(page, "running");
-  await expect(page.getByTestId("job-progress").first()).toHaveAttribute("data-state", "done", { timeout: 30_000 });
+  await expect(page.getByTestId("job-progress").first()).toHaveAttribute("data-state", "done", { timeout: 45_000 });
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "anthropic", { timeout: 15_000 }); // a model wrote it; the page does not say so
   await page.getByTestId("answer-table").getByRole("button", { name: "Show" }).first().click();
   await expect(page.getByTestId("probe")).toBeVisible();
