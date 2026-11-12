@@ -139,7 +139,7 @@ export function TowRail({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   return (
     <div className="studio-form ws-rail-panels" data-testid="tow-form">
-      {!apiBaseUrl ? <p className="studio-alert">The page was built without the API&apos;s address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be calculated.</p> : null}
+      {!apiBaseUrl ? <p className="studio-alert">Analysis is not available on this page.</p> : null}
       <div className="ws-rail-head"><SetupLine form={form} /></div>
       <StepPanel {...step("tow-standard")} note="ASTM D4018: a fibre tow, no model">
         <TestStep form={form} disabled={busy} onChange={edit} allTests={allTests} />

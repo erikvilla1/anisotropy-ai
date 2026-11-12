@@ -117,8 +117,8 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
         choose("width", sizes["width"], why)
         choose("length", sizes["length"], why)
         choose("tab_length", tab, why if "tab_length" in sizes else
-               f"{why} grips through emery cloth and gives no grip length: {GRIP_LENGTH_MM:g} mm is ours, as in the public D3039 check")
-        choose("size_from", why + ("" if "tab_length" in sizes else f"; the {GRIP_LENGTH_MM:g} mm grip length is ours"),
+               f"{why} grips through emery cloth and sets no grip length: {GRIP_LENGTH_MM:g} mm by default")
+        choose("size_from", why + ("" if "tab_length" in sizes else f"; the {GRIP_LENGTH_MM:g} mm grip length by default"),
                "where the size comes from, for the coupon's identity card")
     elif size_given:
         choose("size_from", "the engineer's own size" + (f": a deviation from {D3039} Table 2 is reported, never refused" if under_d3039 else ""),

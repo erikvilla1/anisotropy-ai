@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
@@ -39,6 +40,19 @@ def content_type(path: Path) -> str:
     return MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
 
 
+DOWNLOAD_NAME = re.compile(r"[A-Za-z0-9_.,()\[\]+-]{1,120}")  # what the page may ask a file to be saved as (lib/studio-copy.ts downloadName)
+
+
+def download_name(name: str | None, suffix: str) -> str | None:
+    """The name a file is handed out under, when the page asks for one (ADR-0091): letters, digits and `_ . , ( ) [ ] + -` only, and the
+    file's own suffix; anything else is refused, so a header never carries what the page did not mean."""
+    if name is None:
+        return None
+    if not DOWNLOAD_NAME.fullmatch(name) or not name.lower().endswith(suffix.lower()) or name.startswith("."):
+        raise ValueError(f"a download name is letters, digits and _ . , ( ) [ ] + - ending in {suffix}")
+    return name
+
+
 def disposition(path: Path) -> str | None:
     """`attachment` for the files a browser should save; None lets the browser decide (the viewer fetches the JSON ones)."""
     return f'attachment; filename="{path.name}"' if path.suffix.lower() in ATTACHMENTS else None
@@ -55,7 +69,7 @@ class ObjectStore(Protocol):
 
     def tags(self, prefix: str) -> dict[str, str]: ...
 
-    def link(self, key: str, seconds: int = LINK_SECONDS) -> str: ...
+    def link(self, key: str, seconds: int = LINK_SECONDS, filename: str | None = None) -> str: ...
 
 
 class R2Store:
@@ -94,8 +108,12 @@ class R2Store:
         pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix)
         return {item["Key"]: item["ETag"] for page in pages for item in page.get("Contents", [])}
 
-    def link(self, key: str, seconds: int = LINK_SECONDS) -> str:
-        return self.client.generate_presigned_url("get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=seconds)
+    def link(self, key: str, seconds: int = LINK_SECONDS, filename: str | None = None) -> str:
+        """A short-lived link; with `filename`, the store answers it as an attachment under that name (S3's response-content-disposition)."""
+        params = {"Bucket": self.bucket, "Key": key}
+        if filename is not None:
+            params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
+        return self.client.generate_presigned_url("get_object", Params=params, ExpiresIn=seconds)
 
 
 # ------------------------------------------------------------------------------------------------------------- the layout

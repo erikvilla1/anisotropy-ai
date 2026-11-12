@@ -294,7 +294,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             reason = str(exc).split("Value error, ", 1)[-1].split(" [type=", 1)[0]
             problems.append(reason)
             iso = values is not None and values.isotropic is not None
-            notes.note("material", "fail", f"our engine refuses these constants: {reason}",
+            notes.note("material", "fail", f"these constants are not physically valid: {reason}",
                        (row("own_E"), row("own_nu")) if iso else (row("own_E1"), row("own_E2"), row("own_G12"), row("own_nu12")))
     if spec is not None:  # the test standard: judged on the spec, whatever the mesh says; a deviation warns and never blocks (ADR-0072)
         judged = conformance(spec)
@@ -445,9 +445,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         if spec.mesh.mesher == "structured" and bricks > SPOOLES_LAYER_BRICKS:
             # SPOOLES, the image's only direct solver, stopped on one structured mesh of 24,000 layer bricks (55,733 equations) and ordered 17,850 on the
             # same coupon and an open-hole mesh of about 25,000; the count is where it has failed, not a rule (ADR-0030 amendment 5)
-            notes.note("mesh", "warn", f"the CalculiX twin would be {bricks} layer bricks ({mesh.element_count} elements by {len(plies)} plies); the image's SPOOLES solver "
-                       f"stopped on a structured mesh of 24000 (2026-11-08, whatever the material) and ordered {SPOOLES_LAYER_BRICKS - 150} on the same coupon, so this run may stop in "
-                       "CalculiX; if it does, a coarser mesh solves (fea/checks/calculix-conventions.toml)", (row("element_size"), row("mesh_nx")))
+            notes.note("mesh", "warn", f"the reference solve would be {bricks} layer bricks ({mesh.element_count} elements by {len(plies)} plies); its SPOOLES solver "
+                       f"stopped on a structured mesh of 24000 and ordered {SPOOLES_LAYER_BRICKS - 150} on the same coupon, so this run may stop while "
+                       "verifying; if it does, a coarser mesh solves", (row("element_size"), row("mesh_nx")))
         if spec.mesh.mesher == "gmsh":
             version = gmsh()
             notes.note("mesh", "pass" if version else "fail", f"Gmsh {version} meshes the hole" if version else
@@ -479,15 +479,15 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     found = ccx()
     version = ccx_version(found) if found is not None else None
     if version:
-        notes.note("solver", "pass", f"CalculiX {version} at {found}: the reference solver that checks our engine's result")
+        notes.note("solver", "pass", f"version {version}, ready")  # the program and its path stay out of the page (ADR-0091)
     else:
         notes.note("solver", "fail", "CalculiX not found: set ANISOTROPY_CCX or put ccx on PATH (docs/installation-fea-tools.md); the run tool refuses "
                    "to start without it")
     tectonic_path = tectonic()
     if tectonic_path:
-        notes.note("document", "pass", f"Tectonic at {tectonic_path}: the package gets its PDF")
+        notes.note("document", "pass", "the report is written as a PDF")
     else:
-        notes.note("document", "warn", "Tectonic not found: the package is written without its PDF (run with pdf off)")
+        notes.note("document", "warn", "the report PDF cannot be written here: the package is written without its PDF")
 
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)

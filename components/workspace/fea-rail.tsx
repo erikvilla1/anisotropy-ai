@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { hiddenReason, isRowEnabled, isTestEnabled } from "@/lib/enabled-tests";
-import { couponValues, DOWNLOADS, fileUrl, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
+import { couponValues, DOWNLOADS, isActive, listCoupons, StudioError, type CheckAnswer, type CouponSummary } from "@/lib/studio-api";
+import { runHeadline, runProblem } from "@/lib/studio-copy";
+import { layupNotation } from "@/lib/studio-chat";
+import { JobFiles, namingOf } from "@/components/studio/job-files";
 import { buildValues, exampleForm, formFromValues, isIsotropic, PLATE_TEST, rowErrorsFrom, withStandard, withTest, type StudioForm } from "@/lib/studio-form";
 import { plateFromValues, plateValues, type PlateLists } from "@/lib/studio-plate";
 import { MATERIAL_KEYS, NEEDS_TEST, panel, panelState, panelToFix, stepNumber, visibleKeys, type PanelId } from "@/lib/workspace-panels";
@@ -30,7 +33,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runBy, setRunBy] = useState("");
   const [message, setMessage] = useState("");
-  const [status, setStatus] = useState("Load the example or fill in the rows, then check the setup.");
+  const [status, setStatus] = useState("Load the example or fill in the inputs, then check the setup.");
   const [coupons, setCoupons] = useState<CouponSummary[]>([]);
   const [reopen, setReopen] = useState("");
   useEffect(() => { setRunBy(remembered(RUN_BY_KEY)); }, []);
@@ -42,7 +45,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
   }, [apiBaseUrl]);
 
   const { clearChecked } = runner;
-  const changed = useCallback((what: string) => { setErrors({}); clearChecked(); setMessage(""); setStatus(`${what} changed. Check the setup again before solving.`); }, [clearChecked]);
+  const changed = useCallback((what: string) => { setErrors({}); clearChecked(); setMessage(""); setStatus(`${what} changed. Check the setup again.`); }, [clearChecked]);
   const edit = useCallback((key: string, value: string) => {
     // a new test or standard clears the rows that belonged to the old one, and says so (ADR-0072)
     const note = key === "test" ? withTest(form, value).note : "";
@@ -73,10 +76,10 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
     try {
       const answer = await runner.check(values(named()));
       setErrors(rowErrorsFrom(answer.checklist));
-      setStatus(answer.state === "ready" ? `Setup ready: ${answer.designation ?? "the coupon"} can be solved.` : "The setup is blocked; the items below say what to fix.");
+      setStatus(answer.state === "ready" ? "Setup ready." : "Fix the items below.");
       return answer;
     } catch (error) {
-      setMessage(error instanceof StudioError ? error.message : "The setup check failed.");
+      setMessage(error instanceof StudioError ? error.message : "The setup could not be checked. Try again.");
       setStatus("");
       return null;
     }
@@ -87,20 +90,20 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
     const answer = checked ?? (await check());
     if (!answer || answer.state !== "ready") return;
     const name = runBy.trim();
-    if (!name) { setMessage("Give your name under Run by: the attempt log and the CalculiX record name who ran it."); return; }
+    if (!name) { setMessage("Enter your name under Run by."); return; }
     remember(RUN_BY_KEY, name);
     setMessage("");
     try {
       await runner.solve(values(named()), name, answer.checklist.coupon_exists);
-      setStatus("Solving. The fields appear as soon as our engine has run.");
+      setStatus("Running. Results appear as soon as the solve finishes.");
     } catch (error) {
-      setMessage(error instanceof StudioError ? error.message : "The solve could not start.");
+      setMessage(error instanceof StudioError ? error.message : "The analysis could not start. Try again.");
     }
   }
 
   useEffect(() => {
     if (!job || !fields) return;
-    setStatus(job.state === "done" ? `Done: ${job.message ?? "the package is written"}.` : "Our engine has run; CalculiX, the record and the package follow.");
+    setStatus(job.state === "done" ? "Done." : "Solved. Verification and the report follow.");
   }, [job, fields]);
   useEffect(() => { if (runner.problem) setMessage(runner.problem); }, [runner.problem]);
 
@@ -111,15 +114,15 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
       setForm({ ...formFromValues(loaded), filled_by: form.filled_by || runBy, date: today() });
       setPlate(plateFromValues(loaded));
       setErrors({}); setMessage(""); runner.reset();
-      setStatus(`Coupon ${name} loaded; change what you need and check the setup. Solving it adds the next attempt.`);
+      setStatus(`${name} opened. Change what you need, then check the setup.`);
     } catch (error) {
-      setMessage(error instanceof StudioError ? error.message : "The coupon could not be read.");
+      setMessage(error instanceof StudioError ? error.message : "The coupon could not be opened. Try again.");
     }
   }
 
   function loadExample() {
     setForm(exampleForm(today())); setErrors({}); clearChecked(); setMessage("");
-    setStatus("The public IM7/8552 example is loaded: 250 by 25 mm with 56 mm tabs, [45/0/-45/90]s, 1 mm pull.");
+    setStatus("IM7/8552 example loaded: 250 × 25 mm, 56 mm tabs, [45/0/-45/90]s, 1 mm pull.");
   }
 
   // the fibre tow test is no coupon: its own panels (ADR-0074), while the switch offers it (ADR-0089)
@@ -134,13 +137,13 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
   );
   /** A step whose rows depend on the test waits for the first step's answer, and says so, instead of showing rows that may not apply. */
   const waiting = (id: PanelId) => (!form.test && NEEDS_TEST.includes(id)
-    ? <p className="studio-hint" data-testid={`waiting-${id}`}>Pick the test under step 1 first: what this step asks for depends on it.</p> : null);
+    ? <p className="studio-hint" data-testid={`waiting-${id}`}>Pick the test in step 1 first.</p> : null);
   const failing = checklist?.items.filter((item) => item.state === "fail" || item.state === "missing") ?? [];
   const available = job ? DOWNLOADS.filter(([key]) => key in job.outputs) : [];
 
   return (
     <div className="studio-form ws-rail-panels" data-testid="studio-form">
-      {!apiBaseUrl ? <p className="studio-alert">The page was built without the API&apos;s address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be checked or solved.</p> : null}
+      {!apiBaseUrl ? <p className="studio-alert">Analysis is not available on this page.</p> : null}
 
       <div className="ws-rail-head">
         <SetupLine form={form} />
@@ -152,7 +155,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
                 <option value="">Reopen a coupon…</option>
                 {coupons.map((c) => {
                   const offered = isTestEnabled(c.test, allTests); // a coupon of a hidden test is listed, kept, and not reopened (ADR-0089)
-                  return <option key={c.name} value={c.name} disabled={!offered}>{c.name} ({offered ? `${c.status ?? "?"}, ${c.attempts} attempt${c.attempts === 1 ? "" : "s"}` : `${c.test}: not available yet`})</option>;
+                  return <option key={c.name} value={c.name} disabled={!offered}>{c.name} ({offered ? `${c.attempts} run${c.attempts === 1 ? "" : "s"}` : `${c.test}: not available yet`})</option>;
                 })}
               </select>
               <button type="button" className="studio-text-button" onClick={() => loadCoupon(reopen)} disabled={busy || !reopen}>Reopen</button>
@@ -169,7 +172,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
 
       <StepPanel id="project" step={stepNumber("project")} title="Project" state={state("project")}>
         {grid("project")}
-        {checklist?.designation ? <p className="studio-hint">Coupon {checklist.designation}{checklist.coupon_exists ? `, ${checklist.attempts} attempt${checklist.attempts === 1 ? "" : "s"} so far` : ", new"}: the name is derived from the material, the test and the layup.</p> : null}
+        {checklist?.designation ? <p className="studio-hint">Coupon {checklist.designation}{checklist.coupon_exists ? `, ${checklist.attempts} run${checklist.attempts === 1 ? "" : "s"} so far` : ", new"}.</p> : null}
       </StepPanel>
 
       <StepPanel id="geometry" step={stepNumber("geometry")} title="Geometry" state={state("geometry")}>
@@ -178,7 +181,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
             <StandardSize form={form} disabled={busy} onRows={editSize} />
             {grid("geometry")}
             <StepStandard form={form} id="geometry" checklist={checklist} />
-            {isPlate ? <p className="studio-hint">A plate&apos;s regions, the boxes you draw, are listed under Loads and supports.</p> : null}
+            {isPlate ? <p className="studio-hint">A plate&apos;s regions are listed under Loads and supports.</p> : null}
           </>
         )}
       </StepPanel>
@@ -188,7 +191,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
           <>
             {grid("layup", visibleKeys(form, "layup").filter((key) => key === "material_kind"))}
             {isIsotropic(form)
-              ? <p className="studio-hint" data-testid="isotropic-hint">One isotropic material, such as a plastic: no plies, so give its thickness, E and nu, with its name and source. Its yield and failure are not modelled yet, so no failure criterion applies.</p>
+              ? <p className="studio-hint" data-testid="isotropic-hint">One isotropic material, such as a plastic: give its thickness, E and ν, name and source. Failure is not predicted for it.</p>
               : <LayupEditor form={form} errors={errors} disabled={busy} onChange={edit} onRows={editRows} />}
             {grid("layup", visibleKeys(form, "layup").filter((key) => MATERIAL_KEYS.includes(key)))}
             <StepStandard form={form} id="layup" checklist={checklist} />
@@ -209,7 +212,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
         {waiting("mesh") ?? (
           <>
             {grid("mesh")}
-            {checked?.preview ? <p className="studio-hint">{checked.preview.mesh.element_count} elements, {checked.preview.mesh.node_count} nodes, {checked.preview.mesh.mesher} mesher.</p> : null}
+            {checked?.preview ? <p className="studio-hint">{checked.preview.mesh.element_count} elements, {checked.preview.mesh.node_count} nodes.</p> : null}
           </>
         )}
       </StepPanel>
@@ -223,7 +226,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
           <p className="ws-fix-links">
             {failing.map((item) => {
               const target = panelToFix(item);
-              return target ? <button type="button" key={item.id} className="studio-text-button" onClick={() => showPanel(target)}>Fix {item.label.toLowerCase()} under {panel(target).title}</button> : null;
+              return target ? <button type="button" key={item.id} className="studio-text-button" onClick={() => showPanel(target)}>Fix {item.label.toLowerCase()} ({panel(target).title})</button> : null;
             })}
           </p>
         ) : null}
@@ -235,25 +238,22 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
         <div className="studio-field studio-run-by">
           <label htmlFor="studio-run-by">Run by</label>
           <input id="studio-run-by" type="text" value={runBy} onChange={(e) => setRunBy(e.target.value)} disabled={busy} autoComplete="name" />
-          <span className="studio-hint">Named in the attempt log and the CalculiX record; remembered in this browser.</span>
+          <span className="studio-hint">Your name goes on the report.</span>
         </div>
         <div className="studio-buttons">
           <button type="button" className="studio-button studio-button-primary" onClick={solve} disabled={busy || !apiBaseUrl || (checked !== null && checked.state !== "ready")} data-testid="solve-button">Run full analysis</button>
         </div>
-        {job ? <p className="studio-hint">{job.state === "queued" ? `Queued: ${job.message ?? "waiting for a free solver"}.` : job.state === "running" ? `Running: ${job.stage ?? "starting"}.` : job.state === "done" ? "Done. The results are in the centre, the files under Outputs." : `${job.state}: ${job.message ?? ""}`}</p> : null}
+        {job ? <p className="studio-hint">{runProblem(job) ?? (job.state === "done" ? "Done. Results are in the centre, files under Outputs." : `${runHeadline(job)}${job.state === "running" ? "…" : "."}`)}</p> : null}
       </StepPanel>
 
       <StepPanel id="outputs" title="Outputs">
         {job && available.length ? (
-          <ul className="studio-downloads ws-outputs">
-            {available.map(([key, label]) => <li key={key}><a href={fileUrl(apiBaseUrl, job.job_id, key)} target="_blank" rel="noreferrer">{label}</a></li>)}
-            <li><a href={`/workspace/fea/view?job=${encodeURIComponent(job.job_id)}`} target="_blank" rel="noreferrer">The viewer in a new window</a></li>
-          </ul>
-        ) : <p className="studio-hint">The package, its PDF, the decks and the CalculiX results appear here as the run writes them.</p>}
+          <JobFiles apiBase={apiBaseUrl} job={job} naming={namingOf(fields, form, layupNotation(form))} />
+        ) : <p className="studio-hint">Files appear here when the analysis finishes.</p>}
       </StepPanel>
 
-      <StepPanel id="advanced" title="Advanced: every other row" open={false} note="names, codes, the Abaqus names">
-        <p className="studio-hint">Rows the steps above do not ask for: the coupon&apos;s codes are derived when blank; the Abaqus names only name the deck&apos;s parts.</p>
+      <StepPanel id="advanced" title="Advanced" open={false} note="names and codes">
+        <p className="studio-hint">Optional inputs. Codes left blank are derived.</p>
         {grid("advanced")}
       </StepPanel>
     </div>

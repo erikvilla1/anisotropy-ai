@@ -31,7 +31,7 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
     <div className="studio-panel" data-testid="preview">
       <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span></h3>
       <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loaded={loaded} loads={loads} onPick={onPick} picked={picked ?? null} />
-      {onPick ? <p className="studio-muted">Click an element to hold or load the regions it belongs to.</p> : null}
+      {onPick ? <p className="studio-muted">Click an element to hold or load its regions.</p> : null}
     </div>
   );
 }
@@ -54,12 +54,12 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const sketch = !shown && !checked?.preview ? sketchOf(form, isPlate ? plate : null) : null;
   return (
     <section className="studio-output">
+      {job ? <JobProgress job={job} /> : null}
       {shown ? (
         <>
-          {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open the viewer in a new window</a></p> : null}
+          {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : null}
           <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
-            live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} />
-          {job ? <JobProgress job={job} /> : null}
+            live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false} />
         </>
       ) : (
         <>
@@ -84,17 +84,16 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
             </>
           ) : sketch ? (
             <div className="studio-panel" data-testid="sketch">
-              <h3>The coupon <span className="studio-badge">sketch of the typed rows, not meshed</span></h3>
+              <h3>The coupon <span className="studio-badge">sketch, not meshed</span></h3>
               <SketchScene sketch={sketch} />
-              <p className="studio-muted">{sketch.width} by {sketch.length} {sketch.lengthUnit}{sketch.tabs !== null ? `, ${sketch.tabs} ${sketch.lengthUnit} tabs` : ""}{sketch.tabThickness !== null ? ` bonded ${sketch.tabThickness} ${sketch.lengthUnit} thick with a ${sketch.tabBevel}° bevel` : ""}{sketch.hole !== null ? `, a ${sketch.hole} ${sketch.lengthUnit} hole` : ""}{sketch.dogbone !== null ? `, a dog-bone narrowing to ${sketch.dogbone.narrowWidth} by ${sketch.dogbone.narrowLength} ${sketch.lengthUnit} through ${sketch.dogbone.radius} ${sketch.lengthUnit} fillets${sketch.dogbone.outerRadius !== null ? ` and ${sketch.dogbone.outerRadius} ${sketch.lengthUnit} outer radii` : ""}` : ""}{sketch.strain !== null ? `, a ${sketch.strain.length} ${sketch.lengthUnit} ${sketch.strain.device} at the centre` : ""}, as typed.{sketch.standard ? ` Sized for ${sketch.standard}${sketch.specimen ? `, ${sketch.specimen}` : ""}; the check says how it meets it.` : ""} {sketch.isotropic ? (sketch.toScale ? `One isotropic material, drawn ${sketch.thickness} ${sketch.lengthUnit} thick.` : "One isotropic material, drawn as a thin slab until its thickness is given.") : sketch.toScale ? `The thickness is drawn in proportion, ${sketch.plies} plies.` : "The thickness is drawn as a thin slab until the plies and their thickness are given."} Check the setup to mesh it and see the held end and the load.</p>
+              <p className="studio-muted">{sketch.width} × {sketch.length} {sketch.lengthUnit}{sketch.tabs !== null ? `, ${sketch.tabs} ${sketch.lengthUnit} tabs` : ""}{sketch.tabThickness !== null ? ` bonded ${sketch.tabThickness} ${sketch.lengthUnit} thick with a ${sketch.tabBevel}° bevel` : ""}{sketch.hole !== null ? `, a ${sketch.hole} ${sketch.lengthUnit} hole` : ""}{sketch.dogbone !== null ? `, a dog-bone narrowing to ${sketch.dogbone.narrowWidth} by ${sketch.dogbone.narrowLength} ${sketch.lengthUnit} through ${sketch.dogbone.radius} ${sketch.lengthUnit} fillets${sketch.dogbone.outerRadius !== null ? ` and ${sketch.dogbone.outerRadius} ${sketch.lengthUnit} outer radii` : ""}` : ""}{sketch.strain !== null ? `, a ${sketch.strain.length} ${sketch.lengthUnit} ${sketch.strain.device} at the centre` : ""}{sketch.isotropic && sketch.toScale ? `, ${sketch.thickness} ${sketch.lengthUnit} thick` : ""}.{sketch.standard ? ` Sized for ${sketch.standard}${sketch.specimen ? `, ${sketch.specimen}` : ""}.` : ""}</p>
             </div>
           ) : (
             <div className="studio-empty" data-testid="empty-scene">
               <h3>No model yet</h3>
-              <p>Give the coupon&apos;s width and length under Geometry and a sketch appears here; check the setup and the mesh, the held tab and the pulled tab follow.</p>
+              <p>The model appears here once the coupon is set up.</p>
             </div>
           )}
-          {job ? <JobProgress job={job} /> : null}
         </>
       )}
     </section>

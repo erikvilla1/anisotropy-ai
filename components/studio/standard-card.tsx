@@ -1,5 +1,6 @@
 "use client";
 
+import { checkText } from "@/lib/studio-copy";
 import { enabledStandards } from "@/lib/enabled-tests";
 import { standardOf, standardsFor, type Checklist, type StudioForm } from "@/lib/studio-form";
 import { RequirementTable } from "./requirement-table";
@@ -33,7 +34,7 @@ export function StandardCard({ form, checklist, tow = false, allTests = false }:
       </p>
       {judged && item ? (
         <>
-          <p className={`ws-standard-summary ws-standard-${item.state}`} data-testid="standard-summary">{item.message}</p>
+          <p className={`ws-standard-summary ws-standard-${item.state}`} data-testid="standard-summary">{checkText(item)}</p>
           <details open>
             <summary>Each requirement, judged on this {tow ? "record" : "coupon"}</summary>
             <RequirementTable requirements={judged} judged subject={subject} />

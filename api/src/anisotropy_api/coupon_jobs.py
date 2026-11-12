@@ -228,7 +228,7 @@ class CouponJobs:
             job = None if row is None else Job.from_row(row)
             if row is not None and row.state == "queued" and not row.message:
                 ahead = queue_position(self.table, row.id, row.started_at)
-                job.snapshot["message"] = f"waiting for a free solver; {ahead} job(s) ahead of this one" if ahead else "waiting for a free solver"
+                job.snapshot["message"] = f"queued; {ahead} ahead" if ahead else "queued"  # the words a customer reads (ADR-0091)
         return job
 
     def sweep(self, force: bool = False) -> int:
@@ -342,7 +342,7 @@ class CouponJobs:
             raise JobRefused(f"the job could not be registered in the jobs table, so it was not queued: {str(exc).splitlines()[0]}") from exc
         return Job(job_id, actor, inputs, None, now, state="queued", user_email=user_email, project_id=project_id,
                    snapshot={"stage": None, "done": [], "stages": [], "outputs": {}, "coupon": None, "attempt": None, "log_tail": [],
-                             "message": "waiting for a free solver"})
+                             "message": "queued"})
 
     def _within_limits(self, actor: str, user_email: str | None) -> None:
         """The hosted tier's per-user limits (ADR-0056), from the jobs table: one running job per person, and at most `per_day` jobs
@@ -441,14 +441,15 @@ class CouponJobs:
             shutil.make_archive(str(archive.with_suffix("")), "zip", root_dir=package.parent, base_dir=package.name)
         return archive
 
-    def output_url(self, job: Job, key: str) -> str | None:
+    def output_url(self, job: Job, key: str, filename: str | None = None) -> str | None:
         """A short-lived link to a job's file in the object store, or None when the file is served from the disk: no store, a job of
         this process still running, or a file the store does not hold (ADR-0050 amendment 2); an ended job's stored files, a stopped
         run's deck and console among them, come from the store. A job read back from its row has no
-        disk here, so its files come from the store while it runs too: with the job queue its solver files them as they are made."""
+        disk here, so its files come from the store while it runs too: with the job queue its solver files them as they are made.
+        With `filename`, the link hands the file out under that name (ADR-0091)."""
         if self.store is None or key not in job.stored or (job.state not in ("done", "stopped") and job.folder is not None):
             return None
-        return self.store.link(job.stored[key])
+        return self.store.link(job.stored[key]) if filename is None else self.store.link(job.stored[key], filename=filename)
 
     def output_file(self, job: Job, key: str) -> Path:
         """One of the job's files by its key, from the outcome once it is done or from the progress while it runs: `package` is the

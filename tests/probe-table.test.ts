@@ -6,15 +6,16 @@ import { DEFAULT_CHOICE, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valu
 
 const fields = JSON.parse(readFileSync("tests/fixtures/studio/fields.json", "utf8")) as Fields;
 
-test("the viewer offers Tresca, the principal stresses, the pressure and the ply strains as Abaqus names them, element values only (ADR-0066 amendment 2)", () => {
+test("the viewer offers Tresca, the principal stresses, the pressure and the ply strains by plain names, element values only (ADR-0066 amendment 2, ADR-0091)", () => {
   const options = Object.fromEntries(fieldOptions(fields).map((o) => [o.id, o]));
   for (const id of ["tresca", "max_principal", "mid_principal", "min_principal", "pressure", "E11", "E22", "E12"]) {
     assert.ok(options[id], id);
     assert.equal(options[id].elementOnly, true, id);
     assert.equal(options[id].perPly, true, id);
   }
-  assert.match(options.tresca.label, /S, Tresca/);
-  assert.match(options.max_principal.label, /S, Max\. Principal/);
+  assert.equal(options.tresca.label, "Ply Tresca stress");
+  assert.equal(options.max_principal.label, "Ply max. principal stress");
+  assert.equal(options.E11.label, "Ply strain ε₁");
   const k = 2; // ply 2, the 0 deg ply of [45/0/-45/90]s
   const tresca = valuesFor(fields, { ...DEFAULT_CHOICE(fields), id: "tresca", ply: k, averaged: true });
   assert.equal(tresca.by, "element", "no display average is written for an invariant, whatever the switch says");

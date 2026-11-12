@@ -67,7 +67,7 @@ def test_a_complete_setup_passes_every_item(tmp_path):
     assert items["mesh"].message.startswith("1200 elements, 1331 nodes (structured mesh, order 1); aspect ratio")
     assert items["criterion"].message == "first-ply failure by max_stress, tsai_hill"
     assert "node centre at (12.5, 125)" in items["probes"].message and "element centre, element near_grip" in items["probes"].message
-    assert items["solver"].message.startswith("CalculiX 2.22 at ccx") and items["document"].message.startswith("Tectonic at tectonic")
+    assert items["solver"].message == "version 2.22, ready" and items["document"].message == "the report is written as a PDF"
     assert model is not None and model.mesh.element_count == 1200 and quality is not None and quality.element_count == 1200
     as_dict = checked.as_dict()
     assert as_dict["state"] == "ready" and as_dict["items"][0] == {"id": "identity", "label": "Who and which coupon", "state": "pass",
@@ -191,7 +191,7 @@ def test_constants_the_engine_refuses_fail_the_material(tmp_path):
     checked, model, _ = checklist(tmp_path, PUBLIC_FILL, **{**own_constants(), "own_E1": 162.0})  # E1 alone in GPa: nu12^2 < E1/E2 no longer holds
     items = by_id(checked)
     assert checked.state == "blocked" and model is None and items["material"].state == "fail"
-    assert "our engine refuses these constants: Elastic constants violate positive compliance" in items["material"].message
+    assert "these constants are not physically valid: Elastic constants violate positive compliance" in items["material"].message
     assert items["material"].rows[0] == "Own material: E1 (MPa)" and checked.problems == ("Elastic constants violate positive compliance: need nu12**2 < E1/E2",)
 
 
