@@ -9,7 +9,7 @@ export const LIVE_DEBOUNCE_MS = 800;
 /** The rows as sent, as one string: two edits that leave the same rows send nothing new. */
 export const liveKey = (values: StudioValues): string => JSON.stringify(values);
 
-export type LiveCondition = {
+type LiveCondition = {
   /** every row the setup needs is filled (the conversation's last step is the review) */
   complete: boolean;
   /** a full run is going: its answer is on its way and a preview would only compete with it */

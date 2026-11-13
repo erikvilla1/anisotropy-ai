@@ -2,7 +2,7 @@
  * or from the "Add a condition" menu on the panels, and never shown before. Each names the product it belongs to, the words that call it
  * up, and the panel that holds its rows. The page decides only what to show; every number is the engine's (ADR-0001). */
 
-export type ConditionId = "temperature";
+type ConditionId = "temperature";
 export type Condition = {
   id: ConditionId;
   title: string;

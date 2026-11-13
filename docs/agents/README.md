@@ -18,13 +18,21 @@ The `docs/` folder is also the Obsidian vault, so these files can be read and ed
 
 ## How the agent finds them
 
-Claude Code scans `.claude/skills/` for skills and `.claude/agents/` for subagents. `scripts/link-agent-dirs.ps1` points them at `skills/` and `subagents/` here with local junctions that git ignores. Run the script once after cloning and in every new worktree:
+Claude Code scans `.claude/skills/` for skills and `.claude/agents/` for subagents. A setup script points them at `skills/` and `subagents/` here with local links that git ignores: junctions on Windows, symlinks on macOS and Linux. Run the one for your machine once after cloning and in every new worktree.
+
+On Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/link-agent-dirs.ps1
 ```
 
-A session started before `.claude/agents/` existed lists no subagent; start a new session once.
+On macOS and Linux:
+
+```sh
+sh scripts/link-agent-dirs.sh
+```
+
+Either way `git status` shows neither link. A session started before `.claude/agents/` existed lists no subagent; start a new session once.
 
 ## Using a subagent
 

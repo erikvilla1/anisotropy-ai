@@ -1,5 +1,5 @@
 // References describe methods and source coverage. They never certify the classroom values.
-export type StandardReference = {
+type StandardReference = {
   id: string; title: string; url: string; monitorId?: string;
 };
 export const standards: Record<string, StandardReference> = {
@@ -14,7 +14,7 @@ export const standards: Record<string, StandardReference> = {
   ISO845: { id: "ISO845", title: "ISO 845 · apparent density", url: "https://www.iso.org/standard/39408.html" },
   AMS401: { id: "AMS401", title: "SAE AMS-STD-401 · sandwich/core test methods", url: "https://saemobilus.sae.org/standards/amsstd401-sandwich-constructions-core-materials-general-test-methods" },
 };
-export type MaterialEvidence = {
+type MaterialEvidence = {
   identity: "identified" | "confirmation-needed" | "identity-needed";
   sourceIds: string[];
   references: { title: string; url: string; relationship: string }[];
@@ -89,7 +89,7 @@ export type MaterialFeed = {
   candidates: { materialId: string; sourceId: string; fingerprint: string; properties: PropertyValue[]; status: "unreviewed" }[];
   releases: { materialId: string; sourceId: string; fingerprint: string; releaseId: string; approvedAt: string; sourceRevision: string | null; sourceRevisionDate: string | null; documentUrl: string; properties: PropertyValue[]; use: "reference-only" }[];
 };
-export function engineeringEligibility(materialId: string) {
+function engineeringEligibility(materialId: string) {
   if (!materialEvidence[materialId]) throw new Error("Unknown material");
   return { scope: "qualified-design-allowables", eligible: false as const, reason: "No qualified design release exists. Use analysisPacket for explicitly scoped preliminary inputs; reference lookup remains available." };
 }
