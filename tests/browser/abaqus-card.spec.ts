@@ -148,8 +148,11 @@ test("an upload key is shown once, the command never holds it, and a file sent f
   await expect(keys).toBeVisible({ timeout: 20_000 });
   await expect(keys.getByTestId("abaqus-command")).toBeHidden();
   await keys.locator("summary").click();
+  // the address the site was built with, whatever it is here: the one the connector's link has
+  const api = ((await card(page).getByTestId("abaqus-connector").getAttribute("href")) ?? "").replace(/\/v1\/abaqus-connector$/, "");
+  expect(api).toMatch(/^https?:\/\/[^/]+$/);
   await expect(keys.getByTestId("abaqus-command")).toHaveText(
-    `abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa --coupon IM7-UNT-L1 --send http://api.test --token-file anisotropy-key.txt --our-run ${JOB}`);
+    `abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa --coupon IM7-UNT-L1 --send ${api} --token-file anisotropy-key.txt --our-run ${JOB}`);
   await expect(keys.getByTestId("abaqus-waiting")).toHaveText("Waiting for a file from Abaqus…");
   await keys.getByLabel("Where you will use it").fill("lab workstation");
   await keys.getByTestId("abaqus-key-create").click();
