@@ -14,7 +14,7 @@ export type BeatId = (typeof BEAT_IDS)[number];
 export const DEMO_CLOCK_PER_SECOND = 0.25;
 /** How long each beat is on the clock: 4.4, 3.2, 5.6 and 2.8 s. */
 const LENGTHS: Record<BeatId, number> = { describe: 1.1, model: 0.8, analysis: 1.4, report: 0.7 };
-/** The model's move at the start of a beat: 1.44 s, eased in and out, as Scale's centre model moves. */
+/** The model's move at the start of a beat: 1.44 s, eased in and out. */
 export const MOVE = 0.36;
 /** The words of the beat before go in this long, as the move starts. */
 const WORDS_OUT = 0.09;
@@ -39,7 +39,7 @@ const [DESCRIBE, MODEL, ANALYSIS, REPORT] = BEATS;
  * the plies stand apart, 0 to 1; `size` is the coupon's length as a share of the box's width. */
 export type Pose = { x: number; y: number; pitch: number; yaw: number; explode: number; size: number };
 const START: Pose = { x: 0.5, y: 0.3, pitch: 0.42, yaw: 0, explode: 0.3, size: 0.4 };
-/** The pose at the end of each beat, Scale's way: in the middle and nearly face-on, then three-quarter at one side, then at the
+/** The pose at the end of each beat: in the middle and nearly face-on, then three-quarter at one side, then at the
  * other with the plies apart, then back in the middle. */
 export const POSES: Record<BeatId, Pose> = {
   describe: { x: 0.5, y: 0.25, pitch: 0.66, yaw: 0.1, explode: 0.5, size: 0.44 },

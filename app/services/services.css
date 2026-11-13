@@ -1,5 +1,6 @@
 /* The services landing, the five service pages and the contact page (ADR-0058) on the section kit (ADR-0077 amendment 12). The
- * shared parts (`kit-row`, `kit-note`, `kit-figure`, `kit-status`, the page opening) are in `app/inner-pages.css`. */
+ * shared parts (`kit-row`, `kit-note`, `kit-figure`, the page opening) are in `app/inner-pages.css`; `kit-status` is in
+ * `app/sections.css`. */
 
 /* The landing's two ways in, under its introduction: two cards of six columns. */
 .page-opening-links {
@@ -10,7 +11,7 @@
 }
 .page-opening-links > a {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 20px;
   min-width: 0;
   padding: 24px;
@@ -33,17 +34,19 @@
   letter-spacing: 0.02em;
   color: var(--muted);
 }
-.page-opening-links h3 {
+/* The card's title: a line of words, not a heading, so the page's first heading after its h1 is the band's h2. */
+.page-opening-links .page-opening-link-title {
   margin: 6px 0 0;
   font-family: var(--font);
   font-size: 22px;
   font-weight: 400;
   line-height: 28px;
   letter-spacing: -0.01em;
+  color: var(--text);
 }
 
-/* The five services as rows on the head's columns: the picture under the label, the service under the statement, how much
- * of it exists in the last three columns. */
+/* The five services as rows on the head's columns: the picture, when the row has one, under the label, and the service under
+ * the statement, how much of it exists beside its number. */
 .service-item-body {
   display: flex;
   flex-direction: column;
@@ -52,8 +55,9 @@
 }
 .service-item-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
 }
 .service-item h3 {
   margin: 4px 0 0;
@@ -66,22 +70,6 @@
 .service-item .kit-link {
   margin-top: 8px;
 }
-/* The landing's last band: the note in the left half, its link from the halfway line, as the closing band sets a statement
- * and its action. */
-.service-preview .band-grid {
-  align-items: end;
-}
-.service-preview-text {
-  grid-column: 1 / 7;
-  font-size: 24px;
-  line-height: 32px;
-  letter-spacing: -0.01em;
-}
-.service-preview-link {
-  grid-column: 7 / 13;
-  justify-self: start;
-  margin-bottom: 5px;
-}
 
 /* A service page. What exists: rows, the fact's number and name under the label, its text under the statement. */
 .service-fact-head {
@@ -89,8 +77,8 @@
   grid-template-columns: 40px minmax(0, 1fr);
   align-items: baseline;
 }
-/* The demonstration: what you get under the label (columns 1 to 3), the pictures under the statement (4 to 12), as the home
- * demo sets its inputs and its view. Two pictures share the width and one height. */
+/* The demonstration: what you get under the label (columns 1 to 3), the picture under the statement (4 to 12), as the home
+ * demo sets its inputs and its view. */
 .service-demo-media {
   grid-column: 4 / 13;
   grid-row: 1;
@@ -99,22 +87,16 @@
   grid-auto-columns: minmax(0, 1fr);
   gap: 32px;
 }
-.service-demo-media > .media-slot:not(:only-child) {
-  display: flex;
-  flex-direction: column;
-}
-.service-demo-media > .media-slot:not(:only-child) .media-slot-frame {
-  flex: 1;
-  min-height: 240px;
-  /* The slot's ratio is an inline style (components/media-slot.tsx); beside the illustration it takes that panel's height. */
-  aspect-ratio: auto !important;
-}
 .service-demo-list {
   grid-column: 1 / 4;
   grid-row: 1;
   display: grid;
   align-content: start;
   gap: 16px;
+}
+/* With no picture, what you get takes the band's width. */
+.has-no-media > .service-demo-list {
+  grid-column: 1 / -1;
 }
 .service-demo-list ul {
   margin: 0;
@@ -135,12 +117,19 @@
   line-height: 24px;
   color: var(--muted);
 }
-/* What is planned: cards of three columns under the statement. */
+/* What is planned: cards under the statement, as many to a row as there are cards (up to three), so none is left alone. */
 .service-planned-list {
   grid-column: 4 / 13;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 32px;
+}
+.service-planned-list[data-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 36em;
+}
+.service-planned-list[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .service-planned-card {
   display: flex;
@@ -155,6 +144,16 @@
   font-size: 16px;
   line-height: 24px;
   color: var(--muted);
+}
+/* A link inside a card's words is told from them by its colour and its underline, not by colour alone (WCAG 1.4.1). */
+.service-planned-card p a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: opacity 0.15s;
+}
+.service-planned-card p a:hover {
+  opacity: 0.6;
 }
 /* Access: the links under the statement's paragraph. */
 .band.service-access .band-head {
@@ -205,19 +204,47 @@
   grid-column: 10 / 13;
 }
 
-/* Contact: two heads of the kit, the address and the links each in a statement's place. */
+/* Contact: two heads of the kit, the addresses and the links each in a statement's place. Each address is the words of its
+ * link, so it can be selected and copied as well as clicked. */
 .contact-row:last-child {
   margin-bottom: 0;
+}
+.contact-groups {
+  gap: 32px;
+}
+.contact-group {
+  display: grid;
+  gap: 12px;
+}
+.contact-group h3 {
+  font-weight: 400;
+}
+.contact-group ul {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.contact-group li {
+  display: grid;
+  gap: 4px;
+}
+.contact-person {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--muted);
 }
 .contact-email {
   justify-self: start;
   display: inline-flex;
   align-items: center;
-  gap: 16px;
-  font-size: 38px;
-  line-height: 41px;
+  gap: 12px;
+  font-size: 28px;
+  line-height: 34px;
   letter-spacing: -0.01em;
   overflow-wrap: anywhere;
+  user-select: text;
   transition: opacity 0.15s;
 }
 .contact-email:hover {
@@ -234,25 +261,54 @@
   .service-planned-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .service-planned-list[data-count="1"],
+  .service-planned-list[data-count="3"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 @media (max-width: 1023px) {
   .page-opening-links {
     margin-top: 48px;
   }
-  .service-preview-text,
-  .service-preview-link,
   .service-demo-media,
   .service-demo-list,
   .service-planned-list {
     grid-column: 1 / -1;
     grid-row: auto;
   }
-  .service-item .media-slot {
-    max-width: 360px;
-  }
   .contact-email {
-    font-size: 30px;
-    line-height: 34px;
+    font-size: 24px;
+    line-height: 30px;
+  }
+  /* The strip to the other services: three columns that size to their words, so a name stays on one line with its arrow. */
+  .service-nav {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+  .service-nav a {
+    white-space: nowrap;
+  }
+  .service-nav a:nth-child(1) {
+    grid-column: 1;
+  }
+  .service-nav a:nth-child(2) {
+    grid-column: 2;
+  }
+  .service-nav a:nth-child(3) {
+    grid-column: 3;
+    justify-self: end;
+  }
+}
+/* A tablet: a service row with a picture keeps it beside its words; a row without one has its words across the row. */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .service-item.has-media {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: 32px;
+  }
+  .service-item.has-media .kit-row-head {
+    grid-column: 1;
+  }
+  .service-item.has-media .kit-row-body {
+    grid-column: 2;
   }
 }
 @media (max-width: 760px) {
@@ -264,17 +320,13 @@
   .page-opening-links > a {
     padding: 20px;
   }
-  .page-opening-links h3 {
+  .page-opening-links .page-opening-link-title {
     font-size: 20px;
     line-height: 26px;
   }
   .service-item h3 {
     font-size: 24px;
     line-height: 30px;
-  }
-  .service-preview-text {
-    font-size: 20px;
-    line-height: 28px;
   }
   .service-demo-media {
     grid-auto-flow: row;
@@ -291,15 +343,17 @@
   }
   .service-nav a:nth-child(n) {
     grid-column: 1;
+    justify-self: start;
+    white-space: normal;
   }
   .contact-email {
-    gap: 12px;
-    font-size: 22px;
-    line-height: 28px;
+    gap: 10px;
+    font-size: 20px;
+    line-height: 26px;
   }
   .contact-email svg {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
   }
   .contact-links .kit-link {
     font-size: 18px;

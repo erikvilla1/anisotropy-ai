@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowUpRight, Check, FileText, Layers3 } from "lucide-react";
+import { ArrowRight, Check, FileText, Layers3 } from "lucide-react";
 import { demoRun, demoScale, standardName } from "@/lib/demo-run";
 import { COMMON_MATERIALS } from "@/lib/studio-chat";
 import { legendGradient } from "@/lib/studio-colors";
@@ -29,7 +29,7 @@ function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches, () => false);
 }
 
-/** Where each beat's words stand: under the model, or in a block at one side with the model at the other (Scale's arrangement). */
+/** Where each beat's words stand: under the model, or in a block at one side with the model at the other (ADR-0095 amendment 1). */
 const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", model: "left", analysis: "right", report: "under" };
 /** The three files the workspace lists first for a run. */
 const FILES = DOWNLOAD_LABELS.slice(0, 3).map(([, label]) => label);
@@ -161,7 +161,7 @@ export function ProductDemo() {
             <li key={name} data-shown={index < view.files ? "true" : undefined}><FileText size={15} aria-hidden="true" /> {name}</li>
           ))}
         </ul>
-        <Link className="demo-open" href="/workspace/fea">{OPEN_WORKSPACE} <ArrowUpRight size={16} aria-hidden="true" /></Link>
+        <Link className="demo-open" href="/workspace/fea">{OPEN_WORKSPACE} <ArrowRight size={16} aria-hidden="true" /></Link>
       </div>
     ),
   };
@@ -171,7 +171,8 @@ export function ProductDemo() {
       <div className="product-demo-box" ref={box}>
         <div className="product-demo-head">
           <p className="demo-label">{DEMO_HEAD.label}</p>
-          <h2 id="demo-title">{DEMO_HEAD.title}</h2>
+          {/* The hero's "Scroll to explore" moves the focus here (components/home/scroll-to-explore.tsx). */}
+          <h2 id="demo-title" tabIndex={-1}>{DEMO_HEAD.title}</h2>
         </div>
         <div className="product-demo-view">{viewWanted ? <ProductDemoScene handle={handle} script={script} /> : null}</div>
         <ol className="product-demo-beats">

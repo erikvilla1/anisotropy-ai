@@ -112,7 +112,7 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   // seen before its move: a copy each, hidden from assistive technology, over the page's own text, which stays in place.
   const ready = seen.findIndex((frame) => frame.copies > 0);
   expect(ready).toBeGreaterThan(0);
-  // The triangle and the Basement's mark wait with them to fade in, and the statement's copy carries the one text cursor.
+  // The triangle and the corner's words wait with them to fade in, and the statement's copy carries the one text cursor.
   expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, riders: 1, running: 5, ownHeadline: STATEMENT });
   expect(seen.slice(0, ready).every((frame) => frame.opacity === 1)).toBe(true);
   // The copies go once the moves have played: the headline's 1.6 s, with room for a busy machine.
@@ -207,13 +207,14 @@ test("three seconds after the load-in the hero's words are taken away and the cl
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero.locator(".home-hero-mark")).toHaveCSS("transform", "none");
-  // The statement and the Basement's mark are still in the page for a screen reader.
+  // The statement and the words in the corner are still in the page for a screen reader.
   await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
-  await expect(hero.getByAltText("UC San Diego, The Basement")).toHaveCount(1);
-  // With the words gone, "Scroll to explore" comes up in the clip's bottom right corner, as far in as the Basement's mark is
+  await expect(hero.locator(".home-hero-backed")).toHaveText("The Basement, UC San Diego Fall 2026 Launchpad cohort");
+  // With the words gone, "Scroll to explore" comes up in the clip's bottom right corner, as far in as the cohort's words are
   // on the left: the words, then an arrow in a square outline (ADR-0077 amendments 22 and 24) ...
   await expect(explore).toBeVisible();
   await expect(explore).toHaveText("Scroll to explore");
+  await expect(explore).toHaveAttribute("href", "#demo");
   await expect(explore).toHaveCSS("opacity", "1");
   const placed = await page.evaluate(() => {
     const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
@@ -238,7 +239,8 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   expect(placed.square).toEqual([34, 34]);
   expect(placed.squareLast).toBeLessThanOrEqual(0.5);
   expect([placed.border, placed.radius]).toEqual(["1px", "5px"]);
-  // ... and a press scrolls the page to the section that follows the hero: to the window's top, or its middle if it is shorter.
+  // ... and a press scrolls the page to the section that follows the hero, the product demo: to the window's top, or its
+  // middle if it is shorter; the focus moves to the demo's heading, so a keyboard or a screen reader carries on from there.
   await explore.click();
   const off = () =>
     page.evaluate(() => {
@@ -246,6 +248,7 @@ test("three seconds after the load-in the hero's words are taken away and the cl
       return Math.round(Math.abs(box.top - Math.max(0, (window.innerHeight - box.height) / 2)));
     });
   await expect.poll(off, { timeout: 10_000 }).toBeLessThanOrEqual(1);
+  await expect(page.locator("#demo-title")).toBeFocused();
 });
 
 test("a header link goes to its page at once, Back too, and only the home page's first load is veiled (ADR-0070 amendment 3)", async ({ page }) => {

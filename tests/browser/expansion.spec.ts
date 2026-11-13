@@ -30,7 +30,7 @@ test("navigation routes load directly with research-focused About", async ({
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "documented answer",
   );
-  await page.getByRole("link", { name: "Development process streamlining" }).click();
+  await page.getByRole("link", { name: "Coupon analysis" }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await page.reload();
   // One test is offered for now (ADR-0089), so the assistant's first question is the material, as workspace.spec.ts reads it.
@@ -114,7 +114,11 @@ test("the Services disclosure lists the five service pages and the contact page 
   await expect(page.getByRole("link", { name: "Open the workspace", exact: true })).toHaveAttribute("href", /\/workspace\/fea$/);
   await page.getByRole("link", { name: "Contact us", exact: true }).first().click();
   await expect(page).toHaveURL(/\/contact\/?$/);
-  await expect(page.getByRole("link", { name: /erikvilla947@gmail\.com/ })).toHaveAttribute("href", "mailto:erikvilla947@gmail.com");
+  // Three addresses, each the words of its own mailto link (the audit of 2026-11-12, decision D2), and no repository link (D3).
+  for (const address of ["e1villa@ucsd.edu", "chvalerio@ucsd.edu", "ka1saucedo@outlook.com"])
+    await expect(page.getByRole("link", { name: address })).toHaveAttribute("href", `mailto:${address}`);
+  await expect(page.locator("main")).not.toContainText(/gmail|for now|will follow/i);
+  await expect(page.locator("main a[href*='github.com']")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Calculator", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Studio", exact: true })).toHaveCount(0);
   await expect(page.locator(".site-header .wordmark")).toHaveText("Anisotropy");
@@ -143,7 +147,11 @@ test("expanded pages fit phones and tablets with local-only visual assets", asyn
       "/about",
       "/industries",
       "/services",
+      "/services/computer-aided-design",
       "/services/finite-element-modeling",
+      "/services/test-plans",
+      "/services/documentation",
+      "/services/manufacturing-plans",
       "/contact",
       "/library",
       "/workspace",
@@ -156,6 +164,9 @@ test("expanded pages fit phones and tablets with local-only visual assets", asyn
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
       ).toBeTruthy();
+      // No empty picture slot reaches a visitor (components/media-slot.tsx draws nothing without a file).
+      await expect(page.locator(".media-slot-placeholder")).toHaveCount(0);
+      await expect(page.locator("main")).not.toContainText(/IMAGE SLOT|CLIP SLOT/);
       await page.screenshot({
         path: `.preview/${path.slice(1)}-${width}.png`,
         fullPage: true,

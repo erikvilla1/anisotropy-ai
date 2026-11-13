@@ -4,7 +4,7 @@
  * section kit (`app/sections.css`), light first and then alternating. This file holds the parts those pages share and the
  * Industries page's own; `app/about/about.css` and `app/services/services.css` hold the rest. A page's stylesheet stays loaded
  * after a visit, so every name here is new (`kit-`, `page-opening`, `industry-`) and nothing restyles a class another page uses,
- * except the media slot, which only these pages use. */
+ * except the media slot, which only these pages use. Lines of running text stay under about 75 characters. */
 .kit-page {
   overflow: clip;
 }
@@ -41,6 +41,7 @@
   line-height: 1.04;
   letter-spacing: -0.03em;
   color: #ffffff;
+  text-wrap: balance;
 }
 .page-opening-title em {
   font-style: normal;
@@ -57,7 +58,7 @@
   grid-row: 1;
 }
 .page-opening-copy p {
-  max-width: 36em;
+  max-width: 34em;
   font-size: 18px;
   line-height: 26px;
   color: var(--text);
@@ -83,17 +84,22 @@
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
+/* A note's label has the band label's tick; on a service page the note is the service's state, so it has the state's mark
+ * instead (see `kit-status`). */
 .page-opening-note-label::before {
   content: "";
   flex: none;
+  width: 1px;
+  height: 11px;
+  background: currentColor;
+}
+.page-opening-note-label:is(.is-built, .is-partly, .is-planned)::before {
   box-sizing: border-box;
   width: 8px;
   height: 8px;
   border: 1px solid currentColor;
   border-radius: 50%;
-  background: currentColor;
 }
-/* On a service page the note is the service's state, so its dot is the state's mark (see `kit-status`). */
 .page-opening-note-label.is-partly::before {
   background: linear-gradient(90deg, currentColor 50%, transparent 50%);
 }
@@ -116,7 +122,7 @@
   letter-spacing: -0.01em;
 }
 .kit-text {
-  max-width: 36em;
+  max-width: 34em;
   font-size: 18px;
   line-height: 26px;
   color: var(--muted);
@@ -141,34 +147,22 @@
 .kit-link:hover {
   opacity: 0.6;
 }
-/* How much of a thing exists (lib/services.ts), without a colour, as the home page's cards mark it: a full dot for built,
- * half for in part, a ring for planned. The word names the state. */
-.kit-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  line-height: 20px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+/* A link's arrow after a no-break space, kept with the last word when the link wraps. */
+.kit-link-icon {
   white-space: nowrap;
-  color: var(--text);
 }
-.kit-status::before {
-  content: "";
-  flex: none;
-  box-sizing: border-box;
-  width: 8px;
-  height: 8px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
+.kit-link-icon svg {
+  display: inline;
+  vertical-align: -3px;
 }
-.kit-status-built::before {
-  background: currentColor;
-}
-.kit-status-partly::before {
-  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+/* Words for a screen reader only, such as the service's name before a page's slogans or "(opens in a new tab)". */
+.kit-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .kit-badge {
   flex: none;
@@ -212,8 +206,7 @@
   grid-column: 10 / 13;
   min-width: 0;
 }
-.kit-row-aside.kit-link,
-.kit-row-aside.kit-status {
+.kit-row-aside.kit-link {
   justify-self: start;
   margin-top: 2px;
 }
@@ -237,7 +230,7 @@
 }
 .kit-note-text {
   grid-column: 4 / 11;
-  max-width: 44em;
+  max-width: 36em;
   font-size: 16px;
   line-height: 24px;
   color: var(--muted);
@@ -296,9 +289,8 @@
   color: var(--muted);
 }
 
-/* The media slot (components/media-slot.tsx) on either ground. A photo sits in a 1 px frame. An empty slot is the same frame
- * on the band's panel colour with a faint hatch in the band's line colour, and says in the corner what belongs there, in the
- * label's type. */
+/* The media slot (components/media-slot.tsx) on either ground: a photo in a 1 px frame. A slot without a file is not drawn. A
+ * picture with smaller copies is a <picture>, which lays out as its image does. */
 .kit-page .media-slot {
   min-width: 0;
 }
@@ -307,42 +299,8 @@
   border-radius: 12px;
   background: var(--panel);
 }
-.kit-page .media-slot-placeholder {
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 20px;
-  text-align: left;
-  border: 0;
-  border-radius: 0;
-  background: repeating-linear-gradient(135deg, transparent 0 13px, var(--line) 13px 14px) var(--panel);
-}
-.kit-page .media-slot-kind {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  line-height: 18px;
-  letter-spacing: 0.02em;
-  font-weight: 400;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.kit-page .media-slot-kind::before {
-  content: "";
-  flex: none;
-  width: 1px;
-  height: 9px;
-  background: currentColor;
-}
-.kit-page .media-slot-placeholder strong {
-  max-width: 30ch;
-  font-family: var(--font);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 22px;
-  color: var(--text);
+.kit-page .media-slot-frame picture {
+  display: contents;
 }
 .kit-page .media-slot figcaption {
   margin-top: 12px;
@@ -351,8 +309,8 @@
   color: var(--muted);
 }
 
-/* Industries. The two priorities are two cards of six columns, the picture across the top of each; the four potential
- * industries are four cards of three columns. */
+/* Industries. The two priorities are two cards of six columns; the four potential industries are four cards of three columns.
+ * Each card opens on its icon. */
 .industry-priorities,
 .industry-potentials {
   display: grid;
@@ -375,12 +333,6 @@
 .industry-potential {
   grid-column: span 3;
 }
-.kit-page .industry-priority .media-slot-frame,
-.kit-page .industry-potential .media-slot-frame {
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-}
 .industry-priority-body {
   display: flex;
   flex: 1;
@@ -394,7 +346,7 @@
   gap: 16px;
   margin-bottom: 32px;
 }
-.kit-page .industry-priority h2 {
+.kit-page .industry-priority h3 {
   margin: 0 0 16px;
   font-family: var(--font);
   font-size: 38px;
@@ -418,6 +370,7 @@
   border-bottom: 1px solid var(--line);
 }
 .industry-priority .kit-link {
+  display: block;
   align-self: flex-start;
   margin-top: auto;
 }
@@ -491,6 +444,10 @@
     font-size: clamp(34px, 9.4vw, 44px);
     letter-spacing: -0.02em;
   }
+  /* On a phone the headline breaks where the width does, so no line is left with one word. */
+  .page-opening-title br {
+    display: none;
+  }
   .page-opening-grid {
     row-gap: 32px;
     margin-top: 36px;
@@ -514,8 +471,8 @@
   .industry-priority-body {
     padding: 24px;
   }
-  .kit-page .industry-priority h2 {
-    font-size: 30px;
-    line-height: 34px;
+  .kit-page .industry-priority h3 {
+    font-size: 24px;
+    line-height: 28px;
   }
 }

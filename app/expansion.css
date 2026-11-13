@@ -318,77 +318,6 @@
 .horizon > .button {
   margin-top: 40px;
 }
-.industry-section {
-  padding-top: 65px;
-}
-.industry-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 23px;
-}
-.industry-card {
-  padding: 33px;
-  border: 1px solid #383838;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #1e1e1e, #121212);
-}
-.industry-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  color: #c6c6c6;
-}
-.industry-top > span {
-  font-size: 7px;
-  letter-spacing: 1.2px;
-  max-width: 190px;
-  text-align: right;
-}
-.industry-card h2 {
-  font-size: 28px;
-  letter-spacing: -0.7px;
-  margin: 33px 0 14px;
-}
-.industry-card > p {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.85;
-  max-width: 430px;
-}
-.industry-card ul {
-  list-style: none;
-  padding: 0;
-  margin: 24px 0;
-}
-.industry-card li {
-  font-size: 11px;
-  color: #c3c3c3;
-  padding: 9px 0;
-  border-bottom: 1px solid #323232;
-}
-.industry-card li:before {
-  content: "+";
-  margin-right: 12px;
-  color: #8b8b8b;
-}
-.industry-card > a {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  font-size: 11px;
-  color: var(--accent);
-}
-.industry-note {
-  padding: 30px 0 0;
-  max-width: 850px;
-}
-.industry-note p {
-  font-size: 12px;
-  line-height: 1.9;
-  color: var(--muted);
-  margin-top: 13px;
-}
 .service-selectors {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1111,16 +1040,6 @@
   .horizon-grid h3 {
     font-size: 19px;
   }
-  .industry-card {
-    padding: 25px;
-  }
-  .industry-card h2 {
-    font-size: 24px;
-  }
-  .industry-top > span {
-    font-size: 6px;
-    max-width: 150px;
-  }
   .service-selectors h3 {
     font-size: 16px;
   }
@@ -1277,19 +1196,6 @@
   }
   .horizon h2 {
     font-size: 36px;
-  }
-  .industry-grid {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-  .industry-card h2 {
-    font-size: 26px;
-  }
-  .industry-card > p {
-    font-size: 12px;
-  }
-  .industry-top > span {
-    font-size: 7px;
   }
   .service-selectors {
     grid-template-columns: 1fr;
@@ -1481,12 +1387,4 @@
   .references-panel h2 {
     font-size: 23px;
   }
-}
-
-/* Media slots on the industry cards (audit of 2026-10-31, item 11). */
-.industry-card .media-slot {
-  margin-bottom: 24px;
-}
-.potential-grid article .media-slot {
-  margin-bottom: 16px;
 }

@@ -247,7 +247,7 @@ test("up from the first beat and down from the last the page scrolls as any page
   await expectStop(page, 0);
 });
 
-test("Scroll to explore brings the stage to fill the window, and the first beat plays", async ({ page }) => {
+test("the hero's \"Scroll to explore\" brings the stage to fill the window, and the first beat plays", async ({ page }) => {
   await page.goto("/");
   await expect(demo(page)).toHaveAttribute("data-mode", "pinned");
   const explore = page.locator("#overview .home-hero-explore");

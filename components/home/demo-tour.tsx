@@ -1,13 +1,13 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
-import { ArrowDown } from "lucide-react";
 import { LaminateScene } from "./scene";
-import { AbdGrid, FailurePanel, PropertyRow, SpecsList, StackList } from "./laminate-panels";
+import { AbdGrid, FailurePanel, PropertyRow, SpecsList, StackList, trim } from "./laminate-panels";
 import { useEngineAnswers, useEngineEntry, type EngineEntry } from "./engine-answers";
 import { useTourDriver } from "./tour-driver";
 import { STEPS, finalView, layupScript, sameView, span, viewAt, type TourView } from "./tour-timeline";
-import { buildAnalysisRequest, CalculationError, loadNames, requestAnalysis, type AnalysisRequest, type LoadName } from "@/lib/laminate-api";
+import { buildAnalysisRequest, CalculationError, loadNames, requestAnalysis, shownCitation, type AnalysisRequest, type LoadName } from "@/lib/laminate-api";
+import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
 import { defaultHeroState, heroForm, zeroLoads } from "@/lib/home-calculator";
 import { expandLayup } from "@/lib/layup";
 import { findLibraryOption, libraryOptions, type LibraryOption } from "@/lib/material-library-options";
@@ -60,14 +60,17 @@ const signed = (angle: number) => (angle > 0 ? `+${angle}` : String(angle));
 /** While the tour steers the view, the pointer passing over it does not light a ply: the list beside it still does. */
 const ignoreHover = () => {};
 
-/** What the engine's line says, in the calculator's own words. */
+/** The results' state in a word or two, in the calculator's own words. The version and the run that answered stay in the
+ * line's data attributes, for support, not on the screen. */
 function engineLine(apiBaseUrl: string, entry: EngineEntry | undefined): string {
   if (!apiBaseUrl) return "Calculations are unavailable on this site.";
-  if (entry?.state === "answer") return `Engine ${entry.result.engine_version}${entry.result.run_id ? ` · run ${entry.result.run_id.slice(0, 8)}` : ""}`;
-  if (entry?.state === "failed") return "The engine did not answer.";
+  if (entry?.state === "answer") return "Calculated";
+  if (entry?.state === "failed") return "Unavailable";
   if (entry?.state === "pending") return "Calculating…";
-  return "Waiting for the engine.";
+  return "";
 }
+const runOf = (entry: EngineEntry | undefined) =>
+  entry?.state === "answer" ? { "data-engine-version": entry.result.engine_version, "data-run-id": entry.result.run_id ?? undefined } : {};
 
 /** A field of the calculator as the tour shows it: read-only, filled as its step plays. The live fields are in the calculator below. */
 function TourField({ label, value, hint, caret = false, quiet = false }: { label: ReactNode; value: string; hint?: string; caret?: boolean; quiet?: boolean }) {
@@ -114,7 +117,7 @@ const MaterialCard = memo(function MaterialCard({ option, picked, constants }: {
         ))}
         <li className="tour-library-more">and {libraryOptions.length - listed.length} more</li>
       </ul>
-      <p className="tour-hint tour-reveal" data-shown={picked ? "true" : undefined}>{option.citation}</p>
+      <p className="tour-hint tour-reveal" data-shown={picked ? "true" : undefined}>{shownCitation(option.citation)}</p>
       <PropertyRow option={typed} provenance={undefined} />
     </>
   );
@@ -133,7 +136,7 @@ const LayupCard = memo(function LayupCard({ text, chars, thickness, option, angl
         <TourField label="Ply thickness (mm)" value={thickness ? thicknessText : ""}
           hint={option.thickness_mm ? "The dataset's cured ply thickness." : "The dataset states no ply thickness."} />
       </div>
-      <p className="tour-eyebrow tour-stack-head">PLIES, TOP FACE FIRST</p>
+      <p className="tour-eyebrow tour-stack-head">PLIES, TOP FACE FIRST (mm)</p>
       <div className="tour-stack-slot" style={{ "--tour-rows": angles.length } as CSSProperties}>
         <StackList angles={shown} thickness_mm={thicknessText} colors={colors} hovered={hovered} onHover={onHover} />
       </div>
@@ -141,58 +144,57 @@ const LayupCard = memo(function LayupCard({ text, chars, thickness, option, angl
   );
 });
 
-/** The request as it goes to the engine, read from the request itself; where the site has no calculation service, it says
- * that nothing is sent. */
-function RequestLines({ request, thickness_mm, sent }: { request: AnalysisRequest; thickness_mm: string; sent: boolean }) {
-  const material = "library_id" in request.material ? `${request.material.library_id} · ${request.material.dataset_id}` : request.material.source_reference;
-  const loads = loadNames.filter((name) => request.loads[name] !== 0).map((name) => `${name} = ${request.loads[name]} ${name.startsWith("N") ? "N/m" : "N·m/m"}`);
+/** What is calculated, read from the request itself: the material by its name, the plies and the loads. */
+function InputLines({ request, option, layup, thickness_mm }: { request: AnalysisRequest; option: LibraryOption; layup: string; thickness_mm: string }) {
+  const loads = loadNames.filter((name) => request.loads[name] !== 0).map((name) => `${name} = ${request.loads[name].toLocaleString("en-US")} ${name.startsWith("N") ? "N/m" : "N·m/m"}`);
   return (
-    <dl className="tour-request" aria-label="The request to the engine">
-      {sent ? <div><dt>POST</dt><dd>/v1/laminates/response</dd></div> : <div><dt>request</dt><dd>not sent: this site has no calculation service</dd></div>}
-      <div><dt>material</dt><dd>{material}</dd></div>
-      <div><dt>plies</dt><dd>{request.plies.length} × {thickness_mm} mm · {request.plies.map((ply) => signed(ply.angle_deg)).join(" / ")}</dd></div>
+    <dl className="tour-request" aria-label="The inputs">
+      <div><dt>material</dt><dd>{option.label}</dd></div>
+      <div><dt>plies</dt><dd>{request.plies.length} × {trim(Number(thickness_mm))} mm · {layup}</dd></div>
       <div><dt>loads</dt><dd>{loads.length ? loads.join(", ") : "none"}</dd></div>
     </dl>
   );
 }
 
-/** What stands where the engine's numbers go while there are none: it says so, and keeps the panel's size. */
-function NeedsEngine({ apiBaseUrl, entry, what }: { apiBaseUrl: string; entry: EngineEntry | undefined; what: string }) {
+/** What stands where the results go while there are none: one sentence when they cannot come, nothing while they are on
+ * their way. */
+function NeedsEngine({ apiBaseUrl, entry }: { apiBaseUrl: string; entry: EngineEntry | undefined }) {
   if (apiBaseUrl && entry?.state !== "failed") return <p className="tour-waiting" aria-hidden="true" />;
   return (
     <p className="tour-needs-engine" role="note">
-      {entry?.state === "failed" ? `${entry.message} ` : ""}
-      {what} are the engine&apos;s numbers, and nothing here stands in for them. The material, the layup and the plies above need no engine.
+      {apiBaseUrl ? "Results are unavailable right now; try the calculator below." : "Results need the calculation service, which this site does not have."}
     </p>
   );
 }
 
-const EngineCard = memo(function EngineCard({ stage, apiBaseUrl, entry, request, thickness_mm }: {
-  stage: TourView["engine"]; apiBaseUrl: string; entry: EngineEntry | undefined; request: AnalysisRequest | null; thickness_mm: string;
+const EngineCard = memo(function EngineCard({ stage, apiBaseUrl, entry, request, option, layup, thickness_mm }: {
+  stage: TourView["engine"]; apiBaseUrl: string; entry: EngineEntry | undefined; request: AnalysisRequest | null; option: LibraryOption;
+  layup: string; thickness_mm: string;
 }) {
   const result = entry?.state === "answer" ? entry.result : null;
   const answered = stage >= 2;
-  // Busy: the request is on its way in the replay, or the engine has truly not answered yet.
+  const failed = entry?.state === "failed" ? "true" : undefined;
+  // Busy: the request is on its way in the replay, or the answer has truly not come yet.
   const busy = Boolean(apiBaseUrl) && (stage === 1 || (answered && !result && entry?.state !== "failed"));
   return (
     <>
       <div className="tour-card-head">
-        <span className="tour-eyebrow">THE ENGINE SAYS</span>
-        <span className="tour-hint" role="status">
-          {answered || !apiBaseUrl || !entry ? (stage >= 1 ? engineLine(apiBaseUrl, entry) : "") : "Sent to the engine."}
+        <span className="tour-eyebrow">RESULTS</span>
+        <span className="tour-hint" role="status" {...runOf(entry)}>
+          {answered || !apiBaseUrl || !entry ? (stage >= 1 ? engineLine(apiBaseUrl, entry) : "") : "Calculating…"}
         </span>
       </div>
       {request ? (
         <div className="tour-reveal" data-shown={stage >= 1 ? "true" : undefined}>
-          <RequestLines request={request} thickness_mm={thickness_mm} sent={Boolean(apiBaseUrl)} />
+          <InputLines request={request} option={option} layup={layup} thickness_mm={thickness_mm} />
         </div>
       ) : null}
-      <div className="tour-slot tour-slot-specs" data-busy={busy ? "true" : undefined}>
+      <div className="tour-slot tour-slot-specs" data-busy={busy ? "true" : undefined} data-failed={failed}>
         {answered && result?.summary ? <SpecsList summary={result.summary} />
-          : (answered || (stage === 1 && !apiBaseUrl)) && !result ? <NeedsEngine apiBaseUrl={apiBaseUrl} entry={entry} what="The description and the matrices" /> : null}
+          : (answered || (stage === 1 && !apiBaseUrl)) && !result ? <NeedsEngine apiBaseUrl={apiBaseUrl} entry={entry} /> : null}
       </div>
-      <div className="tour-slot tour-slot-abd" data-busy={busy || (stage === 2 && Boolean(result)) ? "true" : undefined}>
-        {stage >= 3 && result ? <AbdGrid result={result} /> : null}
+      <div className="tour-slot tour-slot-abd" data-busy={busy || (stage === 2 && Boolean(result)) ? "true" : undefined} data-failed={failed}>
+        {stage >= 3 && result ? <AbdGrid result={result} focusable={false} /> : null}
       </div>
     </>
   );
@@ -204,7 +206,7 @@ const LoadsCard = memo(function LoadsCard({ chars, loaded, apiBaseUrl, entry }: 
     <>
       <div className="tour-card-head">
         <span className="tour-eyebrow">LOADS PER UNIT WIDTH</span>
-        <span className="tour-hint" role="status">{loaded ? engineLine(apiBaseUrl, entry) : ""}</span>
+        <span className="tour-hint" role="status" {...runOf(entry)}>{loaded ? engineLine(apiBaseUrl, entry) : ""}</span>
       </div>
       <div className="tour-loads">
         {loadNames.map((name) => (
@@ -214,9 +216,10 @@ const LoadsCard = memo(function LoadsCard({ chars, loaded, apiBaseUrl, entry }: 
             caret={name === TOUR_LOAD.name && chars > 0 && chars < TOUR_LOAD.value.length} />
         ))}
       </div>
-      <div className="tour-slot tour-slot-failure" data-busy={loaded && !result && Boolean(apiBaseUrl) && entry?.state !== "failed" ? "true" : undefined}>
+      <div className="tour-slot tour-slot-failure" data-busy={loaded && !result && Boolean(apiBaseUrl) && entry?.state !== "failed" ? "true" : undefined}
+        data-failed={entry?.state === "failed" ? "true" : undefined}>
         {loaded && result?.first_ply_failure ? <FailurePanel failure={result.first_ply_failure} />
-          : loaded && !result ? <NeedsEngine apiBaseUrl={apiBaseUrl} entry={entry} what="The failure check and its factors" /> : null}
+          : loaded && !result ? <NeedsEngine apiBaseUrl={apiBaseUrl} entry={entry} /> : null}
       </div>
     </>
   );
@@ -226,13 +229,12 @@ function HandoverCard({ option, layup, thickness_mm }: { option: LibraryOption; 
   return (
     <>
       <div className="tour-card-head">
-        <span className="tour-eyebrow">LAMINATE CALCULATOR / LIVE</span>
-        <ArrowDown size={16} aria-hidden="true" />
+        <span className="tour-eyebrow">THE CALCULATOR BELOW STARTS WITH</span>
       </div>
       <dl className="tour-request" aria-label="What the calculator below starts from">
         <div><dt>material</dt><dd>{option.label}</dd></div>
         <div><dt>layup</dt><dd>{layup}</dd></div>
-        <div><dt>ply</dt><dd>{thickness_mm} mm</dd></div>
+        <div><dt>ply</dt><dd>{trim(Number(thickness_mm))} mm</dd></div>
         <div><dt>loads</dt><dd>none yet</dd></div>
       </dl>
     </>
@@ -352,7 +354,7 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
         answers.report(requestJson, {
           state: "failed",
           message: controller.signal.aborted ? "The calculation timed out."
-            : error instanceof CalculationError ? error.message : "Cannot reach the calculation service.",
+            : error instanceof CalculationError ? error.message : ANALYSIS_UNAVAILABLE,
         });
       })
       .finally(() => {
@@ -392,52 +394,57 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
   const option = run.option;
   if (!option) return null;
   const active = (index: number) => (!pinned || view.step === index ? "true" : undefined);
-  const loadText = `${TOUR_LOAD.name} = ${Number(TOUR_LOAD.value) / 1000} kN/m`;
+  const loadText = `${TOUR_LOAD.name} = ${Number(TOUR_LOAD.value).toLocaleString("en-US")} N/m`;
   const steps: { label: string; title: string; text: string; card: ReactNode }[] = [
     {
       label: "01 / MATERIAL",
       title: "Start from a cited material.",
-      text: `${option.label.split(" · ")[0]} comes from the materials library. Its elastic constants, density and fiber volume fraction are the record's values, each with its source.`,
+      text: `${option.label.split(" · ")[0]} comes from the materials library, with its published properties and their source.`,
       card: <MaterialCard option={option} picked={view.picked} constants={view.constants} />,
     },
     {
       label: "02 / LAYUP",
       title: "Type the stacking.",
-      text: `${run.state.layup} is read bottom face first${run.script.text.trim().toLowerCase().endsWith("s") ? ", and the s mirrors it" : ""}: ${run.angles.length} plies, each ${run.state.thickness_mm} mm thick, the dataset's cured ply thickness.`,
+      text: `${run.state.layup} is read bottom face first${run.script.text.trim().toLowerCase().endsWith("s") ? ", and the s mirrors it" : ""}: ${run.angles.length} plies, each ${trim(Number(run.state.thickness_mm))} mm thick, the dataset's cured ply thickness.`,
       card: (
         <LayupCard text={run.script.text} chars={view.layupChars} thickness={view.thickness} option={option} angles={run.angles}
           laid={Math.round(view.laid)} colors={colors} hovered={hovered} onHover={setHovered} />
       ),
     },
     {
-      label: "03 / ENGINE",
-      title: "The engine answers.",
-      text: "One request carries the stack to the engine. It returns what the laminate is and its A, B and D stiffness matrices, by classical laminate theory. The browser computes none of it.",
-      card: <EngineCard stage={view.engine} apiBaseUrl={apiBaseUrl} entry={unloaded} request={run.unloaded} thickness_mm={run.state.thickness_mm} />,
+      label: "03 / CALCULATE",
+      title: "Calculate.",
+      text: "Classical laminate theory gives the laminate's type and its A, B and D stiffness matrices.",
+      card: (
+        <EngineCard stage={view.engine} apiBaseUrl={apiBaseUrl} entry={unloaded} request={run.unloaded} option={option} layup={run.state.layup}
+          thickness_mm={run.state.thickness_mm} />
+      ),
     },
     {
       label: "04 / LOADS",
       title: "Add a load.",
-      text: `With ${loadText} on the stack, the engine checks every ply and names the first to fail, with the factor on the load at which it does.`,
+      text: `With ${loadText}, every ply is checked and the first-ply failure is named with its load factor R.`,
       card: <LoadsCard chars={view.loadChars} loaded={view.loaded} apiBaseUrl={apiBaseUrl} entry={loaded} />,
     },
     {
       label: "05 / YOUR TURN",
       title: "Now it is yours.",
-      text: "The calculator below starts from this stack. Change the material, the layup or the loads, and the engine answers each edit.",
+      text: "The calculator below starts from this stack. Change the material, the layup or the loads; the results follow each edit.",
       card: <HandoverCard option={option} layup={run.state.layup} thickness_mm={run.state.thickness_mm} />,
     },
   ];
   return (
     <div className="demo-tour" id="tour" ref={root} role="region" aria-labelledby="tour-title" data-mode={pinned ? "pinned" : "static"}>
+      {/* The tour is several screens of scrolling: a keyboard can pass it at once (the site's skip link, shown on focus). */}
+      <a className="skip-link" href="#laminate">Skip to the calculator</a>
       {/* Without scripts nothing plays the steps: they then lie in the page's flow, as they do for reduced motion. */}
       <noscript><style>{".demo-tour{height:auto!important;background:#080808!important}.demo-tour>.demo-tour-stage{visibility:visible!important}"}</style></noscript>
       <div className="demo-tour-stage">
         <div className="demo-tour-head">
           <p className="demo-tour-label">THE CALCULATOR / STEP BY STEP</p>
           <div className="demo-tour-statement">
-            <h2 id="tour-title">One calculation, start to finish.</h2>
-            <p>The run the calculator below makes when the page opens, one step at a time.</p>
+            <h2 id="tour-title" tabIndex={-1}>One calculation, start to finish.</h2>
+            <p>Follow one laminate from material to first-ply failure, then make it yours in the calculator below.</p>
           </div>
         </div>
         <div className="demo-tour-scene" ref={sceneBox}>

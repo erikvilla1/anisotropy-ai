@@ -1,4 +1,4 @@
-/* The load-in moves (ADR-0070 amendment 1), after Anduril's; components/intro-text.ts runs them and documents the attributes
+/* The load-in moves (ADR-0070 amendment 1); components/intro-text.ts runs them and documents the attributes
  * (data-intro="type" | "rise" | "fade", data-intro-delay). While a move runs, the element's own text is transparent, not
  * removed, so it keeps its place and a screen reader still reads it; the copy that moves lies over it, out of the flow. */
 [data-intro-run="text"] {

@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 function git(args: string[]): string | null {
   try {
@@ -41,7 +41,10 @@ test("the repository says who owns it: all rights reserved, and third-party valu
 test("NOTICE names every partner's mark the site serves, since LICENSE claims all else for Anisotropy", () => {
   // LICENSE says the media are Anisotropy's "unless NOTICE names another owner"; a partner's mark is someone else's (ADR-0081).
   const notice = readFileSync("NOTICE", "utf8");
-  const marks = readdirSync("public/assets/partners").filter((name) => !name.startsWith("."));
-  assert.ok(marks.length > 0, "public/assets/partners holds no marks; update this test if they moved");
-  for (const mark of marks) assert.ok(notice.includes(mark), `NOTICE does not name public/assets/partners/${mark}`);
+  // Both ways: every partner's mark the site serves is named, and NOTICE names no mark the site no longer serves (since the
+  // audit's D14 The Basement is named in words, ADR-0081 amendment 2, and public/assets/partners is gone).
+  const dir = "public/assets/partners";
+  const marks = existsSync(dir) ? readdirSync(dir).filter((name) => !name.startsWith(".")) : [];
+  for (const mark of marks) assert.ok(notice.includes(mark), `NOTICE does not name ${dir}/${mark}`);
+  for (const named of notice.match(/public\/assets\/partners\/[\w.-]+/g) ?? []) assert.ok(existsSync(named), `NOTICE names ${named}, which the site no longer serves`);
 });

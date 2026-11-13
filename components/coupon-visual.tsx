@@ -2,57 +2,53 @@
 
 import { useId } from "react";
 
-export function CouponVisual({
-  mode = "stress",
-  optimized = false,
-}: {
-  mode?: "geometry" | "stress" | "strain" | "failure";
-  optimized?: boolean;
-}) {
+/** The strip, from end to end along the drawing's x, and the bonded tabs at its ends. */
+const STRIP = { x0: 70, x1: 630, y0: 150, y1: 190 };
+const TAB = 100;
+const outline = `M${STRIP.x0} ${STRIP.y0} H${STRIP.x1} V${STRIP.y1} H${STRIP.x0}Z`;
+const tab = (x: number, inward: 1 | -1) => {
+  const end = x + inward * TAB;
+  // A tapered tab: its end towards the gauge is bevelled, as D3039's tabs are.
+  return `M${x} ${STRIP.y0 - 5} H${end - inward * 14} L${end} ${STRIP.y0} V${STRIP.y1} L${end - inward * 14} ${STRIP.y1 + 5} H${x}Z`;
+};
+/** Where the tab ends fall along the strip, as a fraction of its length: the gauge section lies between them. */
+const TAB_END = TAB / (STRIP.x1 - STRIP.x0);
+
+/** An illustration, not a result: the ASTM D3039 tension strip, straight-sided with bonded tabs (the one coupon the workspace
+ * offers), drawn for a dark ground. `stress` colours the gauge section one colour, raised only at the tab ends, as a uniform
+ * tension strip is; `failure` marks the tab end as the region to investigate. Its words are the page's: the figure's bar and
+ * caption carry them (audit of 2026-11-12, services-8 and about-industries-contact-24). */
+export function CouponVisual({ mode = "stress" }: { mode?: "geometry" | "stress" | "strain" | "failure" }) {
   const id = useId().replace(/:/g, "");
-  const outline = optimized
-    ? "M70 110 H160 Q205 110 242 140 H458 Q495 110 540 110 H630 V230 H540 Q495 230 458 200 H242 Q205 230 160 230 H70Z"
-    : "M70 110 H175 Q218 110 235 145 H465 Q482 110 525 110 H630 V230 H525 Q482 230 465 195 H235 Q218 230 175 230 H70Z";
+  const gauge = mode === "strain" ? "#d9ac70" : "#e2a86b";
+  const peak = mode === "strain" ? "#bacb71" : "#b66b53";
+  const names: Record<typeof mode, string> = {
+    geometry: "geometry",
+    stress: "stress field",
+    strain: "strain field",
+    failure: "region to investigate at a tab end",
+  };
   return (
     <svg
       className="coupon-visual"
       viewBox="0 0 700 370"
       role="img"
-      aria-label={`Conceptual ${optimized ? "revised" : "baseline"} coupon ${mode} illustration; no computed results`}
+      aria-label={`Illustration of the ASTM D3039 tension strip with bonded tabs, its ${names[mode]}; no computed results`}
     >
       <defs>
         <linearGradient id={`${id}-field`}>
           <stop stopColor="#456b9b" />
-          <stop offset=".23" stopColor="#63b5a0" />
-          <stop
-            offset=".36"
-            stopColor={mode === "strain" ? "#bacb71" : "#e2a86b"}
-          />
-          <stop
-            offset=".5"
-            stopColor={mode === "strain" ? "#d9ac70" : "#b66b53"}
-          />
-          <stop offset=".64" stopColor="#e2a86b" />
-          <stop offset=".77" stopColor="#63b5a0" />
+          <stop offset={TAB_END - 0.06} stopColor="#63b5a0" />
+          <stop offset={TAB_END} stopColor={peak} />
+          <stop offset={TAB_END + 0.03} stopColor={gauge} />
+          <stop offset={1 - TAB_END - 0.03} stopColor={gauge} />
+          <stop offset={1 - TAB_END} stopColor={peak} />
+          <stop offset={1 - TAB_END + 0.06} stopColor="#63b5a0" />
           <stop offset="1" stopColor="#456b9b" />
         </linearGradient>
-        <pattern
-          id={`${id}-mesh`}
-          width="13"
-          height="10"
-          patternUnits="userSpaceOnUse"
-        >
-          <path
-            d="M13 0H0V10"
-            fill="none"
-            stroke="#0e181a"
-            strokeWidth=".65"
-            opacity=".7"
-          />
+        <pattern id={`${id}-mesh`} width="14" height="10" patternUnits="userSpaceOnUse">
+          <path d="M14 0H0V10" fill="none" stroke="#0e181a" strokeWidth=".65" opacity=".7" />
         </pattern>
-        <clipPath id={`${id}-clip`}>
-          <path d={outline} />
-        </clipPath>
       </defs>
       <g stroke="#3c3c3c" strokeWidth=".5" opacity=".5">
         {Array.from({ length: 12 }, (_, i) => (
@@ -63,47 +59,31 @@ export function CouponVisual({
         ))}
       </g>
       <g transform="translate(0 3) rotate(-15 350 170)">
-        <path
-          d={outline}
-          transform="translate(0 8)"
-          fill="#3e3e3e"
-          stroke="#6c6c6c"
-        />
-        <path
-          d={outline}
-          fill={mode === "geometry" ? "#aaaaaa" : `url(#${id}-field)`}
-          stroke="#c4c4c4"
-          strokeWidth="1.2"
-        />
+        <path d={outline} transform="translate(0 8)" fill="#3e3e3e" stroke="#6c6c6c" />
+        <path d={outline} fill={mode === "geometry" ? "#aaaaaa" : `url(#${id}-field)`} stroke="#c4c4c4" strokeWidth="1.2" />
         <path d={outline} fill={`url(#${id}-mesh)`} />
-        {mode === "failure" && (
-          <g fill="none" stroke="#f2d0a3">
-            <ellipse
-              cx={optimized ? 280 : 231}
-              cy="169"
-              rx="31"
-              ry="47"
-              strokeWidth="2"
-              strokeDasharray="5 4"
-            />
-            <path d={`M${optimized ? 280 : 231} 122V72H380`} />
-            <text x="386" y="76" fill="#e7d6bd" stroke="none" fontSize="11">
-              Region to investigate
-            </text>
+        {[tab(STRIP.x0, 1), tab(STRIP.x1, -1)].map((d) => (
+          <g key={d}>
+            <path d={d} transform="translate(0 6)" fill="#2c2c2c" stroke="#5a5a5a" />
+            <path d={d} fill="#7b7b7b" stroke="#c4c4c4" strokeWidth="1.2" />
           </g>
+        ))}
+        {mode === "failure" && (
+          <ellipse
+            cx={STRIP.x0 + TAB}
+            cy={(STRIP.y0 + STRIP.y1) / 2}
+            rx="24"
+            ry="40"
+            fill="none"
+            stroke="#f2d0a3"
+            strokeWidth="2"
+            strokeDasharray="5 4"
+          />
         )}
         <g stroke="#c1c1c1" fill="none">
           <path d="M25 170H65M635 170H679M25 170l8 -5m-8 5 8 5M679 170l-8 -5m8 5 -8 5" />
         </g>
       </g>
-      <text x="30" y="336" fill="#8a8a8a" fontSize="9" letterSpacing="1.5">
-        {mode === "geometry"
-          ? "PARAMETRIC GEOMETRY CONCEPT"
-          : "QUALITATIVE FIELD ILLUSTRATION"}
-      </text>
-      <text x="670" y="336" textAnchor="end" fill="#8a8a8a" fontSize="9">
-        ILLUSTRATION / NOT ANALYSIS
-      </text>
     </svg>
   );
 }

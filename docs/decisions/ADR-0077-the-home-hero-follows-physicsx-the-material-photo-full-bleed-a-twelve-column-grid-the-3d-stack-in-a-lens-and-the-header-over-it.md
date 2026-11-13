@@ -1,6 +1,6 @@
 # ADR-0077: The home hero follows PhysicsX: the material photo full-bleed, a twelve-column grid, the 3D stack in a lens, and the header over it
 
-- Status: Proposed
+- Status: Proposed; the hero's clip can be paused and loads only where it plays, and its corner names The Basement in words, since amendment 32
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07; Founder, 2026-11-12 ("accept": "Composites. Calculated." and "Closed beta", amendment 16) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) (the hero first; this is its option 3 in part), [ADR-0001](ADR-0001-deterministic-engine.md), the CEO's website audit of 2026-10-31 (item 7), `app/page.tsx`, `app/home.css`, `components/home/hero-lens.tsx`, `components/site-shell.tsx`, `tests/browser/home.spec.ts`
@@ -456,3 +456,23 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 **Decision.** The line on the triangle's left reads "Est. 2026" in place of "Established 2026", and is set wide (0.27 em between letters) so that it is as long as the name on the other side. The space the tracking leaves after the last figure is taken back, so both sides stand as far from the triangle.
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px: "Est. 2026" alone measured 101 px beside the name's 138 px; set wide it measures 138 px, and each side stands 34 px from the triangle. A screenshot was looked at. `home.spec.ts` and `intro.spec.ts`: 10 of 10. UNVERIFIED, as before: the year is the lead's statement.
+
+## Amendment 32, 2026-11-13 (the clip can be paused and loads only where it plays; "Scroll to explore" leads to the demo; the corner in words; the home page's bands and links after the audit of 2026-11-12)
+
+Numbered 27 on its branch; renumbered when the branch took in main, where amendments 27 to 31 had the numbers.
+
+**Context.** The professional audit of 2026-11-12 found that the hero's clip plays and loops with no way to stop it, and `HeroVideoKeeper` restarted any pause, which WCAG 2.2.2 (Pause, Stop, Hide) does not allow for motion that starts by itself and lasts more than five seconds. The 1.57 MB clip was loaded with `preload="auto"` on phones too. "Scroll to explore" named a gesture, not where it goes, and left the focus in the hero. The page said the cohort more than once, labelled the team band "About", linked three labels to About, and listed news of tests a customer cannot use.
+
+**Options.** For the clip: (1) drop the loop so it ends within five seconds: rejected, the clip is meant to play alone once the words leave (amendment 20); (2) a pause button, and a keeper that never resumes a clip the visitor paused: chosen. For the weight: (1) a smaller encode for phones: not now, where the clip is served waits on Erik's decision (the audit's D1, "later"); (2) no source under 768 px and `preload="metadata"`: chosen. For the band labels: (1) no numbers, the audit's fix while the tour's steps 01 to 05 stood on the same page: not taken, the tour has left the page (ADR-0095) and amendment 31 keeps 01 to 04; (2) the numbers kept and the team band named TEAM: chosen.
+
+**Decision.** Drafted here, not yet confirmed.
+- **The pause button** (`HeroVideoKeeper`, `components/home/hero-video-keeper.tsx`) is a 34 px outlined square in the clip's top right corner, `aria-pressed`, named "Pause background video". It is drawn once the clip has a source, and stays if the window narrows afterwards, since the clip then plays on. A clip the visitor paused stays paused.
+- **The clip's source** carries `media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"`, and the video `preload="metadata"`.
+- **"Scroll to explore" becomes a link to `#demo`, in Kai's words** (the founder, 2026-11-13, chose them over the audit's "See how it works"). It scrolls to the section after the hero as before (ADR-0095) and then moves the focus to the product demo's heading.
+- **The bottom left corner** names The Basement in words, with amendment 28's cohort beside it behind the hairline (ADR-0081 amendment 2). The words take more room than the mark did, so the cohort stands under them from 760 px down, not 640.
+- **The bands:** the cohort is no longer repeated in the team band; the labels read 01 / MISSION, 02 / PLATFORM, 03 / TEAM and 04 / WHAT IS NEW; What is new lists the ASTM D3039 tension workspace and the closed beta; each Platform card's title is its link; the Mission link reads "About Anisotropy"; the closing band's button reads "Contact us" and goes to `/contact`, and its one other link is the materials library.
+- **Arrows:** links on the site carry a right arrow, the product demo's "Open the workspace" among them; the north-east arrow is kept for a link that opens a new tab (amendment 16).
+- **Portraits** (amendment 29): all five people agreed to their portraits on the public site and in the public repository (the founder, 2026-11-13).
+- **The calculator and its tour,** unmounted from the home page by ADR-0095 and kept, take the audit's fixes too; among them the 3D view stops turning by itself after five seconds (`TURN_MS` in `components/home/laminate-scene.tsx`). A visitor of the home page sees none of this.
+
+**Evidence.** `tests/marketing-pages.test.ts`: a paused clip is not resumed by the keeper, and no north-east arrow stands outside a link that opens a new tab; its output is in the pull request. UNVERIFIED: the updated cases of `home.spec.ts` (the corner's words, the link to `#demo`, the pause button), `intro.spec.ts` (the focus on the demo's heading) and `demo.spec.ts` were not run in this change; the clip's contrast under the words was not measured (the audit could not capture a frame of it).
