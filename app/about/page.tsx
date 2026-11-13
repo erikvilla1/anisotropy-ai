@@ -1,8 +1,7 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  ArrowUpRight,
-  Check,
+  Flag,
   FlaskConical,
   Layers3,
   Microscope,
@@ -11,8 +10,8 @@ import {
 } from "lucide-react";
 import { CouponVisual } from "@/components/coupon-visual";
 import { MediaSlot } from "@/components/media-slot";
-import { roadmap, validationGate, workflowSteps } from "@/lib/about-content";
-import { statusLabel, type ServiceStatus } from "@/lib/services";
+import { modelGoals, modelSubjects, roadmap, validationGate, workflowSteps } from "@/lib/about-content";
+import { findService, serviceHref, statusLabel, type ServiceStatus } from "@/lib/services";
 import { team } from "@/lib/team";
 import "../inner-pages.css";
 import "./about.css";
@@ -20,34 +19,35 @@ import "./about.css";
 export const metadata = {
   title: "About",
   description:
-    "Anisotropy is an engineering platform built only for composite structures: design, analysis, testing, fabrication and repair in one workflow, grounded in composite theory and real mechanical test data.",
+    "Anisotropy is an engineering platform built only for composite structures. Design, analysis, and testing share one record today, grounded in composite theory and real mechanical test data; fabrication and repair are planned on the same record.",
 };
 
-/** The five parts of the workflow the platform is built for, each labelled as the service pages label them. */
-const pillars: { title: string; status: ServiceStatus; text: string; href?: string }[] = [
+/** The five parts of the workflow the platform is built for, each labelled as the service pages label them; a part with a
+ * service page links to it by the service's name. */
+const pillars: { title: string; status: ServiceStatus; text: string; service?: string }[] = [
   {
     title: "Design",
     status: "partly",
     text: "A laminate stated as its layup and material, a coupon as a few dimensions; the stiffness and the mesh follow from them. A CAD file to take elsewhere is planned.",
-    href: "/services/computer-aided-design",
+    service: "computer-aided-design",
   },
   {
     title: "Analysis",
     status: "built",
-    text: "Classical laminate theory for the stack and finite elements for the coupon, with CalculiX as the reference and first-ply failure by the criterion you choose.",
-    href: "/services/finite-element-modeling",
+    text: "Classical laminate theory for the stack and finite elements for the coupon, checked against a reference solver, with first-ply failure by the criterion you choose.",
+    service: "finite-element-modeling",
   },
   {
     title: "Testing",
     status: "partly",
-    text: "Coupons in the proportions of the ASTM standards, a checklist before any run, and our own tensile tests and microscopy to check the model against. The test-plan document is planned.",
-    href: "/services/test-plans",
+    text: "Coupons sized to ASTM D3039, a setup check before any run, and our own tensile tests and microscopy to check the model against. The test-plan document is planned.",
+    service: "test-plans",
   },
   {
     title: "Fabrication",
     status: "planned",
     text: "The ply book and the cure cycle from the same record. Not built; the lab lays up its own coupons by hand today.",
-    href: "/services/manufacturing-plans",
+    service: "manufacturing-plans",
   },
   {
     title: "Repair",
@@ -56,21 +56,30 @@ const pillars: { title: string; status: ServiceStatus; text: string; href?: stri
   },
 ];
 
+/** The lab's loop, one row per step. */
+const loop = [
+  { icon: Layers3, title: "Fabricate", text: "Geometry, material, layup, and process." },
+  { icon: FlaskConical, title: "Test", text: "Capture the response and where failure occurs." },
+  { icon: Microscope, title: "Investigate", text: "Connect fracture observations to the specimen." },
+  { icon: Repeat2, title: "Compare and learn", text: "Check predictions, review evidence, refine the model." },
+] as const;
+
 export default function About() {
   return (
     <main id="main" className="kit-page about-page">
       <section className="page-opening">
-        <p className="page-opening-label">ABOUT / WHAT WE ARE BUILDING</p>
+        <p className="page-opening-label">ABOUT</p>
         <h1 className="page-opening-title">
-          Engineering built
+          Engineering built{" "}
           <br />
           on <em>physical evidence.</em>
         </h1>
         <div className="page-opening-grid">
           <div className="page-opening-copy">
             <p>
-              Anisotropy is an engineering platform built only for composite structures. Design, analysis, testing,
-              fabrication and repair live in one workflow, grounded in composite theory and real mechanical test data.
+              Anisotropy is an engineering platform built only for composite structures. Design, analysis, and testing
+              share one record today, grounded in composite theory and real mechanical test data; fabrication and repair
+              are planned on the same record.
             </p>
             <p>
               Every answer comes with its assumptions and references, so engineers can verify results and students can
@@ -82,7 +91,7 @@ export default function About() {
             <p>
               Design. Analyze. Test.
               <br />
-              Fabricate. Repair.
+              Fabrication and repair next.
               <br />
               One record through all of it.
             </p>
@@ -99,35 +108,42 @@ export default function About() {
               only for composites.
             </h2>
             <p>
-              A composite part is designed, analyzed, tested, built and sometimes repaired by different people with
+              A composite part is designed, analyzed, tested, built, and sometimes repaired by different people with
               different tools. We keep those steps on one record, so the layup the analyst used is the layup the lab laid
-              up, and the number in the report is the number the engine computed.
+              up, and the number in the report is the number the analysis computed.
             </p>
           </div>
         </div>
         <div className="about-pillars">
-          {pillars.map((pillar) => (
-            <article className="kit-row" key={pillar.title}>
-              <div className="kit-row-head about-pillar-head">
-                <h3 className="kit-title">{pillar.title}</h3>
-                <span className={`kit-status kit-status-${pillar.status}`}>{statusLabel[pillar.status]}</span>
-              </div>
-              <p className="kit-row-body kit-text">{pillar.text}</p>
-              {pillar.href ? (
-                <Link className="kit-row-aside kit-link" href={pillar.href}>
-                  The service page <ArrowUpRight size={16} />
-                </Link>
-              ) : null}
-            </article>
-          ))}
+          {pillars.map((pillar) => {
+            const service = pillar.service ? findService(pillar.service) : undefined;
+            return (
+              <article className="kit-row" key={pillar.title}>
+                <div className="kit-row-head about-pillar-head">
+                  <h3 className="kit-title">{pillar.title}</h3>
+                  <span className={`kit-status kit-status-${pillar.status}`}>{statusLabel[pillar.status]}</span>
+                </div>
+                <p className="kit-row-body kit-text">{pillar.text}</p>
+                {service ? (
+                  <Link className="kit-row-aside kit-link" href={serviceHref(service)}>
+                    {service.title} <ArrowRight size={16} aria-hidden="true" />
+                  </Link>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
         <MediaSlot
           className="about-figure"
           label="Microscopy of a tested coupon"
           src="/assets/images/microscopy.jpg"
+          webpSrcSet="/assets/images/microscopy-800.webp 800w, /assets/images/microscopy-1600.webp 1600w"
+          sizes="(max-width: 1023px) 100vw, 50vw"
+          width={2880}
+          height={2160}
           alt="Microscopy image of a composite specimen"
           ratio="4/3"
-          caption="Where the model is checked: the lab's own specimens under the microscope."
+          caption="The lab's own specimens under the microscope."
         />
       </section>
       <section className="band about-workflow">
@@ -149,21 +165,18 @@ export default function About() {
           {workflowSteps.map((step, i) => (
             <article className="band-card about-step" key={step.title}>
               <div className="about-step-top">
-                <step.icon size={24} strokeWidth={1.4} />
+                <step.icon size={24} strokeWidth={1.4} aria-hidden="true" />
                 <span className="kit-mono">0{i + 1}</span>
               </div>
               <h3 className="kit-title">{step.title}</h3>
               <p>{step.text}</p>
-              <span className="kit-mono about-step-tag">
-                {step.tag}
-                {i < workflowSteps.length - 1 && <ArrowRight size={16} />}
-              </span>
+              <span className="kit-mono about-step-tag">{step.tag}</span>
             </article>
           ))}
         </div>
         <div className="kit-note">
           <span className="kit-mono kit-note-lead">
-            <ShieldCheck size={18} strokeWidth={1.6} />
+            <ShieldCheck size={18} strokeWidth={1.6} aria-hidden="true" />
             OUR CORE PRINCIPLE
           </span>
           <p className="kit-note-text">
@@ -193,7 +206,7 @@ export default function About() {
             <article className={i === 0 ? "about-stage is-current" : "about-stage"} key={stage.number}>
               <div className="about-stage-number">
                 {stage.number}
-                <span>{i === 0 ? <span className="about-stage-dot" /> : <span className="about-stage-plus">+</span>}</span>
+                <span className={i === 0 ? "about-stage-dot" : "about-stage-ring"} aria-hidden="true" />
               </div>
               <span className="kit-mono">{stage.subtitle}</span>
               <h3 className="kit-title">{stage.title}</h3>
@@ -204,7 +217,7 @@ export default function About() {
         </div>
         <div className="kit-note">
           <p className="kit-note-text has-icon">
-            <Check size={18} />
+            <Flag size={18} aria-hidden="true" />
             <span>{validationGate}</span>
           </p>
         </div>
@@ -230,26 +243,16 @@ export default function About() {
           </div>
         </div>
         <div className="band-grid">
-          <MediaSlot className="about-lab-media" label="A coupon in the tensile frame" ratio="16/9" />
           <div className="about-lab-cycle">
-            {[
-              [Layers3, "Fabricate", "Geometry, material, layup, and process."],
-              [FlaskConical, "Test", "Capture the response and where failure occurs."],
-              [Microscope, "Investigate", "Connect fracture observations to the specimen."],
-              [Repeat2, "Compare & learn", "Check predictions, review evidence, refine the model."],
-            ].map(([Icon, title, description]) => {
-              const I = Icon as typeof Layers3;
-              return (
-                <article key={String(title)}>
-                  <I size={22} strokeWidth={1.4} />
-                  <div>
-                    <h3 className="kit-title">{String(title)}</h3>
-                    <p>{String(description)}</p>
-                  </div>
-                  <ArrowRight size={16} />
-                </article>
-              );
-            })}
+            {loop.map(({ icon: Icon, title, text }) => (
+              <article key={title}>
+                <Icon size={22} strokeWidth={1.4} aria-hidden="true" />
+                <div>
+                  <h3 className="kit-title">{title}</h3>
+                  <p>{text}</p>
+                </div>
+              </article>
+            ))}
           </div>
         </div>
       </section>
@@ -271,11 +274,11 @@ export default function About() {
         <div className="band-grid">
           <div className="kit-figure about-context-figure">
             <div className="kit-figure-top">
-              <span>SPECIMEN SHAPE / LOAD PATH</span>
+              <span>TENSION STRIP / REGION TO INVESTIGATE</span>
               <span className="kit-badge">CONCEPT</span>
             </div>
             <CouponVisual mode="failure" />
-            <p>Investigate how geometry changes local stress and the region in which a specimen fails.</p>
+            <p>Investigate the region in which a specimen fails: in its gauge section, or at the end of a tab.</p>
           </div>
           <div className="about-context-notes">
             <article>
@@ -306,8 +309,8 @@ export default function About() {
         </div>
         <div className="kit-note">
           <p className="kit-note-text">
-            The supplied printed-polymer studies inform our experimental approach. They are not validation of the planned
-            composite-laminate model. Study-specific measurements and performance percentages are not published here.
+            Our printed-polymer specimen studies shape the test approach; they are not a validation of the laminate model.
+            Study-specific measurements and performance percentages are not published here.
           </p>
         </div>
       </section>
@@ -327,10 +330,15 @@ export default function About() {
           </div>
         </div>
         <div className="band-grid about-model-tags">
-          <span>Strength & stiffness</span>
-          <span>Failure location & mode</span>
-          <span>Prediction uncertainty</span>
-          <span>Physics–test discrepancy</span>
+          {modelSubjects.map((subject) => (
+            <span key={subject}>{subject}</span>
+          ))}
+        </div>
+        <div className="band-grid about-model-tags about-model-goals">
+          <p className="kit-mono">RESEARCH GOALS</p>
+          {modelGoals.map((goal) => (
+            <span key={goal}>{goal}</span>
+          ))}
         </div>
         <div className="band-grid">
           <p className="kit-text about-model-text">
@@ -352,21 +360,20 @@ export default function About() {
           </div>
         </div>
         <div className="band-grid">
+          {/* A card is the name and the seats. It shows no portrait yet: the portraits in lib/team.ts are on the home page's cards
+              (ADR-0077 amendment 29, each person's consent still to be confirmed), and About's cards take them with Kai's work on
+              the team cards. */}
           <div className="team-grid">
             {team.map((person) => (
               <article className="team-card" key={person.name}>
-                <MediaSlot label={`Portrait of ${person.name}`} ratio="1/1" />
                 <div className="team-card-body">
                   <h3 className="kit-title">{person.name}</h3>
-                  {person.role ? <span className="kit-mono team-role">{person.role.toUpperCase()}</span> : null}
+                  {person.role ? <span className="kit-mono team-role">{person.role}</span> : null}
                   <p>{person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}.</p>
                   {person.company ? <p>{person.company.charAt(0).toUpperCase() + person.company.slice(1)}.</p> : null}
                 </div>
               </article>
             ))}
-            <p className="team-note">
-              The repository is public: the team's decisions, their reasons and the evidence behind every result are in it.
-            </p>
           </div>
         </div>
       </section>

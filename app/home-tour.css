@@ -22,6 +22,20 @@
 .demo-tour-stage {
   padding: 88px 32px;
 }
+/* The way past the tour for a keyboard: the site's skip link, out of sight until it has the focus, then in the tour's top left
+ * corner, over the stage. */
+.demo-tour > .skip-link {
+  position: absolute;
+  top: 16px;
+  left: 32px;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+}
+.demo-tour > .skip-link:focus {
+  opacity: 1;
+  pointer-events: auto;
+}
 .demo-tour-head {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -89,7 +103,7 @@
   min-height: 18px;
   margin: 14px 0 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 18px;
   letter-spacing: 0.04em;
   text-align: center;
@@ -138,7 +152,7 @@
 }
 .tour-eyebrow {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.6;
   letter-spacing: 1.8px;
@@ -153,7 +167,8 @@
 .tour-card-head .tour-hint {
   text-align: right;
 }
-/* A read-only field: its step fills it. The live fields are in the calculator below. */
+/* A read-only field: its step fills it. It is set as a value on a dotted line, not as a box, so it does not look like a field
+ * to type in; the live fields are in the calculator below. */
 .tour-field {
   display: flex;
   flex-direction: column;
@@ -164,17 +179,15 @@
   font-size: 12px;
 }
 .tour-field-label small {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .tour-field-box {
   display: flex;
   align-items: center;
-  min-height: 40px;
-  padding: 8px 12px;
-  border: 1px solid #414141;
-  border-radius: 4px;
-  background: var(--bg);
+  min-height: 26px;
+  padding: 2px 0 4px;
+  border-bottom: 1px dotted #5a5a5a;
   font-size: 14px;
   line-height: 22px;
   font-variant-numeric: tabular-nums;
@@ -196,7 +209,7 @@
 }
 .tour-field.is-quiet .tour-field-box {
   border-color: var(--line);
-  color: #6f6f6f;
+  color: var(--muted);
 }
 .tour-field-row {
   display: grid;
@@ -209,8 +222,8 @@
   gap: 10px;
 }
 .tour-loads .tour-field-box {
-  min-height: 34px;
-  padding: 5px 10px;
+  min-height: 24px;
+  padding: 2px 0 3px;
   font-size: 13px;
 }
 .tour-library {
@@ -240,7 +253,7 @@
   color: #111111;
 }
 .tour-library .tour-library-more {
-  color: #6f6f6f;
+  color: var(--muted);
 }
 .tour-reveal {
   opacity: 0;
@@ -255,7 +268,7 @@
   gap: 2px;
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 18px;
 }
 .tour-request > div {
@@ -353,7 +366,7 @@
 }
 .demo-tour .hero-abd-note {
   padding: 8px 10px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .demo-tour .calc-table-scroll {
   overflow-x: auto;
@@ -493,21 +506,21 @@
   }
   /* One step at a time: its words at the left, its panel at the right, both centred on the stage's height. A step's move
    * starts as its words come up, so they come up quickly: the step before is gone in 0.15 s and this one is up 0.2 s
-   * after that, by when the clock has what it types still ahead of it (components/home/tour-timeline.ts). */
+   * after that, by when the clock has what it types still ahead of it (components/home/tour-timeline.ts). A step out of
+   * turn is only transparent, not hidden, so a screen reader reads all five steps wherever the stage stands. Nothing in a
+   * step takes the focus: its tables and its ply rows are drawn without a tab stop (`focusable` on AbdGrid and StackList). */
   .demo-tour[data-mode="pinned"] .demo-tour-step {
     position: absolute;
     inset: 0;
     padding: 72px 32px 88px;
     align-items: center;
     opacity: 0;
-    visibility: hidden;
     pointer-events: none;
-    transition: opacity 0.15s linear, visibility 0s linear 0.15s;
+    transition: opacity 0.15s linear;
   }
   .demo-tour[data-mode="pinned"] .demo-tour-step[data-active] {
     opacity: 1;
-    visibility: visible;
-    transition: opacity 0.2s linear 0.1s, visibility 0s;
+    transition: opacity 0.2s linear 0.1s;
   }
   .demo-tour[data-mode="pinned"] .demo-tour-step[data-active] > * {
     pointer-events: auto;
@@ -689,4 +702,8 @@
   .tour-slot-failure {
     min-height: 296px;
   }
+}
+/* When the calculation has failed, the slots its numbers would fill keep no height, so no empty panel stands under the note. */
+.demo-tour .tour-slot[data-failed] {
+  min-height: 0;
 }

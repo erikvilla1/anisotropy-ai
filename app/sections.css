@@ -1,9 +1,10 @@
-/* The section kit (ADR-0077 amendment 11): the parts every page's sections are set with, after PhysicsX's sections as measured
- * for the home demo (amendment 7). A band is a full-width section, 88 px above and below and 32 px at the sides, like the hero and
+/* The section kit (ADR-0077 amendment 11): the parts every page's sections are set with, as measured for the home demo
+ * (amendment 7). A band is a full-width section, 88 px above and below and 32 px at the sides, like the hero and
  * the header. It is dark by default; `is-light` sets the site's colour variables to their light values for the band, so
  * anything inside that reads the variables follows. A band's head is a 12-column grid: a monospace label with a tick in columns
  * 1 to 3, and the statement (the heading, then an optional paragraph) from column 4 behind a 1 px rule that sits in the middle
- * of the gutter, so the text starts exactly on the column. `band-grid` gives a band's content the same 12 columns. */
+ * of the gutter, so the text starts exactly on the column. `band-grid` gives a band's content the same 12 columns. A label
+ * that heads its band alone is an h2 with the label's class, so the page's outline has it; it keeps the label's weight. */
 .band {
   padding: 88px 32px;
   background: var(--bg);
@@ -37,6 +38,7 @@
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 16px;
+  font-weight: 400;
   line-height: 20px;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -65,7 +67,7 @@
   letter-spacing: -0.01em;
 }
 .band-statement p {
-  max-width: 36em;
+  max-width: 34em;
   margin: 0;
   font-size: 18px;
   line-height: 26px;
@@ -75,6 +77,35 @@
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 32px;
+}
+/* How much of a thing exists (lib/services.ts), without a colour: a full dot for built, half for in part, a ring for planned.
+ * The word names the state. The one definition of the mark: the home page's cards, the services rows and About's parts use it. */
+.kit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text);
+}
+.kit-status::before {
+  content: "";
+  flex: none;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.kit-status-built::before {
+  background: currentColor;
+}
+.kit-status-partly::before {
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
 }
 /* A plain card on either ground: it reads the band's variables. */
 .band-card {

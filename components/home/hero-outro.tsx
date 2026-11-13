@@ -7,7 +7,7 @@ import { prepareOutro, type IntroRun } from "@/components/intro-text";
 const HOLD_MS = 3000;
 const CHECK_MS = 200;
 
-/** Takes the hero's words away three seconds after they have loaded in (five until ADR-0077 amendment 26), so the clip plays alone, as Anduril's hero does
+/** Takes the hero's words away three seconds after they have loaded in (five until ADR-0077 amendment 26), so the clip plays alone
  * (ADR-0077 amendment 19; the lead's request and recording of 2026-11-12). The words are untyped by
  * components/intro-text.ts: the statement, the tagline and the small line lose their characters from the end of each
  * line; the mark starts first, with a quarter turn, and has faded just before the last of them goes. The three seconds count only while the load-in is over and

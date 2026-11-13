@@ -1,5 +1,4 @@
 import { CouponVisual } from "@/components/coupon-visual";
-import { MediaSlot } from "@/components/media-slot";
 import { ServicePage } from "@/components/services/service-page";
 import "../../inner-pages.css";
 import "../services.css";
@@ -15,45 +14,42 @@ export default function ComputerAidedDesign() {
       slug="computer-aided-design"
       headline={
         <>
-          Geometry
+          Geometry{" "}
           <br />
           <em>from a few numbers.</em>
         </>
       }
-      lede="A coupon is its length, width, thickness, tabs and hole. The studio builds the mesh from those numbers, so the geometry and the model never disagree. A CAD file you can open elsewhere does not exist yet."
+      lede="A coupon is its length, width, thickness and tabs. The workspace builds the mesh from those numbers, so the geometry and the model never disagree. A CAD file you can open elsewhere does not exist yet."
       exists={[
         {
           title: "Parametric coupons",
-          text: "The D3039 tension strip, with its tabs and its extensometer placed from the dimensions Table 2 gives for the layup. Holes, bending spans and plates with named regions are built and come back one test at a time.",
+          text: "The D3039 tension strip, with its tabs and extensometer placed from the dimensions D3039 Table 2 gives for the layup. Holes, bending spans and plates follow, one test at a time.",
         },
         {
-          title: "Meshed from the spec",
-          text: "Structured meshes for strips, a butterfly grid around the hole, and the element size as one row of the form.",
+          title: "Meshed from the dimensions",
+          text: "A structured mesh for the strip, with the element size as one setting.",
         },
         {
-          title: "One geometry in every deck",
-          text: "Abaqus, PrePoMax and our own kernel read the same spec, so the three models share every node.",
+          title: "One geometry, every file",
+          text: "The mesh you see and the Abaqus input file (.inp) come from the same dimensions, node for node.",
         },
       ]}
       demonstration={{
-        intro: "The geometry is drawn as the mesh the solvers use, with the supports and the load marked on it.",
+        intro: "The geometry is drawn as the mesh the analysis uses, with the supports and the load marked on it.",
         media: (
-          <>
-            <MediaSlot label="The studio's mesh of a D3039 tension coupon" ratio="16/9" />
-            <div className="kit-figure">
-              <div className="kit-figure-top">
-                <span>COUPON / GEOMETRY</span>
-                <span className="kit-badge">ILLUSTRATIVE</span>
-              </div>
-              <CouponVisual mode="geometry" />
-              <p>An illustration of a strip coupon with a central hole.</p>
+          <div className="kit-figure">
+            <div className="kit-figure-top">
+              <span>COUPON / GEOMETRY</span>
+              <span className="kit-badge">ILLUSTRATIVE</span>
             </div>
-          </>
+            <CouponVisual mode="geometry" />
+            <p>An illustration of the D3039 tension strip with its tabs.</p>
+          </div>
         ),
         artefacts: [
           "The mesh, with its element size stated",
           "The supports and the loaded region, marked",
-          "The decks that carry the geometry to other solvers",
+          "The Abaqus input file (.inp) that carries the geometry to other programs",
         ],
       }}
       planned={[
@@ -67,7 +63,7 @@ export default function ComputerAidedDesign() {
         },
       ]}
       access={{
-        text: "The geometry is part of every studio session, open to the invited users of the closed beta. For a CAD file today, write to us.",
+        text: "The geometry is part of every workspace session for invited beta users. CAD export is planned; write to us if you need it.",
         links: [
           { label: "Open the workspace", href: "/workspace/fea", primary: true },
           { label: "Contact us", href: "/contact" },

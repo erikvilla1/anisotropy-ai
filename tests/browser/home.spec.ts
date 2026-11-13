@@ -37,14 +37,22 @@ test("the hero's words are one statement and a row of the year, the mark and the
   const row = await hero.evaluate((el) => ["note", "mark", "tagline"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
   expect(row[0]).toBeLessThan(row[1]);
   expect(row[1]).toBeLessThan(row[2]);
-  // The cohort stands beside the mark of the place that runs it, in the clip's bottom left corner.
-  await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
+  // The cohort stands beside the place that runs it, in the clip's bottom left corner; the place is named in words until
+  // written permission for The Basement's mark is recorded (ADR-0081 amendment 2).
+  await expect(hero.locator(".home-hero-backed")).toHaveText("The Basement, UC San Diego Fall 2026 Launchpad cohort");
   await expect(hero.locator(".home-hero-backed .home-hero-cohort")).toHaveText("Fall 2026 Launchpad cohort");
-  // No 3D view, chat box or link in the hero: the header's Workspace button is the way in. Its one button, "Scroll to explore", is hidden while the words stand (tests/browser/intro.spec.ts).
-  await expect(hero.getByRole("button", { includeHidden: true })).toHaveCount(1);
+  await expect(hero.locator("img")).toHaveCount(0);
+  // No 3D view, chat box or text field in the hero: the header's Workspace button is the way in. Its one link, "See how it
+  // works", goes to the product demo and is hidden while the words stand (tests/browser/intro.spec.ts). Its one button, once
+  // the clip has a source, pauses the clip (ADR-0077 amendment 32); a build without the clip has neither.
+  await expect(hero.getByRole("link", { includeHidden: true })).toHaveCount(1);
+  await expect(hero.getByRole("link", { includeHidden: true })).toHaveAttribute("href", "#demo");
+  const clips = await hero.locator(".home-hero-video").count();
+  const buttons = hero.getByRole("button", { includeHidden: true });
+  expect(await buttons.count()).toBeLessThanOrEqual(clips);
+  if (await buttons.count()) await expect(buttons).toHaveAccessibleName("Pause background video");
   await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);
   await expect(hero.getByRole("textbox")).toHaveCount(0);
-  await expect(hero.getByRole("link")).toHaveCount(0);
   // The header lies over the hero's black ground on the home page; elsewhere it is the same header in the page's flow, 84 px
   // tall, with its links in the middle of the page (ADR-0077 amendments 8 and 19).
   await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
@@ -90,6 +98,42 @@ test("the hero's clip plays in a square box on the black page, under the header,
   const phone = await rect("#overview .home-hero-media");
   expect([phone.left, 390 - phone.right]).toEqual([20, 20]);
   expect(phone.top).toBeGreaterThanOrEqual((await rect(".site-header")).bottom);
+});
+
+test("the hero's clip has a pause button, and a clip the visitor paused stays paused (WCAG 2.2.2; ADR-0077 amendment 32)", async ({ page }) => {
+  await page.goto("/");
+  const hero = page.locator("#overview");
+  test.skip(!(await hero.locator(".home-hero-video").count()), "no clip in this build");
+  const video = hero.locator(".home-hero-video video");
+  // The clip's source is for windows 768 px and wider, without reduced motion; the page loads no more than its first frame
+  // and length before it plays.
+  await expect(hero.locator(".home-hero-video source")).toHaveAttribute("media", "(min-width: 768px) and (prefers-reduced-motion: no-preference)");
+  await expect(video).toHaveAttribute("preload", "metadata");
+  // The button comes once the clip has a source (components/home/hero-video-keeper.tsx).
+  const chosen = await video.evaluate((clip: HTMLVideoElement) => new Promise<boolean>((resolve) => {
+    if (clip.currentSrc) return resolve(true);
+    clip.addEventListener("loadstart", () => resolve(true), { once: true });
+    setTimeout(() => resolve(Boolean(clip.currentSrc)), 3000);
+  }));
+  test.skip(!chosen, "this browser chose no source for the clip");
+  const pause = hero.getByRole("button", { name: "Pause background video" });
+  await expect(pause).toBeVisible();
+  await expect(pause).toHaveAttribute("aria-pressed", "false");
+  await pause.click();
+  await expect(pause).toHaveAttribute("aria-pressed", "true");
+  // The keeper tries again at most once a second: after two seconds a paused clip is still paused.
+  await page.waitForTimeout(2000);
+  expect(await video.evaluate((clip: HTMLVideoElement) => clip.paused)).toBe(true);
+  await pause.click();
+  await expect(pause).toHaveAttribute("aria-pressed", "false");
+  // A window narrowed after the clip has its source keeps the clip, so it keeps the button.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(pause).toBeVisible();
+  // A page opened on a phone gives the clip no source, so nothing plays and there is no button.
+  await page.reload();
+  await expect(video).toHaveJSProperty("currentSrc", "");
+  await page.waitForTimeout(500);
+  await expect(hero.getByRole("button", { includeHidden: true })).toHaveCount(0);
 });
 
 test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }) => {

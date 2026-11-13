@@ -7,7 +7,7 @@
     radial-gradient(40% 40% at 20% 80%, #191919 0%, transparent 60%),
     var(--bg);
 }
-/* The section's head is set as PhysicsX sets its white sections (ADR-0077 amendment 7, measured 2026-11-07): a 16 px monospace
+/* The section's head (ADR-0077 amendment 7): a 16 px monospace
  * label with a short tick in the first column, and the heading from column 4, 38/41 px, with its instructions as an 18 px caption,
  * behind a 1 px rule that sits in the middle of the gutter so the text starts exactly on the column. 88 px above and below, the hero's 32 px margins. */
 .hero-laminate-inner {
@@ -140,7 +140,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .hero-laminate-legend i {
@@ -202,7 +202,10 @@
   background: linear-gradient(150deg, #1d1d1d, var(--panel) 35%);
   transition: opacity 0.2s;
 }
-.hero-laminate-results.is-stale {
+/* A stale answer (the inputs changed and the next answer is on its way) is dimmed; an alert never is, so it keeps its contrast. */
+.hero-laminate-results.is-stale .hero-results-main,
+.hero-laminate-results.is-stale .hero-results-end,
+.hero-laminate-results.is-stale .hero-specs {
   opacity: 0.72;
 }
 .hero-field {
@@ -252,7 +255,7 @@
   min-width: 0;
 }
 .hero-properties dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .hero-properties dd {
@@ -264,12 +267,12 @@
 .hero-properties small,
 .hero-specs small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .hero-not-provided {
   color: var(--muted);
   font-family: var(--font);
-  font-size: 11px;
+  font-size: 12px;
 }
 .hero-loads summary {
   cursor: pointer;
@@ -283,7 +286,7 @@
   margin: 12px 0 8px;
 }
 .hero-loads-grid label {
-  font-size: 11px;
+  font-size: 12px;
 }
 .hero-stack {
   list-style: none;
@@ -339,7 +342,7 @@
   min-width: 0;
 }
 .hero-specs dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-bottom: 3px;
 }
@@ -360,7 +363,7 @@
 .hero-failure h3 span {
   color: var(--muted);
   font-family: var(--font);
-  font-size: 11px;
+  font-size: 12px;
   margin-left: 8px;
 }
 .hero-failure table {
@@ -399,11 +402,11 @@
 .hero-abd .calc-matrix h3 span {
   color: var(--muted);
   font-family: var(--font);
-  font-size: 11px;
+  font-size: 12px;
   margin-left: 6px;
 }
 .hero-abd .calc-matrix table {
-  font-size: 10px;
+  font-size: 12px;
 }
 .hero-abd .calc-matrix th,
 .hero-abd .calc-matrix td {
@@ -412,7 +415,7 @@
 .hero-abd-note {
   margin: 0;
   padding: 10px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
   color: var(--muted);
   border: 1px dashed var(--line);
@@ -445,11 +448,15 @@
 .hero-stack-head {
   margin: 0 0 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
+}
+/* The unit keeps its case: mm, not MM. */
+.hero-stack-head span {
+  text-transform: none;
 }
 .hero-laminate-stack .hero-stack li {
   grid-template-columns: 10px 22px 1fr auto;
@@ -497,7 +504,7 @@
 }
 
 /* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31): Mission and Platform
- * dark, About light, News dark. Each numbered band opens with the kit's head. Platform's cards start at column 4, under the
+ * dark, Team light, News dark. Each numbered band opens with the kit's head. Platform's cards start at column 4, under the
  * statement, three columns wide and three to a row. The label column holds only labels, so the news dates sit in it and each
  * item's words start under the statement. The four principles close the Mission band as a strip on all twelve columns, and
  * About's five face cards take the whole width. Every colour here is one of the band's variables, so one rule serves both
@@ -562,23 +569,37 @@
   height: 11px;
   background: currentColor;
 }
-/* The arrow closes the strip; it stays with its words when they wrap. */
-.home-principles svg {
-  margin-left: 4px;
-  vertical-align: -2px;
-}
-/* Three cards to a row from column 4: nine columns and eight gutters split in three is three columns and two gutters each,
- * so the cards' edges fall on the head's columns. */
+/* Five cards from column 4 on six columns: three to the first row, two to the second, each two of the six wide and then three,
+ * so no card stands alone with a hole beside it. A card's title is its link, and the link's area covers the card. */
 .home-cards {
   grid-column: 4 / -1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 32px;
   min-width: 0;
 }
 .home-cards > article {
+  position: relative;
   display: flex;
   flex-direction: column;
+  grid-column: span 2;
+  transition: border-color 0.15s;
+}
+.home-cards > article:nth-child(n + 4) {
+  grid-column: span 3;
+}
+.home-cards > article:hover {
+  border-color: var(--muted);
+}
+.home-cards h3 a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+}
+.home-cards h3 svg {
+  margin-left: 2px;
+  vertical-align: -2px;
 }
 .home-card-top {
   display: flex;
@@ -606,55 +627,7 @@
 .home-cards h3 + p {
   margin-top: 12px;
 }
-.home-cards > article > .home-link {
-  align-self: flex-start;
-  margin-top: auto;
-  padding-top: 24px;
-}
-/* How much of a service exists, without a colour: a full dot for built, half for in part, a ring for planned. */
-.home-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
-  white-space: nowrap;
-}
-.home-status::before {
-  content: "";
-  flex: none;
-  box-sizing: border-box;
-  width: 8px;
-  height: 8px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-}
-.home-status-built::before {
-  background: currentColor;
-}
-.home-status-partly::before {
-  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
-}
-/* About says the one fact about the programme again, as a small monospace line under its statement: the strip above has the
- * logo and the sentence, so this is neither. */
-.band-statement > .home-about-cohort {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  max-width: none;
-  margin-top: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  line-height: 20px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-.band-statement > .home-about-cohort::before {
-  content: "";
-  flex: none;
-  width: 1px;
-  height: 11px;
-  background: currentColor;
-}
+/* How much of a service exists is the section kit's mark (`kit-status`, app/sections.css). */
 /* The face cards: a 4:5 frame ready for a portrait, holding the person's initials until there is one, then the name and the
  * seats. Five to a row across the band's whole width. The frame is the card, so it carries the border, the radius and the
  * ground. A name that links to a profile (lib/team.ts) takes the whole card as its target. */
@@ -683,7 +656,6 @@
   line-height: 1;
   letter-spacing: 0.04em;
   color: var(--muted);
-  opacity: 0.5;
 }
 .home-face-frame {
   position: relative;
@@ -693,7 +665,7 @@
   height: 100%;
   object-fit: cover;
 }
-/* LinkedIn's mark (ADR-0057 amendment 2): a round black badge in the frame's bottom right corner that comes up while the
+/* LinkedIn's mark (ADR-0077 amendment 29): a round black badge in the frame's bottom right corner that comes up while the
  * pointer is over the card, or while the keyboard's focus is in it. Where there is no pointer to hover with, a badge that
  * is a link is always there. */
 .home-face-frame .home-face-in {
@@ -787,6 +759,14 @@
   .home-cards,
   .home-principles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .home-cards > article,
+  .home-cards > article:nth-child(n + 4) {
+    grid-column: auto;
+  }
+  /* Two to a row: the fifth card takes the row's width. */
+  .home-cards > article:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
   .home-faces {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -967,7 +947,7 @@
   }
 }
 
-/* The hero (ADR-0077 and its amendment 19), in the arrangement of Anduril's home page. The page is black; the header lies
+/* The hero (ADR-0077 and its amendment 19). The page is black; the header lies
  * on the black strip at the top; under it the material clip plays in a box with square corners that stands on the page's
  * margin at the sides and the foot. The words are in the middle of the box: one statement in large capitals, and under it a
  * row of the tagline, the mark and one short monospace line.
@@ -1036,9 +1016,8 @@
   row-gap: clamp(28px, 3.2vw, 56px);
   width: 100%;
 }
-/* The statement: capitals of medium weight, set tight, the lines close. Measured on Anduril's page at 1880 px: capitals 62 px
- * tall on a 71 px pitch. Ours is set a little smaller than that at the lead's word, since its lines are longer; the mark in
- * the row keeps its size. */
+/* The statement: capitals of medium weight, set tight, the lines close, at the size the lead chose; the mark in the row keeps
+ * its size. */
 .home-hero h1 {
   margin: 0;
   font-family: var(--font);
@@ -1102,7 +1081,7 @@
 /* The lens (ADR-0071): a 4:3 window over the clip, its right edge on the gutter before the copy and its foot just above the
  * headline's middle, under the words. Through it the clip is dimmed and blurred like glass, and our results play in colour on
  * top, screen-blended so the recording's black background drops out. The lens itself makes no stacking context (no z-index,
- * no transform), so the blend reaches the clip; its parts drift together a few pixels, slowly, as PhysicsX's lens does. The
+ * no transform), so the blend reaches the clip; its parts drift together a few pixels, slowly. The
  * caption above names the model on screen. Wide screens only. */
 .home-hero-lens {
   position: absolute;
@@ -1179,7 +1158,8 @@
     display: none;
   }
 }
-/* UC San Diego's The Basement mark (ADR-0081), in white, in the bottom left corner of the hero's box. */
+/* Where the cohort meets, in words (ADR-0081 amendment 2), in the bottom left corner of the hero's box, and the cohort beside it
+ * behind a hairline (ADR-0077 amendment 28): small monospace capitals, the words and the cohort set alike. */
 .home-hero-backed {
   position: absolute;
   z-index: 2;
@@ -1189,27 +1169,57 @@
   align-items: center;
   gap: 16px;
   margin: 0;
-}
-/* The cohort, beside the mark of the place that runs it (ADR-0077 amendment 28): small monospace capitals behind a hairline. */
-.home-hero-cohort {
-  padding-left: 16px;
-  border-left: 1px solid #ffffff66;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 1.35;
   letter-spacing: 0.06em;
+  text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
   color: #ffffff;
 }
-.home-hero-backed img {
-  display: block;
-  width: auto;
-  height: 40px;
+.home-hero-cohort {
+  padding-left: 16px;
+  border-left: 1px solid #ffffff66;
 }
-/* "Scroll to explore" (components/home/scroll-to-explore.tsx; ADR-0077 amendments 22 and 24): in the bottom right corner of
- * the clip, as far in as the Basement mark is on the left, set as Scale's is: the words in the site's typeface, then a down
- * arrow in a square outline with soft corners. It is not there, for the eye, the pointer or the keyboard, until the hero's
+/* The clip's pause button (WCAG 2.2.2; ADR-0077 amendment 32), in the top right corner of the box, as far in as the words at
+ * its foot: the outlined square of "Scroll to explore". components/home/hero-video-keeper.tsx draws it once the clip has a
+ * source (768 px and wider, without reduced motion), and keeps it when the window narrows afterwards, since the clip plays on. */
+.home-hero-pause {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--hero-top) + var(--hero-pad));
+  right: calc(var(--hero-frame) + var(--hero-pad));
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #ffffff;
+  border-radius: 5px;
+  background: none;
+  color: #ffffff;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+.home-hero-pause svg {
+  width: 16px;
+  height: 16px;
+}
+.home-hero-pause:hover,
+.home-hero-pause:focus-visible {
+  background: #ffffff;
+  color: #000000;
+}
+.home-hero-pause:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 4px;
+}
+/* "Scroll to explore" (components/home/scroll-to-explore.tsx; ADR-0077 amendments 22, 24 and 32): in the bottom right corner of
+ * the clip, as far in as the cohort's words are on the left: the words in the site's typeface, then a down arrow in a square
+ * outline with soft corners. It is not there, for the eye, the pointer or the keyboard, until the hero's
  * words have left (`data-words="gone"`, set by components/home/hero-outro.tsx); then it fades in. */
 .home-hero-explore {
   position: absolute;
@@ -1267,11 +1277,14 @@
   outline: 2px solid #ffffff;
   outline-offset: 6px;
 }
-/* A visitor who asked for reduced motion keeps the hero's words, so the button is there from the start. */
+/* A visitor who asked for reduced motion keeps the hero's words, so the link is there from the start. */
 @media (prefers-reduced-motion: reduce) {
   .home-hero-explore {
     opacity: 1;
     visibility: visible;
+    transition: none;
+  }
+  .home-hero-pause {
     transition: none;
   }
 }
@@ -1324,17 +1337,8 @@
     margin-right: 0;
     padding-left: 0.27em;
   }
-}
-@media (max-width: 640px) {
-  .home-hero {
-    --hero-top: 70px;
-    --hero-frame: 20px;
-    --hero-pad: 16px;
-  }
-  .home-hero-backed img {
-    height: 30px;
-  }
-  /* On a narrow screen the cohort stands under the mark, so the Scroll to explore button keeps its corner. */
+  /* The cohort stands under the place's name, so the two stay clear of "Scroll to explore" in the box's other corner: set in
+   * words, the pair is wider than the mark was (ADR-0081 amendment 2), so this starts at 760 px, not 640 (ADR-0077 amendment 28). */
   .home-hero-backed {
     flex-direction: column;
     align-items: flex-start;
@@ -1343,6 +1347,15 @@
   .home-hero-cohort {
     padding-left: 0;
     border-left: 0;
+  }
+}
+@media (max-width: 640px) {
+  .home-hero {
+    --hero-top: 70px;
+    --hero-frame: 20px;
+    --hero-pad: 16px;
+  }
+  .home-hero-backed {
     font-size: 11px;
   }
   /* The button keeps its square; its words would run into the cohort's line, so they are kept for a screen reader only. */
@@ -1356,7 +1369,7 @@
   }
 }
 
-/* The demo section on white (ADR-0077 amendment 6): after the dark hero, the calculator sits on a white page, as PhysicsX's sections do.
+/* The demo section on white (ADR-0077 amendment 6): after the dark hero, the calculator sits on a white page.
  * The section sets the site's colour variables for itself, then corrects the few colours written out for a dark page. The 3D
  * view stays a dark viewport, since its axes and dust are drawn for a dark ground. */
 .hero-laminate {
@@ -1404,6 +1417,23 @@
   border-color: #e2b4a4;
   color: #8a2f12;
   background: #fdf1ec;
+}
+/* A failed calculation: its sentence, and a button that sends the same request again. */
+.hero-retry {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+.hero-retry .calc-text-button {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 .hero-laminate .button.primary {
   color: #ffffff;

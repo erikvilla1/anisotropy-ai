@@ -1,11 +1,11 @@
-import { MediaSlot } from "@/components/media-slot";
+import Link from "next/link";
 import { ServicePage } from "@/components/services/service-page";
 import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
   title: "Documentation",
-  description: "Every solved coupon leaves a package, every calculation a record, and every material value carries the page it came from.",
+  description: "Every solved coupon leaves a report, every calculation a record, and every material value carries the page it came from.",
 };
 
 export default function Documentation() {
@@ -14,20 +14,20 @@ export default function Documentation() {
       slug="documentation"
       headline={
         <>
-          Every answer with
+          Every answer with{" "}
           <br />
           <em>its assumptions and references.</em>
         </>
       }
-      lede="A result nobody can trace is not finished. Each coupon job leaves a package, each calculation leaves a record, and each material value carries the page it came from, so an engineer can verify the answer and a student can learn from it."
+      lede="A result nobody can trace is not finished. Each solved coupon leaves a report, each calculation leaves a record, and each material value carries the page it came from, so any answer can be checked."
       exists={[
         {
-          title: "The coupon package",
-          text: "One folder per solved coupon: a PDF with the model, the theory it used, the comparison with CalculiX and the audit form, next to the decks, the fields and the record.",
+          title: "The coupon report",
+          text: "One report per solved coupon: the model, the theory it used and the reference solver check, with the Abaqus input file (.inp) beside it.",
         },
         {
           title: "A record of every run",
-          text: "The inputs as received, the engine and API versions, the commit and the result, kept so any number can be traced back to the run that produced it.",
+          text: "The inputs as entered, the software version and the result, kept so any number traces back to the run that produced it.",
         },
         {
           title: "Materials with their page",
@@ -35,27 +35,27 @@ export default function Documentation() {
         },
         {
           title: "The physics, with references",
-          text: "Each equation the engine implements has a card in the library with its reference, so the method is as inspectable as the number.",
+          text: "Each equation the analysis uses has a card in the library with its reference, so the method is as open as the number.",
         },
       ]}
       demonstration={{
-        intro: "A package reads like a report an engineer would write by hand, except that every number in it comes from the run it documents.",
-        media: <MediaSlot label="Pages of a coupon package: the model chapter and the comparison table" ratio="16/9" />,
-        artefacts: [
-          "The report as PDF, with its LaTeX source",
-          "Abaqus and PrePoMax decks as written",
-          "The comparison record against the reference solver",
-          "The run record with inputs, versions and result",
-        ],
+        intro: "The report reads like one an engineer would write by hand, except that every number in it comes from the run it documents.",
+        artefacts: ["Report (PDF)", "Abaqus input file (.inp)"],
       }}
       planned={[
         {
           title: "Test-plan and manufacturing documents",
-          text: "The same record, written out as the document the lab or the shop needs. See the test plans and manufacturing plans pages.",
+          text: (
+            <>
+              The same record, written out as the document the lab or the shop needs. See{" "}
+              <Link href="/services/test-plans">Test plans</Link> and{" "}
+              <Link href="/services/manufacturing-plans">Manufacturing plans</Link>.
+            </>
+          ),
         },
       ]}
       access={{
-        text: "The package comes with every studio job, so it is available to the invited users of the closed beta. The materials library and the physics cards are open to anyone who can reach the site.",
+        text: "Every analysis comes with its report. The materials library and the physics cards are open to every user.",
         links: [
           { label: "Open the workspace", href: "/workspace/fea", primary: true },
           { label: "Browse the materials library", href: "/library" },

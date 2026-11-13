@@ -6,14 +6,16 @@ export function formatted(value: number) {
   return formatNumber(value);
 }
 
-export function Matrix({ title, unit, meaning, values, compact = false }: {
-  title: string; unit: string; meaning: string; values: number[][]; compact?: boolean;
+/** `focusable` gives the table's scroll box a tab stop, so a keyboard can scroll it; the home page's tour turns it off, since its
+ * steps may stand out of turn, transparent, where a tab stop could not be seen. */
+export function Matrix({ title, unit, meaning, values, compact = false, focusable = true }: {
+  title: string; unit: string; meaning: string; values: number[][]; compact?: boolean; focusable?: boolean;
 }) {
   return (
     <div className={compact ? "calc-matrix calc-matrix-compact" : "calc-matrix"}>
       <h3>{title} <span>{unit}</span></h3>
       {compact ? null : <p>{meaning}</p>}
-      <div className="calc-table-scroll" tabIndex={0} role="region" aria-label={`${title}, ${meaning.toLowerCase()} (${unit})`}>
+      <div className="calc-table-scroll" tabIndex={focusable ? 0 : undefined} role={focusable ? "region" : undefined} aria-label={focusable ? `${title}, ${meaning.toLowerCase()} (${unit})` : undefined}>
         <table aria-label={`${title} matrix`}>
           <thead><tr><td />{["x", "y", "xy"].map((axis) => <th scope="col" key={axis}>{axis}</th>)}</tr></thead>
           <tbody>{values.map((row, i) => <tr key={i}><th scope="row">{["x", "y", "xy"][i]}</th>{row.map((value, j) => <td key={j}>{compact ? shortened(value) : formatted(value)}</td>)}</tr>)}</tbody>
