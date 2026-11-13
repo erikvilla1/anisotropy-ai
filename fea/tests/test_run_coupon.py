@@ -56,8 +56,10 @@ def test_a_filled_form_goes_to_its_package_in_one_command(tool, tmp_path):
     outcome = tool.run(str(public_form(tmp_path)), "A. Engineer", pdf=False, theory=False, progress=tool.Progress(progress_path))
     folder, attempt = paths.LOCAL / DESIGNATION, outcome.attempt
     out = attempt / "run"
-    assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "prepomax_deck", "prepomax_results", "kernel_summary", "convergence",
-                                                                      "kernel_vtu", "fields", "explanation", "record", "checklist", "preview"}  # no document without the PDF
+    assert outcome.coupon == DESIGNATION and set(outcome.outputs) == {"package", "abaqus_deck", "abaqus_build", "prepomax_deck", "prepomax_results", "kernel_summary",
+                                                                      "convergence", "kernel_vtu", "fields", "explanation", "record", "checklist",
+                                                                      "preview"}  # no document without the PDF; the build script of ADR-0094 with the deck
+    assert outcome.outputs["abaqus_build"].name == f"{DESIGNATION}-build.py"
     assert all(path.exists() for path in outcome.outputs.values())
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
     assert progress["stage"] == "the outputs" and progress["done"] == list(tool.STAGES[:-1]) and progress["coupon"] == DESIGNATION

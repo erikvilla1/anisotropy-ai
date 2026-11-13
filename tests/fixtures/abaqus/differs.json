@@ -1,0 +1,973 @@
+{
+ "bundle": {
+  "sha256": "3b65525c54acfde2c1b033e57d5c8d121a53e410e66437dbd2ed60451d821b6b",
+  "bundle_version": 1,
+  "created": "2026-11-12T21:36:00Z",
+  "units": "mm-MPa",
+  "written_by": {
+   "abaqus": "Abaqus/Standard 2025",
+   "connector": "test 1",
+   "python": null
+  },
+  "job": "Job-1",
+  "coupon": null,
+  "results": null,
+  "files": {
+   "deck": {
+    "role": "deck",
+    "path": "model/Job-1.inp",
+    "bytes": 101692,
+    "sha256": "d34e43de3b3e0748848c20a13d561995947b45ced61e586a50812c154e191ca4"
+   },
+   "every_output": {
+    "role": "every_output",
+    "path": "results/Job-1-every-output.csv",
+    "bytes": 1883901,
+    "sha256": "5c454340a884f70e27af794a626886918ea10b0f8307ce8dc6bef2909ed0402a"
+   },
+   "reactions": {
+    "role": "reactions",
+    "path": "results/Job-1-every-output-RF.csv",
+    "bytes": 24198,
+    "sha256": "268a3f73fc04af42da18c0ec65d3621bec060e4dbed453635cabd5b671da7cbd"
+   }
+  }
+ },
+ "units": "mm-MPa",
+ "converted_from": null,
+ "ours": {
+  "coupon": "d3039",
+  "written_by": "anisotropy-fea test",
+  "element": "S4",
+  "elements": 1488,
+  "layers": 8
+ },
+ "floor": 0.02,
+ "acceptance": {
+  "reaction": 0.01,
+  "gauge": 0.01,
+  "free length": 0.03
+ },
+ "model": {
+  "compared": "item by item",
+  "same": false,
+  "items": [
+   {
+    "item": "Part / instance names",
+    "yours": "Coupon / Coupon-1",
+    "ours": "Coupon / Coupon-1",
+    "same": true
+   },
+   {
+    "item": "Nodes",
+    "yours": "1625 on the part, 0 reference points",
+    "ours": "1625 on the part, 0 reference points",
+    "same": true
+   },
+   {
+    "item": "Node positions",
+    "yours": "the positions in this deck",
+    "ours": "every node within 0 mm of a node of the other deck",
+    "same": true
+   },
+   {
+    "item": "Elements",
+    "yours": "1488 S4",
+    "ours": "1488 S4",
+    "same": true
+   },
+   {
+    "item": "Element connectivity",
+    "yours": "as written",
+    "ours": "every element on the same corner nodes",
+    "same": true
+   },
+   {
+    "item": "Section",
+    "yours": "composite shell on all elements, listed as the symmetric half",
+    "ours": "composite shell on all elements, listed as the symmetric half",
+    "same": true
+   },
+   {
+    "item": "Layup, bottom first",
+    "yours": "[30/0/-45/90/90/-45/0/30], 8 plies, from the length axis (Ori-1, local 1 along y)",
+    "ours": "[45/0/-45/90/90/-45/0/45], 8 plies, from the length axis (Ori-1, local 1 along y)",
+    "same": false
+   },
+   {
+    "item": "Ply thickness",
+    "yours": "0.18288 mm",
+    "ours": "0.18288 mm",
+    "same": true
+   },
+   {
+    "item": "Integration points per ply",
+    "yours": "3",
+    "ours": "3",
+    "same": true
+   },
+   {
+    "item": "Shell orientation",
+    "yours": "a = [0.0, 1.0, 0.0], b = [-1.0, 0.0, 0.0], 0 deg about 3",
+    "ours": "a = [0.0, 1.0, 0.0], b = [-1.0, 0.0, 0.0], 0 deg about 3",
+    "same": null
+   },
+   {
+    "item": "Material names",
+    "yours": "IM7-8552",
+    "ours": "IM7-8552",
+    "same": true
+   },
+   {
+    "item": "Section set / layup names",
+    "yours": "All / Layup-1",
+    "ours": "All / Layup-1",
+    "same": true
+   },
+   {
+    "item": "Material E1 (MPa)",
+    "yours": "162096",
+    "ours": "162096",
+    "same": true
+   },
+   {
+    "item": "Material E2 (MPa)",
+    "yours": "8963.18",
+    "ours": "8963.18",
+    "same": true
+   },
+   {
+    "item": "Material nu12",
+    "yours": "0.316",
+    "ours": "0.316",
+    "same": true
+   },
+   {
+    "item": "Material G12 (MPa)",
+    "yours": "4688.43",
+    "ours": "4688.43",
+    "same": true
+   },
+   {
+    "item": "Material G13 (MPa)",
+    "yours": "4688.43",
+    "ours": "4688.43",
+    "same": true
+   },
+   {
+    "item": "Material G23 (MPa)",
+    "yours": "2987.73",
+    "ours": "2987.73",
+    "same": true
+   },
+   {
+    "item": "Strengths (*Fail Stress)",
+    "yours": "IM7-8552: F1t 2558.51, F1c 1731.48, F2t 64.0523, F2c 285.719, F6 91.1487 MPa",
+    "ours": "IM7-8552: F1t 2558.51, F1c 1731.48, F2t 64.0523, F2c 285.719, F6 91.1487 MPa",
+    "same": null
+   },
+   {
+    "item": "Boundary conditions, node by node",
+    "yours": "377 node(s): 1=0 mm, 2=0 mm, 3=0 mm, 4=0, 5=0, 6=0; 377 node(s): 1=0 mm, 2=1 mm, 3=0 mm, 4=0, 5=0, 6=0",
+    "ours": "377 node(s): 1=0 mm, 2=0 mm, 3=0 mm, 4=0, 5=0, 6=0; 377 node(s): 1=0 mm, 2=1 mm, 3=0 mm, 4=0, 5=0, 6=0",
+    "same": true
+   },
+   {
+    "item": "Concentrated loads",
+    "yours": "0",
+    "ours": "0",
+    "same": true
+   },
+   {
+    "item": "Steps",
+    "yours": "Step-1 (linear static)",
+    "ours": "Step-1 (linear static)",
+    "same": true
+   }
+  ],
+  "largest_node_offset": 0.0
+ },
+ "pairing": {
+  "same_mesh": true,
+  "how": "by element number: your elements are ours",
+  "elements": 1488,
+  "moved_by": [
+   0.0,
+   0.0
+  ]
+ },
+ "reaction": {
+  "nodes": 373,
+  "yours": 17021.792417479777,
+  "ours": 16211.230873790264,
+  "difference": -0.047619047619047616
+ },
+ "zones": {
+  "gauge": {
+   "elements": 144,
+   "S11": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 413.639212,
+    "ours": 413.639212
+   },
+   "S22": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 29.5841976,
+    "ours": 29.5841976
+   },
+   "S12": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": -44.9149715,
+    "ours": -44.9149715
+   },
+   "Mises": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 407.170115,
+    "ours": 407.170115
+   },
+   "Tresca": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 418.822045,
+    "ours": 418.822045
+   },
+   "Pressure": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": -147.741137,
+    "ours": -147.741137
+   },
+   "Max. Principal": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 418.822045,
+    "ours": 418.822045
+   },
+   "Mid. Principal": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 24.4013649,
+    "ours": 24.4013649
+   },
+   "Min. Principal": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "E11": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 0.00249414695,
+    "ours": 0.00249414695
+   },
+   "E22": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": 0.00249425947,
+    "ours": 0.00249425947
+   },
+   "E12": {
+    "values": 1152,
+    "within_1": 1152,
+    "within_3": 1152,
+    "worst": 0.0,
+    "our_element": 673,
+    "your_element": 673,
+    "layer": 1,
+    "yours": -0.0095799498,
+    "ours": -0.0095799498
+   }
+  },
+  "free length": {
+   "elements": 384,
+   "S11": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 413.328577,
+    "ours": 413.328577
+   },
+   "S22": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 29.3340121,
+    "ours": 29.3340121
+   },
+   "S12": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": -44.6751422,
+    "ours": -44.6751422
+   },
+   "Mises": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 406.895584,
+    "ours": 406.895584
+   },
+   "Tresca": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 418.457713,
+    "ours": 418.457713
+   },
+   "Pressure": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": -147.554196,
+    "ours": -147.554196
+   },
+   "Max. Principal": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 418.457713,
+    "ours": 418.457713
+   },
+   "Mid. Principal": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 24.2048762,
+    "ours": 24.2048762
+   },
+   "Min. Principal": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "E11": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 0.00249271831,
+    "ours": 0.00249271831
+   },
+   "E22": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": 0.00246695247,
+    "ours": 0.00246695247
+   },
+   "E12": {
+    "values": 3072,
+    "within_1": 3072,
+    "within_3": 3072,
+    "worst": 0.0,
+    "our_element": 481,
+    "your_element": 481,
+    "layer": 1,
+    "yours": -0.00952879641,
+    "ours": -0.00952879641
+   }
+  },
+  "band": {
+   "elements": 264,
+   "S11": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 354.296866,
+    "ours": 354.296866
+   },
+   "S22": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 34.1634071,
+    "ours": 34.1634071
+   },
+   "S12": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": -45.3438134,
+    "ours": -45.3438134
+   },
+   "Mises": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 347.501948,
+    "ours": 347.501948
+   },
+   "Tresca": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 360.595456,
+    "ours": 360.595456
+   },
+   "Pressure": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": -129.486758,
+    "ours": -129.486758
+   },
+   "Max. Principal": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 360.595456,
+    "ours": 360.595456
+   },
+   "Mid. Principal": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 27.8648178,
+    "ours": 27.8648178
+   },
+   "Min. Principal": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "E11": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 0.00211912553,
+    "ours": 0.00211912553
+   },
+   "E22": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": 0.00312083622,
+    "ours": 0.00312083622
+   },
+   "E12": {
+    "values": 2112,
+    "within_1": 2112,
+    "within_3": 2112,
+    "worst": 0.0,
+    "our_element": 349,
+    "your_element": 349,
+    "layer": 1,
+    "yours": -0.00967141781,
+    "ours": -0.00967141781
+   }
+  },
+  "tab line": {
+   "elements": 24,
+   "S11": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 274.357377,
+    "ours": 274.357377
+   },
+   "S22": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 53.0810983,
+    "ours": 53.0810983
+   },
+   "S12": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": -43.4691875,
+    "ours": -43.4691875
+   },
+   "Mises": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 263.049602,
+    "ours": 263.049602
+   },
+   "Tresca": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 282.590462,
+    "ours": 282.590462
+   },
+   "Pressure": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": -109.146158,
+    "ours": -109.146158
+   },
+   "Max. Principal": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 282.590462,
+    "ours": 282.590462
+   },
+   "Mid. Principal": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 44.8480126,
+    "ours": 44.8480126
+   },
+   "Min. Principal": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "E11": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 0.00158908398,
+    "ours": 0.00158908398
+   },
+   "E22": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": 0.00538727479,
+    "ours": 0.00538727479
+   },
+   "E12": {
+    "values": 192,
+    "within_1": 192,
+    "within_3": 192,
+    "worst": 0.0,
+    "our_element": 337,
+    "your_element": 337,
+    "layer": 1,
+    "yours": -0.00927157737,
+    "ours": -0.00927157737
+   }
+  },
+  "gripped": {
+   "elements": 672,
+   "S11": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "S22": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "S12": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "Mises": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "Tresca": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "Pressure": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": -0.0,
+    "ours": -0.0
+   },
+   "Max. Principal": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "Mid. Principal": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "Min. Principal": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "E11": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "E22": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   },
+   "E12": {
+    "values": 5376,
+    "within_1": 5376,
+    "within_3": 5376,
+    "worst": 0.0,
+    "our_element": 1,
+    "your_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   }
+  }
+ },
+ "criteria": [
+  {
+   "criterion": "Reaction within 1 %",
+   "met": false,
+   "evidence": "ours -4.762 % from yours",
+   "judged": true
+  },
+  {
+   "criterion": "Gauge: every value within 1 %",
+   "met": true,
+   "evidence": "13824 values, the worst 0 % (S11)",
+   "judged": true
+  },
+  {
+   "criterion": "Free length: every value within 3 %",
+   "met": true,
+   "evidence": "36864 values, the worst 0 % (S11)",
+   "judged": true
+  }
+ ],
+ "verdict": "differs",
+ "summary": {
+  "places": 2,
+  "model": {
+   "items": 22,
+   "judged": 20,
+   "different": 1
+  },
+  "zones": {
+   "gauge": {
+    "elements": 144,
+    "values": 13824,
+    "quantity": "S11",
+    "worst": 0.0,
+    "your_element": 673,
+    "our_element": 673,
+    "layer": 1,
+    "yours": 413.639212,
+    "ours": 413.639212
+   },
+   "free length": {
+    "elements": 384,
+    "values": 36864,
+    "quantity": "S11",
+    "worst": 0.0,
+    "your_element": 481,
+    "our_element": 481,
+    "layer": 1,
+    "yours": 413.328577,
+    "ours": 413.328577
+   },
+   "band": {
+    "elements": 264,
+    "values": 25344,
+    "quantity": "S11",
+    "worst": 0.0,
+    "your_element": 349,
+    "our_element": 349,
+    "layer": 1,
+    "yours": 354.296866,
+    "ours": 354.296866
+   },
+   "tab line": {
+    "elements": 24,
+    "values": 2304,
+    "quantity": "S11",
+    "worst": 0.0,
+    "your_element": 337,
+    "our_element": 337,
+    "layer": 1,
+    "yours": 274.357377,
+    "ours": 274.357377
+   },
+   "gripped": {
+    "elements": 672,
+    "values": 64512,
+    "quantity": "S11",
+    "worst": 0.0,
+    "your_element": 1,
+    "our_element": 1,
+    "layer": 1,
+    "yours": 0.0,
+    "ours": 0.0
+   }
+  },
+  "labels": {
+   "length": "mm",
+   "stress": "MPa",
+   "force": "N"
+  }
+ }
+}

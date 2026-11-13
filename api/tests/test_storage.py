@@ -136,6 +136,36 @@ def test_the_live_store_round_trips_and_its_link_serves_the_file(tmp_path):
     with urllib.request.urlopen(client.link(key, seconds=60), timeout=30) as response:
         assert response.status == 200 and response.headers.get("Content-Type", "").startswith("application/json")
         assert response.read() == source.read_bytes()
+    client.delete(key)  # an upload's bundle goes when its owner asks (ADR-0094 part 6); a key that is gone is not an error
+    assert key not in client.keys(key.rsplit("/", 3)[0])
+    client.delete(key)
+
+
+def test_an_uploads_bundle_has_a_prefix_of_its_own_outside_every_coupons():
+    key = storage.upload_key("0b6f6f0e-9d0a-4f43-8a52-3f6a6f2c1d11")
+    assert key == "uploads/0b6f6f0e-9d0a-4f43-8a52-3f6a6f2c1d11/bundle.zip" and not key.startswith(f"{storage.COUPONS}/")
+    assert storage._coupon_path(key) is None  # never restored into a coupon's folder
+
+
+def test_a_folder_on_the_disk_keeps_the_same_keys_and_deletes_one(tmp_path):
+    store = storage.FolderStore(tmp_path / "kept")
+    assert store.keys("") == []
+    source = tmp_path / "bundle.zip"
+    source.write_bytes(b"PK-a-bundle")
+    for key in ("uploads/a/bundle.zip", "uploads/b/bundle.zip"):
+        store.put(key, source, "application/zip")
+    assert store.keys("uploads/") == ["uploads/a/bundle.zip", "uploads/b/bundle.zip"] and store.keys("uploads/a/") == ["uploads/a/bundle.zip"]
+    assert store.path("uploads/a/bundle.zip") == tmp_path / "kept" / "uploads" / "a" / "bundle.zip" and set(store.tags("uploads/")) == set(store.keys(""))
+    store.get("uploads/a/bundle.zip", tmp_path / "back" / "bundle.zip")
+    assert (tmp_path / "back" / "bundle.zip").read_bytes() == b"PK-a-bundle"
+    store.delete("uploads/a/bundle.zip")
+    store.delete("uploads/a/bundle.zip")  # gone already: not an error
+    assert store.keys("") == ["uploads/b/bundle.zip"] and not (tmp_path / "kept" / "uploads" / "a").exists()
+    for bad in ("", "../outside.zip", "uploads/../../outside.zip", "/etc/passwd", "uploads//bundle.zip", "uploads\\a"):
+        with pytest.raises(ValueError):
+            store.path(bad)
+    with pytest.raises(NotImplementedError):
+        store.link("uploads/b/bundle.zip")
 
 
 def test_the_folder_copy_leaves_the_big_run_files_out(tmp_path):

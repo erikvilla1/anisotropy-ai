@@ -1,7 +1,8 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { printed } from "../../lib/studio-colors";
-import { bannedIn } from "../../lib/studio-copy";
+import { bannedIn, bannedInAbaqusCard } from "../../lib/studio-copy";
+import { exchangeState, LIMITS, mockExchange, uploadOf } from "./abaqus-api";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
 const BENDING = "three-point bending";
@@ -1036,13 +1037,17 @@ function echoed(name: string, problem: Record<string, unknown>) {
 }
 
 /** Every word a customer can read in the workspace (ADR-0091): the shell's text, folded details included, and the words a screen reader,
- * a tooltip, a placeholder or a saved file's name carries. */
-async function shownText(page: Page): Promise<string> {
-  return page.getByTestId("workspace-shell").evaluate((shell) => {
-    const attributes = [...shell.querySelectorAll("[aria-label], [title], [placeholder], a[download]")]
-      .flatMap((el) => ["aria-label", "title", "placeholder", "download"].map((name) => el.getAttribute(name) ?? ""));
-    return [shell.textContent ?? "", ...attributes].join("\n");
-  });
+ * a tooltip, a placeholder or a saved file's name carries. `part` reads the card of the user's own Abaqus alone, or everything but it:
+ * that card may name Abaqus and the connector's file (ADR-0094 part 7), and is judged by its own list. */
+async function shownText(page: Page, part: "outside the Abaqus card" | "the Abaqus card" = "outside the Abaqus card"): Promise<string> {
+  return page.getByTestId("workspace-shell").evaluate((shell, inside) => {
+    const root = shell.cloneNode(true) as HTMLElement;
+    const cards = [...root.querySelectorAll("[data-names-abaqus]")];
+    if (!inside) cards.forEach((card) => card.remove());
+    const read = (el: Element) => [el.textContent ?? "", ...[...el.querySelectorAll("[aria-label], [title], [placeholder], a[download]")]
+      .flatMap((x) => ["aria-label", "title", "placeholder", "download"].map((name) => x.getAttribute(name) ?? ""))].join("\n");
+    return (inside ? cards : [root]).map(read).join("\n");
+  }, part === "the Abaqus card");
 }
 const expectNoBannedTerms = async (page: Page, where: string) => expect(bannedIn(await shownText(page)), where).toEqual([]);
 
@@ -1055,6 +1060,7 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   let phase: "queued" | "running" | "result" | "done" = "queued";
   const jobs = { queued, running: fixture("job-running"), result: fixture("job-result-in"), done: fixture("job-done") };
   await mockApi(page, calls, { allTests: false, writer: "model", jobs: () => jobs[phase] });
+  await mockExchange(page, exchangeState({ exchange: { uploads: true, connector_route: true, ...LIMITS }, uploads: [uploadOf("differs")] }));
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await expectNoBannedTerms(page, "a fresh start");
@@ -1079,6 +1085,18 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   await expect(page.getByTestId("probe")).toBeVisible();
   await expect(page.getByTestId("tension-files").locator("a[data-key=prepomax_results]")).toHaveText("Reference solver results (.frd)");
   await expectNoBannedTerms(page, "done, with the probe table and the files");
+  // the card of the user's own Abaqus (ADR-0094 part 7), with a model that differs, an upload key just made and every fold open: it names
+  // Abaqus and the connector's file and nothing else of the list; the rest of the page still names neither
+  const card = page.getByTestId("abaqus-card");
+  await expect(card.getByTestId("abaqus-verdict")).toHaveText("Differs in 2 places");
+  await card.getByTestId("abaqus-keys").locator("summary").click();
+  await card.getByTestId("abaqus-key-create").click();
+  await expect(card.getByTestId("abaqus-key-value")).toBeVisible();
+  const onCard = await shownText(page, "the Abaqus card");
+  expect(bannedIn(onCard)).toEqual(["Abaqus", ".py"]);
+  expect(bannedInAbaqusCard(onCard)).toEqual([]);
+  await expectNoBannedTerms(page, "done, beside the Abaqus card");
+  await expect(page.getByTestId("tension-files")).not.toContainText(/build/i); // the build script is offered on the card alone
 });
 
 test("a stopped run says what happened and what to do, in plain words (ADR-0091)", async ({ page }) => {

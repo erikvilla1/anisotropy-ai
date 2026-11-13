@@ -1,0 +1,530 @@
+{
+ "bundle": {
+  "sha256": "cf264e98cf450725d716cf019cf70e48ad12a609a6b28d80bafe33a65196a741",
+  "bundle_version": 1,
+  "created": "2026-11-12T21:36:00Z",
+  "units": "mm-MPa",
+  "written_by": {
+   "abaqus": "Abaqus/Standard 2025",
+   "connector": "test 1",
+   "python": null
+  },
+  "job": "Job-1",
+  "coupon": null,
+  "results": null,
+  "files": {
+   "deck": {
+    "role": "deck",
+    "path": "model/Job-1.inp",
+    "bytes": 29180,
+    "sha256": "dd4e5058f03cd4bc7e27ce5f5de98da9bc192201ec0f293a70936c86cfa7faf4"
+   },
+   "every_output": {
+    "role": "every_output",
+    "path": "results/Job-1-every-output.csv",
+    "bytes": 460147,
+    "sha256": "2c6e6e42a39944f1009cafd733f80c1cd014d31e5110d9debc7a80ca70b3214a"
+   },
+   "reactions": {
+    "role": "reactions",
+    "path": "results/Job-1-every-output-RF.csv",
+    "bytes": 6626,
+    "sha256": "ca90b01a5031795bc203028c8172331d7e77e2dcb64d45a2944a0364f7e25b3e"
+   }
+  }
+ },
+ "units": "mm-MPa",
+ "converted_from": null,
+ "ours": {
+  "coupon": "d3039",
+  "written_by": "anisotropy-fea test",
+  "element": "S4",
+  "elements": 1488,
+  "layers": 8
+ },
+ "floor": 0.02,
+ "acceptance": {
+  "reaction": 0.01,
+  "gauge": 0.01,
+  "free length": 0.03
+ },
+ "model": {
+  "compared": "without the mesh",
+  "same": true,
+  "items": [
+   {
+    "item": "Part / instance names",
+    "yours": "Coupon / Coupon-1",
+    "ours": "Coupon / Coupon-1",
+    "same": true
+   },
+   {
+    "item": "Outline",
+    "yours": "25 by 250 mm",
+    "ours": "25 by 250 mm",
+    "same": true
+   },
+   {
+    "item": "Nodes",
+    "yours": "441 on the part",
+    "ours": "1625 on the part",
+    "same": null
+   },
+   {
+    "item": "Elements",
+    "yours": "372 S4",
+    "ours": "1488 S4",
+    "same": null
+   },
+   {
+    "item": "Element type",
+    "yours": "S4",
+    "ours": "S4",
+    "same": true
+   },
+   {
+    "item": "Section",
+    "yours": "composite shell on all elements, listed as the symmetric half",
+    "ours": "composite shell on all elements, listed as the symmetric half",
+    "same": true
+   },
+   {
+    "item": "Layup, bottom first",
+    "yours": "[45/0/-45/90/90/-45/0/45], 8 plies, from the length axis (Ori-1, local 1 along y)",
+    "ours": "[45/0/-45/90/90/-45/0/45], 8 plies, from the length axis (Ori-1, local 1 along y)",
+    "same": true
+   },
+   {
+    "item": "Ply thickness",
+    "yours": "0.18288 mm",
+    "ours": "0.18288 mm",
+    "same": true
+   },
+   {
+    "item": "Integration points per ply",
+    "yours": "3",
+    "ours": "3",
+    "same": true
+   },
+   {
+    "item": "Shell orientation",
+    "yours": "a = [0.0, 1.0, 0.0], b = [-1.0, 0.0, 0.0], 0 deg about 3",
+    "ours": "a = [0.0, 1.0, 0.0], b = [-1.0, 0.0, 0.0], 0 deg about 3",
+    "same": null
+   },
+   {
+    "item": "Material names",
+    "yours": "IM7-8552",
+    "ours": "IM7-8552",
+    "same": true
+   },
+   {
+    "item": "Section set / layup names",
+    "yours": "All / Layup-1",
+    "ours": "All / Layup-1",
+    "same": true
+   },
+   {
+    "item": "Material E1 (MPa)",
+    "yours": "162096",
+    "ours": "162096",
+    "same": true
+   },
+   {
+    "item": "Material E2 (MPa)",
+    "yours": "8963.18",
+    "ours": "8963.18",
+    "same": true
+   },
+   {
+    "item": "Material nu12",
+    "yours": "0.316",
+    "ours": "0.316",
+    "same": true
+   },
+   {
+    "item": "Material G12 (MPa)",
+    "yours": "4688.43",
+    "ours": "4688.43",
+    "same": true
+   },
+   {
+    "item": "Material G13 (MPa)",
+    "yours": "4688.43",
+    "ours": "4688.43",
+    "same": true
+   },
+   {
+    "item": "Material G23 (MPa)",
+    "yours": "2987.73",
+    "ours": "2987.73",
+    "same": true
+   },
+   {
+    "item": "Strengths (*Fail Stress)",
+    "yours": "IM7-8552: F1t 2558.51, F1c 1731.48, F2t 64.0523, F2c 285.719, F6 91.1487 MPa",
+    "ours": "IM7-8552: F1t 2558.51, F1c 1731.48, F2t 64.0523, F2c 285.719, F6 91.1487 MPa",
+    "same": null
+   },
+   {
+    "item": "Grips and boundary conditions",
+    "yours": "210 nodes held or moved, 0 couplings",
+    "ours": "754 nodes held or moved, 0 couplings",
+    "same": null
+   },
+   {
+    "item": "Steps",
+    "yours": "Step-1 (linear static)",
+    "ours": "Step-1 (linear static)",
+    "same": true
+   }
+  ],
+  "reason": "the two meshes differ"
+ },
+ "pairing": {
+  "same_mesh": false,
+  "elements": 132,
+  "moved_by": [
+   0.0,
+   0.0
+  ],
+  "why_not_element_by_element": "your model has 372 elements and ours 1488: not the same mesh (the package's PDF, Chapter 4, Mesh: the partition lines and the seeds by number)",
+  "how": "by position on two meshes: each of your elements in the gauge and the free length beside ours nearest its centroid"
+ },
+ "reaction": {
+  "nodes": 102,
+  "yours": 16218.525154638792,
+  "ours": 16211.230873790264,
+  "difference": -0.0004497499482214885
+ },
+ "zones": {
+  "gauge": {
+   "elements": 36,
+   "S11": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.00047314432977510766,
+    "our_element": 678,
+    "your_element": 171,
+    "layer": 3,
+    "yours": 413.837782,
+    "ours": 413.641977
+   },
+   "S22": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.0004663038723520627,
+    "our_element": 678,
+    "your_element": 171,
+    "layer": 1,
+    "yours": 29.5970092,
+    "ours": 29.583208
+   },
+   "S12": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.0004565706713883055,
+    "our_element": 681,
+    "your_element": 173,
+    "layer": 1,
+    "yours": -44.93346,
+    "ours": -44.9129447
+   },
+   "Mises": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.00047308653864043743,
+    "our_element": 678,
+    "your_element": 171,
+    "layer": 3,
+    "yours": 407.365216,
+    "ours": 407.172497
+   },
+   "Tresca": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.00047260272725410153,
+    "our_element": 678,
+    "your_element": 171,
+    "layer": 3,
+    "yours": 419.022127,
+    "ours": 418.824096
+   },
+   "Pressure": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.00047162162927370945,
+    "our_element": 678,
+    "your_element": 171,
+    "layer": 3,
+    "yours": -147.811287,
+    "ours": -147.741576
+   },
+   "Max. Principal": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.00047260272725410153,
+    "our_element": 678,
+    "your_element": 171,
+    "layer": 3,
+    "yours": 419.022127,
+    "ours": 418.824096
+   },
+   "Mid. Principal": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.0006182394341094783,
+    "our_element": 675,
+    "your_element": 170,
+    "layer": 2,
+    "yours": 0.0550873683,
+    "ours": 0.0547855105
+   },
+   "Min. Principal": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.0004560900143951757,
+    "our_element": 681,
+    "your_element": 173,
+    "layer": 4,
+    "yours": -353.590289,
+    "ours": -353.42902
+   },
+   "E11": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.0004736692521702239,
+    "our_element": 678,
+    "your_element": 171,
+    "layer": 3,
+    "yours": 0.0024953488,
+    "ours": 0.00249416683
+   },
+   "E22": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.0004736692521702239,
+    "our_element": 678,
+    "your_element": 171,
+    "layer": 1,
+    "yours": 0.0024953488,
+    "ours": 0.00249416683
+   },
+   "E12": {
+    "values": 288,
+    "within_1": 288,
+    "within_3": 288,
+    "worst": 0.000456571238325331,
+    "our_element": 681,
+    "your_element": 173,
+    "layer": 1,
+    "yours": -0.00958389323,
+    "ours": -0.0095795175
+   }
+  },
+  "free length": {
+   "elements": 96,
+   "S11": {
+    "values": 768,
+    "within_1": 768,
+    "within_3": 768,
+    "worst": 0.005126394301008936,
+    "our_element": 495,
+    "your_element": 122,
+    "layer": 4,
+    "yours": -357.063053,
+    "ours": -355.232607
+   },
+   "S22": {
+    "values": 768,
+    "within_1": 712,
+    "within_3": 756,
+    "worst": 0.05634572574065468,
+    "our_element": 987,
+    "your_element": 248,
+    "layer": 2,
+    "yours": -0.11626043,
+    "ours": -0.0496153272
+   },
+   "S12": {
+    "values": 768,
+    "within_1": 624,
+    "within_3": 688,
+    "worst": 0.1249142459072951,
+    "our_element": 996,
+    "your_element": 252,
+    "layer": 2,
+    "yours": 0.19616651,
+    "ours": 0.0839068829
+   },
+   "Mises": {
+    "values": 768,
+    "within_1": 768,
+    "within_3": 768,
+    "worst": 0.005073689724020106,
+    "our_element": 493,
+    "your_element": 121,
+    "layer": 3,
+    "yours": 402.213204,
+    "ours": 404.253909
+   },
+   "Tresca": {
+    "values": 768,
+    "within_1": 768,
+    "within_3": 768,
+    "worst": 0.004908495249181326,
+    "our_element": 493,
+    "your_element": 121,
+    "layer": 3,
+    "yours": 413.844141,
+    "ours": 415.875493
+   },
+   "Pressure": {
+    "values": 768,
+    "within_1": 768,
+    "within_3": 768,
+    "worst": 0.005864952833454378,
+    "our_element": 495,
+    "your_element": 122,
+    "layer": 4,
+    "yours": 99.3054704,
+    "ours": 98.7230485
+   },
+   "Max. Principal": {
+    "values": 768,
+    "within_1": 768,
+    "within_3": 768,
+    "worst": 0.004908495249181326,
+    "our_element": 493,
+    "your_element": 121,
+    "layer": 3,
+    "yours": 413.844141,
+    "ours": 415.875493
+   },
+   "Mid. Principal": {
+    "values": 768,
+    "within_1": 720,
+    "within_3": 752,
+    "worst": 0.06860803435792899,
+    "our_element": 985,
+    "your_element": 247,
+    "layer": 2,
+    "yours": 0.0111339381,
+    "ours": 0.0446320768
+   },
+   "Min. Principal": {
+    "values": 768,
+    "within_1": 768,
+    "within_3": 768,
+    "worst": 0.00942824320920303,
+    "our_element": 987,
+    "your_element": 248,
+    "layer": 2,
+    "yours": -0.116354635,
+    "ours": -0.0496765873
+   },
+   "E11": {
+    "values": 768,
+    "within_1": 768,
+    "within_3": 768,
+    "worst": 0.005228539545543688,
+    "our_element": 493,
+    "your_element": 121,
+    "layer": 3,
+    "yours": 0.00246317349,
+    "ours": 0.00247605229
+   },
+   "E22": {
+    "values": 768,
+    "within_1": 768,
+    "within_3": 768,
+    "worst": 0.005228539545543688,
+    "our_element": 493,
+    "your_element": 121,
+    "layer": 1,
+    "yours": 0.00246317349,
+    "ours": 0.00247605229
+   },
+   "E12": {
+    "values": 768,
+    "within_1": 624,
+    "within_3": 688,
+    "worst": 0.12491424633356406,
+    "our_element": 985,
+    "your_element": 247,
+    "layer": 2,
+    "yours": -4.18405101e-05,
+    "ours": -1.78965654e-05
+   }
+  }
+ },
+ "criteria": [
+  {
+   "criterion": "Reaction within 1 %",
+   "met": true,
+   "judged": true,
+   "evidence": "ours -0.045 % from yours"
+  },
+  {
+   "criterion": "Gauge: every value within 1 %",
+   "met": true,
+   "judged": true,
+   "evidence": "3456 values, the worst 0.06182 % (Mid. Principal)"
+  },
+  {
+   "criterion": "Free length: every value within 3 %",
+   "met": null,
+   "judged": false,
+   "evidence": "reported, not judged on another mesh: 9216 values, the worst 12.49 % (E12)"
+  }
+ ],
+ "verdict": "agrees",
+ "summary": {
+  "places": 0,
+  "model": {
+   "items": 21,
+   "judged": 16,
+   "different": 0
+  },
+  "zones": {
+   "gauge": {
+    "elements": 36,
+    "values": 3456,
+    "quantity": "Mid. Principal",
+    "worst": 0.0006182394341094783,
+    "your_element": 170,
+    "our_element": 675,
+    "layer": 2,
+    "yours": 0.0550873683,
+    "ours": 0.0547855105
+   },
+   "free length": {
+    "elements": 96,
+    "values": 9216,
+    "quantity": "E12",
+    "worst": 0.12491424633356406,
+    "your_element": 247,
+    "our_element": 985,
+    "layer": 2,
+    "yours": -4.18405101e-05,
+    "ours": -1.78965654e-05
+   }
+  },
+  "labels": {
+   "length": "mm",
+   "stress": "MPa",
+   "force": "N"
+  }
+ }
+}
