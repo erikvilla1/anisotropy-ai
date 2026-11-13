@@ -120,7 +120,7 @@ uv run python tools/abaqus_upload.py check <bundle>.zip
 uv run python tools/abaqus_upload.py compare <bundle>.zip --ours <package>/4-results/ours-every-output.csv --our-deck <our deck>.inp --json <result>.json
 ```
 
-`compare` puts a bundle beside a run of ours from that run's own files; nothing is solved. The model is compared item by item (`equivalence.deck_equivalence`), after a coupon drawn elsewhere is moved onto ours, and the results by the rules of `tools/compare_every_output.py`, ADR-0089's acceptance. A model on another mesh is compared without its mesh (`equivalence.equivalence_without_mesh`: the outline, the element type, the section, the layup, each ply's constants), each of its gauge elements beside ours nearest its centroid, and at the reaction; its free length is reported, not judged. A bundle in the other deck system is converted first. The exit code is the verdict (0 agrees, 1 differs or incomplete, 2 refused or out of scope), and `--json` holds what a page will show. Tests: `tests/test_bundle.py`, `tests/test_abaqus_upload.py`.
+`compare` puts a bundle beside a run of ours from that run's own files; nothing is solved. The model is compared item by item (`equivalence.deck_equivalence`), after a coupon drawn elsewhere is moved onto ours, and the results by the rules of `tools/compare_every_output.py`, ADR-0089's acceptance. A model on another mesh is compared without its mesh (`equivalence.equivalence_without_mesh`: the outline, the element type, the section, the layup, each ply's constants), each of its gauge elements beside ours nearest its centroid, and at the reaction; its free length is reported, not judged. Two material constants that are one number written to six significant digits count as the same, and the item says so: Abaqus/CAE writes an input file's material lines with six digits. A bundle in the other deck system is converted first. The exit code is the verdict (0 agrees, 1 differs or incomplete, 2 refused or out of scope), and `--json` holds what a page will show. Tests: `tests/test_bundle.py`, `tests/test_abaqus_upload.py`.
 
 The connector writes the bundle on the machine that has Abaqus (ADR-0094, step 2; `tools/anisotropy_connector.py`). It is four files kept in one folder, the standard library and Abaqus's own modules only; `connector` below writes them as one zip to hand over.
 
@@ -131,6 +131,15 @@ abaqus cae noGUI=anisotropy_connector.py -- <job>.odb --units mm-MPa --cae <mode
 ```
 
 The first Abaqus command reads the ODB (`abaqus_every_output.read`), takes `<job>.inp` from beside it and writes `<job>-anisotropy.zip`; it uses no seat of Abaqus/CAE. The second also reads the `.cae`, from a copy in a temporary folder because opening a `.cae` changes the file, and adds the model as built as `<job>-model.json` (the parts with their layups ply by ply, the materials, the sections, the assembly, the steps with what each boundary condition, load and output request is in them, the constraints; what could not be read is named under `not_read`) and the `.jnl` beside the `.cae`. Under Abaqus/CAE put the ODB first, and read the line the command prints: Abaqus/CAE ends with exit code 0 whatever happened. `--units` states the deck system, which an Abaqus model does not carry. Nothing is sent: the command writes one file. `check` counts what the model file holds; the comparison is made on the deck and never on that file. Tests: `tests/test_anisotropy_connector.py`, with the two readers that need Abaqus replaced. The two runs under Abaqus 2025, both routes, are in ADR-0094's evidence.
+
+The way out is a build script (ADR-0094, step 3; `anisotropy_fea.write_cae_script`): from the same model the input deck is written from, a script that Abaqus/CAE runs to build the coupon as a native model to edit, with its sketch, partitions, material, composite layup, grips, step, seeds, structured mesh, output requests and a job.
+
+```
+uv run python tools/abaqus_build_script.py <coupon>.toml --out <coupon>-build.py
+abaqus cae noGUI=<coupon>-build.py -- save=<coupon>.cae
+```
+
+In Abaqus/CAE itself it is File > Run Script, which adds the model and its job to the open session and saves nothing (this route is not yet checked by us; the terminal route is). The script adds one model and one job, stops when either name is taken and never saves over a file. It covers the unnotched tension coupon on a structured mesh, with nodal or coupled grips, and refuses anything else with the reason. The package of such a coupon carries it as `2-our-model/abaqus/<coupon>-build.py`. Tests: `tests/test_write_cae_script.py`, against a stand-in for Abaqus/CAE. The round trip under Abaqus 2025 (built by the script, solved, sent back by the connector, compared: agrees with ours for both grips) is in ADR-0094's evidence.
 
 ## Model comparison documents
 

@@ -163,3 +163,48 @@ def test_the_script_and_the_odb_readers_it_ships_with_import_nothing_beyond_the_
         imported = {alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
         imported |= {node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module}
         assert imported <= allowed, (name, imported - allowed)
+
+
+class Stub:
+    """An object with the attributes given: enough of odbAccess's shape for the exporter's `read`."""
+
+    def __init__(self, **attributes):
+        self.__dict__.update(attributes)
+
+
+class StubField:
+    def __init__(self, values, labels=()):
+        self.values, self.componentLabels = values, labels
+
+    def getSubset(self, region=None, position=None):
+        return StubField([v for v in self.values if v.instance is region], self.componentLabels)
+
+
+def test_the_exporter_reads_a_coupled_grips_reaction_on_its_reference_point_and_keeps_the_section_points(tmp_path, monkeypatch):
+    """`read` runs only under Abaqus, where a mistake in it ends a job with exit code 0. A stand-in ODB of one element under kinematic
+    couplings, shaped as Abaqus 2025 gave it on 2026-11-12: every reaction of the instance zero, the pull on two nodes of the assembly."""
+    import types
+
+    monkeypatch.syspath_prepend(str(TOOLS))
+    exporter = __import__("abaqus_every_output")
+    instance = Stub(name="COUPON-1", nodes=[Stub(label=n, coordinates=c) for n, c in ((1, (0, 0, 0)), (2, (25, 0, 0)), (3, (25, 250, 0)), (4, (0, 250, 0)))],
+                    elements=[Stub(label=1, connectivity=(1, 2, 3, 4))])
+    invariants = dict(mises=1.0, tresca=1.0, press=0.0, maxPrincipal=1.0, midPrincipal=0.0, minPrincipal=0.0)
+    middle = Stub(number=2, description="fraction = 0.0, Layer = 1")
+    stress = StubField([Stub(instance=instance, elementLabel=1, sectionPoint=middle, data=(100.0, 2.0, 3.0), **invariants)], ("S11", "S22", "S12"))
+    strain = StubField([Stub(instance=instance, elementLabel=1, sectionPoint=middle, data=(1e-3, 2e-4, 3e-5))], ("E11", "E22", "E12"))
+    reaction = StubField([Stub(instance=instance, nodeLabel=n, data=(0.0, 0.0, 0.0)) for n in (1, 2, 3, 4)]
+                         + [Stub(instance=None, nodeLabel=1, data=(0.0, -16210.0928, 0.0)), Stub(instance=None, nodeLabel=2, data=(0.0, 16210.0928, 0.0))])
+    frame = Stub(description="Increment 1: Step Time = 1.000", fieldOutputs={"S": stress, "E": strain, "RF": reaction})
+    closed = []
+    odb = Stub(name="job.odb", jobData=Stub(version="Abaqus/Standard 2025", creationTime="now"), steps={"Pull": Stub(name="Pull", frames=[Stub(description="Increment 0: Step Time = 0.000", fieldOutputs={}), frame])},
+               rootAssembly=Stub(instances={"COUPON-1": instance}, nodes=[Stub(label=1, coordinates=(12.5, 0, 0)), Stub(label=2, coordinates=(12.5, 250, 0))]),
+               close=lambda: closed.append(True))
+    monkeypatch.setitem(sys.modules, "odbAccess", types.SimpleNamespace(openOdb=lambda path, readOnly: odb))
+    monkeypatch.setitem(sys.modules, "abaqusConstants", types.SimpleNamespace(CENTROID="CENTROID"))
+    (tmp_path / "job.odb").write_bytes(b"")
+    assert exporter.main([str(tmp_path / "job.odb"), "--out", str(tmp_path / "out")]) == 0 and closed
+    rows = read(tmp_path / "out" / "job-every-output.csv")
+    assert [(r["Element"], r["Layer"], float(r["S11"]), float(r["E11"])) for r in rows] == [("1", "1", 100.0, 1e-3)]
+    reactions = read(tmp_path / "out" / "job-every-output-RF.csv")
+    assert [(r["Node"], float(r["X"]), float(r["Y"]), float(r["RF2"])) for r in reactions] == [("1", 12.5, 0.0, -16210.0928), ("2", 12.5, 250.0, 16210.0928)]

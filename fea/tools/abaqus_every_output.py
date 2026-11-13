@@ -119,12 +119,12 @@ def read(path: Path, step_name, frame_index, instance_name) -> dict:
                     reactions.append([str(int(value.nodeLabel)), number(x), number(y), number(rf[0]), number(rf[1])])
             # a coupled grip's reaction is on its reference point, a node of the assembly and of no instance (Abaqus 2025: with kinematic
             # couplings every reaction on the instance is zero). Its label is the assembly's own and may repeat an instance node's.
-            points = {int(n.label): tuple(float(c) for c in n.coordinates) for n in odb.rootAssembly.nodes}
+            assembly_nodes = {int(n.label): tuple(float(c) for c in n.coordinates) for n in odb.rootAssembly.nodes}
             for value in rf_field.values:
-                if value.instance is None and int(value.nodeLabel) in points:
+                if value.instance is None and int(value.nodeLabel) in assembly_nodes:
                     rf = tuple(float(v) for v in value.data)
                     if any(rf):
-                        x, y, _ = points[int(value.nodeLabel)]
+                        x, y, _ = assembly_nodes[int(value.nodeLabel)]
                         reactions.append([str(int(value.nodeLabel)), number(x), number(y), number(rf[0]), number(rf[1])])
         return {"odb": str(odb.name), "solver": str(odb.jobData.version), "created": str(odb.jobData.creationTime), "step": str(step.name),
                 "frame_index": index, "frame": descriptions[index], "instance": str(instance.name), "points": points, "stress": stress,
