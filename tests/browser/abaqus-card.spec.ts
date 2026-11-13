@@ -76,7 +76,7 @@ test("a model that differs says in how many places and shows each where it is; a
   const rows = card(page).getByTestId("abaqus-rows").locator("tr");
   await expect(rows.nth(0)).toHaveAttribute("data-state", "differs");
   await expect(rows.nth(0)).toContainText("1 of 20 items differ.");
-  await expect(rows.nth(1)).toContainText("Yours 17020 N, ours 16210 N (ours -4.762 % from yours).");
+  await expect(rows.nth(1)).toContainText("Yours 17020 N, ours 16210 N (ours −4.762 % from yours).");
   await expect(rows.nth(1)).toContainText("outside 1 %");
   await expect(rows.nth(2)).toHaveAttribute("data-state", "same");
   const what = card(page).getByTestId("abaqus-differences").locator("tbody tr");

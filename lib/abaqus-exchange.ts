@@ -5,6 +5,7 @@
  * as a percentage.
  */
 import { ACTOR, StudioError } from "./studio-api";
+import { formatNumber, inProse } from "./number-format";
 import { printed } from "./studio-colors";
 import { bannedInAbaqusCard, sentence } from "./studio-copy";
 
@@ -194,11 +195,11 @@ export async function cancelUploadKey(apiBase: string, id: string): Promise<Uplo
 
 // ----------------------------------------------------------------------------------------------------------------------- the words
 
-/** A text of the fea package or the API, shown on the card as it is when it names nothing the card may not (the card may name the user's
- * own Abaqus and the connector's files); null otherwise. */
+/** A text of the fea package or the API, shown on the card when it names nothing the card may not (the card may name the user's own
+ * Abaqus and the connector's files), its numbers as the page prints them (the minus sign, no exponent in letters); null otherwise. */
 export function cardText(text: string | null | undefined): string | null {
   const trimmed = text?.trim();
-  return trimmed && !bannedInAbaqusCard(trimmed).length ? trimmed : null;
+  return trimmed && !bannedInAbaqusCard(trimmed).length ? inProse(trimmed) : null;
 }
 
 export type Tone = "pass" | "fail" | "open";
@@ -219,8 +220,8 @@ export function provenance(comparison: Comparison): string {
     + (comparison.converted_from ? ` Your values were written in ${comparison.converted_from} and are shown in ${comparison.units}.` : "");
 }
 
-/** A fraction as the card prints a difference: four significant figures of the percentage. */
-export const percent = (fraction: number): string => `${Number((100 * Math.abs(fraction)).toPrecision(4))} %`;
+/** A fraction as the card prints a difference: the size of the percentage by the site's one rule for numbers. */
+export const percent = (fraction: number): string => `${formatNumber(100 * Math.abs(fraction), { zeros: false })} %`;
 
 /** The exporter's names for a ply's values, as the rest of the page writes them. */
 const QUANTITY: Record<string, string> = { S11: "σ₁", S22: "σ₂", S12: "τ₁₂", E11: "ε₁", E22: "ε₂", E12: "γ₁₂", Mises: "Mises", Tresca: "Tresca", Pressure: "pressure",
@@ -259,7 +260,7 @@ export function cardRows(c: Comparison): CardRow[] {
   }
   const reaction = c.criteria.find((x) => x.criterion.startsWith("Reaction"));
   if (reaction) {
-    const said = c.reaction ? `Yours ${printed(Math.abs(c.reaction.yours))} ${force}, ours ${printed(Math.abs(c.reaction.ours))} ${force} (${reaction.evidence}).`
+    const said = c.reaction ? `Yours ${printed(Math.abs(c.reaction.yours))} ${force}, ours ${printed(Math.abs(c.reaction.ours))} ${force}${cardText(reaction.evidence) ? ` (${cardText(reaction.evidence)})` : ""}.`
       : /^no reactions read/.test(reaction.evidence) ? "Your file holds no reaction forces, so the pull force was not compared."
         : `${sentence(cardText(reaction.evidence) ?? "not compared")}.`;
     rows.push({ id: "force", label: "The pull force", said, ...mark(reaction), element: null, ply: null });

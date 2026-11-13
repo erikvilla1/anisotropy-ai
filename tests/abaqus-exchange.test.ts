@@ -42,7 +42,7 @@ test("its four lines are the model, the pull force, the gauge section and betwee
   const differs = cardRows(comparison("differs"));
   assert.deepEqual(differs.map((r) => [r.state, r.mark]), [["differs", "differs"], ["differs", "outside 1 %"], ["same", "within 1 %"], ["same", "within 3 %"]]);
   assert.equal(differs[0].said, "1 of 20 items differ.");
-  assert.equal(differs[1].said, "Yours 17020 N, ours 16210 N (ours -4.762 % from yours).");
+  assert.equal(differs[1].said, "Yours 17020 N, ours 16210 N (ours −4.762 % from yours)." /* the minus sign, as every number on the page */);
 
   const other = cardRows(comparison("another-mesh")); // on another mesh the free length is shown and not judged, and says so
   assert.equal(other[0].said, "The same as ours on all 16 items, compared without the mesh.");
@@ -68,6 +68,8 @@ test("a difference is shown where it is: the item by name, yours beside ours, an
     summary: { ...base.summary, places: 1, zones: { ...base.summary.zones, gauge: { ...base.summary.zones.gauge, quantity: "S11", worst: 0.0196, your_element: 700, layer: 2, yours: 1934.2, ours: 1896.3 } } } };
   assert.deepEqual(differences(off), [{ what: "σ₁, the gauge section", yours: "1934 MPa", ours: "1896 MPa", where: "your element 700, ply 2" }]);
   assert.equal(percent(-0.047619), "4.762 %");
+  assert.equal(percent(3.2e-9), "3.2 × 10⁻⁷ %"); // a difference that is roundoff is never printed with an exponent in letters
+  assert.equal(cardText("ours -0.007 % from yours, 1.5e+06 beside"), "ours −0.007 % from yours, 1.5 × 10⁶ beside");
 });
 
 test("an answer of another shape is not shown as a comparison", () => {
