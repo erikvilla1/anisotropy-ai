@@ -7,6 +7,8 @@ import { materials, materialSource } from "../lib/materials";
 import { schoolCitation } from "../lib/material-analysis";
 import { textbookSource } from "../lib/textbook-source";
 import { handbookReferences, rightsPolicy, sourceRightsClasses, sourceRightsPolicy, testStandardReferences } from "../lib/source-rights";
+import { handbookRightsEvidence, provenanceOf, testStandardRightsEvidence } from "../lib/source-provenance";
+import { citedSources } from "../lib/cited-sources";
 import { STANDARDS } from "../lib/studio-form";
 
 function walk(dir: string): string[] {
@@ -19,7 +21,7 @@ test("every public dataset names a rights class with evidence, and the class per
   for (const m of datasets) {
     for (const ref of [m.source, ...(m.supportingReferences || [])]) {
       assert.ok(sourceRightsClasses.includes(ref.rights), `${m.id}: ${ref.id} has no rights class`);
-      assert.ok(ref.rightsEvidence.length > 20, `${m.id}: ${ref.id} needs rights evidence`);
+      assert.ok(provenanceOf(ref.id).rightsEvidence.length > 20, `${m.id}: ${ref.id} needs rights evidence`);
       const policy = rightsPolicy(ref.rights);
       assert.equal(policy.publicRecord, true, `${m.id}: ${ref.rights} sources cannot appear in the public library`);
       // Nothing in the library links to a copy we host: every URL is the publisher's own.
@@ -28,8 +30,8 @@ test("every public dataset names a rights class with evidence, and the class per
       if (!policy.linkDocument) assert.equal(ref.kind === "book" || ref.rights === "licensed-reference", true);
     }
     const out = exportCitedMaterial(m);
-    assert.equal(out.source.rights, m.source.rights);
-    assert.ok(out.source.rightsEvidence);
+    assert.equal(out.source.rights, rightsPolicy(m.source.rights).label);
+    assert.ok(!("rightsEvidence" in out.source) && !("verification" in out.source) && !("sha256" in out.source));
   }
   assert.equal(textbookSource.rights, "licensed-reference");
   assert.equal(sourceRightsPolicy["user-supplied"].publicRecord, false);
@@ -61,7 +63,7 @@ test("handbooks the site names carry a rights class and are only linked at the p
   for (const ref of handbookReferences) {
     assert.ok(sourceRightsClasses.includes(ref.rights));
     assert.match(ref.url, /^https:\/\//);
-    assert.ok(ref.rightsEvidence);
+    assert.ok(handbookRightsEvidence[ref.id]);
   }
   assert.equal(handbookReferences.find(r => r.id === "cmh-17-2g")!.rights, "licensed-reference");
   assert.equal(handbookReferences.find(r => r.id === "mil-hdbk-17-2f")!.rights, "public-domain");
@@ -74,6 +76,23 @@ test("every test standard the form offers is a licensed reference with its evide
     assert.equal(ref.rights, "licensed-reference");
     assert.equal(profile.rights, ref.rights);
     assert.equal(profile.catalog_url, ref.url);
-    assert.ok(ref.rightsEvidence.includes("Individual values"));
+    assert.ok(testStandardRightsEvidence[ref.designation].includes("Individual values"));
+    assert.doesNotMatch(testStandardRightsEvidence[ref.designation], /team|founder|San Diego/i);
   }
+});
+
+test("the references list shows every class a cited source uses, and no class without one", () => {
+  const groups = citedSources();
+  const used = new Set(curatedMaterials.flatMap(materialDatasets).map(m => m.source.rights));
+  for (const rights of used) assert.ok(groups.some(g => g.rights === rights), rights);
+  assert.ok(!groups.some(g => g.rights === "user-supplied")); // No record uses it, so the page does not promise it.
+  for (const group of groups) assert.ok(group.sources.length > 0);
+  const all = groups.flatMap(g => g.sources);
+  assert.equal(new Set(all.map(s => s.url)).size, all.length);
+  // A book's title is its link; the author or series sits beside it. The textbook reads as on its cards.
+  for (const [title, detail] of [["Basic Mechanics of Laminated Composite Plates", "NASA RP-1351"],
+    ["Structural Analysis of Laminated Anisotropic Plates", "Whitney"], ["ASTM D4018-23", "Carbon and Graphite Fiber Tows"]])
+    assert.ok(all.some(s => s.title === title && s.detail.includes(detail)), title);
+  assert.ok(all.some(s => s.title === textbookSource.fullCitation && !s.detail), "the textbook in its full citation form");
+  assert.ok(all.some(s => s.search), "the dissertation link is labelled a search");
 });

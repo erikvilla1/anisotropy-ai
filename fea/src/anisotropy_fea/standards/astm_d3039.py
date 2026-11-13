@@ -1,7 +1,7 @@
 """ASTM D3039/D3039M: tensile properties of polymer matrix composites, as a profile (ADR-0072).
 
-Read from the 2017 copy (D3039/D3039M-17), licensed to UC San Diego; the publisher lists D3039/D3039M-17(2025), a reapproval, as the active
-edition. Each value below carries its clause; the wording is ours. D3039 states its SI and inch-pound values separately and they are not
+Read from the 2017 edition (D3039/D3039M-17); the publisher lists D3039/D3039M-17(2025), a reapproval, as the active edition (that its
+text is unchanged is UNVERIFIED). Each value below carries its clause; the wording is ours. D3039 states its SI and inch-pound values separately and they are not
 exact equivalents (§1.2), so a coupon stated in inches is held to the bracketed inch values, not to converted millimetres.
 
 Our reading, not the standard's words: Table 1's "gripping" in the minimum length is the gripped length at both ends together, which is
@@ -209,8 +209,7 @@ REQUIREMENTS = (
 PROFILE = Profile(
     id=ID, designation=DESIGNATION, title="Tensile properties of polymer matrix composites", kinds=("unnotched_tension",),
     catalog_url="https://store.astm.org/d3039_d3039m-17r25.html",
-    edition_note="read from the D3039/D3039M-17 copy licensed to UC San Diego; the publisher lists D3039/D3039M-17(2025), a reapproval, as "
-                 "active (that its text is unchanged is UNVERIFIED)",
+    edition_note="ASTM D3039/D3039M-17; the publisher lists D3039/D3039M-17(2025), a reapproval, as active",
     systems="SI and inch-pound, each used on its own (§1.2)",
     requirements=REQUIREMENTS, classes=CLASSES, classify=classify, requires_strain=True, aliases=("d3039", "d3039m"),
 )

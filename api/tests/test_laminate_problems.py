@@ -6,9 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from anisotropy_engine.cases import engine_results, validate_case_inputs
+from anisotropy_engine.library import load_library
 from anisotropy_engine.units import INCH, LBF, PSI, UNIT_SYSTEMS
 from anisotropy_api.assistant import ClaudeAssistant, TemplateAssistant, number_guard
-from anisotropy_api.laminate_problems import case_of, sentences_of
+from anisotropy_api.laminate_problems import _words, case_of, sentences_of
 from anisotropy_api.main import app
 from anisotropy_api.schemas import LaminateProblem
 
@@ -189,6 +190,28 @@ def test_a_problem_without_a_ply_thickness_needs_a_dataset_that_records_one():
     assert response.status_code == 422 and "ply_thickness is required" in response.json()["detail"]
 
 
+def test_every_dataset_the_material_list_offers_is_solved_and_the_rest_are_refused_for_a_range():
+    """The one material list of the calculator and the laminate workspace (lib/material-library-options.ts, ADR-0060 amendment 2) offers
+    every dataset with an elastic input set whose elastic inputs and ply thickness are single values. Each one solves here, picked by its
+    dataset; every dataset the list leaves out is refused for a range or a bound, the reason it is left out."""
+    offered, left_out = [], []
+    for d in load_library()["datasets"]:
+        if not d["elasticInputs"]:
+            continue
+        props = {p["key"]: p for p in d["properties"]}
+        keys = [*d["elasticInputs"].values(), next((k for k in ("tply", "tply-WT") if k in props), None)]
+        single = all("valueEnd" not in props[k] and "valueQualifier" not in props[k] for k in keys if k)
+        problem = homework(material={"library": d["materialId"], "dataset": d["datasetId"]})
+        response = client.post(ENDPOINT, json=problem)
+        if single:
+            assert response.status_code == 200, (d["datasetId"], response.text)
+            offered.append(d["datasetId"])
+        else:
+            assert response.status_code == 422 and "is a range or a bound" in response.json()["detail"], (d["datasetId"], response.text)
+            left_out.append(d["datasetId"])
+    assert offered and "agate-e765-2001-rtd-measured-v2" in left_out
+
+
 # ------------------------------------------------------------------------------------------------ the words
 
 def test_the_templates_sentences_quote_only_the_engines_numbers():
@@ -196,10 +219,10 @@ def test_the_templates_sentences_quote_only_the_engines_numbers():
     assert answer["writer"] == "template" and answer["model"] is None and not answer["withheld"] and answer["reason"] is None
     prose = answer["prose"]
     assert prose[0].startswith("The stack [0/45/-45/90/90/-45/45/0] of 8 plies is 1 mm thick, quasi-isotropic, symmetric and balanced, so no in-plane load bends it")
-    assert prose[1] == ("Under Nx = 1e+05 N/m the mid-plane strain is eps_x = 1719 microstrain (it stretches along x), eps_y = -497 microstrain "
+    assert prose[1] == ("Under Nx = 100000 N/m the mid-plane strain is eps_x = 1719 microstrain (it stretches along x), eps_y = -497 microstrain "
                         "(it shortens along y), gamma_xy = 0 (no shear strain), and it does not curve.")
     assert prose[2] == "Its in-plane moduli are Ex = 58.18 GPa, Ey = 58.18 GPa, Gxy = 22.56 GPa and nu_xy = 0.2892."
-    assert prose[3] == "By Tsai-Wu, ply 4 (90 degrees) fails first, by the interaction of its stresses, when every load reaches 3.207 times its value: Nx = 3.207e+05 N/m."
+    assert prose[3] == "By Tsai-Wu, ply 4 (90°) fails first, by the interaction of its stresses, when every load reaches 3.207 times its value: Nx = 320700 N/m."
     assert prose[4] == "By maximum stress that ply fails in transverse tension, when its sigma2 reaches F2t = 57 MPa."
     assert prose[5] == "The other criteria give maximum stress R = 3.474 (ply 4), Tsai-Hill R = 3.434 (ply 4)."
     guard = number_guard(" ".join(prose), answer["facts"])
@@ -216,11 +239,23 @@ def test_in_mm_mpa_the_lowest_ratio_governs_and_the_maximum_stress_mode_names_th
     assert answer["criteria"] == ["max_stress", "tsai_hill"]
     prose = answer["prose"]
     assert prose[1].startswith("Under Nx = 100 N/mm the mid-plane strain is eps_x = 1719 microstrain (it stretches along x)")
-    assert prose[3] == "By Tsai-Hill, ply 4 (90 degrees) fails first, by the interaction of its stresses, when every load reaches 3.434 times its value: Nx = 343.4 N/mm."
+    assert prose[3] == "By Tsai-Hill, ply 4 (90°) fails first, by the interaction of its stresses, when every load reaches 3.434 times its value: Nx = 343.4 N/mm."
     assert prose[4] == "By maximum stress that ply fails in transverse tension, when its sigma2 reaches F2t = 57 MPa."
     assert prose[5] == "The other criteria give maximum stress R = 3.474 (ply 4)."
     assert number_guard(" ".join(prose), answer["facts"]).ok
     assert sentences_of(answer["facts"]) == prose
+
+
+@pytest.mark.parametrize(("value", "written"), [
+    (100000.0, "100000"), (320700.0, "320700"), (1719.0, "1719"), (-497.0, "-497"), (0.2892, "0.2892"), (3.22, "3.22"), (0.001, "0.001"),
+    (1.5e6, "1.5e+06"), (1.234e-5, "1.234e-05"), (999999.7, "1e+06"), (0.0, "0"), (None, "unbounded"),
+])
+def test_a_sentence_writes_the_sites_one_number_rule_in_ascii(value, written):
+    """Plain digits from 0.001 up to a million and an exponent outside, four figures, as lib/number-format.ts prints them; the page
+    turns the exponent into "x 10^n" and the sign into a minus (ADR-0091 amendment 1). The guard reads every form back."""
+    assert _words(value) == written
+    if value is not None:
+        assert number_guard(f"It is {written}.", {"v": value}).ok
 
 
 def test_an_unsymmetric_stack_is_said_to_bend_and_curve():

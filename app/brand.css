@@ -45,3 +45,13 @@
     --brand-h: 22px;
   }
 }
+/* In forced colours (Windows high contrast) the browser paints backgrounds in the page's colour, so a part drawn as a coloured
+ * background through a mask would vanish: it keeps its own colours, in the system's text colour. Only an empty part is drawn
+ * that way; a name set as text needs nothing. */
+@media (forced-colors: active) {
+  .wordmark .brand-mark,
+  .wordmark .brand-name:empty {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+}

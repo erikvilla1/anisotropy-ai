@@ -6,7 +6,7 @@ import "../inner-pages.css";
 import "./services.css";
 
 export const metadata = {
-  title: "Services — Anisotropy",
+  title: "Services",
   description: "Computer-aided design, finite element modeling, test plans, documentation and manufacturing plans for composite coupons, each on its own page.",
 };
 

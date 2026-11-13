@@ -4,6 +4,7 @@
  * in the same order wherever they appear, each ply also labelled). The surface is the site's dark theme. Colours never carry a
  * number: the legend's ticks and the readout do.
  */
+import { formatNumber, MINUS } from "./number-format";
 
 export type RGB = [number, number, number]; // 0..1
 
@@ -84,13 +85,11 @@ export function legendGradient(scale: Pick<Scale, "stops">, bands: number): stri
   return `linear-gradient(to right, ${steps.join(", ")})`;
 }
 
-/** A number as the legend and the readout print it: four significant digits, no trailing noise. */
+/** A number as the legend and the readout print it: the site's one rule (`lib/number-format.ts`), four significant digits with no
+ * trailing zeros, plain from 0.001 up to a million, "× 10ⁿ" outside, and the minus sign. */
 export function printed(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "–";
-  if (value === 0) return "0";
-  const magnitude = Math.abs(value);
-  if (magnitude >= 1e5 || magnitude < 1e-3) return value.toExponential(3);
-  return String(Number(value.toPrecision(4)));
+  return formatNumber(value, { zeros: false });
 }
 
 /** A change from the previous mesh as the convergence table prints it (ADR-0068): signed, two figures under 1 %, one decimal above, a dash for none. */
@@ -98,7 +97,7 @@ export function percentChange(change: number | null | undefined): string {
   if (change === null || change === undefined || !Number.isFinite(change)) return "–";
   const magnitude = Math.abs(100 * change);
   const text = magnitude < 0.001 ? "0.00" : magnitude < 1 ? magnitude.toPrecision(2) : magnitude.toFixed(1);
-  return `${change < 0 && magnitude >= 0.001 ? "−" : "+"}${text} %`;
+  return `${change < 0 && magnitude >= 0.001 ? MINUS : "+"}${text} %`;
 }
 
 /** A set of components read together, with the ones that are numerical noise beside the others set to zero: a component below a billionth of the

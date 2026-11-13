@@ -13,7 +13,7 @@
 import { Container, getContainer } from "@cloudflare/containers";
 import type { DurableObject } from "cloudflare:workers";
 
-import { ENQUEUE_HEADER, apiEnvironment, apiPath, isSolverPath, solverEnvironment, type ContainerVariable } from "./routing";
+import { ENQUEUE_HEADER, apiEnvironment, apiPath, isSolverPath, movedLocation, solverEnvironment, type ContainerVariable } from "./routing";
 import { POLL_MS, firstWatch, jobIdOf, retryDelay, solverNames, startInPool, startJob, watchJob, type SolverCall, type StartVerdict,
          type Watch, type WatchStep } from "./solver-queue";
 
@@ -94,9 +94,11 @@ export class SolverContainer extends Container<WorkerEnv> {
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+    const moved = movedLocation(request.url);
+    if (moved !== null) return Response.redirect(moved, 301);  // /chat, /studio and their viewers moved (ADR-0058 amendment 2)
     const url = new URL(request.url);
     const path = apiPath(url.pathname);
-    if (path === null) return env.ASSETS.fetch(request);  // only /api/* runs the Worker first; this keeps the rest honest
+    if (path === null) return env.ASSETS.fetch(request);  // only /api/* and the moved pages run the Worker first; this keeps the rest honest
     if (isSolverPath(path)) return Response.json({ detail: "Not Found" }, { status: 404 });  // the solvers' routes are the consumer's alone
     url.pathname = path;
     const forwarded = new Request(url.toString(), request);

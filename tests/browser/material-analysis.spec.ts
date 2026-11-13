@@ -3,8 +3,9 @@ import { test, expect } from "@playwright/test";
 test("curated lookup has dated original references, dual units and no classroom fallback", async ({ page }) => {
   await page.goto("/library");
   await expect(page.getByText("26 materials", { exact: true })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "English / imperial", exact: true })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "SI / metric", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "English / imperial converted" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "SI / metric as printed" })).toBeVisible();
+  await expect(page.locator(".units-note")).toContainText("Converted values are calculated from the printed values");
   await expect(page.locator(".cited-properties")).not.toContainText(/Appendix F|School source|identity needed|unverified/i);
   await expect(page.locator('[data-property="E1"]')).toContainText("147 GPa");
   await expect(page.locator('[data-property="F1t"]')).toContainText("2,280 MPa");
@@ -12,9 +13,9 @@ test("curated lookup has dated original references, dual units and no classroom 
   await page.getByRole("combobox", { name: "Property dataset" }).selectOption("maddocks-1995-table-6-2");
   await expect(page.locator('[data-property="F1t"]')).toHaveCount(0);
   await expect(page.locator(".property-reference")).toContainText("May 1995");
-  await expect(page.getByRole("link", { name: "Open reference" })).toHaveAttribute("href", /ntrs.nasa.gov.+#page=95$/);
+  await expect(page.getByRole("link", { name: /^Open reference/ })).toHaveAttribute("href", /ntrs.nasa.gov.+#page=95$/);
   await expect(page.locator('[data-property="E1"]')).toContainText("142 GPa");
-  await expect(page.locator('[data-property="alpha1"]')).toContainText("-0.2 10⁻⁶/°F");
+  await expect(page.locator('[data-property="alpha1"]')).toContainText("−0.200 × 10⁻⁶/°F");
   await page.getByRole("button", { name: "Stiffness", exact: true }).click();
   await expect(page.locator('[data-property="alpha1"]')).toHaveCount(0);
   await page.getByRole("textbox", { name: "Search materials" }).fill("carbon fiber");
@@ -53,7 +54,7 @@ test("supplier dataset remains available offline and conflicting values are abse
   await page.route("**/materials/catalog-status.json", route => route.fulfill({ status:503, body:"offline" }));
   await page.goto("/library");
   await page.getByRole("textbox", { name: "Search materials" }).fill("M55J");
-  await expect(page.locator(".dataset-summary")).toContainText("121°C autoclave");
+  await expect(page.locator(".dataset-summary")).toContainText("121 °C autoclave");
   await expect(page.locator(".simple-property-table")).not.toContainText("Tensile Modulus");
   await expect(page.locator(".simple-property-table [data-property]")).toHaveCount(7);
   await expect(page.locator(".property-reference")).toContainText("Jan 28, 2020");
@@ -81,7 +82,7 @@ test("carbon qualification exports its complete elastic set and supporting speci
   expect(data.elasticInputs).toEqual({ E1: "E1t", E2: "E2t", G12: "G12", nu12: "nu12" });
   expect(data.supportingReferences).toHaveLength(4);
   expect(data.source.date).toBe("2011-05-06");
-  expect(data.properties.find((p: { key: string }) => p.key === "SBS").conditions).toContain("70°F");
+  expect(data.properties.find((p: { key: string }) => p.key === "SBS").conditions).toContain("70 °F");
   await page.setViewportSize({ width:390, height:844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
@@ -92,6 +93,9 @@ test("IM7 / 8552 offers the NASA 2023 dataset beside the NCAMP record without ch
   await page.getByRole("textbox", { name: "Search materials" }).fill("IM7 / 8552");
   await expect(page.getByRole("heading", { name: "IM7 / 8552", exact: true })).toBeVisible();
   await expect(page.locator('[data-property="E1t"]')).toContainText("23.51 Msi");
+  // The report prints in US units with the density in g/cm³: the header tags the US column, the density row says where it was printed.
+  await expect(page.getByRole("columnheader", { name: "English / imperial as printed" })).toBeVisible();
+  await expect(page.locator('[data-property="density-LT"]')).toContainText("printed in metric units");
   await page.getByRole("combobox", { name: "Property dataset" }).selectOption("nasa-tm-20230001560-im7-8552-rt-measured-v1");
   await expect(page.locator(".dataset-summary")).toContainText("quasi-static");
   await expect(page.locator('[data-property="E1t"]')).toContainText("23.1051 Msi");
@@ -108,7 +112,12 @@ test("woven NCAMP and canceled-handbook records render with their own badges, di
   await expect(page.getByRole("heading", { name: "HTS40 PW / TC250", exact: true })).toBeVisible();
   await expect(page.locator('[data-property="E1t"]')).toContainText("8.66 Msi");
   await expect(page.locator('[data-property="E1t"]')).toContainText("Warp");
-  await expect(page.locator('[data-property="F1c"]')).toContainText("Measured mean");
+  // The label names the basis once; no separate "Basis:" line repeats it.
+  await expect(page.locator(".dataset-summary")).toContainText("NCAMP 2016 · measured means");
+  await expect(page.locator(".dataset-summary")).not.toContainText("Basis:");
+  await expect(page.locator('[data-property="F1c"]')).not.toContainText("Measured mean");
+  // NCAMP prints in US units: that column is "as printed".
+  await expect(page.getByRole("columnheader", { name: "English / imperial as printed" })).toBeVisible();
   await expect(page.locator('[data-property="E1t"] a')).toHaveAttribute("href", /12k-HTS40-2\.pdf#page=28$/);
   await page.getByRole("textbox", { name: "Search materials" }).fill("T650-35");
   await expect(page.getByRole("heading", { name: "T650-35 / 976", exact: true })).toBeVisible();
@@ -118,4 +127,20 @@ test("woven NCAMP and canceled-handbook records render with their own badges, di
   await expect(page.locator('[data-property="F1t"]')).toContainText("B30");
   await expect(page.locator('[data-property="nu12"]')).toHaveCount(0);
   await expect(page.locator('[data-property="F1t"] a')).toHaveAttribute("href", /quicksearch\.dla\.mil.+#page=301$/);
+});
+
+test("the dissertation's values link only to a search, which says it is one (decision D8)", async ({ page }) => {
+  await page.goto("/library");
+  await page.getByRole("textbox", { name: "Search materials" }).fill("X840");
+  await expect(page.getByRole("heading", { name: "X840 / Z60 plain weave 6K", exact: true })).toBeVisible();
+  await expect(page.locator('[data-property="E1"] a')).toHaveCount(0);
+  // The printed column keeps the dissertation's figures (audit R2-7).
+  await expect(page.locator('[data-property="E1"]')).toContainText("80.0 GPa");
+  await expect(page.locator('[data-property="G13"]')).toContainText("5.10 GPa");
+  await expect(page.locator('[data-property="density"]')).toContainText("1.61 g/cm³");
+  await page.getByText("Reference & test details", { exact: true }).click();
+  await expect(page.locator(".cited-reference-details")).toContainText("Printed page 79 · Table 3.1, Fabric row");
+  const links = page.locator('.cited-properties a[href*="escholarship.org"]');
+  await expect(links).toHaveCount(1);
+  await expect(links).toContainText("Search escholarship.org");
 });

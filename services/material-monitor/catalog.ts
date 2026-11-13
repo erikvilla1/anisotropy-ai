@@ -2,16 +2,25 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, existsSync, writeFileSync, renameSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { materialEvidence, type MaterialFeed, type SourceStatus } from "../../lib/material-evidence";
+import { sourceProvenance } from "../../lib/source-provenance";
 import { MonitorStore } from "./store";
 import { extractProperties, revisionMetadata } from "./properties";
 
 export function buildCatalog(store: MonitorStore): MaterialFeed {
   const result: MaterialFeed = { schemaVersion: 1, generatedAt: new Date().toISOString(), sources: [], candidates: [], releases: [] };
+  const rows = store.db.prepare("SELECT payload FROM reference_releases ORDER BY approved_at,id").all();
+  const latest = new Map<string, MaterialFeed["releases"][number]>();
+  for (const row of rows) { const release = JSON.parse(String(row.payload)); latest.set(release.materialId, release); }
+  result.releases = [...latest.values()];
   for (const state of store.list()) {
     const source = store.source(state.id);
     const snapshot = state.current ? store.snapshot(state.current.id)! : null;
     const pages = snapshot ? JSON.parse(snapshot.pages) : [];
     const meta = snapshot ? revisionMetadata(state.id, pages) : { revision: null, revisionDate: null, datePrecision: null, dateMeaning: "No source revision captured." };
+    // The copies the shown values were reviewed against: the one the library cites (lib/source-provenance.ts, a review record
+    // the pages never load) and the latest published release. `outcome` compares only with the previous check.
+    const reviewed = new Set([sourceProvenance[state.id]?.sha256, ...result.releases.filter(r => r.sourceId === state.id).map(r => r.fingerprint)]
+      .filter((hash): hash is string => !!hash));
     const status: SourceStatus = {
       id: state.id, name: state.name, kind: source.kind || "datasheet", sourceUrl: state.pageUrl,
       documentUrl: snapshot?.url || null, fingerprint: snapshot?.raw_hash || null, ...meta,
@@ -19,6 +28,7 @@ export function buildCatalog(store: MonitorStore): MaterialFeed {
       outcome: state.lastCheck ? String(state.lastCheck.outcome) : "not-checked", failed: !!state.error,
       review: snapshot ? (state.review?.decision as "accepted" | "rejected" || "pending") : "not-captured",
       propertyExtraction: snapshot ? "not-configured" : "not-captured",
+      changedSinceReview: !!snapshot && reviewed.size > 0 && !reviewed.has(snapshot.raw_hash),
     };
     result.sources.push(status);
     if (snapshot && !source.kind) {
@@ -30,10 +40,6 @@ export function buildCatalog(store: MonitorStore): MaterialFeed {
       } catch { status.propertyExtraction = "review-required"; }
     }
   }
-  const rows = store.db.prepare("SELECT payload FROM reference_releases ORDER BY approved_at,id").all();
-  const latest = new Map<string, MaterialFeed["releases"][number]>();
-  for (const row of rows) { const release = JSON.parse(String(row.payload)); latest.set(release.materialId, release); }
-  result.releases = [...latest.values()];
   return result;
 }
 

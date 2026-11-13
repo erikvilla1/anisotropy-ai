@@ -93,7 +93,7 @@ test("the home page draws the stack, posts it once and shows the engine's descri
   await expect(specs).toContainText("2.312 kg/m²");
   await expect(specs).toContainText("bending–twisting");
   await expect(calculator(page).getByTestId("failure-panel")).toHaveCount(0);
-  await expect(calculator(page).getByTestId("abd-grid").getByRole("table", { name: "A matrix" })).toContainText("9.88e+7");
+  await expect(calculator(page).getByTestId("abd-grid").getByRole("table", { name: "A matrix" })).toContainText("9.88 × 10⁷"); // the site's one number rule, three figures
   await expect(calculator(page).getByTestId("property-row")).toContainText("1580");
   await expect(calculator(page).getByTestId("property-row")).toContainText("57.3");
   await page.waitForTimeout(700);

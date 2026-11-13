@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { materials } from "../lib/materials";
-import { curatedMaterials, archivedMaterialReasons, currentMaterial, exportCitedMaterial, materialDatasets } from "../lib/curated-materials";
+import { curatedMaterials, archivedMaterialReasons, couponWorkspaceMaterialIds, currentMaterial, exportCitedMaterial, exportFileName, materialDatasets } from "../lib/curated-materials";
+import { provenanceOf } from "../lib/source-provenance";
+import { libraryOptions } from "../lib/studio-form";
 import { qualifiedCarbon, qualifiedCarbonIM7, nasaCarbonIM7, qualifiedT650, qualifiedBT250, qualifiedTC380, qualifiedEP2190, qualifiedAS4PW, qualifiedT650PW, qualifiedTC250, handbookT650976, handbookEA9396, qualifiedGlass } from "../lib/qualification-materials";
 import { dualUnits } from "../lib/property-units";
 import published from "../lib/published-material-references.json";
@@ -40,14 +42,14 @@ test("scientific definitions and source-specific measurements are not interchang
   assert.equal(value("F12-5pct").value, 8.962);
   assert.equal(value("SBS").method, "ASTM D2344/D2344M-16");
   assert.ok(ncamp.properties.filter(p => /^(E[12][tc]|F|G12|SBS)/.test(p.key)).every(p => p.basis === "Measured mean"));
-  assert.equal(ncamp.source.sha256, "1eefc09bc58939ef84806bcb00b60c2e282a9db628352b38de66c03930d52816");
+  assert.equal(provenanceOf(ncamp.source.id).sha256, "1eefc09bc58939ef84806bcb00b60c2e282a9db628352b38de66c03930d52816");
   const as4 = materialDatasets(curatedMaterials.find(m => m.id === "as4-3501")!)[1];
   assert.equal(as4.properties.find(p => p.key === "E1")!.value, 142);
   assert.ok(as4.properties.every(p => p.basis === "Model input"));
   assert.equal(curatedMaterials.find(m => m.id === "m55j")!.properties.length, 7);
   assert.ok(!curatedMaterials.find(m => m.id === "m55j")!.properties.some(p => /Tensile Modulus/i.test(p.label)));
-  assert.equal(dualUnits(-.36, "10⁻⁶/K").english, "-0.2 10⁻⁶/°F");
-  assert.equal(dualUnits(25.4, "mm").english, "1 in");
+  assert.equal(dualUnits(-.36, "10⁻⁶/K").english, "−0.200 × 10⁻⁶/°F");
+  assert.equal(dualUnits(25.4, "mm").english, "1.00 in");
 });
 
 test("qualification records supply coherent elastic inputs and keep the two glass programs separate", () => {
@@ -60,14 +62,16 @@ test("qualification records supply coherent elastic inputs and keep the two glas
     assert.equal(Object.keys(inputs).length, 4);
     assert.equal(record.reviewedOn, "2026-10-02");
     for (const ref of [record.source, ...record.supportingReferences!]) {
-      assert.match(ref.sha256!, /^[a-f0-9]{64}$/);
+      assert.match(provenanceOf(ref.id).sha256!, /^[a-f0-9]{64}$/);
       const adapter = sources.find(s => s.id === ref.id)!;
       assert.equal(adapter.pageUrl, ref.url);
       assert.equal(adapter.kind, "reference-document");
     }
     const out = exportCitedMaterial(record);
     assert.deepEqual(out.elasticInputs, record.elasticInputs);
-    assert.equal(out.recordRevision, "2026-10-02.1");
+    assert.equal(record.recordRevision, "2026-10-02.1");
+    assert.equal(out.reviewedOn, "2026-10-02");
+    assert.ok(!("recordRevision" in out)); // The record revision stays in the repository and the engine export.
     assert.equal(out.source.date, record.source.date); // Review date must not replace publication date.
     assert.ok(out.properties.every(p => p.referenceUrl.startsWith(record.source.url)));
   }
@@ -87,8 +91,8 @@ test("qualification records supply coherent elastic inputs and keep the two glas
   assert.equal(value(qualifiedCarbon, "F1c-derived").value, 215.29);
   assert.equal(value(qualifiedCarbon, "F12-offset").value, 8);
   assert.equal(value(qualifiedCarbon, "F12-5pct").value, 13.28);
-  assert.match(value(qualifiedCarbon, "SBS").conditions, /^70°F/);
-  assert.match(value(qualifiedCarbon, "E1t").conditions, /^75°F/);
+  assert.match(value(qualifiedCarbon, "SBS").conditions, /^70 °F/);
+  assert.match(value(qualifiedCarbon, "E1t").conditions, /^75 °F/);
   assert.equal(qualifiedCarbon.properties.length, 21);
   assert.equal(qualifiedGlass.properties.length, 19);
 });
@@ -114,7 +118,8 @@ test("only newer reviewed releases of the same property definitions can replace 
   const exported = exportCitedMaterial(currentMaterial(base, feed));
   assert.equal(exported.datasetId, release.releaseId);
   assert.equal(exported.designAllowables, false);
-  assert.equal(exported.source.sha256, release.fingerprint);
+  assert.equal(exported.source.url, release.documentUrl);
+  assert.ok(!("sha256" in exported.source)); // A fingerprint is a review record, not part of the download.
 });
 
 test("publication monitoring detects document replacement without extracting or publishing numerical values", async t => {
@@ -147,10 +152,10 @@ test("IM7 / 8552 record uses the measured RTD column of the 2019 report and keep
   assert.equal(value("SBS").sourcePage, 37);
   assert.equal(value("tply").value, .0072);
   assert.equal(qualifiedCarbonIM7.properties.length, 21);
-  assert.equal(qualifiedCarbonIM7.source.sha256, "640c215e6999e3429ed410722432174fb02e9157c76ae323380b9f314f211387");
+  assert.equal(provenanceOf(qualifiedCarbonIM7.source.id).sha256, "640c215e6999e3429ed410722432174fb02e9157c76ae323380b9f314f211387");
   assert.equal(qualifiedCarbonIM7.source.date, "2019-04-16");
   assert.equal(qualifiedCarbonIM7.source.rights, "open-publisher");
-  assert.match(qualifiedCarbonIM7.source.rightsEvidence, /general distribution to the public/);
+  assert.match(provenanceOf(qualifiedCarbonIM7.source.id).rightsEvidence, /general distribution to the public/);
   for (const ref of [qualifiedCarbonIM7.source, ...qualifiedCarbonIM7.supportingReferences!]) {
     const adapter = sources.find(s => s.id === ref.id)!;
     assert.equal(adapter.pageUrl, ref.url);
@@ -188,16 +193,16 @@ test("T650 / 5320-1 and IM7 / BT250E-6 records use the measured RTD column and h
     assert.equal(value("SBS").value, e.SBS);
     assert.equal(value("tply").value, e.tply);
     assert.equal(m.properties.length, 19);
-    assert.equal(m.source.sha256, e.sha);
+    assert.equal(provenanceOf(m.source.id).sha256, e.sha);
     assert.equal(m.source.date, e.date);
     assert.equal(m.source.rights, "open-publisher");
-    assert.match(m.source.rightsEvidence, /general distribution to the public/);
+    assert.match(provenanceOf(m.source.id).rightsEvidence, /general distribution to the public/);
     for (const ref of [m.source, ...m.supportingReferences!]) {
       const adapter = sources.find(s => s.id === ref.id)!;
       assert.equal(adapter.pageUrl, ref.url);
       assert.equal(adapter.kind, "reference-document");
       assert.deepEqual(adapter.materials.map(x => x.id), [id]);
-      assert.match(ref.sha256!, /^[a-f0-9]{64}$/);
+      assert.match(provenanceOf(ref.id).sha256!, /^[a-f0-9]{64}$/);
     }
     const inputs = Object.fromEntries(Object.entries(m.elasticInputs!).map(([name, key]) => [name, value(key).value]));
     assert.ok(1 - inputs.nu12 * (inputs.nu12 * inputs.E2 / inputs.E1) > 0);
@@ -211,9 +216,9 @@ test("T650 / 5320-1 and IM7 / BT250E-6 records use the measured RTD column and h
 test("T1100GC / TC380 and IMS65 / EP2190 records use the measured room-temperature column and keep their test conditions distinct", () => {
   const expected = {
     "t1100gc-tc380": { record: qualifiedTC380, E1t: 22.97, E2t: 1.111, nu12: .3132, G12: .5740, F1t: 475.3, F1cKey: "F1c-derived", F1c: 236.2, F1cBasis: "Derived lamina mean", F12: 11.16, SBS: 14.40, tply: .0048, count: 20,
-      sha: "e8297c644af8e437a482edb78717b83dee49ed3c52c91b2c963a0dfbb8bd446b", date: "2025-09-24", normalized: /472\.6|226\.7|22\.84/, environment: /70°F/ },
+      sha: "e8297c644af8e437a482edb78717b83dee49ed3c52c91b2c963a0dfbb8bd446b", date: "2025-09-24", normalized: /472\.6|226\.7|22\.84/, environment: /70 °F/ },
     "ims65-ep2190": { record: qualifiedEP2190, E1t: 22.04, E2t: 1.255, nu12: .3299, G12: .6053, F1t: 415.8, F1cKey: "F1c", F1c: 207.7, F1cBasis: "Measured mean", F12: 10.63, SBS: 12.64, tply: .0056, count: 20,
-      sha: "99a3d37118965e0933878c06de2222a65264f3fc1171836555d11697217c5dfc", date: "2025-09-18", normalized: /430\.6|218\.1|22\.81/, environment: /75°F.*ambient/ },
+      sha: "99a3d37118965e0933878c06de2222a65264f3fc1171836555d11697217c5dfc", date: "2025-09-18", normalized: /430\.6|218\.1|22\.81/, environment: /75 °F.*ambient/ },
   };
   for (const [id, e] of Object.entries(expected)) {
     const m = e.record;
@@ -232,16 +237,16 @@ test("T1100GC / TC380 and IMS65 / EP2190 records use the measured room-temperatu
     assert.equal(m.properties.length, e.count);
     assert.match(m.conditions, e.environment);
     assert.ok(m.properties.every(p => e.environment.test(p.conditions)));
-    assert.equal(m.source.sha256, e.sha);
+    assert.equal(provenanceOf(m.source.id).sha256, e.sha);
     assert.equal(m.source.date, e.date);
     assert.equal(m.source.rights, "open-publisher");
-    assert.match(m.source.rightsEvidence, /general distribution to the public/);
+    assert.match(provenanceOf(m.source.id).rightsEvidence, /general distribution to the public/);
     for (const ref of [m.source, ...m.supportingReferences!]) {
       const adapter = sources.find(s => s.id === ref.id)!;
       assert.equal(adapter.pageUrl, ref.url);
       assert.equal(adapter.kind, "reference-document");
       assert.deepEqual(adapter.materials.map(x => x.id), [id]);
-      assert.match(ref.sha256!, /^[a-f0-9]{64}$/);
+      assert.match(provenanceOf(ref.id).sha256!, /^[a-f0-9]{64}$/);
     }
     const inputs = Object.fromEntries(Object.entries(m.elasticInputs!).map(([name, key]) => [name, value(key).value]));
     assert.ok(1 - inputs.nu12 * (inputs.nu12 * inputs.E2 / inputs.E1) > 0);
@@ -284,12 +289,12 @@ test("NASA 2023 IM7 / 8552 dataset sits beside the NCAMP record with printed ave
   for (const p of m.properties) {
     assert.equal(p.printedPage, p.sourcePage - 6);
     assert.match(p.conditions, /^Room temperature, quasi-static/);
-    assert.doesNotMatch(p.conditions, /70°F|75°F|dry as fabricated/);
+    assert.doesNotMatch(p.conditions, /70 ?°F|75 ?°F|dry as fabricated/);
   }
-  assert.equal(m.source.sha256, "8720e1dce2830b9cae264627a637d74b1bca4d7a2cec078a29c52ae61e7e7eeb");
+  assert.equal(provenanceOf(m.source.id).sha256, "8720e1dce2830b9cae264627a637d74b1bca4d7a2cec078a29c52ae61e7e7eeb");
   assert.equal(m.source.date, "2023-02");
   assert.equal(m.source.rights, "open-publisher");
-  assert.match(m.source.rightsEvidence, /Public Use Permitted/);
+  assert.match(provenanceOf(m.source.id).rightsEvidence, /Public Use Permitted/);
   assert.equal(m.supportingReferences, undefined);
   const adapter = sources.find(s => s.id === m.source.id)!;
   assert.equal(adapter.pageUrl, m.source.url);
@@ -326,17 +331,17 @@ test("NCAMP plain weave records use the measured RTD column, direct fabric compr
     assert.equal(value("F1c").basis, "Measured mean");
     assert.ok(!m.properties.some(p => p.key === "F1c-derived"));
     assert.equal(m.properties.length, e.count);
-    assert.ok(m.properties.every(p => /^70°F/.test(p.conditions)));
-    assert.equal(m.source.sha256, e.sha);
+    assert.ok(m.properties.every(p => /^70 °F/.test(p.conditions)));
+    assert.equal(provenanceOf(m.source.id).sha256, e.sha);
     assert.equal(m.source.date, e.date);
     assert.equal(m.source.rights, "open-publisher");
-    assert.match(m.source.rightsEvidence, /general distribution to the public/);
+    assert.match(provenanceOf(m.source.id).rightsEvidence, /general distribution to the public/);
     for (const ref of [m.source, m.supportingReferences![0]]) {
       const adapter = sources.find(s => s.id === ref.id)!;
       assert.equal(adapter.pageUrl, ref.url);
       assert.equal(adapter.kind, "reference-document");
       assert.deepEqual(adapter.materials.map(x => x.id), [id]);
-      assert.match(ref.sha256!, /^[a-f0-9]{64}$/);
+      assert.match(provenanceOf(ref.id).sha256!, /^[a-f0-9]{64}$/);
     }
     const inputs = Object.fromEntries(Object.entries(m.elasticInputs!).map(([name, key]) => [name, value(key).value]));
     assert.ok(1 - inputs.nu12 * (inputs.nu12 * inputs.E2 / inputs.E1) > 0);
@@ -352,15 +357,16 @@ test("MIL-HDBK-17-2F historical records are public domain, labelled canceled and
   for (const m of [handbookT650976, handbookEA9396]) {
     assert.match(m.dataset, /historical handbook data/);
     assert.match(m.conditions, /canceled 26 March 2013/);
-    assert.match(m.conditions, /^72°F/);
+    assert.match(m.conditions, /^72 °F/);
     assert.equal(m.source.rights, "public-domain");
     assert.equal(m.source.id, "mil-hdbk-17-2f-volume-2");
-    assert.equal(m.source.sha256, "a0368e3214a93ca859a50fc09d7cc3230cd4856d5be3e9ba1e9916f34758ff8b");
+    assert.equal(provenanceOf(m.source.id).sha256, "a0368e3214a93ca859a50fc09d7cc3230cd4856d5be3e9ba1e9916f34758ff8b");
     assert.equal(m.source.date, "2002-06-17");
     assert.equal(m.supportingReferences![0].id, "mil-hdbk-17-2f-notice-1");
     assert.equal(m.supportingReferences![0].date, "2013-03-26");
     for (const p of m.properties) {
-      assert.match(p.evidence, /handbook page \d-\d+ \(PDF page \d+\)/);
+      assert.match(p.evidence, /handbook page \d-\d+;/);
+      assert.doesNotMatch(p.evidence, /PDF/); // Public pages cite printed pages only (ADR-0018 amendment 2).
       assert.ok(["Mean", "Interim", "Screening", "B30", "B18", "Reported nominal", "Reported transition temperature"].includes(p.basis), p.basis);
     }
     const adapter = sources.find(s => s.id === m.source.id)!;
@@ -390,4 +396,15 @@ test("MIL-HDBK-17-2F historical records are public domain, labelled canceled and
   assert.notEqual(handbookEA9396.id, qualifiedGlass.id); // Separate from the 7781 / E-765 prepreg record.
   const out = exportCitedMaterial(handbookT650976);
   assert.ok(!out.properties.some(p => [231, 202, 200].includes(p.value as number))); // Normalized and B-basis values stay in the handbook.
+});
+
+test("the library links to the coupon workspace only for the materials its form lists", () => {
+  assert.deepEqual([...couponWorkspaceMaterialIds].sort(), libraryOptions.map(o => o.id).sort());
+  for (const id of couponWorkspaceMaterialIds) assert.ok(curatedMaterials.some(m => m.id === id), id);
+});
+
+test("a downloaded record is named for the material and its source", () => {
+  const as4 = curatedMaterials.find(m => m.id === "as4-3501")!;
+  assert.equal(exportFileName(as4), "AS4-3501-6_Daniel-Ishai-2006.json");
+  for (const m of curatedMaterials.flatMap(materialDatasets)) assert.match(exportFileName(m), /^[A-Za-z0-9.]+(?:-[A-Za-z0-9.]+)*_[A-Za-z0-9.]+(?:-[A-Za-z0-9.]+)*\.json$/, m.datasetId);
 });

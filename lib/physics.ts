@@ -1,4 +1,6 @@
 import { foundationTopics, maximumStrain, bookReference, coreReferences, laminateExtensions, failureExtensions } from "./physics-foundations";
+// A card says what an equation is, its units and where it is printed; which engine function computes it is kept off the
+// page, in lib/physics-code-map.ts (ADR-0019 amendment 1).
 export type Method = { name: string; equation: string; detail: string;
   reference?: { title: string; url: string; location: string }; units?: string };
 export type PhysicsTopic = {
@@ -21,7 +23,7 @@ const existingPhysicsTopics: PhysicsTopic[] = [
     title: "Classical Laminate Theory",
     subtitle: "From a single ply to laminate response",
     assumptions:
-      "Thin, perfectly bonded, linearly elastic orthotropic plies; small deformation and plane stress. Engineering shear strain γ is used. Angles rotate global x–y into local fiber axes 1–2; z is measured from the laminate mid-plane.",
+      "Thin, perfectly bonded, linearly elastic orthotropic plies; small deformation and plane stress. Engineering shear strain γ is used. Angles rotate global x–y into local fibre axes 1–2; z is measured from the laminate mid-plane.",
     source: "NASA RP-1351 · Basic Mechanics of Laminated Composite Plates",
     url: "https://ntrs.nasa.gov/citations/19950009349",
     methods: [
@@ -38,7 +40,7 @@ const existingPhysicsTopics: PhysicsTopic[] = [
       m(
         "Stress transformation Tσ",
         "m = cos θ; n = sin θ\nTσ = [[m², n², 2mn],\n      [n², m², −2mn],\n      [−mn, mn, m²−n²]]\nσ₁₂ = Tσ σxy",
-        "Transforms global stress to the local fiber/transverse system. The stress and engineering-strain transformations differ in their shear terms.",
+        "Transforms global stress to the local fibre/transverse system. The stress and engineering-strain transformations differ in their shear terms.",
       ),
       m(
         "Strain transformation Tε",
@@ -88,12 +90,12 @@ const existingPhysicsTopics: PhysicsTopic[] = [
       m(
         "Local strains & local stresses",
         "ε₁₂,mech = Tε εxy,mech\nσ₁₂ = Q ε₁₂,mech\nσxy = Tσ⁻¹ σ₁₂",
-        "Recover fiber, transverse, and shear stress for failure assessment. Stress can jump between dissimilar plies even when the interface strain is continuous.",
+        "Recover fibre, transverse, and shear stress for failure assessment. Stress can jump between dissimilar plies even when the interface strain is continuous.",
       ),
       m(
         "Laminate engineering constants",
         "a = extensional block of [[A,B],[B,D]]⁻¹  (= A⁻¹ when B = 0)\nEx = 1/(h a₁₁)    Ey = 1/(h a₂₂)    Gxy = 1/(h a₆₆)\nνxy = −a₂₁/a₁₁    νyx = −a₁₂/a₂₂\nηxs = a₆₁/a₁₁    ηys = a₆₂/a₂₂",
-        "Effective in-plane constants of a laminate free to bend as it stretches. For a symmetric laminate a = A⁻¹; for a general laminate take the extensional block of the full ABD inverse (§7.12.3). The η terms are the shear coupling coefficients. Restrained bending gives different apparent constants (engineering_constants).",
+        "Effective in-plane constants of a laminate free to bend as it stretches. For a symmetric laminate a = A⁻¹; for a general laminate take the extensional block of the full ABD inverse (§7.12.3). The η terms are the shear coupling coefficients. Restrained bending gives different apparent constants.",
       ),
     ],
   },
@@ -103,154 +105,52 @@ const existingPhysicsTopics: PhysicsTopic[] = [
     subtitle: "Evaluate local stresses against a defined strength basis",
     assumptions:
       "Use positive strength magnitudes Xₜ, X꜀, Yₜ, Y꜀ and S with tension-positive local stresses. Appendix compressive values are signed source values and require explicit sign normalization before calculation. Failure indices indicate initiation, not residual strength or fracture location certainty.",
-    source: "COMSOL · Failure prediction in a laminated composite shell",
-    url: "https://doc.comsol.com/6.4/doc/com.comsol.help.models.compmat.failure_prediction_in_a_laminated_composite_shell/failure_prediction_in_a_laminated_composite_shell.html",
+    source: bookReference.title,
+    url: bookReference.url,
     methods: [
       m(
         "Maximum stress",
         "r₁ = σ₁/Xₜ (σ₁ ≥ 0); −σ₁/X꜀ (σ₁ < 0)\nr₂ = σ₂/Yₜ (σ₂ ≥ 0); −σ₂/Y꜀ (σ₂ < 0)\nFI = max(r₁, r₂, |τ₁₂|/S)",
-        "Checks fiber, transverse, and shear limits separately. FI ≥ 1 indicates initiation; this criterion does not model interaction between stress components.",
+        "Checks fibre, transverse, and shear limits separately. FI ≥ 1 indicates initiation; this criterion does not model interaction between stress components.",
       ),
       m(
-        "Tsai–Hill",
+        "Tsai-Hill",
         "FI = (σ₁/X)² − σ₁σ₂/X²\n     + (σ₂/Y)² + (τ₁₂/S)²",
-        "This documented plane-stress convention selects X = Xₜ or X꜀ by the sign of σ₁ and Y similarly by σ₂. Mixed-sign conventions differ between implementations; record the convention before comparisons. FI ≥ 1 indicates initiation; for proportional loading R = 1/√FI (tsai_hill_index, tsai_hill_ratio).",
+        "This documented plane-stress convention selects X = Xₜ or X꜀ by the sign of σ₁ and Y similarly by σ₂. Mixed-sign conventions differ between implementations; record the convention before comparisons. FI ≥ 1 indicates initiation; for proportional loading R = 1/√FI.",
       ),
       m(
-        "Tsai–Wu coefficients",
+        "Tsai-Wu coefficients",
         "F₁ = 1/Xₜ − 1/X꜀    F₂ = 1/Yₜ − 1/Y꜀\nF₁₁ = 1/(XₜX꜀)    F₂₂ = 1/(YₜY꜀)\nF₆₆ = 1/S²    F₁₂ = f₁₂ √(F₁₁F₂₂)",
         "The biaxial interaction coefficient f₁₂ needs experimental evidence or an explicitly recorded assumption. It cannot be inferred from uniaxial strengths alone. Require |f₁₂| < 1 for a positive-definite normal-stress quadratic.",
       ),
       m(
-        "Tsai–Wu failure index",
+        "Tsai-Wu failure index",
         "FI = F₁σ₁ + F₂σ₂ + F₁₁σ₁²\n     + F₂₂σ₂² + 2F₁₂σ₁σ₂ + F₆₆τ₁₂²",
-        "FI ≥ 1 marks the chosen failure envelope. The scalar index does not identify fiber versus matrix failure; report it alongside mode-sensitive criteria and the input strength basis.",
-      ),
-      m(
-        "Hashin · fiber modes",
-        "Tension (σ₁ ≥ 0):\nFIft = (σ₁/Xₜ)² + α(τ₁₂/Sᴸ)²\nCompression (σ₁ < 0):\nFIfc = (σ₁/X꜀)²",
-        "Plane-stress initiation formulation for unidirectional plies. α weights shear participation in fiber tension and must be specified; α = 1 is a common choice. Sᴸ is longitudinal shear strength.",
-      ),
-      m(
-        "Hashin · matrix modes",
-        "Tension (σ₂ ≥ 0):\nFImt = (σ₂/Yₜ)² + (τ₁₂/Sᴸ)²\nCompression (σ₂ < 0):\nFImc = (σ₂/2Sᵀ)² + [(Y꜀/2Sᵀ)² − 1]σ₂/Y꜀\n       + (τ₁₂/Sᴸ)²",
-        "Sᵀ is transverse shear strength, distinct from Sᴸ. Missing strength data must remain unresolved. A woven architecture needs an applicable, validated failure formulation rather than automatic reuse of UD criteria.",
+        "FI ≥ 1 marks the chosen failure envelope. The scalar index does not identify fibre versus matrix failure; report it alongside mode-sensitive criteria and the input strength basis.",
       ),
       m(
         "Strength ratio & safety margin",
-        "FI(Rσ) = 1\nTsai–Wu: aR² + bR − 1 = 0\nMS = R/FS − 1",
+        "FI(Rσ) = 1\nTsai-Wu: aR² + bR − 1 = 0\nMS = R/FS − 1",
         "Find the smallest positive load multiplier R reaching initiation; a and b are the quadratic and linear stress terms. For homogeneous quadratic criteria, R = 1/√FI. FS is the specified safety factor. Handle zero stress and the linear limiting case explicitly.",
-      ),
-    ],
-  },
-  {
-    id: "fea",
-    title: "CAD, FEA & verification",
-    subtitle: "Geometry, boundary conditions, and independent checks",
-    assumptions:
-      "The relations below describe a small-displacement linear elastic analysis. Solver choice, element formulation, geometry tolerances, units, and acceptance thresholds belong in the analysis record.",
-    source: "Anisotropy · Analysis workflow",
-    url: "/services",
-    methods: [
-      m(
-        "Parametric geometry & mesh",
-        "Geometry = g(length, width, thickness, hole, fillets)\nMesh = discretize(Geometry, element type, size)",
-        "Define a reproducible CAD model; check dimensions, hole/edge distances, ply thickness, and mesh quality. STEP geometry and mesh exports are planned product deliverables.",
-      ),
-      m(
-        "Finite element equilibrium",
-        "K u = f\nε = Bₑ uₑ    σ = C εmech",
-        "Apply supports and loads, solve nodal displacements, and recover strain/stress using the element strain–displacement matrix Bₑ. Do not confuse Bₑ with laminate coupling B.",
-      ),
-      m(
-        "Mesh convergence",
-        "δq = |qfine − qcoarse| / |qfine|",
-        "Track relevant quantities across mesh refinements against an agreed tolerance. Use an absolute scale if qfine is near zero. A stress singularity may not converge; investigate its cause before accepting a peak.",
-      ),
-      m(
-        "CLT–FEA & test comparison",
-        "Δq = qmodel − qreference\nRelative discrepancy = |Δq| / |qreference|",
-        "Compare equivalent loads, axes, units, regions, and boundary conditions. CLT comparison applies away from 3D/local effects. Physical-test discrepancies must include uncertainty; thresholds are defined for the study.",
-      ),
-      m(
-        "Verification gate",
-        "release = inputs reviewed ∧ MS ≥ 0\n          ∧ convergence passed ∧ cross-checks passed",
-        "A planned gate for reporting a passing design. Failed or unresolved checks produce an investigation record with the failure reason, rather than an approved result. An engineering review remains part of the workflow.",
-      ),
-    ],
-  },
-  {
-    id: "open-hole",
-    title: "Open-hole strength & damage",
-    subtitle: "Local fields, calibrated models, and future development",
-    assumptions:
-      "A hole introduces nonuniform stress. Unnotched lamina strength alone does not validate open-hole strength. Coupon geometry, laminate architecture, characteristic length, and test evidence must match the chosen model.",
-    source: "Anisotropy · Research scope",
-    url: "/services",
-    methods: [
-      m(
-        "Stress concentration",
-        "Kt = σlocal,max / σnominal",
-        "Record whether nominal stress uses gross or net section area. Extract local fields from an applicable solution or a converged model; isotropic infinite-plate factors are not general laminate solutions.",
-      ),
-      m(
-        "Point-stress criterion",
-        "σyy(x = a + d₀, y = 0) = Xlaminate",
-        "For tension in y and a hole of radius a, compare stress on the transverse ligament at a calibrated characteristic distance d₀. Requires matching unnotched laminate strength and open-hole calibration; it is not a universal material constant.",
-      ),
-      m(
-        "Progressive failure · future",
-        "σ = C(d) εmech;    0 ≤ d ≤ 1",
-        "Research direction only. Initiation must be paired with a calibrated damage-evolution law, energy regularization, and independent tests. Residual-strength and damage-evolution analysis are outside this preview.",
-      ),
-    ],
-  },
-  {
-    id: "optimization",
-    title: "Layup design & optimization",
-    subtitle: "Search candidates, then verify the proposed stack",
-    assumptions:
-      "An optimization result is conditional on its material basis, load cases, constraints, and model validity. Candidate ranking alone does not qualify a design.",
-    source: "Anisotropy · Design exploration",
-    url: "/services",
-    methods: [
-      m(
-        "Mass objective",
-        "minimize mass = Area × Σ ρₖ tₖ",
-        "For a constant-area laminate, compare discrete ply counts, orientations, and materials. A variable CAD geometry requires volume integration instead of this constant-area expression.",
-      ),
-      m(
-        "Layup constraints",
-        "θₖ ∈ permitted angles;    min MS ≥ 0\nSymmetry: θₖ = θₙ₊₁₋ₖ\nBalance: matched +θ / −θ plies",
-        "Symmetry and balance also require matching material and thickness. Include manufacturing limits, stiffness, displacement, and other project-specific constraints. Balanced laminates do not necessarily have zero bending–twisting coupling.",
-      ),
-      m(
-        "Candidate verification",
-        "Candidate → CLT → FEA → verification → test",
-        "Screen stacks, then verify the shortlisted designs using the same material basis and engineering checks. Document the objective, constraints, rejected cases, and reproducible inputs.",
       ),
     ],
   },
 ];
 
-// Only referenced analytical foundations are presented as current equation cards.
+// Only referenced analytical foundations are presented as equation cards.
 export const physicsTopics: PhysicsTopic[] = [
   ...existingPhysicsTopics.filter(t => ["clt", "failure"].includes(t.id)).map(topic => ({
     ...topic, source: bookReference.title, url: bookReference.url,
     assumptions: topic.id === "failure"
-      ? "Use positive tensile/compressive strength magnitudes and tension-positive local stresses. Match the criterion to the material architecture and strength basis. Failure indices estimate initiation; they do not predict damage evolution or final component failure."
+      ? "Use positive tensile/compressive strength magnitudes and tension-positive local stresses. Strengths: Xₜ = F₁ₜ, X꜀ = F₁c, Yₜ = F₂ₜ, Y꜀ = F₂c and S = F₆, the shear strength the material tables list as F₁₂; the Tsai-Wu F terms are coefficients, not strengths. Match the criterion to the material architecture and strength basis. Failure indices estimate initiation; they do not predict damage evolution or final component failure."
       : topic.assumptions,
-    methods: topic.methods.filter(m => !m.name.startsWith("Hashin")).map<Method>(method => ({
+    methods: topic.methods.map<Method>(method => ({
       ...method, units: coreReferences[method.name].units,
-      reference: { ...bookReference, location: coreReferences[method.name].location },
+      reference: { title: bookReference.title, url: bookReference.url, location: coreReferences[method.name].location },
     })).concat(topic.id === "failure" ? [maximumStrain, ...failureExtensions] : laminateExtensions),
   })),
   ...foundationTopics,
 ];
 
-export const deferredPhysicsTopics = [
-  { title: "CAD & finite elements", detail: "Geometry, elements, meshing, boundary conditions and solver-specific validation need a separate research and implementation phase." },
-  { title: "Open-hole strength & progressive damage", detail: "Requires local-field models, applicable failure formulations and calibrated damage or characteristic-length data." },
-  { title: "Layup optimization", detail: "Requires a verified analysis model, explicit constraints and candidate checks before ranking designs." },
-  { title: "Mode-specific failure models", detail: "Hashin–Rotem (1973) is presented as the textbook prints it. The later Hashin fiber and matrix mode variants, their required shear strengths and applicability to UD or woven materials need their own formulation review." },
-];
+/** How many equation cards the library shows, for its headline. */
+export const physicsCardCount = physicsTopics.reduce((n, t) => n + t.methods.length, 0);

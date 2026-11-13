@@ -266,19 +266,27 @@
   color: #b6b6b6;
   padding: 18px 22px;
 }
-.standalone-workspace .chat-body {
-  height: clamp(260px, calc(100dvh - 650px), 410px);
+/* The test-data page's label keeps the 11 px floor at every width (it outranks the narrow-screen rule below). */
+.data-workspace .studio-mode {
+  font-size: 11px;
 }
 .source-materials {
   grid-template-columns: 310px minmax(0, 1fr);
   align-items: start;
   background: #141414;
+  /* clip, not hidden: the corners stay rounded and the material list can stick while the page scrolls */
+  overflow: clip;
 }
+/* The list stays in view beside a long property table, with a visible scrollbar and a fade that shows more below. */
 .source-materials .material-list {
-  max-height: 840px;
+  position: sticky;
+  top: 96px;
+  max-height: calc(100vh - 120px);
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #5c5c5c #1a1a1a;
+  padding-bottom: 48px;
+  scrollbar-width: auto;
+  scrollbar-color: #8a8a8a #1a1a1a;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
 }
 .source-materials .material-detail {
   background: #161616;
@@ -398,8 +406,9 @@
   text-align: left;
 }
 .topic-list button > span {
-  font-size: 9px;
+  font-size: 11px;
   color: #999999;
+  font-variant-numeric: tabular-nums;
 }
 .topic-list button strong {
   font-size: 12px;
@@ -407,7 +416,7 @@
 }
 .topic-list button small {
   display: block;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 400;
   margin-top: 8px;
   color: #8b8b8b;
@@ -420,7 +429,7 @@
 .topic-content {
   min-width: 0;
 }
-.topic-content > h3 {
+.topic-content > h2 {
   font-size: 30px;
   font-weight: 450;
   letter-spacing: -0.7px;
@@ -463,8 +472,10 @@
   display: none;
 }
 .method-entry summary > span {
-  font-size: 9px;
+  font-size: 11px;
   color: #8a8a8a;
+  min-width: 2.2em;
+  font-variant-numeric: tabular-nums;
 }
 .method-entry summary strong {
   font-size: 13px;
@@ -529,16 +540,23 @@
   .source-materials {
     grid-template-columns: 1fr;
   }
+  /* A strip of cards: the next card always peeks out, and the right edge fades, so the others are clearly there. The
+     right padding lets the last card scroll clear of the fade. */
   .source-materials .material-list {
+    position: static;
     display: flex;
     max-height: 210px;
     overflow: auto;
     gap: 8px;
+    padding-bottom: 10px;
+    padding-right: 40px;
     border-right: 0;
     border-bottom: 1px solid #414141;
+    mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
   }
   .source-materials .material-list button {
-    width: 220px;
+    width: calc(45% - 8px);
+    min-width: 160px;
     flex-shrink: 0;
   }
   .physics-browser {
@@ -634,9 +652,9 @@
     font-size: 11px;
   }
   .topic-list button small {
-    font-size: 8px;
+    font-size: 11px;
   }
-  .topic-content > h3 {
+  .topic-content > h2 {
     font-size: 27px;
   }
   .topic-assumptions {
@@ -655,26 +673,19 @@
   .studio-heading h1 {
     letter-spacing: -1px;
   }
-  .standalone-workspace .chat-body {
-    height: 450px;
-  }
   .studio-mode {
     padding: 16px 12px;
     font-size: 8px;
-  }
-  .standalone-workspace .preview-label {
-    font-size: 7px;
   }
   .material-detail-footer .button {
     width: 100%;
     justify-content: center;
   }
 }
-.main-nav .mobile-chat-cta {
-  display: none;
-}
+/* The workspace's header: 56 px, on the workspace toolbar's 20 px gutter so the two left edges line up. */
 .site-header.chat-site-header {
-  height: 70px;
+  height: 56px;
+  padding: 0 20px;
 }
 .chat-page-title {
   position: absolute;
@@ -699,12 +710,8 @@
   border-radius: 0;
   background: transparent;
 }
-.chat-only-page #assistant-panel,
-.chat-only-page .assistant-grid {
+.chat-only-page #assistant-panel {
   height: 100%;
-}
-.chat-only-page .assistant-grid {
-  display: block;
 }
 .chat-only-page .chat {
   display: flex;
@@ -712,32 +719,10 @@
   height: 100%;
   padding: 0 16px 12px;
 }
-.chat-only-page .chat-toolbar {
-  order: -1;
-  flex-shrink: 0;
-}
-.chat-only-page .scope-editor-row {
-  flex-shrink: 0;
-}
-.chat-only-page .standalone-workspace .chat-body {
-  height: auto;
-  min-height: 0;
-  flex: 1;
-  padding-top: 30px;
-}
 .chat-only-page .chat-composer {
   flex-shrink: 0;
 }
-.chat-only-page .chat-disclaimer {
-  flex-shrink: 0;
-}
 @media (max-width: 640px) {
-  .main-nav .mobile-chat-cta {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--accent);
-  }
   .chat-only-page .workspace-section {
     padding: 0 12px;
   }
@@ -745,14 +730,28 @@
     padding: 0 4px max(10px, env(safe-area-inset-bottom));
   }
   .site-header.chat-site-header {
-    padding: 0 16px;
+    padding: 0 20px;
     gap: 12px;
   }
   .chat-site-header .wordmark {
     font-size: 18px;
   }
   .chat-site-header .text-button {
-    font-size: 10px;
+    font-size: 13px;
     gap: 4px;
+  }
+  /* On a phone the two links do not fit beside the logo: where "All projects" shows, the logo is the way to the website. */
+  .chat-site-links {
+    gap: 14px;
+  }
+  .chat-site-links:has(.is-projects) .is-website {
+    display: none;
+  }
+}
+
+/* At 600 px and below the workspace toolbar's gutter is 12 px (workspace.css), and the header follows it. */
+@media (max-width: 600px) {
+  .site-header.chat-site-header {
+    padding: 0 12px;
   }
 }

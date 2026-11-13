@@ -4,7 +4,7 @@ import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
-  title: "Test plans — Anisotropy",
+  title: "Test plans",
   description: "Coupons in the proportions of the ASTM standards, with a checklist that judges the setup before anything runs. The test-plan document is planned.",
 };
 

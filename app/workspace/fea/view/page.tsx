@@ -4,8 +4,8 @@ import { StudioViewer } from "@/components/studio/studio-viewer";
 import "../../../studio/studio.css";
 
 export const metadata: Metadata = {
-  title: "Viewer | Anisotropy",
-  description: "The 3D view of one solved coupon, by its job.",
+  title: "Viewer",
+  description: "3D results of one solved coupon.",
 };
 
 /** The viewer window a solved coupon opens from the workspace, by the job's link (ADR-0051; under the workspace since ADR-0062). */

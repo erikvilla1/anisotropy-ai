@@ -1,6 +1,6 @@
 """ASTM D638: tensile properties of plastics, as a profile (ADR-0075).
 
-Read from the D638-22 copy the founder supplied, the active edition, and checked clause by clause against the D638-14 copy read first:
+Read from D638-22, the active edition, and checked clause by clause against D638-14, read first:
 every clause and value below is the same in both. D638-22's own summary of changes names Sections 3 (terminology), 13 (precision and bias)
 and A3.12 (Poisson's ratio's precision), none of which a requirement here reads. Each value below carries its clause; the wording is ours. The SI values are the
 standard and the inch-pound values in parentheses are for information only (§1.5), so a coupon stated in inches is held to the millimetre
@@ -297,7 +297,7 @@ REQUIREMENTS = (
 PROFILE = Profile(
     id=ID, designation=DESIGNATION, title="Tensile properties of plastics", kinds=("unnotched_tension",),
     catalog_url="https://store.astm.org/d0638-22.html",
-    edition_note="read from the D638-22 copy the founder supplied, the active edition; every clause held here is the same in D638-14",
+    edition_note="ASTM D638-22, the active edition; every clause held here is the same in D638-14",
     systems="SI; the inch-pound values are for information only (§1.5)",
     requirements=REQUIREMENTS, variants=VARIANTS, variant_words=TYPES, variant_noun="Type", aliases=("d638",),
 )

@@ -4,7 +4,7 @@ import { SourceViewer } from "@/components/source-viewer";
 import "./sources.css";
 
 export const metadata: Metadata = {
-  title: "Source reference | Anisotropy",
+  title: "Source reference",
   description: "Review a material property's textbook citation, recorded source units and displayed conversions.",
 };
 
