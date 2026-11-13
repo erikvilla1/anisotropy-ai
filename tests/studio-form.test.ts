@@ -85,6 +85,9 @@ test("a checklist's failing rows land on their fields", () => {
 test("a row's hint is its help's first sentence", () => {
   assert.ok(shortHelp(fieldByKey.length).startsWith("the whole coupon"));
   assert.ok(shortHelp(fieldByKey.G13).length <= 140);
+  // the Units hint says what the row is; its default comes after, on the form, never first in the hint
+  assert.ok(shortHelp(fieldByKey.units).startsWith("the unit system"));
+  assert.ok(!shortHelp(fieldByKey.units).includes("left blank") && fieldByKey.units.help.includes("left blank, it is mm-MPa"));
 });
 
 test("the form carries the engine's unit systems: labels per row, defaults per system and the library's constants, nothing converted here", () => {

@@ -1,9 +1,10 @@
 # ADR-0043: Every coupon delivery is audited against one fixed rubric and sent as one package folder
 
-- Status: Proposed. The rubric stays a draft until the cofounder confirms its items and tolerances. Rubric 0.4 (row C8, every other output of a tension coupon's ply) at the founder's request, amendment 7.
+- Status: Proposed. The rubric stays a draft until the cofounder confirms its items and tolerances. Rubric 0.4 (row C8, every other output of a tension coupon's ply) at the founder's request, amendment 7. Rubric 0.5, a draft: a package without a team model can reach a verdict (section B and C5 N/A, the founder's decision of 2026-11-12), amendment 8.
 - Date: 2026-10-23
-- Decided by: Founder, 2026-10-23. The workflow is the founder's diagram, and the rubric is the cofounder's request. The founder chose both a chapter in the PDF and an Excel form. Any team member may audit. The deliverable is "per coupon package so its own folder". | Drafted by: Claude Code
+- Decided by: Founder, 2026-10-23. The workflow is the founder's diagram, and the rubric is the cofounder's request. The founder chose both a chapter in the PDF and an Excel form. Any team member may audit. The deliverable is "per coupon package so its own folder". Founder, 2026-11-12 ("accept", how a coupon without a team model is audited: amendment 8) | Drafted by: Claude Code
 - Related: `docs/audit/rubric.toml`, `fea/src/anisotropy_fea/audit.py`, `fea/tests/test_audit.py`, [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md), [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md), [ADR-0041](ADR-0041-one-document-per-coupon-in-chapters.md) (amended here), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md)
+- Area: fea
 
 ## Context
 
@@ -248,3 +249,20 @@ For D5: the evidence adds the laminate's in-plane shear coupling from our engine
 - **Unchanged.** Rows C2 and C3 stay as they were, for a team's own field reports.
 
 **Evidence.** `fea/tests/test_audit.py` pins version 0.4 and C8's method, requirement, test code and wording. It also pins C8 among the auditor's rows of the grips fixture, its two texts with and without the every-output file, and C8 on the cover's to-send list. `fea/tests/test_coupon_document.py` prints "rubric 0.4" in the audit chapter.
+
+## Amendment 8, 2026-11-13 (rubric 0.5: a package without a team model can reach a verdict; B7, C1 and C7 worded for what the team can send)
+
+**Context.** The audit of the tension package `IM78552-UNT-L1` (2026-11-12) found that a coupon the team has not built could never get a verdict: eleven required rows (B1 to B9, C2, C3) arrived as Not checked and locked, so the cover's formula stayed blank whatever the auditor entered, while the README's steps exist to produce exactly the Abaqus values C2, C3 and C8 judge. It found the cover telling the auditor that sections B and C "cannot be checked", rows B7 and C1 written for grips coupled to a reference point when the package's grips hold their node sets directly, row C7 asking for Abaqus failure indices that no step asked the job to write, a Team column the auditor was told to fill through Observation (which turned every clean audit into Pass with observations), and a verdict formula that counted any typed word as an answer. Asked how a coupon with no team model should be audited, the founder accepted the recommendation ("accept", 2026-11-12): "Mark B rows N/A and not required, and keep C2, C3 and C8 open for the README run".
+
+**Options.**
+1. Leave the rows as they are and say on the cover that such a package cannot pass: rejected. The form would promise a verdict it can never give, and the team's Abaqus run of our deck would have nowhere to go.
+2. Drop section B from the form of such a package: rejected. The rubric is one rubric, and the auditor should see that the model match was not judged and why.
+3. **Section B, and C5 (whose regions a team comparison's manifest names), N/A and not required, each with its reason; C2, C3, C6 and C8 open for the auditor's Abaqus run of our deck (chosen).**
+
+**Decision.**
+- **No team model.** `audit.score` writes section B and C5 as N/A, Required no, with the reason "No team model yet"; B6 keeps our material and its source as evidence. C2 and C3 are the auditor's, with our values and, in a tension package, the every-output file and the comparison script; C6 likewise, with the document's peaks table; and C8, in a package with an every-output file, with that file and the same script. The cover says "No team model yet: section B is not applicable. Section C compares your Abaqus run of our deck (README.txt, steps 1 to 4) with our values", and lists what the team's next export should hold only when there is a team export.
+- **The Team column.** A row whose team value is entered on the form opens its Team cell, yellow, reading "Your value"; Observation stays for observations, so a clean audit with team values reads Pass.
+- **The verdict formula.** A required row counts as answered only when its Result is exactly Pass, N/A or Fail; every list cell refuses a word that is not on its list.
+- **Rubric 0.5, a draft until the founder confirms it.** B7 holds the same nodes in the same degrees of freedom for either kind of grip; C1 needs the reaction at the loaded grip's reference point or summed over its node set; C7 needs the failure indices from a field output request the job adds (CFAILURE), which the guide's Job and outputs step and the README now ask for.
+
+**Evidence.** The package audit of 2026-11-12, and the founder's answer "accept" to the recommendation quoted above. `fea/tests/test_audit.py` pins rubric 0.5 as a draft, section B and C5 as N/A and not required without a team model, a package without a team model reaching Pass once the auditor passes every open row, the open Team cells and a clean audit with team values reading Pass, the formula's three answered words, and the lists' stopping error alert. The founder has not yet confirmed rubric 0.5.

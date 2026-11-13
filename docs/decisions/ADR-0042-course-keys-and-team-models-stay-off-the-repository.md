@@ -4,6 +4,7 @@
 - Date: 2026-10-23
 - Decided by: Founder, 2026-10-23. Scope: the homework and the team's coupon models; the X840-Z60 material record stays. Storage: `.local/` for now, maybe AWS S3 later. One history rewrite at the end. | Drafted by: Claude Code
 - Related: [ADR-0007](ADR-0007-validation-cases-store-numbers-only.md), [ADR-0018](ADR-0018-source-rights-classes.md), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) amendment 4, [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md), [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md) amendments 1 and 2, risks R-06 and R-16
+- Area: process, data
 
 ## Context
 

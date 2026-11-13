@@ -4,6 +4,7 @@
 - Date: 2026-10-26
 - Decided by: Founder, 2026-10-26 ("i am settled with the order above", on the order: one command per job with an end-to-end test, the job through the API, the assistant, then machine learning) | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0026](ADR-0026-run-record-contents-and-startup-policy.md), [ADR-0027](ADR-0027-deployment-tiers-and-assistant-model-location.md) (its order of work is extended here), [ADR-0047](ADR-0047-a-read-only-peer-review-subagent-for-generated-documents.md), [ADR-0049](ADR-0049-one-command-takes-a-coupon-from-its-input-form-to-its-package.md), [system overview](../00_system_overview.md)
+- Area: assistant
 
 ## Context
 

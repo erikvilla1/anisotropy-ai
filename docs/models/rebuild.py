@@ -68,6 +68,7 @@ class Context:
     hole: tuple[float, float, float] | None = None  # centre x, centre y, diameter (m) of an open hole, from the spec
     compared_deck: Path | None = None  # the deck our engine compared with the reference solver, when it is not the kernel deck
     compared_sha256: str | None = None
+    verify: tuple[str, str, str] | None = None  # a package's commands: run the job, read its ODB, compare every output; None without a package
     outline: object | None = None  # a dog-bone's `dogbone.Outline` from the spec (m), centred on the part; None for a straight strip
 
 
@@ -529,8 +530,12 @@ def render(ctx: Context, h: Helpers) -> str:
             out.append(keyword_box(h, ctx.reference_deck.name + " (CalculiX)", "\n".join(keyword_blocks(ctx.reference_deck, "Orientation") + keyword_blocks(ctx.reference_deck, "Shell Section", 20))))
 
     # ---------------------------------------------------------------- assembly and sets
-    out.append(h.heading(1, "Assembly, sets and reference points"))
-    out.append(r"\textbf{Purpose.} Place the part, name the node and element groups the constraints and loads act on, and create the reference points that carry the grip motion.")
+    if f.reference_nodes:
+        out.append(h.heading(1, "Assembly, sets and reference points"))
+        out.append(r"\textbf{Purpose.} Place the part, name the node and element groups the constraints and loads act on, and create the reference points that carry the grip motion.")
+    else:  # the grips hold their node sets directly: there is no reference point to create
+        out.append(h.heading(1, "Assembly and sets"))
+        out.append(r"\textbf{Purpose.} Place the part and name the node and element groups the constraints and loads act on; the grips hold their node sets directly, so there are no reference points.")
     rows = [rf"Instance & {e(f'{name} of part {part} at the origin, no rotation (dependent: the mesh lives in the part)')} & {tag('INP')} \\" for name, part in f.instances]
     for name, (x, y) in f.reference_nodes:
         rows.append(rf"Reference point & {e(f'{name} at ({length(x):g}, {length(y):g}, 0) {L}')} & {tag('INP')} \\")
@@ -607,7 +612,8 @@ def render(ctx: Context, h: Helpers) -> str:
         out.append(keyword_box(h, ctx.kernel_deck.name, "\n".join(coupling_blocks(ctx.kernel_deck))))
     else:
         out.append("No couplings, contact or ties: the grips are direct constraints on the grip node sets (next section). " + tag("INP")
-                   + " Consequence: every gripped node is held in all its dofs, which prevents width contraction in the tabs exactly as a kinematic coupling with fixed reference rotations does. " + tag("CALC"))
+                   + " Consequence: every gripped node is held in all its dofs " + tag("INP-derived") + ", which prevents width contraction in the "
+                   "tabs as a kinematic coupling with fixed reference rotations does " + tag("ASSUMED") + ".")
 
     # ---------------------------------------------------------------- boundary conditions and loads
     out.append(h.heading(1, "Boundary conditions and loading"))
@@ -680,12 +686,15 @@ def render(ctx: Context, h: Helpers) -> str:
     out.append(h.kv_table([
         ("Job", job),
         ("Output requests in the deck", e(", ".join(f.ignored_keywords) + ": skipped by the kernel, since they cannot change the solution; quoted below") + " " + tag("INP")),
-        ("What the comparison needs", e("every element at the middle of every ply: S, E and the reactions at the grips, which the package's "
-                                         "5-verify scripts read from the job's .odb" if middles else
+        ("What the comparison needs", e(("every element at the middle of every ply: S, E and the reactions at the grips, which the package's "
+                                          "5-verify scripts read from the job's .odb" if ctx.verify else
+                                          "every element at the middle of every ply: S, E and the reactions at the grips, from the job's .odb") if middles else
                                          "reactions summed over each grip set, displacements at the probe nodes, stresses and strains at the probe elements per ply")
          + " " + tag("SPEC" if generated else "INP")),
     ]))
     failure = any(m.fail_stress for m in ctx.deck.materials.values())
+    commands = ("" if ctx.verify is None else
+                "\n" + r"\begin{plainfile}" + "\n" + h.listing_text("\n".join(ctx.verify)) + "\n" + r"\end{plainfile}")  # pasted whole: no hyphen breaks
     out.append(gui_steps(h, "Abaqus/CAE", [
         e("Step module > Field Output Requests: Preselected defaults (the deck writes variable=PRESELECT); add S, E, SF at all section points for the comparison"
           + (", and CFAILURE (the failure indices; it needs the strengths of Fail Stress)" if failure else "") + "."),
@@ -699,15 +708,16 @@ def render(ctx: Context, h: Helpers) -> str:
         e("Step module > Field Output Requests: keep the Preselected defaults (the deck writes variable=PRESELECT: RF among them) and create a "
           f"second request on the whole model: S and E, with Output at shell, beam, and layered section points: Specify: {', '.join(map(str, middles))} "
           "(the middle of each ply, bottom ply first, for the thickness integration points of the section above), and Include local coordinate "
-          "directions when available ticked (the deck writes directions=YES)."),
+          "directions when available ticked (the deck writes directions=YES)"
+          + ("; with the strengths in Fail Stress, add CFAILURE (the failure indices MSTRS and TSAIH) to the same request, for the first-ply "
+             "failure row of the audit" if failure else "") + "."),
         e("Job module > Create Job, name as above > Submit > Monitor. Check the .msg and .sta files for warnings."),
-        e("To check every output, with the job's .odb: ") + h.code("abaqus python 5-verify/abaqus_every_output.py Job.odb --out results")
-        + e(", then ") + h.code("abaqus python 5-verify/compare_every_output.py 4-results/ours-every-output.csv results/Job-every-output.csv")
-        + e(" (the package's README.txt gives the lines). It pairs your elements with ours by number, or by position for a coupon built "
-            "here, and judges every value by zone."),
+        *([e("To check every output, from the package folder, with the job named as the package's README.txt says: run the job, read its "
+             "ODB, compare. It pairs your elements with ours by number, or by position for a coupon built here, and judges every value by "
+             "zone. The three commands, whole:") + commands] if ctx.verify else []),
         e("To read one value by hand: Visualization module, Result > Section Points: the ply (Layer k) and its middle point; Query > Probe "
-          "Values, Probe Elements, on the element: S, S11 in the ply's material axes, the element's own value, not averaged at the nodes. "
-          "The package's 4-results/ours-every-output.csv holds ours at the same element and ply."),
+          "Values, Probe Elements, on the element: S, S11 in the ply's material axes, the element's own value, not averaged at the nodes."
+          + (" The package's 4-results/ours-every-output.csv holds ours at the same element and ply." if ctx.verify else "")),
     ], "CAE-CHECK"))
     out.append(gui_steps(h, "PrePoMax 2.6", [
         e("Step > History Output > Create > Node output: RF, Totals Yes, region the grip node set (one per grip); Node output U at the probe nodes; Element output S, E at the probe elements, Global Yes. ") + tag("MANUAL p.47"),

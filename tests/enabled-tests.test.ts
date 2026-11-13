@@ -36,7 +36,7 @@ test("a form says why it cannot be set up with the list closed, and nothing with
   const tension = exampleForm("2026-11-11");
   assert.equal(hiddenReason(tension, false), null);
   assert.equal(hiddenReason({ ...tension, standard: D3039 }, false), null);
-  assert.match(hiddenReason({ ...tension, test: "open-hole tension" }, false) ?? "", /^Open-hole tension is not available yet: the studio offers the unnotched tension coupon/);
+  assert.match(hiddenReason({ ...tension, test: "open-hole tension" }, false) ?? "", /^Open-hole tension is not available yet: the workspace offers the unnotched tension coupon/);
   assert.match(hiddenReason({ ...tension, standard: "ASTM D638-22" }, false) ?? "", /^ASTM D638-22 is not available yet/);
   assert.match(hiddenReason({ ...tension, material_kind: "isotropic" }, false) ?? "", /^One isotropic material is not available yet/);
   assert.match(hiddenReason({ ...tension, narrow_width: "13" }, false) ?? "", /^A dog-bone is not available yet/);

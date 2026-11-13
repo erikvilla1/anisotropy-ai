@@ -39,7 +39,7 @@ INK, MUTED, GRID = "#1C1F22", "#5D636A", "#D9DCE0"
 LENGTH_UNIT = {units: lab["length"] for units, lab in UNIT_LABEL.items()}  # one table for every stated system (ADR-0061)
 FORCE_PER_LENGTH_UNIT = {units: lab["force_per_length"] for units, lab in UNIT_LABEL.items()}
 MOMENT_UNIT = {units: lab["moment"] for units, lab in UNIT_LABEL.items()}
-TITLE, LABEL, TICKS = 13, 11, 10  # font sizes: the figure prints at about 0.6 of its size on a letter page
+TITLE, LABEL, TICKS = 14, 12, 11  # font sizes: a long coupon's figure prints at about 0.65 of its size on a letter page, so ticks read at 7 pt
 SEQUENTIAL = "Blues"  # one hue, light to dark: magnitudes
 DIVERGING = "RdBu_r"  # two hues, neutral middle: signed fields, centred on zero
 
@@ -100,10 +100,10 @@ def plot_solution(deck: Deck, solution: Solution, units: str, path: Path, magnif
     # two rows of three panels; a long coupon (length more than three times the width) gets tall panels and wrapped titles
     aspect = float(np.ptp(xy[:, 1])) / width
     unit = LENGTH_UNIT[units]
-    fig, axes = plt.subplots(2, 3, figsize=(11, 15) if aspect > 3 else (15, 9), constrained_layout=True)
+    fig, axes = plt.subplots(2, 3, figsize=(8.5, 11) if aspect > 3 else (15, 9), constrained_layout=True)
     fig.patch.set_facecolor("white")
     panels = list(axes.flat)
-    wrap = (lambda text: textwrap.fill(text, 24)) if aspect > 3 else (lambda text: textwrap.fill(text, 40))
+    wrap = (lambda text: textwrap.fill(text, 20)) if aspect > 3 else (lambda text: textwrap.fill(text, 40))  # a title fits its panel, never runs off it
     force = lambda f: from_si(f, "force", units)  # noqa: E731
     reaction_text = lambda rf: ", ".join(f"{force(v) if abs(v) > 1e-9 * np.max(np.abs(rf)) else 0.0:.4g}" for v in rf[:3])  # noqa: E731  roundoff as 0
     ax = panels[0]

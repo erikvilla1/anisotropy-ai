@@ -4,6 +4,7 @@
 - Date: 2026-10-14
 - Decided by: Founder, accepted 2026-10-26 ("FEA method (7)", choosing which groups of the proposed records to accept) | Drafted by: Claude Code
 - Related: ADR-0001 (the engine computes every number), ADR-0007 (validation cases store numbers and a source), ADR-0011 (separate package for a new layer), ADR-0019 (physics library mirrors the theory), ADR-0022 (plate buckling), ADR-0026 (run records), ADR-0027 (order of work), [system overview](../00_system_overview.md), [engine theory, "Not modeled yet"](../../engine/docs/theory.md)
+- Area: fea
 
 ## Context
 

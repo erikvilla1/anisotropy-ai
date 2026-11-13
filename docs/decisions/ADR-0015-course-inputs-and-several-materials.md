@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/course_excel.py`, `engine/src/anisotropy_engine/cases.py`, `engine/tests/test_course_inputs.py`, local evaluation note `.local/notes/evaluations/2026-10-03-validation-course-problems.md` (ADR-0042), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0009](ADR-0009-calculator-inputs-in-case-files.md)
+- Area: engine
 
 ## Context
 

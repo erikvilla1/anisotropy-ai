@@ -105,7 +105,7 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
     choose("units", UNITS, "millimetres, megapascals and newtons, the units the solver input is written in")
     choose("standard", D3039, "the standard of the unnotched tension test of a polymer-matrix composite")
     under_d3039 = str(out["standard"]).strip().lower() == D3039.lower()
-    choose("filled_by", "studio", "the coupon was set up in the workspace")
+    choose("filled_by", "workspace", "the coupon was set up in the workspace")
     choose("date", (today or date.today()).isoformat(), "the day the coupon was set up")
 
     size_given = any(not _blank(out.get(key)) for key in ("length", "width", "tab_length"))
@@ -117,8 +117,9 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
         choose("width", sizes["width"], why)
         choose("length", sizes["length"], why)
         choose("tab_length", tab, why if "tab_length" in sizes else
-               f"{why} grips through emery cloth and sets no grip length: {GRIP_LENGTH_MM:g} mm by default")
-        choose("size_from", why + ("" if "tab_length" in sizes else f"; the {GRIP_LENGTH_MM:g} mm grip length by default"),
+               f"{why} grips through emery cloth and sets no grip length: {GRIP_LENGTH_MM:g} mm is the software's choice")
+        choose("size_from", why + ("" if "tab_length" in sizes else f"; the {GRIP_LENGTH_MM:g} mm grip length is the software's choice, since Table 2 "
+                                                                     "gives none for this class"),
                "where the size comes from, for the coupon's identity card")
     elif size_given:
         choose("size_from", "the engineer's own size" + (f": a deviation from {D3039} Table 2 is reported, never refused" if under_d3039 else ""),

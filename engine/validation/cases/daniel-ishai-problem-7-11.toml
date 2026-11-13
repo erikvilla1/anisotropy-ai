@@ -1,5 +1,5 @@
 title = "Extensional stiffness of a [0/45/-45] carbon/epoxy laminate"
-source = "Daniel & Ishai, Engineering Mechanics of Composite Materials, 2nd ed. (2006), Problem 7.11; printed answer"
+source = "Daniel & Ishai, Engineering Mechanics of Composite Materials, 2nd ed. (2006), Problem 7.11 with the inputs of Problem 7.8, p. 201; printed answer, p. 393"
 units = "SI"
 
 [material]

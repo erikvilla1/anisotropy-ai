@@ -4,6 +4,7 @@
 - Date: 2026-10-24
 - Decided by: Founder, 2026-10-24 ("complete it all", on the plan for audit form v0.2; the form is the proof that the engine matches Abaqus, and later the fabrication comparison) | Drafted by: Claude Code
 - Related: [ADR-0043](ADR-0043-coupon-audit-scored-by-a-fixed-rubric-delivered-as-one-package-folder.md), [ADR-0001](ADR-0001-engine-computes-every-number.md), `fea/src/anisotropy_fea/audit.py` (`form_tables`, `write_form`), `fea/tests/test_audit.py`
+- Area: fea
 
 ## Context
 

@@ -4,6 +4,7 @@
 - Date: 2026-10-10
 - Decided by: Erik Villa (founder) | Drafted by: Claude Code
 - Related: `scripts/export-material-library.ts`, `engine/src/anisotropy_engine/library.py`, `engine/src/anisotropy_engine/data/material-library.json`, `api/src/anisotropy_api/schemas.py`, `lib/material-library-options.ts`, `docs/material-loader-2026-10-10.md`, [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0018](ADR-0018-source-rights-classes.md)
+- Area: engine, data
 
 ## Context
 

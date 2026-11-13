@@ -1,1 +1,1 @@
-"""Anisotropy AI laminate analysis engine."""
+"""Anisotropy laminate analysis engine."""
