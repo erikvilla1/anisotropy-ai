@@ -928,7 +928,7 @@
  *   --hero-top    where the box starts: the header's height
  *   --hero-frame  the black frame at the sides and the foot: the page's margin
  *   --hero-pad    the words' least distance from the box's edge
- * The ground is a layer of its own so the scroll tour can fade it while it carries the box away (app/home-tour.css). */
+ * The ground is a layer of its own, under the box. */
 .home-hero {
   --hero-top: 84px;
   --hero-frame: 32px;

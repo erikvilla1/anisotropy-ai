@@ -1,0 +1,261 @@
+"use client";
+
+import { useEffect, useRef, type RefObject } from "react";
+import { CLOCK_PER_SECOND, STOPS } from "./tour-timeline";
+import { HOLD_PX, LAST_STOP, decide, startsGesture, wheelPixels, type WheelMemory } from "./tour-stepper";
+
+/** How fast the page is carried onto the stage or back to the hero: window heights a second, at constant speed. */
+const PAGE_SCREENS_PER_SECOND = 2;
+/** A carry over a few pixels still takes this long, so it is seen as a move and not a jump. */
+const PAGE_MIN_MS = 150;
+/** For this long after the page has been carried onto the stage, scrolling that was already on its way is undone; and for
+ * this long after any move, only a pause begins a new wheel gesture (tour-stepper.ts). */
+const SETTLE_MS = 300;
+/** The page counts as at rest this long after its last scroll event. */
+const REST_MS = 140;
+
+export type TourFrame = {
+  /** The tour's clock (tour-timeline.ts). */
+  clock: number;
+  /** At least half of the stage is in the window. */
+  onStage: boolean;
+};
+
+/** Drives the stepped tour (ADR-0084 amendment 4). `tour` is the element that is one window tall in the page's flow. While
+ * `enabled`, a wheel gesture, a swipe or a scrolling key that tour-stepper.ts gives to the tour is taken from the browser
+ * and answered with one move at constant speed: the clock from one stop to the next, or the page onto the stage or back to
+ * the hero. Every other scroll is the browser's own. `onFrame` is called whenever the clock moves or the stage comes on or
+ * goes off; the element carries `data-stop` (where the clock stands) and `data-moving` (while a move plays). */
+export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: boolean, onFrame: (frame: TourFrame) => void) {
+  const latest = useRef(onFrame);
+  latest.current = onFrame;
+  useEffect(() => {
+    const element = tour.current;
+    if (!enabled || !element) return;
+    let stop = 0;
+    let clock = 0;
+    let moving = false; // a step is playing, or the page is being carried
+    let carrying = false; // the page is being carried: the scroll events are this file's own
+    let holding = false; // the step that is playing began with the stage holding the window
+    let held = false; // the stage held the window when the page last scrolled
+    let clampUntil = 0;
+    let quietUntil = 0;
+    let frame = 0;
+    let rest = 0;
+    let onStage: boolean | null = null;
+    let wheel: WheelMemory = null;
+    let touch: { x: number; y: number; ours: boolean | null } | null = null;
+
+    const place = () => ({ top: element.getBoundingClientRect().top, viewport: window.innerHeight || 1 });
+    /** Where the page must be scrolled to for the stage to fill the window. */
+    const stageY = () => Math.round(window.scrollY + element.getBoundingClientRect().top);
+    // "instant": the site's `scroll-behavior: smooth` would otherwise ease every one of these.
+    const scrollPage = (top: number) => window.scrollTo({ top, behavior: "instant" });
+    const align = () => {
+      scrollPage(stageY());
+      held = true;
+    };
+    const tell = () => {
+      const { top, viewport } = place();
+      onStage = Math.abs(top) < viewport / 2;
+      latest.current({ clock, onStage });
+    };
+    const mark = () => {
+      element.dataset.stop = String(stop);
+      if (moving) element.dataset.moving = "true";
+      else delete element.dataset.moving;
+    };
+    const jump = (to: number) => {
+      stop = to;
+      clock = STOPS[to];
+      mark();
+      tell();
+    };
+
+    /** Plays the clock from where it stands to a stop, at its one speed. */
+    function play(to: number) {
+      const from = clock;
+      const target = STOPS[to];
+      const duration = (Math.abs(target - from) / CLOCK_PER_SECOND) * 1000;
+      let started = 0;
+      moving = true;
+      holding = Math.abs(place().top) <= HOLD_PX;
+      mark();
+      const tick = (now: number) => {
+        if (!started) started = now;
+        const share = duration > 0 ? Math.min(1, (now - started) / duration) : 1;
+        // The last frame lands on the stop itself, not on a sum beside it: which step is up depends on it.
+        clock = share < 1 ? from + (target - from) * share : target;
+        if (share < 1) {
+          tell();
+          frame = window.requestAnimationFrame(tick);
+          return;
+        }
+        frame = 0;
+        stop = to;
+        moving = holding = false;
+        quietUntil = performance.now() + SETTLE_MS;
+        mark();
+        tell();
+      };
+      frame = window.requestAnimationFrame(tick);
+    }
+
+    /** Carries the page to a scroll position at constant speed, then calls `then`. */
+    function carry(to: number, then: () => void) {
+      const from = window.scrollY;
+      const viewport = window.innerHeight || 1;
+      const duration = Math.max(PAGE_MIN_MS, (Math.abs(to - from) / (viewport * PAGE_SCREENS_PER_SECOND)) * 1000);
+      let started = 0;
+      moving = carrying = true;
+      mark();
+      const tick = (now: number) => {
+        if (!started) started = now;
+        const share = Math.min(1, (now - started) / duration);
+        scrollPage(from + (to - from) * share);
+        if (share < 1) {
+          frame = window.requestAnimationFrame(tick);
+          return;
+        }
+        frame = 0;
+        moving = carrying = false;
+        quietUntil = performance.now() + SETTLE_MS;
+        then();
+      };
+      frame = window.requestAnimationFrame(tick);
+    }
+    /** The stage is brought into the window; if the tour has not started, its first step plays. */
+    const enter = () => carry(stageY(), () => {
+      align();
+      clampUntil = performance.now() + SETTLE_MS;
+      if (stop === 0) play(1);
+      else {
+        mark();
+        tell();
+      }
+    });
+    /** Back up to the hero, where the tour starts over. */
+    const leave = () => {
+      const hero = document.getElementById("overview");
+      const top = hero ? window.scrollY + hero.getBoundingClientRect().top : stageY() - (window.innerHeight || 1);
+      carry(Math.max(0, Math.round(top)), () => {
+        held = false;
+        jump(0);
+      });
+    };
+
+    /** Asks the rules what a gesture means and plays it. True when the tour took it, so the browser must not scroll. */
+    function act(direction: 1 | -1, fresh: boolean): boolean {
+      const action = decide(stop, moving, place(), direction, fresh);
+      if (action.kind === "native") {
+        clampUntil = 0;
+        return false;
+      }
+      if (action.kind === "step") play(action.to);
+      else if (action.kind === "enter") enter();
+      else if (action.kind === "leave") leave();
+      return true;
+    }
+
+    const onWheel = (event: WheelEvent) => {
+      // Not a pinch (the browser reports it as a wheel with Ctrl), not a sideways scroll, not one a control already took.
+      if (event.ctrlKey || event.defaultPrevented || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      const delta = wheelPixels(event.deltaY, event.deltaMode, window.innerHeight || 1);
+      if (!delta) return;
+      const fresh = startsGesture(wheel, event.timeStamp, delta, performance.now() >= quietUntil);
+      wheel = { time: event.timeStamp, delta };
+      if (act(delta > 0 ? 1 : -1, fresh) && event.cancelable) event.preventDefault();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return;
+      let direction: 1 | -1;
+      if (event.key === "ArrowDown" || event.key === "PageDown") direction = 1;
+      else if (event.key === "ArrowUp" || event.key === "PageUp") direction = -1;
+      else if (event.key === " ") {
+        // On a button or a link the space bar presses it.
+        if (target?.closest("button, a[href], summary, [role='button']")) return;
+        direction = event.shiftKey ? -1 : 1;
+      } else return;
+      if (act(direction, true)) event.preventDefault();
+    };
+    // A swipe: the first move says which way it goes, and the whole touch is then the tour's or the browser's.
+    const onTouchStart = (event: TouchEvent) => {
+      touch = event.touches.length === 1 ? { x: event.touches[0].clientX, y: event.touches[0].clientY, ours: null } : null;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (!touch || event.touches.length !== 1) {
+        touch = null;
+        return;
+      }
+      if (touch.ours === null) {
+        const dx = touch.x - event.touches[0].clientX;
+        const dy = touch.y - event.touches[0].clientY;
+        if (!dx && !dy) return;
+        // A finger moving up scrolls the page down.
+        touch.ours = Math.abs(dy) > Math.abs(dx) && event.cancelable ? act(dy > 0 ? 1 : -1, true) : false;
+      }
+      if (touch.ours && event.cancelable) event.preventDefault();
+    };
+    const onTouchEnd = () => {
+      touch = null;
+    };
+
+    const onRest = () => {
+      // The page came to rest with the stage filling the window by some other way (a link to it, the scroll bar, a restored
+      // position) and the tour has not started: its first step plays.
+      if (!moving && stop === 0 && Math.abs(place().top) <= HOLD_PX) play(1);
+    };
+    const onScroll = () => {
+      window.clearTimeout(rest);
+      if (carrying) return;
+      const { top, viewport } = place();
+      const off = Math.abs(top) > HOLD_PX;
+      // While a step plays on a stage that held the window, and just after the page was carried there, nothing else may
+      // scroll it: what does is scrolling that was already on its way, and it is undone.
+      if (off && ((moving && holding) || performance.now() < clampUntil)) {
+        align();
+        return;
+      }
+      held = !off;
+      if (!moving) {
+        // Out of sight, the tour is where a visitor coming back to it expects it: at its start from above, at its end from below.
+        if (top >= viewport && stop !== 0) jump(0);
+        else if (top <= -viewport && stop !== LAST_STOP) jump(LAST_STOP);
+      }
+      if (Math.abs(top) < viewport / 2 !== onStage) tell();
+      rest = window.setTimeout(onRest, REST_MS);
+    };
+    const onResize = () => {
+      if (held && !carrying) align();
+      tell();
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd);
+    window.addEventListener("touchcancel", onTouchEnd);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    mark();
+    tell();
+    onScroll();
+    return () => {
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      window.clearTimeout(rest);
+      if (frame) window.cancelAnimationFrame(frame);
+      delete element.dataset.stop;
+      delete element.dataset.moving;
+    };
+  }, [tour, enabled]);
+}

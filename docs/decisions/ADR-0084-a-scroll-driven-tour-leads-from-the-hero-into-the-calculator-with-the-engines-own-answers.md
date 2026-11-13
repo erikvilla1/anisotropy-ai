@@ -1,6 +1,6 @@
 # ADR-0084: A scroll-driven tour leads from the hero into the calculator, with the engine's own answers
 
-- Status: Proposed; the bridge starts from the hero's box, now with square corners (amendments 1 to 3)
+- Status: Proposed; amendment 4 removes the bridge and plays one whole step per scroll gesture, which replaces the scroll-driven clock and amendments 1 to 3
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-09 and 2026-11-10 | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md) (the engine computes every number), [ADR-0059](ADR-0059-the-engine-describes-the-stack-and-evaluates-first-ply-failure-on-the-response-endpoint-for-the-home-calculator.md) (the home calculator's endpoint), [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the hero and the demo), [ADR-0083](ADR-0083-the-laminate-view-draws-carbon-plies-with-a-procedural-fibre-pattern-and-takes-four-props-for-the-scroll-tour.md) (the 3D view's props), `components/home/demo-tour.tsx`, `components/home/tour-timeline.ts`, `components/home/tour-bridge.ts`, `components/home/engine-answers.tsx`, `app/home-tour.css`, `tests/browser/tour.spec.ts`, `tests/tour-timeline.test.ts`
@@ -99,3 +99,42 @@ On 2026-11-10, in headless Chromium on the dev server:
 **Decision.** Amendment 1's code returns: the bridge measures the box's place and corner radius, which is now 0, and the hero's black ground fades first. Its unit case and its lines in `tour.spec.ts` return, reading a radius of 0 on the page.
 
 **Evidence.** ADR-0077 amendment 19 has the runs; `tour.spec.ts` passed in them, and a screenshot of the hand-over at three moments shows the box shrinking into the card and landing on the top ply.
+
+## Amendment 4, 2026-11-13 (no bridge; one scroll gesture plays one whole step)
+
+**Context.** With a screenshot of the hero's clip lying on the top ply, the lead asked: "lets get rid of this transition. I still like the idea of the scroll interactive demo so keep that, but make sure that each scroll fulfills the entire sequence step animation, ie one scroll does the animation from one to two, the next to three. all fluid and constant speed. instead of having the scroll literally move the animation along manually, I dont want that." This takes back option 2 of this record (no taking of the scroll) for the tour, at the lead's request.
+
+**Decision.**
+- **The bridge is removed:** `tour-bridge.ts`, its styles and its tests. The hero is an ordinary section that scrolls away, and the tour writes nothing on it.
+- **The stage** is one window tall in the page's flow under the hero, in place of a sticky stage in a wrapper six windows tall. The page is about four screens shorter.
+- **The clock no longer follows the scroll** (`tour-timeline.ts`). It has six stops: 0 before the first step, then the end of each step. A gesture plays it from one stop to the next at one speed, 0.6 units a second, linear, forwards and back: 1.0, 1.8, 1.3, 1.5 and 0.75 s for the five steps. The next step's words come up as its move starts, and each stop shows its step complete.
+- **A gesture** is a wheel gesture, a swipe, or ArrowDown, ArrowUp, PageDown, PageUp, Space or Shift+Space outside a field (`tour-stepper.ts` decides, `tour-driver.ts` listens and plays). While the stage's top edge is on the window's, down plays the next step and up the one before, and the page does not scroll. While a step plays, and for the rest of the wheel gesture that played it, input is taken and nothing happens. Wheel events less than 200 ms apart in one direction are one gesture; a new one begins after a pause, on a change of direction, or with an event of 50 px or more that is not smaller than the one before (a wheel still being turned), the last not within 300 ms of a move.
+- **The ends.** On the hero, with the stage touching the window from below, a gesture down carries the page onto the stage at two window heights a second, linear, and the first step plays. Up from the first step carries the page back to the hero, and the tour starts over. Down from the last step is the browser's, so the page scrolls on to the calculator. Up from there, while the stage touches the window, carries the stage back in at its last step.
+- **The scroll bar, links and restored positions** move the page and not the clock, so the tour is never between two steps. Wholly below the window it goes to its start; wholly above, to its end. If the page comes to rest on the stage before the first step has played, it plays. A scroll from elsewhere while a step plays on the stage is undone.
+- **Unchanged:** with reduced motion, or under 1024 px wide or 600 px high, every step is shown and no gesture is taken. The loaded case is asked for 0.4 s after its load is typed, while at least half the stage is in the window. The engine's numbers and the shared answers are as before.
+- **A finger on the 3D view.** The view's controls write `touch-action: none` on their box. The stepped tour sets it to `pan-y`, so a swipe on the view at the last step scrolls the page on.
+
+**Options considered.**
+1. Keep the tall wrapper and animate the scroll position between the steps' offsets. Rejected: the scroll would still be the clock, so the scroll bar or a touch fling would move the animation along by hand, which the lead asked not to have.
+2. CSS scroll snapping. Rejected: it places the page but cannot play a timed move at constant speed or ignore input while one plays.
+3. One duration for every step. Rejected: the steps hold different amounts (the layup types 14 characters and lays 8 plies), so one duration makes some hurry; one speed keeps the same pace in all of them.
+4. A stage one window tall with its own clock, taking a gesture only on the stage or towards a stage that touches the window. Chosen.
+
+**Evidence.** On 2026-11-13, headless Chromium on the dev server:
+- **One notch, a burst, notches during a step** (1440 by 900, real wheel events): one notch on the hero had the stage in the window and the first step done 1,636 ms later; 45 wheel events in a row played one step; three notches within half a second played one; at the last stop a notch scrolled the page 100 px on; a notch up from 400 px below carried the stage back; five more went back a step each and then to the hero. One request to the engine before the loads step and two after; no page errors.
+- **Swipes with coasting,** made in the page from a 16 ms timer (the busy page delivered 11 to 71 events a swipe), coasting 1.2 to 2.4 s: each of six played exactly one step and every event was taken; four of the six coasted on after their step had ended.
+- **Touch and keys:** swipes sent as touch events through the browser's debugging protocol played one step each, on the words and on the 3D view, and back; at the last stop a drag on the view moved the page from 800 to 1,164 px (before the `touch-action` rule it did not move). The six keys stepped both ways, and up from the first step went to the hero.
+- **Looked at:** contact sheets of a recording at 1280 by 800, one notch a step: the hero scrolling away, the stage arriving, and each of the five steps to its end.
+- **Checks:** `npm run typecheck` clean. `npm test`: 248 passed, 1 skipped, with 8 cases on the clock and the rules in `tests/tour-timeline.test.ts`. `tour.spec.ts`, 12 cases, run twice over: 24 of 24. `home.spec.ts` and `intro.spec.ts`: 14 of 14.
+- **Run again before the commit,** by the session that reviewed the change: `npm run typecheck` clean; `npm test` 248 passed, 1 skipped; the three files together 26 of 26; `expansion.spec.ts` and the overview case of `portfolio.spec.ts` 7 of 7. The risk is R-27 in the register.
+- **Runs that failed first.** The three files together gave 25 of 26: the tour's own new case sent a swipe one wheel event per call, the busy machine spread them more than 200 ms apart, and two steps played; the case now sends the swipe in one go. `home.spec.ts` "typing a layup" failed in one run and in one of three runs alone; it depends on the calculator's typing delay and has failed this way in this container before this change.
+
+**UNVERIFIED.** Smoothness on a real graphics card: here the 3D view draws in software, frames took 67 ms while a step played and up to 250 ms while the stage was carried in. A real trackpad and a real wheel: the swipes were made by script. Safari and Firefox, whose wheel reports lines, which the code converts but no test ran. A real touch screen, and a tablet held wide, where the tour is stepped and the stage is `100vh` tall under the browser's bars. Screen readers. A visitor who scrolls within 2.5 s of the load, when the 3D view is mounted during the carry.
+
+**Consequences now.**
+- No longer true: the page is five screens longer; the bridge repeats the view's camera constants; the bridge depends on `:has()`.
+- New: on the stage the wheel, swipes and the scrolling keys are the tour's. A visitor cannot pass it faster than its steps play, 6.4 s for the five, except by the scroll bar, a link, Home or End.
+- Still true: the stage's ground copies the view's backdrop by hand, and the page mounts two WebGL views.
+
+**How we will know it was wrong.** A swipe plays two steps or none on some device. Visitors leave at the tour because it holds the page.
+
