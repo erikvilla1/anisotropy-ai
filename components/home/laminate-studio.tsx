@@ -52,24 +52,14 @@ export const CarbonLighting = memo(function CarbonLighting({ grade }: { grade: C
 });
 
 const BACKDROP_VERTEX = /* glsl */ `
-  varying vec2 vUv;
   void main() {
-    vUv = uv;
     gl_Position = vec4( position.xy, 1.0, 1.0 );
   }`;
-// A dark ground, a little lighter behind the stack, written in display values and dithered so that the gradient shows no bands.
+// Pure black, as the page around the view is (ADR-0077 amendment 25). The only light on the ground is the floor's faint pool
+// under the stack. Until that amendment this was a dark grey, lighter behind the stack.
 const BACKDROP_FRAGMENT = /* glsl */ `
-  varying vec2 vUv;
-  float hash( vec2 p ) {
-    vec3 p3 = fract( vec3( p.xyx ) * 0.1031 );
-    p3 += dot( p3, p3.yzx + 33.33 );
-    return fract( ( p3.x + p3.y ) * p3.z );
-  }
   void main() {
-    vec2 p = ( vUv - vec2( 0.5, 0.54 ) ) * vec2( 1.0, 1.12 );
-    float shade = mix( 0.112, 0.042, smoothstep( 0.0, 0.78, length( p ) ) );
-    shade += ( hash( gl_FragCoord.xy ) - 0.5 ) / 255.0;
-    gl_FragColor = vec4( vec3( shade ), 1.0 );
+    gl_FragColor = vec4( 0.0, 0.0, 0.0, 1.0 );
   }`;
 
 /** The view's ground colour, drawn in WebGL behind everything else (the card's own CSS background is never seen through it). */

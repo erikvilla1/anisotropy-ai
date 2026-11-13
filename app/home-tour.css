@@ -6,7 +6,7 @@
  * ADR-0084 amendment 4). The type and the grid are the site's (app/sections.css): 12 columns, 32 px gutters and margins,
  * monospace labels, headings 38/41 px at weight 400. */
 .demo-tour {
-  --tour-ground: #080808;
+  --tour-ground: #000000;
   --bg: #0d0d0d;
   --panel: #141414;
   --raised: #1b1b1b;
@@ -395,23 +395,19 @@
 
 /* The stepped tour ("pinned": the stage holds the window while its steps play). */
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
-  /* Where the 3D view stands on the stage, and the stage's ground: the view's own ground (the backdrop that
-   * components/home/laminate-studio.tsx draws: lighter behind the stack, darker outward) continued over the whole stage, so the
-   * view has no edge. */
+  /* Where the 3D view stands on the stage, and the stage's ground: pure black, as the page and the view's own ground are
+   * (ADR-0077 amendment 25), with the one light the view draws on its ground continued over the stage, so the view has no
+   * edge: the floor's faint pool of light under the stack. */
   :root {
     --tour-scene-x: 47.3vw;
     --tour-scene-width: min(44vw, 72vh);
-    /* Two layers, as the view draws them: the floor's faint pool of light under the stack, over the backdrop's own gradient.
-     * The stops follow the view's shaders (a Gaussian for the pool, a smoothstep for the backdrop), in display values. */
+    /* The pool's stops follow the view's shader (a Gaussian), in display values. */
     --tour-stage-ground:
       radial-gradient(ellipse calc(1.156 * var(--tour-scene-width)) calc(0.58 * var(--tour-scene-width)) at var(--tour-scene-x) calc(50vh + 0.15 * var(--tour-scene-width)),
         rgb(255 255 255 / 0.06) 0%, rgb(255 255 255 / 0.0569) 12.5%, rgb(255 255 255 / 0.0485) 25%, rgb(255 255 255 / 0.0373) 37.5%,
         rgb(255 255 255 / 0.0257) 50%, rgb(255 255 255 / 0.016) 62.5%, rgb(255 255 255 / 0.0075) 75%, rgb(255 255 255 / 0.0022) 87.5%,
         rgb(255 255 255 / 0) 100%),
-      radial-gradient(ellipse calc(0.78 * var(--tour-scene-width)) 69.64vh at var(--tour-scene-x) 46vh,
-        rgb(28.6 28.6 28.6) 0%, rgb(27.8 27.8 27.8) 12.5%, rgb(25.8 25.8 25.8) 25%, rgb(22.9 22.9 22.9) 37.5%, rgb(19.6 19.6 19.6) 50%,
-        rgb(16.4 16.4 16.4) 62.5%, rgb(13.5 13.5 13.5) 75%, rgb(11.5 11.5 11.5) 87.5%, rgb(10.7 10.7 10.7) 100%),
-      rgb(10.7 10.7 10.7);
+      #000000;
   }
   /* The tour is one window tall from the first paint, so nothing moves when the page's script sets the mode; until it has,
    * the stage is not shown, because its markup is still the unpinned tour's with every step up. */

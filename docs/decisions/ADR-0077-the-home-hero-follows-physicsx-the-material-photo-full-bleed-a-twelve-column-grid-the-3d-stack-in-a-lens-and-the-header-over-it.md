@@ -379,3 +379,11 @@ On phones it is one column.
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px: a frame taken after the exit shows the button in the clip's bottom right corner; `intro.spec.ts` reads its distance from the clip's right edge and foot as equal to the mark's from the left edge and foot, the square as 34 by 34 px with a 1 px border and 5 px corners, and a press as bringing the tour's stage to the window's top: 4 of 4. UNVERIFIED: phones.
 
+## Amendment 25, 2026-11-13 (the tour's stage and the 3D view stand on pure black too)
+
+**Context.** Amendment 23 left the tour's stage on the 3D view's own ground, a dark grey that was lighter behind the stack. With a screenshot of it under the hero's black frame the lead asked: "should be all black too?"
+
+**Decision.** The 3D view's backdrop (`Backdrop` in `components/home/laminate-studio.tsx`) draws pure black in place of its grey gradient, in the tour and in the calculator's view. The stage's ground (`--tour-stage-ground`) is `#000000` with only the view's faint pool of light under the stack continued over it, so the view still has no edge; the unpinned tour's ground and the view's card are `#000000` as well. The pool, at most 6% white under the stack, and the stack's contact shadow on it are kept: they are what the stack stands on.
+
+**Evidence.** On 2026-11-13 on the dev server at 1440 by 900: in a screenshot of the stage at its first step the pixels at its four corners and the middle of each side read (0, 0, 0); in one taken part of the way down from the hero the frame under the clip and the stage's top are one black. `npm run typecheck` clean; `npm test` 249 passed, 1 skipped; the cases of `home.spec.ts` and `tour.spec.ts` that load the view and the stage: 13 of 13. UNVERIFIED: the view on a real graphics card, and whether the pool reads as light or as a grey patch on the lead's display.
+

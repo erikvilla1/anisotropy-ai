@@ -110,7 +110,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
-  background: linear-gradient(160deg, #131313, #0d0d0d 70%);
+  background: #000000;
   touch-action: pan-y;
 }
 .hero-laminate-canvas canvas {
