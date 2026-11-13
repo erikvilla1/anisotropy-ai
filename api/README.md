@@ -70,11 +70,13 @@ GET    /v1/upload-tokens                 the requester's tokens, never a token i
 DELETE /v1/upload-tokens/{id}            cancel one; a bundle sent with it is refused from then on
 POST   /v1/abaqus-uploads                the bundle's zip as the body [?job_id=<a finished coupon job>&may_train=true]
 POST   /v1/connector/uploads             the same, from the connector, with  Authorization: Bearer <token>
-GET    /v1/abaqus-uploads                the requester's uploads; a founder sees every owner's
+GET    /v1/abaqus-uploads                the requester's uploads; a founder sees every owner's [?job_id=<a coupon job>&mine=true]
 GET    /v1/abaqus-uploads/{id}           one upload with what the check found and the comparison
-GET    /v1/abaqus-uploads/{id}/bundle    the bundle as sent, the same bytes
+GET    /v1/abaqus-uploads/{id}/bundle    the bundle as sent, the same bytes [?actor=<actor>, for a link, which carries no header]
 POST   /v1/abaqus-uploads/{id}/compare   beside a run of ours again [?job_id=...]
 DELETE /v1/abaqus-uploads/{id}           the bundle and its row, gone
+GET    /v1/abaqus-exchange               what the page's card may offer: uploads kept, the connector's route open, the limits
+GET    /v1/abaqus-connector              the connector's files as one zip
 ```
 
 A bundle is what `fea/tools/anisotropy_connector.py` writes under the user's own Abaqus. The API judges it with `fea/tools/abaqus_upload.py check`, the same command a person runs; a file that breaks the format is refused with every reason, 422, and nothing is stored. A bundle is stored as one object, `uploads/<id>/bundle.zip`, in the bucket when one is named and under `.local/abaqus/` otherwise, and its row in `abaqus_uploads` names its owner: the signed-in email behind Cloudflare Access, the actor locally, as a project's. Only the owner opens, downloads, compares and deletes it; to anyone else it does not exist (404). The founders named in `ANISOTROPY_FOUNDER_EMAILS` list, open and download every upload and change none.

@@ -35,6 +35,8 @@ COUPON = "D3039-CHECK"
 OTHER = "someone-else@example.com"
 FOUNDER = "founder@example.com"
 ROUTE, TOKENS, CONNECTOR = "/v1/abaqus-uploads", "/v1/upload-tokens", "/v1/connector/uploads"
+EXCHANGE, CONNECTOR_ZIP = "/v1/abaqus-exchange", "/v1/abaqus-connector"  # what the page's card asks first, and the connector to hand out (step 6)
+LIMITS = {"max_bundle_bytes": 50 * 1024 * 1024, "max_uploads": 100, "max_tokens": 10}
 needs_uv = pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not on PATH: the bundles are made and judged by the fea package's tools")
 pytestmark = [needs_test_database, needs_uv]
 
@@ -91,6 +93,15 @@ def signed(email: str = EMAIL) -> dict:
     return {access.HEADER: token(email=email)}
 
 
+def as_a_link(client, url: str, **more):
+    """As a browser follows a link on the page: the request carries no actor header."""
+    kept = client.headers.pop("X-Anisotropy-Actor")
+    try:
+        return client.get(url, **more)
+    finally:
+        client.headers["X-Anisotropy-Actor"] = kept
+
+
 def run_on_this_disk(registry: CouponJobs, engine, made: Path, actor: str = "studio", state: str = "done") -> uuid.UUID:
     """A finished job of this process with its package folder in the job's own folder, as the local API has it."""
     job_id, now = uuid.uuid4(), dt.datetime.now(dt.timezone.utc)
@@ -125,6 +136,7 @@ def test_without_run_records_the_uploads_answer_503(monkeypatch):
         for answer in (client.post(ROUTE, content=b"PK"), client.get(ROUTE), client.get(f"{ROUTE}/{uuid.uuid4()}"), client.delete(f"{ROUTE}/{uuid.uuid4()}"),
                        client.post(TOKENS, json={"name": "x"}), client.get(TOKENS), client.post(CONNECTOR, content=b"PK")):
             assert answer.status_code == 503 and "switched off" in answer.json()["detail"]
+        assert client.get(EXCHANGE).json() == {"uploads": False, "connector_route": True, **LIMITS}  # so the page's card offers nothing here
 
 
 # ------------------------------------------------------------------------------------------------------- a bundle, stored
@@ -149,9 +161,16 @@ def test_a_bundle_is_checked_stored_read_back_and_deleted_by_its_owner_alone(loc
     back = client.get(f"{ROUTE}/{upload['id']}/bundle")
     assert back.status_code == 200 and back.content == bundle(made, "agrees") and "Job-1-anisotropy.zip" in back.headers["content-disposition"]
 
+    linked = as_a_link(client, f"{ROUTE}/{upload['id']}/bundle", params={"actor": "studio"})  # the page's link: no header, the actor in the address
+    assert linked.status_code == 200 and linked.content == bundle(made, "agrees")
+    assert as_a_link(client, f"{ROUTE}/{upload['id']}/bundle").status_code == 422  # a link that names no actor is refused, as a request without the header is
+    assert as_a_link(client, f"{ROUTE}/{upload['id']}/bundle", params={"actor": "test"}).status_code == 404  # and another actor's link finds nothing
+    assert as_a_link(client, f"{ROUTE}/{upload['id']}", params={"actor": "studio"}).status_code == 422  # the one route a link asks for; every other needs the header
+
     stranger = {"X-Anisotropy-Actor": "test"}  # locally the owner is the actor, as a project's is
     assert client.get(ROUTE, headers=stranger).json() == []
     for answer in (client.get(f"{ROUTE}/{upload['id']}", headers=stranger), client.get(f"{ROUTE}/{upload['id']}/bundle", headers=stranger),
+                   client.get(f"{ROUTE}/{upload['id']}/bundle", params={"actor": "studio"}, headers=stranger),  # the header is the one that counts when both are there
                    client.post(f"{ROUTE}/{upload['id']}/compare", headers=stranger), client.delete(f"{ROUTE}/{upload['id']}", headers=stranger)):
         assert answer.status_code == 404 and answer.json()["detail"] == f"No upload {upload['id']} of yours"
     assert client.get(f"{ROUTE}/{uuid.uuid4()}").status_code == 404
@@ -240,6 +259,36 @@ def test_a_run_is_named_when_the_bundle_names_no_coupon_and_a_comparison_asked_f
     assert again.status_code == 409 and client.get(f"{ROUTE}/{unnamed['id']}").json()["verdict"] == "agrees"
 
 
+def test_the_page_is_told_what_it_may_offer_and_lists_the_uploads_beside_one_run(local, made):
+    client, registry, _kept, engine = local
+    assert client.get(EXCHANGE).json() == {"uploads": True, "connector_route": True, **LIMITS}  # no sign-in in front: the connector's route is open
+    first, second = run_on_this_disk(registry, engine, made), run_on_this_disk(registry, engine, made)
+    beside_first = client.post(ROUTE, content=bundle(made, "agrees"), params={"job_id": str(first)}).json()
+    beside_second = client.post(ROUTE, content=bundle(made, "differs"), params={"job_id": str(second)}).json()
+    unnamed = client.post(ROUTE, content=bundle(made, "unnamed")).json()  # beside no run
+    assert {u["id"] for u in client.get(ROUTE).json()} == {beside_first["id"], beside_second["id"], unnamed["id"]}
+    assert [u["id"] for u in client.get(ROUTE, params={"job_id": str(first)}).json()] == [beside_first["id"]]
+    assert [u["id"] for u in client.get(ROUTE, params={"job_id": str(second), "mine": "true"}).json()] == [beside_second["id"]]
+    assert client.get(ROUTE, params={"job_id": str(uuid.uuid4())}).json() == [] and client.get(ROUTE, params={"job_id": "x"}).status_code == 422
+
+
+def test_the_connector_is_handed_out_as_one_zip_the_same_each_time(local):
+    client, _registry, kept, _engine = local
+    answer = client.get(CONNECTOR_ZIP)
+    assert answer.status_code == 200 and answer.headers["content-type"] == "application/zip"
+    assert 'filename="anisotropy-connector.zip"' in answer.headers["content-disposition"]
+    with zipfile.ZipFile(io.BytesIO(answer.content)) as archive:
+        assert sorted(archive.namelist()) == [f"anisotropy-connector/{name}" for name in (
+            "README.txt", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py", "bundle.py")]
+        assert archive.read("anisotropy-connector/anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes()
+    assert client.get(CONNECTOR_ZIP).content == answer.content and (kept.scratch / "connector" / "anisotropy-connector.zip").is_file()
+    kept.command = None  # no uv: the zip already written is still handed out; a fresh process without uv says why not
+    assert client.get(CONNECTOR_ZIP).status_code == 200
+    (kept.scratch / "connector" / "anisotropy-connector.zip").unlink()
+    refused = client.get(CONNECTOR_ZIP)
+    assert refused.status_code == 503 and "uv is not on PATH" in refused.json()["detail"]
+
+
 def test_a_bundle_out_of_scope_is_kept_and_not_compared(local, made):
     client, registry, _kept, engine = local
     job_id = run_on_this_disk(registry, engine, made)
@@ -281,11 +330,16 @@ def test_behind_access_an_upload_is_its_owners_a_second_user_gets_not_found_and_
 
     assert [u["id"] for u in client.get(ROUTE, headers=signed(FOUNDER.upper())).json()] == [upload["id"]]  # the founders also see an upload
     assert client.get(f"{ROUTE}/{upload['id']}", headers=signed(FOUNDER)).json()["user_email"] == EMAIL
+    assert client.get(ROUTE, params={"mine": "true"}, headers=signed(FOUNDER)).json() == []  # the page's card lists a founder's own alone
+    assert [u["id"] for u in client.get(ROUTE, params={"mine": "true", "job_id": str(job_id)}, headers=signed()).json()] == [upload["id"]]
     assert client.post(f"{ROUTE}/{upload['id']}/compare", headers=signed(FOUNDER)).status_code == 404  # and change nothing
     assert client.delete(f"{ROUTE}/{upload['id']}", headers=signed(FOUNDER)).status_code == 404 and key in store.objects
 
     link = client.get(f"{ROUTE}/{upload['id']}/bundle", headers=signed(), follow_redirects=False)
     assert link.status_code == 307 and link.headers["location"] == f"https://store.test/{key}?expires=600&filename=Job-1-anisotropy.zip"
+    linked = as_a_link(client, f"{ROUTE}/{upload['id']}/bundle", params={"actor": "browser"}, headers=signed(), follow_redirects=False)
+    assert linked.status_code == 307 and linked.headers["location"] == link.headers["location"]  # the page's link, signed in: the same short-lived link
+    assert as_a_link(client, f"{ROUTE}/{upload['id']}/bundle", params={"actor": "browser"}, headers=signed(OTHER), follow_redirects=False).status_code == 404
     assert client.delete(f"{ROUTE}/{upload['id']}", headers=signed()).status_code == 204
     assert key not in store.objects and client.get(ROUTE, headers=signed(FOUNDER)).json() == []
 
@@ -351,7 +405,11 @@ def test_behind_access_the_connectors_route_passes_on_its_token_only_when_the_se
     assert both.status_code == 201 and both.json()["user_email"] == EMAIL
     assert client.post(CONNECTOR, content=bundle(made, "unnamed"), headers=signed()).status_code == 401  # Access's token alone is not an upload token
 
+    assert client.get(EXCHANGE, headers=signed()).json() == {"uploads": True, "connector_route": False, **LIMITS}  # the page offers no upload key yet
+    assert client.get(EXCHANGE).status_code == 401 and client.get(CONNECTOR_ZIP).status_code == 401  # both behind the sign-in, as everything is
+
     monkeypatch.setattr(app.state, "connector_uploads", True, raising=False)
+    assert client.get(EXCHANGE, headers=signed()).json()["connector_route"] is True
     assert client.post(CONNECTOR, content=bundle(made, "unnamed"), headers=bearer).status_code == 201
     for answer in (client.get(ROUTE, headers=bearer), client.get(f"{ROUTE}/{both.json()['id']}", headers=bearer), client.get(TOKENS, headers=bearer),
                    client.post(ROUTE, content=bundle(made, "unnamed"), headers=bearer), client.post(TOKENS, json={}, headers=bearer),

@@ -8,6 +8,7 @@ import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type An
 import { customerText, shownSentence } from "@/lib/studio-copy";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
+import { AbaqusCard } from "./abaqus-card";
 import { JobFiles, namingOf } from "./job-files";
 import { Scene } from "./scene";
 import type { SceneField, SceneMarker } from "./scene-canvas";
@@ -655,6 +656,9 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
         </div>
       ) : <p className="studio-muted studio-pick-hint">Click an element to read its values. The critical element is outlined in red.</p>}
       <SummaryPanel fields={fields} onShow={show} />
+      {/* the user's own Abaqus beside a finished run of the tension coupon, the one the comparison covers (ADR-0094 part 7) */}
+      {job && !live && job.state === "done" && apiBase && fields.coupon.kind === "unnotched_tension"
+        ? <AbaqusCard apiBase={apiBase} job={job} fields={fields} onShow={show} /> : null}
       <ExplanationPanel explanation={explanation} answer={answer} />
       {job && showFiles ? <Downloads apiBase={apiBase} job={job} fields={fields} /> : null}
     </div>

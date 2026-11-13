@@ -40,6 +40,7 @@ COMPARE_TIMEOUT_S = 240.0
 OURS = ("4-results", "ours-every-output.csv")
 OUR_DECKS = ("2-our-model", "abaqus")
 OUR_DECK_ENDING = "-abaqus.inp"
+CONNECTOR_NAME = "anisotropy-connector.zip"
 
 
 class UploadRefused(Exception):
@@ -95,6 +96,7 @@ class Uploads:
         self.command = command
         self.founders = founders
         self.scratch = scratch or Path(tempfile.gettempdir()) / "anisotropy-uploads"
+        self._connector: Path | None = None  # the connector's zip, once this process has written it
 
     def sees_all(self, user_email: str | None) -> bool:
         """Whether the requester is a founder, who also sees every upload (ADR-0094 part 6). Only a signed-in email can be one."""
@@ -121,6 +123,30 @@ class Uploads:
         except (OSError, json.JSONDecodeError):
             tail = (done.stderr or done.stdout).strip().splitlines()[-3:]
             raise ToolFailed("the bundle's command failed: " + (" | ".join(tail) or f"exit code {done.returncode}")) from None
+
+    def connector(self) -> Path:
+        """The connector's files as one zip to hand to a user of Abaqus (`abaqus_upload.py connector`), written once per process: the
+        same files give the same bytes."""
+        if self._connector is not None and self._connector.is_file():
+            return self._connector
+        if self.command is None:
+            raise ToolFailed("uv is not on PATH; the connector's zip is written by fea/tools/abaqus_upload.py through `uv run --project fea`")
+        made = self.scratch / "connector" / CONNECTOR_NAME  # written again by each process: a file left by an older one may be an older connector
+        made.parent.mkdir(parents=True, exist_ok=True)
+        with self.folder() as folder:
+            fresh = Path(folder) / CONNECTOR_NAME
+            env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+            try:
+                done = subprocess.run([*self.command, "connector", "--out", str(fresh)], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                      cwd=FEA, env={**env, "PYTHONIOENCODING": "utf-8"}, timeout=CHECK_TIMEOUT_S, check=False)
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                raise ToolFailed(f"the connector's zip could not be written: {exc}") from exc
+            if done.returncode != 0 or not fresh.is_file():
+                tail = (done.stderr or done.stdout).strip().splitlines()[-3:]
+                raise ToolFailed("the connector's zip was not written: " + (" | ".join(tail) or f"exit code {done.returncode}"))
+            os.replace(fresh, made)  # whole or not there: two requests at once write the same bytes
+        self._connector = made
+        return made
 
     def check(self, bundle: Path) -> dict:
         """What the bundle holds and whether the comparison takes it (`abaqus_upload.py check`). Raises `UploadRefused` for a file that

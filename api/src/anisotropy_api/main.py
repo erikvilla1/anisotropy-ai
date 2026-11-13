@@ -46,7 +46,7 @@ from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, 
                       token_digest)
 from .uploads import tool_command as upload_command
 from .schemas import (
-    AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
+    AbaqusExchange, AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     LiveSolveResponse, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
@@ -64,6 +64,8 @@ SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only i
 PROJECTS = "/v1/projects"
 UPLOADS = "/v1/abaqus-uploads"  # the uploads from Abaqus, each its owner's alone (ADR-0094 part 6)
 UPLOAD_TOKENS = "/v1/upload-tokens"  # what the connector sends with
+ABAQUS_EXCHANGE = "/v1/abaqus-exchange"  # what the page's card may offer here (step 6)
+ABAQUS_CONNECTOR = "/v1/abaqus-connector"  # the connector's files as one zip
 
 
 def job_recorder(app: FastAPI):
@@ -197,6 +199,14 @@ def actor_from_header(x_anisotropy_actor: Annotated[str | None, Header()] = None
 
 
 Actor = Annotated[str, Depends(actor_from_header)]
+
+
+def actor_of_a_link(x_anisotropy_actor: Annotated[str | None, Header()] = None, actor: Annotated[str | None, Query()] = None) -> str:
+    """The same for a route a page links to: a link carries no header, so there the actor may be named as `?actor=` instead."""
+    return actor_from_header(x_anisotropy_actor if x_anisotropy_actor is not None else actor)
+
+
+LinkActor = Annotated[str, Depends(actor_of_a_link)]
 
 
 def _record(request: Request, actor: str, problem: BaseModel, *, response: dict | None = None,
@@ -628,6 +638,30 @@ def _uploads(request: Request) -> Uploads:
     return uploads
 
 
+@app.get(ABAQUS_EXCHANGE, response_model=AbaqusExchange)
+def abaqus_exchange(request: Request) -> AbaqusExchange:
+    """What the page's card may offer here (ADR-0094 step 6); the page asks once. `uploads` is false when run records are off, since
+    an upload's row is where its owner is kept. `connector_route` says whether a bundle sent with an upload token alone arrives:
+    with no sign-in in front of the API it does; behind Cloudflare Access only when ANISOTROPY_CONNECTOR_UPLOADS=on (the Access
+    application must let the path through as well, which this API cannot see). Not a run: nothing is computed or recorded."""
+    state = request.app.state
+    behind_access = getattr(state, "access_verifier", None) is not None
+    return AbaqusExchange(uploads=getattr(state, "records", None) is not None and getattr(state, "uploads", None) is not None,
+                          connector_route=not behind_access or bool(getattr(state, "connector_uploads", False)),
+                          max_bundle_bytes=MAX_BUNDLE_BYTES, max_uploads=MAX_UPLOADS, max_tokens=MAX_TOKENS)
+
+
+@app.get(ABAQUS_CONNECTOR)
+def abaqus_connector(request: Request) -> Response:
+    """The connector as one zip (ADR-0094 step 6): the four files a user keeps in one folder and the note of its commands, written
+    by `fea/tools/abaqus_upload.py connector`. The same for every requester; nothing of theirs is in it."""
+    try:
+        path = _uploads(request).connector()
+    except ToolFailed as exc:
+        raise HTTPException(status_code=503, detail=f"The connector could not be handed out: {exc}") from exc
+    return FileResponse(path, media_type="application/zip", filename=path.name)
+
+
 @app.post(UPLOAD_TOKENS, status_code=201, response_model=UploadTokenCreated)
 def create_upload_token(wanted: UploadTokenInput, actor: Actor, request: Request) -> UploadTokenCreated:
     """A token for the connector (ADR-0094 part 6): what `anisotropy_connector.py --send` sends a bundle with, in the name of who
@@ -836,12 +870,15 @@ def send_upload_from_connector(request: Request, sent: Annotated[tuple, Depends(
 
 
 @app.get(UPLOADS, response_model=list[UploadOutput])
-def list_uploads_endpoint(actor: Actor, request: Request, limit: Annotated[int, Query(ge=1, le=200)] = 50) -> list[UploadOutput]:
+def list_uploads_endpoint(actor: Actor, request: Request, limit: Annotated[int, Query(ge=1, le=200)] = 50, job_id: uuid.UUID | None = None,
+                         mine: bool = False) -> list[UploadOutput]:
     """The requester's uploads, newest first, without their facts and comparisons; a founder named in the settings sees every
-    owner's (ADR-0094 part 6)."""
+    owner's (ADR-0094 part 6) unless `mine` asks for the requester's own alone, as the page's card does. With `job_id`, only those
+    that stand beside that run of ours."""
     engine = _records_engine(request)
     try:
-        rows = list_uploads(engine, actor=actor, user_email=_email(request), everyone=_uploads(request).sees_all(_email(request)), limit=limit)
+        rows = list_uploads(engine, actor=actor, user_email=_email(request), everyone=not mine and _uploads(request).sees_all(_email(request)),
+                            limit=limit, job_id=job_id)
     except SQLAlchemyError as exc:
         raise _database_error(exc) from exc
     return [UploadOutput.of(row, full=False) for row in rows]
@@ -855,8 +892,9 @@ def upload_detail(upload_id: uuid.UUID, actor: Actor, request: Request) -> Uploa
 
 
 @app.get(UPLOADS + "/{upload_id}/bundle")
-def upload_bundle(upload_id: uuid.UUID, actor: Actor, request: Request) -> Response:
-    """The bundle as it was sent, the same bytes: a redirect to a short-lived link when a bucket holds it, the file itself otherwise."""
+def upload_bundle(upload_id: uuid.UUID, actor: LinkActor, request: Request) -> Response:
+    """The bundle as it was sent, the same bytes: a redirect to a short-lived link when a bucket holds it, the file itself otherwise.
+    The page offers it as a link, so the actor may be named as `?actor=`; who owns the upload is decided as on every other route."""
     _engine, row = _requesters_upload(request, actor, upload_id, reading=True)
     store = _uploads(request).store
     try:  # the job's name is the user's own text: it names the download only when it is a plain file name

@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -141,6 +142,11 @@ def test_our_own_run_sent_back_agrees_item_by_item_and_value_by_value(tool, runs
     assert criteria(result) == {"Reaction within 1 %": True, "Gauge: every value within 1 %": True, "Free length: every value within 3 %": True}
     assert result["reaction"]["difference"] == pytest.approx(0.0, abs=1e-12) and 0 < result["reaction"]["nodes"] <= 377  # the top grip's nodes that carry one
     assert set(result["zones"]) == {"gauge", "free length", "band", "tab line", "gripped"} and result["zones"]["gauge"]["S11"]["worst"] == 0.0
+    said = result["summary"]  # what the page's card and the terminal say first, counted here and not by them
+    assert said["places"] == 0 and said["model"] == {"items": len(model["items"]), "judged": sum(1 for i in model["items"] if i["same"] is not None), "different": 0}
+    assert said["labels"] == {"length": "mm", "stress": "MPa", "force": "N"} and set(said["zones"]) == set(result["zones"])
+    assert said["zones"]["gauge"] == {"elements": 144, "values": 144 * 8 * len(QUANTITIES), "quantity": "S11", "worst": 0.0, "your_element": 673, "our_element": 673,
+                                      "layer": 1, "yours": result["zones"]["gauge"]["S11"]["yours"], "ours": result["zones"]["gauge"]["S11"]["ours"]}
     with (tmp_path / "pairs.csv").open(encoding="utf-8", newline="") as handle:
         assert sum(1 for _ in handle) == 1 + 1488 * 8
 
@@ -201,6 +207,10 @@ def test_a_gauge_value_two_percent_off_differs_and_says_where(tool, runs, tmp_pa
     s11 = result["zones"]["gauge"]["S11"]
     assert s11["within_1"] == s11["values"] - 1 and (s11["your_element"], s11["layer"]) == (int(target["Element"]), 2)
     assert s11["worst"] == pytest.approx(0.02 / 1.02, rel=1e-6)
+    said = result["summary"]
+    assert said["places"] == 1 and said["model"]["different"] == 0
+    assert (said["zones"]["gauge"]["quantity"], said["zones"]["gauge"]["your_element"], said["zones"]["gauge"]["layer"]) == ("S11", int(target["Element"]), 2)
+    assert said["zones"]["gauge"]["worst"] == s11["worst"]
 
 
 def test_another_layup_in_the_deck_differs_on_the_model_even_when_the_numbers_agree(tool, runs, tmp_path):
@@ -237,7 +247,8 @@ def test_a_coupon_of_another_size_differs_and_its_results_are_not_placed_on_ours
     assert result["verdict"] == "differs"
     outline = next(i for i in result["model"]["items"] if i["item"] == "Outline")
     assert outline == {"item": "Outline", "yours": "22.5 by 225 mm", "ours": "25 by 250 mm", "same": False}
-    assert result["zones"] == {} and result["reaction"] is None
+    assert result["zones"] == {} and result["reaction"] is None and result["summary"]["zones"] == {}
+    assert result["summary"]["places"] == result["summary"]["model"]["different"] >= 1  # the criteria are not judged, so only the model's items count
     assert {c["evidence"] for c in result["criteria"]} == {"not compared: the two coupons are not the same size"}
 
 
@@ -245,6 +256,54 @@ def test_without_reactions_the_pull_force_is_not_judged_and_the_verdict_is_incom
     result = compared(tool, runs, bundle_of(tmp_path / "no-rf", runs["ours"], rf=False))
     assert result["verdict"] == "incomplete" and result["reaction"] is None
     assert criteria(result) == {"Reaction within 1 %": None, "Gauge: every value within 1 %": True, "Free length: every value within 3 %": True}
+
+
+CARD = paths.ROOT / "tests" / "fixtures" / "abaqus"  # the comparisons the page's card is tested with (tests/abaqus-exchange.test.ts, tests/browser)
+NOT_PINNED = {"sha256", "bytes"}  # a bundle's identity follows the last digit of every value in it, which a machine's linear algebra decides
+
+
+def card_comparisons(tool, runs, folder: Path) -> dict[str, dict]:
+    """Four comparisons as `compare --json` writes them: our own run sent back; the same with another first ply in its deck and every
+    reaction 5 % larger; the coupon on a mesh half as fine; our own run without its reactions."""
+    ours = runs["ours"]
+    text = ours["deck"].read_text(encoding="utf-8")
+    ply = re.search(r"^(.*, *)45\.?0*(, *\S+)$", text.split("*Shell Section", 1)[1], re.M)
+    heavier = {**ours, "reactions": [{**r, "RF1": r["RF1"] * 1.05, "RF2": r["RF2"] * 1.05} for r in ours["reactions"]]}
+    bundles = {"agrees": bundle_of(folder / "agrees", ours),
+               "differs": bundle_of(folder / "differs", heavier, deck_text=text.replace(ply.group(0), f"{ply.group(1)}30.{ply.group(2)}", 1)),
+               "another-mesh": bundle_of(folder / "another-mesh", runs["coarse"]),
+               "incomplete": bundle_of(folder / "incomplete", ours, rf=False)}
+    return {name: json.loads(json.dumps(tool.plain(compared(tool, runs, bundle)), allow_nan=False)) for name, bundle in bundles.items()}
+
+
+def as_pinned(today, pinned, where: str = "") -> list[str]:
+    """Where today's comparison is not the pinned one: the same keys, the same words, and every number within one part in a million."""
+    if isinstance(pinned, dict) and isinstance(today, dict):
+        if set(pinned) != set(today):
+            return [f"{where}: keys {sorted(set(pinned) ^ set(today))}"]
+        return [problem for key in pinned if key not in NOT_PINNED for problem in as_pinned(today[key], pinned[key], f"{where}/{key}")]
+    if isinstance(pinned, list) and isinstance(today, list):
+        if len(pinned) != len(today):
+            return [f"{where}: {len(today)} entries, pinned {len(pinned)}"]
+        return [problem for i, (a, b) in enumerate(zip(today, pinned)) for problem in as_pinned(a, b, f"{where}/{i}")]
+    if isinstance(pinned, float) or isinstance(today, float):
+        same = isinstance(pinned, (int, float)) and isinstance(today, (int, float)) and today == pytest.approx(pinned, rel=1e-6, abs=1e-9)
+        return [] if same else [f"{where}: {today!r}, pinned {pinned!r}"]
+    return [] if today == pinned else [f"{where}: {today!r}, pinned {pinned!r}"]
+
+
+def test_the_cards_fixtures_are_what_the_command_writes_today(tool, runs, tmp_path):
+    """tests/fixtures/abaqus/<name>.json is what the studio's card is tested with; each must be `compare`'s result today. Rewrite them
+    with  ANISOTROPY_WRITE_FIXTURES=1 uv run pytest tests/test_abaqus_upload.py -k fixtures  after a change to what the command writes."""
+    made = card_comparisons(tool, runs, tmp_path)
+    assert [made[name]["verdict"] for name in ("agrees", "differs", "another-mesh", "incomplete")] == ["agrees", "differs", "agrees", "incomplete"]
+    assert made["differs"]["summary"]["places"] == 2 and made["another-mesh"]["model"]["compared"] == "without the mesh"
+    if os.environ.get("ANISOTROPY_WRITE_FIXTURES") == "1":
+        CARD.mkdir(parents=True, exist_ok=True)
+        for name, result in made.items():
+            (CARD / f"{name}.json").write_text(json.dumps(result, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    for name, result in made.items():
+        assert as_pinned(result, json.loads((CARD / f"{name}.json").read_text(encoding="utf-8")), name) == []
 
 
 def test_what_is_out_of_scope_is_refused_with_the_reason(tool, runs, tmp_path):

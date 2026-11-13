@@ -507,11 +507,15 @@ def fetch_upload(engine: Engine, upload_id: uuid.UUID) -> UploadRow | None:
         return session.get(UploadRow, upload_id)
 
 
-def list_uploads(engine: Engine, *, actor: str, user_email: str | None, everyone: bool = False, limit: int = 50) -> list[UploadRow]:
-    """The requester's uploads, newest first; `everyone` lists every owner's, which is for a founder alone (ADR-0094 part 6)."""
+def list_uploads(engine: Engine, *, actor: str, user_email: str | None, everyone: bool = False, limit: int = 50,
+                 job_id: uuid.UUID | None = None) -> list[UploadRow]:
+    """The requester's uploads, newest first; `everyone` lists every owner's, which is for a founder alone (ADR-0094 part 6). With
+    `job_id`, only those that stand beside that run of ours."""
     statement = select(UploadRow).order_by(UploadRow.created_at.desc(), UploadRow.id).limit(limit)
     if not everyone:
         statement = _by_owner(statement, UploadRow, user_email, actor)
+    if job_id is not None:
+        statement = statement.where(UploadRow.job_id == job_id)
     with Session(engine, expire_on_commit=False) as session:
         return list(session.scalars(statement))
 

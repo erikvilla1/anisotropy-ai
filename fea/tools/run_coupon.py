@@ -462,6 +462,9 @@ def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, prog
         opens = [("package", "the package for the team", delivered)] + (
             [("document", "its document", delivered / f"{name}.pdf")] if pdf else []) + [
             ("abaqus_deck", "open in Abaqus/CAE", delivered / "2-our-model" / "abaqus" / f"{name}-abaqus.inp")] + opens
+        build = delivered / "2-our-model" / "abaqus" / f"{name}-build.py"  # written for the coupons the build script covers (ADR-0094 step 3)
+        if build.is_file():
+            opens.append(("abaqus_build", "builds the coupon in Abaqus/CAE as a model to edit", build))
     missing = [path for _, _, path in opens if not path.exists()]
     if missing and delivered is not None:
         hint = " (no Tectonic? run again with --no-pdf)" if delivered / f"{name}.pdf" in missing else ""

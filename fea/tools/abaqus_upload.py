@@ -49,7 +49,7 @@ from anisotropy_fea.abaqus_reader import read_deck  # noqa: E402
 from anisotropy_fea.bundle import EPOCH, BundleRefused, open_bundle, write_bundle  # noqa: E402
 from anisotropy_fea.equivalence import EquivalenceError, deck_equivalence, equivalence_without_mesh, outline  # noqa: E402
 from anisotropy_fea.model import DeckError, expanded_layers  # noqa: E402
-from anisotropy_fea.units import DECK_UNIT_SYSTEMS, from_si, to_si  # noqa: E402
+from anisotropy_fea.units import DECK_UNIT_SYSTEMS, UNIT_LABEL, from_si, to_si  # noqa: E402
 
 STRESSES = team.QUANTITIES[:9]  # the rest are strains, numbers without a unit
 RF_COLUMNS = ("Node", "X", "Y", "RF1", "RF2")
@@ -331,7 +331,25 @@ def compare(bundle_path: Path, ours_csv: Path, our_deck_path: Path, pairs_out: P
     result["reaction"], result["zones"], result["criteria"] = rf, tables, criteria
     judged = [c["met"] for c in criteria if c["judged"]] + [result["model"]["same"]]
     result["verdict"] = "differs" if any(v is False for v in judged) else "incomplete" if any(v is None for v in judged) else "agrees"
+    result["summary"] = summary_of(result)
     return result
+
+
+def summary_of(result: dict) -> dict:
+    """The comparison as the page's card and the terminal say it first, so that neither counts for itself (ADR-0001): how many items
+    of the model were judged and how many differ, each zone's count of values with its worst quantity and where that is, the number
+    of places that differ (items of the model, and criteria judged and not met), and the units' names."""
+    items = result["model"]["items"]
+    zones = {}
+    for zone, table in result["zones"].items():
+        worst = max(team.QUANTITIES, key=lambda q: table[q]["worst"])
+        zones[zone] = {"elements": table.get("elements"), "values": sum(table[q]["values"] for q in team.QUANTITIES), "quantity": worst,
+                       **{key: table[worst].get(key) for key in ("worst", "your_element", "our_element", "layer", "yours", "ours")}}
+    different = sum(1 for i in items if i["same"] is False)
+    labels = UNIT_LABEL[result["units"]]
+    return {"places": different + sum(1 for c in result["criteria"] if c["judged"] and c["met"] is False),
+            "model": {"items": len(items), "judged": sum(1 for i in items if i["same"] is not None), "different": different},
+            "zones": zones, "labels": {kind: labels[kind] for kind in ("length", "stress", "force")}}
 
 
 WORDS = {"agrees": "Agrees with ours", "differs": "Differs from ours", "incomplete": "Not every part could be compared"}
@@ -343,21 +361,19 @@ def print_comparison(result: dict) -> None:
     print(f"{WORDS[result['verdict']]}: {b['job'] or 'the model sent'}{solver} beside {result['ours']['coupon']} ({result['ours']['written_by']})")
     if result["converted_from"]:
         print(f"your values were written in {result['converted_from']} and are shown in {result['units']}")
-    judged = [i for i in model["items"] if i["same"] is not None]
+    said = result["summary"]
     different = [i for i in model["items"] if i["same"] is False]
     if model["compared"] == "not compared":
         print(f"\nThe model: not compared ({model['reason']})")
     else:
         how = model["compared"] + ("" if model["compared"] == "item by item" else f", because {model['reason']}")
-        print(f"\nThe model ({how}): " + (f"the same as ours on every one of {len(judged)} items" if not different
-                                           else f"{len(different)} of {len(judged)} items differ"))
+        print(f"\nThe model ({how}): " + (f"the same as ours on every one of {said['model']['judged']} items" if not different
+                                           else f"{said['model']['different']} of {said['model']['judged']} items differ"))
         for i in different:
             print(f"  {i['item']}: yours {i['yours']}; ours {i['ours']}")
     print(f"\nThe results: {pairing['elements']} elements paired {pairing['how']}")
-    for zone, table in result["zones"].items():
-        worst = max(team.QUANTITIES, key=lambda q: table[q]["worst"])
-        t = table[worst]
-        print(f"  {zone}: {sum(table[q]['values'] for q in team.QUANTITIES)} values, the worst {100 * t['worst']:.4g} % ({worst}, your element "
+    for zone, t in said["zones"].items():
+        print(f"  {zone}: {t['values']} values, the worst {100 * t['worst']:.4g} % ({t['quantity']}, your element "
               f"{t['your_element']} ply {t['layer']}: yours {t['yours']:.6g}, ours {t['ours']:.6g})")
     print("\nVerdict")
     for c in result["criteria"]:

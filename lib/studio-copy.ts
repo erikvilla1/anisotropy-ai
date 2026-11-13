@@ -29,6 +29,14 @@ export function bannedIn(text: string): string[] {
   return BANNED_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.label);
 }
 
+/** What the card of the user's own Abaqus may name (ADR-0094 part 7, a change to ADR-0091): Abaqus, because there it is the user's own
+ * program and not a tool of ours, and the connector's file, which the user runs by its name. Everything else stays banned there too. */
+export const ABAQUS_CARD_ALLOWS = ["Abaqus", ".py"];
+/** The banned terms a text of that card holds, by label. */
+export function bannedInAbaqusCard(text: string): string[] {
+  return bannedIn(text).filter((label) => !ABAQUS_CARD_ALLOWS.includes(label));
+}
+
 /** A message from the API or the pipeline, shown as it is only when it holds no banned term, no file path and no exit code; null
  * otherwise, so the page says the plain thing instead. */
 export function customerText(text: string | null | undefined): string | null {
@@ -185,6 +193,7 @@ export const DOWNLOAD_LABELS: [string, string][] = [
 ];
 const DOWNLOAD_SUFFIX: Record<string, string> = {
   document: "_report.pdf", package: "_package.zip", abaqus_deck: "_solver.inp", prepomax_deck: "_reference.inp", prepomax_results: "_reference.frd",
+  abaqus_build: "_build.py", // the script that builds the coupon in Abaqus/CAE: offered on the Abaqus card alone, never in the list of files
 };
 
 /** What a downloaded file is called: the standard and the layup, then what it is, e.g. `D3039_[45-0--45-90]s_report.pdf`. Only

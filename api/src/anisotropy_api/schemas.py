@@ -1008,6 +1008,18 @@ class UploadTokenCreated(UploadTokenOutput):
         return cls(**UploadTokenOutput.of(row).model_dump(), token=token)
 
 
+class AbaqusExchange(Contract):
+    """What the page's card needs to know before it offers anything (ADR-0094 step 6): whether this API keeps uploads at all, whether
+    the connector's own route can be reached with an upload token (always without a sign-in in front; behind Cloudflare Access only
+    when the setting opens it), and the limits a person meets."""
+
+    uploads: bool
+    connector_route: bool
+    max_bundle_bytes: int
+    max_uploads: int
+    max_tokens: int
+
+
 class UploadOutput(Contract):
     """An upload from Abaqus as the API keeps it (ADR-0094 part 6): whose it is, the bundle's identity, what the check found in it, and,
     once it stood beside a run of ours, that job with the verdict and the comparison as `fea/tools/abaqus_upload.py compare` wrote it.
