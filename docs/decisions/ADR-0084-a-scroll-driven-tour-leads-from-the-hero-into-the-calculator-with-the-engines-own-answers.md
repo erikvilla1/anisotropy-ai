@@ -158,3 +158,21 @@ On 2026-11-10, in headless Chromium on the dev server:
 
 **Consequences now.** A visitor on the stage cannot pass it faster than its steps play, 15.4 s for the five, except by the scroll bar, a link, Home or End (R-27, updated). `tour.spec.ts` takes about four minutes.
 
+## Amendment 6, 2026-11-13 (nothing of the stage shows until its first step; no timeline at its foot)
+
+**Context.** With a screenshot of the stage coming up under the hero, its first step's words, panel and stack already drawn, the lead asked to "have it animate it only when it hits the bottom, like shouldnt be visible here", and of the five ticks along the stage's foot, "we dont need the timeline things on the bottom either".
+
+**Decision.**
+- **Until its first step starts, the stage is empty.** While the tour stands at its start and nothing plays, the stage's parts and the light on its ground are not drawn; when the stage fills the window and the first step begins they fade in over 0.9 s. Back at its start, out of sight, they are gone again. Met from below, at its last step, the stage shows as before.
+- **The ticks are removed,** with their styles and the per-frame values that filled them.
+
+This is the first part of a larger change the lead asked for in the same message, the tour modelled on Scale's home page and on the workspace; that part is not in this amendment.
+
+**Evidence.** On 2026-11-13 on the dev server at 1440 by 900: with the page 650 px down the hero, every pixel of the stage's part of the window reads 0; a screenshot after the first step shows the stage without the ticks. `tour.spec.ts`: the stage's head, view and steps read opacity 0 at the start and 1 after the first step, and no tick list exists; the four cases that cover the start, the first step and the way back: 4 of 4. `npm run typecheck` clean.
+
+**Two faults found on the way, both from amendment 5.**
+- **A finger's throw could carry the page off the stage after the first step.** In the whole file the touch case failed 1 run in 3, and 4 in 6 under load, with the stage resting 30 or 114 px above the window's top after its first step: the page was still coasting on the swipe that had brought the stage in, and nothing held it once the step had ended. For 3 s after a finger has brought the stage in, a scroll that takes it off the window's top again is undone, unless a new gesture has let the stage go; and while a step plays the hold is checked on every frame. The touch case repeated six times after the change: 6 of 6.
+- **The test of a step's length measured its own pace:** it timed the first step from the test's side and read 1.0 to 1.5 s for a 2.4 s step when the machine was busy. It now has the page note when the second step starts and ends: 4 of 4 repeated, between 4.2 and 5.6 s for a 4.4 s step.
+
+`tour.spec.ts`, `home.spec.ts` and `intro.spec.ts` after both, run together: 27 of 27.
+

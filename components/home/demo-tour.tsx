@@ -301,7 +301,6 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
   useTourDriver(root, pinned, ({ clock, onStage }) => {
     const element = root.current;
     if (!element) return;
-    STEPS.forEach((step, index) => element.style.setProperty(`--tour-rail-${index}`, span(clock, step.start, step.end).toFixed(3)));
     const next = viewAt(clock, run.script, run.angles.length, TOUR_LOAD.value);
     setScrolled((current) => (current && sameView(current, next) ? current : next));
     // A step is reached while at least half of the stage is in the window; past that the visitor is in the calculator.
@@ -466,12 +465,6 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
               </div>
               <div className="demo-tour-card">{step.card}</div>
             </li>
-          ))}
-        </ol>
-        <ol className="demo-tour-rail" aria-hidden="true">
-          {steps.map((step, index) => (
-            <li key={step.label} data-active={pinned && view.step === index ? "true" : undefined}
-              style={{ "--tour-fill": `var(--tour-rail-${index}, 0)` } as CSSProperties}>{step.label}</li>
           ))}
         </ol>
       </div>

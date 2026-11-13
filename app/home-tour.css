@@ -129,9 +129,6 @@
   border-radius: 12px;
   background: #101010;
 }
-.demo-tour-rail {
-  display: none;
-}
 .tour-card-head {
   display: flex;
   justify-content: space-between;
@@ -422,7 +419,25 @@
     height: 100%;
     padding: 0;
     overflow: hidden;
+    background: #000000;
+  }
+  /* Nothing of the stage shows while it comes up under the hero (ADR-0084 amendment 6): until its first step starts, with
+   * the stage filling the window, its parts and the light on its ground are not drawn. They fade in as that step begins,
+   * and go again when the tour is back at its start, out of sight. */
+  .demo-tour[data-mode="pinned"] > .demo-tour-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
     background: var(--tour-stage-ground);
+  }
+  .demo-tour[data-mode="pinned"] > .demo-tour-stage::before,
+  .demo-tour[data-mode="pinned"] > .demo-tour-stage > * {
+    transition: opacity 0.9s ease;
+  }
+  .demo-tour[data-mode="pinned"][data-stop="0"]:not([data-moving]) > .demo-tour-stage::before,
+  .demo-tour[data-mode="pinned"][data-stop="0"]:not([data-moving]) > .demo-tour-stage > * {
+    opacity: 0;
+    transition: none;
   }
   .demo-tour[data-mode="pinned"] .demo-tour-head {
     position: absolute;
@@ -516,47 +531,6 @@
     overflow: hidden;
     background: #101010f2;
   }
-  /* Where the tour is: five ticks along the foot of the stage, the current one filling as its step plays. */
-  .demo-tour[data-mode="pinned"] .demo-tour-rail {
-    position: absolute;
-    left: 32px;
-    right: 32px;
-    bottom: 28px;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    column-gap: 32px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .demo-tour-rail li {
-    position: relative;
-    padding-top: 12px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    line-height: 16px;
-    letter-spacing: 0.06em;
-    color: #6f6f6f;
-    transition: color 0.3s;
-  }
-  .demo-tour-rail li[data-active] {
-    color: var(--text);
-  }
-  .demo-tour-rail li::before,
-  .demo-tour-rail li::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background: var(--line);
-  }
-  .demo-tour-rail li::after {
-    background: var(--text);
-    transform: scaleX(var(--tour-fill, 0));
-    transform-origin: 0 50%;
-  }
 }
 /* A smaller desktop: the view is a little narrower, so the stack clears the words and the panel. */
 @media (min-width: 1280px) and (max-width: 1439px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
@@ -635,9 +609,6 @@
   }
   .demo-tour[data-mode="pinned"] .demo-tour-note {
     bottom: 64px;
-  }
-  .demo-tour[data-mode="pinned"] .demo-tour-rail {
-    bottom: 20px;
   }
 }
 /* A very low window: the engine's panel keeps the answer and drops the request's lines. */

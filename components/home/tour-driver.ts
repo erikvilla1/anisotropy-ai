@@ -16,6 +16,10 @@ const SETTLE_MS = 300;
 /** A scroll this soon after a wheel, key or touch event is that gesture's own, and may be stopped on the stage. The scroll
  * bar, a link and a restored position come without one. */
 const INPUT_MS = 600;
+/** After a finger has scrolled the stage into place, the page may still be coasting on that throw for a while: for this
+ * long, a scroll that takes the stage off the window's top edge again is the throw's and is undone, unless a new gesture
+ * has let the stage go. */
+const FLING_MS = 3000;
 /** What a scrolling key asks for, as browsers answer it: about 40 px for an arrow, most of a window for the others. */
 const ARROW_PX = 40;
 const PAGE_KEY_SHARE = 0.85;
@@ -46,6 +50,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     let moving = false; // a step is playing, or the page is being put on the stage
     let carrying = false; // the page is being put on the stage: the scroll events are this file's own
     let lastInput = -Infinity; // when a wheel, key or touch event last came
+    let lastTouch = -Infinity; // when a finger last moved on the page
     let lastTop: number | null = null; // where the stage's top edge was at the last scroll event
     let holding = false; // the step that is playing began with the stage holding the window
     let held = false; // the stage held the window when the page last scrolled
@@ -95,6 +100,10 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       const tick = (now: number) => {
         if (!started) started = now;
         const share = duration > 0 ? Math.min(1, (now - started) / duration) : 1;
+        // The stage holds the window for the whole step. A finger's scroll can still move the page after the last scroll
+        // event has been answered (the browser applies it on another thread and reports no change), so the hold is
+        // checked on every frame and not only when the page says it scrolled.
+        if (holding && Math.abs(place().top) > HOLD_PX) align();
         // The last frame lands on the stop itself, not on a sum beside it: which step is up depends on it.
         clock = share < 1 ? from + (target - from) * share : target;
         if (share < 1) {
@@ -140,7 +149,9 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     const settle = () => {
       align();
       lastTop = 0;
-      clampUntil = quietUntil = performance.now() + SETTLE_MS;
+      const now = performance.now();
+      quietUntil = now + SETTLE_MS;
+      clampUntil = now + (now - lastTouch < INPUT_MS ? FLING_MS : SETTLE_MS);
       if (stop === 0) play(1);
       else {
         mark();
@@ -204,7 +215,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
         // the browser's, and the scroll it makes is stopped on the stage when it gets there (onScroll).
         touch.ours = Math.abs(dy) > Math.abs(dx) && event.cancelable ? act(dy > 0 ? 1 : -1, true, 0) : false;
       }
-      lastInput = performance.now();
+      lastInput = lastTouch = performance.now();
       if (touch.ours && event.cancelable) event.preventDefault();
     };
     const onTouchEnd = () => {

@@ -115,6 +115,10 @@ test("from the hero the page scrolls as any page does, and the first step plays 
   expect(await scrollY(page)).toBe(100);
   await expectStop(page, 0);
   await expect(step(page, "material").locator(".tour-library li[data-picked]")).toHaveCount(0);
+  // Nothing of the stage shows while it comes up under the hero: not its words, its panels or the 3D view (amendment 6).
+  for (const part of [".demo-tour-head", ".demo-tour-scene", ".demo-tour-steps"]) await expect(tour(page).locator(`.demo-tour-stage > ${part}`), part).toHaveCSS("opacity", "0");
+  // And there is no timeline along its foot.
+  await expect(tour(page).locator(".demo-tour-rail")).toHaveCount(0);
   // Notch by notch down the hero: the page keeps to the wheel and the tour waits.
   for (let guard = 0; (await stageTop(page)) > 100 && guard < 30; guard++) {
     const before = await scrollY(page);
@@ -133,6 +137,8 @@ test("from the hero the page scrolls as any page does, and the first step plays 
   expect(await stageTop(page)).toBe(0);
   expect(await scrollY(page)).toBe(heroHeight);
   await expect(step(page, "material")).toHaveAttribute("data-active", "true");
+  // The stage's parts have faded in with the step.
+  for (const part of [".demo-tour-head", ".demo-tour-scene", ".demo-tour-steps"]) await expect(tour(page).locator(`.demo-tour-stage > ${part}`), part).toHaveCSS("opacity", "1");
   // The library record's values, as the calculator shows them before the engine has cited them.
   const properties = step(page, "material").getByTestId("property-row");
   await expect(properties).toContainText("162.096");
@@ -141,18 +147,26 @@ test("from the hero the page scrolls as any page does, and the first step plays 
   await expect(step(page, "material").locator(".tour-library li[data-picked]")).toHaveCount(1);
 });
 
-test("a step plays at the clock's one speed: the first takes about 2.4 s", async ({ page }) => {
+test("a step plays at the clock's one speed: the second takes about 4.4 s", async ({ page }) => {
   await playApi(page, []);
   await openPinned(page);
-  await page.mouse.wheel(0, await stageTop(page));
-  await expect(tour(page)).toHaveAttribute("data-stop", "0");
-  // From the stage holding the window to the first stop.
-  await expect.poll(() => stageTop(page)).toBe(0);
-  const started = Date.now();
-  await expectStop(page, 1);
-  const took = Date.now() - started;
-  expect(took).toBeGreaterThan(1800);
-  expect(took).toBeLessThan(4500);
+  await playTo(page, 1);
+  // The page itself notes when the step starts to play and when it has ended, so the test's own pace is not in the number.
+  await page.evaluate(() => {
+    const stage = document.getElementById("tour")!;
+    const marks = { start: 0, end: 0 };
+    (window as unknown as { __step: typeof marks }).__step = marks;
+    new MutationObserver(() => {
+      if (stage.dataset.moving && !marks.start) marks.start = performance.now();
+      if (!stage.dataset.moving && marks.start && !marks.end) marks.end = performance.now();
+    }).observe(stage, { attributes: true, attributeFilter: ["data-moving"] });
+  });
+  await notch(page);
+  await expectStop(page, 2);
+  const marks = await page.evaluate(() => (window as unknown as { __step: { start: number; end: number } }).__step);
+  const took = marks.end - marks.start;
+  expect(took).toBeGreaterThan(4200);
+  expect(took).toBeLessThan(5600);
 });
 
 test("each gesture plays one whole step: the layup is typed and the plies laid, a swipe's burst of events plays one step, and gestures during a step are not kept", async ({ page }) => {
