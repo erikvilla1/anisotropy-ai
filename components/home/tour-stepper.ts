@@ -4,8 +4,10 @@
  *
  * The stage is one window tall and stands in the page's flow between the hero and the calculator. While its top edge is on
  * the window's top edge it holds the window: a gesture then plays the next step, or the one before, and the page does not
- * scroll. Away from the stage the page scrolls as usual, until a gesture moves towards a stage that touches the window:
- * that gesture brings the stage in. */
+ * scroll. Away from the stage the page scrolls as usual (amendment 5): nothing carries it there. Only on the way down, the
+ * gesture that would take the stage's top edge onto or past the window's is stopped on it, and the stage then holds the
+ * window. On the way up from the calculator the stage is a section like any other, showing its last step, so a visitor
+ * going back to the top is not made to watch the steps backwards. */
 
 import { STOPS } from "./tour-timeline";
 
@@ -47,23 +49,30 @@ export type Action =
   | { kind: "swallow" }
   /** The clock plays to this stop. */
   | { kind: "step"; to: number }
-  /** The page is carried so that the stage fills the window. */
-  | { kind: "enter" }
-  /** The page is carried back up to the hero. */
-  | { kind: "leave" };
+  /** The page scrolls the rest of the way down onto the stage, `by` pixels, and the stage then holds the window. */
+  | { kind: "arrive"; by: number };
 
-/** What a gesture does. `stop` is where the clock stands, `moving` is true while a step plays or the page is being carried,
- * `direction` is 1 for down (on in the page) and -1 for up, and `fresh` is false for the later events of one wheel gesture. */
-export function decide(stop: number, moving: boolean, place: Place, direction: 1 | -1, fresh: boolean): Action {
+/** What a gesture does. `stop` is where the clock stands, `moving` is true while a step plays or the page is being put on
+ * the stage, `direction` is 1 for down (on in the page) and -1 for up, `fresh` is false for the later events of one wheel
+ * gesture, and `reach` is how far this event asks the page to scroll, in pixels (0 when that is not known). */
+export function decide(stop: number, moving: boolean, place: Place, direction: 1 | -1, fresh: boolean, reach = 0): Action {
   if (moving) return { kind: "swallow" };
   if (Math.abs(place.top) <= HOLD_PX) {
     if (!fresh) return { kind: "swallow" };
     // Past the last step the stage lets go, and the page scrolls on to the calculator.
     if (direction > 0) return stop < LAST_STOP ? { kind: "step", to: stop + 1 } : { kind: "native" };
-    return stop > 1 ? { kind: "step", to: stop - 1 } : { kind: "leave" };
+    // Up from the first step there is nothing to play back: the stage lets go, and the page scrolls up to the hero.
+    return stop > 1 ? { kind: "step", to: stop - 1 } : { kind: "native" };
   }
-  // The stage touches the window from below and the gesture goes down, or from above and it goes up.
-  if (direction > 0 && place.top > 0 && place.top <= place.viewport + 1) return { kind: "enter" };
-  if (direction < 0 && place.top < 0 && place.top >= -place.viewport - 1) return { kind: "enter" };
+  // The page scrolls as it would, until an event on the way down asks for at least what is left to the stage: it is
+  // stopped there.
+  if (direction > 0 && place.top > 0 && reach >= place.top) return { kind: "arrive", by: place.top };
   return { kind: "native" };
+}
+
+/** Whether a scroll that moved the stage's top edge from `before` to `top` brought it down onto or across the window's top
+ * edge from where it showed below it, so the stage should now hold the window. A jump from out of sight is not one, nor is
+ * the stage coming down into the window as the page scrolls up. */
+export function crossed(before: number, top: number, viewport: number): boolean {
+  return before > HOLD_PX && before <= viewport + 1 && top <= HOLD_PX && top > -viewport;
 }

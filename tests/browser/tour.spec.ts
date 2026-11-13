@@ -2,10 +2,14 @@ import { test, expect, type Page } from "@playwright/test";
 import quasi from "../fixtures/home/response-im7-quasi.json";
 import loaded from "../fixtures/home/response-im7-quasi-loaded.json";
 
-// The stepped tour between the hero and the calculator (ADR-0084 amendment 4), with the API played from tests/fixtures/home as
-// tests/browser/home.spec.ts plays it: two answers of the real engine for the IM7/8552 quasi-isotropic stack, unloaded and
-// under Nx = 25 kN/m. One scroll gesture plays one whole step; `data-stop` on the tour says where its clock stands (0 before
-// the first step, 1 to 5 at the end of each) and `data-moving` is there while a step plays or the page is carried.
+// The stepped tour between the hero and the calculator (ADR-0084 amendments 4 and 5), with the API played from
+// tests/fixtures/home as tests/browser/home.spec.ts plays it: two answers of the real engine for the IM7/8552 quasi-isotropic
+// stack, unloaded and under Nx = 25 kN/m. The page scrolls to the stage as any page does; once the stage fills the window one
+// scroll gesture plays one whole step. `data-stop` on the tour says where its clock stands (0 before the first step, 1 to 5
+// at the end of each) and `data-moving` is there while a step plays.
+
+// The five steps take 2.4, 4.4, 3.2, 3.6 and 1.8 s, and several cases play most of them.
+test.describe.configure({ timeout: 120_000 });
 
 type Posted = { plies: { angle_deg: number; thickness_m: number }[]; loads: Record<string, number>; material: Record<string, string> };
 
@@ -30,9 +34,22 @@ async function expectStop(page: Page, stop: number) {
 }
 /** One notch of a mouse wheel: down by default. */
 const notch = (page: Page, direction: 1 | -1 = 1) => page.mouse.wheel(0, 100 * direction);
-/** Plays the tour on to a stop, one notch a step, as a visitor would. */
+/** Scrolls the page down onto the stage with the one wheel event that asks for all that is left, and waits for the first
+ * step to have played. */
+async function reachStage(page: Page) {
+  await page.mouse.wheel(0, await stageTop(page));
+  await expectStop(page, 1);
+  expect(await stageTop(page)).toBe(0);
+  await page.waitForTimeout(350); // the moment after a move in which a wheel still turning begins nothing
+}
+/** Plays the tour on to a stop: onto the stage first, then one notch a step, as a visitor would. */
 async function playTo(page: Page, stop: number) {
-  for (let at = Number(await tour(page).getAttribute("data-stop")); at < stop; at++) {
+  let at = Number(await tour(page).getAttribute("data-stop"));
+  if (at === 0 && stop > 0) {
+    await reachStage(page);
+    at = 1;
+  }
+  for (; at < stop; at++) {
     await notch(page);
     await expectStop(page, at + 1);
   }
@@ -87,10 +104,29 @@ test("the hero scrolls away as any section does, and the stage stands under it i
   await expectStop(page, 0);
 });
 
-test("one scroll gesture on the hero brings the stage into the window and plays the first step", async ({ page }) => {
+test("from the hero the page scrolls as any page does, and the first step plays once the stage fills the window", async ({ page }) => {
   await playApi(page, []);
   await openPinned(page);
   const heroHeight = await page.locator("#overview").evaluate((element) => Math.round(element.getBoundingClientRect().height));
+  // A notch moves the page by what it asks for. Nothing is carried, and nothing plays.
+  await notch(page);
+  await expect.poll(() => scrollY(page)).toBe(100);
+  await page.waitForTimeout(500);
+  expect(await scrollY(page)).toBe(100);
+  await expectStop(page, 0);
+  await expect(step(page, "material").locator(".tour-library li[data-picked]")).toHaveCount(0);
+  // Notch by notch down the hero: the page keeps to the wheel and the tour waits.
+  for (let guard = 0; (await stageTop(page)) > 100 && guard < 30; guard++) {
+    const before = await scrollY(page);
+    await notch(page);
+    await expect.poll(() => scrollY(page)).toBe(before + 100);
+    await expect(tour(page)).not.toHaveAttribute("data-moving", "true");
+  }
+  await expectStop(page, 0);
+  const left = await stageTop(page);
+  expect(left).toBeGreaterThan(0);
+  expect(left).toBeLessThanOrEqual(100);
+  // The notch that would pass the stage is stopped on it, and the first step plays there.
   await notch(page);
   await expect(tour(page)).toHaveAttribute("data-moving", "true");
   await expectStop(page, 1);
@@ -103,6 +139,20 @@ test("one scroll gesture on the hero brings the stage into the window and plays 
   await expect(properties).toContainText("1580");
   await expect(properties).toContainText("57.3");
   await expect(step(page, "material").locator(".tour-library li[data-picked]")).toHaveCount(1);
+});
+
+test("a step plays at the clock's one speed: the first takes about 2.4 s", async ({ page }) => {
+  await playApi(page, []);
+  await openPinned(page);
+  await page.mouse.wheel(0, await stageTop(page));
+  await expect(tour(page)).toHaveAttribute("data-stop", "0");
+  // From the stage holding the window to the first stop.
+  await expect.poll(() => stageTop(page)).toBe(0);
+  const started = Date.now();
+  await expectStop(page, 1);
+  const took = Date.now() - started;
+  expect(took).toBeGreaterThan(1800);
+  expect(took).toBeLessThan(4500);
 });
 
 test("each gesture plays one whole step: the layup is typed and the plies laid, a swipe's burst of events plays one step, and gestures during a step are not kept", async ({ page }) => {
@@ -196,7 +246,7 @@ test("the engine step shows the calculator's own answer: one POST before the loa
   expect(errors).toEqual([]);
 });
 
-test("after the last step the stage lets go and the page scrolls on to the calculator; a gesture back up brings the stage in again", async ({ page }) => {
+test("after the last step the stage lets go and the page scrolls on to the calculator; on the way back up the stage is passed like any section", async ({ page }) => {
   await playApi(page, []);
   await openPinned(page);
   await playTo(page, 5);
@@ -213,56 +263,90 @@ test("after the last step the stage lets go and the page scrolls on to the calcu
   await page.mouse.wheel(0, 240);
   await expect.poll(() => scrollY(page)).toBe(held + 480);
   await expectStop(page, 5);
-  // Up again while the stage still touches the window: it is carried back in, at its last step.
+  // Up again: the page keeps to the wheel across the stage's place and on towards the hero, and the tour stays at its end.
   await page.waitForTimeout(300);
-  await notch(page, -1);
+  await page.mouse.wheel(0, -240);
+  await expect.poll(() => scrollY(page)).toBe(held + 240);
+  await page.waitForTimeout(300);
+  await page.mouse.wheel(0, -480);
+  await expect.poll(() => scrollY(page)).toBe(held - 240);
+  await page.waitForTimeout(500);
+  expect(await scrollY(page)).toBe(held - 240);
+  await expectStop(page, 5);
+  await expect(step(page, "handover")).toHaveAttribute("data-active", "true");
+  // Down again, the stage is met from above: it holds the window at its last step, and a gesture up plays that step backwards.
+  await page.mouse.wheel(0, 300);
   await expect.poll(() => stageTop(page)).toBe(0);
   await expectStop(page, 5);
   expect(await scrollY(page)).toBe(held);
-  // And the next gesture up plays the last step backwards.
   await page.waitForTimeout(400);
   await notch(page, -1);
   await expectStop(page, 4);
   await expect(step(page, "loads")).toHaveAttribute("data-active", "true");
 });
 
-test("a gesture up from the first step goes back to the hero, and the tour starts over from there", async ({ page }) => {
+test("up from the first step the page scrolls back towards the hero as any page does, and from the top the tour starts over", async ({ page }) => {
   await playApi(page, []);
   await openPinned(page);
   await playTo(page, 1);
+  const held = await scrollY(page);
+  // A notch up moves the page; while part of the stage still shows, it keeps its first step.
   await notch(page, -1);
+  await expect.poll(() => scrollY(page)).toBe(held - 100);
+  await page.waitForTimeout(400);
+  await expectStop(page, 1);
+  await expect(step(page, "material").locator(".tour-library li[data-picked]")).toHaveCount(1);
+  // Down again: the stage holds the window, and the first step is not played a second time.
+  await notch(page);
+  await expect.poll(() => stageTop(page)).toBe(0);
+  await page.waitForTimeout(400);
+  await expectStop(page, 1);
+  // All the way up: with the stage out of sight the tour is at its start, and the next arrival plays the first step again.
+  await page.mouse.wheel(0, -held);
   await expect.poll(() => scrollY(page)).toBe(0);
   await expectStop(page, 0);
   await expect(page.locator("#overview")).toBeInViewport({ ratio: 0.99 });
   await expect(step(page, "material").locator(".tour-library li[data-picked]")).toHaveCount(0);
   await page.waitForTimeout(400);
-  await notch(page);
-  await expectStop(page, 1);
-  expect(await stageTop(page)).toBe(0);
+  await reachStage(page);
   await expect(step(page, "material").locator(".tour-library li[data-picked]")).toHaveCount(1);
 });
 
-test("the scrolling keys step the tour as the wheel does", async ({ page }) => {
+test("the scrolling keys scroll the page to the stage and step the tour on it, as the wheel does", async ({ page }) => {
   await playApi(page, []);
   await openPinned(page);
   const press = async (key: string, stop: number) => {
     await page.keyboard.press(key);
     await expectStop(page, stop);
   };
-  await press("ArrowDown", 1);
-  expect(await stageTop(page)).toBe(0);
+  // From the hero a key scrolls the page as it does anywhere: an arrow by a little, and the tour waits.
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => scrollY(page)).toBeGreaterThan(10);
+  await page.waitForTimeout(500);
+  expect(await scrollY(page)).toBeLessThan(200);
+  await expectStop(page, 0);
+  // On the stage each key plays one step, forwards or back.
+  await reachStage(page);
+  const held = await scrollY(page);
   await press("PageDown", 2);
   await press("Space", 3);
   await press("ArrowUp", 2);
   await press("PageUp", 1);
-  await press("Shift+Space", 0);
-  expect(await scrollY(page)).toBe(0);
+  expect(await scrollY(page)).toBe(held);
+  // Up from the first step the key is the browser's again: the page scrolls up.
+  await page.waitForTimeout(350);
+  await page.keyboard.press("Shift+Space");
+  await expect.poll(() => scrollY(page)).toBeLessThan(held - 300);
   // A key pressed in a field is the field's: with the calculator's first box focused, the arrow key plays no step.
-  await press("ArrowDown", 1);
+  await page.waitForTimeout(700);
+  await page.mouse.wheel(0, await stageTop(page));
+  await expect.poll(() => stageTop(page)).toBe(0);
+  await page.waitForTimeout(400);
+  const stop = Number(await tour(page).getAttribute("data-stop"));
   await page.locator("#laminate input").first().evaluate((field: HTMLElement) => field.focus({ preventScroll: true }));
   await page.keyboard.press("ArrowDown");
-  await page.waitForTimeout(400);
-  await expectStop(page, 1);
+  await page.waitForTimeout(600);
+  await expectStop(page, stop);
 });
 
 test("the scroll bar and links move the page, never the tour's clock: it is always at a stop, at its start from above and its end from below", async ({ page }) => {
@@ -314,9 +398,14 @@ test.describe("on a touch screen", () => {
     };
     const side = 200;
     const middle = Math.round(viewport.width * 0.47);
+    // From the hero a finger scrolls the page; the swipe that brings the stage's top edge to the window's is stopped there.
     await swipe(side, 700, 400);
+    await expect.poll(() => scrollY(page)).toBeGreaterThan(150);
+    await expectStop(page, 0);
+    for (let guard = 0; (await stageTop(page)) > 0 && guard < 10; guard++) await swipe(side, 700, 400);
     await expectStop(page, 1);
     expect(await stageTop(page)).toBe(0);
+    await page.waitForTimeout(350);
     const held = await scrollY(page);
     await expect(tour(page).locator("canvas")).toBeVisible({ timeout: 15_000 });
     await swipe(middle, 600, 300);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { HOLD_PX, LAST_STOP, WHEEL_GAP_MS, decide, startsGesture, wheelPixels, type WheelMemory } from "../components/home/tour-stepper";
+import { HOLD_PX, LAST_STOP, WHEEL_GAP_MS, crossed, decide, startsGesture, wheelPixels, type WheelMemory } from "../components/home/tour-stepper";
 import { CLOCK_PER_SECOND, STEPS, STOPS, TOTAL, finalView, layupScript, viewAt } from "../components/home/tour-timeline";
 import { DEFAULT_LAYUP } from "../lib/home-calculator";
 import { expandLayup } from "../lib/layup";
@@ -32,9 +32,9 @@ test("the steps follow one another from 0 and fill the tour's length; the clock 
   assert.deepEqual(STEPS.map((step) => step.id), ["material", "layup", "engine", "loads", "handover"]);
   assert.deepEqual(STOPS, [0, ...STEPS.map((step) => step.end)]);
   assert.equal(LAST_STOP, 5);
-  // At the clock's one speed no step takes less than 0.7 s or more than 2 s.
+  // At the clock's one speed no step takes less than 1.5 s or more than 5 s (ADR-0084 amendment 5).
   const seconds = STEPS.map((step) => (step.end - step.start) / CLOCK_PER_SECOND);
-  assert.ok(Math.min(...seconds) >= 0.7 && Math.max(...seconds) <= 2, seconds.join(", "));
+  assert.ok(Math.min(...seconds) >= 1.5 && Math.max(...seconds) <= 5, seconds.join(", "));
 });
 
 test("a step only ever adds: typing, laid plies and the engine's stages never go back as the clock runs on", () => {
@@ -125,25 +125,45 @@ test("on the stage one gesture plays one step, and nothing is taken while a step
   assert.deepEqual(decide(2, false, { top: HOLD_PX, viewport: 900 }, 1, true), { kind: "step", to: 3 });
 });
 
-test("the ends of the tour: up from the first step goes back to the hero, down from the last lets the page scroll on", () => {
+test("the ends of the tour: up from the first step and down from the last let the page scroll on", () => {
   const onStage = { top: 0, viewport: 900 };
-  assert.deepEqual(decide(1, false, onStage, -1, true), { kind: "leave" });
+  assert.deepEqual(decide(1, false, onStage, -1, true), { kind: "native" });
   assert.deepEqual(decide(LAST_STOP, false, onStage, 1, true), { kind: "native" });
-  // Reached by a link before the first step has played: down plays it, up goes back.
+  // Reached by a link before the first step has played: down plays it, up is the page's.
   assert.deepEqual(decide(0, false, onStage, 1, true), { kind: "step", to: 1 });
-  assert.deepEqual(decide(0, false, onStage, -1, true), { kind: "leave" });
+  assert.deepEqual(decide(0, false, onStage, -1, true), { kind: "native" });
 });
 
-test("away from the stage the page scrolls as usual, until a gesture goes towards a stage that touches the window", () => {
+test("away from the stage the page scrolls as usual; on the way down, the event that would pass the stage is stopped on it", () => {
   const viewport = 900;
-  // From the hero, whose foot is the window's foot: down brings the stage in, with or without a fresh gesture; up is the page's.
-  assert.deepEqual(decide(0, false, { top: 900, viewport }, 1, true), { kind: "enter" });
-  assert.deepEqual(decide(0, false, { top: 420, viewport }, 1, false), { kind: "enter" });
-  assert.deepEqual(decide(0, false, { top: 420, viewport }, -1, true), { kind: "native" });
-  // From the calculator: up brings the stage back, down is the page's.
-  assert.deepEqual(decide(LAST_STOP, false, { top: -100, viewport }, -1, true), { kind: "enter" });
-  assert.deepEqual(decide(LAST_STOP, false, { top: -100, viewport }, 1, false), { kind: "native" });
-  // The stage out of sight: the page's, both ways. While the page is being carried: nothing.
-  for (const top of [940, 2400, -940, -5000]) for (const direction of [1, -1] as const) assert.deepEqual(decide(0, false, { top, viewport }, direction, true), { kind: "native" });
-  assert.deepEqual(decide(0, true, { top: 420, viewport }, 1, true), { kind: "swallow" });
+  // From the hero, whose foot is the window's foot: the page scrolls, whatever the gesture.
+  assert.deepEqual(decide(0, false, { top: 900, viewport }, 1, true, 100), { kind: "native" });
+  assert.deepEqual(decide(0, false, { top: 420, viewport }, 1, false, 96), { kind: "native" });
+  assert.deepEqual(decide(0, false, { top: 420, viewport }, -1, true, 100), { kind: "native" });
+  // The event that asks for what is left, or more, is stopped on the stage; one that asks for less is the page's.
+  assert.deepEqual(decide(0, false, { top: 80, viewport }, 1, false, 100), { kind: "arrive", by: 80 });
+  assert.deepEqual(decide(0, false, { top: 100, viewport }, 1, true, 100), { kind: "arrive", by: 100 });
+  assert.deepEqual(decide(3, false, { top: 30, viewport }, 1, true, 40), { kind: "arrive", by: 30 });
+  assert.deepEqual(decide(0, false, { top: 101, viewport }, 1, true, 100), { kind: "native" });
+  // How far a touch will go is not known when it starts: it is the page's, and its scroll is stopped when it gets there.
+  assert.deepEqual(decide(0, false, { top: 80, viewport }, 1, true), { kind: "native" });
+  // On the way up from the calculator the stage is passed like any section, both ways.
+  assert.deepEqual(decide(LAST_STOP, false, { top: -100, viewport }, -1, true, 240), { kind: "native" });
+  assert.deepEqual(decide(LAST_STOP, false, { top: -100, viewport }, 1, false, 240), { kind: "native" });
+  // The stage out of sight: the page's, both ways. While the page is being put on the stage: nothing.
+  for (const top of [940, 2400, -940, -5000]) for (const direction of [1, -1] as const) assert.deepEqual(decide(0, false, { top, viewport }, direction, true, 100), { kind: "native" });
+  assert.deepEqual(decide(0, true, { top: 420, viewport }, 1, true, 500), { kind: "swallow" });
+});
+
+test("a scroll is stopped on the stage only when it brings the stage's top edge down onto the window's from where it showed", () => {
+  const viewport = 900;
+  assert.equal(crossed(60, 0, viewport), true);
+  assert.equal(crossed(60, -45, viewport), true); // it overshot: the page is put back on the stage
+  assert.equal(crossed(900, 1, viewport), true);
+  assert.equal(crossed(60, 12, viewport), false); // not there yet
+  assert.equal(crossed(0, -40, viewport), false); // leaving the stage downwards
+  assert.equal(crossed(-60, 0, viewport), false); // coming back up from the calculator
+  assert.equal(crossed(-60, 30, viewport), false);
+  assert.equal(crossed(2400, 0, viewport), false); // a jump from out of sight
+  assert.equal(crossed(300, -900, viewport), false); // a jump right past it
 });

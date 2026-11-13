@@ -1,6 +1,6 @@
 # ADR-0084: A scroll-driven tour leads from the hero into the calculator, with the engine's own answers
 
-- Status: Proposed; amendment 4 removes the bridge and plays one whole step per scroll gesture, which replaces the scroll-driven clock and amendments 1 to 3
+- Status: Proposed; amendment 4 removes the bridge and plays one whole step per scroll gesture, which replaces the scroll-driven clock and amendments 1 to 3; amendment 5 lets the page scroll to the stage by itself and slows the steps
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-09 and 2026-11-10 | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md) (the engine computes every number), [ADR-0059](ADR-0059-the-engine-describes-the-stack-and-evaluates-first-ply-failure-on-the-response-endpoint-for-the-home-calculator.md) (the home calculator's endpoint), [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the hero and the demo), [ADR-0083](ADR-0083-the-laminate-view-draws-carbon-plies-with-a-procedural-fibre-pattern-and-takes-four-props-for-the-scroll-tour.md) (the 3D view's props), `components/home/demo-tour.tsx`, `components/home/tour-timeline.ts`, `components/home/tour-bridge.ts`, `components/home/engine-answers.tsx`, `app/home-tour.css`, `tests/browser/tour.spec.ts`, `tests/tour-timeline.test.ts`
@@ -137,4 +137,24 @@ On 2026-11-10, in headless Chromium on the dev server:
 - Still true: the stage's ground copies the view's backdrop by hand, and the page mounts two WebGL views.
 
 **How we will know it was wrong.** A swipe plays two steps or none on some device. Visitors leave at the tour because it holds the page.
+
+## Amendment 5, 2026-11-13 (the page scrolls to the stage by itself; slower steps; the way back up is free)
+
+**Context.** With a recording of amendment 4 and a screenshot of the stage filling the window, the lead asked: "dont snap into the first animation by a scroll from the main paige; start it once the scroll reaches the screenshot position. also the animations are way too fast." In the recording one scroll on the hero carried the page a whole window in half a second, and the first step then played in one second.
+
+**Decision.**
+- **Nothing carries the page.** From the hero it scrolls as any page does, by what each wheel event, key or finger asks for, and it may rest part of the way. The first step plays once the stage's top edge is on the window's. Two things put it there: the wheel event or key that asks for at least what is left is stopped on the stage (`decide` returns `arrive`; a gap over 24 px is closed at two window heights a second, at least 150 ms), and a scroll made by a wheel, key or finger in the last 600 ms that brings the edge onto or across the window's is put back on it (`crossed`). What is left of that gesture begins no step.
+- **Up from the first step** the stage lets go and the page scrolls up; there is no carry back to the hero. While part of the stage shows, it keeps its first step; out of sight below the window the tour is at its start again, as before.
+- **On the way back up from the calculator the stage is passed like any section,** showing its last step. Amendment 4 stopped the page on it there, which, with the slower steps, would make a visitor going back to the top watch all five steps backwards. A stage met again from above holds the window at the step it shows.
+- **The clock's speed is 0.25 units a second** in place of 0.6: the five steps take 2.4, 4.4, 3.2, 3.6 and 1.8 s (15.4 s in all), and the layup's 14 characters are typed in about 2 s.
+
+**Options considered.** Keep the carry and slow it: rejected, the lead asked for no snap. Stop the page on the stage from below as well: rejected for the reason above; it is the drafter's choice, not asked for by the lead. One second longer per step in place of one slower speed: rejected, amendment 4's reason for one speed stands.
+
+**Evidence.** On 2026-11-13, headless Chromium on the dev server:
+- **Swipes sent as a trackpad sends them** (a wheel event every 16 ms, 1280 by 800, hero 800 px): the first two moved the page to 353 and 706 px and nothing played; the third stopped it at 800 px, the stage's place, and the first step played in 2.4 s; four more played one step each in 4.1, 2.7, 3.3 and 1.7 s; the next moved the page on to 1,259 px; two swipes up moved it to 583 px and to 0 with the tour at its last step and then at its start. Contact sheets of that recording were looked at.
+- **Checks:** `npm run typecheck` clean. `npm test`: 249 passed, 1 skipped, with 9 cases on the clock and the rules. `tour.spec.ts`, 13 cases, among them the page keeping to the wheel notch by notch down the hero, the first step's length, the free way back up and a finger's scroll stopped on the stage: 13 of 13 on the first run. `home.spec.ts` and `intro.spec.ts`: 14 of 14.
+
+**UNVERIFIED.** As in amendment 4: a real trackpad, wheel and touch screen, a real graphics card, Safari and Firefox. Also: a browser that animates a wheel notch's scroll may run a few pixels past the stage before it is put back; headless Chromium does not animate it, so this was not seen.
+
+**Consequences now.** A visitor on the stage cannot pass it faster than its steps play, 15.4 s for the five, except by the scroll bar, a link, Home or End (R-27, updated). `tour.spec.ts` takes about four minutes.
 

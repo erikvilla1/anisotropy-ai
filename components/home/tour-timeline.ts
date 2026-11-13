@@ -42,9 +42,10 @@ const [MATERIAL, LAYUP, ENGINE, LOADS, HANDOVER] = STEPS;
 /** Where the clock stands still: at 0 before the first step has played, which is seen only while the stage comes into the
  * window, and then at the end of each step. A step is the move from one stop to the next. */
 export const STOPS: number[] = [0, ...STEPS.map((step) => step.end)];
-/** The clock's one speed while a step plays, in units a second, forwards and back. At 0.6 the five steps take 1.0, 1.8, 1.3,
- * 1.5 and 0.75 s, and the layup's 14 characters are typed in about 0.8 s. */
-export const CLOCK_PER_SECOND = 0.6;
+/** The clock's one speed while a step plays, in units a second, forwards and back. At 0.25 the five steps take 2.4, 4.4, 3.2,
+ * 3.6 and 1.8 s, and the layup's 14 characters are typed in about 2 s. It was 0.6, which the lead found far too fast
+ * (ADR-0084 amendment 5). */
+export const CLOCK_PER_SECOND = 0.25;
 
 /** When each ply starts to come down as the layup is typed, on a clock of one unit per character. A listed ply starts when the
  * slash or the bracket that ends its angle is typed; a mirrored one follows the `s`. */

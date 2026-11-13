@@ -2,15 +2,23 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import { CLOCK_PER_SECOND, STOPS } from "./tour-timeline";
-import { HOLD_PX, LAST_STOP, decide, startsGesture, wheelPixels, type WheelMemory } from "./tour-stepper";
+import { HOLD_PX, LAST_STOP, crossed, decide, startsGesture, wheelPixels, type WheelMemory } from "./tour-stepper";
 
-/** How fast the page is carried onto the stage or back to the hero: window heights a second, at constant speed. */
+/** How fast the page is put on the stage over the last of the way, when one event asks for more than is left: window heights
+ * a second, at constant speed. */
 const PAGE_SCREENS_PER_SECOND = 2;
-/** A carry over a few pixels still takes this long, so it is seen as a move and not a jump. */
+/** That move takes at least this long, so it is seen as a move and not a jump; under ARRIVE_JUMP_PX there is nothing to see. */
 const PAGE_MIN_MS = 150;
-/** For this long after the page has been carried onto the stage, scrolling that was already on its way is undone; and for
- * this long after any move, only a pause begins a new wheel gesture (tour-stepper.ts). */
+const ARRIVE_JUMP_PX = 24;
+/** For this long after the page has come onto the stage, scrolling that was already on its way is undone; and for this long
+ * after any move, only a pause begins a new wheel gesture (tour-stepper.ts). */
 const SETTLE_MS = 300;
+/** A scroll this soon after a wheel, key or touch event is that gesture's own, and may be stopped on the stage. The scroll
+ * bar, a link and a restored position come without one. */
+const INPUT_MS = 600;
+/** What a scrolling key asks for, as browsers answer it: about 40 px for an arrow, most of a window for the others. */
+const ARROW_PX = 40;
+const PAGE_KEY_SHARE = 0.85;
 /** The page counts as at rest this long after its last scroll event. */
 const REST_MS = 140;
 
@@ -21,10 +29,11 @@ export type TourFrame = {
   onStage: boolean;
 };
 
-/** Drives the stepped tour (ADR-0084 amendment 4). `tour` is the element that is one window tall in the page's flow. While
- * `enabled`, a wheel gesture, a swipe or a scrolling key that tour-stepper.ts gives to the tour is taken from the browser
- * and answered with one move at constant speed: the clock from one stop to the next, or the page onto the stage or back to
- * the hero. Every other scroll is the browser's own. `onFrame` is called whenever the clock moves or the stage comes on or
+/** Drives the stepped tour (ADR-0084 amendments 4 and 5). `tour` is the element that is one window tall in the page's flow.
+ * The page scrolls to it and away from it as any page does. A scroll that brings the stage's top edge onto the window's is
+ * stopped there, and the first step plays; from then, while `enabled`, a wheel gesture, a swipe or a scrolling key is taken
+ * from the browser and answered with one move at constant speed, the clock from one stop to the next. Up from the first
+ * step and down from the last are the browser's again, and so is the way back up from the calculator. `onFrame` is called whenever the clock moves or the stage comes on or
  * goes off; the element carries `data-stop` (where the clock stands) and `data-moving` (while a move plays). */
 export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: boolean, onFrame: (frame: TourFrame) => void) {
   const latest = useRef(onFrame);
@@ -34,8 +43,10 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     if (!enabled || !element) return;
     let stop = 0;
     let clock = 0;
-    let moving = false; // a step is playing, or the page is being carried
-    let carrying = false; // the page is being carried: the scroll events are this file's own
+    let moving = false; // a step is playing, or the page is being put on the stage
+    let carrying = false; // the page is being put on the stage: the scroll events are this file's own
+    let lastInput = -Infinity; // when a wheel, key or touch event last came
+    let lastTop: number | null = null; // where the stage's top edge was at the last scroll event
     let holding = false; // the step that is playing began with the stage holding the window
     let held = false; // the stage held the window when the page last scrolled
     let clampUntil = 0;
@@ -124,36 +135,31 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       };
       frame = window.requestAnimationFrame(tick);
     }
-    /** The stage is brought into the window; if the tour has not started, its first step plays. */
-    const enter = () => carry(stageY(), () => {
+    /** The stage has come onto the window's top edge: it holds the window, and if the tour has not started its first step
+     * plays. What is left of the gesture that brought it begins no step. */
+    const settle = () => {
       align();
-      clampUntil = performance.now() + SETTLE_MS;
+      lastTop = 0;
+      clampUntil = quietUntil = performance.now() + SETTLE_MS;
       if (stop === 0) play(1);
       else {
         mark();
         tell();
       }
-    });
-    /** Back up to the hero, where the tour starts over. */
-    const leave = () => {
-      const hero = document.getElementById("overview");
-      const top = hero ? window.scrollY + hero.getBoundingClientRect().top : stageY() - (window.innerHeight || 1);
-      carry(Math.max(0, Math.round(top)), () => {
-        held = false;
-        jump(0);
-      });
     };
+    /** One event asked for more than was left to the stage: the page goes the rest of the way and stops there. */
+    const arrive = (by: number) => (Math.abs(by) <= ARRIVE_JUMP_PX ? settle() : carry(stageY(), settle));
 
     /** Asks the rules what a gesture means and plays it. True when the tour took it, so the browser must not scroll. */
-    function act(direction: 1 | -1, fresh: boolean): boolean {
-      const action = decide(stop, moving, place(), direction, fresh);
+    function act(direction: 1 | -1, fresh: boolean, reach: number): boolean {
+      lastInput = performance.now();
+      const action = decide(stop, moving, place(), direction, fresh, reach);
       if (action.kind === "native") {
         clampUntil = 0;
         return false;
       }
       if (action.kind === "step") play(action.to);
-      else if (action.kind === "enter") enter();
-      else if (action.kind === "leave") leave();
+      else if (action.kind === "arrive") arrive(action.by);
       return true;
     }
 
@@ -164,13 +170,14 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       if (!delta) return;
       const fresh = startsGesture(wheel, event.timeStamp, delta, performance.now() >= quietUntil);
       wheel = { time: event.timeStamp, delta };
-      if (act(delta > 0 ? 1 : -1, fresh) && event.cancelable) event.preventDefault();
+      if (act(delta > 0 ? 1 : -1, fresh, Math.abs(delta)) && event.cancelable) event.preventDefault();
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return;
       let direction: 1 | -1;
+      const arrow = event.key === "ArrowDown" || event.key === "ArrowUp";
       if (event.key === "ArrowDown" || event.key === "PageDown") direction = 1;
       else if (event.key === "ArrowUp" || event.key === "PageUp") direction = -1;
       else if (event.key === " ") {
@@ -178,7 +185,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
         if (target?.closest("button, a[href], summary, [role='button']")) return;
         direction = event.shiftKey ? -1 : 1;
       } else return;
-      if (act(direction, true)) event.preventDefault();
+      if (act(direction, true, arrow ? ARROW_PX : (window.innerHeight || 1) * PAGE_KEY_SHARE)) event.preventDefault();
     };
     // A swipe: the first move says which way it goes, and the whole touch is then the tour's or the browser's.
     const onTouchStart = (event: TouchEvent) => {
@@ -193,9 +200,11 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
         const dx = touch.x - event.touches[0].clientX;
         const dy = touch.y - event.touches[0].clientY;
         if (!dx && !dy) return;
-        // A finger moving up scrolls the page down.
-        touch.ours = Math.abs(dy) > Math.abs(dx) && event.cancelable ? act(dy > 0 ? 1 : -1, true) : false;
+        // A finger moving up scrolls the page down. How far it will go is not known yet: away from the stage the touch is
+        // the browser's, and the scroll it makes is stopped on the stage when it gets there (onScroll).
+        touch.ours = Math.abs(dy) > Math.abs(dx) && event.cancelable ? act(dy > 0 ? 1 : -1, true, 0) : false;
       }
+      lastInput = performance.now();
       if (touch.ours && event.cancelable) event.preventDefault();
     };
     const onTouchEnd = () => {
@@ -209,13 +218,20 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     };
     const onScroll = () => {
       window.clearTimeout(rest);
-      if (carrying) return;
       const { top, viewport } = place();
+      const before = lastTop;
+      lastTop = top;
+      if (carrying) return;
       const off = Math.abs(top) > HOLD_PX;
       // While a step plays on a stage that held the window, and just after the page was carried there, nothing else may
       // scroll it: what does is scrolling that was already on its way, and it is undone.
       if (off && ((moving && holding) || performance.now() < clampUntil)) {
         align();
+        return;
+      }
+      // A wheel, a key or a finger has just scrolled the stage's top edge down onto or across the window's: it stops there.
+      if (!moving && before !== null && performance.now() - lastInput < INPUT_MS && crossed(before, top, viewport)) {
+        settle();
         return;
       }
       held = !off;
