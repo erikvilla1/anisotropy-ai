@@ -1,7 +1,7 @@
 /** Small numerical kernels for checking reference equations. Not a component solver. */
 export type Vector3 = [number, number, number];
-export type Matrix3 = [Vector3, Vector3, Vector3];
-export type ElasticInputs = { E1: number; E2: number; G12: number; nu12: number };
+type Matrix3 = [Vector3, Vector3, Vector3];
+type ElasticInputs = { E1: number; E2: number; G12: number; nu12: number };
 const finite = (...values: number[]) => {
   if (!values.every(Number.isFinite)) throw new Error("Inputs must be finite");
 };

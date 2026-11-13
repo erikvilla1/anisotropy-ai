@@ -1,0 +1,20 @@
+Anisotropy
+Copyright (c) 2026 Anisotropy. All rights reserved; see LICENSE.
+
+Third-party material
+
+This repository cites material property values, test-standard requirements and references from other publishers. They are not Anisotropy's: each keeps its owner's terms, and LICENSE grants nothing in them. Every source the materials library cites carries one of these rights classes (lib/source-rights.ts, ADR-0018):
+
+- Public domain: free of copyright, for example a US government work such as MIL-HDBK-17-2F. Values may be shown and a copy may be hosted.
+- Open publisher: distributed publicly by its publisher, for example NCAMP qualification reports, NASA technical reports and manufacturer datasheets. Values are shown with their citation and a link to the publisher's copy; the documents are not copied here.
+- Licensed reference: a copyrighted work, for example a textbook, CMH-17 or an ASTM test standard. Only individual values are recorded, each cited by its table and page or its clause; no scans, extracted text, tables, figures or PDFs are published, and readers are directed to their own copy.
+
+Each record names its source, its rights class and the evidence for that class: lib/curated-materials.ts, lib/qualification-materials.ts, lib/qualification-references.json, lib/textbook-source.ts and lib/source-rights.ts.
+
+Marks and media of others
+
+public/assets/partners/uc-san-diego-the-basement.png and uc-san-diego-the-basement-white.png are The Basement mark of UC San Diego, shown for the Launchpad cohort the team is part of (ADR-0081). They keep their owner's terms, and LICENSE grants nothing in them. Photographs and other media owned by someone other than Anisotropy keep their owners' terms in the same way.
+
+Software dependencies
+
+Packages installed by npm and by uv keep their own licences. They are listed in package-lock.json and in the uv.lock file of engine/, fea/ and api/.
