@@ -75,7 +75,7 @@ export default function Home() {
             {/* The row of ADR-0077 amendment 28: the year on the left, the mark, the name on the right. */}
             <div className="home-hero-notes">
               <p className="home-hero-note" data-intro="type" data-outro="type">
-                Est. 2026
+                Est 2026
               </p>
             </div>
             <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />

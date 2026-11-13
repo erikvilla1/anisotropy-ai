@@ -73,7 +73,7 @@ async function expectHeroWhole(page: Page, blink = "type-caret-blink") {
   await expect(hero.locator("h1")).toHaveText("one engineering platformfor composite theoryand real test data");
   await expect(hero.locator("h1")).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
-  await expect(hero.locator(".home-hero-note")).toHaveText("Est. 2026");
+  await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
   for (const line of await hero.locator(".home-hero-tagline, .home-hero-note").all()) await expect(line).toHaveCSS("color", "rgb(255, 255, 255)");
   // The text cursor: on the statement's last line, at its end, taking no room, and blinking unless the visitor asked for
   // reduced motion.

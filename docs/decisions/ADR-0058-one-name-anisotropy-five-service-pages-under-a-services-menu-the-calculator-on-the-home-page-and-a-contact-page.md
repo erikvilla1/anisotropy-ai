@@ -89,3 +89,14 @@ Numbered 2 on its branch; renumbered when the branch took in main, where an amen
 **Decision.** The link to `/library` reads "Resources". The header and the footer draw their links from one list (`lib/site-nav.ts`), so both change. The address and the page's own title, "Materials library", stay; other pages' links to it keep their wording.
 
 **Evidence.** On 2026-11-13: `tests/site-map.test.ts` expects About, Industries, Resources, Services, Contact us: 2 passed, 0 failed. The two menu cases of `expansion.spec.ts`: 2 of 2. UNVERIFIED: whether the page will hold more than the materials library, which the new word suggests.
+
+## Amendment 4, 2026-11-13 (Services is hidden from the header for now)
+
+**Context.** The lead, looking at the deployed header: "lets get rid of the dropdown for services. just hide the feature for now." The drop-down was the founder's request in the audit this record began with ("leave the tab called Services and make it a drop-down menu"), so this reverses it for the time being and is the founder's to accept with the pull request.
+
+**Options considered.** (1) Take the item and its panel out of the header at every width behind one switch, and keep the pages, the footer's column and the panel's code: chosen, as the reading of "hide the feature". (2) Keep "Services" as a plain link to `/services` without the panel: not chosen; the lead's sentence could also mean this, and it is a small change from here. (3) Delete the panel's code: rejected, the lead said "for now".
+
+**Decision.** `SERVICES_IN_HEADER` in `lib/site-nav.ts` is `false`: the header and the folded menu list About, Industries, Resources and Contact us. The five service pages, the footer's Services column (it now reads `siteNav`, the whole list) and the home page's Platform cards stay. Setting the switch to `true` brings the item and its panel back. The three browser cases that test the item in the header are skipped while the switch is off, and one new case checks that it is absent, wide and folded, and that the footer still lists the five pages.
+
+**Evidence.** On 2026-11-13 against the dev server: `shell.spec.ts`, `expansion.spec.ts`, `home.spec.ts`, `intro.spec.ts` and `demo.spec.ts`: 32 passed, 3 skipped (the three cases above), 0 failed. `npm test`: 295 tests, 294 passed, 1 skipped. `npx tsc --noEmit` clean. A screenshot at 1440 px was looked at: the four links stand in the middle of the page. UNVERIFIED: whether the founder agrees, and which of options 1 and 2 the lead meant.
+

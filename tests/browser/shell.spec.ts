@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { SERVICES_IN_HEADER } from "../../lib/site-nav";
 
 // The site's shell after the audit of 2026-11-12 (ADR-0077 amendment 16, ADR-0058 amendment 2): the 404 page, the titles, the folded
 // menu's keyboard order, Back to top and the workspace header's way back to the projects. Runs against the built site.
@@ -71,6 +72,7 @@ test.describe("on a phone", () => {
   });
 
   test("in the folded menu the current service's row is underlined, and Services marks the section", async ({ page }) => {
+    test.skip(!SERVICES_IN_HEADER, "Services is hidden from the header for now (ADR-0058 amendment 4)");
     await page.goto("/services/test-plans");
     await page.getByRole("button", { name: "Open menu" }).click();
     const nav = page.getByRole("navigation", { name: "Main navigation" });
@@ -85,6 +87,34 @@ test.describe("on a phone", () => {
     await expect(page.locator(".site-header").getByRole("link", { name: "All projects" })).toHaveAttribute("href", "/workspace");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
+});
+
+test("Services is not in the header for now, wide or folded; the footer still lists its five pages (ADR-0058 amendment 4)", async ({ page }) => {
+  test.skip(SERVICES_IN_HEADER, "Services is back in the header");
+  const five = ["Computer-aided design", "Finite element modeling", "Test plans", "Documentation", "Manufacturing plans"];
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  for (const name of ["About", "Industries", "Resources", "Contact us"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Services", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show services" })).toHaveCount(0);
+  await expect(page.locator(".services-panel")).toHaveCount(0);
+  // the four links still stand in the middle of the page
+  const middle = await nav.evaluate((el) => {
+    const links = [...el.querySelectorAll(":scope > a")].filter((a) => !a.classList.contains("mobile-chat-cta") && a.getBoundingClientRect().width > 0);
+    const boxes = links.slice(0, 4).map((a) => a.getBoundingClientRect());
+    return (boxes[0].left + boxes[3].right) / 2 - window.innerWidth / 2;
+  });
+  expect(Math.abs(middle)).toBeLessThanOrEqual(2);
+  const footer = page.getByRole("navigation", { name: "Footer" });
+  await expect(footer.getByRole("link", { name: "Services", exact: true })).toHaveAttribute("href", /\/services\/?$/);
+  for (const name of five) await expect(footer.getByRole("link", { name, exact: true })).toBeVisible();
+  // the folded menu
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await expect(nav.getByRole("link", { name: "About", exact: true })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Services", exact: true })).toHaveCount(0);
+  for (const name of five) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(0);
 });
 
 test("Back to top takes the focus to the top with the page", async ({ page }) => {

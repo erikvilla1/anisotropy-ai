@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, Menu, X } from "lucide-react";
-import { headerLinksToProjects, isAppPath, primaryNav } from "@/lib/site-nav";
+import { headerLinksToProjects, isAppPath, primaryNav, siteNav } from "@/lib/site-nav";
 import { ServicesMenu } from "@/components/services-menu";
 
 /** The logo (ADR-0080): the triangle, then the name, both drawn by `app/brand.css` from the vector files in
@@ -130,8 +130,8 @@ function backToTop(event: MouseEvent<HTMLAnchorElement>) {
   document.querySelector<HTMLElement>(".site-header .wordmark")?.focus({ preventScroll: true });
 }
 
-/** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and the tagline in the left half, and the header's own
- * navigation (`lib/site-nav.ts`) as columns of links from the halfway line: the plain pages and the workspace in the first
+/** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and the tagline in the left half, and the site's
+ * navigation (`siteNav` in `lib/site-nav.ts`, Services included while the header hides it) as columns of links from the halfway line: the plain pages and the workspace in the first
  * column, then each item with children as a column of its own under its landing page. Under a rule, the copyright line, the
  * release stage and the way back to the top, on the same columns. Absent in the workspace, which is an app. The tagline and the
  * stage are the founder's choice of 2026-11-12 (ADR-0077 amendment 16). */
@@ -148,7 +148,7 @@ export function SiteFooter() {
         </div>
         <nav className="site-footer-nav" aria-label="Footer">
           <ul>
-            {primaryNav
+            {siteNav
               .filter((item) => !item.children)
               .map((item) => (
                 <li key={item.href}>
@@ -163,7 +163,7 @@ export function SiteFooter() {
               </Link>
             </li>
           </ul>
-          {primaryNav
+          {siteNav
             .filter((item) => item.children)
             .map((item) => (
               <ul key={item.href}>

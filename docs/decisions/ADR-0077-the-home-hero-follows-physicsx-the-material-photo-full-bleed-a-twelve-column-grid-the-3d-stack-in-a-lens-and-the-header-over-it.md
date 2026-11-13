@@ -456,3 +456,12 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 **Decision.** The line on the triangle's left reads "Est. 2026" in place of "Established 2026", and is set wide (0.27 em between letters) so that it is as long as the name on the other side. The space the tracking leaves after the last figure is taken back, so both sides stand as far from the triangle.
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px: "Est. 2026" alone measured 101 px beside the name's 138 px; set wide it measures 138 px, and each side stands 34 px from the triangle. A screenshot was looked at. `home.spec.ts` and `intro.spec.ts`: 10 of 10. UNVERIFIED, as before: the year is the lead's statement.
+
+## Amendment 32, 2026-11-13 (the year reads "Est 2026")
+
+**Context.** The lead: "lets try change from est. 2026 to est 2026".
+
+**Decision.** The full stop goes. The space between letters grows from 0.27 em to 0.44 em, so the shorter line is still as long as the name on the triangle's other side (amendment 30).
+
+**Evidence.** On 2026-11-13 against the dev server: at 1440 px the year measures 138.6 px beside the name's 138.3 px, each 34.5 px from the triangle; at 1280 px, 123.3 and 123.5; at 1920 px, 181.6 and 176.8. A screenshot at 1440 px was looked at. `home.spec.ts` and `intro.spec.ts` read "Est 2026" and pass. UNVERIFIED: the year is set in the visitor's own monospace typeface, so its length on Windows and macOS was not measured; and, as before, the year is the lead's statement.
+

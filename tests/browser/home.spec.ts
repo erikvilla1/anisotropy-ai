@@ -32,7 +32,7 @@ test("the hero's words are one statement and a row of the year, the mark and the
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
   await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
   // The row under it: the year, the triangle, the name (amendment 28).
-  await expect(hero.locator(".home-hero-note")).toHaveText("Est. 2026");
+  await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
   const row = await hero.evaluate((el) => ["note", "mark", "tagline"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
   expect(row[0]).toBeLessThan(row[1]);
