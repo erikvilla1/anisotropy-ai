@@ -1,14 +1,19 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { buildProblem, type LaminateDraft, type ReportUnits } from "@/lib/laminate-chat";
+import { answerMatches, buildProblem, type LaminateDraft, type ReportUnits } from "@/lib/laminate-chat";
 import { laminateProjects, newLaminateProject, readProjects, reduceLaminate, upsert, writeProjects, type LaminateProject } from "@/lib/project-store";
 import { solveLaminate, StudioError, type LaminateAnswer } from "@/lib/studio-api";
 import { browserStorage } from "./project-context";
 import { useNewestFromServer, useProjectSync } from "./project-sync";
 
-/** What a solve came to: solved, refused by the page's own reading of the draft (a row missing or not a number), or refused by the API. */
-export type SolveOutcome = { ok: true } | { ok: false; errors: string[] } | { ok: false; refused: string };
+/** What a solve came to: solved, refused by the page's own reading of the draft (a row missing or not a number), refused by the API
+ * (with its status when it answered: 422 is a refusal of the problem, anything else an outage), or answered for another problem
+ * (`mismatch`: the analysis ran, and its answer is not shown). */
+export type SolveOutcome = { ok: true } | { ok: false; errors: string[] } | { ok: false; refused: string; status?: number; mismatch?: true };
+
+/** What the page says when the answer that came back is not the answer to the problem it sent. */
+export const ANSWER_MISMATCH = "The result did not match the problem; solve again.";
 
 /** The laminate project the workspace edits and its answer, shared by the panels, the stack and the assistant (ADR-0062, part 5): the
  * draft lives in one place, each value with the unit it was typed in (ADR-0060), and a reload picks the last laminate project up. */
@@ -73,13 +78,17 @@ export function LaminateProvider({ apiBaseUrl, children }: { apiBaseUrl: string;
     setSolving(true); setProblem("");
     try {
       const solved = await solveLaminate(apiBaseUrl, built.problem);
+      if (!answerMatches(built.problem, solved)) { // never shown beside a problem it does not answer
+        setAnswer(null); setProblem(ANSWER_MISMATCH);
+        return { ok: false, refused: ANSWER_MISMATCH, mismatch: true };
+      }
       setAnswer(solved);
       if (!reportUnits) setStamp((s) => s + 1);
       return { ok: true };
     } catch (error) {
       const message = error instanceof StudioError ? error.message : "The solve failed.";
       setProblem(message);
-      return { ok: false, refused: message };
+      return { ok: false, refused: message, status: error instanceof StudioError ? error.status : undefined };
     } finally {
       setSolving(false);
     }

@@ -9,6 +9,9 @@ do not change the solution; strengths are listed but not judged, because a linea
 element maps are returned so the two decks' results can be put side by side.
 
 Our reader accepts only linear static steps (nlgeom=NO, *Static), so two decks that both read have the same procedure.
+
+Two models of one coupon on different meshes cannot be paired node by node. `equivalence_without_mesh` compares what does not depend
+on the mesh, the outline, the element type, the section, the layup and each ply's constants, and says what it left out (ADR-0094).
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from .units import from_si, unit_factors
 
 RELATIVE = 1e-9  # material constants, thicknesses and prescribed values count as equal within this relative difference
 UNIT_NAMES = {"mm-MPa": ("mm", "MPa"), "m-Pa": ("m", "Pa")}
+OUTLINE = 1e-6  # two outlines are the same size within this share of the longer side: a mesh's corner nodes, not a typed constant
 
 
 class EquivalenceError(ValueError):
@@ -68,6 +72,14 @@ def _close(a: float | None, b: float | None) -> bool:
     return abs(a - b) <= RELATIVE * max(abs(a), abs(b), 1e-300)
 
 
+def _same_written(a: float | None, b: float | None, digits: int) -> bool:
+    """Whether two constants are one number written to `digits` significant digits: within half a unit of the last digit, at its
+    largest (a leading 1). Abaqus/CAE writes an input file's material lines to six (seen on Abaqus 2025, ADR-0094)."""
+    if a is None or b is None:
+        return a is None and b is None
+    return abs(a - b) <= 0.5 * 10.0 ** (1 - digits) * max(abs(a), abs(b), 1e-300)
+
+
 def _match_points(reference: np.ndarray, ours: np.ndarray, tolerance: float, what: str) -> tuple[np.ndarray, float]:
     """Index into `ours` of the point at each reference position; one to one and within the tolerance, or refused."""
     if len(reference) != len(ours):
@@ -110,8 +122,66 @@ def _axis_words(part, section) -> str:
     return f"from {section.rotation_deg:g} deg past x ({section.orientation})"
 
 
-def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) -> DeckEquivalence:
+def _section_items(add, reference: Deck, ours: Deck, ref_part, our_part, length, stress, stress_unit: str, material_digits: int | None = None) -> None:
+    """What the two models are made of, whatever their meshes: the section, the layup, and each ply's material constants. With
+    `material_digits`, two constants that are one number written to that many significant digits count as the same, and the item says
+    so; without it they must agree within RELATIVE."""
+    # section, layup, orientation, material constants per ply
+    if len(ref_part.sections) != 1 or len(our_part.sections) != 1:
+        raise EquivalenceError("equivalence compares decks with one shell section")
+    ref_section, our_section = ref_part.sections[0], our_part.sections[0]
+    covers = lambda part, section: set(part.elsets[section.elset].tolist()) == set(part.elements.labels.tolist())  # noqa: E731
+    ref_layers, our_layers = expanded_layers(ref_section), expanded_layers(our_section)
+    add("Section", f"composite shell on {'all' if covers(ref_part, ref_section) else 'some'} elements"
+        + (", listed as the symmetric half" if ref_section.symmetric else ""),
+        f"composite shell on {'all' if covers(our_part, our_section) else 'some'} elements" + (", listed as the symmetric half" if our_section.symmetric else ""),
+        covers(ref_part, ref_section) and covers(our_part, our_section))
+    # The layups are judged by the fibre direction of each ply from global x, the stated angle plus the section's rotation (ADR-0065): two decks
+    # that count their angles from different axes are the same model when their fibres run the same way. Each deck is shown as it states itself.
+    ref_fibres, our_fibres = fibre_angles(ref_section), fibre_angles(our_section)
+    same_angles = len(ref_fibres) == len(our_fibres) and all(_close(a, b) for a, b in zip(ref_fibres, our_fibres))
+    add("Layup, bottom first", f"[{_layer_text(ref_layers)}], {len(ref_layers)} plies, {_axis_words(ref_part, ref_section)}",
+        f"[{_layer_text(our_layers)}], {len(our_layers)} plies, {_axis_words(our_part, our_section)}", same_angles)
+    same_thickness = len(ref_layers) == len(our_layers) and all(_close(a.thickness, b.thickness) for a, b in zip(ref_layers, our_layers))
+    add("Ply thickness", ", ".join(sorted({length(layer.thickness) for layer in ref_layers})),
+        ", ".join(sorted({length(layer.thickness) for layer in our_layers})), same_thickness)
+    same_points = len(ref_layers) == len(our_layers) and all(a.integration_points == b.integration_points for a, b in zip(ref_layers, our_layers))
+    add("Integration points per ply", ", ".join(sorted({str(layer.integration_points) for layer in ref_layers})),
+        ", ".join(sorted({str(layer.integration_points) for layer in our_layers})), same_points)
+    ref_ori = ref_part.orientations.get(ref_section.orientation) if ref_section.orientation else None
+    our_ori = our_part.orientations.get(our_section.orientation) if our_section.orientation else None
+    ori_text = lambda o: "global axes (none)" if o is None else f"a = {list(o.a)}, b = {list(o.b)}, {o.rotation_deg:g} deg about {o.rotation_axis}"  # noqa: E731
+    # Listed, not judged: the orientation is the axis the layer angles are counted from, and the layup row above already judges the fibres.
+    add("Shell orientation", ori_text(ref_ori), ori_text(our_ori), None)
+
+    ref_materials = {layer.material for layer in ref_layers}
+    our_materials = {layer.material for layer in our_layers}
+    add("Material names", ", ".join(sorted(ref_materials)), ", ".join(sorted(our_materials)), True if ref_materials == our_materials else None)
+    add("Section set / layup names", f"{ref_section.elset} / {ref_section.layup_name}", f"{our_section.elset} / {our_section.layup_name}",
+        True if (ref_section.elset, ref_section.layup_name) == (our_section.elset, our_section.layup_name) else None)
+    for name, label in (("E1", "E1"), ("E2", "E2"), ("nu12", "nu12"), ("G12", "G12"), ("G13", "G13"), ("G23", "G23")):
+        ref_values = [getattr(reference.materials[layer.material].elastic, name) for layer in ref_layers]
+        our_values = [getattr(ours.materials[layer.material].elastic, name) for layer in our_layers]
+        shown = (lambda v: f"{v:g}") if name == "nu12" else stress
+        paired = len(ref_values) == len(our_values)
+        exact = paired and all(_close(a, b) for a, b in zip(ref_values, our_values))
+        written = not exact and paired and material_digits is not None and all(_same_written(a, b, material_digits) for a, b in zip(ref_values, our_values))
+        if not exact:  # two values that differ are shown with the digits that tell them apart, in the same unit
+            factor = 1.0 if name == "nu12" else float(stress(1.0))  # the unit's factor, from the formatter the caller gave
+            shown = lambda v, factor=factor: f"{v * factor:.10g}"  # noqa: E731
+        text = lambda values, shown=shown: ", ".join(sorted({"none" if v is None else shown(v) for v in values}))  # noqa: E731
+        add(f"Material {label}" + ("" if name == "nu12" else f" ({stress_unit})"), text(ref_values),
+            text(our_values) + (f" (one number written to {material_digits} significant digits)" if written else ""), exact or written)
+    strength_text = lambda deck, names: "; ".join(  # noqa: E731
+        f"{n}: none" if deck.materials[n].fail_stress is None else
+        f"{n}: F1t {stress(deck.materials[n].fail_stress.Xt)}, F1c {stress(abs(deck.materials[n].fail_stress.Xc))}, F2t {stress(deck.materials[n].fail_stress.Yt)}, "
+        f"F2c {stress(abs(deck.materials[n].fail_stress.Yc))}, F6 {stress(deck.materials[n].fail_stress.S)} {stress_unit}" for n in sorted(names))
+    add("Strengths (*Fail Stress)", strength_text(reference, ref_materials), strength_text(ours, our_materials), None)
+
+
+def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str, material_digits: int | None = None) -> DeckEquivalence:
     """Compare two SI decks of one part and one instance each; `tolerance` (m) is the largest node offset that counts as the same position.
+    `material_digits` is for a deck Abaqus/CAE wrote from a model of ours (`_section_items`).
 
     The comparison is made in SI; `units` ("mm-MPa" or "m-Pa") is only how the item texts state lengths and stresses.
     """
@@ -166,51 +236,7 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
     add("Element connectivity", "as written", "every element on the same corner nodes" if not unmatched else f"{unmatched} elements have no counterpart",
         unmatched == 0)
 
-    # section, layup, orientation, material constants per ply
-    if len(ref_part.sections) != 1 or len(our_part.sections) != 1:
-        raise EquivalenceError("equivalence compares decks with one shell section")
-    ref_section, our_section = ref_part.sections[0], our_part.sections[0]
-    covers = lambda part, section: set(part.elsets[section.elset].tolist()) == set(part.elements.labels.tolist())  # noqa: E731
-    ref_layers, our_layers = expanded_layers(ref_section), expanded_layers(our_section)
-    add("Section", f"composite shell on {'all' if covers(ref_part, ref_section) else 'some'} elements"
-        + (", listed as the symmetric half" if ref_section.symmetric else ""),
-        f"composite shell on {'all' if covers(our_part, our_section) else 'some'} elements" + (", listed as the symmetric half" if our_section.symmetric else ""),
-        covers(ref_part, ref_section) and covers(our_part, our_section))
-    # The layups are judged by the fibre direction of each ply from global x, the stated angle plus the section's rotation (ADR-0065): two decks
-    # that count their angles from different axes are the same model when their fibres run the same way. Each deck is shown as it states itself.
-    ref_fibres, our_fibres = fibre_angles(ref_section), fibre_angles(our_section)
-    same_angles = len(ref_fibres) == len(our_fibres) and all(_close(a, b) for a, b in zip(ref_fibres, our_fibres))
-    add("Layup, bottom first", f"[{_layer_text(ref_layers)}], {len(ref_layers)} plies, {_axis_words(ref_part, ref_section)}",
-        f"[{_layer_text(our_layers)}], {len(our_layers)} plies, {_axis_words(our_part, our_section)}", same_angles)
-    same_thickness = len(ref_layers) == len(our_layers) and all(_close(a.thickness, b.thickness) for a, b in zip(ref_layers, our_layers))
-    add("Ply thickness", ", ".join(sorted({length(layer.thickness) for layer in ref_layers})),
-        ", ".join(sorted({length(layer.thickness) for layer in our_layers})), same_thickness)
-    same_points = len(ref_layers) == len(our_layers) and all(a.integration_points == b.integration_points for a, b in zip(ref_layers, our_layers))
-    add("Integration points per ply", ", ".join(sorted({str(layer.integration_points) for layer in ref_layers})),
-        ", ".join(sorted({str(layer.integration_points) for layer in our_layers})), same_points)
-    ref_ori = ref_part.orientations.get(ref_section.orientation) if ref_section.orientation else None
-    our_ori = our_part.orientations.get(our_section.orientation) if our_section.orientation else None
-    ori_text = lambda o: "global axes (none)" if o is None else f"a = {list(o.a)}, b = {list(o.b)}, {o.rotation_deg:g} deg about {o.rotation_axis}"  # noqa: E731
-    # Listed, not judged: the orientation is the axis the layer angles are counted from, and the layup row above already judges the fibres.
-    add("Shell orientation", ori_text(ref_ori), ori_text(our_ori), None)
-
-    ref_materials = {layer.material for layer in ref_layers}
-    our_materials = {layer.material for layer in our_layers}
-    add("Material names", ", ".join(sorted(ref_materials)), ", ".join(sorted(our_materials)), True if ref_materials == our_materials else None)
-    add("Section set / layup names", f"{ref_section.elset} / {ref_section.layup_name}", f"{our_section.elset} / {our_section.layup_name}",
-        True if (ref_section.elset, ref_section.layup_name) == (our_section.elset, our_section.layup_name) else None)
-    for name, label in (("E1", "E1"), ("E2", "E2"), ("nu12", "nu12"), ("G12", "G12"), ("G13", "G13"), ("G23", "G23")):
-        ref_values = [getattr(reference.materials[layer.material].elastic, name) for layer in ref_layers]
-        our_values = [getattr(ours.materials[layer.material].elastic, name) for layer in our_layers]
-        shown = (lambda v: f"{v:g}") if name == "nu12" else stress
-        text = lambda values, shown=shown: ", ".join(sorted({"none" if v is None else shown(v) for v in values}))  # noqa: E731
-        add(f"Material {label}" + ("" if name == "nu12" else f" ({stress_unit})"), text(ref_values), text(our_values),
-            len(ref_values) == len(our_values) and all(_close(a, b) for a, b in zip(ref_values, our_values)))
-    strength_text = lambda deck, names: "; ".join(  # noqa: E731
-        f"{n}: none" if deck.materials[n].fail_stress is None else
-        f"{n}: F1t {stress(deck.materials[n].fail_stress.Xt)}, F1c {stress(abs(deck.materials[n].fail_stress.Xc))}, F2t {stress(deck.materials[n].fail_stress.Yt)}, "
-        f"F2c {stress(abs(deck.materials[n].fail_stress.Yc))}, F6 {stress(deck.materials[n].fail_stress.S)} {stress_unit}" for n in sorted(names))
-    add("Strengths (*Fail Stress)", strength_text(reference, ref_materials), strength_text(ours, our_materials), None)
+    _section_items(add, reference, ours, ref_part, our_part, length, stress, stress_unit, material_digits)
 
     # grips: couplings by their reference point
     our_couplings = {reference_node(ours, c): c for c in ours.couplings}
@@ -259,3 +285,50 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
     add("Steps", ", ".join(f"{s.name} (linear static)" for s in reference.steps), ", ".join(f"{s.name} (linear static)" for s in ours.steps),
         len(reference.steps) == len(ours.steps))
     return DeckEquivalence(items=tuple(items), node_map=node_map, element_map=element_map, largest_node_offset=largest, tolerance=tolerance, units=units)
+
+
+def outline(deck: Deck) -> tuple[float, float, float, float]:
+    """The box around a deck's one part, from its nodes: (x min, y min, x max, y max), m."""
+    xyz = _only(deck.parts, "part", deck).nodes.xyz
+    if len(xyz) == 0:
+        raise EquivalenceError(f"{deck.source_path or 'deck'}: the part has no nodes")
+    return float(xyz[:, 0].min()), float(xyz[:, 1].min()), float(xyz[:, 0].max()), float(xyz[:, 1].max())
+
+
+def equivalence_without_mesh(reference: Deck, ours: Deck, units: str, material_digits: int | None = None) -> tuple[EquivalenceItem, ...]:
+    """What two SI decks of one coupon are made of, compared without pairing their meshes (ADR-0094): the outline's size, the element
+    type, the section, the layup and each ply's constants, and the steps. The nodes, the elements, the grips, the boundary conditions and
+    the loads are counted and listed, not judged: on two meshes they cannot be paired, and the reaction's comparison stands for them."""
+    if reference.units is None or ours.units is None:
+        raise EquivalenceError("equivalence_without_mesh needs both decks in SI (read_deck with units, or to_si)")
+    unit_factors(units)
+    length_unit, stress_unit = UNIT_NAMES[units]
+    length = lambda v: f"{from_si(v, 'length', units):.6g} {length_unit}"  # noqa: E731
+    stress = lambda v: f"{from_si(v, 'stress', units):.6g}"  # noqa: E731
+    ref_part, our_part = _only(reference.parts, "part", reference), _only(ours.parts, "part", ours)
+    ref_inst, our_inst = _only(reference.instances, "instance", reference), _only(ours.instances, "instance", ours)
+    if ref_part.elements is None or our_part.elements is None:
+        raise EquivalenceError("both decks need elements")
+    items: list[EquivalenceItem] = []
+
+    def add(item: str, team: str, mine: str, same: bool | None) -> None:
+        items.append(EquivalenceItem(item, team, mine, same))
+
+    add("Part / instance names", f"{ref_part.name} / {ref_inst.name}", f"{our_part.name} / {our_inst.name}",
+        True if (ref_part.name, ref_inst.name) == (our_part.name, our_inst.name) else None)
+    (rx0, ry0, rx1, ry1), (ox0, oy0, ox1, oy1) = outline(reference), outline(ours)
+    sizes = ((rx1 - rx0, ry1 - ry0), (ox1 - ox0, oy1 - oy0))
+    longest = max(*sizes[0], *sizes[1])
+    size_text = lambda size: f"{from_si(size[0], 'length', units):.6g} by {from_si(size[1], 'length', units):.6g} {length_unit}"  # noqa: E731
+    add("Outline", size_text(sizes[0]), size_text(sizes[1]), all(abs(a - b) <= OUTLINE * longest for a, b in zip(*sizes)))
+    add("Nodes", f"{len(ref_part.nodes.labels)} on the part", f"{len(our_part.nodes.labels)} on the part", None)
+    add("Elements", f"{len(ref_part.elements.labels)} {ref_part.elements.element_type}",
+        f"{len(our_part.elements.labels)} {our_part.elements.element_type}", None)
+    add("Element type", ref_part.elements.element_type, our_part.elements.element_type,
+        ref_part.elements.element_type == our_part.elements.element_type)
+    _section_items(add, reference, ours, ref_part, our_part, length, stress, stress_unit, material_digits)
+    held = lambda deck: f"{len(_held(deck))} nodes held or moved, {len(deck.couplings)} couplings"  # noqa: E731
+    add("Grips and boundary conditions", held(reference), held(ours), None)
+    add("Steps", ", ".join(f"{s.name} (linear static)" for s in reference.steps), ", ".join(f"{s.name} (linear static)" for s in ours.steps),
+        len(reference.steps) == len(ours.steps))
+    return tuple(items)

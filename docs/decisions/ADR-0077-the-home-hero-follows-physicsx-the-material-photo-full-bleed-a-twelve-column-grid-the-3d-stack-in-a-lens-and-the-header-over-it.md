@@ -2,7 +2,7 @@
 
 - Status: Proposed
 - Date: 2026-11-07
-- Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
+- Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07; Founder, 2026-11-12 ("accept": "Composites. Calculated." and "Closed beta", amendment 16) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) (the hero first; this is its option 3 in part), [ADR-0001](ADR-0001-deterministic-engine.md), the CEO's website audit of 2026-10-31 (item 7), `app/page.tsx`, `app/home.css`, `components/home/hero-lens.tsx`, `components/site-shell.tsx`, `tests/browser/home.spec.ts`
 
 ## Context
@@ -260,6 +260,23 @@ On phones it is one column.
 
 **Evidence.** In the browser on 2026-11-10 at 1440 px, on the dev server: at rest the button is outlined with white words and an up-right arrow; hovered, its words are rgb(13, 13, 13), its border white, the fill at full width and the arrow turned 45°; after the pointer leaves it returns to the rest state. Screenshots of each state were looked at. UNVERIFIED: touch screens, where there is no hover.
 
+## Amendment 16, 2026-11-12 (the header and footer after the site audit; the tagline and the stage confirmed by the founder)
+
+**Context.** The site audit of 2026-11-12 found in the shell: two taglines, "Engineered from evidence." in the footer and "Composites. Calculated." on the home, and two names for the stage, "Research preview v.01" in the footer and in a header label hidden at every width, and "closed beta" on the home (shell-16, decision D11); header links of 9 to 10 px from 641 to 900 px, with "Services +" about 5 px low (shell-7); a phone menu whose button came after its links in the page's order, with no Escape and no close on a press outside (shell-6); the current page marked by colour alone (shell-21); ↗ on links that stay on the site (shell-8); "Back to top" leaving the focus in the footer (shell-9); a masked logo that would vanish in forced colours (shell-15, from how forced colours work, not observed); and a 70 px workspace header on a 48 px gutter over a toolbar on 20 px, with no way back to the projects from CAD and the viewer (shell-22, shell-J1-1, shell-J1-2).
+
+**Options.** From 641 to 900 px: (1) the row of links at 13 px or more; not chosen: an estimate from the type sizes, not a measurement, puts the five links, the logo and the Workspace button wider than a 768 px header. (2) The menu button up to 900 px, the audit's alternative: chosen.
+
+**Decision.**
+- **Tagline and stage:** "Composites. Calculated." and "Closed beta", with no version: the founder's answer to D11 on 2026-11-12, "accept". The header's hidden version label and its rules are gone.
+- **The menu** folds the links up to 900 px (640 before; `components/services-menu.css` follows). Its button comes before it in the page and names it (`aria-controls`); opening moves the focus to the first link; Escape closes it and returns the focus to the button; a press outside the header, the focus leaving the header or a new page closes it; each row is at least 44 px tall. From 901 px the links sit on one centre line.
+- **Arrows:** the shell has no ↗: → for Workspace in the header, the menu and the footer; ← for "Back to website" and "All projects". Amendment 15's hover keeps its fill and colours, and its arrow no longer turns. Beyond the shell, a library property's link to its source page on this site drops its ↗, which stays on the external one with "(opens in a new tab)" in its name, and a job's "Open results in a new window" takes ↗ for the new window. ↗ is meant only for a link that opens a new tab, but this change does not reach the pages' own links: they follow in their fix groups (the home, about, industries, services and contact pages: audit finding uiux-home-about-12; the library's "Discuss this material": library-27; the library's "View source details", its source titles and supporting references, the physics cards' references, the library page's source links and the source viewer's links, and the coupon studio's "Open results in a new window": handed on with shell-8). Until then some same-site links keep ↗.
+- **The current page** is underlined, 1 px at 6 px, in the header and the footer, and in the folded menu the current service's row too (from 901 px the panel's 1 px rule marks it); on a service page the Services item says `aria-current="true"`, the section, not the page.
+- **Back to top** scrolls to the top and moves the focus to the logo; without a script it goes to `#main`.
+- **Forced colours:** the masked parts of the logo draw in the system's text colour.
+- **The workspace header** is 56 px tall on a 20 px gutter. On CAD and the viewer, which have no toolbar of their own, it links to All projects; on a phone that link takes the place of "Back to website", and the logo still leads home. Its links are 13 px on phones. On phones the workspace toolbar puts the project's name on a row of its own and keeps the kind on one line.
+
+**Evidence.** `npm run build` on 2026-11-12: every page lists the menu button before `id="site-menu"`; `out/workspace/cad.html` has the header's All projects link and `out/workspace/fea.html` does not; no page holds "Research preview" or `header-version`; the folded menu's underline for the current service row is in the shared stylesheet. `npm test` on 2026-11-13, rebased on main after #199: 255 tests, 254 passed, 0 failed, 1 skipped; `tests/site-metadata.test.ts`, 6 of 6, checks which addresses get the workspace header, where All projects shows, and that in the shell, the property table and a job's files ↗ sits only on a link with `target="_blank"` that says it opens a new tab or window (its check, run by hand on main's versions, flags four links in `site-shell.tsx` and two in `property-table.tsx`). `tests/browser/shell.spec.ts` (new: the menu's order, focus, Escape, outside press, Tab out and 44 px rows, the current service's row underlined in it, Back to top, the CAD header, the 404 page under an old address) and the existing site-wide specs: UNVERIFIED, not run in this change. No screenshots were taken: the header from 641 to 900 px, forced colours and the workspace header on a phone are UNVERIFIED.
+
 ## Amendment 31, 2026-11-11 (the supporters' strip removed)
 
 Numbered 16 on its branch; renumbered when the branch took in main, where an amendment of 2026-11-12 had the number.
@@ -439,4 +456,3 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 **Decision.** The line on the triangle's left reads "Est. 2026" in place of "Established 2026", and is set wide (0.27 em between letters) so that it is as long as the name on the other side. The space the tracking leaves after the last figure is taken back, so both sides stand as far from the triangle.
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px: "Est. 2026" alone measured 101 px beside the name's 138 px; set wide it measures 138 px, and each side stands 34 px from the triangle. A screenshot was looked at. `home.spec.ts` and `intro.spec.ts`: 10 of 10. UNVERIFIED, as before: the year is the lead's statement.
-

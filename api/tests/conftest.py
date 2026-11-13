@@ -44,6 +44,8 @@ def migrated_database():
     with engine.begin() as connection:
         if inspect(connection).has_table("runs"):
             connection.execute(text("TRUNCATE runs CASCADE"))  # and the jobs that point at runs (migration 0006)
+        if inspect(connection).has_table("upload_tokens"):
+            connection.execute(text("TRUNCATE upload_tokens CASCADE"))  # and the uploads that name a token (migration 0010)
     command.downgrade(alembic_config(TEST_URL), "base")
     command.upgrade(alembic_config(TEST_URL), "head")
     yield engine
@@ -52,7 +54,7 @@ def migrated_database():
 
 @pytest.fixture
 def empty_runs(migrated_database):
-    """The migrated database with empty runs and jobs tables."""
+    """The migrated database with empty runs and jobs tables, and no uploads or upload tokens."""
     with migrated_database.begin() as connection:
-        connection.execute(text("TRUNCATE runs CASCADE"))
+        connection.execute(text("TRUNCATE runs, upload_tokens CASCADE"))
     return migrated_database

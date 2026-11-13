@@ -973,3 +973,81 @@ class CouponValuesOutput(Contract):
 
     name: str
     values: dict[str, Any]
+
+
+class UploadTokenInput(Contract):
+    """A token for the connector (ADR-0094 part 6): the name its owner tells it from the others by, such as the machine it is for."""
+
+    name: Annotated[str, Field(max_length=100)] = ""
+
+
+class UploadTokenOutput(Contract):
+    """A token as the API keeps it: never the token itself, only its last characters."""
+
+    id: str
+    name: str
+    hint: str
+    created_at: str
+    last_used_at: str | None
+    revoked_at: str | None
+
+    @classmethod
+    def of(cls, row) -> "UploadTokenOutput":
+        return cls(id=str(row.id), name=row.name, hint=row.hint, created_at=row.created_at.isoformat(),
+                   last_used_at=None if row.last_used_at is None else row.last_used_at.isoformat(),
+                   revoked_at=None if row.revoked_at is None else row.revoked_at.isoformat())
+
+
+class UploadTokenCreated(UploadTokenOutput):
+    """A token just created, with the token itself: shown this once and never again, because only its SHA-256 is kept."""
+
+    token: str
+
+    @classmethod
+    def with_token(cls, row, token: str) -> "UploadTokenCreated":
+        return cls(**UploadTokenOutput.of(row).model_dump(), token=token)
+
+
+class AbaqusExchange(Contract):
+    """What the page's card needs to know before it offers anything (ADR-0094 step 6): whether this API keeps uploads at all, whether
+    the connector's own route can be reached with an upload token (always without a sign-in in front; behind Cloudflare Access only
+    when the setting opens it), and the limits a person meets."""
+
+    uploads: bool
+    connector_route: bool
+    max_bundle_bytes: int
+    max_uploads: int
+    max_tokens: int
+
+
+class UploadOutput(Contract):
+    """An upload from Abaqus as the API keeps it (ADR-0094 part 6): whose it is, the bundle's identity, what the check found in it, and,
+    once it stood beside a run of ours, that job with the verdict and the comparison as `fea/tools/abaqus_upload.py compare` wrote it.
+    `not_compared` says why no comparison was made. A list leaves `facts` and `comparison` out; read the upload by its id for them."""
+
+    id: str
+    actor: str
+    user_email: str | None
+    token_id: str | None
+    created_at: str
+    bundle_sha256: str
+    bundle_bytes: int
+    units: str
+    job: str | None
+    coupon: str | None
+    in_scope: bool
+    may_train: bool
+    job_id: str | None
+    verdict: Literal["agrees", "differs", "incomplete", "refused"] | None
+    compared_at: str | None
+    not_compared: str | None
+    facts: dict[str, Any] | None = None
+    comparison: dict[str, Any] | None = None
+
+    @classmethod
+    def of(cls, row, full: bool = True) -> "UploadOutput":
+        return cls(id=str(row.id), actor=row.actor, user_email=row.user_email, token_id=None if row.token_id is None else str(row.token_id),
+                   created_at=row.created_at.isoformat(), bundle_sha256=row.bundle_sha256, bundle_bytes=row.bundle_bytes, units=row.units, job=row.job,
+                   coupon=row.coupon, in_scope=row.in_scope, may_train=row.may_train, job_id=None if row.job_id is None else str(row.job_id),
+                   verdict=row.verdict, compared_at=None if row.compared_at is None else row.compared_at.isoformat(), not_compared=row.not_compared,
+                   facts=dict(row.facts) if full else None, comparison=dict(row.comparison) if full and row.comparison is not None else None)

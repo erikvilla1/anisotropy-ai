@@ -1,4 +1,7 @@
 import { materials, materialSource, type Material, type Property } from "./materials";
+import { formatNumber, parseProperty, PSI_MPA } from "./property-numbers";
+
+export { formatNumber, parseProperty, PSI_MPA };
 
 export const schoolAudit = {
   title: "SE143AB · Appendix F: Material Properties", edition: "Version 2", published: "2026-02-01",
@@ -17,10 +20,6 @@ export function schoolCitation(m: Material) {
   };
 }
 
-export function parseProperty(value: string): number | null {
-  const cleaned = value.trim().replace(/,/g, "");
-  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(cleaned) && Number.isFinite(Number(cleaned)) ? Number(cleaned) : null;
-}
 export function propertyIssue(m: Material, p: Property): string | null {
   if (p.review) return p.review;
   if (["as4-3501", "agp370"].includes(m.id) && p.symbol.startsWith("β")) return "Moisture coefficients exactly repeat the thermal coefficients under different units. Confirm with the source owner before moisture analysis.";
@@ -31,9 +30,6 @@ export function propertyIssue(m: Material, p: Property): string | null {
   return null;
 }
 
-// Factors derive from exact SI definitions: inch=0.0254 m; lb=0.45359237 kg;
-// standard gravity=9.80665 m/s². Original numbers/signs are never overwritten.
-export const PSI_MPA = 0.45359237 * 9.80665 / (0.0254 ** 2) / 1e6;
 const conversions: Record<string, [number, string]> = {
   Msi: [PSI_MPA * 1000, "GPa"], ksi: [PSI_MPA * 1000, "MPa"], psi: [PSI_MPA, "MPa"],
   "lb/in³": [0.45359237 / 0.0254 ** 3, "kg/m³"], "lb/ft³": [0.45359237 / 0.3048 ** 3, "kg/m³"],
@@ -44,7 +40,6 @@ export function siProperty(p: Property) {
   if (value === null || !conversion) return null;
   return { value: value * conversion[0], unit: conversion[1] };
 }
-export function formatNumber(value: number) { return Number(value.toPrecision(6)).toLocaleString("en-US", { maximumSignificantDigits: 6 }); }
 
 export type AnalysisPurpose = "in-plane-elastic" | "laminate-elastic" | "strength-screening" | "mass" | "core-elastic";
 export const analysisPurposes: Record<AnalysisPurpose, string> = {

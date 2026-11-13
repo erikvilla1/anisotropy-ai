@@ -1,4 +1,5 @@
 import { serviceHref, services } from "./services";
+import { WORKSPACE_ROOT, WORKSPACES } from "./workspaces";
 
 /** The header's items in the order of the audit of 2026-10-31 (ADR-0058). Calculator and Studio left the
  * header: the calculator lives on the home page and the studio is reached from the finite element page. The materials
@@ -20,3 +21,20 @@ export const primaryNav: readonly NavItem[] = [
   },
   { label: "Contact us", href: "/contact" },
 ];
+
+/** The old addresses that move to the workspace (ADR-0058 amendments 1 and 2), the same four as `MOVED_PAGES` in worker/routing.ts. */
+export const MOVED_ADDRESSES: readonly string[] = ["/chat", "/chat/view", "/studio", "/studio/view"];
+
+/** The app's addresses: the workspace, and the four old addresses that move to it. They get the workspace's own header and no
+ * footer. Any other path under `/chat` or `/studio` is the 404 page, which keeps the site's header it was built with. */
+export function isAppPath(pathname: string): boolean {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return path === "/workspace" || path.startsWith("/workspace/") || MOVED_ADDRESSES.includes(path);
+}
+
+/** True where the workspace's header links back to the projects: a workspace page without a toolbar of its own (CAD, the viewer).
+ * The built workspaces' toolbars carry "All projects" already (components/workspace/shell.tsx), and `/workspace` is the projects. */
+export function headerLinksToProjects(pathname: string): boolean {
+  const path = pathname.replace(/\/+$/, "");
+  return path.startsWith(`${WORKSPACE_ROOT}/`) && !WORKSPACES.some((w) => w.status === "built" && w.href === path);
+}

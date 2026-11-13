@@ -8,11 +8,8 @@
     "page": 30,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/hexcel-8552/AS4-Unitape-2.pdf",
-    "sha256": "14c20a47834ed11fa3f3d62183c861a66b8dd0b48dae19c45ecacf64d9e424be",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "as4-stats": {
     "id": "ncamp-as4-8552-statistics",
@@ -23,11 +20,8 @@
     "page": 34,
     "role": "Statistical strength analysis; recommended values and exclusions",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/hexcel-8552/AS4-Unitape-3.pdf",
-    "sha256": "f92977f3427210121cf6e667fe1c6cfd021931f42d4cab6c0516fab510150123",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "as4-detail": {
     "id": "ncamp-as4-8552-detail",
@@ -38,11 +32,8 @@
     "page": 1,
     "role": "Exact prepreg identity and qualified product",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/hexcel-8552/AS4-Unitape-1.pdf",
-    "sha256": "6e6a5faebb095c80d7ee730ddb6601099633073d2e6dbf21d0c94cbcbb9a53c0",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "as4-base": {
     "id": "ncamp-8552-base",
@@ -53,11 +44,8 @@
     "page": 1,
     "role": "Current listed base specification; later than the test program",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NMS-128-Rev-D-March-16-2022-Hexcel-8552-Base-Material-Specification.pdf",
-    "sha256": "c30a130d783409eee1ebe5439b6707d886a8ce21bf9a90f66b6a861249295689",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "as4-process": {
     "id": "ncamp-8552-process",
@@ -68,11 +56,8 @@
     "page": 1,
     "role": "Current listed process specification; qualification baseline cure M",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NPS-81228-Rev-C-Hexcel-8552-Process-Specification-March-16-2022-.pdf",
-    "sha256": "a73a420512cc4774643f6b7fa54e81462fa10ba452fa4c63f2d799e4e07be8c1",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "glass-legacy": {
     "id": "agate-e765-2001",
@@ -83,11 +68,8 @@
     "page": 27,
     "role": "Original qualification program, including Poisson’s ratio",
     "url": "https://agate.niar.wichita.edu/Materials/WP3.3-033051-105.pdf",
-    "sha256": "88d0ed9b830da8bdcdf58b1fa3e7d7b1951e605d65f844833c45ee35a4760436",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "AGATE program report hosted publicly by NIAR for download. Linked, not copied."
+    "rights": "open-publisher"
   },
   "glass-data": {
     "id": "ncamp-e765-2025",
@@ -98,11 +80,8 @@
     "page": 17,
     "role": "2025 measurements; separate test program",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Park-Aerospace-Corp-7781-E765-Glass-CAM-RP-2023-010-Rev-NC-MPDR-2-25-25.pdf",
-    "sha256": "1eefc09bc58939ef84806bcb00b60c2e282a9db628352b38de66c03930d52816",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "glass-stats": {
     "id": "ncamp-e765-equivalency",
@@ -113,11 +92,8 @@
     "page": 1,
     "role": "Comparison with the AGATE baseline; application-specific equivalency remains required",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Equivalency-Report-Park-Aerospace-E765-7781.pdf",
-    "sha256": "8227ff87c4c30090018a84b2ce04dd6bae41f961ec6a860d29eb4065c2727f75",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "glass-base": {
     "id": "ncamp-e765-base",
@@ -128,11 +104,8 @@
     "page": 1,
     "role": "Current listed material specification",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NMS-765-Base-Rev-March-10-2024.pdf",
-    "sha256": "1a1f4d3b2f8322c2ea04a538b582af2bee03412b847c1075720917fd5dd877f5",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "glass-detail": {
     "id": "ncamp-e765-detail",
@@ -143,11 +116,8 @@
     "page": 1,
     "role": "Current listed exact prepreg identity and qualified product",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NMS-765-slash-5-Rev-March-10-2024-E765-7781.pdf",
-    "sha256": "bc9d0e8ac550536afdc2d523866c124f4460fa5cf01b35ee0dddee43981c7d40",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "glass-process": {
     "id": "ncamp-e765-process",
@@ -158,11 +128,8 @@
     "page": 1,
     "role": "Cure O; distinguishes baseline bagging Option 1 from later Option 2",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NPS-81765-Rev-2.9.2024-E765-Process-Spec.pdf",
-    "sha256": "c761ce96af51730e34855e036e02163e79dc91c211551e29675d1d637c5b8f3e",
     "accessed": "2026-10-01",
-    "verification": "Original publisher PDF downloaded; title-page date and applicable tables/specification sections reviewed.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP documents are intended for general distribution to the public (NCAMP, NIAR). Linked, not copied."
+    "rights": "open-publisher"
   },
   "im7-data": {
     "id": "ncamp-im7-8552-data",
@@ -173,11 +140,8 @@
     "page": 28,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Qual-CAM-RP-2009-015-Rev-B-Hexcel-8552-IM7-MPDR-04.16.19.pdf",
-    "sha256": "640c215e6999e3429ed410722432174fb02e9157c76ae323380b9f314f211387",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover, p. 9 distribution statement, Table 2-1 (p. 28) and the individual test summaries on pp. 30-34 and 37 visually checked.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "im7-stats": {
     "id": "ncamp-im7-8552-statistics",
@@ -188,11 +152,8 @@
     "page": 35,
     "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NCP-RP-2009-028-Rev-B-HEXCEL-8552-IM7-Uni-SAR-4-16-2019.pdf",
-    "sha256": "6313ba07cc0205aa0677f0a1f6233952f847fc4f0b093acc98f2d2a1bcd9628d",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover and Table 3-1 (p. 35) visually checked; distribution sentence on p. 10.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 10) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "t650-data": {
     "id": "ncamp-t650-5320-1-data",
@@ -203,11 +164,8 @@
     "page": 22,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/cytec-5320-1/T650-Unitape-2.pdf",
-    "sha256": "3f65281e0bcfde5341cb0c7e06c1b96fe0f4306d1a0d7130f1dbe2863bfc63ed",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover, p. 9 distribution statement, Table 2-1 (p. 22), pp. 18, 21, 24-28 and 36 visually checked.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "t650-stats": {
     "id": "ncamp-t650-5320-1-statistics",
@@ -218,11 +176,8 @@
     "page": 33,
     "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/cytec-5320-1/T650-Unitape-3.pdf",
-    "sha256": "1f90f7f2520da6c4fd8e192b95b0f0f1baca86e42ef02a480038ed5e26896686",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover and Table 3-1 (p. 33) visually checked; distribution sentence on p. 9.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "bt250-data": {
     "id": "ncamp-im7-bt250e-6-data",
@@ -233,11 +188,8 @@
     "page": 19,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/tencate-bt250e-6/CAM-RP-2015-038-Rev-NC-TenCate-BT250E-6-IM7-GP-Unitape-MPDR-10.25.2017.pdf",
-    "sha256": "304a088a4a497ed641e121b06c1a281d1c8cd440efd9782cde8c9d6db82e7683",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover, p. 6 distribution statement, Table 2-1 (p. 19), pp. 14, 18, 20-24 and 26 visually checked.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 6) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "bt250-stats": {
     "id": "ncamp-im7-bt250e-6-statistics",
@@ -248,11 +200,8 @@
     "page": 30,
     "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/tencate-bt250e-6/NCP-RP-2015-019-NC-BT250E-6-IM7-GP-Unitape-Stat-Analysis-UNI-10-20-17.pdf",
-    "sha256": "d0b9b3db52540d28da64d51ae3a8542612d70995896063c4a54771bca65cddbf",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover and Table 3-1 (p. 30) visually checked; distribution sentence on p. 6.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 6) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "tc380-data": {
     "id": "ncamp-t1100gc-tc380-data",
@@ -263,11 +212,8 @@
     "page": 32,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Toray-TC380-T1100GC-24K-Uni-CAM-RP-2025-021-Rev-9-24-2025-MPDR.pdf",
-    "sha256": "e8297c644af8e437a482edb78717b83dee49ed3c52c91b2c963a0dfbb8bd446b",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover, p. 10 distribution statement, Table 2-1 (p. 32), pp. 24, 31, 39-44 visually checked.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 10) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "tc380-stats": {
     "id": "ncamp-t1100gc-tc380-statistics",
@@ -278,11 +224,8 @@
     "page": 36,
     "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/Toray-TC380-T1100GC-24K-Uni-NCP-RP-2025-010-Rev-10-03-25-SAR.pdf",
-    "sha256": "7d334c5861aaa17ee858ff47fa026e80e69334067f6b095d8b73d75d00cabc82",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover and Table 3-1 (p. 36) visually checked; distribution sentence on p. 10.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 10) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "ep2190-data": {
     "id": "ncamp-ims65-ep2190-data",
@@ -293,11 +236,8 @@
     "page": 33,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/EP2190-IMS65-UNI-CAM-RP-2022-001-Rev-9.18.2025-MPDR.pdf",
-    "sha256": "99a3d37118965e0933878c06de2222a65264f3fc1171836555d11697217c5dfc",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover, p. 9 distribution statement, Table 2-1 (p. 33), pp. 26, 30, 39-45 and 53 visually checked.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "ep2190-stats": {
     "id": "ncamp-ims65-ep2190-statistics",
@@ -308,11 +248,8 @@
     "page": 37,
     "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/EP2190-IMS65-UNI-NCP-RP-2022-002-Rev-09-26-2025-SAR.pdf",
-    "sha256": "d8dfdfe8595e349893bb32405d93b4d082b5a351c55438504bfd0b566bcf8e60",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover (report date 28 August 2025; the file name says 26 September) and Table 3-1 (p. 37) visually checked; distribution sentence on p. 11.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 11) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "im7-nasa-2023": {
     "id": "nasa-tm-20230001560-im7-8552",
@@ -324,11 +261,8 @@
     "page": 18,
     "role": "Measured property data",
     "url": "https://ntrs.nasa.gov/api/citations/20230001560/downloads/TM-20230001560.pdf",
-    "sha256": "8720e1dce2830b9cae264627a637d74b1bca4d7a2cec078a29c52ae61e7e7eeb",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded from the NASA Technical Reports Server; cover, notice page, Table 1 (p. 2) and Tables 6, 8, 10, 12, 14, 16, 18, 20, 22 and 31 visually checked from rendered pages. Printed page = PDF page - 6.",
-    "rights": "open-publisher",
-    "rightsEvidence": "The NASA Technical Reports Server citation page (https://ntrs.nasa.gov/citations/20230001560) states \"Public Use Permitted\" with public distribution, and the report notice page says it is available in electronic form at sti.nasa.gov and ntrs.nasa.gov. Contractor authors are listed and no copyright notice appears, so the report is linked, not copied."
+    "rights": "open-publisher"
   },
   "as4pw-data": {
     "id": "ncamp-as4-8552s-pw-data",
@@ -339,11 +273,8 @@
     "page": 29,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/hexcel-8552/AS4-PW-2.pdf",
-    "sha256": "76fdace8746d4f5750373784888b72b6594738ed6b3e3d68009bd73c96efec7a",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover, p. 9 distribution statement, Table 2-1 (p. 29) visually checked; pp. 22, 27 and 31 to 35 read from extracted text.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9). Linked, not copied."
+    "rights": "open-publisher"
   },
   "as4pw-stats": {
     "id": "ncamp-as4-8552s-pw-statistics",
@@ -354,11 +285,8 @@
     "page": 33,
     "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Documents/NCP-RP-2010-011-Rev-B-Hexcel-8552-AS4-3K-PW-11-15-12-FINAL-SAR.pdf",
-    "sha256": "91b135a85a000be2e8646bc64d8c530a36cc57a4980d8e5b62836d4b02fb3c69",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover and Table 3-1 (p. 33) visually checked; distribution sentence on p. 10.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 10). Linked, not copied."
+    "rights": "open-publisher"
   },
   "t650pw-data": {
     "id": "ncamp-t650-5320-1-pw-data",
@@ -369,11 +297,8 @@
     "page": 21,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/cytec-5320-1/T650-3k-PW-2.pdf",
-    "sha256": "edcf939a0b607c3e6c7053e7c0030d0364189b1ba3fa7d9b3839a7d8cb9438b0",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover, p. 8 distribution statement, Table 2-1 (p. 21) visually checked; pp. 9, 20 and 23 to 27 read from extracted text.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 8) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "t650pw-stats": {
     "id": "ncamp-t650-5320-1-pw-statistics",
@@ -384,11 +309,8 @@
     "page": 34,
     "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/cytec-5320-1/T650-3k-PW-3.pdf",
-    "sha256": "38bf7101b1e37be772f16871f6bcd657854dd4ee6615ebd5d65faabb4a5b6f91",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover and Table 3-1 (p. 34) visually checked; distribution sentence on p. 9.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9) and the cover carries Distribution Statement A. Linked, not copied."
+    "rights": "open-publisher"
   },
   "tc250-data": {
     "id": "ncamp-hts40-tc250-data",
@@ -399,11 +321,8 @@
     "page": 26,
     "role": "Measured property data",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/tencate-tc250/12k-HTS40-2.pdf",
-    "sha256": "ccd1717a7c2b463223fbbef34638350c502aac62e7dd154c2acafd5ef068a8c1",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover, p. 9 distribution statement, Table 2-1 (p. 26) visually checked; pp. 19, 24 and 28 to 32 read from extracted text.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9). Linked, not copied."
+    "rights": "open-publisher"
   },
   "tc250-stats": {
     "id": "ncamp-hts40-tc250-statistics",
@@ -414,11 +333,8 @@
     "page": 32,
     "role": "Recommended B-basis values (Table 3-1); the library displays means, not these limits",
     "url": "https://www.wichita.edu/industry_and_defense/NIAR/Research/tencate-tc250/12k-HTS40-3.pdf",
-    "sha256": "4d63b50bf2a3acbac64bc8818f8c9754ac61bfc3db3e20d45eff6c078eb5e79e",
     "accessed": "2026-10-10",
-    "verification": "Original publisher PDF downloaded; cover and Table 3-1 (p. 32) visually checked; distribution sentence on p. 9.",
-    "rights": "open-publisher",
-    "rightsEvidence": "NCAMP states the data \"is intended for general distribution to the public\" (report p. 9). Linked, not copied."
+    "rights": "open-publisher"
   },
   "milhdbk-17-2f": {
     "id": "mil-hdbk-17-2f-volume-2",
@@ -429,11 +345,8 @@
     "page": 301,
     "role": "Historical property data, public domain",
     "url": "https://quicksearch.dla.mil/qsDocDetails.aspx?ident_number=53882",
-    "sha256": "a0368e3214a93ca859a50fc09d7cc3230cd4856d5be3e9ba1e9916f34758ff8b",
     "accessed": "2026-10-10",
-    "verification": "Official copy downloaded from DLA ASSIST (529 pages); cover, foreword, Table 1.4.2(c) context (p. 17), Sections 4.2.29 (pp. 299 to 304) and 6.2.4 (pp. 429 to 437) visually checked. ASSIST stamps each page with the download time, so the fingerprint identifies this dated copy; page numbering matches the research copy.",
-    "rights": "public-domain",
-    "rightsEvidence": "Department of Defense handbook; cover carries Distribution Statement A, approved for public release, distribution unlimited (17 U.S.C. § 105). Secretariat work was performed under Army contract DAAL01-97-C-0140 by Materials Sciences Corporation (foreword), a point for counsel. Linked to the official ASSIST record; no copy is hosted here."
+    "rights": "public-domain"
   },
   "milhdbk-17-2f-notice-1": {
     "id": "mil-hdbk-17-2f-notice-1",
@@ -444,10 +357,7 @@
     "page": 1,
     "role": "Cancellation notice; names SAE R-423 (CMH-17 Volume 2, 2012) as a possible replacement",
     "url": "https://quicksearch.dla.mil/qsDocDetails.aspx?ident_number=53882",
-    "sha256": "f488d0c0dd6354e1e539de060b18e10f047f8734b114572dd70c440bbe69e1af",
     "accessed": "2026-10-10",
-    "verification": "Official copy downloaded from DLA ASSIST (1 page); visually checked.",
-    "rights": "public-domain",
-    "rightsEvidence": "Department of Defense notice; Distribution Statement A. Linked to the official ASSIST record."
+    "rights": "public-domain"
   }
 }

@@ -1,7 +1,8 @@
 import { readFile, writeFile, mkdir, readdir, copyFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { curatedMaterials, materialDatasets, exportCitedMaterial, archivedMaterialReasons } from "../lib/curated-materials";
+import { curatedMaterials, materialDatasets, exportCitedMaterial, archivedMaterialReasons, type CitedMaterial } from "../lib/curated-materials";
+import { provenanceOf, sourceProvenance } from "../lib/source-provenance";
 import { physicsTopics } from "../lib/physics";
 import { standards } from "../lib/material-evidence";
 import { materialSource, materials as originalMaterials } from "../lib/materials";
@@ -10,6 +11,12 @@ const root = process.cwd();
 const digest = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const escape = (x: unknown) => String(x ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const safe = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "-");
+// The archive holds the PDFs, so its records keep every value's PDF page; the customer download leaves it out for a source
+// cited by its printed page only (ADR-0018 amendment 2).
+function archivedRecord(material: CitedMaterial) {
+  const record = exportCitedMaterial(material);
+  return { ...record, properties: record.properties.map((p, i) => ({ ...p, sourcePage: material.properties[i].sourcePage })) };
+}
 type Source = { id: string; title: string; publisher: string; date: string | null; revision: string; url: string; sha256: string | null; accessed?: string; kind?: string; page?: number; printedPage?: number; authors?: string; verification?: string };
 type Reference = Source & { roles: string[]; localFile: string; localSha256: string; fingerprintCheck: string; bytes: number };
 
@@ -30,11 +37,11 @@ async function main() {
   };
   for (const m of datasets) {
     const group = m.source.kind === "book" ? "01-Books" : /Manufacturer/.test(m.dataset) ? "03-Manufacturer-Datasheets" : "02-Reports";
-    register(m.source, `Property source: ${m.name} / ${m.datasetId}`, group);
-    for (const s of m.supportingReferences || []) register(s, `${s.role}: ${m.name}`, /specification/i.test(s.title) ? "04-Specifications" : "02-Reports");
+    register({ ...m.source, ...provenanceOf(m.source.id) }, `Property source: ${m.name} / ${m.datasetId}`, group);
+    for (const s of m.supportingReferences || []) register({ ...s, ...provenanceOf(s.id) }, `${s.role}: ${m.name}`, /specification/i.test(s.title) ? "04-Specifications" : "02-Reports");
   }
   const book = datasets.find(m => m.source.kind === "book")!.source;
-  register(book, "Source for all 29 current physics equation cards", "01-Books");
+  register({ ...book, ...provenanceOf(book.id) }, "Source for all 29 current physics equation cards", "01-Books");
   for (const [key, title, date, revision] of [
     ["volume-2", "Composite Materials Handbook · Volume 2: Polymer Matrix Composites, Materials Properties", "2002", "MIL-HDBK-17-2F"],
     ["volume-3", "Composite Materials Handbook · Volume 3: Materials Usage, Design, and Analysis", "2012", "CMH-17-3G"],
@@ -79,10 +86,10 @@ async function main() {
   for (const material of datasets) {
     const file = `06-Dataset-Records/${safe(material.id)}--${safe(material.datasetId)}.json`;
     const ref = referenceById.get(material.source.id)!;
-    await saveJson(file, { ...exportCitedMaterial(material), archiveReference: {
+    await saveJson(file, { ...archivedRecord(material), archiveReference: {
       sourceId: ref.id, localDocument: `../${ref.localFile}`, sha256: ref.localSha256,
       propertyPageConvention: "sourcePage is the 1-based PDF viewer page; printedPage is the page printed in the publication, when recorded",
-    }, supportingLocalDocuments: (material.supportingReferences || []).map(r => ({ sourceId: r.id, localDocument: `../${referenceById.get(r.id)!.localFile}`, sha256: r.sha256 })) });
+    }, supportingLocalDocuments: (material.supportingReferences || []).map(r => ({ sourceId: r.id, localDocument: `../${referenceById.get(r.id)!.localFile}`, sha256: sourceProvenance[r.id]?.sha256 ?? null })) });
     datasetFiles.push({ id: material.datasetId, name: material.name, dataset: material.dataset, file, sourceId: ref.id, properties: material.properties.length });
   }
   const formulas = physicsTopics.flatMap(t => t.methods.map(m => ({ topic: t.title, name: m.name, equation: m.equation, assumptions: t.assumptions,
@@ -106,7 +113,7 @@ async function main() {
   const sourceRows = references.map(r => `<tr><td>${link(r.localFile, r.title)}<small>${escape(r.id)}</small></td><td>${escape(r.publisher)}<br>${escape(r.date || "Publication date not established")}<br>${escape(r.revision)}</td><td>${r.roles.map(escape).join("<br>")}</td><td>${r.url ? link(r.url, "Publisher / original source") : "Supplied locally"}<details><summary>File fingerprint</summary><code>${r.localSha256}</code><p>${escape(r.fingerprintCheck)}</p></details></td></tr>`).join("");
   const datasetSections = datasets.map((m, i) => {
     const ref = referenceById.get(m.source.id)!;
-    const rows = exportCitedMaterial(m).properties.map(p => `<tr><td>${escape(p.label)}<small>${escape(p.key)} · ${escape(p.basis)}</small></td><td>${escape(p.displayUnits.english)}</td><td>${escape(p.displayUnits.si)}</td><td>${link(`${ref.localFile}#page=${p.sourcePage}`, `PDF p. ${p.sourcePage}`)}${p.printedPage ? `<br>Printed p. ${p.printedPage}` : ""}<small>${escape(p.evidence)}</small></td><td>${escape(p.method)}<small>${escape(p.conditions)}</small></td></tr>`).join("");
+    const rows = archivedRecord(m).properties.map(p =>`<tr><td>${escape(p.label)}<small>${escape(p.key)} · ${escape(p.basis)}</small></td><td>${escape(p.displayUnits.english)}</td><td>${escape(p.displayUnits.si)}</td><td>${link(`${ref.localFile}#page=${p.sourcePage}`, `PDF p. ${p.sourcePage}`)}${p.printedPage ? `<br>Printed p. ${p.printedPage}` : ""}<small>${escape(p.evidence)}</small></td><td>${escape(p.method)}<small>${escape(p.conditions)}</small></td></tr>`).join("");
     return `<details class="dataset"><summary>${escape(m.name)} — ${escape(m.dataset)} (${m.properties.length} properties)</summary><p>${escape(m.datasetId)}<br>${escape(m.application)}<br>${escape(m.conditions)}</p><p>${link(ref.localFile, "Open source PDF")} · ${link(datasetFiles[i].file, "Dataset JSON")}</p><div class="scroll"><table><thead><tr><th>Property / basis</th><th>English</th><th>SI</th><th>Source location</th><th>Method / conditions</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
   }).join("");
   const formulaRows = formulas.map(f => `<tr><td>${escape(f.topic)}<br><strong>${escape(f.name)}</strong></td><td>${escape(f.reference?.location)}</td><td>${link(f.localDocument, "Open textbook")}<small>Printed page references</small></td></tr>`).join("");

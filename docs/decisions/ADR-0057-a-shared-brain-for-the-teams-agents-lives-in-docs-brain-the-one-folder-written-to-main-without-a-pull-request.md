@@ -1,8 +1,8 @@
 # ADR-0057: A shared brain for the team's agents lives in `docs/brain/`, the one folder an agent may write to `main` without a pull request
 
-- Status: Proposed
+- Status: Accepted with amendment 1: a brain change reaches `main` through a pull request that needs no approval, and every other change needs the founder's; a person is named only once they agree
 - Date: 2026-11-04
-- Decided by: Proposed by Kai Saucedo, growth engineering, 2026-11-04 ("docs/brain": a shared second brain for Anisotropy that he and the founder can use together, segregated from his personal one); the founder's decision is pending | Drafted by: Claude Code
+- Decided by: Proposed by Kai Saucedo, growth engineering, 2026-11-04 ("docs/brain": a shared second brain for Anisotropy that he and the founder can use together, segregated from his personal one); Founder, 2026-11-04 ("Accept with changes", "Approval except brain", "Seat only for now": the founder's choices in a Claude Code review of this record) | Drafted by: Claude Code
 - Related: [ADR-0023](ADR-0023-agent-skills-in-the-docs-vault.md) (`docs/` is the vault), [ADR-0028](ADR-0028-founder-tooling-outside-the-repository.md) (amendment 2), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md), `AGENTS.md`, `docs/brain/README.md`, `docs/agents/skills/project-rules/SKILL.md`
 
 ## Context
@@ -50,3 +50,13 @@ Easier: every agent working on Anisotropy, in any tool, reads the same company c
 ## How we will know it was wrong
 
 Revisit if anything private lands in `docs/brain/` (then option 2, a private repository, at once, and the history rewritten); if a commit with the `brain:` prefix touches a file outside the folder; if the founder finds the brain's entries wrong or stale more than once a month; or if a third machine needs the brain and git sync conflicts weekly.
+
+## Amendment 1, 2026-11-04 (brain changes through a pull request that needs no approval, names only with consent, no decision rights in the brain; confirmed by the founder)
+
+**Context.** This record and its rule changes reached `main` through PR #113, opened and merged by its proposer with no review while the founder's decision was pending; `main` had no protection, so nothing stopped it. In review, the founder asked for `main` to be protected except for the brain. GitHub's ruleset pages offer no exemption by path: the pull-request rule covers a whole branch ("You can require that all changes to the target branch be associated with a pull request"); a bypass goes to "users with certain roles, specific teams, or GitHub Apps", who may then push any path; push rulesets only block paths and are documented "to block pushes to a private or internal repository". The review also found that `people.md` and `company.md` named everyone on the team in a public repository and carried internal decision rights (who decides alone, who signs off, who stands in, the board rule).
+
+**Options.** (1) A pull request for every change to `main`, with `.github/CODEOWNERS` making the founder the required approver of every file except `docs/brain/`, which has no owner, so a pull request touching only the brain merges without an approval: chosen. (2) `main` stays open, and a workflow fails when a direct commit to `main` touches a file outside `docs/brain/`: rejected, because it only detects after the push and notifies the pusher, not the founder. (3) No protection: rejected, since that is how #113 merged unreviewed. (4) A bypass for the brain's writers: rejected, because a bypass covers every path.
+
+**Decision.** Option 1. A brain change goes on a branch and in a pull request that touches only `docs/brain/`. The agent opens it and merges it itself, and the `brain:` prefix stays. Every other pull request waits for the founder's approval. As administrator, the founder may bypass the rule on their own pull requests. The ruleset on `main` is applied once the pull request that adds `CODEOWNERS` has merged. The brain names a person only once they have agreed to be named in public; until then it gives their seat. It carries no internal decision rights, sign-off duties, deputies or board rules; those stay in the team's private notes. The posting approval in `x.md` stays, because it is how the workflow runs. Founder's words: "Accept with changes", "Approval except brain" and "Seat only for now" (choices in a Claude Code review, 2026-11-04).
+
+**Evidence.** PR #113: author and merger `ka1saucedo`, no reviews (`gh pr view 113 --json mergedBy,author,reviews`, 2026-11-04). GitHub Docs, "Available rules for rulesets" and "About rulesets", read 2026-11-04. Whether a ruleset with no required approvals still enforces the code owner's review: UNVERIFIED until the ruleset is applied and tried with one brain-only pull request and one other. The old text of `people.md` and `company.md` stays in the public history; no purge is planned unless someone named asks for one (the ADR-0042 procedure).

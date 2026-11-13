@@ -258,6 +258,13 @@ def test_a_tension_package_carries_every_output_and_the_scripts_the_engineers_co
     for tool in coupon.VERIFY_TOOLS:  # the same scripts as the repository's, byte for byte
         assert (package / "5-verify" / tool).read_bytes() == (paths.FEA / "tools" / tool).read_bytes()
     readme = (package / "README.txt").read_text(encoding="utf-8")
+    # the script that builds the coupon in Abaqus/CAE sits beside the deck, written from the same model (ADR-0094)
+    built = [name for name in names if name.startswith("2-our-model/abaqus/") and name.endswith("-build.py")]
+    assert len(built) == 1 and built[0] in readme and "builds that model for you (File, Run Script)" in readme
+    script = (package / built[0]).read_text(encoding="utf-8")
+    assert script == coupon.cae_script(load_spec(package / "2-our-model/spec" / f"{DESIGNATION}.toml"))
+    assert script.isascii() and "sketch.rectangle(point1=(0.0, 0.0), point2=(WIDTH, LENGTH))" in script
+    assert "build.py" in tex_path.read_text(encoding="utf-8")  # the document's list of files names it too
     assert "Attempt:       02 (our attempt this package delivers)" in readme
     assert "How to verify every output" in readme and "abaqus python 5-verify/compare_every_output.py 4-results/ours-every-output.csv" in readme
     assert all(name in readme for name in names if name.startswith(("4-results/", "5-verify/")))

@@ -4,7 +4,7 @@ import "../inner-pages.css";
 import "../services/services.css";
 
 export const metadata = {
-  title: "Contact — Anisotropy",
+  title: "Contact",
   description: "Write to Anisotropy about a composite coupon, a material or a question about the platform.",
 };
 

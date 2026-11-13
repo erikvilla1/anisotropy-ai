@@ -141,12 +141,18 @@ def _si(prop: dict, allowed_units: set[str] | None = None) -> tuple[float, str]:
 
 def _cite(role: str, prop: dict, dataset: dict, allowed_units: set[str] | None = None) -> CitedValue:
     value, unit = _si(prop, allowed_units)
-    reference = dataset["source"]["url"]
+    source = dataset["source"]
+    # A book's link opens its publisher's page and a search link opens a search: neither is the document, so the value
+    # links there as it is and is cited by its printed page (ADR-0018 amendment 2). Every other link opens the document
+    # itself, at the value's page.
+    linked_document = source.get("kind") != "book" and source.get("linkKind") != "search"
+    anchor = f"#page={prop['sourcePage']}" if linked_document else ""
+    reference = source["url"]
     return CitedValue(role=role, key=prop["key"], value=value, unit=unit,
                       source_value=float(prop.get("sourceValue", prop["value"])),
                       source_unit=prop.get("sourceUnit", prop["unit"]), basis=prop["basis"],
                       page=int(prop["sourcePage"]), printed_page=prop.get("printedPage"),
-                      reference_url=f"{reference}#page={prop['sourcePage']}")
+                      reference_url=f"{reference}{anchor}")
 
 
 def _first(props: dict[str, dict], keys: tuple[str, ...]) -> dict | None:

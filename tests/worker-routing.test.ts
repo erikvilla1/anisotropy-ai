@@ -1,5 +1,7 @@
 // The Worker's pure decisions (ADR-0056): which paths are the API's and what the container gets as its environment.
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { CONTAINER_VARIABLES, apiPath, containerEnvironment } from "../worker/routing";
@@ -42,6 +44,10 @@ test("the API's container is told to queue jobs only when the Worker has the que
   // a solver gets the database, the store and the role; no sign-in, origins, assistant or per-user cap
   assert.deepEqual(solverEnvironment({ ...env, ANISOTROPY_R2_BUCKET: "b", ANTHROPIC_API_KEY: "k", ANISOTROPY_ALLOWED_ORIGINS: "https://anisotropy.dev" }),
                    { DATABASE_URL: "postgresql://u:p@h/db", ANISOTROPY_R2_BUCKET: "b", ANISOTROPY_JOB_ROLE: "solver" });
+  // who sees an upload and the connector's route (ADR-0094 step 5) reach the API's container and never a solver, which has no sign-in
+  const uploads = { ANISOTROPY_FOUNDER_EMAILS: "founder@example.com", ANISOTROPY_CONNECTOR_UPLOADS: "on" };
+  assert.deepEqual(apiEnvironment({ ...env, ...uploads }), { ...env, ...uploads });
+  assert.deepEqual(solverEnvironment({ ...env, ...uploads }), { DATABASE_URL: "postgresql://u:p@h/db", ANISOTROPY_JOB_ROLE: "solver" });
   for (const path of ["/v1/solver", "/v1/solver/jobs/x", "/v1/solver/jobs/x/stop"]) assert.ok(isSolverPath(path), path);
   for (const path of ["/v1/coupon-jobs", "/v1/solvers", "/v1/coupon-jobs/v1/solver/"]) assert.ok(!isSolverPath(path), path);
 });
@@ -49,4 +55,29 @@ test("the API's container is told to queue jobs only when the Worker has the que
 test("the hosted container never gets the switch that shows every coupon test (ADR-0089): the hosted tier offers tension only", () => {
   assert.ok(!(CONTAINER_VARIABLES as readonly string[]).includes("ANISOTROPY_ALL_TESTS"));
   assert.deepEqual(containerEnvironment({ ANISOTROPY_ALL_TESTS: "on", ANISOTROPY_RUN_RECORDS: "off" }), { ANISOTROPY_RUN_RECORDS: "off" });
+});
+
+test("the pages that moved are sent to the workspace with a 301 that keeps the query (ADR-0058 amendment 2)", async () => {
+  const { MOVED_PAGES, movedLocation, movedPath } = await import("../worker/routing");
+  for (const [from, to] of [["/chat", "/workspace/fea"], ["/studio", "/workspace/fea"], ["/chat/view", "/workspace/fea/view"], ["/studio/view", "/workspace/fea/view"]]) {
+    assert.equal(movedPath(from), to, from);
+    assert.equal(movedPath(`${from}/`), to, `${from}/`);
+  }
+  for (const path of ["/", "/workspace/fea", "/workspace/fea/view", "/chatroom", "/chat.txt", "/studio/x", "/studio/view/more", "/api/v1/chat", "/constructor", "/__proto__"]) {
+    assert.equal(movedPath(path), null, path);
+  }
+  assert.equal(movedLocation("https://anisotropy.dev/chat?material=im7-8552"), "https://anisotropy.dev/workspace/fea?material=im7-8552");
+  assert.equal(movedLocation("https://anisotropy.dev/studio/view/?job=0f3a2c9e"), "https://anisotropy.dev/workspace/fea/view?job=0f3a2c9e");
+  assert.equal(movedLocation("https://anisotropy.dev/studio"), "https://anisotropy.dev/workspace/fea");
+  assert.equal(movedLocation("https://anisotropy.dev/about?x=1"), null);
+  // the new addresses are pages, and the Worker runs first for every old one (wrangler.jsonc), or the assets would answer instead
+  const wrangler = readFileSync("wrangler.jsonc", "utf8");
+  const first = JSON.parse(/"run_worker_first":\s*(\[[^\]]*\])/.exec(wrangler)?.[1] ?? "[]") as string[];
+  const runsFirst = (path: string) => first.some((p) => p === path || (p.endsWith("/*") && path.startsWith(p.slice(0, -1))));
+  assert.ok(runsFirst("/api/v1/coupon-jobs"));
+  for (const [from, to] of Object.entries(MOVED_PAGES)) {
+    assert.ok(runsFirst(from) && runsFirst(`${from}/`), `the Worker runs first for ${from}`);
+    assert.ok(existsSync(join("app", to, "page.tsx")), `${to} has a page`);
+    assert.ok(existsSync(join("app", from, "page.tsx")), `${from} keeps its fallback page`);
+  }
 });

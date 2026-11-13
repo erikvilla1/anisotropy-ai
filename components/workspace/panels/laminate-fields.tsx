@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { libraryOptions } from "@/lib/studio-form";
 import {
-  CONSTANT_NAMES, libraryThicknessOf, LOAD_NAMES, loadsWithZeros, printedUnit, readLayupLine, systemUnit, unitsOf,
+  ANGLE_CONVENTION, CONSTANT_NAMES, LIBRARY_MATERIALS, libraryChoice, libraryThicknessOf, LOAD_NAMES, loadsWithZeros, printedUnit, readLayupLine, systemUnit, unitsOf,
   type ConstantName, type Kind, type LaminateDraft, type LoadName, type OwnConstants, type Quantity, type ReportUnits, blankOwn } from "@/lib/laminate-chat";
 
 /** The fields of the laminate workspace's panels (ADR-0062, part 5): each value with its own unit menu, the unit list the engine's table
  * gives for the kind (ADR-0060). Edits write the draft as they are typed; nothing here converts a unit or judges a value. */
 
-export function QuantityField({ id, label, kind, quantity, system, onChange, disabled }: {
-  id: string; label: ReactNode; kind: Kind; quantity: Quantity; system: ReportUnits; onChange: (q: Quantity) => void; disabled?: boolean;
+/** A value and its unit menu. `name` is the value's plain name for the menu ("Nx unit") when the visible label is markup, such as Nx
+ * with its subscript. */
+export function QuantityField({ id, label, name, kind, quantity, system, onChange, disabled }: {
+  id: string; label: ReactNode; name?: string; kind: Kind; quantity: Quantity; system: ReportUnits; onChange: (q: Quantity) => void; disabled?: boolean;
 }) {
   const unit = quantity.unit || systemUnit(system, kind);
   return (
@@ -18,7 +19,7 @@ export function QuantityField({ id, label, kind, quantity, system, onChange, dis
       <span>{label}</span>
       <span className="lam-field-row">
         <input id={id} type="text" inputMode="decimal" autoComplete="off" value={quantity.value} disabled={disabled} onChange={(e) => onChange({ value: e.target.value, unit })} />
-        <select aria-label={`${typeof label === "string" ? label : id} unit`} value={unit} disabled={disabled} onChange={(e) => onChange({ value: quantity.value, unit: e.target.value })}>
+        <select aria-label={`${name ?? (typeof label === "string" ? label : "Value")} unit`} value={unit} disabled={disabled} onChange={(e) => onChange({ value: quantity.value, unit: e.target.value })}>
           {unitsOf(kind).map((u) => <option key={u} value={u}>{printedUnit(u)}</option>)}
         </select>
       </span>
@@ -34,18 +35,19 @@ const LABELS: Record<ConstantName, string> = { E1: "E₁", E2: "E₂", G12: "G�
 export function MaterialFields({ draft, system, disabled, onChange }: {
   draft: LaminateDraft; system: ReportUnits; disabled?: boolean; onChange: (material: LaminateDraft["material"]) => void;
 }) {
-  const library = draft.material && "library" in draft.material ? draft.material.library : "";
+  // a project saved before the one list names a material alone: it shows as that material's first dataset
+  const library = draft.material && "library" in draft.material ? libraryChoice(draft.material.library)?.value ?? draft.material.library : "";
   const own = draft.material && "own" in draft.material ? draft.material.own : null;
   return (
     <div className="lam-material" data-testid="laminate-material">
       <label htmlFor="lam-library" className="lam-field">
         <span>Library material</span>
         <select id="lam-library" value={library} disabled={disabled} onChange={(e) => onChange(e.target.value ? { library: e.target.value } : null)}>
-          <option value="">{own ? "(my own constants, below)" : "Pick one…"}</option>
-          {libraryOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          <option value="">{own ? "My own constants" : "Pick one…"}</option>
+          {LIBRARY_MATERIALS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
       </label>
-      <p className="studio-hint">With its cited constants and strengths; or <button type="button" className="studio-text-button" disabled={disabled || !!own} onClick={() => onChange({ own: blankOwn() })}>type your own constants</button>.</p>
+      <p className="studio-hint">Pick a cited library material, or <button type="button" className="studio-text-button" disabled={disabled || !!own} onClick={() => onChange({ own: blankOwn() })}>enter your own constants</button>.</p>
       {own ? (
         <div className="lam-own">
           <div className="lam-grid3">
@@ -58,7 +60,7 @@ export function MaterialFields({ draft, system, disabled, onChange }: {
                     <input id={id} type="text" inputMode="decimal" autoComplete="off" value={own.nu12 as string} disabled={disabled} onChange={(e) => onChange({ own: { ...own, nu12: e.target.value } })} /></label>
                 );
               }
-              return <QuantityField key={name} id={id} label={LABELS[name]} kind={kind} quantity={own[name] as Quantity} system={system} disabled={disabled}
+              return <QuantityField key={name} id={id} label={LABELS[name]} name={LABELS[name]} kind={kind} quantity={own[name] as Quantity} system={system} disabled={disabled}
                 onChange={(q) => onChange({ own: { ...own, [name]: q } })} />;
             })}
           </div>
@@ -99,7 +101,7 @@ export function LayupFields({ draft, system, disabled, onChange }: {
         <button type="submit" className="chat-primary" disabled={disabled}>Use layup</button>
         {error ? <span className="chat-error" role="alert">{error}</span> : null}
       </form>
-      <p className="studio-hint">Bottom ply first. Here 0° runs along x, the direction of Nx, as in the textbooks.</p>
+      <p className="studio-hint">{ANGLE_CONVENTION}</p>
       <QuantityField id="lam-thickness" label={recorded === null ? "Ply thickness" : "Ply thickness (optional)"} kind="length" quantity={thickness} system={system} disabled={disabled}
         onChange={(q) => onChange(draft.layup, q)} />
       {recorded !== null && !thickness.value.trim() ? <p className="studio-hint">Ply thickness {Number(recorded.toPrecision(4))} mm from the library record; type one to use another.</p> : null}
@@ -118,7 +120,7 @@ export function LoadsFields({ loads, system, disabled, onChange }: {
     <div className="lam-loads-fields" data-testid="laminate-loads">
       <div className="lam-grid3">
         {LOAD_NAMES.map((name) => (
-          <QuantityField key={name} id={`lam-${name}`} label={<>{name[0]}<sub>{name.slice(1)}</sub></>} kind={name.startsWith("N") ? "N" : "M"} quantity={current[name]} system={system}
+          <QuantityField key={name} id={`lam-${name}`} label={<>{name[0]}<sub>{name.slice(1)}</sub></>} name={name} kind={name.startsWith("N") ? "N" : "M"} quantity={current[name]} system={system}
             disabled={disabled} onChange={(q) => onChange({ ...current, [name]: q })} />
         ))}
       </div>
@@ -126,10 +128,10 @@ export function LoadsFields({ loads, system, disabled, onChange }: {
         <div className="studio-actions">
           <button type="button" className="studio-text-button" disabled={disabled}
             onClick={() => onChange(loadsWithZeros(Object.fromEntries(LOAD_NAMES.filter((n) => current[n].value.trim()).map((n) => [n, current[n]])), system))}>
-            The rest are zero</button>
+            Set the rest to zero</button>
         </div>
       ) : null}
-      <p className="studio-hint">N are forces per unit width, M moments per unit width; compression and reversed moments are negative. Every one of the six is stated; nothing is assumed.</p>
+      <p className="studio-hint">Forces N and moments M per unit width; compression and reversed moments are negative. Use 0 for loads that do not act.</p>
     </div>
   );
 }

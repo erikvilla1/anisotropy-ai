@@ -85,7 +85,7 @@ export function SpecsList({ summary }: { summary: LaminateSummary }) {
     { label: "Total thickness", value: `${mm(summary.total_thickness_m)} mm` },
     { label: "Stacking", value: [summary.symmetric ? "symmetric" : summary.antisymmetric ? "antisymmetric" : "unsymmetric", summary.balanced ? "balanced" : "unbalanced"].join(", ") },
     { label: "Laminate type", value: kindLabel[summary.kind] },
-    { label: "Coupling", value: couplings.length ? couplings.join(", ") : "none at the engine's tolerance" },
+    { label: "Coupling", value: couplings.length ? couplings.join(", ") : "none" },
     summary.areal_mass_kg_per_m2 === null
       ? { label: "Areal mass", value: "not computed", note: summary.areal_mass_missing ?? undefined }
       : { label: "Areal mass", value: `${trim(summary.areal_mass_kg_per_m2, 4)} kg/m²` },
@@ -144,7 +144,7 @@ export function AbdGrid({ result }: { result: AnalysisResult }) {
       <Matrix title="A" unit="N/m" meaning="Stretching stiffness" values={result.A_N_per_m} compact />
       <Matrix title="B" unit="N" meaning="Stretching–bending coupling" values={result.B_N} compact />
       <p className="hero-abd-note">
-        The ABD matrix is <span>[A B; B D]</span>: B appears twice, once above and once mirrored here. Values in scientific notation, three figures; the full page prints six.
+        The ABD matrix is <span>[A B; B D]</span>: B appears twice, once above and once mirrored here. Three significant figures; the full page prints four.
       </p>
       <Matrix title="D" unit="N·m" meaning="Bending stiffness" values={result.D_N_m} compact />
     </div>

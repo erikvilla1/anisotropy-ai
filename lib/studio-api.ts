@@ -3,7 +3,7 @@
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
 import type { Checklist, StudioValues } from "./studio-form";
-import { customerText, DOWNLOAD_LABELS, sentence } from "./studio-copy";
+import { ANALYSIS_UNAVAILABLE, customerText, DOWNLOAD_LABELS, sentence } from "./studio-copy";
 
 export const ACTOR = "studio";
 export const POLL_MS = 2000;
@@ -165,12 +165,13 @@ async function call(url: string, init: RequestInit & { signal?: AbortSignal }, w
     response = await fetch(url, { ...init, credentials: "same-origin", cache: "no-store" });
   } catch (error) {
     if (init.signal?.aborted) throw error;
-    throw new StudioError(`The analysis service did not answer (${what}). Check your connection and try again.`);
+    throw new StudioError(ANALYSIS_UNAVAILABLE); // an outage: what happened and what to do, the same words as the calculator's
   }
   let payload: unknown = null;
   const text = await response.text();
   try { payload = text ? JSON.parse(text) : null; }
-  catch { throw new StudioError(`The analysis service sent an answer the page cannot read (${what}). Try again.`, response.status); }
+  catch { throw new StudioError(response.status >= 500 ? ANALYSIS_UNAVAILABLE : `The analysis service sent an answer the page cannot read (${what}). Try again.`, response.status); }
+  if (response.status >= 500) throw new StudioError(ANALYSIS_UNAVAILABLE, response.status);
   if (!response.ok) {
     const detail = isObject(payload) ? payload.detail : null;
     const message = typeof detail === "string" ? detail

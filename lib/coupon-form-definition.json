@@ -2539,7 +2539,7 @@
     "title": "Tensile properties of polymer matrix composites",
     "organisation": "ASTM International",
     "catalog_url": "https://store.astm.org/d3039_d3039m-17r25.html",
-    "edition_note": "read from the D3039/D3039M-17 copy licensed to UC San Diego; the publisher lists D3039/D3039M-17(2025), a reapproval, as active (that its text is unchanged is UNVERIFIED)",
+    "edition_note": "ASTM D3039/D3039M-17; the publisher lists D3039/D3039M-17(2025), a reapproval, as active",
     "systems": "SI and inch-pound, each used on its own (§1.2)",
     "rights": "licensed-reference",
     "tests": [
@@ -2900,7 +2900,7 @@
     "title": "Tensile properties of plastics",
     "organisation": "ASTM International",
     "catalog_url": "https://store.astm.org/d0638-22.html",
-    "edition_note": "read from the D638-22 copy the founder supplied, the active edition; every clause held here is the same in D638-14",
+    "edition_note": "ASTM D638-22, the active edition; every clause held here is the same in D638-14",
     "systems": "SI; the inch-pound values are for information only (§1.5)",
     "rights": "licensed-reference",
     "tests": [
@@ -3484,7 +3484,7 @@
     "title": "Open-hole tensile strength of fibre-reinforced advanced ceramic composites",
     "organisation": "ASTM International",
     "catalog_url": "https://store.astm.org/c1869-18.html",
-    "edition_note": "read from the C1869-18 (reapproved 2023) copy licensed to UC San Diego",
+    "edition_note": "ASTM C1869-18, reapproved 2023",
     "systems": "SI only (§1.8)",
     "rights": "licensed-reference",
     "tests": [
@@ -3824,7 +3824,7 @@
     "title": "Tensile properties of continuous-filament carbon and graphite fibre tows",
     "organisation": "ASTM International",
     "catalog_url": "https://store.astm.org/d4018-23.html",
-    "edition_note": "read from the D4018-23 copy licensed to UC San Diego",
+    "edition_note": "ASTM D4018-23",
     "systems": "SI only (§1.5)",
     "rights": "licensed-reference",
     "tests": [

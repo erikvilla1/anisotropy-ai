@@ -10,8 +10,11 @@ The layout, under one prefix per coupon:
                                                             number are what they were; the latest job's copy wins
     jobs/<job id>/input/<file name>                         with the job queue, the form or the values as sent, for the solver
                                                             container that runs the job (ADR-0056 amendment 3)
+    uploads/<upload id>/bundle.zip                          a bundle a user sent from their own Abaqus (ADR-0094 part 6): private, read
+                                                            only through the API's owner check, never restored to a coupon's folder
 
-Without the settings nothing is stored or restored: the files stay where the tool wrote them, as before.
+Without the settings nothing is stored or restored: the files stay where the tool wrote them, as before, and an upload's bundle is
+kept in a folder of the local disk under the same key (`FolderStore`).
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
@@ -27,6 +31,7 @@ from .settings import StorageSettings
 COUPONS = "coupons"
 FOLDER = "folder"
 JOBS = "jobs"
+UPLOADS = "uploads"
 TAGS = ".store-tags.json"  # in the coupons' root: each restored file's object key and the store's tag for it when it was fetched
 LINK_SECONDS = 600  # a download link lives ten minutes: long enough to open, short enough not to be worth passing around
 MEDIA_TYPES = {".json": "application/json", ".txt": "text/plain; charset=utf-8", ".inp": "text/plain; charset=utf-8", ".toml": "text/plain; charset=utf-8",
@@ -59,7 +64,8 @@ def disposition(path: Path) -> str | None:
 
 
 class ObjectStore(Protocol):
-    """What the jobs need of a store: upload a file, download one, list a prefix, and make a short-lived link."""
+    """What the jobs and the uploads need of a store: upload a file, download one, list a prefix, make a short-lived link, and delete
+    one object (an upload's bundle, when its owner asks)."""
 
     def put(self, key: str, path: Path, content_type: str, disposition: str | None = None) -> None: ...
 
@@ -70,6 +76,8 @@ class ObjectStore(Protocol):
     def tags(self, prefix: str) -> dict[str, str]: ...
 
     def link(self, key: str, seconds: int = LINK_SECONDS, filename: str | None = None) -> str: ...
+
+    def delete(self, key: str) -> None: ...
 
 
 class R2Store:
@@ -115,6 +123,54 @@ class R2Store:
             params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
         return self.client.generate_presigned_url("get_object", Params=params, ExpiresIn=seconds)
 
+    def delete(self, key: str) -> None:
+        """One object gone; a key the bucket does not hold is not an error (S3 answers both the same)."""
+        self.client.delete_object(Bucket=self.bucket, Key=key)
+
+
+class FolderStore:
+    """The same keys as files under one folder of the local disk: where an upload's bundle is kept when no bucket is named, so the
+    local API stores and deletes as the hosted one does. It makes no links: `path` gives the file, which the API serves itself."""
+
+    def __init__(self, root: Path):
+        self.root = Path(root)
+
+    def path(self, key: str) -> Path:
+        parts = key.split("/")
+        if not key or any(part in ("", ".", "..") or "\\" in part for part in parts):
+            raise ValueError(f"{key!r} is not a key of plain names")
+        return self.root.joinpath(*parts)
+
+    def put(self, key: str, path: Path, content_type: str, disposition: str | None = None) -> None:
+        target = self.path(key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+
+    def get(self, key: str, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.path(key), path)
+
+    def keys(self, prefix: str) -> list[str]:
+        if not self.root.is_dir():
+            return []
+        found = (p.relative_to(self.root).as_posix() for p in self.root.rglob("*") if p.is_file())
+        return sorted(key for key in found if key.startswith(prefix))
+
+    def tags(self, prefix: str) -> dict[str, str]:
+        return {key: hashlib.md5(self.path(key).read_bytes()).hexdigest() for key in self.keys(prefix)}
+
+    def link(self, key: str, seconds: int = LINK_SECONDS, filename: str | None = None) -> str:
+        raise NotImplementedError("a folder on the disk hands out no links; the API serves the file itself")
+
+    def delete(self, key: str) -> None:
+        """The file gone, and its folder when that left it empty; a key that is not there is not an error."""
+        target = self.path(key)
+        target.unlink(missing_ok=True)
+        try:
+            target.parent.rmdir()
+        except OSError:
+            pass
+
 
 # ------------------------------------------------------------------------------------------------------------- the layout
 
@@ -136,6 +192,11 @@ def folder_key(coupon: str, relative: PurePosixPath) -> str:
 
 def input_key(job_id: str, filename: str) -> str:
     return f"{JOBS}/{job_id}/input/{filename}"
+
+
+def upload_key(upload_id: str) -> str:
+    """Where an upload's bundle is kept (ADR-0094 part 6): a prefix of its own, outside every coupon's."""
+    return f"{UPLOADS}/{upload_id}/bundle.zip"
 
 
 def store_file(store: ObjectStore, coupon: str, attempt: str, key: str, path: Path) -> str:

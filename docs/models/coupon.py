@@ -87,6 +87,7 @@ from anisotropy_fea.calculix_summary import calculix_test_method, extensometer_o
 from anisotropy_fea.standards.conformance import conformance  # noqa: E402
 from anisotropy_fea.test_quantities import method_inputs  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
+from anisotropy_fea.write_cae_script import CaeScriptError, write_cae_script  # noqa: E402
 from anisotropy_fea.intake import FIELDS  # noqa: E402
 from anisotropy_fea.tension_input import INPUT as TENSION_INPUT, complete_tension  # noqa: E402
 
@@ -1002,6 +1003,17 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
 
 # --------------------------------------------------------------------------------------------- the package
 
+def cae_script(spec) -> str | None:
+    """The script that builds the coupon in Abaqus/CAE as a native model (ADR-0094), or None for a coupon it does not draw: only the
+    unnotched tension coupon on a structured mesh is tried, so no other mesher is started for it."""
+    if spec.kind != "unnotched_tension" or spec.mesh.mesher != "structured":
+        return None
+    try:
+        return write_cae_script(build_model(spec))
+    except CaeScriptError:
+        return None
+
+
 def package_contents(src: Sources, spec, package: Path) -> list[tuple[str, str]]:
     """The package of a coupon the team has not built, in the same numbered folders as one with a team model (ADR-0043 amendment 2),
     without 1-team-model/."""
@@ -1009,6 +1021,9 @@ def package_contents(src: Sources, spec, package: Path) -> list[tuple[str, str]]
     out = [("README.txt", "this list, as plain text"), (f"{c}.pdf", "the coupon document"),
            (f"{package.name}-audit.xlsx", "the audit form: our tools' results locked; the auditor's results, observations and verdict to fill in"),
            (f"2-our-model/abaqus/{c}-abaqus.inp", "our deck, for Abaqus: File, Import, Model (this click path is not checked by us), or run it as a job"),
+           *([(f"2-our-model/abaqus/{c}-build.py", "builds the same coupon in Abaqus/CAE as a model you can edit, with its partitions, layup, grips, "
+                                                   "seeds and output requests: File, Run Script (this click path is not checked by us), or from a "
+                                                   f"terminal, abaqus cae noGUI={c}-build.py -- save={c}.cae")] if cae_script(spec) is not None else []),
            (f"2-our-model/calculix/{paths.deck_path(src.twin, 'ccx').name}", "the CalculiX twin, with the grips as direct constraints. PrePoMax: File, "
                                                                             "Import, then run it"),
            (f"2-our-model/calculix/{paths.deck_path(src.twin, 'abaqus').name}", "the same twin in Abaqus format: what our engine solved for the "
@@ -1043,11 +1058,12 @@ def every_layer(spec) -> bool:
     return bool(spec.output.abaqus.every_layer)
 
 
-def verify_lines(c: str) -> list[str]:
+def verify_lines(c: str, script: bool = False) -> list[str]:
     """The README's steps for the engineer who verifies the coupon: run, read the ODB, compare, send back."""
     return ["How to verify every output (Abaqus 2024 or later: its Python 3 runs the scripts)",
             f"1. Run our deck 2-our-model/abaqus/{c}-abaqus.inp as a job, or build the coupon in Abaqus/CAE by Chapter 4 of the PDF:",
             "   S4 elements (Reduced integration unticked), the same partitions and seeds, and S and E at the middle of every ply.",
+            *([f"   2-our-model/abaqus/{c}-build.py builds that model for you (File, Run Script), with a job ready to submit."] if script else []),
             f"2. abaqus python {VERIFY}/abaqus_every_output.py <Job>.odb --out <folder>",
             "   writes <Job>-every-output.csv (every element and ply) and <Job>-every-output-RF.csv (the reactions).",
             f"3. abaqus python {VERIFY}/compare_every_output.py 4-results/ours-every-output.csv <folder>/<Job>-every-output.csv "
@@ -1068,6 +1084,9 @@ def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, d
     for sub in ("2-our-model/abaqus", "2-our-model/calculix", "2-our-model/spec", "3-material", "4-results"):
         (folder / sub).mkdir(parents=True)
     (folder / "2-our-model/abaqus" / f"{src.coupon}-abaqus.inp").write_text(text, encoding="utf-8", newline="\n")
+    script = cae_script(spec)
+    if script is not None:
+        (folder / "2-our-model/abaqus" / f"{src.coupon}-build.py").write_text(script, encoding="utf-8", newline="\n")
     shutil.copy2(paths.deck_path(src.twin, "ccx"), folder / "2-our-model/calculix")
     shutil.copy2(paths.deck_path(src.twin, "abaqus"), folder / "2-our-model/calculix")
     shutil.copy2(src.spec, folder / "2-our-model/spec")
@@ -1091,7 +1110,7 @@ def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, d
              f"Start with the PDF. Numbers in the files are in {units_words(deck_units)}"
              + (f"; the PDF states the coupon in {units_words(spec.units)}, as the team did." if deck_units != spec.units else "."),
              "There is no 1-team-model folder: the team has not built this coupon yet.", "",
-             *(verify_lines(src.coupon) if every_layer(spec) else []),
+             *(verify_lines(src.coupon, script is not None) if every_layer(spec) else []),
              *[f"{path.ljust(width)}  {what}" for path, what in contents]]
     (folder / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 

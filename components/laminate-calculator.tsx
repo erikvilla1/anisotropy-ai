@@ -1,18 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { ArrowRight, Layers3, Plus, RotateCcw, X } from "lucide-react";
 import {
-  buildAnalysisRequest, CalculationError, exampleForm, loadNames, requestAnalysis,
+  buildAnalysisRequest, CalculationError, exampleForm, loadNames, requestAnalysis, shownCitation, shownMatrices,
   type AnalysisResult, type CalculatorForm, type FieldErrors,
 } from "@/lib/laminate-api";
+import { ANGLE_CONVENTION } from "@/lib/laminate-chat";
 import { findLibraryOption, libraryOptions } from "@/lib/material-library-options";
 import { calculatorHandoffKey, readCalculatorHandoff } from "@/lib/home-calculator";
+import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
 import { formatted, Matrix } from "@/components/abd-matrix";
 
+/** The calculator's results in the units the laminate workspace prints (style guide, Tables and numbers): strains in microstrain, A in
+ * MN/m and B in kN, scaled where the values leave for the screen (ADR-0002); the engine's SI values are unchanged. */
+const MICRO = 1e6;
+const scaledBy = (rows: number[][], factor: number) => rows.map((row) => row.map((value) => value / factor));
+
 const materialFields = [
-  ["E1_GPa", "E₁ (GPa)", "Along the fibers"],
-  ["E2_GPa", "E₂ (GPa)", "Across the fibers"],
+  ["E1_GPa", "E₁ (GPa)", "Along the fibres"],
+  ["E2_GPa", "E₂ (GPa)", "Across the fibres"],
   ["G12_GPa", "G₁₂ (GPa)", "In-plane shear"],
   ["nu12", "ν₁₂", "Major Poisson ratio"],
 ] as const;
@@ -38,7 +46,7 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [pending, setPending] = useState(false);
-  const [status, setStatus] = useState("Example inputs loaded. Select Analyze laminate to calculate.");
+  const [status, setStatus] = useState("Example inputs loaded. Select Solve to see the results.");
   const activeRequest = useRef<AbortController | null>(null);
   useEffect(() => () => activeRequest.current?.abort("unmount"), []);
   // The home page's "Want to check the math?" leaves its inputs here once; they replace the example, nothing is calculated yet.
@@ -48,13 +56,16 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
       if (!raw) return;
       sessionStorage.removeItem(calculatorHandoffKey);
       const handed = readCalculatorHandoff(raw);
-      if (handed) { setForm(handed); setStatus("Inputs carried over from the home page. Select Analyze laminate to calculate."); }
+      if (handed) {
+        setForm({ ...handed, material: { ...handed.material, source_reference: shownCitation(handed.material.source_reference) } });
+        setStatus("Inputs carried over from the home page. Select Solve to see the results.");
+      }
     } catch { /* storage blocked: the example stays */ }
   }, []);
 
   function update(next: CalculatorForm) {
     setForm(next); setErrors({}); setMessage(""); setResult(null);
-    setStatus("Inputs changed. Analyze again to calculate the current values.");
+    setStatus("Inputs changed. Solve again to see results for the current values.");
   }
 
   async function analyze(event: FormEvent<HTMLFormElement>) {
@@ -65,19 +76,19 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
     if (parsed.errors) {
       setErrors(parsed.errors); setMessage("Review the highlighted inputs and try again."); setStatus(""); return;
     }
-    setErrors({}); setPending(true); setStatus("Calculating laminate response…");
+    setErrors({}); setPending(true); setStatus("Solving…");
     const controller = new AbortController();
     activeRequest.current = controller;
     const timeout = window.setTimeout(() => controller.abort("timeout"), 20_000);
     try {
       const answer = await requestAnalysis(apiBaseUrl, parsed.request, controller.signal);
-      if (!controller.signal.aborted) { setResult(answer); setStatus("Calculation complete. Results match the current inputs."); }
+      if (!controller.signal.aborted) { setResult(answer); setStatus("Solved. Results match the current inputs."); }
     } catch (error) {
       if (controller.signal.reason === "unmount") return;
       setStatus("");
       setMessage(controller.signal.aborted
-        ? controller.signal.reason === "timeout" ? "The calculation timed out. Please try again." : "Calculation cancelled. Your inputs are unchanged."
-        : error instanceof CalculationError ? error.message : "Cannot reach the calculation service. Check that it is running, then try again.");
+        ? controller.signal.reason === "timeout" ? "The analysis took too long. Your inputs are kept; try again." : "Calculation cancelled. Your inputs are unchanged."
+        : error instanceof CalculationError ? error.message : ANALYSIS_UNAVAILABLE);
       if (error instanceof CalculationError) setErrors(error.fields);
     } finally {
       window.clearTimeout(timeout); activeRequest.current = null; setPending(false);
@@ -89,10 +100,10 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
       <form className="calc-form" onSubmit={analyze} noValidate aria-label="Laminate inputs">
         <div className="calc-panel-title"><span className="eyebrow">01 / DEFINE</span>
           <button className="calc-text-button" type="button" disabled={pending} onClick={() => {
-            update(exampleForm()); setStatus("Example inputs loaded. Select Analyze laminate to calculate.");
+            update(exampleForm()); setStatus("Example inputs loaded. Select Solve to see the results.");
           }}><RotateCcw size={14} /> Load example</button>
         </div>
-        <p className="calc-intro">One material across the stack. The example uses cited AS4/3501-6 properties and a constructed tension load.</p>
+        <p className="calc-intro">One material across the stack. The example uses AS4 / 3501-6 from the material library under a uniaxial tension load.</p>
         <fieldset disabled={pending}>
           <legend>Material</legend>
           <div className="calc-field calc-source">
@@ -103,7 +114,7 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
                 if (!option) { update({ ...form, material: { ...form.material, library: "" } }); return; }
                 // Display values are rounded for the fields; the request sends the dataset reference itself.
                 update({ ...form,
-                  material: { library: option.value, E1_GPa: option.E1_GPa, E2_GPa: option.E2_GPa, G12_GPa: option.G12_GPa, nu12: option.nu12, source_reference: option.citation },
+                  material: { library: option.value, E1_GPa: option.E1_GPa, E2_GPa: option.E2_GPa, G12_GPa: option.G12_GPa, nu12: option.nu12, source_reference: shownCitation(option.citation) },
                   plies: option.thickness_mm ? form.plies.map((ply) => ({ ...ply, thickness_mm: option.thickness_mm! })) : form.plies });
               }}>
               <option value="">Enter values manually</option>
@@ -111,7 +122,7 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
             </select>
             <span id="library-help" className={errors["material.library"] ? "calc-field-error" : "calc-hint"}>
               {errors["material.library"] || (form.material.library
-                ? "Values, citation and ply thickness come from this cited dataset; the engine uses the dataset, not the rounded display. Editing a value switches to manual entry."
+                ? "Values shown are rounded; the analysis uses the full cited values. Editing a value switches to manual entry."
                 : "Pick a cited dataset from the material library, or type values and their source below.")}
             </span>
           </div>
@@ -131,7 +142,7 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
         </fieldset>
         <fieldset disabled={pending}>
           <legend>Ply stack</legend>
-          <p className="calc-hint">Bottom face first. Angles are counterclockwise from x to the fibers.</p>
+          <p className="calc-hint">{ANGLE_CONVENTION}</p>
           <div className="calc-plies">{form.plies.map((ply, index) => <div className="calc-ply" key={index}>
             <span className="calc-ply-index">{index + 1}</span>
             <NumericField name={`plies.${index}.angle_deg`} label={`Ply ${index + 1} angle (°)`} value={ply.angle_deg} error={errors[`plies.${index}.angle_deg`]}
@@ -146,7 +157,7 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
         </fieldset>
         <fieldset disabled={pending}>
           <legend>Loads per unit width</legend>
-          <p className="calc-hint">Enter every component, including 0 for unused loads. These are resultants per width, not total forces or moments.</p>
+          <p className="calc-hint">Loads are per unit width. Use 0 for loads that do not act.</p>
           <div className="calc-field-grid calc-loads">{loadNames.map((name) => <NumericField key={name} name={`loads.${name}`}
             label={`${name} (${name.startsWith("N") ? "N/m" : "N·m/m"})`} value={form.loads[name]} error={errors[`loads.${name}`]}
             onChange={(value) => update({ ...form, loads: { ...form.loads, [name]: value } })} />)}</div>
@@ -154,37 +165,42 @@ export function LaminateCalculator({ apiBaseUrl }: { apiBaseUrl: string }) {
         {!apiBaseUrl && <p className="calc-notice">Calculations are unavailable on this site. You can still inspect the example inputs.</p>}
         {message && <p className="calc-alert" role="alert">{message}</p>}
         <div className="calc-actions">
-          <button className="button primary" type="submit" disabled={pending || !apiBaseUrl}>{pending ? "Calculating…" : "Analyze laminate"}<ArrowRight size={16} /></button>
+          <button className="button primary" type="submit" disabled={pending || !apiBaseUrl}>{pending ? "Solving…" : "Solve"}<ArrowRight size={16} /></button>
           {pending && <button className="calc-text-button" type="button" onClick={() => activeRequest.current?.abort("cancel")}>Cancel</button>}
         </div>
       </form>
 
-      <section className="calc-output" aria-labelledby="results-title" aria-busy={pending}>
-        <div className="calc-panel-title"><span className="eyebrow">02 / INSPECT</span><span className="calc-hint" title={result?.run_id ?? undefined}>{result ? `Engine ${result.engine_version}${result.run_id ? ` · run ${result.run_id.slice(0, 8)}` : ""}` : "Engine results"}</span></div>
+      {/* the run's id and the engine's version stay with the record and in data attributes for support, not on the screen (style guide, rule 1) */}
+      <section className="calc-output" aria-labelledby="results-title" aria-busy={pending} data-run-id={result?.run_id ?? undefined} data-version={result?.engine_version}>
+        <div className="calc-panel-title"><span className="eyebrow">02 / INSPECT</span><span className="calc-hint">Results</span></div>
         <h2 id="results-title">Laminate response</h2>
         <p className="calc-status" role="status">{status}</p>
         {result ? <div className="calc-results" data-testid="calculation-results">
-          <div className="calc-vector"><h3>Mid-plane strain <span>dimensionless</span></h3>
-            <dl>{["εx", "εy", "γxy"].map((label, i) => <div key={label}><dt>{label}</dt><dd data-testid={`strain-${i}`}>{formatted(result.midplane_strain[i])}</dd></div>)}</dl>
+          <div className="calc-vector"><h3>Mid-plane strain <span>microstrain</span></h3>
+            <dl>{["εx", "εy", "γxy"].map((label, i) => <div key={label}><dt>{label}</dt><dd data-testid={`strain-${i}`}>{formatted(result.midplane_strain[i] * MICRO)}</dd></div>)}</dl>
           </div>
           <div className="calc-vector"><h3>Curvature <span>1/m</span></h3>
             <dl>{["κx", "κy", "κxy"].map((label, i) => <div key={label}><dt>{label}</dt><dd data-testid={`curvature-${i}`}>{formatted(result.curvature_per_m[i])}</dd></div>)}</dl>
           </div>
-          <p className="calc-hint">γxy is engineering shear strain. Values use scientific notation; e−4 means × 10⁻⁴.</p>
-          {result.material_provenance && <div className="calc-provenance" data-testid="material-provenance">
+          <p className="calc-hint">γxy is engineering shear strain.</p>
+          {result.material_provenance && <div className="calc-provenance" data-testid="material-provenance" data-dataset={result.material_provenance.dataset_id}>
             <h3>Material source <span>{result.material_provenance.name}</span></h3>
             <p>{result.material_provenance.citation}</p>
-            <p className="calc-hint">Dataset {result.material_provenance.dataset_id} · record {result.material_provenance.record_revision ?? "n/a"} · {result.material_provenance.rights}</p>
             <ul>{result.material_provenance.values.map((v) => <li key={v.role}>
               <strong>{v.role}</strong> = {v.source_value} {v.source_unit === "—" ? "" : v.source_unit} · {v.basis} · <a href={v.reference_url} target="_blank" rel="noreferrer">page {v.printed_page ?? v.page}</a>
             </li>)}</ul>
             {result.material_provenance.not_provided.length > 0 && <p className="calc-hint">Not provided by this dataset: {result.material_provenance.not_provided.join("; ")}.</p>}
           </div>}
-          <Matrix title="A" unit="N/m" meaning="Stretching stiffness" values={result.A_N_per_m} />
-          <Matrix title="B" unit="N" meaning="Stretching–bending coupling" values={result.B_N} />
-          <Matrix title="D" unit="N·m" meaning="Bending stiffness" values={result.D_N_m} />
-        </div> : <div className="calc-empty"><Layers3 size={34} strokeWidth={1} /><h3>Your layup, calculated.</h3><p>Run an analysis to inspect stretching, bending and the connection between them.</p></div>}
-        <p className="calc-scope">Flat, unnotched laminates · One material · Linear elastic CLT. This screen reports stiffness and deformation; strength, holes, temperature and moisture effects are outside its scope. Results are for research exploration, not design approval.</p>
+          {(() => {
+            const shownAbd = shownMatrices(result);
+            return <>
+              <Matrix title="A" unit="MN/m" meaning="Stretching stiffness" values={scaledBy(shownAbd.A, 1e6)} />
+              <Matrix title="B" unit="kN" meaning="Stretching–bending coupling" values={scaledBy(shownAbd.B, 1e3)} />
+              <Matrix title="D" unit="N·m" meaning="Bending stiffness" values={shownAbd.D} />
+            </>;
+          })()}
+        </div> : <div className="calc-empty"><Layers3 size={34} strokeWidth={1} /><h3>No results yet</h3><p>Select Solve to see the A, B and D matrices, mid-plane strains and curvatures.</p></div>}
+        <p className="calc-scope">Flat, unnotched laminates · One material · Linear elastic classical laminate theory. This page reports stiffness and deformation; for first-ply failure and temperature change, open the <Link href="/workspace/laminate">laminate workspace</Link>. Results are for research exploration, not design approval.</p>
       </section>
     </div>
   );

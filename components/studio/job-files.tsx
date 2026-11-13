@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, ExternalLink } from "lucide-react";
+import { ArrowUpRight, Download } from "lucide-react";
 import { DOWNLOADS, fileUrl, type Fields, type JobStatus } from "@/lib/studio-api";
 import { downloadName } from "@/lib/studio-copy";
 
@@ -30,7 +30,7 @@ export function JobFiles({ apiBase, job, naming, viewer = true, testId }: {
         );
       })}
       {viewer ? (
-        <li><a href={`/workspace/fea/view?job=${encodeURIComponent(job.job_id)}`} target="_blank" rel="noreferrer"><ExternalLink size={13} aria-hidden="true" /> Open results in a new window</a></li>
+        <li><a href={`/workspace/fea/view?job=${encodeURIComponent(job.job_id)}`} target="_blank" rel="noreferrer"><ArrowUpRight size={13} aria-hidden="true" /> Open results in a new window</a></li>
       ) : null}
     </ul>
   );

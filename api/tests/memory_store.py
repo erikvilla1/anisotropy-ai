@@ -26,6 +26,9 @@ class MemoryStore:
         self.linked.append(key)
         return f"https://store.test/{key}?expires={seconds}" + ("" if filename is None else f"&filename={filename}")
 
+    def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
+
 
 class FailingStore(MemoryStore):
     """A store whose uploads fail, as a bucket that is gone or a key that no longer opens it would."""

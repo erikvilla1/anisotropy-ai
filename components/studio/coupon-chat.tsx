@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
+import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type JobStatus,
   type ProposalAnswer } from "@/lib/studio-api";
 import { couponOffer, couponRowsFrom } from "@/lib/proposals";
@@ -634,7 +634,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else content = resultMessage(entry.job);
     return (
       <div className="chat-assistant" key={entry.id}>
-        <span className="message-avatar"><Sparkles size={15} /></span>
+        <span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span>
         <div>{content}</div>
       </div>
     );
@@ -652,8 +652,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       </div>
       <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
         {entries.map((e) => render(e, latestCheck))}
-        {reading ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
-        {checking ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing">Checking the setup…</p></div></div> : null}
+        {reading ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
+        {checking ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing">Checking the setup…</p></div></div> : null}
         {problem ? <p className="studio-alert" role="alert">{problem}</p> : null}
       </div>
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>

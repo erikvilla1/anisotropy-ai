@@ -5,7 +5,7 @@ import base from "./playwright.config";
 // the site must be built with NEXT_PUBLIC_ANISOTROPY_API_URL set to any address, which the test intercepts.
 export default defineConfig({
   ...base,
-  testMatch: ["studio.spec.ts", "workspace.spec.ts"],
+  testMatch: ["studio.spec.ts", "workspace.spec.ts", "abaqus-card.spec.ts"],
   timeout: 60_000,
   webServer: [{ command: "npm run preview", url: "http://localhost:3001/studio", reuseExistingServer: !process.env.CI }],
 });

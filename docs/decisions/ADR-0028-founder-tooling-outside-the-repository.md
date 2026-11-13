@@ -1,8 +1,8 @@
 # ADR-0028: Hermes and the founder's post-drafting tooling live outside the product repository and call the API as an outside client
 
-- Status: Proposed; the facts the post-drafting workflow's assistants share may live in `docs/brain/` since amendment 2 ([ADR-0057](ADR-0057-a-shared-brain-for-the-teams-agents-lives-in-docs-brain-the-one-folder-written-to-main-without-a-pull-request.md))
+- Status: Proposed; the facts the post-drafting workflow's assistants share may live in `docs/brain/` since amendment 2, confirmed by the founder on 2026-11-04 ([ADR-0057](ADR-0057-a-shared-brain-for-the-teams-agents-lives-in-docs-brain-the-one-folder-written-to-main-without-a-pull-request.md))
 - Date: 2026-10-14
-- Decided by: Founder, 2026-10-14 | Drafted by: Claude Code
+- Decided by: Founder, 2026-10-14; amendment 2: Founder, 2026-11-04 | Drafted by: Claude Code
 - Related: ADR-0023 (agent skills; Hermes part superseded here), ADR-0026 (actor list), ADR-0027 (deployment tiers), `docs/agents/README.md`, `scripts/link-agent-dirs.ps1`, `api/src/anisotropy_api/records.py`
 
 ## Context
@@ -44,12 +44,12 @@ Easier: the repository holds only the product and its documentation; customer bu
 
 Revisit if Hermes needs repository files to work (then a separate private repository, not this one); if a second person needs to run the post-drafting workflow; or if the actor rename breaks a stored record's readability (it must not: a migration rewrites existing `hermes` rows to the new name, and the trigger that forbids updates is suspended for that migration only, which the migration test must show).
 
-## Amendment 2, 2026-11-04 (the facts the workflow's assistants share may live in `docs/brain/`; proposed, not yet confirmed by the founder)
+## Amendment 2, 2026-11-04 (the facts the workflow's assistants share may live in `docs/brain/`; confirmed by the founder)
 
 **Context.** This record's revisit trigger, "a second person needs to run the post-drafting workflow", has fired. Kai Saucedo (growth engineering) runs the X posting workflow for Anisotropy with his own assistant, Christopher Valerio approves each post, and both assistants and the founder's Claude Code need the same company context. [ADR-0057](ADR-0057-a-shared-brain-for-the-teams-agents-lives-in-docs-brain-the-one-folder-written-to-main-without-a-pull-request.md) proposes that context as `docs/brain/`.
 
 **Options.** (1) A separate private repository, the path this record named: rejected in ADR-0057 for a second clone on every machine and drift from the decisions it summarizes. (2) `docs/brain/` in this repository, public-safe facts only: chosen there.
 
-**Decision.** This record's decision stands for everything it covers: the assistants' configuration, skills, prompts, scripts, credentials, page and channel ids, and the drafts themselves stay outside the repository, on the machine that runs them, and reach the engine as outside clients. One thing changes: the facts those assistants share (the company, the people, the voice, the posting rules and the log of what was posted) may live in `docs/brain/`, written in tool-neutral terms, so the product code and documentation still name no assistant outside the decision records. Founder's words: none yet; proposed by Kai Saucedo on 2026-11-04.
+**Decision.** This record's decision stands for everything it covers: the assistants' configuration, skills, prompts, scripts, credentials, page and channel ids, and the drafts themselves stay outside the repository, on the machine that runs them, and reach the engine as outside clients. One thing changes: the facts those assistants share (the company, the people, the voice, the posting rules and the log of what was posted) may live in `docs/brain/`, written in tool-neutral terms, so the product code and documentation still name no assistant outside the decision records. Proposed by Kai Saucedo on 2026-11-04. Founder's words: "Accept with changes" (a Claude Code review, 2026-11-04); the changes are ADR-0057 amendment 1.
 
 **Evidence.** Kai's instruction of 2026-11-04 (ADR-0057, Context). No evidence yet that the split, facts in and tooling out, holds; ADR-0057's revisit triggers cover it.

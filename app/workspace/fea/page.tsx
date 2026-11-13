@@ -4,8 +4,8 @@ import "../../studio/studio.css";
 import "../workspace.css";
 
 export const metadata: Metadata = {
-  title: "Coupon FEA | Anisotropy",
-  description: "A coupon test set up on the left, checked and solved by the engine and CalculiX, drawn ply by ply in the centre, with the assistant beside it.",
+  title: "Coupon FEA",
+  description: "Set up a composite coupon test, run the analysis and review every ply's results.",
 };
 
 /** The coupon FEA workspace (ADR-0062): three columns on one project. `?material=` and `?prompt=` start the assistant's conversation. */

@@ -82,6 +82,24 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
 }
 
 
+# Choosing among fixed tools (ADR-0094, part 8): the model names tools on offer and nothing else, so its answer holds no script, no path
+# and no number. The order they run in and whether they can run at all is checked by the tools themselves.
+TOOL_CHOICE_MAX_TOKENS = 1000
+TOOL_CHOICE_SYSTEM = (
+    "You read what an engineer asks for in a composite analysis workspace and choose which of the offered tools to run for it, in order. "
+    "You are given the engineer's message, the tools on offer (each with its name and what it does) and the names of the tools whose work "
+    "is already done. Choose only tools the message asks for, by name, each at most once, leaving out a tool that is already done. When the "
+    "message asks for the whole job, choose every tool that is not done. When it asks for none of them, choose none. You choose names only: "
+    "you never write a command, a script, a file name or a number."
+)
+
+
+def tool_choice_schema(names: list[str]) -> dict[str, Any]:
+    """The model's answer when it chooses tools: a list of names from those on offer, and no other field."""
+    return {"type": "object", "properties": {"tools": {"type": "array", "items": {"type": "string", "enum": list(names)}}},
+            "required": ["tools"], "additionalProperties": False}
+
+
 @dataclass(frozen=True)
 class Reading:
     """What a writer read from a message (ADR-0088): the model's answer as parsed, before the source guard; None when no model read it,
@@ -123,6 +141,8 @@ class Assistant(Protocol):
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft: ...
 
     def propose(self, view: dict[str, Any]) -> Reading: ...
+
+    def choose_tools(self, view: dict[str, Any]) -> Reading: ...
 
 
 def numbers_in(text: str) -> list[str]:
@@ -201,6 +221,10 @@ class TemplateAssistant:
 
     def propose(self, view: dict[str, Any]) -> Reading:
         """The template reads nothing: the page's own patterns read the message (ADR-0055)."""
+        return Reading(None, "template", None)
+
+    def choose_tools(self, view: dict[str, Any]) -> Reading:
+        """The template reads no message, so it chooses nothing: the caller takes the tools' own order."""
         return Reading(None, "template", None)
 
 
@@ -290,6 +314,22 @@ class ClaudeAssistant:
         """The model's reading of a message (ADR-0088): proposals in the fixed schema, which the source guard then reads. `view` is what the
         model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11)."""
         text, reason = self._ask(PROPOSE_SYSTEM, json.dumps(view, ensure_ascii=False, indent=1), schema=PROPOSAL_SCHEMA, max_tokens=PROPOSE_MAX_TOKENS)
+        if text is None:
+            return Reading(None, "template", None, (reason or "the model gave no answer").replace("; the template's prose stands", ""))
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            return Reading(None, "template", None, "the model's answer was not the JSON asked for")
+        if not isinstance(raw, dict):
+            return Reading(None, "template", None, "the model's answer was not the JSON asked for")
+        return Reading(raw, self.name, self.model)
+
+    def choose_tools(self, view: dict[str, Any]) -> Reading:
+        """The model's choice among the tools on offer (ADR-0094, part 8), in a schema that holds their names and nothing else. `view` is
+        what the model may see: the message, each tool's name and description, and the names of those already done."""
+        names = [str(tool["name"]) for tool in view.get("tools", [])]
+        text, reason = self._ask(TOOL_CHOICE_SYSTEM, json.dumps(view, ensure_ascii=False, indent=1), schema=tool_choice_schema(names),
+                                 max_tokens=TOOL_CHOICE_MAX_TOKENS)
         if text is None:
             return Reading(None, "template", None, (reason or "the model gave no answer").replace("; the template's prose stands", ""))
         try:

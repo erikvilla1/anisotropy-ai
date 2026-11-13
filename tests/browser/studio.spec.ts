@@ -1,7 +1,8 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { printed } from "../../lib/studio-colors";
-import { bannedIn } from "../../lib/studio-copy";
+import { bannedIn, bannedInAbaqusCard } from "../../lib/studio-copy";
+import { exchangeState, LIMITS, mockExchange, uploadOf } from "./abaqus-api";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
 const BENDING = "three-point bending";
@@ -772,7 +773,7 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
     if (new URL(request.url()).pathname !== "/v1/laminates/solve" || request.method() !== "POST") return route.fallback();
     const problem = request.postDataJSON() as Record<string, unknown>;
     problems.push(problem);
-    const body = fixture(problem.report_units === "US" ? "laminate-answer-us" : "laminate-answer");
+    const body = echoed(problem.report_units === "US" ? "laminate-answer-us" : "laminate-answer", problem);
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
   await page.goto("/workspace/fea");
@@ -789,14 +790,14 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
   await message.press("Enter");
   await expect(page.getByText("Got it").last()).toBeVisible();
   await expect(question).toHaveAttribute("data-step", "layup");
-  await expect(question).toContainText("0° runs along x");
+  await expect(question).toContainText("Angles run counterclockwise from x (the Nx direction) to the fibres.");
   await message.fill("[0/45/-45/90]s, 0.125 mm plies");
   await message.press("Enter");
   await expect(question).toHaveAttribute("data-step", "loads");
   await expect(page.getByTestId("laminate-stack")).toContainText("8 plies"); // the stack is drawn as soon as the layup is given
   await page.locator("#lam-Nx").fill("100"); // on the Loads panel
-  await page.getByLabel("lam-Nx unit", { exact: true }).selectOption("N/mm"); // the system's unit is N/m; the typed value keeps its own
-  await page.getByRole("button", { name: "The rest are zero", exact: true }).click();
+  await page.getByLabel("Nx unit", { exact: true }).selectOption("N/mm"); // the system's unit is N/m; the typed value keeps its own
+  await page.getByRole("button", { name: "Set the rest to zero", exact: true }).click();
   await expect(question).toHaveAttribute("data-step", "review"); // the rows typed on the panel moved the conversation on
   await expect(page.getByTestId("laminate-spec")).toContainText("[0/45/-45/90]s, 8 plies, 0.125 mm plies");
   await expect(page.getByTestId("laminate-spec")).toContainText("Nx = 100 N/mm");
@@ -823,13 +824,20 @@ test("the chat solves a laminate problem with each value in its own unit, and sh
   await expect(page.getByTestId("lam-eps-x")).toHaveText("1719");
   await expect(page.getByTestId("lam-fpf")).toContainText("R = 3.207");
   await expect(page.getByTestId("lam-ratio-tsai_wu")).toHaveText("3.207");
-  await expect(page.getByTestId("lam-ratio-max_strain")).toHaveText("3.22"); // the fourth criterion, from the limits the engine derived
+  await expect(page.getByTestId("lam-ratio-max_strain")).toHaveText("3.220"); // the fourth criterion, from the limits the engine derived; four figures in a column
   await expect(page.getByTestId("lam-no-max-strain")).toHaveCount(0);
   await expect(page.getByTestId("lam-fpf-table").locator("tr.studio-earliest")).toHaveAttribute("data-criterion", "tsai_wu");
   await expect(page.getByTestId("lam-ply-table").locator("tr.studio-earliest")).toHaveAttribute("data-ply", "4");
   await expect(page.getByTestId("matrix-A")).toContainText("N/m");
   await expect(page.getByTestId("lam-explanation")).toHaveAttribute("data-writer", "template");
-  await expect(page.getByTestId("lam-explanation")).toContainText("By Tsai-Wu, ply 4 (90 degrees) fails first");
+  await expect(page.getByTestId("lam-explanation")).toContainText("By Tsai-Wu, ply 4 (90°) fails first");
+  await expect(page.getByTestId("lam-explanation")).toContainText("Nx = 100000 N/m"); // the one number rule: plain below a million
+  await expect(page.getByTestId("lam-fpf-table").locator("tr.studio-earliest th")).toContainText("Tsai-Wu (governs)"); // marked in words, not by tint alone
+  await expect(page.getByTestId("lam-ply-table").locator("tr[data-ply='4'] th")).toContainText("Ply 4 · 90°");
+  await expect(page.getByTestId("matrix-B").locator("tbody td")).toHaveText(Array(9).fill("0")); // no extension–bending coupling: B is zero, not roundoff
+  await expect(page.getByTestId("laminate-rail").getByTestId("status")).toHaveText("Solved. Results are under the stack."); // solved from the chat, said in the rail
+  await expect(page.getByTestId("panel-solve").locator(".studio-badge")).toHaveText("solved");
+  await expect(page.getByTestId("panel-units").locator(".studio-badge")).toHaveText("complete");
 
   await page.getByRole("button", { name: "US customary", exact: true }).click(); // solved again by the engine in the other system
   await expect(results).toHaveAttribute("data-units", "US", { timeout: 15_000 });
@@ -953,8 +961,9 @@ test("a temperature change named in the laminate chat brings up its condition, i
   await page.route(API, async (route) => { // the laminate solve, answered from the captured fixture
     const request = route.request();
     if (new URL(request.url()).pathname !== "/v1/laminates/solve" || request.method() !== "POST") return route.fallback();
-    problems.push(request.postDataJSON() as Record<string, unknown>);
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixture("laminate-answer")) });
+    const problem = request.postDataJSON() as Record<string, unknown>;
+    problems.push(problem);
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(echoed("laminate-answer", problem)) });
   });
   await page.goto("/workspace/laminate");
   await page.locator("button[data-system='SI']").click();
@@ -970,7 +979,7 @@ test("a temperature change named in the laminate chat brings up its condition, i
   // a value states it: the condition comes on with it, read with its sign and unit
   await message.fill("E1 147 GPa, E2 10.3 GPa, G12 7 GPa, nu12 0.27, F1t 2280 MPa, F1c 1725 MPa, F2t 57 MPa, F2c 228 MPa, F6 76 MPa");
   await message.press("Enter");
-  await message.fill("[0/90]s, 0.25 mm plies, Nx = 0 N/m, the rest zero");
+  await message.fill("[0/45/-45/90]s, 0.25 mm plies, Nx = 0 N/m, the rest zero"); // the captured answer's plies, so its echo is whole
   await message.press("Enter");
   await message.fill("it is cooled by 150 °C after cure, alpha1 = -1e-6 /°C, alpha2 = 25e-6 /°C");
   await message.press("Enter");
@@ -1020,14 +1029,25 @@ test("with a model on, the laminate chat's card proposes a temperature change an
   await expect(page.locator("#lam-delta-t")).toHaveValue("-150");
 });
 
+/** A laminate answer from a captured fixture, echoing the problem it was sent (the page shows an answer only beside the problem it answers,
+ * audit finding laminate-4): the title, the layup and the system come from the request. */
+function echoed(name: string, problem: Record<string, unknown>) {
+  const body = fixture(name);
+  return { ...body, report_units: problem.report_units, case: { ...body.case, title: problem.title, laminate: { ...body.case.laminate, layup: problem.layup } } };
+}
+
 /** Every word a customer can read in the workspace (ADR-0091): the shell's text, folded details included, and the words a screen reader,
- * a tooltip, a placeholder or a saved file's name carries. */
-async function shownText(page: Page): Promise<string> {
-  return page.getByTestId("workspace-shell").evaluate((shell) => {
-    const attributes = [...shell.querySelectorAll("[aria-label], [title], [placeholder], a[download]")]
-      .flatMap((el) => ["aria-label", "title", "placeholder", "download"].map((name) => el.getAttribute(name) ?? ""));
-    return [shell.textContent ?? "", ...attributes].join("\n");
-  });
+ * a tooltip, a placeholder or a saved file's name carries. `part` reads the card of the user's own Abaqus alone, or everything but it:
+ * that card may name Abaqus and the connector's file (ADR-0094 part 7), and is judged by its own list. */
+async function shownText(page: Page, part: "outside the Abaqus card" | "the Abaqus card" = "outside the Abaqus card"): Promise<string> {
+  return page.getByTestId("workspace-shell").evaluate((shell, inside) => {
+    const root = shell.cloneNode(true) as HTMLElement;
+    const cards = [...root.querySelectorAll("[data-names-abaqus]")];
+    if (!inside) cards.forEach((card) => card.remove());
+    const read = (el: Element) => [el.textContent ?? "", ...[...el.querySelectorAll("[aria-label], [title], [placeholder], a[download]")]
+      .flatMap((x) => ["aria-label", "title", "placeholder", "download"].map((name) => x.getAttribute(name) ?? ""))].join("\n");
+    return (inside ? cards : [root]).map(read).join("\n");
+  }, part === "the Abaqus card");
 }
 const expectNoBannedTerms = async (page: Page, where: string) => expect(bannedIn(await shownText(page)), where).toEqual([]);
 
@@ -1040,6 +1060,7 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   let phase: "queued" | "running" | "result" | "done" = "queued";
   const jobs = { queued, running: fixture("job-running"), result: fixture("job-result-in"), done: fixture("job-done") };
   await mockApi(page, calls, { allTests: false, writer: "model", jobs: () => jobs[phase] });
+  await mockExchange(page, exchangeState({ exchange: { uploads: true, connector_route: true, ...LIMITS }, uploads: [uploadOf("differs")] }));
   await page.goto("/workspace/fea");
   await expect(page.getByTestId("tension-screen")).toBeVisible();
   await expectNoBannedTerms(page, "a fresh start");
@@ -1064,6 +1085,18 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   await expect(page.getByTestId("probe")).toBeVisible();
   await expect(page.getByTestId("tension-files").locator("a[data-key=prepomax_results]")).toHaveText("Reference solver results (.frd)");
   await expectNoBannedTerms(page, "done, with the probe table and the files");
+  // the card of the user's own Abaqus (ADR-0094 part 7), with a model that differs, an upload key just made and every fold open: it names
+  // Abaqus and the connector's file and nothing else of the list; the rest of the page still names neither
+  const card = page.getByTestId("abaqus-card");
+  await expect(card.getByTestId("abaqus-verdict")).toHaveText("Differs in 2 places");
+  await card.getByTestId("abaqus-keys").locator("summary").click();
+  await card.getByTestId("abaqus-key-create").click();
+  await expect(card.getByTestId("abaqus-key-value")).toBeVisible();
+  const onCard = await shownText(page, "the Abaqus card");
+  expect(bannedIn(onCard)).toEqual(["Abaqus", ".py"]);
+  expect(bannedInAbaqusCard(onCard)).toEqual([]);
+  await expectNoBannedTerms(page, "done, beside the Abaqus card");
+  await expect(page.getByTestId("tension-files")).not.toContainText(/build/i); // the build script is offered on the card alone
 });
 
 test("a stopped run says what happened and what to do, in plain words (ADR-0091)", async ({ page }) => {
@@ -1083,4 +1116,49 @@ test("a stopped run says what happened and what to do, in plain words (ADR-0091)
   await expect(run.locator("li[data-step=solving]")).toHaveAttribute("data-state", "stopped");
   await expect(run).not.toContainText("exited with code");
   await expectNoBannedTerms(page, "stopped");
+});
+
+test("the laminate workspace never names its machinery, unsolved or solved, and a mismatched answer is not shown (laminate-2, laminate-4)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  let echo = true;
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const request = route.request();
+    if (new URL(request.url()).pathname !== "/v1/laminates/solve" || request.method() !== "POST") return route.fallback();
+    const problem = request.postDataJSON() as Record<string, unknown>;
+    const body = echo ? echoed("laminate-answer", problem) : fixture("laminate-answer"); // the captured answer is for Nx = 100 N/mm
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/workspace/laminate");
+  await expectNoBannedTerms(page, "laminate, a fresh start");
+  await page.locator("button[data-system='SI']").click();
+  await expectNoBannedTerms(page, "laminate, the units picked");
+  const message = page.getByLabel("Message the laminate assistant", { exact: true });
+  await message.fill("E1 147 GPa, E2 10300 MPa, G12 7, nu12 0.27, F1t 2280 MPa, F1c 1725 MPa, F2t 57 MPa, F2c 228 MPa, F6 76 MPa");
+  await message.press("Enter");
+  await message.fill("[0/45/-45/90]s, 0.125 mm plies");
+  await message.press("Enter");
+  await message.fill("Nx = 100 N/m, everything else zero"); // a thousand times smaller than the captured answer's load
+  await message.press("Enter");
+  const rail = page.getByTestId("laminate-rail");
+  echo = false;
+  await page.getByTestId("laminate-solve").click(); // from the assistant
+  await expect(rail.getByRole("alert")).toHaveText("The result did not match the problem; solve again.");
+  await expect(page.getByTestId("laminate-results")).toHaveCount(0);
+  // the analysis ran and its answer was for another problem: the assistant asks for a new solve, not that the analysis did not run
+  await expect(page.getByTestId("ws-assistant").locator(".chat-problem h4").last()).toHaveText("Solve again");
+  await page.getByTestId("solve-button").click(); // from the rail: refused the same way, said once
+  await expect(rail.getByRole("alert")).toHaveText("The result did not match the problem; solve again.");
+  await expect(page.getByTestId("laminate-results")).toHaveCount(0);
+  echo = true;
+  await message.fill("solve"); // from the assistant after the rail's refusal: the rail shows one state, the answer's
+  await message.press("Enter");
+  await expect(page.getByTestId("laminate-results")).toBeVisible({ timeout: 15_000 });
+  await expect(rail.getByRole("alert")).toHaveCount(0);
+  await expect(rail.getByTestId("status")).toHaveText("Solved. Results are under the stack.");
+  await expectNoBannedTerms(page, "laminate, solved");
+  expect(await shownText(page)).not.toMatch(/\de[+-]\d/); // no programmer's exponent anywhere on the page
+  await page.getByTestId("assistant-toggle").click();
+  await expect(page.getByTestId("assistant-toggle")).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("assistant-toggle")).not.toHaveAttribute("aria-pressed", /.*/);
 });

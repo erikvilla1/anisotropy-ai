@@ -129,6 +129,18 @@ def test_a_physical_change_is_named(old, new, item):
     assert not eq.same_model and [i.item for i in eq.differences] == [item]
 
 
+def test_six_digits_of_a_material_constant_are_the_same_only_when_asked():
+    """The rule for a deck Abaqus/CAE wrote (ADR-0094) is the caller's to ask for: every other comparison keeps the strict one."""
+    text = generated()
+    line = next(l for l in text.splitlines() if l.startswith("16") and l.count(",") == 5)
+    rounded = ", ".join(f"{float(v):.6g}" for v in line.split(","))
+    assert rounded != line
+    strict = deck_equivalence(deck_of(text.replace(line, rounded, 1)), deck_of(text), TOLERANCE, "mm-MPa")
+    assert not strict.same_model and all(i.item.startswith("Material ") and i.team != i.ours for i in strict.differences)
+    asked = deck_equivalence(deck_of(text.replace(line, rounded, 1)), deck_of(text), TOLERANCE, "mm-MPa", material_digits=6)
+    assert asked.same_model and any("one number written to 6 significant digits" in i.ours for i in asked.items)
+
+
 def test_names_read_same_when_they_match_and_are_only_listed_when_they_differ():
     text = generated()
     same = {i.item: i.same for i in deck_equivalence(deck_of(text), deck_of(text), TOLERANCE, "mm-MPa").items}

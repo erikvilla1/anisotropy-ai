@@ -42,9 +42,10 @@ test("reported ranges, lower bounds and absolute temperatures survive display an
   assert.deepEqual(dualUnits(32, "°F"), { english: "32 °F", si: "0 °C" });
   assert.deepEqual(dualUnits(100, "°C"), { english: "212 °F", si: "100 °C" });
   assert.equal(dualUnits("32–212", "°F").si, "0–100 °C");
-  assert.equal(dualUnits("1.81–1.86", "g/cm³").si, "1,810–1,860 kg/m³");
-  assert.equal(dualUnits(".0091–.0101", "in").si, "0.23114–0.25654 mm");
-  assert.deepEqual(dualUnits(.2, "strain/unit c"), { english: "0.2 strain/unit c", si: "0.2 strain/unit c" });
+  assert.equal(dualUnits("1.81–1.86", "g/cm³").si, "1.81–1.86 g/cm³");
+  assert.equal(dualUnits(".0091–.0101", "in").si, "0.231–0.257 mm");
+  assert.equal(dualUnits(".0091–.0101", "in", { precision: "full" }).si, "0.23114–0.25654 mm");
+  assert.deepEqual(dualUnits(.2, "—"), { english: "0.2", si: "0.2" }); // β is a pure number per unit moisture concentration.
   const glass = curatedMaterials.find(m => m.id === "7781-e765")!;
   const range = exportCitedMaterial(glass).properties.find(p => p.key === "density-WT")!;
   assert.equal(range.value, 1.81);
@@ -52,7 +53,7 @@ test("reported ranges, lower bounds and absolute temperatures survive display an
   assert.equal(range.valueType, "range");
   assert.equal(exportCitedMaterial(glass).schemaVersion, 2);
   assert.equal(range.sourceUnit, "g/cm³");
-  assert.equal(range.displayUnits.si, "1,810–1,860 kg/m³");
+  assert.equal(range.displayUnits.si, "1.81–1.86 g/cm³");
   assert.match(range.referenceUrl, /#page=29$/);
   const agp = curatedMaterials.find(m => m.id === "agp370")!;
   const lowerBound = exportCitedMaterial(agp).properties.find(p => p.key === "gamma31")!;
