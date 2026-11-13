@@ -1,6 +1,6 @@
 # ADR-0080: The logo is the lead's triangle and wide wordmark, traced to vectors and drawn through CSS masks
 
-- Status: Proposed; the name is set in Archivo again, as outlines (amendment 1)
+- Status: Proposed; the triangle and the name are the designer's approved outlines (amendment 2, which replaces amendment 1's lettering)
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-10 ("swap the current logos … triangle first then anisotropy") | Drafted by: Claude Code
 - Related: [ADR-0079](ADR-0079-the-wordmark-is-set-in-archivo-at-weight-800-the-nearest-open-licence-match-to-physicsx-s-lettering.md) (the wordmark this replaces), [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the header), `app/brand.css`, `components/site-shell.tsx`, `public/assets/brand/`, `app/layout.tsx`
@@ -66,3 +66,20 @@ Option 3.
 - Screenshots of the header over the hero, on the About page and on the phone were looked at. The link's text still reads "Anisotropy".
 - **Checks:** `npm run typecheck` clean; `npm test` 221 passed, 1 skipped; the production build without the hero clip exit 0. The browser suite against that build, on the tree that also holds ADR-0077 amendment 16: 77 passed, 2 failed, 1 skipped. The failures were `home.spec.ts` "typing a layup" (two quick fills of the layup were posted separately) and `studio.spec.ts` "the studio checks a setup" (the job still read "running" at the test's 30 s limit); neither test reads the logo or the strip. Re-run, the first passed twice; the second passed alone in 21.7 s and failed twice more beside other tests. UNVERIFIED: that both are only slow in this container; the pull request's CI run decides.
 - UNVERIFIED: the logo on a light ground (no page puts it on one), and the lead's own screen.
+
+## Amendment 2, 2026-11-13 (the designer's approved logo files, in the same arrangement)
+
+**Context.** The lead received the official logo files from the designer and asked: "lets use these now on the website but make sure the same arrangement as is up there rn." The approved file is the stacked logo, the triangle over the name, on a 1920 by 1080 artboard, in four colourings. The lead committed the four SVG files to `public/assets/brand/official/`.
+
+**Decision.**
+- **The site's logo is cut from the approved file.** `scripts/brand-logo.py` reads the black-on-white file and writes the triangle (one path) and the name (ten paths, one a letter) each on its own, cropped to its ink and filled with the current colour. The outlines are unchanged. It also writes the tab icon from the same triangle; the phone icon is that triangle on the site's near-black at 180 px.
+- **The arrangement stays:** the triangle first, the name beside it, centred on one line, drawn through CSS masks. The name's letters are half the triangle's height and the gap is the same half, as this record first set them for the wide lettering.
+- **The name is the designer's wide lettering again.** It replaces amendment 1's Archivo outlines, and `scripts/brand-wordmark.py` is deleted (it is in commit `cebcd04`). The lead was asked which lettering to keep and had not answered when this was made; the request names the official files, so they are used.
+- **Colour.** The logo keeps taking the colour of the text around it. The approved files' own colours (`#D1D5DB` on `#0F1115`, and white on black) are not applied to the site.
+
+**Evidence.** On 2026-11-13, in the browser against the dev server:
+- **Header at 1440 px:** the triangle 34.3 by 28 px from x = 32, the name 181 by 14 px from x = 80.3, both centred on y = 27.5, where the header's links are centred. **Footer:** 29.4 by 24 px and 155.2 by 12 px on one centre line.
+- **A 390 px phone:** 26.9 by 22 px and 142.3 by 11 px, both centred on y = 34.5; no sideways scroll; no page errors.
+- Screenshots of the header and of the phone icon were looked at. The link's text still reads "Anisotropy".
+- `npm run typecheck` clean; `npm test` 248 passed, 1 skipped; `home.spec.ts` and `intro.spec.ts` against the dev server 13 of 13.
+- UNVERIFIED: the logo on a light ground, and whether the designer's files allow the two parts to be set side by side (the files show them stacked).
