@@ -77,8 +77,5 @@ docs/.obsidian/
 worker-configuration.d.ts
 
 # Licensed media (the hero clip, ADR-0069). scripts/hero-video.sh writes the web copy and its poster here from the original
-# kept in .local/. Those two files may be committed since ADR-0069 amendment 1 (the lead's decision, 2026-11-11), so the
-# deployed site plays the clip. Everything else in this folder, the original included, stays out of the repository.
-/public/media/*
-!/public/media/hero.mp4
-!/public/media/hero.jpg
+# kept in .local/; the deploy fetches the two from a private R2 bucket (amendment 2). Nothing in this folder is committed.
+/public/media/
