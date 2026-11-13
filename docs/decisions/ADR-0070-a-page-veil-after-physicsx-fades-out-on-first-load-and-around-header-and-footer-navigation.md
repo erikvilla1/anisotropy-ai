@@ -146,3 +146,11 @@ What Anduril's code does:
 
 **Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` counts five elements waiting under the black (the three texts, the triangle and the Basement's mark): 4 of 4, run while the scroll tour was being reworked in the same tree, which these cases do not touch. UNVERIFIED: looked at only through that count, not on a recording.
 
+## Amendment 7, 2026-11-13 (the triangle turns anticlockwise)
+
+**Context.** Of amendment 5's turn the lead asked: "counter clockwise too."
+
+**Decision.** The turn ends at -360° in place of 360°: one turn anticlockwise, with the same length, easing and fade.
+
+**Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` reads the turn's keyframes as 0° to -360°: 4 of 4. A contact sheet of the triangle at ten frames a second was looked at: its top tips to the left first, and it has faded by about 1.4 s.
+
