@@ -6,6 +6,7 @@
  * Nothing is computed here beyond picking arrays the fea package wrote.
  */
 import type { Faced, Fields } from "./studio-api";
+import { CRITERION_NAMES } from "./studio-answer";
 
 export type FieldOption = {
   id: string; label: string; unit: string; group: string;
@@ -45,38 +46,38 @@ export function fieldOptions(fields: Fields): FieldOption[] {
   const faces = hasFaces(fields);
   const options: FieldOption[] = [
     { id: "u_mag", label: "Displacement |u|", unit: lab.length, group: "Displacement", signed: false, nodalOnly: true },
-    { id: "u_x", label: "Displacement u (x)", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true },
-    { id: "u_y", label: "Displacement v (y)", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true },
+    { id: "u_x", label: "Displacement uₓ", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true },
+    { id: "u_y", label: "Displacement uᵧ", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true },
   ];
   if (shell) {
-    options.push({ id: "u_z", label: "Deflection w (z)", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true });
+    options.push({ id: "u_z", label: "Deflection w", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true });
     options.push({ id: "theta_x", label: "Rotation about x", unit: lab.rotation ?? "rad", group: "Rotation", signed: true, nodalOnly: true });
     options.push({ id: "theta_y", label: "Rotation about y", unit: lab.rotation ?? "rad", group: "Rotation", signed: true, nodalOnly: true });
   }
   options.push(
-    { id: "eps_x", label: "Membrane strain eps_x", unit: "-", group: "Strain", signed: true },
-    { id: "eps_y", label: "Membrane strain eps_y", unit: "-", group: "Strain", signed: true },
-    { id: "gamma_xy", label: "Membrane shear strain gamma_xy", unit: "-", group: "Strain", signed: true },
-    { id: "N_x", label: "Section force N_x", unit: lab.force_per_length, group: "Section force", signed: true },
-    { id: "N_y", label: "Section force N_y", unit: lab.force_per_length, group: "Section force", signed: true },
-    { id: "N_xy", label: "Section force N_xy", unit: lab.force_per_length, group: "Section force", signed: true },
+    { id: "eps_x", label: "Membrane strain εx", unit: "-", group: "Strain", signed: true },
+    { id: "eps_y", label: "Membrane strain εy", unit: "-", group: "Strain", signed: true },
+    { id: "gamma_xy", label: "Membrane shear strain γxy", unit: "-", group: "Strain", signed: true },
+    { id: "N_x", label: "Section force Nx", unit: lab.force_per_length, group: "Section force", signed: true },
+    { id: "N_y", label: "Section force Ny", unit: lab.force_per_length, group: "Section force", signed: true },
+    { id: "N_xy", label: "Section force Nxy", unit: lab.force_per_length, group: "Section force", signed: true },
   );
   if (shell) {
     options.push(
-      { id: "kappa_x", label: "Curvature kappa_x", unit: lab.per_length ?? `1/${lab.length}`, group: "Curvature", signed: true },
-      { id: "kappa_y", label: "Curvature kappa_y (along the coupon)", unit: lab.per_length ?? `1/${lab.length}`, group: "Curvature", signed: true },
-      { id: "kappa_xy", label: "Twist kappa_xy", unit: lab.per_length ?? `1/${lab.length}`, group: "Curvature", signed: true },
-      { id: "M_x", label: "Moment M_x", unit: lab.moment ?? lab.force, group: "Moment", signed: true },
-      { id: "M_y", label: "Moment M_y (along the coupon)", unit: lab.moment ?? lab.force, group: "Moment", signed: true },
-      { id: "M_xy", label: "Twisting moment M_xy", unit: lab.moment ?? lab.force, group: "Moment", signed: true },
-      { id: "Q_x", label: "Transverse shear force Q_x", unit: lab.force_per_length, group: "Shear force", signed: true },
-      { id: "Q_y", label: "Transverse shear force Q_y", unit: lab.force_per_length, group: "Shear force", signed: true },
+      { id: "kappa_x", label: "Curvature κx", unit: lab.per_length ?? `1/${lab.length}`, group: "Curvature", signed: true },
+      { id: "kappa_y", label: "Curvature κy", unit: lab.per_length ?? `1/${lab.length}`, group: "Curvature", signed: true },
+      { id: "kappa_xy", label: "Twist κxy", unit: lab.per_length ?? `1/${lab.length}`, group: "Curvature", signed: true },
+      { id: "M_x", label: "Moment Mx", unit: lab.moment ?? lab.force, group: "Moment", signed: true },
+      { id: "M_y", label: "Moment My", unit: lab.moment ?? lab.force, group: "Moment", signed: true },
+      { id: "M_xy", label: "Twisting moment Mxy", unit: lab.moment ?? lab.force, group: "Moment", signed: true },
+      { id: "Q_x", label: "Transverse shear force Qx", unit: lab.force_per_length, group: "Shear force", signed: true },
+      { id: "Q_y", label: "Transverse shear force Qy", unit: lab.force_per_length, group: "Shear force", signed: true },
     );
   }
   options.push(
-    { id: "S11", label: "Ply stress S11 (along the fibres)", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: true },
-    { id: "S22", label: "Ply stress S22 (across the fibres)", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: true },
-    { id: "S12", label: "Ply shear stress S12", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: true },
+    { id: "S11", label: "Ply stress σ₁", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: true },
+    { id: "S22", label: "Ply stress σ₂", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: true },
+    { id: "S12", label: "Ply shear stress τ₁₂", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: true },
     { id: "mises", label: "Ply von Mises stress", unit: lab.stress, group: "Ply stress", perPly: true, perFace: faces, signed: false },
   );
   if (fields.element.ply.invariants) { // what Abaqus prints beside Mises (ADR-0066 amendment 2): element values, no display averages
@@ -85,9 +86,9 @@ export function fieldOptions(fields: Fields): FieldOption[] {
     }
   }
   options.push(
-    { id: "E11", label: "Ply strain E11 (along the fibres)", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
-    { id: "E22", label: "Ply strain E22 (across the fibres)", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
-    { id: "E12", label: "Ply shear strain E12 (engineering)", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
+    { id: "E11", label: "Ply strain ε₁", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
+    { id: "E22", label: "Ply strain ε₂", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
+    { id: "E12", label: "Ply shear strain γ₁₂", unit: "-", group: "Ply strain", perPly: true, perFace: faces, signed: true, elementOnly: true },
   );
   if (Object.keys(fields.element.failure).length) {
     options.push({ id: "failure_index", label: "Failure index 1/R, worst ply", unit: "-", group: "Failure", perCriterion: true, signed: false });
@@ -134,7 +135,7 @@ function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "ran
   const criterion = fields.element.failure[choice.criterion] ? choice.criterion : Object.keys(fields.element.failure)[0];
   const faceWord = option.perFace && hasFaces(fields) ? `, ${fields.mesh.faces![face]} face` : "";
   const plyWord = option.perPly ? ` (ply ${k + 1}, ${fields.mesh.angles[k]}°${faceWord})` : "";
-  const critWord = option.perCriterion ? ` by ${criterion.replace("_", " ")}` : "";
+  const critWord = option.perCriterion ? `, ${CRITERION_NAMES[criterion] ?? criterion.replace("_", " ")}` : "";
   const label = `${option.label}${plyWord}${critWord}`;
   const nodal = (values: (number | null)[]): Omit<FieldValues, "range"> => ({ values, by: "node", label, unit: option.unit, signed: option.signed });
   const element = (values: (number | null)[]): Omit<FieldValues, "range"> => ({ values, by: "element", label, unit: option.unit, signed: option.signed });
@@ -191,23 +192,24 @@ function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "ran
 
 export type Readout = { title: string; rows: [string, string][] };
 
-/** Tresca, the principal stresses and the pressure, with the names Abaqus/CAE gives them under S (ADR-0066 amendment 2): comparison
- * quantities, not a composite's failure criterion. */
+/** Tresca, the principal stresses and the pressure (ADR-0066 amendment 2): comparison quantities, not a composite's failure criterion;
+ * shown with the plain names of ADR-0091. */
 export const INVARIANT_OPTIONS: [string, string, boolean][] = [
-  ["tresca", "Ply Tresca stress (S, Tresca)", false],
-  ["max_principal", "Ply max. principal stress (S, Max. Principal)", true],
-  ["mid_principal", "Ply mid. principal stress (S, Mid. Principal)", true],
-  ["min_principal", "Ply min. principal stress (S, Min. Principal)", true],
-  ["pressure", "Ply pressure (S, Pressure)", true],
+  ["tresca", "Ply Tresca stress", false],
+  ["max_principal", "Ply max. principal stress", true],
+  ["mid_principal", "Ply mid. principal stress", true],
+  ["min_principal", "Ply min. principal stress", true],
+  ["pressure", "Ply pressure stress", true],
 ];
 
-/** The columns of the probe table, as Abaqus/CAE names them: the stresses in each ply's material axes, the invariants, the strains. */
+/** The columns of the probe table by their CSV names: the stresses in each ply's material axes, the invariants, the strains. The page
+ * heads them with the symbols of `PROBE_HEADS` (ADR-0091). */
 export const PROBE_COLUMNS = ["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"];
 
 export type ProbeRow = { ply: number; angle: number; face: string | null; values: (number | null)[] };
 export type ProbeTable = { element: string; instance: string; label: string; centroid: [number, number]; rows: ProbeRow[]; note: string };
 
-/** Every ply of one element as Abaqus/CAE's Query > Probe Values shows it for a composite shell: the element's own number in its
+/** Every ply of one element, as a composite shell's probe shows it (ADR-0066 amendment 2): the element's own number in its
  * instance, the centroid's value (no averaging), each ply in its material axes, S11 S22 S12, Mises, Tresca, the principal stresses, the
  * pressure and the strains. A membrane coupon has one value per ply, the same at the ply's bottom, middle and top section points; a
  * bending coupon has its two faces. S13 and S23 are not modelled by the membrane kernel and are not shown as numbers. */
@@ -233,14 +235,12 @@ export function probeTable(fields: Fields, element: number): ProbeTable {
     });
   }
   const note = hasFaces(fields)
-    ? "Element centroid, no averaging, each ply in its material axes, at its bottom and top faces."
-    : "Element centroid, no averaging, each ply in its material axes; the membrane state is the same at a ply's bottom, middle and top "
-      + "section points. S13 and S23 are not modelled (membrane state). In Abaqus/CAE: Query > Probe Values, the element by its number, "
-      + "averaging off, the ply's section point.";
+    ? "Element centroid, no averaging, fibre axes, bottom and top face of each ply."
+    : "Element centroid, no averaging, fibre axes; the same through each ply's thickness. S13 and S23 are not modelled (membrane state).";
   return { element: fields.mesh.element_labels[element], instance, label, centroid: [e.centroids[element][0], e.centroids[element][1]], rows, note };
 }
 
-/** The probe table as a CSV, the columns in Abaqus/CAE's words with the units, the numbers as the package wrote them. */
+/** The probe table as a CSV, the columns by their common FE names with the units, the numbers as the package wrote them. */
 export function probeCsv(fields: Fields, table: ProbeTable): string {
   const lab = fields.labels;
   const head = ["Element", "Ply", "Angle (deg)", ...(table.rows.some((r) => r.face) ? ["Face"] : []),
@@ -260,24 +260,25 @@ export function elementReadout(fields: Fields, element: number, choice: FieldCho
   const plyName = `Ply ${k + 1} (${fields.mesh.angles[k]}°)${faces ? `, ${fields.mesh.faces![face]} face` : ""}`;
   const rows: [string, string][] = [
     ["Centroid (x, y)", `${print(e.centroids[element][0])}, ${print(e.centroids[element][1])} ${lab.length}`],
-    ["eps_x, eps_y, gamma_xy", e.strain[element].map(print).join(", ")],
-    [`N_x, N_y, N_xy (${lab.force_per_length})`, e.section_force[element].map(print).join(", ")],
+    ["εx, εy, γxy", e.strain[element].map(print).join(", ")],
+    [`Nx, Ny, Nxy (${lab.force_per_length})`, e.section_force[element].map(print).join(", ")],
   ];
   if (e.curvature && e.moment && e.shear_force) {
-    rows.push([`kappa_x, kappa_y, kappa_xy (${lab.per_length ?? `1/${lab.length}`})`, e.curvature[element].map(print).join(", ")]);
-    rows.push([`M_x, M_y, M_xy (${lab.moment ?? lab.force})`, e.moment[element].map(print).join(", ")]);
-    rows.push([`Q_x, Q_y (${lab.force_per_length})`, e.shear_force[element].map(print).join(", ")]);
+    rows.push([`κx, κy, κxy (${lab.per_length ?? `1/${lab.length}`})`, e.curvature[element].map(print).join(", ")]);
+    rows.push([`Mx, My, Mxy (${lab.moment ?? lab.force})`, e.moment[element].map(print).join(", ")]);
+    rows.push([`Qx, Qy (${lab.force_per_length})`, e.shear_force[element].map(print).join(", ")]);
   }
-  rows.push([`${plyName} S11, S22, S12 (${lab.stress})`, onFace(fields, e.ply.stress_12[element][k], face).map(print).join(", ")]);
+  rows.push([`${plyName} σ₁, σ₂, τ₁₂ (${lab.stress})`, onFace(fields, e.ply.stress_12[element][k], face).map(print).join(", ")]);
   rows.push([`${plyName} von Mises (${lab.stress})`, print(onFace(fields, e.ply.mises[element][k], face))]);
   for (const [criterion, failure] of Object.entries(e.failure)) {
     const ratio = onFace(fields, failure.ratio[element][k], face);
     const index = onFace(fields, failure.index[element][k], face);
     const mode = onFace(fields, failure.mode[element][k], face);
-    rows.push([`${criterion.replace("_", " ")}: ply ${k + 1}${faces ? ` ${fields.mesh.faces![face]} face` : ""} R, 1/R, mode`,
+    const name = CRITERION_NAMES[criterion] ?? criterion.replace("_", " ");
+    rows.push([`${name}: ply ${k + 1}${faces ? ` ${fields.mesh.faces![face]} face` : ""} R, 1/R, mode`,
       `${print(ratio)}, ${print(index)}, ${e.modes[mode]}`]);
     const worst = failure.worst_face ? ` (${failure.worst_face[element]} face)` : "";
-    rows.push([`${criterion.replace("_", " ")}: worst ply of the element`, `ply ${failure.worst_ply[element]}${worst}, 1/R = ${print(failure.element_index[element])}`]);
+    rows.push([`${name}: worst ply of the element`, `ply ${failure.worst_ply[element]}${worst}, 1/R = ${print(failure.element_index[element])}`]);
   }
   return { title: `Element ${fields.mesh.element_labels[element].split(".").pop()}`, rows };
 }

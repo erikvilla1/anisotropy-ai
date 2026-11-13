@@ -72,11 +72,11 @@ test("a refusal carries the API's words and its status", async () => {
 
 test("file addresses and the download list", () => {
   assert.equal(fileUrl("http://api.test/", "abc", "fields"), "http://api.test/v1/coupon-jobs/abc/files/fields");
-  assert.equal(DOWNLOADS[0][0], "package");
-  assert.ok(DOWNLOADS.some(([key]) => key === "prepomax_results"));
-  // the page offers the package, its PDF and the decks; the JSON files, the record, the summary and the .vtu stay outputs, not downloads
-  assert.deepEqual(DOWNLOADS.map(([key]) => key), ["package", "document", "abaqus_deck", "prepomax_deck", "prepomax_results"]);
-  assert.ok(DOWNLOADS.every(([, label]) => !/JSON|TOML/.test(label)));
+  assert.equal(fileUrl("http://api.test/", "abc", "document", "D3039_[0-90]2s_report.pdf"),
+    "http://api.test/v1/coupon-jobs/abc/files/document?name=D3039_%5B0-90%5D2s_report.pdf"); // saved under the page's name (ADR-0091)
+  // the page offers the report, the package and the solver files; the JSON files, the record, the summary and the .vtu stay outputs, not downloads
+  assert.deepEqual(DOWNLOADS.map(([key]) => key), ["document", "package", "abaqus_deck", "prepomax_deck", "prepomax_results"]);
+  assert.deepEqual(DOWNLOADS.map(([, label]) => label), ["Report (PDF)", "Full package (ZIP)", "Solver input (.inp)", "Reference solver input (.inp)", "Reference solver results (.frd)"]);
 });
 
 test("the explain answer carries its writer and reads only a known shape", async () => {

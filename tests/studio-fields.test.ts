@@ -33,7 +33,7 @@ test("the values are the package's arrays, per element or per node", () => {
   assert.ok(stress.label.includes("ply 3, -45°"));
   const index = valuesFor(fields, { id: "failure_index", ply: 1, criterion: "max_stress", averaged: false });
   assert.ok(Math.abs(Math.max(...(index.values as number[])) - fields.summary.fpf.max_stress.index) < 1e-8); // arrays carry nine digits, the summary all
-  assert.ok(index.label.endsWith("by max stress"));
+  assert.ok(index.label.endsWith(", Maximum stress"));
   const magnitude = valuesFor(fields, { id: "u_mag", ply: 1, criterion: "", averaged: false });
   assert.equal(magnitude.by, "node");
   assert.equal(magnitude.values[fields.summary.max_displacement.node], fields.summary.max_displacement.value);
@@ -63,7 +63,7 @@ test("the readout of the critical element names its ply, ratio and mode", () => 
   const critical = fields.summary.fpf.tsai_hill;
   const readout = elementReadout(fields, critical.element, { id: "S11", ply: critical.ply, criterion: "tsai_hill", averaged: false }, printed);
   assert.equal(readout.title, `Element ${critical.label.split(".").pop()}`);
-  const row = readout.rows.find(([label]) => label.startsWith("tsai hill: ply"))!;
+  const row = readout.rows.find(([label]) => label.startsWith("Tsai-Hill: ply"))!;
   assert.ok(row[1].startsWith(`${printed(critical.factor)}, ${printed(critical.index)}, `));
   assert.ok(row[1].endsWith(critical.mode));
 });
@@ -94,7 +94,7 @@ test("a bending coupon's fields carry the deflection, the moments and both faces
   assert.equal(worstFace(bending, faces), Math.max(...faces));
   assert.equal(onFace(bending, bending.element.ply.mises[2][0], 1), (bending.element.ply.mises[2][0] as number[])[1]);
   const readout = elementReadout(bending, 86, { id: "S11", ply: 1, face: 0, criterion: "tsai_hill", averaged: false }, printed);
-  assert.ok(readout.rows.some(([k]) => k.startsWith("M_x, M_y, M_xy")));
+  assert.ok(readout.rows.some(([k]) => k.startsWith("Mx, My, Mxy")));
   assert.ok(readout.rows.some(([k, v]) => k.includes("bottom face") && v.length > 0));
   assert.ok(bending.summary.fpf.tsai_hill.face === "bottom" && bending.summary.reaction.sense === "pressing the coupon down");
 });

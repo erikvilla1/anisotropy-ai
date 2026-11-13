@@ -1,34 +1,31 @@
 "use client";
 
-import { isActive, type JobStatus } from "@/lib/studio-api";
+import { Check, X } from "lucide-react";
+import { type JobStatus } from "@/lib/studio-api";
+import { runDetail, runHeadline, runProblem, runSteps, verificationOf } from "@/lib/studio-copy";
 
-const STAGES = ["the setup check", "the input", "the decks", "the attempt", "our engine", "CalculiX", "the CalculiX record", "the result", "the drawings",
-  "the package", "the outputs"];
-
+/** The run in five steps (ADR-0091): Queued, Meshing, Solving, Post-processing, Report ready, mapped from the pipeline's stages in
+ * `lib/studio-copy.ts`; one line on what is happening, the verification line once the reference solver has run, and a stopped run in
+ * plain words. The pipeline's stage names, timings and console stay in the job's record. */
 export function JobProgress({ job }: { job: JobStatus }) {
-  const stages = job.stages.length ? job.stages : STAGES;
-  const done = new Set(job.stages_done);
-  const timings = job.timings ?? {};
-  const seconds = (stage: string) => (typeof timings[stage] === "number" ? ` (${timings[stage].toFixed(1)} s)` : "");
-  const solverSeconds = ["restore_s", "lock_wait_s", "gate_s", "upload_s"].filter((k) => typeof timings[k] === "number")
-    .map((k) => `${k.replace("_s", "").replace("_", " ")} ${timings[k].toFixed(1)} s`).join(", ");
+  const steps = runSteps(job);
+  const problem = runProblem(job);
+  const detail = runDetail(job);
+  const check = job.state === "running" || job.state === "done" ? verificationOf(job.result ?? (job.state === "done" ? job.message : null)) : null;
   return (
-    <div className="studio-panel" data-testid="job-progress" data-state={job.state}>
-      <h3>Solve <span className={`studio-badge studio-badge-${job.state}`}>{job.state}</span></h3>
-      <p className="studio-muted">Job {job.job_id.slice(0, 8)}{job.coupon ? `, coupon ${job.coupon}` : ""}{job.attempt ? `, ${job.attempt.split("/").pop()}` : ""}.
-        {job.state === "queued" ? " Waiting for a free solver; it starts by itself." : ""}
-        {job.state === "running" && !job.result ? " Our engine's fields appear as soon as it has run; CalculiX and the record follow, then the drawings and the package." : ""}
-        {job.state === "running" && job.result ? " The result is in; the drawings and the package are still being made, and appear under Outputs when written." : ""}</p>
-      <ol className="studio-stages">
-        {stages.map((stage) => {
-          const state = done.has(stage) || (job.state === "done" && job.stage === stage) ? "done"
-            : job.stage === stage && job.state === "running" ? "current" : job.stage === stage ? "stopped" : "waiting";
-          return <li key={stage} data-state={state}><span aria-hidden="true">{state === "done" ? "✓" : state === "current" ? "▶" : state === "stopped" ? "✕" : "·"}</span> {stage}{seconds(stage)}</li>;
-        })}
+    <div className="studio-panel studio-run" data-testid="job-progress" data-state={job.state}>
+      <h3>Analysis <span className={`studio-badge studio-badge-${job.state}`} data-testid="job-state">{runHeadline(job)}</span></h3>
+      <ol className="studio-stepper" aria-label="Progress">
+        {steps.map((s) => (
+          <li key={s.id} data-step={s.id} data-state={s.state} aria-current={s.state === "current" ? "step" : undefined}>
+            <span className="studio-step-mark" aria-hidden="true">{s.state === "done" ? <Check size={11} /> : s.state === "stopped" ? <X size={11} /> : null}</span>
+            <span className="studio-step-label">{s.label}</span>
+          </li>
+        ))}
       </ol>
-      {solverSeconds ? <p className="studio-muted" data-testid="solver-timings">Around the tool: {solverSeconds}.</p> : null}
-      {job.message ? <p className={job.state === "done" || job.result ? "studio-ok" : isActive(job.state) ? "studio-muted" : "studio-problem"} data-testid="job-message">{job.message}</p> : null}
-      {job.log_tail.length ? <details><summary>Console (last lines)</summary><pre className="studio-console">{job.log_tail.join("\n")}</pre></details> : null}
+      {detail ? <p className="studio-muted">{detail}</p> : null}
+      {check ? <p className={check.verified ? "studio-ok" : "studio-warn"} data-testid="job-message">{check.line}</p> : null}
+      {problem ? <p className="studio-problem" role="alert" data-testid="job-problem">{problem}</p> : null}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { blankOwn, TemperatureFields } from "@/components/workspace/panels/lamin
 import { conditionOf, conditionsNamed } from "@/lib/conditions";
 import { laminateDraftFrom, laminateOffer, laminateUnit, laminateUnitNeeded } from "@/lib/proposals";
 import { assistantInfo, proposeRows, StudioError, type AssistantInfo, type ProposalAnswer } from "@/lib/studio-api";
+import { shownSentence } from "@/lib/studio-copy";
 import { ProposalCard, type ProposalLine } from "./proposal-card";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { useLaminate } from "./laminate-context";
@@ -177,8 +178,8 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     const reason = failed ?? answer?.reason;
     if (reason) { // a model that does not answer is not asked again this session: each message would wait for it and fail the same way
       setModel(null);
-      add({ role: "assistant", kind: "text", title: "Read by the page instead",
-        body: <p className="chat-note">{reason}. The page reads your messages with its own patterns from here on; reload to ask the model again.</p> });
+      add({ role: "assistant", kind: "text", title: "Reading simple phrases only",
+        body: <p className="chat-note">Free-text reading is unavailable right now, so short phrases like the examples are read from here on. Reload to try again.</p> });
     }
     readWithPatterns(text, step, true);
   }
@@ -374,9 +375,8 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     return (
       <div data-testid="laminate-answer">
         <h4>Solved</h4>
-        {answer.prose.slice(0, 2).map((sentence, i) => <p key={i}>{sentence}</p>)}
-        {answer.prose.length > 3 ? <p>{answer.prose[3]}</p> : null}
-        <p className="chat-note">The matrices, every ply&apos;s stresses and each criterion are in the centre, in the units you pick there.</p>
+        {answer.prose.slice(0, 2).map(shownSentence).map((sentence, i) => (sentence ? <p key={i}>{sentence}</p> : null))}
+        <p className="chat-note">Full results are in the centre.</p>
         <Chips>
           <button type="button" onClick={() => ask("loads")}>Change the loads</button>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
@@ -397,7 +397,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
-        dropped={entry.answer.dropped} model={entry.answer.model} onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
+        dropped={entry.answer.dropped} onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
     } else content = answerMessage(entry.stamp);
     return (
       <div className="chat-assistant" key={entry.id}>

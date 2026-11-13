@@ -260,6 +260,10 @@ def test_the_status_shows_the_stage_and_the_files_so_far(jobs):
     package = client.get(f"/v1/coupon-jobs/{job_id}/files/package")
     assert package.status_code == 200 and package.headers["content-type"] == "application/zip"
     assert client.get(f"/v1/coupon-jobs/{job_id}/files/fields").status_code == 200
+    named = client.get(f"/v1/coupon-jobs/{job_id}/files/package", params={"name": "D3039_[45-0--45-90]s_package.zip"})  # the page's name (ADR-0091)
+    assert named.status_code == 200 and "D3039_%5B45-0--45-90%5Ds_package.zip" in named.headers["content-disposition"]  # RFC 5987 form for the brackets
+    for bad in ("../escape.zip", "report.pdf", 'a"b.zip', "x" * 121 + ".zip"):  # a path, another suffix, a quote, too long: refused
+        assert client.get(f"/v1/coupon-jobs/{job_id}/files/package", params={"name": bad}).status_code == 422, bad
 
 
 def test_the_result_shows_while_the_package_is_still_being_built(jobs):
@@ -418,6 +422,9 @@ def test_a_done_jobs_files_go_to_the_store_and_the_api_hands_out_links_there(tmp
     assert fields.status_code == 307 and fields.headers["location"] == f"https://store.test/{job.stored['fields']}?expires=600"
     package = client.get(f"/v1/coupon-jobs/{done['job_id']}/package", follow_redirects=False)
     assert package.status_code == 307 and package.headers["location"].endswith("/package.zip?expires=600")
+    named = client.get(f"/v1/coupon-jobs/{done['job_id']}/files/package", params={"name": "D3039_[0-90]2s_package.zip"}, follow_redirects=False)
+    assert named.status_code == 307 and named.headers["location"].endswith("/package.zip?expires=600&filename=D3039_[0-90]2s_package.zip")
+    assert client.get(f"/v1/coupon-jobs/{done['job_id']}/files/package", params={"name": "D3039.pdf"}, follow_redirects=False).status_code == 422
     outside = client.get(f"/v1/coupon-jobs/{done['job_id']}/files/outside")  # not in the store: the disk rule still refuses it
     assert outside.status_code == 404 and "outside" in outside.json()["detail"]
 

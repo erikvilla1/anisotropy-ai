@@ -112,3 +112,13 @@ def test_the_reference_pick_builds_the_public_d3039_check_and_the_checklist_says
     ours.write_text(write_abaqus(model), encoding="utf-8")
     equivalence = deck_equivalence(read_deck(CHECK.parent / "decks" / "d3039-im7-8552-abaqus.inp", "mm-MPa"), read_deck(ours, "mm-MPa"), 1e-9, "mm-MPa")
     assert equivalence.same_model, [item.what for item in equivalence.differences]
+
+
+@pytest.mark.parametrize("given", [REFERENCE, {"library": "im7-8552", "angles": [0, 45], "symmetric": "no"},
+                                   {"own_name": "X", "own_E1": 80000, "own_E2": 80000, "own_G12": 5100, "own_nu12": 0.06, "own_source": "a sheet"}])
+def test_no_reason_the_screen_shows_names_a_tool_a_file_or_the_team(given):
+    """The tension screen lists every choice with its reason to a customer (ADR-0091): no program, record, script or team word."""
+    _, built = complete_tension(given, DAY)
+    banned = ("abaqus", "calculix", "prepomax", "spooles", ".toml", ".py", "ours", "our engine", "the team", "studio's", "change a choice")
+    for choice in built:
+        assert not [word for word in banned if word in choice.reason.lower()], (choice.row, choice.reason)

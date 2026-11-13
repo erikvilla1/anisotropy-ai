@@ -69,7 +69,7 @@ export function LaminateProvider({ apiBaseUrl, children }: { apiBaseUrl: string;
   const solve = useCallback(async (reportUnits?: ReportUnits): Promise<SolveOutcome> => {
     const built = buildProblem(projectRef.current.draft, reportUnits ?? (answerRef.current?.report_units as ReportUnits | undefined));
     if (built.errors) return { ok: false, errors: built.errors };
-    if (!apiBaseUrl) return { ok: false, refused: "This page was built without the API address (NEXT_PUBLIC_ANISOTROPY_API_URL), so the problem can be stated but not solved." };
+    if (!apiBaseUrl) return { ok: false, refused: "Analysis is not available on this page. The problem can be stated but not solved." };
     setSolving(true); setProblem("");
     try {
       const solved = await solveLaminate(apiBaseUrl, built.problem);

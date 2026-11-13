@@ -48,7 +48,7 @@ export function TestStep({ form, disabled, onChange, allTests = false }: {
       {hidden ? <p className="studio-alert" data-testid="test-not-available">{hidden} Pick unnotched tension below to start one; this project&apos;s rows are kept.</p> : null}
       <Choices name="test" question="What test are you setting up?" options={tests} value={form.test ?? ""} disabled={disabled}
         hint={allTests ? "The test decides what the next steps ask for: grips and tabs for a pulled strip, supports and a span for bending, regions for a plate."
-          : "One test for now: the unnotched tension coupon, built here and compared with Abaqus output by output. The others follow, one at a time."}
+          : "One test for now: the unnotched tension coupon. More tests follow."}
         onPick={(test) => onChange("test", test)} />
       {!form.test ? null : offered.length ? (
         <Choices name="standard" question={`Which standard does the ${form.test} specimen follow?`} value={form.standard || NO_STANDARD} disabled={disabled}

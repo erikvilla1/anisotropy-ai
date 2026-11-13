@@ -1,5 +1,6 @@
 "use client";
 
+import { checkText } from "@/lib/studio-copy";
 import { useState, type ReactNode } from "react";
 import { Check, CircleAlert } from "lucide-react";
 import { changedRows, fixEcho, fixRows } from "@/lib/check-fix";
@@ -28,7 +29,7 @@ export function CheckIssues({ items, form, units, live, link, onApply, allTests 
         const fields = live ? offered.get(item.id) : undefined;
         return (
           <li key={item.id} data-item={item.id} className={fields ? "chat-issue-fill" : undefined}>
-            <CircleAlert size={14} /> <span><strong>{item.label}:</strong> {item.message}</span>
+            <CircleAlert size={14} /> <span><strong>{item.label}:</strong> {checkText(item)}</span>
             {fields ? (
               <div className="chat-fix-rows">
                 {fields.map((field) => <FixInput key={field.key} field={field} units={units} words={enabledWords(field.key, wordsFor(field, form), allTests)} value={typed[field.key] ?? form[field.key] ?? ""}

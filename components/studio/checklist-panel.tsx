@@ -1,5 +1,6 @@
 "use client";
 
+import { checkText } from "@/lib/studio-copy";
 import type { Checklist } from "@/lib/studio-form";
 import { RequirementTable } from "./requirement-table";
 
@@ -23,14 +24,14 @@ export function ChecklistPanel({ checklist, checking, title = "Setup check", rea
   return (
     <div className="studio-panel" data-testid="checklist" data-state={checklist.state}>
       <h3>{title} <span className={`studio-badge studio-badge-${checklist.state}`}>{checklist.state === "ready" ? ready : `blocked: ${blocked} item${blocked === 1 ? "" : "s"}`}</span></h3>
-      {checklist.designation ? <p className="studio-muted">Coupon {checklist.designation}{checklist.coupon_exists ? `, ${checklist.attempts} attempt${checklist.attempts === 1 ? "" : "s"} so far` : ", new"}.</p> : null}
+      {checklist.designation ? <p className="studio-muted">Coupon {checklist.designation}{checklist.coupon_exists ? `, ${checklist.attempts} run${checklist.attempts === 1 ? "" : "s"} so far` : ", new"}.</p> : null}
       <ol className="studio-checklist">
         {checklist.items.map((item) => (
           <li key={item.id} data-state={item.state} data-item={item.id}>
             <span className="studio-check-mark" aria-hidden="true">{MARK[item.state]}</span>
             <span className="studio-check-body">
               <strong>{item.label}</strong> <span className="studio-muted">({WORD[item.state]})</span>
-              {item.message ? <span className="studio-check-message">{item.message}</span> : null}
+              {item.message ? <span className="studio-check-message">{checkText(item)}</span> : null}
               {item.rows.length ? <span className="studio-check-rows">Rows: {item.rows.join(", ")}</span> : null}
               {item.requirements?.length ? (
                 <details className="ws-check-requirements">

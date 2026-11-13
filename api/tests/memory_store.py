@@ -22,9 +22,9 @@ class MemoryStore:
     def tags(self, prefix: str) -> dict[str, str]:
         return {key: hashlib.md5(self.objects[key][0]).hexdigest() for key in self.keys(prefix)}
 
-    def link(self, key: str, seconds: int = 600) -> str:
+    def link(self, key: str, seconds: int = 600, filename: str | None = None) -> str:
         self.linked.append(key)
-        return f"https://store.test/{key}?expires={seconds}"
+        return f"https://store.test/{key}?expires={seconds}" + ("" if filename is None else f"&filename={filename}")
 
 
 class FailingStore(MemoryStore):

@@ -67,7 +67,7 @@ def test_a_complete_setup_passes_every_item(tmp_path):
     assert items["mesh"].message.startswith("1200 elements, 1331 nodes (structured mesh, order 1); aspect ratio")
     assert items["criterion"].message == "first-ply failure by max_stress, tsai_hill"
     assert "node centre at (12.5, 125)" in items["probes"].message and "element centre, element near_grip" in items["probes"].message
-    assert items["solver"].message.startswith("CalculiX 2.22 at ccx") and items["document"].message.startswith("Tectonic at tectonic")
+    assert items["solver"].message == "version 2.22, ready" and items["document"].message == "the report is written as a PDF"
     assert model is not None and model.mesh.element_count == 1200 and quality is not None and quality.element_count == 1200
     as_dict = checked.as_dict()
     assert as_dict["state"] == "ready" and as_dict["items"][0] == {"id": "identity", "label": "Who and which coupon", "state": "pass",
@@ -170,10 +170,10 @@ def test_a_structured_twin_past_where_spooles_failed_warns(tmp_path):
     checked, model, _ = checklist(tmp_path, PUBLIC_FILL, mesh_nx=24)
     items = by_id(checked)
     assert checked.state == "ready" and model is not None and items["mesh"].state == "warn"
-    assert "23040 layer bricks" in items["mesh"].message and "SPOOLES" in items["mesh"].message and "a coarser mesh solves" in items["mesh"].message
+    assert "23040 solid elements" in items["mesh"].message and "may stop while verifying" in items["mesh"].message and "a coarser mesh solves" in items["mesh"].message
     assert items["mesh"].rows == ("Element size (mm)", "Your Abaqus mesh: elements across the width")
     fine, _, _ = checklist(tmp_path, PUBLIC_FILL)  # 1200 by 8 = 9600 bricks, within what SPOOLES ordered
-    assert by_id(fine)["mesh"].state == "pass" and "SPOOLES" not in by_id(fine)["mesh"].message
+    assert by_id(fine)["mesh"].state == "pass" and "may stop while verifying" not in by_id(fine)["mesh"].message
     hole, _, _ = checklist(tmp_path, OHT_FILL)  # a Gmsh mesh: no such warning, SPOOLES ordered the open-hole check's
     assert "SPOOLES" not in by_id(hole)["mesh"].message
 
@@ -183,7 +183,7 @@ def test_a_transverse_shear_modulus_far_from_g12_warns(tmp_path):
     checked, _, _ = checklist(tmp_path, PUBLIC_FILL, G13=100.0, G23=100.0)
     items = by_id(checked)
     assert checked.state == "ready" and items["material"].state == "warn"
-    assert items["material"].message.startswith("G13 = 100 MPa, G23 = 100 MPa against G12 = ") and "our membrane does not use it" in items["material"].message
+    assert items["material"].message.startswith("G13 = 100 MPa, G23 = 100 MPa against G12 = ") and "the shell model does not use it" in items["material"].message
     assert items["material"].rows == ("G13 (MPa)", "G23 (MPa)")
 
 
@@ -191,7 +191,7 @@ def test_constants_the_engine_refuses_fail_the_material(tmp_path):
     checked, model, _ = checklist(tmp_path, PUBLIC_FILL, **{**own_constants(), "own_E1": 162.0})  # E1 alone in GPa: nu12^2 < E1/E2 no longer holds
     items = by_id(checked)
     assert checked.state == "blocked" and model is None and items["material"].state == "fail"
-    assert "our engine refuses these constants: Elastic constants violate positive compliance" in items["material"].message
+    assert "these constants are not physically valid: Elastic constants violate positive compliance" in items["material"].message
     assert items["material"].rows[0] == "Own material: E1 (MPa)" and checked.problems == ("Elastic constants violate positive compliance: need nu12**2 < E1/E2",)
 
 
@@ -329,8 +329,8 @@ def test_a_coupon_stated_in_inches_is_checked_and_named_in_inches(tmp_path):
     checked, model, quality = checklist(tmp_path, in_inches(PUBLIC_FILL))
     items = by_id(checked)
     assert checked.state == "ready" and {item.state for item in checked.items} == {"pass"} and model.spec.units == "in-psi"
-    assert items["units"].message == ("every row in in, psi and lbf; the results come back in the same units; the Abaqus and CalculiX decks are written in "
-                                      "mm, MPa and N, as every deck we solve is")
+    assert items["units"].message == ("every row in in, psi and lbf; the results come back in the same units; the solver input is written in "
+                                      "mm, MPa and N")
     assert items["geometry"].message.startswith("9.84252 by 0.984252 in, 2.20472 in tabs")
     assert "displacement of 0.0393701 in on the top grip" in items["load"].message and items["probes"].message.endswith("(in)")
     preview = preview_data(model, quality)

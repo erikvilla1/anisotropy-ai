@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { LaminateAnswer } from "@/lib/studio-api";
 import { printedUnit, REPORT_SYSTEMS, type ReportUnits } from "@/lib/laminate-chat";
+import { shownSentence } from "@/lib/studio-copy";
 
 /** The engine's number as the page prints it: four significant figures, exponential outside everyday sizes; never a value of its own. */
 export function shown(value: unknown, figures = 4): string {
@@ -29,7 +30,8 @@ function Matrix({ title, unit, results, note }: { title: "Q" | "A" | "B" | "D"; 
 }
 
 /** Everything the engine returned for a laminate problem (ADR-0060), in the units asked for: the headline strains and failure, the
- * stiffness matrices, every ply's stresses, first-ply failure by each criterion, and the explanation with who wrote it (ADR-0052). */
+ * stiffness matrices, every ply's stresses, first-ply failure by each criterion, and the explanation in the product's words (ADR-0091); who
+ * wrote it stays in the run record and in `data-writer`. */
 export function LaminateResults({ answer, busy, onReport }: { answer: LaminateAnswer; busy: boolean; onReport: (system: ReportUnits) => void }) {
   const [axes, setAxes] = useState<"local" | "global">("local");
   const r = answer.results, u = answer.units, f = answer.facts, s = answer.summary;
@@ -37,8 +39,7 @@ export function LaminateResults({ answer, busy, onReport }: { answer: LaminateAn
   const earliest = typeof f.earliest === "string" ? f.earliest : null;
   const governing = earliest ? Number(r[`fpf_ply_${earliest}`]) : null;
   const stresses = (axes === "local" ? r.ply_stress_local : r.ply_stress_global) as number[][];
-  const badge = answer.writer === "template" ? "written by the template from the engine's numbers"
-    : `written by ${answer.writer}${answer.model ? ` (${answer.model})` : ""}, every number checked against the engine's`;
+  const prose = answer.prose.map(shownSentence).filter((sentence): sentence is string => sentence !== null);
   return (
     <div className="lam-results" data-testid="laminate-results" data-units={answer.report_units}>
       <div className="lam-unitbar">
@@ -146,11 +147,10 @@ export function LaminateResults({ answer, busy, onReport }: { answer: LaminateAn
 
       <section className="studio-panel lam-explanation" data-testid="lam-explanation" data-writer={answer.writer}>
         <h3>What this shows</h3>
-        {answer.prose.map((sentence, index) => <p key={index}>{sentence}</p>)}
-        <p className="studio-muted">{badge}.</p>
-        {answer.reason ? <p className="studio-muted" data-testid="explanation-reason">{answer.withheld ? "The model's draft was withheld: " : "The template's words stand: "}{answer.reason}.</p> : null}
+        {prose.slice(0, 2).map((sentence, index) => <p key={index}>{sentence}</p>)}
+        {prose.length > 2 ? <details className="studio-details-more"><summary>Details</summary>{prose.slice(2).map((sentence, index) => <p key={index}>{sentence}</p>)}</details> : null}
       </section>
-      <p className="studio-muted">Engine {answer.engine_version}{answer.run_id ? `, run ${answer.run_id}` : ""}.</p>
+      <p className="studio-muted">Engine {answer.engine_version}</p>
     </div>
   );
 }
