@@ -4,6 +4,7 @@
 - Date: 2026-11-08
 - Decided by: Founder, 2026-11-08 ("0° along the load") | Drafted by: Claude Code
 - Related: [ADR-0004](ADR-0004-sign-and-stacking-conventions.md) (unchanged: the engine's angle stays counterclockwise from the laminate x axis), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (form version 0.7), [ADR-0055](ADR-0055-the-studio-opens-on-a-guided-chat-that-fills-the-same-form-rows-and-the-full-form-stays-one-click-away.md), [ADR-0056](ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md); `fea/src/anisotropy_fea/spec.py`, `fea/src/anisotropy_fea/model.py`, `fea/src/anisotropy_fea/abaqus_reader.py`, `fea/src/anisotropy_fea/mesh.py`, `fea/src/anisotropy_fea/recovery.py`, `fea/src/anisotropy_fea/write_abaqus.py`, `fea/src/anisotropy_fea/write_calculix.py`, `fea/src/anisotropy_fea/convert_deck.py`, `fea/src/anisotropy_fea/equivalence.py`, `fea/src/anisotropy_fea/intake.py`, `fea/tools/migrate_angles.py`, `fea/docs/theory.md`, `fea/tests/test_angles_from_length.py`, `fea/tests/test_migrate_angles.py`
+- Area: fea
 
 ## Context
 

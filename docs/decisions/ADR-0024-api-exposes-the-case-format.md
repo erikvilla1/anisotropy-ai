@@ -4,6 +4,7 @@
 - Date: 2026-10-11
 - Decided by: Erik Villa (founder) | Drafted by: Claude Code
 - Related: `api/src/anisotropy_api/main.py`, `api/src/anisotropy_api/schemas.py`, `api/tests/test_cases_api.py`, `engine/src/anisotropy_engine/cases.py`, `docs/api-case-endpoint-2026-10-11.md`, [ADR-0009](ADR-0009-calculator-inputs-in-case-files.md), [ADR-0011](ADR-0011-local-laminate-api.md), [ADR-0015](ADR-0015-course-inputs-and-several-materials.md)
+- Area: api
 
 ## Context
 

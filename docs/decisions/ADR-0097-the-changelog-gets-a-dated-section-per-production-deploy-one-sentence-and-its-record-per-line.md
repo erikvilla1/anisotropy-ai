@@ -4,6 +4,7 @@
 - Date: 2026-11-13
 - Decided by: Founder, 2026-11-12 ("accept", on the audit's recommendation "give each production deploy a dated section with one-sentence entries") | Drafted by: Claude Code
 - Related: [ADR-0096](ADR-0096-the-repository-is-all-rights-reserved-by-anisotropy-and-third-party-values-keep-their-owners-terms.md), `CHANGELOG.md`, `docs/documentation-guide.md`, `.github/workflows/deploy.yml`
+- Area: docs, process
 
 ## Context
 

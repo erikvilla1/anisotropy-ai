@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Codex
 - Related: [walkthrough](../walkthroughs/chunk-2-calculator.md), [evaluation](../evaluations/website/2026-10-03-calculator-chunk-2.md), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0011](ADR-0011-local-laminate-api.md)
+- Area: website
 
 ## Context
 

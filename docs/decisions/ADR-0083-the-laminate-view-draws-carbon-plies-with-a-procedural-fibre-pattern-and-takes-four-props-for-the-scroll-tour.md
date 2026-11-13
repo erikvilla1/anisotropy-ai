@@ -4,6 +4,7 @@
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-10 | Drafted by: Claude Code
 - Related: [ADR-0004](ADR-0004-sign-and-stacking-conventions.md) (angles and ply order), [ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) (the studio's generated lighting), `components/home/laminate-scene.tsx`, `components/home/carbon-material.ts`, `components/home/laminate-studio.tsx`
+- Area: website
 
 ## Context
 

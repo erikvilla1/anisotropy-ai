@@ -4,6 +4,7 @@
 - Date: 2026-11-11
 - Decided by: Founder, 2026-11-11 (on the first plan: "another confusing non user friendly is the inputting for abaqus for abaqus deck it doesn't make sense why the user has to do all of that, it shouldn't be there, all we need is more simpler input for the user ... what we are trying to do is recreate the model with our AI/software gives us the output files boom"; then, asked: the screen is "Two choices + chat", and what may be changed is "Own material constants, Pull or force, Coupon size and tabs, Mesh size") | Drafted by: Claude Code
 - Related: [ADR-0089](ADR-0089-only-unnotched-tension-under-d3039-or-no-standard-is-offered-until-its-abaqus-comparison-is-validated.md) (one test first), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (the form's rows), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (the workspace's panels), [ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md) (D3039's Table 2), [ADR-0003](ADR-0003-reject-invalid-input.md) (no silent defaults); `fea/src/anisotropy_fea/tension_input.py`, `lib/tension-screen.ts`, `components/workspace/tension-screen.tsx`, `fea/checks/d3039-im7-8552/`
+- Area: fea
 
 ## Context
 

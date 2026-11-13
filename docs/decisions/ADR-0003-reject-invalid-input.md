@@ -4,6 +4,7 @@
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/lamina.py`, `engine/src/anisotropy_engine/failure.py`, [physics foundations](../physics-foundations-2026-10-02.md)
+- Area: engine
 
 ## Context
 

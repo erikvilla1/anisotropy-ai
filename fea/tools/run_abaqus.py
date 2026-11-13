@@ -1,7 +1,7 @@
 """Run one of our specs in Abaqus/Standard without the GUI, export its fields, and write the comparison record against the kernel (ADR-0045).
 
-    uv run python tools/run_abaqus.py ../.local/fea/<coupon>/ours/<coupon>.toml --out ../.local/fea/<coupon>/ours/runs/attempt-NN_<date>/run/abaqus \
-        --run-by "Erik Villa" --machine "founder Windows 11, Abaqus 2025, UCSD teaching licence" --tolerance 0.01 --floor 0.02 \
+    uv run python tools/run_abaqus.py checks/<test>/<spec>.toml --out <run folder>/abaqus \
+        --run-by "<role>" --machine "<platform, Abaqus version and licence>" --tolerance 0.01 --floor 0.02 \
         --within 0 10 25 55 [--element-probes centre] [--elements 395 396] [--notes "..."] [--record <path>]
 
 Needs Abaqus (ANISOTROPY_ABAQUS or abaqus on PATH; docs/installation-fea-tools.md) and a licence seat. Writes into --out the deck

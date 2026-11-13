@@ -185,7 +185,9 @@ function PeaksTable({ s, cx, lab, criterion, onShow }: { s: Fields["summary"]; c
                   <th scope="row">{p.ply} · {p.angle}°</th>
                   <td><span className="studio-num">{three([p.S11.value, p.S22.value, p.S12.value])}</span> at element {p.S11.label.split(".").pop()}{p.S11.face ? `, ${p.S11.face} face` : ""}{p.S11.touches_grip ? ", grip edge" : ""}
                     {" "}<button type="button" className="studio-text-button" onClick={() => onShow(p.S11.element, p.ply, criterion, p.S11.face)}>Show</button></td>
-                  <td>{f && typeof f.s1_max === "number" ? <><span className="studio-num">{three([f.s1_max, f.s2_max, f.t12_max_abs])}</span> at node {f.s1_max_node}{xyz(f.s1_max_xyz)}</> : DASH}</td>
+                  {/* one definition in both columns, each component at its largest magnitude with its sign (ADR-0066); a record written
+                      before the reference solver's side had it shows a dash, never a different quantity in the same row */}
+                  <td>{f && typeof f.s1_max_abs === "number" ? <><span className="studio-num">{three([f.s1_max_abs, f.s2_max_abs, f.t12_max_abs])}</span> at node {f.s1_max_abs_node}{xyz(f.s1_max_abs_xyz)}</> : DASH}</td>
                 </tr>
               );
             })}

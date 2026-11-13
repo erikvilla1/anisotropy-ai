@@ -4,6 +4,7 @@
 - Date: 2026-11-09
 - Decided by: Founder, 2026-11-08 (asked how to treat ASTM D4018: "Tow calculator, no FEA (Recommended)", as its own part) and 2026-11-09 (asked where it lives: "Inside the coupon Test list") | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/tow.py`, `engine/docs/theory.md` (section 11), `fea/src/anisotropy_fea/standards/astm_d4018.py`, `fea/src/anisotropy_fea/tow_test.py`, `fea/tools/studio_tool.py` (`tow`), `api/src/anisotropy_api/main.py` (`POST /v1/tow-tests`), `lib/studio-tow.ts`, `components/workspace/tow-rail.tsx`, `components/studio/tow-stage.tsx`, [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0026](ADR-0026-run-record-contents-and-startup-policy.md), [ADR-0018](ADR-0018-source-rights-classes.md) (amendment 1), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (amendment 8), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md), risks R-24 and R-25
+- Area: fea
 
 ## Context
 

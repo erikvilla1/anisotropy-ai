@@ -1,5 +1,5 @@
 title = "The stack itself: thickness and areal mass of a quasi-isotropic AS4/3501-6 laminate from the library"
-source = "Constructed analytical check, not a printed problem: h = 8 x 0.125 mm = 1.0 mm and the areal mass is rho h = 1600 kg/m^3 x 1.0 mm = 1.6 kg/m^2, with the density from the library dataset daniel-ishai-2006-as4-3501-v2 (Daniel & Ishai Table A.4, 1.6 g/cm^3). The balanced stack has A16 = A26 = 0, judged against the size of A; B is roundoff for this symmetric stack and is left out, as the README says. The load is a specified practice input."
+source = "Constructed analytical check, not a printed problem: h = 8 x 0.125 mm = 1.0 mm and the areal mass is rho h = 1600 kg/m^3 x 1.0 mm = 1.6 kg/m^2, with the density from the library dataset daniel-ishai-2006-as4-3501-v2 (Daniel & Ishai Table A.4, 1.6 g/cm^3). The balanced stack has A16 = A26 = 0, judged against the size of A; B is roundoff for this symmetric stack and is left out. The load is a specified practice input."
 units = "SI"
 
 [material]

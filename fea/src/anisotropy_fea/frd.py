@@ -180,8 +180,11 @@ def ply_of_nodes(frd: Frd, plies: Sequence[FrdPly]) -> dict[int, int]:
 def frd_ply_peaks(frd: Frd, plies: Sequence[FrdPly], gauge: tuple[float, float] | None = None, digits: int = 5) -> list[dict]:
     """Each ply's peaks in its own fibre axes, the quantity the page's Summary reads (ADR-0066): the nodal global state of the ply's
     bricks rotated by the ply's fibre angle, then the largest sigma_1 and sigma_2 and the largest |tau_12|, each with its node and
-    position, and with `gauge` = (y_from, y_to) the largest sigma_1 over the ply's nodes between those rows. A nodal value is
-    extrapolated from the integration points, so a peak here sits above the same ply's centroid value; the gauge values match."""
+    position, and with `gauge` = (y_from, y_to) the largest sigma_1 over the ply's nodes between those rows. Beside them, `s1_max_abs`
+    and `s2_max_abs`: sigma_1 and sigma_2 at their largest magnitude, signed, the definition our own per-ply peaks use (fields.ply_peaks),
+    so a table that sets the two side by side compares one quantity (a 90-degree ply's largest sigma_1 in tension and its largest in
+    magnitude, in compression, are different numbers). A nodal value is extrapolated from the integration points, so a peak here sits
+    above the same ply's centroid value; the gauge values match."""
 
     def rounded(v: float) -> float:
         return float(f"{v:.{digits}g}")
@@ -200,9 +203,10 @@ def frd_ply_peaks(frd: Frd, plies: Sequence[FrdPly], gauge: tuple[float, float] 
         if not local:
             out.append(entry)
             continue
-        for name, pick in (("s1_max", lambda n: local[n][0]), ("s2_max", lambda n: local[n][1]), ("t12_max_abs", lambda n: abs(local[n][2]))):
+        for name, pick in (("s1_max", lambda n: local[n][0]), ("s2_max", lambda n: local[n][1]), ("t12_max_abs", lambda n: abs(local[n][2])),
+                           ("s1_max_abs", lambda n: abs(local[n][0])), ("s2_max_abs", lambda n: abs(local[n][1]))):
             node = max(local, key=pick)
-            index = {"s1_max": 0, "s2_max": 1, "t12_max_abs": 2}[name]
+            index = {"s1_max": 0, "s2_max": 1, "t12_max_abs": 2, "s1_max_abs": 0, "s2_max_abs": 1}[name]
             entry[name], entry[f"{name}_node"], entry[f"{name}_xyz"] = rounded(local[node][index]), node, _place(frd, node)
         if gauge is not None:
             inside = [n for n in local if n in frd.nodes and gauge[0] < frd.nodes[n][1] < gauge[1]]

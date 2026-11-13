@@ -4,6 +4,7 @@
 - Date: 2026-10-18
 - Decided by: Founder, accepted 2026-10-26 ("FEA method (7)", choosing which groups of the proposed records to accept) | Drafted by: Claude Code
 - Related: ADR-0008 (the manual is generated from sources), ADR-0029, ADR-0030 (comparison records), `docs/models/build.py`, `docs/models/README.md`, `fea/src/anisotropy_fea/report.py`, `fea/tests/test_report.py`
+- Area: fea, docs
 
 ## Context
 

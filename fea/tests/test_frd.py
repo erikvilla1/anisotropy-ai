@@ -198,6 +198,21 @@ def test_each_ply_peaks_in_its_own_fibre_axes(tmp_path):
     assert wide[0]["gauge_s1_max"] == 600.0 and wide[0]["gauge_s1_max_node"] == 4 and wide[1]["gauge_s1_max"] == 10.0
 
 
+def test_a_compressive_peak_is_the_largest_magnitude_beside_the_largest_signed_value(tmp_path):
+    """The audit of 2026-11-12 found our peak (the largest magnitude, -364 in compression) beside CalculiX's largest signed value (+19.7)
+    in one row: s1_max_abs and s2_max_abs give the reference solver's side the definition of ours, signed."""
+    from anisotropy_fea.frd import FrdPly, frd_ply_peaks
+
+    path = tmp_path / "plies.frd"
+    path.write_text(PLIES.replace(" -1         5 1.00000E+01", " -1         5-3.00000E+02"), encoding="utf-8")  # node 5: SXX -300
+    plies = [FrdPly(0.0, 90.0, 0.5), FrdPly(90.0, 0.0, 0.5)]
+    bottom, top = frd_ply_peaks(read_frd(path), plies)
+    # the top ply's sigma_1 is SXX: +10 at nodes 6 to 8 is the largest signed value, -300 at node 5 the largest magnitude
+    assert top["s1_max"] == 10.0 and top["s1_max_abs"] == -300.0 and top["s1_max_abs_node"] == 5 and top["s1_max_abs_xyz"] == [0.0, 0.0, 0.0]
+    assert top["s2_max_abs"] == 400.0 and top["s2_max"] == 400.0
+    assert bottom["s1_max_abs"] == bottom["s1_max"] == 600.0 and bottom["s1_max_abs_node"] == 4  # all tension: the two definitions agree
+
+
 def test_the_record_writes_the_ply_peaks_as_inline_tables_and_the_summary_converts_them(tmp_path):
     import tomllib
 

@@ -4,6 +4,7 @@
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 ("I like that"; "sure lets do it") | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the hero), [ADR-0084](ADR-0084-a-scroll-driven-tour-leads-from-the-hero-into-the-calculator-with-the-engines-own-answers.md) (the scroll tour), [ADR-0069](ADR-0069-the-licensed-hero-clip-stays-out-of-the-public-repository-a-script-makes-its-web-copy-and-the-page-plays-it-when-present.md) (the stock clip it would replace), [ADR-0001](ADR-0001-deterministic-engine.md) (the engine computes every number), `scripts/hero-plate.py`, `tests/fixtures/home/response-im7-quasi-loaded.json`
+- Area: website
 
 ## Context
 

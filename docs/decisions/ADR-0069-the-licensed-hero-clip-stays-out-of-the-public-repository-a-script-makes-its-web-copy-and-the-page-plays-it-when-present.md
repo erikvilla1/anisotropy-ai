@@ -4,6 +4,7 @@
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the hero), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) (what stays out of the repository), `scripts/hero-video.sh`, `app/page.tsx`, `app/home.css`, `.gitignore`
+- Area: website
 
 ## Context
 

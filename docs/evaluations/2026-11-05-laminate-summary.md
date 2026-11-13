@@ -1,4 +1,4 @@
-# Evaluation: the engine describes the stack and evaluates first-ply failure on the response endpoint (ADR-0059) | 2026-11-05
+# Evaluation, 2026-11-05: the engine describes the stack and evaluates first-ply failure on the response endpoint (ADR-0059)
 
 - Scope: `engine/src/anisotropy_engine/summary.py` (thickness, symmetry, antisymmetry, balance, kind, coupling, areal mass, the failure summary); `library.py` citing `density` and `Vf`; `units.py` with `POUND_MASS`, `FOOT` and the `areal_mass` unit kind; `cases.py` reporting `total_thickness` and `areal_mass`; the validation case `library-as4-3501-stack-summary.toml`; theory Section 10; the physics card "Laminate symmetry, balance & areal mass"; the API's `summary` and `first_ply_failure` on `POST /v1/laminates/response` and `density_kg_per_m3` and `fiber_volume_fraction` on the provenance. Part 2 of the website audit plan; the home page calculator that reads these fields is a later part.
 - Branch: `feat/laminate-summary`, from `origin/main` at `6704f78`, built in a worktree.

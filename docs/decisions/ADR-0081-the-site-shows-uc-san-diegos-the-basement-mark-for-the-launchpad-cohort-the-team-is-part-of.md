@@ -4,6 +4,7 @@
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead (marketing and communications), 2026-11-10 | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the home page), [ADR-0018](ADR-0018-source-rights-classes.md) (rights of what we publish), `app/page.tsx`, `app/home.css`, `public/assets/partners/`
+- Area: website
 
 ## Context
 

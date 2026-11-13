@@ -4,6 +4,7 @@
 - Date: 2026-10-25
 - Decided by: Founder, 2026-10-25: an Excel input form like the audit form; the founder runs the engine and the team only fills in the form; solver inputs only for now; a library material by name or the team's own constants with their source, own constants never in the repository. | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/intake.py`, `fea/src/anisotropy_fea/forms.py`, `fea/tools/coupon_form.py`, `fea/tools/coupon_from_form.py`, `fea/tests/test_intake.py`, [ADR-0018](ADR-0018-source-rights-classes.md), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0038](ADR-0038-coupon-identity-card-and-designation.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md), [ADR-0043](ADR-0043-coupon-audit-scored-by-a-fixed-rubric-delivered-as-one-package-folder.md)
+- Area: fea
 
 ## Context
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable
 
 from anisotropy_fea.abaqus_reader import read_deck
-from anisotropy_fea.audit import Evidence, Rubric, Scored, tolerance_text
+from anisotropy_fea.audit import TEAM_BLANK, Evidence, Rubric, Scored, left_out_text, tolerance_text
 from anisotropy_fea.compare import sha256_of
 from anisotropy_fea.equivalence import DeckEquivalence, EquivalenceError, deck_equivalence
 from anisotropy_fea.model import DeckError
@@ -57,11 +57,15 @@ def compare_rebuilt(path: Path | None, ours, units: str, tolerance_m: float) -> 
 
 def gather(*, test_code: str, units: str, card: list[tuple[str, str]], deck, solution, material: str | None, guide: tuple[int, int], c,
            fpf: tuple[str, float, int, float] | None, rebuilt: DeckEquivalence | str | None = None,
-           fpf_others: tuple[tuple[str, float, int, float], ...] = (), fpf_notes: tuple[str, ...] = (), every_output: bool = False) -> Evidence:
+           fpf_others: tuple[tuple[str, float, int, float], ...] = (), fpf_notes: tuple[str, ...] = (), every_output: bool = False,
+           fpf_basis: str | None = None, build_chapter: int | None = None, peaks_chapter: int | None = None) -> Evidence:
     """What our tools found for the package; `c` is the team comparison (docs/models/team.py), None when the team has not built
-    the coupon; `every_output`, whether the package carries every output of ours and the scripts that compare the team's run (row C8)."""
+    the coupon; `every_output`, whether the package carries every output of ours and the scripts that compare the team's run (row C8);
+    `fpf_basis`, where the document reads its first-ply-failure answer; `build_chapter`, the document's chapter that builds the deck in
+    Abaqus/CAE (row C4 points to it); `peaks_chapter`, the chapter that holds the peaks table (row C6 points to it)."""
     common = dict(test_code=test_code, units=units, card=tuple(card), our_deck=deck, solution=solution, material=material, fpf=fpf, guide=guide,
-                  rebuilt=rebuilt, fpf_others=fpf_others, fpf_notes=fpf_notes, every_output=every_output)
+                  rebuilt=rebuilt, fpf_others=fpf_others, fpf_notes=fpf_notes, every_output=every_output, fpf_basis=fpf_basis,
+                  build_chapter=build_chapter, peaks_chapter=peaks_chapter)
     if c is None:
         return Evidence(**common)
     lo, hi = c.bands["inner"]
@@ -81,19 +85,22 @@ def audited(*, card: dict[str, str], package: str, attempt: str | None) -> list[
 SUB = "  "  # a label that starts with it is a row under the one above: the team's file, then ours, file names only
 
 
-def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str], ...], every_output: bool = False) -> list[tuple[str, str]]:
+def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str], ...], every_output: bool = False,
+                   job: str = "") -> list[tuple[str, str]]:
     """What the audit compares, one row per thing compared and under it one row for the team's file and one for ours, by file name
     (no folder paths, at the founder's request): the cover's block and the chapter's table. `our_deck` and `spec` are package paths;
     only their names are shown; `physics` gives each section D check that applies to the test with who judges it, or that it is not
-    built yet."""
+    built yet. Without a team model, the run section C compares is the README's steps when the package has them (`every_output`), else
+    the `job` command that runs our deck."""
     our_deck, spec = Path(our_deck).name, Path(spec).name
     physics = ("Physics", "our engine on its own, no Abaqus involved (section D): "
                + "; ".join(f"{check[:1].lower() + check[1:]} ({status})" for check, status in physics))
     if c is None:
-        return [("The model", "the team has not built this coupon, so our model stands alone and sections B and C cannot be checked"),
+        run = " (README.txt, steps 1 to 4)" if every_output else f" ({job})" if job else ""
+        return [("The model", f"No team model yet: section B is not applicable. Section C compares your Abaqus run of our deck{run} with our values"),
                 (SUB + "Our deck", f"{our_deck}, written from the spec {spec}"),
-                ("Other values", "the reaction force, the displacements and strains, the first ply to fail: our engine's values are given, for the team to "
-                                 "compare with its own model (section C)"),
+                ("Other values", "the reaction force, the displacements and strains, the first ply to fail: our engine's values are given, for "
+                                 "your Abaqus run of our deck (section C)"),
                 (SUB + "Our values", "in the Ours column of the Rubric sheet, the numbers behind them on the Results sheet; every ply of every "
                                      "element in ours-all-plies.csv"
                                      + ("; every output of every element and ply in ours-every-output.csv, which 5-verify/compare_every_output.py "
@@ -107,7 +114,7 @@ def files_compared(*, c, our_deck: str, spec: str, physics: tuple[tuple[str, str
             (SUB + "Team's reports", ", ".join(p.name for p in c.report_paths) + ": the team's own exports, not repeated in this package"),
             (SUB + "Our values", ", ".join(f"ours-{q}.csv" for q in c.quantities)),
             ("Other values", "the reaction force, the displacements and strains, the first ply to fail (section C)"),
-            (SUB + "Team's values", "left blank, for the team to fill in"),
+            (SUB + "Team's values", f"entered on the form, where the Team column says '{TEAM_BLANK}'"),
             (SUB + "Our values", "in the Ours column of the Rubric sheet, the numbers behind them on the Results sheet"),
             physics]
 
@@ -130,8 +137,11 @@ def mathed(text: str) -> str:
 
 
 def chapter(rubric: Rubric, scored: tuple[Scored, ...], facts: list[tuple[str, str]], form: str, units: str, escape: Callable[[str], str],
-            code: Callable[[str], str], table: Callable[..., str], kv_table: Callable[..., str], team_built: bool = True) -> str:
-    """The audit chapter: what the audit is, the package's identity and the files compared, and one table per rubric section."""
+            code: Callable[[str], str], table: Callable[..., str], kv_table: Callable[..., str], team_built: bool = True,
+            every_output: bool = False, job: str = "") -> str:
+    """The audit chapter: what the audit is, the package's identity and the files compared, and one table per rubric section. Without a
+    team model, the run section C compares is the README's steps when the package has them (`every_output`), else the `job` command."""
+    run = (r"the package's README.txt, steps 1 to 4" if every_output else ("the job " + code(job)) if job else "")
     tools = [s for s in scored if s.result is not None]
     counts = {r: sum(s.result == r for s in tools) for r in ("Pass", "Fail", "N/A", "Not checked")}
     auditor = [s for s in scored if s.result is None]
@@ -146,17 +156,14 @@ def chapter(rubric: Rubric, scored: tuple[Scored, ...], facts: list[tuple[str, s
         rf"{len(tools)}; {len(auditor)} rows are the auditor's. To pass, every required row must be Pass or N/A; a required row that fails fails the "
         r"audit; a failed row a Pass does not need, or an observation, makes it Pass with observations."
         + ("" if team_built else
-           r" The team has not built this coupon, so the rows of sections B and C that set the team's model beside ours cannot pass yet: "
-           r"those our tools judge are Not checked, and those the auditor judges give our values, with the team's side left blank until the "
-           r"team's model exists. The audit cannot pass before then. What can be judged now is the coupon's identity (section A) and our "
-           r"engine's own checks (section D)."),
+           r" The team has not built this coupon, so section B, which matches the team's model with ours, and row C5, whose regions a team "
+           r"comparison names, do not apply: they are N/A and not required. Section C compares the auditor's Abaqus run of our deck"
+           + (f" ({run})" if run else "") + r" with our values: its rows give ours, and the auditor enters the Abaqus values on the form "
+           r"and judges them. The coupon's identity (section A) and our engine's own checks (section D) are judged as for any package."),
         r"Words of the rubric: the inner band of rows C2 and C3 is the free length less a strip beside each tab line, where the grips' hold on "
         r"the width is felt" + (" (the graded band of Chapter 6)" if team_built else "") + r"; the coupon's manifest is our comparison "
         r"settings for a team model, kept with us: which of the team's files are compared, and how wide that strip is.",
-        *([escape("Rows that do not apply to this test, so they are not in this audit: "
-                   + "; ".join(f"{item.id} ({item.check.lower()}), for {' and '.join(TEST_WORDS.get(code, code) for code in item.applies_to)} only"
-                               for item in rubric.items if item.id not in {s.item.id for s in scored}) + ".")]
-          if any(item.id not in {s.item.id for s in scored} for item in rubric.items) else []),
+        *([escape(left_out_text(rubric, scored))] if left_out_text(rubric, scored) else []),
         r"\section{The package audited}",
         kv_table([((r"\quad " + escape(label.strip())) if label.startswith(SUB) else escape(label), escape(value)) for label, value in facts]),
     ]
@@ -169,7 +176,8 @@ def chapter(rubric: Rubric, scored: tuple[Scored, ...], facts: list[tuple[str, s
             tol = tolerance_text(s.item, units)
             check = (rf"\textbf{{{escape(s.item.check)}}}. {escape(s.item.acceptance)}" + (f" (tolerance {escape(tol)})" if tol else "")
                      + (rf" \textcolor{{muted}}{{Needs: {escape(s.item.needs)}.}}" if s.item.needs else ""))
-            parts = [(label, lines) for label, lines in (("Team", s.found.team), ("Ours", s.found.ours), ("Difference", s.found.difference)) if lines]
+            team = ("entered by the auditor on the form",) if s.found.team == (TEAM_BLANK,) else s.found.team  # the form's open Team cell
+            parts = [(label, lines) for label, lines in (("Team", team), ("Ours", s.found.ours), ("Difference", s.found.difference)) if lines]
             found = (r" \newline ".join(rf"\textbf{{{label}:}} " + r" \newline ".join(mathed(escape(line)) for line in lines) for label, lines in parts)
                      if parts else "--")
             body.append([escape(s.item.id), check, "yes" if s.item.required else "no", MARK[s.result], found])

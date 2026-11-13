@@ -99,8 +99,9 @@ def element_stiffness_shell(xy: np.ndarray, A: np.ndarray, B: np.ndarray, D: np.
 
 def pressure_loads(xy: np.ndarray, pressure: float) -> np.ndarray:
     """Consistent nodal forces on w (20 entries) of a uniform pressure p on the element: f_i = -p sum_g w_g N_i det J. A positive
-    pressure pushes against the element's normal (+z for counterclockwise nodes), as the Abaqus P label is documented to do (ADR-0053;
-    the CalculiX convention is detected by a run and recorded in fea/checks/calculix-conventions.toml)."""
+    pressure pushes against the element's normal (+z for counterclockwise nodes), as the Abaqus P label is documented to do (ADR-0053).
+    CalculiX applies P along the normal, the opposite; detected by a run on 2026-10-28 and recorded in fea/checks/calculix-conventions.toml
+    (pressure_direction)."""
     f = np.zeros(4 * DOFS)
     for (xi, eta), weight in zip(GAUSS_POINTS, GAUSS_WEIGHTS):
         _, det = physical_derivatives(xy, xi, eta)
