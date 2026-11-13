@@ -51,7 +51,7 @@ export default function Home() {
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
         {/* The words, in Anduril's arrangement (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle,
-            and under it a row of the name, the mark and one short line. The load-in (ADR-0070 amendments 1 and 4) types
+            and under it a row of the year, the mark and the name. The load-in (ADR-0070 amendments 1 and 4) types
             the statement and the small lines in, and a text cursor blinks at the statement's end (components/intro-text.ts). */}
         <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="type" data-outro="type" data-intro-caret="">
@@ -63,17 +63,16 @@ export default function Home() {
             <span className="type-caret" aria-hidden="true" />
           </h1>
           <div className="home-hero-row">
-            {/* The name, beside the mark, where the tagline stood until ADR-0077 amendment 27. */}
+            {/* The row of ADR-0077 amendment 28: the year on the left, the mark, the name on the right. */}
+            <div className="home-hero-notes">
+              <p className="home-hero-note" data-intro="type" data-outro="type">
+                Established 2026
+              </p>
+            </div>
+            <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />
             <p className="home-hero-tagline" data-intro="type" data-outro="type">
               Anisotropy
             </p>
-            <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />
-            <div className="home-hero-notes">
-              {/* The programme the team is part of (ADR-0081). */}
-              <p className="home-hero-note" data-intro="type" data-outro="type">
-                Fall 2026 Launchpad cohort
-              </p>
-            </div>
           </div>
         </div>
         {/* Three seconds after the load-in the words are taken away and the clip plays alone (components/home/hero-outro.tsx). */}
@@ -84,6 +83,8 @@ export default function Home() {
             load-in and out when the words leave (ADR-0070 amendment 4). */}
         <p className="home-hero-backed" data-intro="fade" data-outro="fade">
           <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
+          {/* The programme the team is part of (ADR-0081), beside the mark of the place that runs it (ADR-0077 amendment 28). */}
+          <span className="home-hero-cohort">Fall 2026 Launchpad cohort</span>
         </p>
       </section>
       {/* The laminate calculator and its tour left the home page on 2026-11-13 (ADR-0094): a feature, not the product. Their

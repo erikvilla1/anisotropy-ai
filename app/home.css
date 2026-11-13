@@ -1013,15 +1013,16 @@
   column-gap: clamp(20px, 2.4vw, 44px);
   width: 100%;
 }
+/* The name, on the mark's right (ADR-0077 amendment 28). */
 .home-hero-tagline {
-  justify-self: end;
+  justify-self: start;
   margin: 0;
   font-size: clamp(15px, 1.5vw, 28px);
   font-weight: 700;
   line-height: 1.32;
   letter-spacing: -0.015em;
   text-transform: uppercase;
-  text-align: right;
+  text-align: left;
 }
 .home-hero-mark {
   display: block;
@@ -1033,17 +1034,18 @@
   -webkit-mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
   mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
 }
+/* The year, on the mark's left. */
 .home-hero-notes {
-  justify-self: start;
+  justify-self: end;
   display: grid;
-  justify-items: start;
+  justify-items: end;
   row-gap: clamp(6px, 0.7vw, 12px);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: clamp(12px, 1.22vw, 23px);
   line-height: 1.3;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  text-align: left;
+  text-align: right;
 }
 .home-hero-note {
   margin: 0;
@@ -1134,7 +1136,22 @@
   z-index: 2;
   left: calc(var(--hero-frame) + var(--hero-pad));
   bottom: calc(var(--hero-frame) + var(--hero-pad));
+  display: flex;
+  align-items: center;
+  gap: 16px;
   margin: 0;
+}
+/* The cohort, beside the mark of the place that runs it (ADR-0077 amendment 28): small monospace capitals behind a hairline. */
+.home-hero-cohort {
+  padding-left: 16px;
+  border-left: 1px solid #ffffff66;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #ffffff;
 }
 .home-hero-backed img {
   display: block;
@@ -1262,6 +1279,26 @@
   }
   .home-hero-backed img {
     height: 30px;
+  }
+  /* On a narrow screen the cohort stands under the mark, so the Scroll to explore button keeps its corner. */
+  .home-hero-backed {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .home-hero-cohort {
+    padding-left: 0;
+    border-left: 0;
+    font-size: 11px;
+  }
+  /* The button keeps its square; its words would run into the cohort's line, so they are kept for a screen reader only. */
+  .home-hero-explore > span:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

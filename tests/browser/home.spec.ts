@@ -26,14 +26,20 @@ test("the hero opens the page, and the laminate calculator and its tour are not 
 
 const STATEMENT = /^\s*one engineering platform\s*for composite theory\s*and real test data\s*$/;
 
-test("the hero's words are one statement, the name and one small line (ADR-0077 amendments 19, 21 and 27)", async ({ page }) => {
+test("the hero's words are one statement and a row of the year, the mark and the name (ADR-0077 amendments 19, 21, 27 and 28)", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
   await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
+  // The row under it: the year, the triangle, the name (amendment 28).
+  await expect(hero.locator(".home-hero-note")).toHaveText("Established 2026");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
-  await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
+  const row = await hero.evaluate((el) => ["note", "mark", "tagline"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
+  expect(row[0]).toBeLessThan(row[1]);
+  expect(row[1]).toBeLessThan(row[2]);
+  // The cohort stands beside the mark of the place that runs it, in the clip's bottom left corner.
   await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
+  await expect(hero.locator(".home-hero-backed .home-hero-cohort")).toHaveText("Fall 2026 Launchpad cohort");
   // No 3D view, chat box or link in the hero: the header's Workspace button is the way in. Its one button, "Scroll to explore", is hidden while the words stand (tests/browser/intro.spec.ts).
   await expect(hero.getByRole("button", { includeHidden: true })).toHaveCount(1);
   await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);

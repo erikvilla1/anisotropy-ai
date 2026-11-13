@@ -403,3 +403,13 @@ On phones it is one column.
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px: a screenshot of the hero was looked at. `intro.spec.ts`, `home.spec.ts` and the overview case of `portfolio.spec.ts`, which read the new words: 15 of 15.
 
+## Amendment 28, 2026-11-13 (the row reads the year, the mark, the name; the cohort goes beside The Basement's mark)
+
+**Context.** The lead: "Maybe lets move anisotropy to the right side of the penrose, and put ESTABLISHED 2026 on the left? I feel like the FALL 2026 LAUNCHPAD COHORT is out of place there... it doesnt say for what cohort nor do I think it should be a main description of the company. unless it goes by the logo in the bottom left right? which is uc san diego the basement, bc the reason I wanted to have it on the site was ... a good flex for credibility when someone first lands on the site."
+
+**Decision.**
+- The row under the statement reads "Established 2026" in the small monospace capitals on the triangle's left, and "Anisotropy" in the bold capitals on its right.
+- "Fall 2026 Launchpad cohort" leaves the row and stands beside The Basement's mark in the clip's bottom left corner, behind a hairline, so the line says whose cohort it is (ADR-0081). It fades in and out with the mark. On a narrow screen it stands under the mark, and "Scroll to explore" keeps only its square there, its words left for a screen reader.
+
+**Evidence.** On 2026-11-13 against the dev server: screenshots at 1440 px and at 390 px were looked at; the first 390 px one showed the cohort's line running into the button's words, which the narrow-screen rule above removes. `home.spec.ts` (the row's order and words, the cohort beside the mark), `intro.spec.ts` and the overview case of `portfolio.spec.ts`: 10 of 10. UNVERIFIED: "Established 2026" is the lead's statement; the repository holds no record of when the company was established. Permission to show The Basement's mark, as before.
+
