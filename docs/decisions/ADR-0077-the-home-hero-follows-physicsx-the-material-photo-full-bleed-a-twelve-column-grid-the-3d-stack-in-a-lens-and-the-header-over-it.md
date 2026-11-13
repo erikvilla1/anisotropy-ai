@@ -371,3 +371,11 @@ On phones it is one column.
 
 **Evidence.** On 2026-11-13 on the dev server at 1440 px: the body's computed ground is `rgb(0, 0, 0)` on `/`, `/about`, `/library` and `/services`, and `rgb(13, 13, 13)` on `/workspace`; screenshots of the home hero, the Mission and Platform bands and the About page were looked at. `home.spec.ts` (which reads the hero's ground as `rgb(0, 0, 0)`), `expansion.spec.ts` and `intro.spec.ts`: 20 of 20. UNVERIFIED: the step from the hero's black frame to the tour stage's ground on a display that shows it, and every inner page beyond the three looked at.
 
+## Amendment 24, 2026-11-13 ("Scroll to explore" as Scale sets it, in the bottom right corner)
+
+**Context.** With a screenshot of Scale's home page the lead asked to "make the scroll to explore button appear in the same position as here and with the same type of box".
+
+**Decision.** The button of amendment 22 moves from the middle of the clip's foot to its bottom right corner, as far in from the right and the foot as the Basement's mark is from the left and the foot. It is set as Scale's: "Scroll to explore" in the site's typeface at 14 px, then a down arrow in a 34 px square with a 1 px white outline and 5 px corners. The arrow no longer dips. On hover or keyboard focus the square fills white and the arrow turns black. When it shows, and what a press does, are unchanged.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: a frame taken after the exit shows the button in the clip's bottom right corner; `intro.spec.ts` reads its distance from the clip's right edge and foot as equal to the mark's from the left edge and foot, the square as 34 by 34 px with a 1 px border and 5 px corners, and a press as bringing the tour's stage to the window's top: 4 of 4. UNVERIFIED: phones.
+

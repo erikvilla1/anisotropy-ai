@@ -30,6 +30,7 @@ const TYPE_CHARS_PER_S = 38; // measured: 17 to 21 characters of a line appear i
 const LINE_MAX_MS = 530; // measured: a line is all on screen about 0.53 s after its first character
 const SETTLE_MS = 110; // measured: a character is random letters for about 3 to 4 characters' time before it settles
 const SCRAMBLE_TICK_MS = 50; // Anduril redraws its random letters 20 times a second
+const WHOLE_HOLD = 0.001; // the share of a typed line's time over which the whole line is held at the end (see typedLine)
 // The way out (prepareOutro), read from the lead's recording of Anduril's hero on 2026-11-12: every line loses its characters
 // from the end, the last few as random letters, the upper lines a little ahead, and the whole block is gone in about half a
 // second; the mark goes last.
@@ -231,12 +232,17 @@ function typedLine(row: HTMLElement, text: HTMLElement, start: number, leaving =
 
   // The edge after each step: nothing, then the right side of each character in turn.
   const edges = [0, ...cells.map((cell, index) => (index === count - 1 ? full : Math.round(cell.right)))];
-  const steps = (value: (edge: number) => number): Keyframe[] =>
-    edges.map((edge, index) => ({
-      offset: index / count,
+  // The whole line is held over a last sliver of the time. A line that leaves waits its turn at that end of the keyframes,
+  // and while an animation waits, the browser reads a stepped keyframe from the side before its jump: without the sliver
+  // every waiting line showed one character short, which was seen as a hitch when the lines began to wait for the mark.
+  const steps = (value: (edge: number) => number): Keyframe[] => [
+    ...edges.map((edge, index) => ({
+      offset: (index / count) * (1 - WHOLE_HOLD),
       transform: `translateX(${value(edge)}px)`,
       easing: index < count ? "steps(1, end)" : "linear",
-    }));
+    })),
+    { offset: 1, transform: `translateX(${value(full)}px)` },
+  ];
   const duration = Math.min((count * 1000) / TYPE_CHARS_PER_S, LINE_MAX_MS) * (leaving ? LEAVE_SPEED : 1);
   const at = (delay: number): KeyframeAnimationOptions => ({ duration, delay, fill: "both", direction: leaving ? "reverse" : "normal" });
   // Arriving, the random letters lead and the text settles behind them; leaving, the text's edge leads and the letters follow.

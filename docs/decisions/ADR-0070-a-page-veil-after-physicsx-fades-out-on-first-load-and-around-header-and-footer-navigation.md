@@ -176,3 +176,13 @@ What Anduril's code does:
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px, contact sheets of a recording were looked at: at the exit the triangle is already turned when the first characters go, has faded by about 0.6 s, and the last characters go at about 0.8 s; on the way in it rises as it fades in. `intro.spec.ts` reads the animations' own timing (the triangle's starts at 0 and ends before the last line's; the first line starts 300 ms or more later) and the fade's first keyframe, `translateY(100%)`: 4 of 4; `home.spec.ts`: 10 of 10. UNVERIFIED: a real graphics card, Safari, Firefox and phones.
 
+## Amendment 10, 2026-11-13 (a hitch at the start of the exit: every line lost its last character early)
+
+**Context.** With a recording of amendment 9's exit the lead asked: "why is there like a stutter on the animation out". Cut frame by frame, the recording shows the last character of every line gone in the frame the triangle starts, then nothing for about a third of a second, then the lines leaving.
+
+**Cause.** A leaving line plays the typed line's keyframes backwards after a wait. Each keyframe steps to the next at the end of its interval. While an animation waits, the browser reads a stepped keyframe from the side before its jump, so a waiting line was drawn at its second-to-last step, one character short. Before amendment 9 the waits were under 0.3 s and read as part of the move; the 350 ms the lines now wait for the triangle made it a hitch. Measured with the old keyframes: the seven waiting lines were drawn back 38, 51, 38, 39, 8, 8 and 12 px, their last characters' widths.
+
+**Decision.** The whole line is held over the last thousandth of a typed line's keyframes (`WHOLE_HOLD` in `components/intro-text.ts`), so the end a waiting line is read from is the whole line whichever side it is read from. The load-in uses the same keyframes and ends as before.
+
+**Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` holds a copy of each line's own animation at its first moment and reads how far the line is drawn back; with the old keyframes the case failed with the seven widths above, with the change every line reads 0. `intro.spec.ts` and `home.spec.ts`: 14 of 14. A contact sheet of a new recording at 25 frames a second was looked at: the lines are whole while the triangle starts to turn, and the first characters go about 0.35 s later. UNVERIFIED: Safari and Firefox, which may read a waiting stepped keyframe differently; the change is safe either way.
+

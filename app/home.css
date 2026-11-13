@@ -1141,27 +1141,26 @@
   width: auto;
   height: 40px;
 }
-/* "Scroll to explore" (components/home/scroll-to-explore.tsx; ADR-0077 amendment 22): at the foot of the clip, in its
- * middle, on the Basement mark's line. It is not there, for the eye, the pointer or the keyboard, until the hero's words have
- * left (`data-words="gone"`, set by components/home/hero-outro.tsx); then it fades in, and its arrow dips now and then. */
+/* "Scroll to explore" (components/home/scroll-to-explore.tsx; ADR-0077 amendments 22 and 24): in the bottom right corner of
+ * the clip, as far in as the Basement mark is on the left, set as Scale's is: the words in the site's typeface, then a down
+ * arrow in a square outline with soft corners. It is not there, for the eye, the pointer or the keyboard, until the hero's
+ * words have left (`data-words="gone"`, set by components/home/hero-outro.tsx); then it fades in. */
 .home-hero-explore {
   position: absolute;
   z-index: 2;
-  left: 50%;
+  right: calc(var(--hero-frame) + var(--hero-pad));
   bottom: calc(var(--hero-frame) + var(--hero-pad));
-  transform: translateX(-50%);
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 16px;
+  padding: 0;
   border: 0;
   background: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.3;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   color: #ffffff;
   cursor: pointer;
@@ -1178,38 +1177,36 @@
     opacity 0.7s ease 0.15s,
     visibility 0s;
 }
-.home-hero-explore svg {
-  width: 18px;
-  height: 18px;
-  animation: home-hero-explore-dip 2.4s ease-in-out infinite;
+.home-hero-explore-box {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ffffff;
+  border-radius: 5px;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
 }
-.home-hero-explore:hover span,
-.home-hero-explore:hover svg {
-  opacity: 0.6;
+.home-hero-explore-box svg {
+  width: 16px;
+  height: 16px;
+}
+.home-hero-explore:hover .home-hero-explore-box,
+.home-hero-explore:focus-visible .home-hero-explore-box {
+  background: #ffffff;
+  color: #000000;
 }
 .home-hero-explore:focus-visible {
   outline: 2px solid #ffffff;
-  outline-offset: 4px;
+  outline-offset: 6px;
 }
-@keyframes home-hero-explore-dip {
-  0%,
-  55%,
-  100% {
-    transform: translateY(0);
-  }
-  75% {
-    transform: translateY(5px);
-  }
-}
-/* A visitor who asked for reduced motion keeps the hero's words, so the button is there from the start, and its arrow is still. */
+/* A visitor who asked for reduced motion keeps the hero's words, so the button is there from the start. */
 @media (prefers-reduced-motion: reduce) {
   .home-hero-explore {
     opacity: 1;
     visibility: visible;
     transition: none;
-  }
-  .home-hero-explore svg {
-    animation: none;
   }
 }
 /* The header is taller or shorter below 1201 px and the page's margin narrower below 1024 and 641 px: the box follows both.

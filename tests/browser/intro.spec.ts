@@ -148,7 +148,21 @@ test("five seconds after the load-in the hero's words are taken away and the cli
         .filter((timing) => Number.isFinite(Number(timing.endTime)));
       if (!lines.length) return null;
       const mark = move.effect!.getComputedTiming();
+      // Each typed line's window that shows its text: how far it is drawn back while the line still waits its turn. A copy
+      // of the window's own animation, held at its first moment, says so whenever this is read.
+      const shown = Array.from(document.querySelectorAll<HTMLElement>("#overview .intro-overlay .intro-line > .intro-win:not(.is-front)"));
+      const waiting = shown.map((box) => {
+        const live = box.getAnimations()[0];
+        const probe = box.animate((live.effect as KeyframeEffect).getKeyframes(), live.effect!.getTiming());
+        probe.pause();
+        probe.currentTime = 0;
+        const drawnBack = new DOMMatrixReadOnly(getComputedStyle(box).transform).m41;
+        probe.cancel();
+        return drawnBack;
+      });
       return {
+        waiting,
+        whole: shown.map(() => 0),
         steps: (move.effect as KeyframeEffect).getKeyframes().map((step) => String(step.transform ?? "")),
         markStart: Number(mark.delay),
         markEnd: Number(mark.endTime),
@@ -166,6 +180,8 @@ test("five seconds after the load-in the hero's words are taken away and the cli
   expect(exit.linesStart).toBeGreaterThanOrEqual(300);
   expect(exit.markEnd).toBeLessThan(exit.linesEnd);
   expect(exit.markEnd).toBeGreaterThan(exit.linesStart);
+  // While the lines wait for the mark every one of them is whole: no character goes before its line's turn (amendment 10).
+  expect(exit.waiting).toEqual(exit.whole);
   await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 12_000 });
   for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");
@@ -174,18 +190,34 @@ test("five seconds after the load-in the hero's words are taken away and the cli
   // The statement and the Basement's mark are still in the page for a screen reader.
   await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
   await expect(hero.getByAltText("UC San Diego, The Basement")).toHaveCount(1);
-  // With the words gone, "Scroll to explore" comes up at the foot of the clip, in its middle (ADR-0077 amendment 22) ...
+  // With the words gone, "Scroll to explore" comes up in the clip's bottom right corner, as far in as the Basement's mark is
+  // on the left: the words, then an arrow in a square outline (ADR-0077 amendments 22 and 24) ...
   await expect(explore).toBeVisible();
   await expect(explore).toHaveText("Scroll to explore");
   await expect(explore).toHaveCSS("opacity", "1");
   const placed = await page.evaluate(() => {
-    const button = document.querySelector("#overview .home-hero-explore")!.getBoundingClientRect();
-    const clip = document.querySelector("#overview .home-hero-media")!.getBoundingClientRect();
-    return { offCentre: Math.abs((button.left + button.right) / 2 - (clip.left + clip.right) / 2), fromFoot: clip.bottom - button.bottom, height: button.height, clip: clip.height };
+    const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+    const button = box("#overview .home-hero-explore");
+    const square = box("#overview .home-hero-explore-box");
+    const clip = box("#overview .home-hero-media");
+    const mark = box("#overview .home-hero-backed");
+    const outline = getComputedStyle(document.querySelector("#overview .home-hero-explore-box")!);
+    return {
+      fromRight: clip.right - button.right,
+      fromFoot: clip.bottom - button.bottom,
+      markFromLeft: mark.left - clip.left,
+      markFromFoot: clip.bottom - mark.bottom,
+      square: [square.width, square.height],
+      squareLast: Math.abs(square.right - button.right),
+      border: outline.borderTopWidth,
+      radius: outline.borderTopLeftRadius,
+    };
   });
-  expect(placed.offCentre).toBeLessThanOrEqual(1);
-  expect(placed.fromFoot).toBeGreaterThanOrEqual(16);
-  expect(placed.fromFoot + placed.height).toBeLessThan(placed.clip / 4);
+  expect(placed.fromRight).toBe(placed.markFromLeft);
+  expect(placed.fromFoot).toBe(placed.markFromFoot);
+  expect(placed.square).toEqual([34, 34]);
+  expect(placed.squareLast).toBeLessThanOrEqual(0.5);
+  expect([placed.border, placed.radius]).toEqual(["1px", "5px"]);
   // ... and a press scrolls the page to the tour, whose first step then plays.
   await explore.click();
   const tour = page.locator("#tour");
