@@ -109,3 +109,12 @@ Option 3.
 **Decision.** The name keeps the site's typeface and takes the statement's setting: weight 500 in place of 800, -0.04 em tracking, and the display cut, which the browser would not choose by itself at the logo's size and is asked for by name.
 
 **Evidence.** On 2026-11-13 at 1440 px on the dev server: the name is 24.08 px at weight 500 with -0.04 em tracking and the optical size at 32; the statement is 59.04 px at weight 500 with -0.04 em tracking. A screenshot of the header over the hero was looked at.
+
+## Amendment 6, 2026-11-13 (the name is bold)
+
+**Context.** Seeing amendment 5 in the header, the lead asked to "also make the font bold. I think that will make it look better, it looks a lil weird rn."
+
+**Decision.** The name is weight 700 in place of 500, with -0.03 em tracking in place of -0.04 em so the heavier letters do not touch. The typeface, the display cut and the size stay.
+
+**Evidence.** On 2026-11-13 at 1440 px on the dev server the name's computed weight is 700 and it is 144.7 px wide beside the 34.3 by 28 px triangle; a screenshot of the header at twice the size was looked at.
+

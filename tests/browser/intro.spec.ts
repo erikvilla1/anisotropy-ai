@@ -1,8 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// The load-in (ADR-0070 amendment 1): the page starts under a black veil, the veil lifts once the hero's text is ready, the
-// statement rises and the small lines are typed in by a copy laid over the page's own text. The veil and the copies are read on
-// every frame from the first paint, because they are gone again within a few seconds.
+// The load-in (ADR-0070 amendments 1 and 4): the page starts under a black veil, the veil lifts once the hero's text is ready,
+// and the statement and the small lines are typed in by a copy laid over the page's own text, a text cursor riding the
+// statement's last line. The veil and the copies are read on every frame from the first paint, because they are gone again
+// within a few seconds.
 
 type Frame = {
   path: string;
@@ -11,6 +12,7 @@ type Frame = {
   opacity: number;
   colour: string;
   copies: number; // the copies that play the moves
+  riders: number; // the copies' own text cursors
   hiddenCopies: number; // of those, the ones hidden from assistive technology
   running: number; // elements whose own text is transparent while a copy plays
   ownHeadline: string; // the headline's own text nodes, without any copy
@@ -33,6 +35,7 @@ async function record(page: Page) {
           opacity: Number(style.opacity),
           colour: style.backgroundColor,
           copies: copies.length,
+          riders: document.querySelectorAll(".intro-overlay .intro-caret").length,
           hiddenCopies: copies.filter((copy) => copy.getAttribute("aria-hidden") === "true" && copy.hasAttribute("inert")).length,
           running: document.querySelectorAll("[data-intro-run]").length,
           ownHeadline: headline
@@ -61,7 +64,7 @@ const frames = (page: Page) =>
 
 const STATEMENT = "Anisotropy one engineering platform for composite theory and real test data";
 
-async function expectHeroWhole(page: Page) {
+async function expectHeroWhole(page: Page, blink = "type-caret-blink") {
   const hero = page.locator("#overview");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero.locator("[data-intro-run]")).toHaveCount(0);
@@ -70,6 +73,27 @@ async function expectHeroWhole(page: Page) {
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Composites.Calculated.");
   await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
   for (const line of await hero.locator(".home-hero-tagline, .home-hero-note").all()) await expect(line).toHaveCSS("color", "rgb(255, 255, 255)");
+  // The text cursor: on the statement's last line, at its end, taking no room, and blinking unless the visitor asked for
+  // reduced motion.
+  const caret = await hero.locator("h1 > .type-caret").evaluate((own) => {
+    const last = Array.from(own.parentElement!.childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .pop()!;
+    const range = document.createRange();
+    range.selectNodeContents(last);
+    const text = range.getBoundingClientRect();
+    const box = own.getBoundingClientRect();
+    const line = getComputedStyle(own, "::after");
+    return {
+      gap: Math.abs(box.left - text.right),
+      onLine: box.top > text.top && box.top <= text.bottom,
+      width: box.width,
+      blink: line.animationName,
+      colour: line.backgroundColor,
+    };
+  });
+  expect(caret).toMatchObject({ onLine: true, width: 0, blink, colour: "rgb(255, 255, 255)" });
+  expect(caret.gap).toBeLessThanOrEqual(1);
 }
 
 test("the home page loads out of black and the hero's words are typed in (ADR-0070 amendment 1)", async ({ page }) => {
@@ -86,7 +110,8 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   // seen before its move: a copy each, hidden from assistive technology, over the page's own text, which stays in place.
   const ready = seen.findIndex((frame) => frame.copies > 0);
   expect(ready).toBeGreaterThan(0);
-  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, running: 3, ownHeadline: STATEMENT });
+  // The Basement's mark, an image, waits with them to fade in, and the statement's copy carries the one text cursor.
+  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, riders: 1, running: 4, ownHeadline: STATEMENT });
   expect(seen.slice(0, ready).every((frame) => frame.opacity === 1)).toBe(true);
   // The copies go once the moves have played: the headline's 1.6 s, with room for a busy machine.
   const lifting = seen.findIndex((frame) => frame.phase === "is-lift");
@@ -103,14 +128,26 @@ test("five seconds after the load-in the hero's words are taken away and the cli
   await expect(page.locator(".page-transition")).toHaveClass(/is-idle/, { timeout: 10_000 });
   await expectHeroWhole(page);
   await expect(hero.locator("h1")).toHaveCSS("opacity", "1");
-  // They stand for five seconds, then are untyped in about a second.
+  await expect(hero.locator(".home-hero-backed")).toHaveCSS("opacity", "1");
+  // They stand for five seconds, then are untyped in about a second, while the mark turns once (amendment 4 of ADR-0070).
+  const turn = await page.waitForFunction(
+    () => {
+      const move = document.querySelector("#overview .home-hero-mark")?.getAnimations()[0];
+      const steps = move ? (move.effect as KeyframeEffect).getKeyframes().map((step) => String(step.transform ?? "")) : [];
+      return steps.length ? steps : null;
+    },
+    null,
+    { timeout: 12_000 },
+  );
+  expect(await turn.jsonValue()).toEqual(["rotate(0deg)", "", "rotate(360deg)"]);
   await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 12_000 });
-  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark"])
+  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
-  // The statement is still in the page for a screen reader, and the Basement's mark stays.
+  await expect(hero.locator(".home-hero-mark")).toHaveCSS("transform", "none");
+  // The statement and the Basement's mark are still in the page for a screen reader.
   await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
-  await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
+  await expect(hero.getByAltText("UC San Diego, The Basement")).toHaveCount(1);
 });
 
 test("a header link goes to black before the next page, and Back does not (ADR-0070 amendment 1)", async ({ page }) => {
@@ -144,12 +181,12 @@ test.describe("for a visitor who asks for reduced motion", () => {
   test("there is no veil and no typing: everything is there at once (ADR-0070 amendment 1)", async ({ page }) => {
     await record(page);
     await page.goto("/");
-    await expectHeroWhole(page);
+    await expectHeroWhole(page, "none");
     await expect(page.locator(".page-transition")).toBeHidden();
     await page.waitForTimeout(1500);
     const seen = await frames(page);
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.every((frame) => !frame.shown && frame.copies === 0 && frame.running === 0)).toBe(true);
-    await expectHeroWhole(page);
+    await expectHeroWhole(page, "none");
   });
 });

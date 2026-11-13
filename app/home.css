@@ -1025,6 +1025,8 @@
 }
 .home-hero-mark {
   display: block;
+  /* The middle of the triangle, which lies below the middle of its box: the mark turns about it when the words leave. */
+  transform-origin: 50% 61%;
   width: clamp(58px, 5.4vw, 102px);
   aspect-ratio: 246.24 / 201.022;
   background: currentColor;

@@ -3,7 +3,9 @@
  *   data-intro="type"  the text is typed in, line by line, each new character first shown as random letters;
  *   data-intro="rise"  each line of the text rises out from behind its own bottom edge (for a big heading);
  *   data-intro="fade"  the element fades in while it moves up 15% of its height (for an image or a block);
- *   data-intro-delay   milliseconds after the black starts to lift, to override the order below.
+ *   data-intro-delay   milliseconds after the black starts to lift, to override the order below;
+ *   data-intro-caret   on a typed element that ends with a `.type-caret` (app/intro.css), the page's own blinking text
+ *                      cursor: a copy of it rides the end of the last line while that line is typed or taken away.
  *
  * Without a delay: a rise starts with the lift, a fade 100 ms later, and typed lines start 150 ms after the lift, one every
  * 100 ms in document order. The page's own text is never changed, moved or removed: it is only made transparent while a copy,
@@ -32,6 +34,7 @@ const SCRAMBLE_TICK_MS = 50; // Anduril redraws its random letters 20 times a se
 const LEAVE_SPEED = 0.7; // a line leaves in this share of the time it took to arrive
 const LEAVE_STAGGER_MS = 45;
 const LEAVE_FADE_MS = 160;
+const LEAVE_SPIN_EASE = "cubic-bezier(0.55, 0, 0.9, 0.4)"; // slow off the mark, fast at the end
 
 // Random letters of about the real letter's width, so they sit in its place: narrow for narrow, and never the widest.
 const NARROW = "iljtfrIJ1";
@@ -158,6 +161,11 @@ function buildOverlay(element: HTMLElement, kind: "type" | "rise", lines: Measur
   return { overlay, rows };
 }
 
+/** The page's own text cursor in an element that asks for one (`data-intro-caret`): the `.type-caret` after its last word. */
+function ownCaret(element: HTMLElement): HTMLElement | null {
+  return element.hasAttribute("data-intro-caret") ? element.querySelector<HTMLElement>(":scope > .type-caret") : null;
+}
+
 /** Sets a typed line up behind its windows and returns their animations, which start `start` ms after play().
  *
  *   row
@@ -170,7 +178,7 @@ function buildOverlay(element: HTMLElement, kind: "type" | "rise", lines: Measur
  *
  * With `leaving`, the same windows run backwards: the settled text's edge goes first and the random letters follow it, so the
  * line is taken away from its end. */
-function typedLine(row: HTMLElement, text: HTMLElement, start: number, leaving = false): { moves: Move[]; end: number } | null {
+function typedLine(row: HTMLElement, text: HTMLElement, start: number, leaving = false, caret: HTMLElement | null = null): { moves: Move[]; end: number } | null {
   const box = row.getBoundingClientRect();
   // The row, and so each window, is a whole number of pixels wide and a little wider than the text: an edge at `full` shows
   // the whole line, and every other edge is a whole pixel too, so the text stays sharp.
@@ -234,19 +242,32 @@ function typedLine(row: HTMLElement, text: HTMLElement, start: number, leaving =
     { offset: 1, opacity: shown[1] },
   ];
   const flicker: KeyframeAnimationOptions = { duration: 2 * SCRAMBLE_TICK_MS, iterations: Infinity };
-  return {
-    moves: [
-      { element: front, keyframes: steps((edge) => edge - full), options: at(lead) },
-      { element: frontHold, keyframes: steps((edge) => full - edge), options: at(lead) },
-      { element: settled, keyframes: steps((edge) => edge - full), options: at(trail) },
-      { element: text, keyframes: steps((edge) => full - edge), options: at(trail) },
-      { element: after, keyframes: steps((edge) => edge), options: at(trail) },
-      { element: afterHold, keyframes: steps((edge) => -edge), options: at(trail) },
-      { element: sheets[0], keyframes: turn([1, 0]), options: flicker },
-      { element: sheets[1], keyframes: turn([0, 1]), options: flicker },
-    ],
-    end: start + duration + SETTLE_MS,
-  };
+  const moves: Move[] = [
+    { element: front, keyframes: steps((edge) => edge - full), options: at(lead) },
+    { element: frontHold, keyframes: steps((edge) => full - edge), options: at(lead) },
+    { element: settled, keyframes: steps((edge) => edge - full), options: at(trail) },
+    { element: text, keyframes: steps((edge) => full - edge), options: at(trail) },
+    { element: after, keyframes: steps((edge) => edge), options: at(trail) },
+    { element: afterHold, keyframes: steps((edge) => -edge), options: at(trail) },
+    { element: sheets[0], keyframes: turn([1, 0]), options: flicker },
+    { element: sheets[1], keyframes: turn([0, 1]), options: flicker },
+  ];
+  if (caret) {
+    // The copy's cursor: drawn as the page's own is and placed on it, at the end of the line. It steps with the front
+    // window's edge, which is the line's end as it is typed or taken away, and shows only while its line is on the way.
+    const own = caret.getBoundingClientRect();
+    const end = own.left - box.left;
+    const rider = span("type-caret intro-caret");
+    rider.style.left = `${end}px`;
+    rider.style.top = `${own.top - box.top}px`;
+    row.append(rider);
+    const shown: Keyframe[] = leaving ? [{ opacity: 1, easing: "steps(1, end)" }, { opacity: 0 }] : [{ opacity: 0, easing: "steps(1, end)" }, { opacity: 1 }];
+    moves.push(
+      { element: rider, keyframes: steps((edge) => (edge === full ? 0 : edge - end)), options: at(lead) },
+      { element: rider, keyframes: shown, options: { duration: 1, delay: leaving ? lead + duration : lead, fill: "both" } },
+    );
+  }
+  return { moves, end: start + duration + SETTLE_MS };
 }
 
 /** Get every tagged element in the viewport ready, hidden in its starting state. Call it while the black covers the page, then
@@ -300,7 +321,7 @@ export function prepareIntro(root: ParentNode = document): IntroRun | null {
         return;
       }
       const start = delay !== null ? delay + index * LINE_STAGGER_MS : TYPE_DELAY_MS + typedLines * LINE_STAGGER_MS;
-      const typed = typedLine(line.row, line.text, start);
+      const typed = typedLine(line.row, line.text, start, false, index === built.rows.length - 1 ? ownCaret(element) : null);
       if (!typed) return;
       moves.push(...typed.moves);
       typedLines += 1;
@@ -342,7 +363,8 @@ export function prepareIntro(root: ParentNode = document): IntroRun | null {
 /** The way out, for elements that carry `data-outro`:
  *
  *   data-outro="type"  the text is taken away line by line from the end of each line, its last characters as random letters;
- *   data-outro="fade"  the element fades out, after the lines have gone.
+ *   data-outro="fade"  the element fades out, after the lines have gone;
+ *   data-outro="spin"  the element turns once about its middle while the lines go, faster and faster, and fades at the end.
  *
  * It uses the load-in's copies and windows, run backwards. When it ends, each element carries `data-outro-done`, which the
  * stylesheet turns invisible; its text stays in the page for a screen reader. Null when there is nothing on screen to take
@@ -368,8 +390,8 @@ export function prepareOutro(root: ParentNode = document): IntroRun | null {
     const built = buildOverlay(element, "type", measured);
     overlays.push(built.overlay);
     marked.push(element);
-    for (const line of built.rows) {
-      const typed = typedLine(line.row, line.text, lines * LEAVE_STAGGER_MS, true);
+    for (const [index, line] of built.rows.entries()) {
+      const typed = typedLine(line.row, line.text, lines * LEAVE_STAGGER_MS, true, index === built.rows.length - 1 ? ownCaret(element) : null);
       if (!typed) continue;
       moves.push(...typed.moves);
       lines += 1;
@@ -377,7 +399,20 @@ export function prepareOutro(root: ParentNode = document): IntroRun | null {
     }
   }
   for (const element of fading) {
-    moves.push({ element, keyframes: [{ opacity: 1 }, { opacity: 0 }], options: { duration: LEAVE_FADE_MS, delay: totalMs, fill: "both" } });
+    if (element.dataset.outro === "spin") {
+      // One turn from the first character's going to the end of the fade, the turn speeding up and the fade in its last part.
+      moves.push({
+        element,
+        keyframes: [
+          { transform: "rotate(0deg)", opacity: 1, offset: 0 },
+          { opacity: 1, offset: 0.62 },
+          { transform: "rotate(360deg)", opacity: 0, offset: 1 },
+        ],
+        options: { duration: totalMs + LEAVE_FADE_MS, easing: LEAVE_SPIN_EASE, fill: "both" },
+      });
+    } else {
+      moves.push({ element, keyframes: [{ opacity: 1 }, { opacity: 0 }], options: { duration: LEAVE_FADE_MS, delay: totalMs, fill: "both" } });
+    }
     marked.push(element);
   }
   if (!marked.length) return null;

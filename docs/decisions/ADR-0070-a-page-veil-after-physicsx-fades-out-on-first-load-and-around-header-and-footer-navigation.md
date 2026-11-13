@@ -113,3 +113,20 @@ What Anduril's code does:
 **A fault found on the way.** The window that shows the random letters was sized with its padding inside its height, so the letters of a large line set tight were cut off below. `.intro-win` now keeps its padding outside (`box-sizing: content-box`); the typed load-in's letters are whole as well.
 
 **Evidence.** Measured during the exit at 1280 px: the random letters' glyph box and the text's own were the same (top 237.1 px, 64 px tall) while the window ended 28 px above their foot; after the change a contact sheet shows the letters whole. The runs are in ADR-0077 amendment 20.
+
+## Amendment 4, 2026-11-13 (the statement is typed too; a text cursor; the mark turns; the Basement's mark joins)
+
+**Context.** After amendment 3 the lead asked, with a recording of a blinking text cursor: "can we make the inital animation same as the outro animation for the main center text and can we also add that blinking type line at the end", then "can we also make the triangle spin at the outro", and of The Basement's mark in the hero's corner, "this should also be a part of the animations".
+
+**Decision.**
+- **The home statement is typed in**, as the small lines are, in place of rising (`data-intro="type"`).
+- **A text cursor.** `.type-caret` (`app/intro.css`) is an empty mark after the statement's last word that takes no room and draws a thin line just after the last letter, a little taller than the capitals. It blinks once every 1.06 s, lit for half of it. While a copy plays, `data-intro-caret` gives the copy its own cursor, placed on the page's, which steps with the end of the last line as it is typed or taken away and shows only while that line is on the way. A visitor who asked for reduced motion gets a steady line.
+- **The triangle turns once as the words leave** (`data-outro="spin"`): one turn about its middle over the whole exit, slow at first and fast at the end, fading in the last part.
+- **The Basement's mark** fades in with the load-in (`data-intro="fade"`) and out with the triangle (`data-outro="fade"`). It stays in the page for a screen reader.
+
+**Options considered.** The cursor inside the typed line's window, which needs no placing: rejected, because the window cuts it off at the line's end, so it sat on the last letter. A typed move for the Basement's mark: not possible, it is an image.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px, a recording from first paint to after the exit was cut into contact sheets and looked at: the four lines of the statement are typed with random letters at their ends, the cursor steps along the last line, rests at its end and is lit then dark; at the exit it steps back, the triangle turns and fades, and the Basement's mark is gone with it. The triangle turns about 50% across and 61% down its box, which is the middle of its outline (50.1%, 60.8%) as computed from the path. `npm run typecheck` clean; `intro.spec.ts` (the cursor's place and blink, the copy's cursor, the turn's keyframes, the Basement's mark at opacity 0 after the exit), `home.spec.ts` and `tour.spec.ts`: 21 of 21, the last two after one case each was run again (see below). UNVERIFIED: the motion on a real graphics card, Safari, Firefox and phones.
+
+**Runs.** First run of the three files: 19 of 21. One failure was this change's own test, which asked a visitor with reduced motion for a blinking cursor; corrected. The other, `home.spec.ts` "a load turns on first-ply failure", passed when run again alone and does not touch the hero.
+
