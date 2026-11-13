@@ -126,7 +126,23 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   expect(seen.some((frame) => frame.markFrom === "translateY(100%)")).toBe(true);
 });
 
-test("five seconds after the load-in the hero's words are taken away and the clip plays alone (ADR-0077 amendment 20)", async ({ page }) => {
+test("three seconds after the load-in the hero's words are taken away and the clip plays alone (ADR-0077 amendments 20 and 26)", async ({ page }) => {
+  // The page itself notes when the load-in is over and when the exit's copies appear, so the hold is read without the test's pace.
+  await page.addInitScript(() => {
+    const marks = { settled: 0, leaving: 0 };
+    (window as unknown as { __hold: typeof marks }).__hold = marks;
+    const tick = () => {
+      const hero = document.getElementById("overview");
+      const veil = document.querySelector(".page-transition");
+      if (hero && veil) {
+        const copies = hero.querySelectorAll(".intro-overlay").length;
+        if (!marks.settled && veil.classList.contains("is-idle") && copies === 0) marks.settled = performance.now();
+        else if (marks.settled && !marks.leaving && copies > 0) marks.leaving = performance.now();
+      }
+      if (!marks.leaving) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(page.locator(".page-transition")).toHaveClass(/is-idle/, { timeout: 10_000 });
@@ -136,7 +152,7 @@ test("five seconds after the load-in the hero's words are taken away and the cli
   // "Scroll to explore" is not there while the words stand.
   const explore = hero.locator(".home-hero-explore");
   await expect(explore).toBeHidden();
-  // They stand for five seconds, then are untyped in about a second, while the mark turns (ADR-0070 amendments 4 to 9).
+  // They stand for three seconds, then are untyped in about a second, while the mark turns (ADR-0070 amendments 4 to 9).
   const turn = await page.waitForFunction(
     () => {
       const move = document.querySelector("#overview .home-hero-mark")?.getAnimations()[0];
@@ -174,6 +190,10 @@ test("five seconds after the load-in the hero's words are taken away and the cli
     { timeout: 12_000 },
   );
   const exit = (await turn.jsonValue())!;
+  // The hold: three seconds, counted by a check every 0.2 s from the first one after the load-in is over.
+  const hold = await page.evaluate(() => (window as unknown as { __hold: { settled: number; leaving: number } }).__hold);
+  expect(hold.leaving - hold.settled).toBeGreaterThanOrEqual(2900);
+  expect(hold.leaving - hold.settled).toBeLessThan(4200);
   expect(exit.steps).toEqual(["rotate(0deg)", "", "rotate(-90deg)"]); // a quarter turn, anticlockwise
   // The mark is the first to move and has gone before the last character does (ADR-0070 amendment 9).
   expect(exit.markStart).toBe(0);

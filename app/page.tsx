@@ -82,7 +82,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-        {/* Five seconds after the load-in the words are taken away and the clip plays alone (components/home/hero-outro.tsx). */}
+        {/* Three seconds after the load-in the words are taken away and the clip plays alone (components/home/hero-outro.tsx). */}
         <HeroOutro />
         {/* Comes up at the foot of the clip once the words have left (ADR-0077 amendment 22). */}
         <ScrollToExplore />

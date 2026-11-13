@@ -387,3 +387,11 @@ On phones it is one column.
 
 **Evidence.** On 2026-11-13 on the dev server at 1440 by 900: in a screenshot of the stage at its first step the pixels at its four corners and the middle of each side read (0, 0, 0); in one taken part of the way down from the hero the frame under the clip and the stage's top are one black. `npm run typecheck` clean; `npm test` 249 passed, 1 skipped; the cases of `home.spec.ts` and `tour.spec.ts` that load the view and the stage: 13 of 13. UNVERIFIED: the view on a real graphics card, and whether the pool reads as light or as a grey patch on the lead's display.
 
+## Amendment 26, 2026-11-13 (the words leave after three seconds)
+
+**Context.** Of the five seconds the hero's words stood before leaving (amendment 20) the lead said: "lets have the main screen text animate after 3 seconds, it feels too long right now."
+
+**Decision.** The hold is three seconds (`HOLD_MS` in `components/home/hero-outro.tsx`). How it is counted is unchanged: from the end of the load-in, only while the page is at its top, checked every 0.2 s.
+
+**Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` has the page note when the load-in is over and when the exit's copies appear, and reads the time between them as at least 2.9 s and under 4.2 s: 4 of 4. The run was made while the tour was being rebuilt in the same tree; these cases do not load its new parts.
+

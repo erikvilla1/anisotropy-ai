@@ -4,13 +4,13 @@ import { useEffect } from "react";
 import { prepareOutro, type IntroRun } from "@/components/intro-text";
 
 /** How long the hero's words stand once they have loaded in, before they are taken away. */
-const HOLD_MS = 5000;
+const HOLD_MS = 3000;
 const CHECK_MS = 200;
 
-/** Takes the hero's words away five seconds after they have loaded in, so the clip plays alone, as Anduril's hero does
+/** Takes the hero's words away three seconds after they have loaded in (five until ADR-0077 amendment 26), so the clip plays alone, as Anduril's hero does
  * (ADR-0077 amendment 19; the lead's request and recording of 2026-11-12). The words are untyped by
  * components/intro-text.ts: the statement, the tagline and the small line lose their characters from the end of each
- * line; the mark starts first, with a quarter turn, and has faded just before the last of them goes. The five seconds count only while the load-in is over and
+ * line; the mark starts first, with a quarter turn, and has faded just before the last of them goes. The three seconds count only while the load-in is over and
  * the page is at its top, so a visitor who has scrolled into the tour still finds the words on the way back. They stay in the page for a screen reader. A
  * visitor who asked for reduced motion keeps the words. Renders nothing. */
 export function HeroOutro() {
