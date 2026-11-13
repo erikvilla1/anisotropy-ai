@@ -111,6 +111,13 @@ def test_jobs_finished_before_the_watch_are_left_alone_and_one_that_finishes_dur
                          read_job=reader_of(job, seen)) == 0
     assert len(there.requests) == 1 and len(seen) == 1 and "left alone" not in capsys.readouterr().out
 
+    # --existing takes the job the first watch left alone, as its line said it would (found by the ninth trial), and once only
+    command = ["--watch", str(folder), "--units", "mm-MPa", "--existing", "--once", "--send", there.address, "--token-file", str(token_file)]
+    assert connector.run(command, read_job=reader_of(job, seen)) == 0
+    assert [name for name, *_ in seen] == ["New-1.odb", "Old-1.odb"] and len(there.requests) == 2
+    assert record_of(folder)["Old-1"]["state"] == "sent" and (folder / "Old-1-anisotropy.zip").is_file()
+    assert connector.run(command, read_job=reader_of(job, seen)) == 0 and len(there.requests) == 2
+
 
 def test_a_job_that_cannot_be_bundled_or_sent_is_said_and_written_down_and_the_watch_goes_on(connector, job, site, token_file, tmp_path, capsys):  # noqa: F811
     put(tmp_path, job, "A-no-deck")

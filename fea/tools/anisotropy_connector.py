@@ -681,8 +681,8 @@ def watch_pass(args, record: dict, first: bool, url=None, token=None, read_job=N
     for odb in sorted(args.watch.glob("*.odb")):
         job, mark = odb.stem, mark_of(odb)
         seen = record["jobs"].get(job)
-        if seen is not None and seen.get("odb") == mark:
-            continue
+        if seen is not None and seen.get("odb") == mark and not (args.existing and seen.get("state") == "before the watch"):
+            continue  # dealt with already; a job an earlier watch left alone is taken once --existing asks for it
         state = job_state(odb)
         if state == "running":
             continue

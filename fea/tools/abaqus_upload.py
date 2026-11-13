@@ -458,7 +458,8 @@ To send every job as it finishes, leave this running in a terminal; it ends with
 
 It takes a job when its .sta says the analysis completed. Jobs that had finished before it started are left alone
 (add --existing to take them too). What it did for each job is in anisotropy-watch.json in that folder, so no ODB is
-sent twice. Without --send it writes each <job>-anisotropy.zip and sends nothing.
+sent twice. Without --send it writes each <job>-anisotropy.zip and sends nothing. It can be ended at any moment, also by
+closing the terminal: the record is written whole each time.
 
 A menu in Abaqus/CAE (Abaqus 2024 or later): copy this whole folder into a folder named abaqus_plugins in your home
 directory (create it if it is not there) and start Abaqus/CAE again. Under Plug-ins > Anisotropy you then have
