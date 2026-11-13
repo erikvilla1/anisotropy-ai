@@ -12,6 +12,29 @@ export function apiPath(pathname: string): string | null {
   return pathname.slice(API_PREFIX.length);
 }
 
+/** The pages that moved (ADR-0058 amendments 1 and 2): the chat and the studio are the coupon FEA workspace, their viewers its viewer.
+ * wrangler.jsonc runs the Worker first for these paths, and it answers each with a 301 to the new address. */
+export const MOVED_PAGES: Readonly<Record<string, string>> = {
+  "/chat": "/workspace/fea",
+  "/studio": "/workspace/fea",
+  "/chat/view": "/workspace/fea/view",
+  "/studio/view": "/workspace/fea/view",
+};
+
+/** The new address of a page that moved, with or without its trailing slash, or null for every other path. */
+export function movedPath(pathname: string): string | null {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return Object.hasOwn(MOVED_PAGES, path) ? MOVED_PAGES[path] : null;
+}
+
+/** Where a request to a page that moved is sent: the new address on the same origin, with the request's query; the browser keeps the
+ * fragment itself. Null when the page did not move. */
+export function movedLocation(requestUrl: string): string | null {
+  const url = new URL(requestUrl);
+  const moved = movedPath(url.pathname);
+  return moved === null ? null : new URL(`${moved}${url.search}`, url.origin).toString();
+}
+
 /** The settings the API reads (api/src/anisotropy_api/settings.py), each a Worker secret or variable of the same name. The
  * container gets only the ones that are set and non-blank; the API refuses an inconsistent set itself (ADR-0003). */
 export const CONTAINER_VARIABLES = [

@@ -18,7 +18,7 @@ import "../inner-pages.css";
 import "./about.css";
 
 export const metadata = {
-  title: "About — Anisotropy",
+  title: "About",
   description:
     "Anisotropy is an engineering platform built only for composite structures: design, analysis, testing, fabrication and repair in one workflow, grounded in composite theory and real mechanical test data.",
 };

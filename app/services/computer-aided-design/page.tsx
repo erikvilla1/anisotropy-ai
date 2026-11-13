@@ -5,7 +5,7 @@ import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
-  title: "Computer-aided design — Anisotropy",
+  title: "Computer-aided design",
   description: "Coupon geometry stated as a few dimensions and meshed from them. A CAD file to take elsewhere is planned.",
 };
 

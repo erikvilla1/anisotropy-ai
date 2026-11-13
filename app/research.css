@@ -670,11 +670,10 @@
     justify-content: center;
   }
 }
-.main-nav .mobile-chat-cta {
-  display: none;
-}
+/* The workspace's header: 56 px, on the workspace toolbar's 20 px gutter so the two left edges line up. */
 .site-header.chat-site-header {
-  height: 70px;
+  height: 56px;
+  padding: 0 20px;
 }
 .chat-page-title {
   position: absolute;
@@ -732,12 +731,6 @@
   flex-shrink: 0;
 }
 @media (max-width: 640px) {
-  .main-nav .mobile-chat-cta {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--accent);
-  }
   .chat-only-page .workspace-section {
     padding: 0 12px;
   }
@@ -745,14 +738,28 @@
     padding: 0 4px max(10px, env(safe-area-inset-bottom));
   }
   .site-header.chat-site-header {
-    padding: 0 16px;
+    padding: 0 20px;
     gap: 12px;
   }
   .chat-site-header .wordmark {
     font-size: 18px;
   }
   .chat-site-header .text-button {
-    font-size: 10px;
+    font-size: 13px;
     gap: 4px;
+  }
+  /* On a phone the two links do not fit beside the logo: where "All projects" shows, the logo is the way to the website. */
+  .chat-site-links {
+    gap: 14px;
+  }
+  .chat-site-links:has(.is-projects) .is-website {
+    display: none;
+  }
+}
+
+/* At 600 px and below the workspace toolbar's gutter is 12 px (workspace.css), and the header follows it. */
+@media (max-width: 600px) {
+  .site-header.chat-site-header {
+    padding: 0 12px;
   }
 }

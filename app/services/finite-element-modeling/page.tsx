@@ -5,7 +5,7 @@ import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
-  title: "Finite element modeling — Anisotropy",
+  title: "Finite element modeling",
   description: "A composite coupon test set up in the browser, checked, solved with our finite element kernel and CalculiX, and shown ply by ply.",
 };
 

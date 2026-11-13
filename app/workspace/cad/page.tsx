@@ -5,8 +5,8 @@ import "../../studio/studio.css";
 import "../workspace.css";
 
 export const metadata: Metadata = {
-  title: "CAD | Anisotropy",
-  description: "Geometry from a CAD file, planned: today a coupon's geometry is a few rows of the FEA workspace.",
+  title: "CAD",
+  description: "Geometry from CAD files. Planned.",
 };
 
 /** The CAD workspace is a placeholder (ADR-0062): what it will do, and what exists today. Nothing here claims more than the repository backs. */
