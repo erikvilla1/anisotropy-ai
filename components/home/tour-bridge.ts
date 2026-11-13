@@ -67,17 +67,15 @@ export function quadTransform(from: Rect, to: [Point, Point, Point, Point]): str
   return `matrix3d(${n(a)},${n(d)},0,${n(gu)},${n(b)},${n(e)},0,${n(hv)},0,0,1,0,${n(c)},${n(f)},0,${n(w)})`;
 }
 
-/** What the bridge needs to know of the page: the box the hero's clip plays in, with its corner radius, and the 3D view's
- * box, both in the window's pixels while the hero is held in the window. */
-export type BridgeGeometry = { media: Rect & { radius?: number }; view: Rect };
+/** What the bridge needs to know of the page: the hero's clip (which fills the window while the hero is held in it) and the
+ * 3D view's box, both in the window's pixels. */
+export type BridgeGeometry = { media: Rect; view: Rect };
 
 export type BridgeFrame = {
-  /** The hero's words, badge and button: their opacity, and how far they have drifted up, in pixels. */
+  /** The hero's words, logo strip and button: their opacity, and how far they have drifted up, in pixels. */
   copy: number; lift: number;
   /** The shades the hero lays over its clip for the words' sake. */
   shade: number;
-  /** The hero's black ground around the box: its opacity. It goes first, so what the shrinking clip uncovers is the stage. */
-  ground: number;
   /** The clip: the part of it that is kept (a CSS `inset()`), its transform, its opacity, and whether it is still drawn. */
   clip: string; transform: string; opacity: number; media: boolean;
 };
@@ -86,7 +84,6 @@ const mix = (from: number, to: number, share: number) => from + (to - from) * sh
 // The bridge in the first screen of scroll: the words leave, the clip shrinks into a card, the card lies back onto the top
 // ply, the clip fades off the ply, and (in the timeline) the plies separate.
 const COPY = [0, 0.26] as const;
-const GROUND = [0, 0.12] as const;
 const CARD = [0.03, 0.46] as const;
 const TILT = [0.32, 0.7] as const;
 const FADE = [0.66, BRIDGE_EXPLODE_FROM - 0.02] as const;
@@ -114,14 +111,13 @@ export function bridgeFrame(t: number, geometry: BridgeGeometry): BridgeFrame {
   // The top ply's face, where the card lands.
   const face = topFace(view.width, view.height, AZIMUTH_START).map(([x, y]) => [x + view.x, y + view.y] as Point);
   const to = flat.map(([x, y], index) => [mix(x, face[index][0], tilt) - media.x, mix(y, face[index][1], tilt) - media.y] as Point);
-  // The corners go from the box's own radius to the card's, and are square again when the card is a ply.
-  const radius = (mix(media.radius ?? 0, CARD_RADIUS, card) * (1 - tilt)) / scale;
+  // The corners are round while the card is a card, and square again when it is a ply.
+  const radius = (CARD_RADIUS * card * (1 - tilt)) / scale;
   const opacity = 1 - span(t, FADE[0], FADE[1]);
   return {
     copy: 1 - span(t, COPY[0], COPY[1]),
     lift: -28 * smooth(span(t, COPY[0], COPY[1])),
     shade: 1 - span(t, CARD[0], 0.3),
-    ground: 1 - span(t, GROUND[0], GROUND[1]),
     clip: `inset(${insetY.toFixed(2)}px ${insetX.toFixed(2)}px round ${radius.toFixed(2)}px)`,
     transform: quadTransform(kept, to as [Point, Point, Point, Point]),
     opacity,

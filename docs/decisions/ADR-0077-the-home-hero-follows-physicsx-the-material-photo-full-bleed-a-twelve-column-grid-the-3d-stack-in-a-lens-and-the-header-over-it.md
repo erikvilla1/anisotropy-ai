@@ -297,3 +297,11 @@ On phones it is one column.
 - **The two failures** are `portfolio.spec.ts` "the chat keeps a coupon across messages" and "mobile navigation and workspaces fit the screen". Both ask the workspace's assistant for the open-hole coupon, which ADR-0089 no longer offers; neither loads the home page, and CI does not run that file. They are left for a change to the workspace's tests.
 - **A stale test fixed on the way.** Two lines of `expansion.spec.ts` expected the workspace assistant's first question to be the test; since ADR-0089 offers one test it is the material, as `workspace.spec.ts` already reads it. Before the fix those two failed; after it the file passed 6 of 6. CI does not run this file either.
 - **UNVERIFIED:** the look on the lead's screen and on a real graphics card (the container draws WebGL in software), Safari and Firefox, and real phones and tablets.
+
+## Amendment 18, 2026-11-13 (the box is taken back: the clip fills the screen again)
+
+**Context.** Having seen amendment 17 on the page, the lead said: "I also dont like the whole scale ai background change I suggested, revert back to whole screen."
+
+**Decision.** Amendment 17 is undone in the code. The clip fills the hero again with the header over it, the shades and the paddings are as before amendment 17, and the scroll tour's hand-over starts from the whole window again (ADR-0084 amendment 2). The browser and unit cases written for the box go with it.
+
+**Evidence.** On 2026-11-13, in the browser against the dev server: at 1440 by 900 the clip's box is the whole window (0, 0, 1440 by 900) and the header lies over it; the same on a 390 px phone; no sideways scroll, no page errors. A screenshot of the hero was looked at. `npm run typecheck` clean; `npm test` 247 passed, 1 skipped; `home.spec.ts`, `intro.spec.ts`, `tour.spec.ts` and `expansion.spec.ts` against the dev server with the local API: 26 of 26.

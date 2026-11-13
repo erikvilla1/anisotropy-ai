@@ -115,24 +115,3 @@ test("the bridge starts from the hero as it is and ends with the clip gone from 
   const done = bridgeFrame(0.9, geometry);
   assert.deepEqual([done.opacity, done.media], [0, false]);
 });
-
-test("the bridge takes the clip from its round box inside the hero, and the hero's ground goes first (ADR-0077 amendment 17)", () => {
-  // The box as the hero sets it in a 1440 by 900 window: under the header, on the page's margin, with 20 px corners.
-  const geometry = { media: { x: 32, y: 64, width: 1376, height: 804, radius: 20 }, view: { x: 364, y: 0, width: 634, height: 900 } };
-  const rest = bridgeFrame(0, geometry);
-  assert.deepEqual([rest.copy, rest.shade, rest.ground, rest.opacity], [1, 1, 1, 1]);
-  // At rest the transform leaves the box where it is, and the clip path draws the box's own corners.
-  assert.deepEqual(carried(rest.transform, [1376, 804]), [1376, 804]);
-  assert.equal(rest.clip, "inset(0.00px 0.00px round 20.00px)");
-  // The ground is gone while the words are still leaving, so the shrinking clip uncovers the stage.
-  const early = bridgeFrame(0.15, geometry);
-  assert.equal(early.ground, 0);
-  assert.ok(early.copy > 0);
-  // Landed, the kept part's top left corner is on the ply's far left corner, in the window's pixels, and the corners are square.
-  const landed = bridgeFrame(0.72, geometry);
-  const face = topFace(634, 900, -24).map(([x, y]) => [x + 364, y]);
-  const keptLeft = (1376 - 804 * (1.4 / 0.9)) / 2;
-  const [x, y] = carried(landed.transform, [keptLeft, 0]);
-  assert.ok(Math.abs(x + 32 - face[0][0]) < 0.01 && Math.abs(y + 64 - face[0][1]) < 0.01, `${x + 32}, ${y + 64}`);
-  assert.match(landed.clip, /round 0\.00px\)$/);
-});

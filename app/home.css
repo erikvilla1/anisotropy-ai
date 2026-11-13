@@ -921,42 +921,24 @@
   }
 }
 
-/* The hero (ADR-0077 and its amendment 17). The page is black, and the material clip plays in a box with round corners, after
- * Scale's home page: the box starts under the header and stands on the page's margin at the sides and the foot, so its edges
- * line up with the logo above and the sections below. The words keep PhysicsX's arrangement inside it: the headline on
- * columns 1 to 6 and two short paragraphs from column 7 of a 12-column grid with 32 px gutters. The header (app/globals.css)
- * lies on the black strip above the box and scrolls away with the hero.
- *   --hero-top    where the box starts: the header's height, and 8 px more under the 56 px desktop header
- *   --hero-frame  the black frame at the sides and the foot: the page's margin
- *   --hero-pad    the words' distance from the box's edge
- * The ground is a layer of its own so the scroll tour can fade it while it carries the box away (app/home-tour.css). */
+/* The hero after PhysicsX's home page (ADR-0077): the material photo full-bleed, only the headline on columns 1 to 6 and two
+ * short paragraphs from column 7 of a 12-column grid (32 px gutters and margins, as measured there on 2026-11-07). The header
+ * (app/globals.css) lies over the hero on this page and scrolls away with it. */
 .home-hero {
-  --hero-top: 64px;
-  --hero-frame: 32px;
-  --hero-pad: 32px;
-  --hero-radius: 20px;
   position: relative;
   min-height: max(640px, 100svh);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: calc(var(--hero-top) + 48px) calc(var(--hero-frame) + var(--hero-pad)) calc(var(--hero-frame) + 48px);
+  padding: 104px 32px;
   overflow: hidden;
   isolation: isolate;
-}
-.home-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -3;
-  background: var(--bg);
+  background: #080808;
 }
 .home-hero-media {
   position: absolute;
-  inset: var(--hero-top) var(--hero-frame) var(--hero-frame);
+  inset: 0;
   z-index: -2;
-  border-radius: var(--hero-radius);
-  overflow: hidden;
   background: url("/assets/images/carbon-weave.jpg") 68% center / cover;
   filter: grayscale(1);
 }
@@ -969,23 +951,22 @@
   height: 100%;
   object-fit: cover;
 }
-/* The shades: one from the left for the headline, one from the foot for the badge and the button. Neither reaches full
- * black, so the box keeps its edge against the black page; a hairline inside the edge marks it where the picture is dark. */
 .home-hero-media::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px #ffffff14;
   background-image:
-    linear-gradient(90deg, #080808e6 0%, #080808bf 34%, #0808088c 66%, #080808a6 100%),
-    linear-gradient(0deg, #08080899 0%, transparent 30%);
+    linear-gradient(90deg, #080808f2 0%, #080808cc 34%, #08080899 66%, #080808b3 100%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 26%),
+    linear-gradient(180deg, #080808b3 0%, transparent 22%);
 }
-/* The clip is already dark footage, so it takes lighter shades than the bright still, and a lift of its own. */
+/* The clip is already dark footage, so it takes lighter shades than the bright still, and a lift of its own; the left keeps
+ * enough shade for the headline, the bottom still fades into the page. */
 .home-hero-media.has-video::after {
   background-image:
-    linear-gradient(90deg, #08080880 0%, #0808084d 36%, #0808081a 68%, #08080826 100%),
-    linear-gradient(0deg, #08080873 0%, transparent 30%);
+    linear-gradient(90deg, #080808a6 0%, #08080873 36%, #08080826 68%, #08080840 100%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 22%),
+    linear-gradient(180deg, #08080880 0%, transparent 16%);
 }
 .home-hero-video video {
   filter: brightness(1.17) contrast(1.05);
@@ -1105,13 +1086,13 @@
     display: none;
   }
 }
-/* The programme badge (ADR-0081): a small monospace line over UC San Diego's The Basement mark in white, in the bottom left
- * corner of the hero's box, as far from its edges as the words are. */
+/* The programme badge (ADR-0081): a small monospace line over UC San Diego's The Basement mark in white, in the hero's bottom
+ * left corner, on the page's 32 px margin. */
 .home-hero-backed {
   position: absolute;
   z-index: 2;
-  left: calc(var(--hero-frame) + var(--hero-pad));
-  bottom: calc(var(--hero-frame) + var(--hero-pad));
+  left: 32px;
+  bottom: 32px;
   display: grid;
   gap: 10px;
   margin: 0;
@@ -1127,19 +1108,9 @@
   width: auto;
   height: 40px;
 }
-/* The header is taller below 1201 px, and the page's margin narrower below 1024 and 641 px: the box follows both. */
-@media (max-width: 1200px) {
-  .home-hero {
-    --hero-top: 86px;
-  }
-}
 @media (max-width: 1023px) {
   .home-hero {
-    --hero-top: 75px;
-    --hero-frame: 24px;
-    --hero-pad: 24px;
-    padding-top: calc(var(--hero-top) + 56px);
-    padding-bottom: calc(var(--hero-frame) + 112px);
+    padding: 120px 24px 96px;
   }
   .home-hero-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -1152,12 +1123,11 @@
 }
 @media (max-width: 640px) {
   .home-hero {
-    --hero-top: 70px;
-    --hero-frame: 20px;
-    --hero-pad: 16px;
-    --hero-radius: 16px;
-    padding-top: calc(var(--hero-top) + 40px);
-    padding-bottom: calc(var(--hero-frame) + 96px);
+    padding: 104px 20px 80px;
+  }
+  .home-hero-backed {
+    left: 20px;
+    bottom: 20px;
   }
   .home-hero-backed img {
     height: 32px;

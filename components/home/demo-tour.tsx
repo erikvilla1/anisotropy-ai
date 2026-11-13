@@ -71,7 +71,7 @@ function engineLine(apiBaseUrl: string, entry: EngineEntry | undefined): string 
 
 /** What the bridge writes on the hero while it plays: custom properties that app/home-tour.css reads. Removing them leaves the
  * hero exactly as its own stylesheet sets it. */
-const HERO_PROPERTIES = ["--tour-copy", "--tour-copy-lift", "--tour-copy-visibility", "--tour-shade", "--tour-ground", "--tour-media-clip", "--tour-media-transform", "--tour-media-opacity", "--tour-media-visibility"];
+const HERO_PROPERTIES = ["--tour-copy", "--tour-copy-lift", "--tour-copy-visibility", "--tour-shade", "--tour-media-clip", "--tour-media-transform", "--tour-media-opacity", "--tour-media-visibility"];
 function clearHero(hero: HTMLElement | null) {
   if (hero) for (const name of HERO_PROPERTIES) hero.style.removeProperty(name);
 }
@@ -318,13 +318,8 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
       if (!geometry.current && sceneBox.current) {
         const stage = element.getBoundingClientRect();
         const box = sceneBox.current.getBoundingClientRect();
-        // The clip's box inside the hero (app/home.css): its place is layout, so a transform already on it does not move it.
-        const media = hero.querySelector<HTMLElement>(".home-hero-media");
         geometry.current = {
-          media: media
-            ? { x: media.offsetLeft, y: media.offsetTop, width: media.offsetWidth, height: media.offsetHeight,
-                radius: parseFloat(getComputedStyle(hero).getPropertyValue("--hero-radius")) || 0 }
-            : { x: 0, y: 0, width: hero.offsetWidth, height: hero.offsetHeight },
+          media: { x: 0, y: 0, width: hero.offsetWidth, height: hero.offsetHeight },
           view: { x: box.left - stage.left, y: 0, width: box.width, height: viewport },
         };
         element.style.setProperty("--tour-hero-height", `${hero.offsetHeight}px`);
@@ -337,7 +332,6 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
         hero.style.setProperty("--tour-copy-lift", `${frame.lift.toFixed(1)}px`);
         hero.style.setProperty("--tour-copy-visibility", frame.copy > 0.001 ? "visible" : "hidden");
         hero.style.setProperty("--tour-shade", frame.shade.toFixed(3));
-        hero.style.setProperty("--tour-ground", frame.ground.toFixed(3));
         hero.style.setProperty("--tour-media-clip", frame.clip);
         hero.style.setProperty("--tour-media-transform", frame.transform);
         hero.style.setProperty("--tour-media-opacity", frame.opacity.toFixed(3));
