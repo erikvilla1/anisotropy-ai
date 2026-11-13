@@ -10,7 +10,8 @@ Each tool is one fixed command of Abaqus, on the machine that has it (ANISOTROPY
 
     build   abaqus cae noGUI=<coupon>-build.py -- save=<coupon>.cae     the script of `write_cae_script`, written from the spec
     run     abaqus job=<job> input=<job>.inp interactive ...            the input file Abaqus/CAE wrote for that model
-    send    abaqus cae noGUI=anisotropy_connector.py -- <job>.odb ...   the connector's bundle, then our comparison of it
+    send    abaqus cae noGUI=anisotropy_connector.py -- <job>.odb ...   the connector's bundle, with the model as built read by name
+                                                                        from the .cae, then our comparison of it
 
 Nothing in a command is free text. The names in it are the ones our code derives from the spec (`cae_facts`), checked against a short
 alphabet, and every file argument is a bare name in the one work folder. Whoever chooses the tools, a person or the assistant's model,
@@ -324,8 +325,8 @@ def send(session: Session, spec, model, abaqus: str | Path | None = None, runner
         raise Refused(f"{session.bundle.name} is already in {session.folder}. Nothing is written over; use an empty folder for another round trip")
     command = abaqus_command(abaqus)
     argv = [command, "cae", f"noGUI={CONNECTOR}", "--", session.odb.name, "--units", session.units, "--coupon", session.coupon]
-    if session.cae.is_file():
-        argv += ["--cae", session.cae.name]
+    if session.cae.is_file():  # by name: the .cae Abaqus/CAE saved also holds its own empty Model-1 (seen on Abaqus 2025)
+        argv += ["--cae", session.cae.name, "--model", session.coupon]
     done, seconds = run_command("send", argv, session, runner)
     said = lines_of(done.output)
     if not session.bundle.is_file():

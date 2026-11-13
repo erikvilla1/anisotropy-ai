@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -95,14 +96,21 @@ def remaining(told: dict[str, Any]) -> list[str]:
 
 
 def start(argv: list[str], capture: bool) -> subprocess.CompletedProcess:
-    """One tool of the fea package, waited for. `capture` for the state's JSON; otherwise its lines go straight to the terminal."""
+    """One tool of the fea package, waited for. `capture` for the state's JSON; otherwise its lines go straight to the terminal. The
+    tool runs in the fea project's environment, so this process's own VIRTUAL_ENV is not handed on (uv warns about it otherwise)."""
+    env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
     if capture:
-        return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=STATE_TIMEOUT_S, check=False)
-    return subprocess.run(argv, check=False)
+        return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=STATE_TIMEOUT_S, check=False, env=env)
+    return subprocess.run(argv, check=False, env=env)
+
+
+def tell(line: str) -> None:
+    """A line of this module's own, written at once: the tools started next write to the same terminal, and theirs must come after."""
+    print(line, flush=True)
 
 
 def round_trip(message: str, coupon: Path, folder: Path, assistant: Assistant, abaqus: str | None = None,
-               runner: Callable[[list[str], bool], Any] = start, say: Callable[[str], None] = print) -> int:
+               runner: Callable[[list[str], bool], Any] = start, say: Callable[[str], None] = tell) -> int:
     """Choose among the three tools for `message` and run the chosen ones. Returns the exit code; raises `RoundTripRefused` with the
     reason when nothing could be started."""
     command = tool_command()

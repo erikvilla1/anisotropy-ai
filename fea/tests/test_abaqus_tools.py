@@ -57,8 +57,13 @@ class StandIn:
             (folder / f"{job_name}.sta").write_text(self.sta or " THE ANALYSIS HAS COMPLETED SUCCESSFULLY\n", encoding="utf-8")
             return self.tools.Done(0, f"Abaqus JOB {job_name} COMPLETED")
         with contextlib.chdir(folder):  # the connector is given bare names, as Abaqus gives them from the work folder
-            self.connector.run(argv[4:], read_job=lambda path, step, frame, instance: self.data,
-                               read_model=lambda path, name: self.connector.model_as_built(cae_model(), "Model-1"))
+            self.asked_for_model = None
+
+            def read_model(path, name):  # the .cae Abaqus/CAE saves holds our model and its own empty Model-1: ours is asked for by name
+                self.asked_for_model = name
+                return self.connector.model_as_built(cae_model(), name)
+
+            self.connector.run(argv[4:], read_job=lambda path, step, frame, instance: self.data, read_model=read_model)
         return self.tools.Done(0, "")
 
 
@@ -86,8 +91,8 @@ def test_three_tools_take_a_coupon_through_abaqus_and_back_and_the_record_lists_
         ("build", [str(abaqus), "cae", f"noGUI={COUPON}-build.py", "--", f"save={COUPON}.cae"]),
         ("run", [str(abaqus), f"job={COUPON}", f"input={COUPON}.inp", "interactive", "ask_delete=OFF", "cpus=1"]),
         ("send", [str(abaqus), "cae", f"noGUI={TOOLS / 'anisotropy_connector.py'}", "--", f"{COUPON}.odb", "--units", "mm-MPa", "--coupon", COUPON,
-                  "--cae", f"{COUPON}.cae"])]
-    assert all(where == folder.resolve() for _, _, where, _ in stand_in.calls)
+                  "--cae", f"{COUPON}.cae", "--model", COUPON])]
+    assert all(where == folder.resolve() for _, _, where, _ in stand_in.calls) and stand_in.asked_for_model == COUPON
     record = json.loads((folder / "abaqus-tools.json").read_text(encoding="utf-8"))
     assert record["coupon"] == COUPON and record["units"] == "mm-MPa" and record["spec"]["name"] == SPEC.name and len(record["spec"]["sha256"]) == 64
     assert [(c["tool"], c["outcome"], c["chosen_by"], c["asked"]) for c in record["calls"]] == [
