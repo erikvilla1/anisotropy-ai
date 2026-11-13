@@ -39,9 +39,6 @@ const news = [
   },
 ];
 
-/** The home page: the hero first (ADR-0076, ADR-0077), a scroll-driven tour of one calculation (ADR-0084), the laminate
- * calculator as the demonstration, then bands on the mission, the platform, the team and what is new, and the closing
- * band. The workflow and the roadmap live on About. */
 /** LinkedIn's "in", as letters only: the round ground is the badge's own (app/home.css, .home-face-in). */
 function LinkedInMark() {
   return (
@@ -51,6 +48,8 @@ function LinkedInMark() {
   );
 }
 
+/** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
+ * platform, the team and what is new, and the closing band. The workflow and the roadmap live on About. */
 export default function Home() {
   return (
     <main id="main">
@@ -100,7 +99,7 @@ export default function Home() {
       {/* The laminate calculator and its tour left the home page on 2026-11-13 (ADR-0095): a feature, not the product. Their
           components are kept, unmounted (components/home/laminate-hero.tsx, demo-tour.tsx); the full calculator is still at
           /calculator and in the workspace. */}
-      {/* The product demo (ADR-0095): the coupon workspace in four beats, in a white box the size of the clip, under it. */}
+      {/* The product demo (ADR-0095 amendment 2): the coupon workspace in four beats, on black, a window tall, under the hero. */}
       <ProductDemo />
       {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31):
           Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
