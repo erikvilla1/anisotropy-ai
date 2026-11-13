@@ -109,6 +109,17 @@ def test_the_r2_client_is_built_from_the_settings_without_the_network():
     assert client.client.meta.config.request_checksum_calculation == "when_required"
     with pytest.raises(ValueError, match="off"):
         storage.R2Store(StorageSettings(None, None, None, None))
+    named = client.link("coupons/A/attempt-01/files/document/A.pdf", 60, filename="D3039_[0-90]2s_report.pdf")  # signed offline (ADR-0091)
+    assert "response-content-disposition=attachment" in named and "D3039_" in named
+    assert "response-content-disposition" not in client.link("coupons/A/attempt-01/files/document/A.pdf", 60)
+
+
+def test_a_download_name_is_letters_digits_and_a_few_marks_with_the_files_suffix():
+    assert storage.download_name(None, ".pdf") is None
+    assert storage.download_name("D3039_[45-0--45-90]s_report.pdf", ".pdf") == "D3039_[45-0--45-90]s_report.pdf"
+    for bad in ("report.zip", "../x.pdf", "a b.pdf", 'a"b.pdf', ".pdf", "r;x.pdf"):
+        with pytest.raises(ValueError):
+            storage.download_name(bad, ".pdf")
 
 
 @needs_live_store

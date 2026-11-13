@@ -294,7 +294,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             reason = str(exc).split("Value error, ", 1)[-1].split(" [type=", 1)[0]
             problems.append(reason)
             iso = values is not None and values.isotropic is not None
-            notes.note("material", "fail", f"our engine refuses these constants: {reason}",
+            notes.note("material", "fail", f"these constants are not physically valid: {reason}",
                        (row("own_E"), row("own_nu")) if iso else (row("own_E1"), row("own_E2"), row("own_G12"), row("own_nu12")))
     if spec is not None:  # the test standard: judged on the spec, whatever the mesh says; a deviation warns and never blocks (ADR-0072)
         judged = conformance(spec)
@@ -327,7 +327,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
                        "or the reverse?)", tuple(row(f"own_{name}") if name in ("E", "E1", "E2", "G12") else row(name) for name in suspicious))
         else:
             notes.note("units", "pass", f"every row in {units_words(units)}; the results come back in the same units"
-                       + (f"; the Abaqus and CalculiX decks are written in {units_words(deck_units)}, as every deck we solve is" if deck_units != units
+                       + (f"; the solver input is written in {units_words(deck_units)}" if deck_units != units
                           else f", and the decks are written in {units}"))
         # transverse shear: our membrane never uses G13 and G23, CalculiX's brick does, so a value far from G12 parts the two solvers
         low, high = material.G12 / TRANSVERSE_SHEAR_RATIO, material.G12 * TRANSVERSE_SHEAR_RATIO
@@ -335,8 +335,8 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         if odd:
             shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in odd)
             notes.note("material", "warn", f"{shown} against G12 = {from_si(material.G12, 'stress', units):g} {lab['stress']}: a transverse shear modulus "
-                       "this far from G12 is unusual for a tape; our membrane does not use it, CalculiX's brick does, so the two will part (on 2026-11-08 a "
-                       "coupon with 100 MPa put CalculiX's reaction 4.6 % from ours, 0.8 % with 4500 MPa)", tuple(row(name) for name in odd))
+                       "this far from G12 is unusual for a tape; the shell model does not use it, the reference solver's solid model does, so the two "
+                       "will differ (a coupon with 100 MPa put the reference reaction 4.6 % away, 0.8 % with 4500 MPa)", tuple(row(name) for name in odd))
         # geometry
         size = f"{length(g.length):g} by {length(g.width):g} {lab['length']}"
         if g.tab_length:
@@ -445,9 +445,9 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         if spec.mesh.mesher == "structured" and bricks > SPOOLES_LAYER_BRICKS:
             # SPOOLES, the image's only direct solver, stopped on one structured mesh of 24,000 layer bricks (55,733 equations) and ordered 17,850 on the
             # same coupon and an open-hole mesh of about 25,000; the count is where it has failed, not a rule (ADR-0030 amendment 5)
-            notes.note("mesh", "warn", f"the CalculiX twin would be {bricks} layer bricks ({mesh.element_count} elements by {len(plies)} plies); the image's SPOOLES solver "
-                       f"stopped on a structured mesh of 24000 (2026-11-08, whatever the material) and ordered {SPOOLES_LAYER_BRICKS - 150} on the same coupon, so this run may stop in "
-                       "CalculiX; if it does, a coarser mesh solves (fea/checks/calculix-conventions.toml)", (row("element_size"), row("mesh_nx")))
+            notes.note("mesh", "warn", f"the reference solve would need {bricks} solid elements ({mesh.element_count} elements by {len(plies)} plies); "
+                       f"it has stopped at 24000 and run at {SPOOLES_LAYER_BRICKS - 150}, so this run may stop while verifying; if it does, "
+                       "a coarser mesh solves", (row("element_size"), row("mesh_nx")))
         if spec.mesh.mesher == "gmsh":
             version = gmsh()
             notes.note("mesh", "pass" if version else "fail", f"Gmsh {version} meshes the hole" if version else
@@ -479,15 +479,15 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     found = ccx()
     version = ccx_version(found) if found is not None else None
     if version:
-        notes.note("solver", "pass", f"CalculiX {version} at {found}: the reference solver that checks our engine's result")
+        notes.note("solver", "pass", f"version {version}, ready")  # the program and its path stay out of the page (ADR-0091)
     else:
         notes.note("solver", "fail", "CalculiX not found: set ANISOTROPY_CCX or put ccx on PATH (docs/installation-fea-tools.md); the run tool refuses "
                    "to start without it")
     tectonic_path = tectonic()
     if tectonic_path:
-        notes.note("document", "pass", f"Tectonic at {tectonic_path}: the package gets its PDF")
+        notes.note("document", "pass", "the report is written as a PDF")
     else:
-        notes.note("document", "warn", "Tectonic not found: the package is written without its PDF (run with pdf off)")
+        notes.note("document", "warn", "the report PDF cannot be written here: the package is written without its PDF")
 
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)

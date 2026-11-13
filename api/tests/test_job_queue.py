@@ -150,10 +150,10 @@ def test_the_api_container_files_a_job_for_the_queue_and_runs_nothing(queue):
     assert json.loads(store.objects[row.source][0]) == {"coupon": "IM7-UNT-L1", "form_version": "0.7"}  # the values as the tool reads them
     assert row.options == ["--run-by", "A. Engineer", "--no-pdf"] and front.jobs == {}  # nothing runs in the API's container
     status = client.get(f"/v1/coupon-jobs/{job_id}").json()
-    assert status["state"] == "queued" and status["message"] == "waiting for a free solver"
+    assert status["state"] == "queued" and status["message"] == "queued"
     second = client.post("/v1/coupon-jobs", json={"coupon": "IM7-UNT-L1", "run_by": "A. Engineer"})
     assert second.status_code == 202 and ENQUEUE_HEADER in second.headers  # no one-at-a-time 409 any more
-    assert client.get(f"/v1/coupon-jobs/{second.json()['job_id']}").json()["message"] == "waiting for a free solver; 1 job(s) ahead of this one"
+    assert client.get(f"/v1/coupon-jobs/{second.json()['job_id']}").json()["message"] == "queued; 1 ahead"
 
 
 def test_a_solver_runs_the_queued_job_and_the_api_reads_it_back_from_the_row_and_the_store(queue, monkeypatch):

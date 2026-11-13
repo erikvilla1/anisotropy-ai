@@ -10,12 +10,11 @@ export type ProposalLine = { id: string; label: string; value: string; unit: str
 /** The model's reading of a message, for the engineer to confirm (ADR-0088): every value ticked by default except one that cannot go in,
  * the conditions it would turn on, a question when it asks one, and what the source guard did not take, with why. Nothing enters the
  * problem until Apply; the card then keeps what was applied. */
-export function ProposalCard({ lines, conditions, question, dropped, model, onApply }: {
+export function ProposalCard({ lines, conditions, question, dropped, onApply }: {
   lines: ProposalLine[];
   conditions: { id: string; title: string; quote: string }[];
   question: string | null;
   dropped: { key: string; reason: string }[];
-  model: string | null;
   onApply: (ids: Set<string>) => void;
 }) {
   const ids = [...lines.filter((l) => !l.blocked).map((l) => l.id), ...conditions.map((c) => `condition:${c.id}`)];
@@ -34,7 +33,7 @@ export function ProposalCard({ lines, conditions, question, dropped, model, onAp
   );
   return (
     <div className="proposal-card" data-testid="proposal-card" data-state={done ?? "open"}>
-      <p className="chat-note">Read by {model ?? "the model"} from your words. Nothing enters the problem until you apply it: untick anything it misread.</p>
+      <p className="chat-note">Read from your message. Nothing changes until you apply it; untick anything misread.</p>
       {lines.length || conditions.length ? (
         <ul className="proposal-lines">
           {lines.map((l) => row(l.id, l.label, <>
@@ -45,8 +44,8 @@ export function ProposalCard({ lines, conditions, question, dropped, model, onAp
       {question ? <p className="proposal-question" data-testid="proposal-question">{question}</p> : null}
       {dropped.length ? (
         <details className="proposal-dropped" data-testid="proposal-dropped">
-          <summary>Not taken ({dropped.length}): the words do not hold them</summary>
-          <ul>{dropped.map((d, i) => <li key={`${d.key}-${i}`}><code>{d.key}</code> {d.reason}</li>)}</ul>
+          <summary>Not applied ({dropped.length})</summary>
+          <ul>{dropped.map((d, i) => <li key={`${d.key}-${i}`}><strong>{d.key}</strong>: {d.reason}</li>)}</ul>
         </details>
       ) : null}
       {done ? (

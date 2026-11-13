@@ -101,11 +101,11 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
             out[key] = value
             built.append(Built(key, value, reason))
 
-    choose("test", TEST, "the one test the studio offers until its comparison with Abaqus is validated")
-    choose("units", UNITS, "millimetres, megapascals and newtons: the units the Abaqus and CalculiX decks are written in")
+    choose("test", TEST, "the one test offered for now")
+    choose("units", UNITS, "millimetres, megapascals and newtons, the units the solver input is written in")
     choose("standard", D3039, "the standard of the unnotched tension test of a polymer-matrix composite")
     under_d3039 = str(out["standard"]).strip().lower() == D3039.lower()
-    choose("filled_by", "studio", "the coupon was set up on the studio's tension screen")
+    choose("filled_by", "studio", "the coupon was set up in the workspace")
     choose("date", (today or date.today()).isoformat(), "the day the coupon was set up")
 
     size_given = any(not _blank(out.get(key)) for key in ("length", "width", "tab_length"))
@@ -117,19 +117,19 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
         choose("width", sizes["width"], why)
         choose("length", sizes["length"], why)
         choose("tab_length", tab, why if "tab_length" in sizes else
-               f"{why} grips through emery cloth and gives no grip length: {GRIP_LENGTH_MM:g} mm is ours, as in the public D3039 check")
-        choose("size_from", why + ("" if "tab_length" in sizes else f"; the {GRIP_LENGTH_MM:g} mm grip length is ours"),
+               f"{why} grips through emery cloth and sets no grip length: {GRIP_LENGTH_MM:g} mm by default")
+        choose("size_from", why + ("" if "tab_length" in sizes else f"; the {GRIP_LENGTH_MM:g} mm grip length by default"),
                "where the size comes from, for the coupon's identity card")
     elif size_given:
         choose("size_from", "the engineer's own size" + (f": a deviation from {D3039} Table 2 is reported, never refused" if under_d3039 else ""),
-               "the size was given under Change a choice")
+               "the size was given under Change settings")
     else:  # a layup in no Table 2 class, or no standard: the size is the engineer's to give, and the check asks for it by row
         choose("size_from", "the engineer's own size" + (f": the layup is in no {D3039} Table 2 class" if under_d3039 else ""),
-               "no size could be chosen, so the length, width and tab length are asked for under Change a choice")
+               "no size could be chosen, so the length, width and tab length are asked for under Change settings")
 
     choose("strain_device", "extensometer", f"strain is measured over a gauge length at mid-length ({D3039} §7.3)")
     choose("strain_length", EXTENSOMETER_MM, f"{EXTENSOMETER_MM:g} mm, within {D3039} §7.3.2's 10 to 50 mm, centred on the coupon")
-    choose("grips", "nodal", "clamped: every node of each tab held, the top one pulled, as the D3039 check and its CalculiX twin are")
+    choose("grips", "nodal", "clamped: every node of each tab held, the top one pulled")
     choose("region", "tabs", "the grips hold the whole tab")
     if _blank(out.get("value")):
         choose("control", "displacement", "the top grip moves; the bottom one is held")

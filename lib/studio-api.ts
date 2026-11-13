@@ -3,6 +3,7 @@
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
 import type { Checklist, StudioValues } from "./studio-form";
+import { customerText, DOWNLOAD_LABELS, sentence } from "./studio-copy";
 
 export const ACTOR = "studio";
 export const POLL_MS = 2000;
@@ -164,18 +165,19 @@ async function call(url: string, init: RequestInit & { signal?: AbortSignal }, w
     response = await fetch(url, { ...init, credentials: "same-origin", cache: "no-store" });
   } catch (error) {
     if (init.signal?.aborted) throw error;
-    throw new StudioError(`The API did not answer (${what}). Is it running at the address the page was built with?`);
+    throw new StudioError(`The analysis service did not answer (${what}). Check your connection and try again.`);
   }
   let payload: unknown = null;
   const text = await response.text();
   try { payload = text ? JSON.parse(text) : null; }
-  catch { throw new StudioError(`The API answered ${what} with something that is not JSON (status ${response.status}).`, response.status); }
+  catch { throw new StudioError(`The analysis service sent an answer the page cannot read (${what}). Try again.`, response.status); }
   if (!response.ok) {
     const detail = isObject(payload) ? payload.detail : null;
     const message = typeof detail === "string" ? detail
       : Array.isArray(detail) ? detail.map((d) => (isObject(d) ? `${(d.loc as unknown[] | undefined)?.filter((p) => p !== "body").join(".")}: ${d.msg}` : String(d))).join("; ")
       : `status ${response.status}`;
-    throw new StudioError(`${what}: ${message}`, response.status);
+    // the API's own words when they are fit to show (ADR-0091); otherwise what failed and what to do
+    throw new StudioError(customerText(message) && !/^status \d+$/.test(message) ? `${sentence(what)}: ${message}` : `${sentence(what)} failed. Try again.`, response.status);
   }
   return payload;
 }
@@ -362,9 +364,10 @@ export async function couponValues(apiBase: string, name: string, signal?: Abort
   return payload.values;
 }
 
-/** Where one of a job's files is, by key: a link for the downloads and the address the viewer loads the fields from. */
-export function fileUrl(apiBase: string, jobId: string, key: string): string {
-  return `${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(key)}`;
+/** Where one of a job's files is, by key: a link for the downloads and the address the viewer loads the fields from. With `name`, the
+ * API hands the file out under that name (ADR-0091). */
+export function fileUrl(apiBase: string, jobId: string, key: string, name?: string): string {
+  return `${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(key)}${name ? `?name=${encodeURIComponent(name)}` : ""}`;
 }
 
 export async function fetchFields(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Fields> {
@@ -394,15 +397,10 @@ export async function explainJob(apiBase: string, jobId: string, kind: "setup" |
   return readExplainAnswer(payload);
 }
 
-/** The files of a job the page offers for download, in the order it lists them: the package, its PDF and the decks; the `.frd` stays so
- * the CalculiX twin can be checked in PrePoMax. The other outputs (the fields, the explanation, the record, the summary, the `.vtu`,
- * the setup check, the preview) remain job outputs the viewer and the explanation read; they are not offered as files (the founder,
- * 2026-11-08: "don't need JSON files"). */
-export const DOWNLOADS: [string, string][] = [
-  ["package", "The package for the team (zip)"], ["document", "The document (PDF)"], ["abaqus_deck", "Our Abaqus deck (.inp)"],
-  ["prepomax_deck", "The CalculiX twin for PrePoMax (.inp)"],
-  ["prepomax_results", "CalculiX's results for PrePoMax (.frd): global axes, one brick per ply, nodal grips"],
-];
+/** The files of a job the page offers for download, in the order it lists them, with their plain names (ADR-0091): the report, the
+ * package, the solver input and the reference solver's input and results. The other outputs (the fields, the explanation, the record, the
+ * summary, the `.vtu`, the setup check, the preview) remain job outputs the viewer and the explanation read; they are not offered as files. */
+export const DOWNLOADS: [string, string][] = DOWNLOAD_LABELS;
 
 // ----------------------------------------------------------------------------------------------- laminate problems (ADR-0060)
 

@@ -39,7 +39,7 @@ from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, Jo
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
                       owns_project, project_jobs, record_run, stop_orphans, update_project, upsert_project)
 from .settings import all_tests, allowed_origins, environment, load_settings
-from .storage import R2Store, content_type, restore, sync
+from .storage import R2Store, content_type, download_name, restore, sync
 from .schemas import (
     AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     LiveSolveResponse, TowTestRequest, TowTestResponse,
@@ -620,33 +620,49 @@ def coupon_job(job_id: uuid.UUID, request: Request) -> CouponJobOutput:
         return CouponJobOutput.of(job)
 
 
+def _download_name(name: str | None, suffix: str) -> str | None:
+    """The page's name for a download (ADR-0091), checked; 422 when it is not one."""
+    try:
+        return download_name(name, suffix)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+DownloadName = Annotated[str | None, Query(max_length=120, description="save the file under this name (ADR-0091)")]
+
+
 @app.get(COUPON_JOBS + "/{job_id}/package")
-def coupon_job_package(job_id: uuid.UUID, request: Request) -> FileResponse:
+def coupon_job_package(job_id: uuid.UUID, request: Request, name: DownloadName = None) -> FileResponse:
     """The package of a job that is done, as a zip: the document, the decks, the material, the results and the audit form."""
+    filename = _download_name(name, ".zip")
     jobs = _coupon_jobs(request)
     job = _known_job(jobs, job_id)
     with jobs.lock:
         state, outcome = job.state, job.outcome
     if state != "done":
         raise HTTPException(status_code=409, detail=f"coupon job {job_id} is {state}" + ("" if outcome is None else f": {outcome['message']}"))
-    link = jobs.output_url(job, "package")
+    link = jobs.output_url(job, "package", filename)
     if link is not None:  # the store has it: the browser fetches it there, not through this container (ADR-0050 amendment 2)
         return RedirectResponse(link, status_code=307)
     try:
         archive = jobs.package_archive(job)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return FileResponse(archive, media_type="application/zip", filename=archive.name)
+    return FileResponse(archive, media_type="application/zip", filename=filename or archive.name)
 
 
 @app.get(COUPON_JOBS + "/{job_id}/files/{key}")
-def coupon_job_file(job_id: uuid.UUID, key: str, request: Request) -> Response:
+def coupon_job_file(job_id: uuid.UUID, key: str, request: Request, name: DownloadName = None) -> Response:
     """One file of a job by its key (ADR-0051): `fields`, `explanation`, `checklist` and `preview` as soon as the tool reports them,
     while the job runs; every key the status lists once it is done; `package` is the zip. An unknown key names the keys there are.
-    Once a job is done and an object store holds its files, the answer is a redirect to a short-lived link there (ADR-0050 amendment 2)."""
+    Once a job is done and an object store holds its files, the answer is a redirect to a short-lived link there (ADR-0050 amendment 2).
+    With `name`, the file is saved under that name, which must end in the file's own suffix (ADR-0091)."""
     jobs = _coupon_jobs(request)
     job = _known_job(jobs, job_id)
-    link = jobs.output_url(job, key)
+    stored = job.stored.get(key)
+    if name is not None and stored is not None:
+        _download_name(name, Path(stored).suffix or (".zip" if key == "package" else ""))
+    link = jobs.output_url(job, key, name)
     if link is not None:
         return RedirectResponse(link, status_code=307)
     try:
@@ -655,7 +671,7 @@ def coupon_job_file(job_id: uuid.UUID, key: str, request: Request) -> Response:
         raise HTTPException(status_code=404, detail=f"coupon job {job_id} has no file {key!r}; it has: {exc.args[0]}") from exc
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return FileResponse(path, media_type=content_type(path), filename=path.name)
+    return FileResponse(path, media_type=content_type(path), filename=_download_name(name, path.suffix) or path.name)
 
 
 def _job_json(jobs: CouponJobs, job: Job, key: str, what: str) -> dict:

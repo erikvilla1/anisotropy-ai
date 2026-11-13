@@ -22,27 +22,33 @@ NUMBER = re.compile(r"(?<![\w.\-+])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])"
 PROVIDER_ANTHROPIC = "anthropic"
 MAX_TOKENS = 2000
 FALLBACK_BETA = "server-side-fallback-2026-07-01"  # the "default" fallbacks form routes a declined request by its category
+# How every explanation reads (ADR-0091, docs/copy-style-guide.md): the product's own words, no model, vendor or tool named.
+VOICE = (
+    " Write as the product's own text, short and confident: never mention a language model, AI, a vendor, or a program by name (such as "
+    "Abaqus, CalculiX or PrePoMax), and never internal files, scripts, records or people. Call the second solver the reference solver. "
+    "Use the symbols σ₁, σ₂ and τ₁₂ for the ply stresses."
+)
 SETUP_SYSTEM = (
     "You explain the setup check of a composite coupon test to the engineer who stated it. You are given the check's items, each passed, "
     "warned, failed, missing or pending, with what the tools found. Write short plain sentences, one per item that needs the engineer's "
     "attention and one summary line first. Quote numbers only as they are written in the items, digit for digit; never compute, convert or "
-    "round a number, and never add one. Name the form rows to change. Do not use markdown."
+    "round a number, and never add one. Name the form rows to change. Do not use markdown." + VOICE
 )
 RESULT_SYSTEM = (
     "You explain the result of a finite element solve of a composite coupon to an engineer. You are given a fact sheet of numbers a "
-    "tested engine computed, and sentences a template wrote from it. Write four to eight plain sentences for an engineer: what the coupon "
+    "tested engine computed, and sentences a template wrote from it. Write three to six short sentences for an engineer, the verdict first: what the coupon "
     "carries, where it moves and is stressed most, and by each failure criterion whether the laminate holds at the applied loading, which "
     "ply limits it, where, and the physical reason in the mode's words. Every number you write must appear in the fact sheet exactly as "
     "printed there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio that is not in the "
-    "sheet. Say nothing the sheet does not support. Do not use markdown."
+    "sheet. Say nothing the sheet does not support. Do not use markdown." + VOICE
 )
 LAMINATE_SYSTEM = (
     "You explain the answer to a laminate problem (classical lamination theory) to the engineer or student who stated it. You are given a "
-    "fact sheet of numbers a tested engine computed, with the unit of each kind, and sentences a template wrote from it. Write three to "
-    "six plain sentences: what the stack is, how it deforms under the loads, how stiff it is, and by each failure criterion which ply "
+    "fact sheet of numbers a tested engine computed, with the unit of each kind, and sentences a template wrote from it. Write two to "
+    "five short sentences: what the stack is, how it deforms under the loads, how stiff it is, and by each failure criterion which ply "
     "fails first, in which mode, at what multiple of the loads. Every number you write must appear in the fact sheet exactly as printed "
     "there, digit for digit; never compute, convert, round differently, or add a number, a percentage or a ratio that is not in the "
-    "sheet. Say nothing the sheet does not support. Do not use markdown."
+    "sheet. Say nothing the sheet does not support. Do not use markdown." + VOICE
 )
 PROPOSE_MAX_TOKENS = 8000
 PROPOSE_SYSTEM = (
@@ -55,7 +61,7 @@ PROPOSE_SYSTEM = (
     "copied character for character, that states the value and its unit. For a choice row the value is one of the row's choice values. For "
     "a notation row the value is the notation as written. Propose a condition only when the message asks for its physics, quoting the words "
     "that ask. When a value is ambiguous, propose nothing for it and ask one short question; otherwise the question is null. Never propose a "
-    "row that is not on offer and never state a value the message does not write."
+    "row that is not on offer and never state a value the message does not write." + VOICE
 )
 # The model's answer: a fixed schema, so the API compiles it once (structured outputs, `output_config.format`).
 PROPOSAL_SCHEMA: dict[str, Any] = {

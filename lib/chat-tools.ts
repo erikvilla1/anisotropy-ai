@@ -22,7 +22,7 @@ export const CHAT_TOOLS: readonly ChatTool[] = [
   {
     id: "coupon",
     title: "Coupon test",
-    detail: "a test coupon set up, checked, solved by finite elements with our kernel and CalculiX, and drawn ply by ply",
+    detail: "a test coupon set up, checked, solved by finite elements and verified, drawn ply by ply",
     words: /\b(coupon|open-hole|unnotched|bending|in-plane shear|plate|fea|finite element|calculix)\b/i,
   },
 ];

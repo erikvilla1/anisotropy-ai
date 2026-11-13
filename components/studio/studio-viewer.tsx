@@ -26,7 +26,7 @@ export function StudioViewer({ apiBaseUrl }: { apiBaseUrl: string }) {
         setJob(status);
         if (isActive(status.state)) timer = window.setTimeout(poll, POLL_MS);
       } catch (error) {
-        if (!cancelled) setMessage(error instanceof StudioError ? error.message : "The job could not be read.");
+        if (!cancelled) setMessage(error instanceof StudioError ? error.message : "The results could not be loaded. Try again.");
       }
     };
     poll();
@@ -42,16 +42,16 @@ export function StudioViewer({ apiBaseUrl }: { apiBaseUrl: string }) {
         setFields(await fetchFields(apiBaseUrl, job.job_id));
         setExplanation("explanation" in job.outputs ? await fetchExplanation(apiBaseUrl, job.job_id) : null);
       } catch (error) {
-        setMessage(error instanceof StudioError ? error.message : "The fields could not be read.");
+        setMessage(error instanceof StudioError ? error.message : "The results could not be loaded. Try again.");
       }
     })();
   }, [job, apiBaseUrl]);
-  if (!jobId) return <p className="studio-alert">No job in the address: open this page from the studio's "Open the viewer in a new window" link.</p>;
+  if (!jobId) return <p className="studio-alert">No results to show. Open this page from a run&apos;s &ldquo;Open results in a new window&rdquo; link.</p>;
   return (
     <div className="studio-viewer">
       {message ? <p className="studio-alert" role="alert">{message}</p> : null}
-      {fields ? <ResultsView fields={fields} explanation={explanation} job={job} apiBase={apiBaseUrl} preview={null} /> : <p className="studio-status" role="status">Waiting for the fields of job {jobId.slice(0, 8)}…</p>}
       {job ? <JobProgress job={job} /> : null}
+      {fields ? <ResultsView fields={fields} explanation={explanation} job={job} apiBase={apiBaseUrl} preview={null} /> : <p className="studio-status" role="status">Loading results…</p>}
     </div>
   );
 }

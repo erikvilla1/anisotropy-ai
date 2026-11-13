@@ -28,7 +28,7 @@ MODE_WORDS = {  # the engine's governing modes, each with what it means for an e
     "none": "no stress at all (the ply carries nothing there)",
 }
 AXIS_WORDS = {"x": "across the coupon", "y": "along the coupon", "z": "out of the plane (the deflection w)"}
-# the ply stress components as the fields name them (the team's CAE names), said with their symbols: PrePoMax's S11 is another quantity (ADR-0066)
+# the ply stress components as the fields name them, said with their symbols; a viewer's global-axis S11 is another quantity (ADR-0066)
 STRESS_WORDS = {"S11": "sigma_1 along the fibres", "S22": "sigma_2 across the fibres", "S12": "tau_12 in-plane shear"}
 # an isotropic material is one layer whose axis 1 runs along the coupon (ADR-0075): no fibres to name
 ISOTROPIC_WORDS = {"S11": "sigma_1 along the coupon", "S22": "sigma_2 across it", "S12": "tau_12 in-plane shear"}
@@ -205,7 +205,7 @@ def ply_stress_sentence(facts: dict[str, Any]) -> str:
         return ("The largest stresses, along and across the coupon, are "
                 + ", ".join(f"{ISOTROPIC_WORDS[name]} = {number(facts[f'max_{name}'])} {facts['stress_unit']}{_face(facts[f'max_{name}_face'])} "
                             f"at element {facts[f'max_{name}_element']}" for name in ("S11", "S22", "S12"))
-                + "; these are element centroids, not the nodal values a viewer such as PrePoMax shows.")
+                + "; these are element centroids.")
     found = [(name, pick) for name, pick in EXTREME_WORDS if f"ext_{name}_{pick}" in facts]
     if found:  # on the answer's basis, tension and compression apart (ADR-0085)
         L = facts["length_unit"]
@@ -214,12 +214,12 @@ def ply_stress_sentence(facts: dict[str, Any]) -> str:
                             f"{facts[f'ext_{name}_{pick}_ply']} ({number(facts[f'ext_{name}_{pick}_angle'])} degrees){_face(facts[f'ext_{name}_{pick}_face'])} "
                             f"at element {facts[f'ext_{name}_{pick}_element']} ({number(facts[f'ext_{name}_{pick}_x'])}, {number(facts[f'ext_{name}_{pick}_y'])} {L})"
                             for name, pick in found)
-                + "; these are element centroids in the ply's axes, not the global-axis values a viewer such as PrePoMax shows.")
+                + "; these are element centroids in the ply's axes.")
     return ("The largest ply stresses, each in its own ply's fibre axes, are "
             + ", ".join(f"{STRESS_WORDS[name]} = {number(facts[f'max_{name}'])} {facts['stress_unit']} in ply {facts[f'max_{name}_ply']} "
                         f"({number(facts[f'max_{name}_angle'])} degrees){_face(facts[f'max_{name}_face'])} at element {facts[f'max_{name}_element']}"
                         for name in ("S11", "S22", "S12"))
-            + "; these are element centroids in the ply's axes, not the global-axis values a viewer such as PrePoMax shows.")
+            + "; these are element centroids in the ply's axes.")
 
 
 def method_sentences(facts: dict[str, Any]) -> list[str]:
