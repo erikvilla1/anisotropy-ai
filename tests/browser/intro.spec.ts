@@ -238,11 +238,14 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   expect(placed.square).toEqual([34, 34]);
   expect(placed.squareLast).toBeLessThanOrEqual(0.5);
   expect([placed.border, placed.radius]).toEqual(["1px", "5px"]);
-  // ... and a press scrolls the page to the tour, whose first step then plays.
+  // ... and a press scrolls the page to the section that follows the hero: to the window's top, or its middle if it is shorter.
   await explore.click();
-  const tour = page.locator("#tour");
-  await expect.poll(() => tour.evaluate((stage) => Math.round(stage.getBoundingClientRect().top)), { timeout: 10_000 }).toBe(0);
-  await expect(tour).toHaveAttribute("data-stop", "1", { timeout: 15_000 });
+  const off = () =>
+    page.evaluate(() => {
+      const box = document.getElementById("overview")!.nextElementSibling!.getBoundingClientRect();
+      return Math.round(Math.abs(box.top - Math.max(0, (window.innerHeight - box.height) / 2)));
+    });
+  await expect.poll(off, { timeout: 10_000 }).toBeLessThanOrEqual(1);
 });
 
 test("a header link goes to black before the next page, and Back does not (ADR-0070 amendment 1)", async ({ page }) => {

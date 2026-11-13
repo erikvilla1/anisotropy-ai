@@ -3,12 +3,9 @@ import { join } from "node:path";
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
-import { DemoTour } from "@/components/home/demo-tour";
-import { EngineAnswersProvider } from "@/components/home/engine-answers";
 import { HeroOutro } from "@/components/home/hero-outro";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
-import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
 import { team } from "@/lib/team";
 import "./home.css";
@@ -89,12 +86,9 @@ export default function Home() {
           <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
         </p>
       </section>
-      {/* The tour of the calculator (components/home/demo-tour.tsx): the scroll takes a visitor through one real run, then leaves
-          them at the live calculator. The provider renders no element; it lets the tour show the answer the calculator asked for. */}
-      <EngineAnswersProvider>
-        <DemoTour apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
-        <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
-      </EngineAnswersProvider>
+      {/* The laminate calculator and its tour left the home page on 2026-11-13 (ADR-0094): a feature, not the product. Their
+          components are kept, unmounted (components/home/laminate-hero.tsx, demo-tour.tsx); the full calculator is still at
+          /calculator and in the workspace. */}
       {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 16):
           Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
           close the Mission band as a strip. */}

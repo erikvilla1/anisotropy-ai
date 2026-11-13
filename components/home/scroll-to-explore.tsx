@@ -6,14 +6,18 @@ import { ArrowDown } from "lucide-react";
  * words and then a down arrow in a square outline, as Scale's home page sets its own. It is hidden
  * while the hero's words stand and comes up once they have left (components/home/hero-outro.tsx marks the hero
  * `data-words="gone"`; app/home.css shows the button then). A visitor who asked for reduced motion keeps the words and sees
- * the button from the start. One press scrolls the page to the tour (components/home/demo-tour.tsx), whose first step
- * plays when its stage fills the window; the page's own scrolling is not taken over. */
+ * the button from the start. One press scrolls the page to the section that follows the hero; the page's own scrolling is
+ * not taken over. */
 export function ScrollToExplore() {
   function explore() {
-    const tour = document.getElementById("tour");
-    if (!tour) return;
+    // The section that follows the hero, whatever it is: brought to the window's top, or to its middle if it is shorter
+    // than the window.
+    const next = document.getElementById("overview")?.nextElementSibling;
+    if (!next) return;
+    const box = next.getBoundingClientRect();
+    const top = box.top + window.scrollY - Math.max(0, (window.innerHeight - box.height) / 2);
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    window.scrollTo({ top: Math.round(tour.getBoundingClientRect().top + window.scrollY), behavior: reduced ? "auto" : "smooth" });
+    window.scrollTo({ top: Math.round(top), behavior: reduced ? "auto" : "smooth" });
   }
   return (
     <button type="button" className="home-hero-explore" onClick={explore}>
