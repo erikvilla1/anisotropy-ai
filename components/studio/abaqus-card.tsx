@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Upload as UploadIcon } from "lucide-react";
 import {
-  cancelUploadKey, cardRows, cardText, compareAgain, connectorCommand, connectorUrl, createUploadKey, differences, getExchange, getUpload, headline, KEY_FILE,
-  listUploadKeys, listUploads, megabytes, notComparedWords, percent, provenance, quantityName, removeUpload, sendProblem, sendUpload, sentFileUrl,
+  cancelUploadKey, cardRows, cardText, compareAgain, connectorCommand, connectorUrl, createUploadKey, differences, documentProblem, documentUrl, getExchange, getUpload,
+  headline, KEY_FILE,
+  listUploadKeys, listUploads, megabytes, notComparedWords, percent, provenance, quantityName, removeUpload, sendProblem, sendUpload, sentFileUrl, writeDocument,
   type Comparison, type Exchange, type NewUploadKey, type Refusal, type SendStage, type Upload, type UploadKey,
 } from "@/lib/abaqus-exchange";
 import { fileUrl, type Fields, type JobStatus } from "@/lib/studio-api";
@@ -21,7 +22,7 @@ const when = (iso: string | null): string => {
 };
 const kilobytes = (bytes: number): string => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} kB`);
 
-type Busy = { what: SendStage | "again" | "removing"; fraction: number } | null;
+type Busy = { what: SendStage | "again" | "removing" | "document"; fraction: number } | null;
 type Problem = { words: string; reasons: string[] } | null;
 
 /** The card of the user's own Abaqus on a finished run (ADR-0094 part 7, step 6): the answer first ("Agrees with ours", or in how many
@@ -102,6 +103,15 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
     finally { setBusy(null); }
   }
 
+  /** The comparison as a PDF: written first when it is not kept yet, which the card says, then saved by the browser from its link. */
+  async function print() {
+    if (!upload || busy) return;
+    setProblem(null); setBusy({ what: "document", fraction: 1 });
+    try { await writeDocument(apiBase, upload.id); window.location.assign(documentUrl(apiBase, upload.id)); }
+    catch (error) { setProblem(documentProblem(error)); }
+    finally { setBusy(null); }
+  }
+
   async function remove() {
     if (!upload || busy || !exchange) return;
     setProblem(null); setBusy({ what: "removing", fraction: 1 });
@@ -127,7 +137,7 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
   const busyWords = busy === null ? null
     : busy.what === "sending" ? `Sending your file… ${Math.round(100 * busy.fraction)} %`
       : busy.what === "comparing" ? "Reading your model and comparing it with this run…"
-        : busy.what === "again" ? "Comparing again…" : "Removing the file…";
+        : busy.what === "again" ? "Comparing again…" : busy.what === "document" ? "Writing the PDF…" : "Removing the file…";
   const chooser = (label: string, primary: boolean) => (
     <button type="button" className={primary ? "studio-button" : "studio-text-button"} disabled={busy !== null} onClick={() => input.current?.click()} data-testid={primary ? "abaqus-choose" : "abaqus-send-another"}>
       {primary ? <UploadIcon size={13} aria-hidden="true" /> : null} {label}
@@ -148,6 +158,9 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
           {problem ? <Trouble problem={problem} /> : null}
           <p className="studio-abaqus-actions">
             <button type="button" className="studio-text-button" disabled={busy !== null} onClick={() => void again()} data-testid="abaqus-again">Compare again</button>
+            {comparison && comparison.verdict !== "refused" ? (
+              <button type="button" className="studio-text-button" disabled={busy !== null} onClick={() => void print()} data-testid="abaqus-document"><Download size={12} aria-hidden="true" /> The comparison as a PDF</button>
+            ) : null}
             <a className="studio-text-button" href={sentFileUrl(apiBase, upload.id)} target="_blank" rel="noreferrer" data-testid="abaqus-sent-file"><Download size={12} aria-hidden="true" /> The file you sent</a>
             {chooser("Send another file", false)}
             <button type="button" className="studio-text-button" disabled={busy !== null} onClick={() => void remove()} data-testid="abaqus-remove">Remove</button>

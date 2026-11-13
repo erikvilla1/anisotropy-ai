@@ -34,7 +34,7 @@ the run records' `git_commit` comes from.
 | Python 3.12 | `uv python install` | one managed interpreter for the three environments |
 | Tectonic 0.17.0 | its GitHub release, the static build | the PDF; the same release CI installs |
 | `engine/.venv`, `api/.venv`, `fea/.venv` | `uv sync --locked` | the packages; fea with `--extra mesh` (Gmsh) and its dev group (matplotlib draws the figures) |
-| Tectonic's cache | `docker/warm-tectonic.py` at build | every TeX package and font the coupon document uses: the script takes the public IM7/8552 coupon through `run_coupon.py` to its PDF once and removes the run, so a running container downloads nothing |
+| Tectonic's cache | `docker/warm-tectonic.py` at build | every TeX package and font the coupon document uses: the script takes the public IM7/8552 coupon through `run_coupon.py` to its PDF once and removes the run, and builds the document of a model sent from Abaqus once from a public comparison (`docs/models/upload.py`, `tests/fixtures/abaqus/differs.json`), so a running container downloads nothing |
 
 The API starts as `/app/api/.venv/bin/uvicorn anisotropy_api.main:app --host 0.0.0.0 --port 8080`, as the service user `app`.
 A coupon job runs `uv run --project fea python fea/tools/run_coupon.py` as it does on a laptop (ADR-0050), with `UV_NO_SYNC=1`
@@ -55,6 +55,13 @@ docker run -d --name api --network none -e ANISOTROPY_RUN_RECORDS=off \
   -v "$PWD/docker/check-image.py:/check/check-image.py:ro" anisotropy-solver
 docker exec api /app/api/.venv/bin/python /check/check-image.py --values /check/values.json --summary /tmp/summary.json
 docker rm -f api
+```
+
+The job then builds the document of a model sent from Abaqus from another public comparison, also with the network off:
+
+```bash
+docker run --rm --network none -v "$PWD/tests/fixtures/abaqus:/check/abaqus:ro" anisotropy-solver sh -c \
+  '/app/fea/.venv/bin/python /app/docs/models/upload.py /check/abaqus/another-mesh.json --out /tmp/upload-document && test -s /tmp/upload-document/comparison.pdf'
 ```
 
 `ccx -v` prints the solver's version and exits with code 201, so a check of it needs `|| true`.
