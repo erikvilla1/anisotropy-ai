@@ -4,6 +4,7 @@
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 ("I only need the LaTeX document of the solution using our engine, the physics, everything needed to showcase to engineers or possibly investors that our engine works"; building the part in Abaqus and in our engine as separate chapters; one zip per coupon) | Drafted by: Claude Code
 - Related: `docs/models/coupon.py`, `docs/models/team.py`, `docs/models/rebuild.py`, `docs/models/build.py`, `fea/tests/test_coupon_document.py`, [ADR-0031](ADR-0031-one-generated-document-per-model-comparison.md), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), [ADR-0040](ADR-0040-one-folder-per-problem-named-for-it.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-coupon-document.md` (ADR-0042)
+- Area: fea, docs
 
 ## Context
 

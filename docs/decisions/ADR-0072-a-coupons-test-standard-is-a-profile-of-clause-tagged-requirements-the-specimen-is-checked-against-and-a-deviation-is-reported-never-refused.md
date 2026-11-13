@@ -4,6 +4,7 @@
 - Date: 2026-11-08
 - Decided by: Founder, 2026-11-08 ("what my cofounder wanted was that the user is able to select the type of standard to test based off the standards ... the geometry and the interface will also change based off the type of testing"; asked to choose, the founder picked: ASTM D4018 as a tow calculator with no finite element model, in a later part; ASTM C1869 now, offered for any material with a scope warning, and ASTM D5766 once its copy is in hand; the profiles in the public repository as individual values cited by clause in our own words; the Test row first and a Standard list filtered by the test after it) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/standards/`, `fea/src/anisotropy_fea/spec.py`, `fea/src/anisotropy_fea/intake.py`, `fea/src/anisotropy_fea/checks.py`, `fea/tools/export_form_definition.py`, `fea/tools/migrate_standard.py`, `fea/tests/test_standards.py`, [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0018](ADR-0018-source-rights-classes.md) (amendment 1), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (amendment 7), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0065](ADR-0065-coupon-ply-angles-are-counted-from-the-coupons-length-axis.md), risks R-24 and R-25
+- Area: fea
 
 ## Context
 

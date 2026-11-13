@@ -200,6 +200,9 @@ class Evidence:
     guide: tuple[int, int] | None = None  # the rebuild guide's open items and ASSUMED tags
     team_reports: tuple[str, ...] = ()  # the file names of the team's field reports, for the "How to check" lines
     every_output: bool = False  # the package carries ours-every-output.csv and the 5-verify scripts that compare the team's run with it
+    fpf_basis: str | None = None  # where the first-ply-failure answer is read: "the gauge section" or "the whole model", as the document says
+    build_chapter: int | None = None  # the chapter of the package's document that builds the deck in Abaqus/CAE, which row C4 points to
+    peaks_chapter: int | None = None  # the chapter of the package's document that holds the peaks table, which row C6 points to
 
 
 @dataclass(frozen=True)
@@ -251,7 +254,12 @@ EQUIVALENCE_GROUPS = {
 }
 LISTED_ONLY = ("Part / instance names", "Material names", "Section set / layup names", "Strengths (*Fail Stress)")  # shown, not judged
 NOT_BUILT_BY_TEAM = "The team has not built this coupon, so there is no model of theirs to compare"
-TEAM_BLANK = "left blank, for the team to fill in"  # the Team column of a row whose value the team has not exported
+NO_TEAM_MODEL = "No team model yet"  # the Results sheet's word where a team value would stand
+TEAM_BLANK = "Your value"  # the Team cell of a row whose value the team enters on the form: yellow and open
+# Without a team model the rows that match the team's model with ours cannot apply (ADR-0043 amendment 8): section B, and C5, whose regions are
+# named in a team comparison's manifest. They are N/A and not required, so the verdict can be reached from the rows that remain.
+NEEDS_TEAM_MODEL = ("C5",)
+NOT_APPLICABLE_WITHOUT_TEAM = "No team model yet: there is no model of the team's to set beside ours, so this row does not apply"
 UNIT_WORDS = {"mm-MPa": ("mm and MPa", "mm, MPa and N"), "m-Pa": ("m and Pa", "m, Pa and N")}  # a deck's units; the audit's
 DOF_NAMES = {1: "U1", 2: "U2", 3: "U3", 4: "UR1", 5: "UR2", 6: "UR3"}  # Abaqus/CAE's names for the degrees of freedom
 
@@ -435,8 +443,14 @@ def _our_largest_in_band(quantity: str, ev: Evidence, facts: _Facts) -> str | No
 
 def _stresses(quantities: tuple[str, ...]) -> Callable[[Item, Evidence, _Facts], tuple[str | None, Found]]:
     def scorer(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
-        if ev.equivalence is None:
-            return "Not checked", Found(team=(NOT_BUILT_BY_TEAM,))
+        if ev.equivalence is None:  # no team model: the auditor judges the row from the Abaqus run of our deck (ADR-0043 amendment 8)
+            names = ", ".join(quantities)
+            if ev.every_output:
+                return None, Found(team=(TEAM_BLANK,), ours=(
+                    "Every element and ply: 4-results/ours-every-output.csv",
+                    f"Compared by 5-verify/compare_every_output.py with your Abaqus run of our deck (README.txt, steps 1 to 3): its {names} "
+                    "lines for the gauge and the free length are the result"))
+            return None, Found(team=(TEAM_BLANK,), ours=(f"Our {names} for every ply of every element: 4-results/ours-all-plies.csv",))
         if ev.inner_band is None:
             return "Not checked", Found(difference=("No graded band is set for this coupon",))
         reported = [q for q in quantities if any(p.quantity == q for p in ev.paired)]
@@ -466,7 +480,7 @@ def _stresses(quantities: tuple[str, ...]) -> Callable[[Item, Evidence, _Facts],
                               f"{w.reference_element}, layer {w.layer}")
         missing = [q for q in quantities if q not in reported]
         for q in missing:
-            team.append(f"{q}: not in the reports, {TEAM_BLANK}")
+            team.append(f"{q}: not in the team's reports")
             ours.append(_our_largest_in_band(q, ev, facts) or f"{q}: --")
             difference.append(f"{q}: not compared; the Result waits until the team has verified {q} against our value")
         # a reported quantity outside the tolerance fails the row; a quantity the team has not exported leaves the row to the auditor
@@ -503,8 +517,9 @@ def _displacement(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, 
         x, y = (from_si(float(v), "length", ev.units) for v in mesh.xy[k])
         scale = float(np.max(np.abs(u))) or 1.0
         shown = lambda v: f"{(0.0 if abs(v) <= 1e-9 * scale else v):.4g} {facts.length_unit}"  # noqa: E731  roundoff as 0
+        built = f" (Chapter {ev.build_chapter})" if ev.build_chapter is not None else ""  # the chapter that builds the deck, from the document
         lines = [f"Displacement at {_node_text(mesh, k)}, the {name} probe at ({x:.4g}, {y:.4g}) {facts.length_unit}, on the deck the team "
-                 f"builds (Chapter 5): " + ", ".join(f"U{j + 1} {shown(u[k, j])}" for j in range(components))]
+                 f"builds{built}: " + ", ".join(f"U{j + 1} {shown(u[k, j])}" for j in range(components))]
     else:
         largest = [int(np.argmax(np.abs(u[:, j]))) for j in range(components)]
         lines = ["Largest displacement: " + "; ".join(f"U{j + 1} {u[i, j]:.4g} {facts.length_unit} at {_node_text(mesh, i)}" for j, i in enumerate(largest))]
@@ -554,9 +569,17 @@ def _fpf(item: Item, ev: Evidence, facts: _Facts) -> tuple[str | None, Found]:
     if ev.fpf is None:
         return None, Found(team=(TEAM_BLANK,), ours=("Not computed: the spec names no failure criterion",))
     criterion, factor, ply, angle = ev.fpf
+    name = CRITERION.get(criterion, criterion)
+    if ev.fpf_notes:
+        # one line per criterion: the notes give each criterion's ply, factor and place (and an earlier clamped-edge value beside it), so
+        # the headline names only the earliest criterion and never repeats the line below it
+        where = f"Over {ev.fpf_basis}, " if ev.fpf_basis else ""
+        head = f"{where}{name if where else name[:1].upper() + name[1:]} gives the first ply to fail" + (", the earliest of the criteria" if ev.fpf_others else "")
+        return None, Found(team=(TEAM_BLANK,), ours=(head + "; by criterion:", *ev.fpf_notes))
     others = tuple(f"By {CRITERION.get(c, c)}: ply {p} ({a:g} deg), at {f:.3g} of the applied loading" for c, f, p, a in ev.fpf_others)
-    return None, Found(team=(TEAM_BLANK,), ours=(f"The first ply to fail is ply {ply} ({angle:g} deg) by {CRITERION.get(criterion, criterion)}, at {factor:.3g} of "
-                                                "the applied loading" + (", the earliest of the criteria" if others else ""), *others, *ev.fpf_notes))
+    basis = f"Over {ev.fpf_basis}, the" if ev.fpf_basis else "The"
+    return None, Found(team=(TEAM_BLANK,), ours=(f"{basis} first ply to fail is ply {ply} ({angle:g} deg) by {name}, at {factor:.3g} of "
+                                                "the applied loading" + (", the earliest of the criteria" if ev.fpf_others else ""), *others))
 
 
 def laminate_distance(check: LaminateCheck) -> tuple[float, float]:
@@ -678,13 +701,17 @@ def _auditor_evidence(item: Item, ev: Evidence, facts: _Facts) -> Found:
     if item.id == "C8":
         if not ev.every_output:
             return Found(ours=("This package has no every-output file: its deck does not ask Abaqus for every ply's middle, so the row is N/A",))
-        return Found(team=("left blank, for the team to fill in",),
+        return Found(team=(TEAM_BLANK,),
                      ours=("Every element and ply: 4-results/ours-every-output.csv",
                            "Compared by 5-verify/compare_every_output.py with what 5-verify/abaqus_every_output.py reads from your job's .odb "
                            "(README.txt, How to verify every output): its line for each quantity and zone, and its Verdict, are the result"))
     if item.id == "C6":
+        if ev.equivalence is None:  # no team model: the auditor sets the peaks of the Abaqus run of our deck beside ours
+            where = f" (Chapter {ev.peaks_chapter})" if ev.peaks_chapter is not None else ""  # the chapter, from the document
+            return Found(team=(TEAM_BLANK,), ours=(f"Each ply's largest stresses, by element: the document's peaks table{where} and "
+                                                   "4-results/ours-all-plies.csv",))
         if not ev.paired:
-            return Found(team=(NOT_BUILT_BY_TEAM if ev.equivalence is None else "No field report in the export",))
+            return Found(team=("No field report in the export",))
         team, ours = [], []
         for q in dict.fromkeys(p.quantity for p in ev.paired):
             members = [p for p in ev.paired if p.quantity == q]
@@ -748,10 +775,18 @@ def _facts(evidence: Evidence) -> _Facts:
 
 def score(rubric: Rubric, evidence: Evidence) -> tuple[Scored, ...]:
     """Every item that applies to the package's test, in rubric order: a result where our tools judge, evidence for the auditor. An item
-    our tools would judge but whose team value is not in the export states our value and is the auditor's (result None)."""
+    our tools would judge but whose team value is not in the export states our value and is the auditor's (result None). Without a team
+    model, section B and the rows that need the team's own model are N/A and not required (ADR-0043 amendment 8); C2 and C3 stay open, for
+    the auditor's Abaqus run of our deck."""
     facts = _facts(evidence)
     scored = []
+    no_team = evidence.equivalence is None
     for item in items_for(rubric, evidence.test_code):
+        if no_team and (item.section == "B" or item.id in NEEDS_TEAM_MODEL):
+            kept = _auditor_evidence(item, evidence, facts) if item.id == "B6" else Found()  # our material and its source still say something
+            scored.append(Scored(item.model_copy(update={"required": False}), "N/A",
+                                 Found(kept.team, kept.ours, (*kept.difference, NOT_APPLICABLE_WITHOUT_TEAM))))
+            continue
         if item.method == "auditor":
             scored.append(Scored(item, None, _auditor_evidence(item, evidence, facts)))
             continue
@@ -759,6 +794,18 @@ def score(rubric: Rubric, evidence: Evidence) -> tuple[Scored, ...]:
         result, found = scorer(item, evidence, facts) if scorer else ("Not checked", Found(difference=("No scorer is built for this item yet",)))
         scored.append(Scored(item, result, found))
     return tuple(scored)
+
+
+def left_out_text(rubric: Rubric, scored: tuple[Scored, ...]) -> str:
+    """The rubric's rows that do not apply to this test, in words, so a gap in the numbering (D1, D2, D5) is explained; empty when none."""
+    words = {code: name for code, name in TEST_CODES.values()}
+    present = {s.item.id for s in scored}
+    missing = [item for item in rubric.items if item.id not in present]
+    if not missing:
+        return ""
+    return ("Rows that do not apply to this test are left out, so the numbering has gaps: "
+            + "; ".join(f"{item.id} ({item.check[:1].lower() + item.check[1:]}), for {' and '.join(words.get(c, c) for c in item.applies_to)} only"
+                        for item in missing) + ".")
 
 
 def tolerance_text(item: Item, units: str) -> str:
@@ -873,23 +920,26 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
     except KernelError:
         check = None
     hand_check = any(s.item.id == "D1" for s in scored)  # the gauge centre of an open-hole coupon is at the hole: no laminate theory there
-    top_set = None
+    top_set, reference = None, ()
     try:
         _, top = gripped_groups(ev.our_deck, ev.solution)
         reference = tuple(ev.solution.mesh.node_keys[i] for i in top if ev.solution.mesh.node_keys[i][0] is None)
         top_set = next((name for name, keys in ev.our_deck.nsets.items() if reference and tuple(keys) == reference), None)
     except KernelError:
         pass
-    reaction_check = (f"How to check: in Abaqus on our deck {deck_name}, the reaction force RF2 at the top reference point"
-                      + (f" (set {top_set})" if top_set else "") + " at the end of the step")
+    # the reaction is read where the grip is held: at its reference point when a coupling drives it, summed over its nodes when it is
+    # held directly
+    where = (f"at the top reference point{f' (set {top_set})' if top_set else ''}" if reference else "summed over the top grip's held nodes")
+    reaction_check = f"How to check: our deck {deck_name}, run in Abaqus: the reaction force RF2 {where} at the end of the step"
+    missing_team = NO_TEAM_MODEL.lower() if ev.equivalence is None else "not exported"  # what stands where the team's value would
     if check is not None and not hand_check:
         tables.append(Table("Reaction at the loaded grip (N)", ("Our engine", "Team"),
-                            ((check.kernel_reaction_N, ev.team_reaction if ev.team_reaction is not None else "not exported"),),
+                            ((check.kernel_reaction_N, ev.team_reaction if ev.team_reaction is not None else missing_team),),
                             "Rubric rows C1 and D2. The laminate-theory hand check (row D1) does not apply to this test.", ("0.0", "0.0"),
                             reaction_check + "."))
         glance.append(("Reaction at the loaded grip", f"ours {check.kernel_reaction_N:.6g} N; " + (
             f"team {ev.team_reaction:.6g} N, {_pct(abs(check.kernel_reaction_N - ev.team_reaction) / abs(ev.team_reaction))} apart"
-            if ev.team_reaction is not None else "not in the team's export")))
+            if ev.team_reaction is not None else NO_TEAM_MODEL.lower() if ev.equivalence is None else "not in the team's export")))
     if check is not None and hand_check:
         widths, restraint, excess = end_effect(check)
         strain, stress_distance = laminate_distance(check)
@@ -929,7 +979,7 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
                             f"Strains are dimensionless; gamma_xy is the engineering shear strain. The largest difference is {_pct(strain)} of the largest "
                             f"theory strain (rubric row D1).{applies_note}", (None, "0.000000", "0.000000", percent),
                             f"How to check: laminate theory with any laminate calculator, for the layup and material on the coupon card, at {applied} and "
-                            f"N_x = N_xy = 0. Our engine, in Abaqus on our deck {deck_name}: XY Data from ODB field output, LE11, LE22 and LE12 at the "
+                            f"N_x = N_xy = 0. Our deck {deck_name}, run in Abaqus: XY Data from ODB field output, LE11, LE22 and LE12 at the "
                             f"integration point of element {label}, {where}; LE12 is the engineering shear strain."))
         tables.append(Table(f"Section forces at element {check.gauge.name} (N/{length_unit}): laminate theory against our engine",
                             ("Section force", "Laminate theory", "Our engine", "Difference (% of the largest theory force)"),
@@ -951,15 +1001,15 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
                             ("Ply (1 = bottom)", "Angle (deg)", "S11 theory", "S11 ours", "S22 theory", "S22 ours", "S12 theory", "S12 ours"), tuple(ply_rows),
                             f"The largest difference is {_pct(stress_distance)} of the largest theory value (rubric row D1).",
                             (None, "0", stress, stress, stress, stress, stress, stress),
-                            f"How to check: in Abaqus on our deck {deck_name}, S11, S22 and S12 at element {label}, one section point per ply, in the ply's "
+                            f"How to check: our deck {deck_name}, run in Abaqus: S11, S22 and S12 at element {label}, one section point per ply, in the ply's "
                             "material axes." + (f" The team's own reports hold S11 and S22 at the same element, their element {team_element}, at layers 1 "
                                                 "and 10, to set beside the 'ours' columns." if team_element is not None else "")))
         if ev.team_reaction is not None:
             team = f"team {ev.team_reaction:.6g} N, {_pct(abs(check.kernel_reaction_N - ev.team_reaction) / abs(ev.team_reaction))} apart"
         else:
-            team = "not in the team's export"
+            team = NO_TEAM_MODEL.lower() if ev.equivalence is None else "not in the team's export"
         tables.append(Table("Reaction at the loaded grip (N)", ("Laminate theory", "Our engine", "Team"),
-                            ((check.reaction_N, check.kernel_reaction_N, ev.team_reaction if ev.team_reaction is not None else "not exported"),),
+                            ((check.reaction_N, check.kernel_reaction_N, ev.team_reaction if ev.team_reaction is not None else missing_team),),
                             "Laminate theory is the free-edge laminate under the same pull or load (rubric rows C1 and D2).", ("0.0", "0.0", "0.0"),
                             reaction_check + f"; laminate theory is N_y times the width ({width:g} {length_unit})."))
         glance.append(("Reaction at the loaded grip", f"ours {check.kernel_reaction_N:.6g} N; {team}"))
@@ -967,20 +1017,25 @@ def form_tables(rubric: Rubric, evidence: Evidence, scored: tuple[Scored, ...]) 
                        f"stresses within {_pct(stress_distance)} of the largest laminate-theory ply stress, with free edges; the free length is "
                        f"{widths:.2g} widths{applies_short}"))
 
-    to_send = tuple(f"{s.item.id} ({s.item.check}): {s.item.needs}" for s in scored if s.result in (None, "Not checked") and s.item.needs)
+    # what the team's next export should hold: only when there is a team export to add to (without a team model the rows are filled from
+    # the Abaqus run of our deck, which the README's steps make)
+    to_send = (tuple(f"{s.item.id} ({s.item.check}): {s.item.needs}" for s in scored if s.result in (None, "Not checked") and s.item.needs)
+               if ev.equivalence is not None else ())
     return FormTables(tuple(glance), tuple(tables), values, to_send)
 
 
 def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cover: list[tuple[str, str]], units: str,
                tables: FormTables | None = None, files: list[tuple[str, str]] | tuple = (), record: list[tuple[str, str]] | tuple = ()) -> Path:
-    """The audit form, version 0.3. The cover says what is audited (`cover`: the coupon, its test, the attempt, the package) and what is
+    """The audit form, for the rubric as it stands (its version is on the Record sheet). The cover says what is audited (`cover`: the
+    coupon, its test, the attempt, the package) and what is
     compared (`files`: the values, and the files each side comes from), takes the auditor's name and date, shows the verdict the rule
     gives (a formula that fills itself from the Results), lists the sections with their meaning, and gives the instructions. The
     Rubric sheet has one row per check under a banner per section: our results locked, the auditor's Result, Observation and Cause
-    open, and what our tools found in three columns, the team's values, ours and the difference, one fact per line. With `tables`,
-    a Results sheet of the numbers behind our rows (the headline lines first) and a Compared values sheet of every value compared.
-    The Record sheet, last and hidden, holds how the package was built (`record`: the team deck and its digest, the engine's commit,
-    who built it and when), the rubric version and the digest of our results; it is for our tools, and the auditor never sees it.
+    open, and what our tools found in three columns, the team's values, ours and the difference, one fact per line; a Team cell that
+    says TEAM_BLANK is open too, for the team's value. With `tables`, a Results sheet of the numbers behind our rows (the headline lines
+    first) and a Compared values sheet of every value compared. The Record sheet, last and hidden, holds how the package was built
+    (`record`: the team deck and its digest, the engine's commit, the role that built it and when), the rubric version and the digest of
+    our results; it is for our tools, and it holds no personal name.
     Lists offer the fixed words, results are coloured, and every sheet prints on letter paper. The sheets are protected without a
     password, so a cell is not changed by accident (this is not a security measure)."""
     from openpyxl import Workbook
@@ -1014,15 +1069,17 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
 
     def rule_formula() -> str:
         """verdict_of, as a formula: Fail if a required row fails; Pass with observations if any other row fails or an observation is
-        written; Pass otherwise; blank while a required row has no result other than Not checked."""
+        written; Pass otherwise; blank while a required row has no result. A required row counts as answered only when its Result is
+        exactly Pass, N/A or Fail, so any other text in it ("TBD", "Pased", Not checked) keeps the verdict blank."""
         required, result, observation = rubric_range("Required"), rubric_range("Result"), rubric_range("Observation")
-        missing = f'COUNTIFS({required},"yes",{result},"Not checked")+COUNTIFS({required},"yes",{result},"")'
+        answered = "+".join(f'COUNTIFS({required},"yes",{result},"{word}")' for word in ("Pass", "N/A", "Fail"))
+        missing = f'COUNTIF({required},"yes")-({answered})'
         required_fail = f'COUNTIFS({required},"yes",{result},"Fail")'
         any_fail, observations = f'COUNTIF({result},"Fail")', f'COUNTIF({observation},"?*")'
         return f'=IF({missing}>0,"",IF({required_fail}>0,"Fail",IF(OR({any_fail}>0,{observations}>0),"Pass with observations","Pass")))'
 
     book = Workbook()
-    book.properties.creator = "Anisotropy AI"
+    book.properties.creator = "Anisotropy"
     facts = dict(cover)
     book.properties.title = f"Coupon audit: {facts.get('Package', path.stem)}"
     sheet = book.active
@@ -1045,7 +1102,7 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
         sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
         sheet.row_dimensions[row].height = 13.0 * lines_of(text, cover_widths[1] + cover_widths[2]) + 4
 
-    sheet["A1"] = "Anisotropy AI coupon audit"
+    sheet["A1"] = "Anisotropy coupon audit"
     sheet["A1"].font = title
     subtitle = ", ".join(t for t in (facts.get("Coupon"), facts.get("Test"), f"attempt {facts['Attempt']}" if facts.get("Attempt") else None) if t)
     sheet.cell(2, 1, subtitle).font = subtitle_font
@@ -1077,6 +1134,10 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
         if any(s.item.section == section.id for s in scored):
             pair(row, f"{section.id}. {section.title}", section.meaning or None)
             row += 1
+    left_out = left_out_text(rubric, scored)  # a gap in the numbering is explained, so no row seems to be missing
+    if left_out:
+        paragraph(row, left_out)
+        row += 1
     row += 1
 
     sheet.cell(row, 1, HOW_TO).font = heading
@@ -1087,10 +1148,12 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
                if tables is not None and tables.tables else "Our ply stresses are in the package's 4-results folder.")
     instructions = [
         "On the Rubric sheet each row is one check: what passes, the team's values, ours, and the difference between them, one fact per line. The "
-        "rows our tools judged are filled in and locked. Give a Result in every yellow cell: compare the team's value with ours and pick Pass, Fail, "
-        "N/A or Not checked from the list. Where the Team column says 'left blank', enter the team's value in Observation first.",
+        "rows our tools judged are filled in and locked. Give a Result in every yellow Result cell: compare the team's value with ours and pick Pass, "
+        f"Fail, N/A or Not checked from the list. Where the Team column says '{TEAM_BLANK}', enter the team's value in that yellow cell. "
+        "Observation and Cause are optional: write an Observation only for something to note, and a Cause only for a row that fails.",
         "To pass, every row marked Required must be Pass or N/A; the Verdict above then fills itself. For a row that fails, pick its Cause: engine, "
-        "our input, their model, documentation or tolerance. Write an Observation where you have one.",
+        "our input, their model, documentation or tolerance. An Observation, or a failed row that is not required, makes the verdict Pass with "
+        "observations.",
         numbers,
         "Put the filled-in form back in the folder you received the package in.",
     ]
@@ -1114,7 +1177,7 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
     sheet.append(list(RUBRIC_COLUMNS))
     for cell in sheet[1]:
         cell.font, cell.fill, cell.alignment = bold, header_fill, wrap
-    result_col, observation_col, cause_col = (RUBRIC_COLUMNS.index(name) + 1 for name in ("Result", "Observation", "Cause"))
+    result_col, observation_col, cause_col, team_col = (RUBRIC_COLUMNS.index(name) + 1 for name in ("Result", "Observation", "Cause", "Team"))
     auditor_rows, item_rows = [], []
     r = 2
     for section in rubric.sections:
@@ -1135,7 +1198,9 @@ def write_form(path: Path | str, rubric: Rubric, scored: tuple[Scored, ...], cov
             for col, value in enumerate(values, start=1):
                 sheet.cell(r, col, value).alignment = wrap
             sheet.cell(r, 1).font = bold
-            for col in (observation_col, cause_col) + ((result_col,) if s.result is None else ()):
+            # the auditor's cells: Observation and Cause on every row, Result where the auditor judges, and the Team cell where the team's
+            # value is entered on the form
+            for col in (observation_col, cause_col) + ((result_col,) if s.result is None else ()) + ((team_col,) if s.found.team == (TEAM_BLANK,) else ()):
                 cell = sheet.cell(r, col)
                 cell.fill, cell.protection = open_cell, unlocked
             item_rows.append(r)

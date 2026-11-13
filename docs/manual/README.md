@@ -24,7 +24,7 @@ The manual is generated, so it cannot drift from the repository ([ADR-0008](../d
 | Code listings with line numbers | The engine and `fea` source, at the places marked `<!-- code: name -->` in each theory file |
 | Validation tables | Running the engine on every case in `engine/validation/cases`, and the kernel on every case in `fea/checks/cases` |
 | Verification reports | The newest file in `docs/evaluations` (engine) and in `docs/evaluations/fea` (finite element layer) |
-| Decisions | `docs/decisions/ADR-*.md` |
+| Decisions | `docs/decisions/ADR-*.md` whose `- Area:` line names `engine` or `fea` (ADR-0008 amendment 1) |
 | Risk register | `docs/risks/risk_register.md` |
 | Worked example | Running the engine during the build |
 | Versions, commit, test counts | `engine/pyproject.toml`, `fea/pyproject.toml`, Git and both test runs |

@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder, 2026-10-10 | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/failure.py`, `engine/tests/test_failure_combined.py`, local evaluation note `.local/notes/evaluations/2026-10-03-validation-ply-failure-fixed-loads.md` (ADR-0042), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0014](ADR-0014-explicit-temperature-change.md) (amended)
+- Area: engine
 
 ## Context
 

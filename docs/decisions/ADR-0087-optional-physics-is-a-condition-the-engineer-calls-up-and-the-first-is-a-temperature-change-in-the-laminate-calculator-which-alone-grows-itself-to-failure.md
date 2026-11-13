@@ -4,6 +4,7 @@
 - Date: 2026-11-10
 - Decided by: Founder, 2026-11-10 ("if the user request, 'there is temperature change' on the structure then it gives the option to the user to add temperature change"; the plan of that day, part 5, approved; asked why temperature comes first, then "ok sounds good continue") | Drafted by: Claude Code
 - Related: `lib/conditions.ts`, `lib/laminate-chat.ts` (`readTemperature`, the `temperature` step), `components/workspace/laminate-rail.tsx`, `components/studio/laminate-chat.tsx`, `components/workspace/panels/laminate-fields.tsx` (`TemperatureFields`), `api/src/anisotropy_api/laminate_problems.py`, `engine/src/anisotropy_engine/failure.py` (`first_ply_failure_thermal`), `engine/src/anisotropy_engine/cases.py` (`thermal_only`), `engine/src/anisotropy_engine/units.py`, [ADR-0014](ADR-0014-explicit-temperature-change.md), [ADR-0017](ADR-0017-failure-with-fixed-and-variable-loads.md), [ADR-0060](ADR-0060-the-chat-solves-laminate-problems-through-the-case-solver-with-every-value-in-its-own-unit.md), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md)
+- Area: engine
 
 ## Context
 

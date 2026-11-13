@@ -26,11 +26,14 @@
 # documentation section E is off the rubric for now ("might not be important right now"). Version 0.4, 2026-11-11, at the
 # founder's request ("update the form"): row C8 judges every other output Abaqus shows for a ply of a tension coupon (Tresca, the
 # pressure, the three principal stresses, the strains), from the comparison the package's 5-verify scripts print for the team's
-# engineer, who verifies (ADR-0089 amendment 3). The rubric's words go to the team unchanged, so no item names a decision record.
-# Changing an item or a tolerance raises the version again.
+# engineer, who verifies (ADR-0089 amendment 3). Version 0.5, 2026-11-13, after the audit of the package (ADR-0043 amendment 8): B7 and C1
+# are worded for both kinds of grip, a coupling to a reference point and a direct constraint on a node set, and C7 says where the team's
+# failure indices come from. A draft until the founder confirms it. Without a team model, section B and row C5 are N/A and not required
+# (anisotropy_fea.audit.score), so the verdict can be reached from the Abaqus run of our deck. The rubric's words go to the team unchanged,
+# so no item names a decision record. Changing an item or a tolerance raises the version again.
 
-version = "0.4"
-status = "confirmed"
+version = "0.5"
+status = "draft"
 
 [[section]]
 id = "A"
@@ -134,7 +137,7 @@ required = true
 id = "B7"
 section = "B"
 check = "Grips"
-acceptance = "Each coupling has the same reference point, drives the same nodes and constrains the same degrees of freedom"
+acceptance = "Each grip holds the same nodes in the same degrees of freedom: a coupling has the same reference point, drives the same nodes and constrains the same degrees of freedom; a grip held directly has the same node set and the same held degrees of freedom"
 method = "auto"
 required = true
 source = ["equivalence.deck_equivalence"]
@@ -169,7 +172,7 @@ method = "auto"
 required = false  # the cofounder decides whether it is required; the team does not export it today, so the auditor judges it against our value
 source = ["report.gripped_groups"]
 tolerance = { relative = 0.01 }
-needs = "the reaction force at the loaded grip's reference point"
+needs = "the reaction force at the loaded grip: at its reference point, or summed over its node set when the grip is held directly"
 
 [[item]]
 id = "C2"
@@ -230,7 +233,7 @@ method = "auto"
 required = false  # the cofounder decides whether it is required; the team does not export failure indices today, so the auditor judges it against ours
 source = ["recovery.strength_ratios"]
 tolerance = { relative = 0.01 }
-needs = "Abaqus failure indices (MSTRS, TSAIH or TSAIW) at every section point"
+needs = "Abaqus failure indices (CFAILURE: MSTRS, TSAIH or TSAIW) at every section point, from a field output request the job adds for them"
 
 [[item]]
 id = "C8"

@@ -4,6 +4,7 @@
 - Date: 2026-10-14
 - Decided by: Founder | Drafted by: Claude Code
 - Related: [system overview](../00_system_overview.md) (run records "Planned, next"), [documentation guide](../documentation-guide.md) Document 6 (provenance record), risk R-03 and R-04 in the [risk register](../risks/risk_register.md), ADR-0006 (no job queue yet), ADR-0018 (source rights)
+- Area: api
 
 ## Context
 

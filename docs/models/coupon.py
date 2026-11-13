@@ -74,7 +74,8 @@ from anisotropy_fea.convergence import convergence_study  # noqa: E402
 from anisotropy_fea.every_output import write_ours as write_every_output  # noqa: E402
 from anisotropy_fea.compare import load_record, sha256_of  # noqa: E402
 from anisotropy_fea.femodel import build_model  # noqa: E402
-from anisotropy_fea.fields import field_data  # noqa: E402
+from anisotropy_fea.fields import field_data, gauge_failures  # noqa: E402
+from anisotropy_fea.results import ShellSolution  # noqa: E402
 from anisotropy_fea.kernel import solve_deck  # noqa: E402
 from anisotropy_fea.mesh import KernelError  # noqa: E402
 from anisotropy_fea.model import to_si  # noqa: E402
@@ -84,7 +85,7 @@ from anisotropy_fea.report import (comparison_rows, element_centroids, fpf_place
 from anisotropy_fea.spec import BENDING_KINDS, TEST_CODES, coupon_card, full_angles, load_spec, spec_material, spec_ply_thickness  # noqa: E402
 from anisotropy_fea.units import deck_units_of, from_si, units_words  # noqa: E402
 from anisotropy_fea.calculix_summary import calculix_test_method, extensometer_of  # noqa: E402
-from anisotropy_fea.standards.conformance import conformance  # noqa: E402
+from anisotropy_fea.standards.conformance import LEVEL_WORDS, conformance  # noqa: E402
 from anisotropy_fea.test_quantities import method_inputs  # noqa: E402
 from anisotropy_fea.write_abaqus import write_abaqus  # noqa: E402
 from anisotropy_fea.write_cae_script import CaeScriptError, write_cae_script  # noqa: E402
@@ -126,7 +127,7 @@ def sources(coupon: str, root: Path) -> Sources:
 # --------------------------------------------------------------------------------------------- chapter 1, the problem
 
 def tension_choices(team_files: Path) -> tuple:
-    """The rows the studio's tension screen left to the software (ADR-0090), with their values and reasons, read again from the latest values
+    """The rows the workspace's tension screen left to the software (ADR-0090), with their values and reasons, read again from the latest values
     file filed under team/<date>/: the same function on the same rows, on the day the folder names. () when the latest delivery came another
     way (the full panels, an Excel form) or there is none."""
     import json
@@ -155,7 +156,7 @@ def built_section(built: tuple, units: str) -> str:
         return ""
     lines = [(escape(FIELDS[b.row].label_in(units) if b.row in FIELDS else b.row), escape(f"{b.value}: {b.reason}")) for b in built]
     return "\n\n".join([r"\section{How we built it}\label{sec:built}",
-                          escape("The coupon was set up on the studio's tension screen from its material and its layup. Every other row was "
+                          escape("The coupon was set up on the workspace's tension screen from its material and its layup. Every other row was "
                                  "chosen by the software, as follows; a row the engineer gave is not listed."),
                           documents.kv_table(lines)])
 
@@ -283,10 +284,10 @@ def material_section(spec, units: str, spec_path: Path) -> str:
         rf"record of our material library, {code(lib.material_id)} "
         rf"(dataset {code(lib.dataset_id)}), and the generator writes its values, with their source and page, into the deck header. The source:",
         rf"\begin{{quote}}{escape(team.source_text(lib))}.\end{{quote}}",
-        rf"Rights class {code(lib.rights)}: the values are cited by table and page and the source itself is not reproduced.",
+        rf"Rights class {code(lib.rights)}: the values are cited by page and the source itself is not reproduced.",
         team.table(["Property", "Value", "Source page"], rows, r">{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{3.6cm}Y"),
-        escape("G13 and G23 are not in the library record: our spec states them, with the note the table quotes, and this document gives no "
-               "page for them, so their source is UNVERIFIED here."),
+        escape("G13 and G23 are not in the library record: our spec states them, with the note the table quotes (where the value was given "
+               "or how it was chosen), and the source gives no page for them."),
         escape(team.SYMBOLS),
         rf"What the record does not give: {escape('; '.join(lib.not_provided) or 'nothing listed')}. "
         + escape(f"The ply thickness, {from_si(spec_ply_thickness(spec), 'length', units):g} {documents.UNIT_LABEL[units]['length']}, is "
@@ -320,7 +321,7 @@ def problem_chapter(spec, card: dict[str, str], c, units: str, figures: Path, sp
                                   else f"{ld.region} loaded by {from_si(ld.total, 'force', units):g} {labels['force']} along dof {ld.dof}") for ld in spec.loads)
                if spec.loads else "") + ". The analysis is linear and static.") + r" Figure~\ref{fig:model} shows the model.") if spec.loading is None else "",
         documents.figure("figures/model.png", "The generated model: element sets, the gripped node sets (every node of each tab, named in "
-                         "the legend), the reference points, the probes "
+                         "the legend), " + ("the reference points, " if grips is not None and grips.kind == "coupling" else "") + "the probes "
                          "(where values are read; Chapter 6 says which of them the CalculiX record compares), and the loading at the top grip, "
                          "with its sign.", "fig:model", r"\linewidth",
                          r"0.75\textheight"),
@@ -379,14 +380,16 @@ def engine_chapter(src: Sources, deck, units: str, committed: Path) -> str:
         r"spec and the decks are in the package, in \texttt{2-our-model/}.",
         r"\section{The spec}\label{sec:model}", documents.file_listing(src.spec, caption=f"2-our-model/spec/{src.spec.name}"),
         r"\section{The CalculiX twin}\label{sec:twin}",
-        r"CalculiX reports no reaction at a coupled reference point (its node printout of our coupled decks holds none there), so the model "
-        r"it runs is a twin: the same spec with the grips as direct "
-        r"constraints on the tab nodes. These are the lines that differ:",
-        r"\begin{plainfile}" + "\n" + documents.listing_text("\n".join(diff)) + "\n" + r"\end{plainfile}",
+        *([r"CalculiX reports no reaction at a coupled reference point (its node printout of our coupled decks holds none there), so the model "
+           r"it runs is a twin: the same spec with the grips as direct "
+           r"constraints on the tab nodes. These are the lines that differ:",
+           r"\begin{plainfile}" + "\n" + documents.listing_text("\n".join(diff)) + "\n" + r"\end{plainfile}"] if diff else
+          [rf"The spec's grips already hold the tab nodes directly, so CalculiX runs the same model: its twin spec, {code(src.twin.name)}, "
+           r"has no line that differs from this one, and only its file name tells them apart."]),
         r"\section{The generated model}",
         rf"The deck {code('2-our-model/abaqus/' + committed.name)} (SHA-256 {code(sha256_of(committed)[:16])}\ldots) opens with these header lines. "
-        rf"They state the spec's values in SI units (m, Pa), as the generator holds them, and the library's citations in their source's units "
-        rf"(GPa, MPa); the deck's own lines are in {escape(units)}, as its last header line says.",
+        rf"They state the spec's values in SI units (m, Pa), as the generator holds them, and the library's citations in their source's units; "
+        rf"the deck's own lines are in {escape(units)}, as its last header line says.",
         r"\begin{plainfile}" + "\n" + documents.listing_text("\n".join(comments)) + "\n" + r"\end{plainfile}",
         "Read back by our own deck reader, it holds:",
         documents.kv_table(documents.deck_facts(deck, units)),
@@ -424,9 +427,10 @@ def abaqus_chapter(src: Sources, spec, deck, solution, units: str, committed: Pa
     context = rebuild.Context(facts=model_facts(deck, solution), deck=deck, units=units, kernel_deck=committed, reference_deck=ccx,
                               kernel_sha256=sha256_of(committed), reference_sha256=sha256_of(ccx), solver_name="calculix", spec_path=src.spec,
                               spec_material_lines=material.citation_lines, spec_material_source=f"{material.source}; rights class {material.rights}",
-                              spec_transverse=transverse, record_title=spec.title, report_date=date.today().isoformat(), hole=hole,
+                              spec_transverse=transverse, record_title=spec.title, report_date=manual.build_date(), hole=hole,
                               compared_deck=compared if compared.is_file() else None,
-                              compared_sha256=sha256_of(compared) if compared.is_file() else None)
+                              compared_sha256=sha256_of(compared) if compared.is_file() else None,
+                              verify=verify_commands(src.coupon) if every_layer(spec) else None)
     out = []
     if c is not None:
         out += [rf"The team built this coupon in Abaqus/CAE ({code(c.team_deck_path.name)}). The first section shows that our deck is the same "
@@ -434,17 +438,53 @@ def abaqus_chapter(src: Sources, spec, deck, solution, units: str, committed: Pa
                 r"\section{What the team built}\label{sec:models}", team.models_section(c, figures)]
     else:
         out.append(rf"The team has not built this coupon yet. The steps below build the model of our deck {code('2-our-model/abaqus/' + committed.name)}, "
-                   r"which Abaqus/CAE can also import directly (File, Import, Model; this click path is not checked by us).")
+                   r"which also runs as it is, as a job: " + code(job_command(src.coupon))
+                   + (r" (the package's README.txt, step 1)." if every_layer(spec) else "."))  # the README has its steps only then
     out += [r"\section{Step by step in Abaqus/CAE}\label{sec:rebuild}", rebuild.render(context, helpers)]
     return "\n\n".join(out)
 
 
 # --------------------------------------------------------------------------------------------- chapter 5, our results
 
-def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: dict | None = None) -> tuple[str, dict]:
+def fpf_trend(study: dict | None, criterion: str, gauge: bool) -> float | None:
+    """The first-ply-failure factor's change at the last mesh refinement (Section 6.4), over the gauge section or over the whole mesh, as a
+    fraction; None when the study did not run or does not hold the criterion."""
+    if not study or not study.get("studied"):
+        return None
+    steps = study["changes"]["fpf_gauge" if gauge else "fpf"].get(criterion)
+    return steps[-1] if steps else None
+
+
+CONVERGENCE = "SECTION-OF-THE-STUDY"  # a plain marker in text that is escaped, made a reference to the study's section afterwards
+
+
+def cited(text: str) -> str:
+    """Escaped text with the marker turned into a reference to the mesh convergence study's section."""
+    return escape(text).replace(CONVERGENCE, r"Section~\ref{sec:convergence}")
+
+
+def moved_by(change: float) -> str:
+    return f"{'+' if change >= 0 else '−'}{abs(100 * change):.3g} %"
+
+
+def trend_words(change: float | None, study: dict | None) -> str:
+    """How a first-ply-failure factor behaved as the mesh was refined, in words that cite the study's number (`cited` makes the marker a
+    reference); empty without a study."""
+    if change is None:
+        return ""
+    if abs(change) < study["settled_below"]:
+        return f"it moved by {moved_by(change)} at the last mesh refinement ({CONVERGENCE}), so it has settled"
+    return f"it still moved by {moved_by(change)} at the last mesh refinement ({CONVERGENCE}), so read it as a trend, not a converged number"
+
+
+GRIP_PLACE = "at the edge of a gripped tab"  # report.fpf_place's words for the clamped edge
+
+
+def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: dict | None = None, study: dict | None = None) -> tuple[str, dict]:
     labels = documents.UNIT_LABEL[units]
     documents.plot_deck_module.plot_solution(deck, solution, units, figures / "solution.png", title=f"Our engine's solution, units {units}")
     bending = spec.kind in BENDING_KINDS
+    coupled = spec.grips is not None and spec.grips.kind == "coupling"
     out = [(r"Our engine solved the model of Section~\ref{sec:model} while this document was built. Figure~\ref{fig:solution} shows the mesh "
             r"with its reactions, the deflection, the bending moment and the curvature along the coupon, the transverse shear force and the "
             r"maximum-stress failure index of every element." if bending else
@@ -456,11 +496,11 @@ def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: d
                                                      r"by maximum stress marked x. A signed field is drawn red above zero and blue below; a field of one "
                                                      r"sign runs from white at zero." if bending else
                                                      r"Our engine's solution: the mesh with its deformed outline and the reactions at the "
-                                                     r"reference points, the strains along the coupon ($\varepsilon_y$), across it ($\varepsilon_x$) and in shear "
+                                                     + (r"reference points" if coupled else r"grips") + r", the strains along the coupon ($\varepsilon_y$), across it ($\varepsilon_x$) and in shear "
                                                      r"($\gamma_{xy}$), the axial section force $N_y$, and the maximum-stress failure index $1/R$ with the first ply to fail "
                                                      r"by maximum stress marked x. The field panels show the free length, where the strain is: the gripped tabs move rigidly and carry none. A "
                                                      r"signed field is drawn red above zero and blue below; a field of one sign runs from white at zero."), "fig:solution",
-                            r"\linewidth", r"0.55\textheight")]
+                            r"\linewidth", r"0.8\textheight")]
     summary: dict = {}
     try:
         check = laminate_check(deck, solution)
@@ -496,23 +536,45 @@ def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: d
         else:  # a plate: the factor scales every load and prescribed value together
             applied, unit = 1.0, "of the loading"
         angles = full_angles(spec)
-        rows, found, places, notes, at_grip = [], [], {}, [], False
-        for criterion in criteria:
-            field = strength_ratios(solution, criterion, deck_f12_star(deck))
-            found.append((criterion, field.factor, field.ply, angles[field.ply - 1]))
+        # The answer is read over the gauge section, the elements of its Gauge set that touch no gripped node, since a test coupon is
+        # accepted when it breaks there; a failure that comes earlier at the clamped edge of a grip is reported beside it, never as the
+        # answer (fea/docs/theory.md, Section 7). A coupon without a gauge section is answered over the whole model.
+        wholes = {criterion: strength_ratios(solution, criterion, deck_f12_star(deck)) for criterion in criteria}
+        gauges = gauge_failures(deck, solution, wholes, isinstance(solution, ShellSolution))
+        basis = "the gauge section" if gauges else "the whole model"
+        rows, clamped_rows, found, places, notes, clamped, trends = [], [], [], {}, [], {}, {}
+
+        def table_row(name: str, field) -> tuple[str, str, list[int]]:
             index = solution.mesh.element_keys.index(field.element)
             x, y = (from_si(float(v), "length", units) for v in solution.mesh.xy[solution.mesh.connectivity[index, :4]].mean(axis=0))
-            name = CRITERION.get(criterion, criterion)
-            place, grip, tied = fpf_place(deck, solution, field, units)
-            places[criterion] = (place, tied)
-            at_grip = at_grip or grip
-            notes.append(f"By {name}: element {field.element[1]}, {place}" + (f"; plies {', '.join(map(str, tied))} tie there, and the bottom-most is "
-                                                                               "named" if len(tied) > 1 else ""))
+            place, _, tied = fpf_place(deck, solution, field, units)
             ply_cell = f"{field.ply} ({angles[field.ply - 1]:g}°)" + (f"; {', '.join(map(str, tied))} tie" if len(tied) > 1 else "")
-            rows.append(rf"{escape(name[:1].upper() + name[1:])} & {number(field.factor, 4)} & {number(field.factor * applied, 4)} {escape(unit)} & "
-                        rf"{ply_cell} & {escape(str(field.element[1]))} ({x:.4g}, {y:.4g}), {escape(place)} & {escape(field.governing_mode)} \\")
+            return (rf"{escape(name[:1].upper() + name[1:])} & {number(field.factor, 4)} & {number(field.factor * applied, 4)} {escape(unit)} & "
+                    rf"{ply_cell} & {escape(str(field.element[1]))} ({x:.4g}, {y:.4g}), {escape(place)} & {escape(field.governing_mode)} \\"), place, tied
+
+        for criterion in criteria:
+            whole = wholes[criterion]
+            field = gauges.get(criterion, whole) if gauges else whole
+            name = CRITERION.get(criterion, criterion)
+            row, place, tied = table_row(name, field)
+            rows.append(row)
+            found.append((criterion, field.factor, field.ply, angles[field.ply - 1]))
+            places[criterion] = (place, tied)
+            trends[criterion] = fpf_trend(study, criterion, gauge=bool(gauges))
+            notes.append(f"By {name}, over {basis}: ply {field.ply} ({angles[field.ply - 1]:g} deg) at {field.factor:.3g} of the applied loading, "
+                         f"element {field.element[1]}, {place}"
+                         + (f"; plies {', '.join(map(str, tied))} tie there, and the bottom-most is named" if len(tied) > 1 else ""))
+            if field is not whole and whole.factor < field.factor:
+                row, wplace, _ = table_row(name, whole)
+                clamped_rows.append(row)
+                clamped[criterion] = (whole.factor, whole.ply, angles[whole.ply - 1], wplace, fpf_trend(study, criterion, gauge=False))
+                notes.append(f"By {name}, earlier at the clamped edge, not the answer: ply {whole.ply} ({angles[whole.ply - 1]:g} deg) at "
+                             f"{whole.factor:.3g} of the applied loading, element {whole.element[1]}, {wplace}")
         found.sort(key=lambda f: f[1])  # the earliest first: the cover and row C7 lead with it
         summary["fpf"], summary["fpf_others"], summary["fpf_places"], summary["fpf_notes"] = found[0], tuple(found[1:]), places, tuple(notes)
+        summary["fpf_basis"], summary["fpf_clamped"], summary["fpf_trends"] = basis, clamped, trends
+        moving = [(CRITERION.get(c, c), t) for c, t in trends.items() if t is not None]
+        trend = ("; ".join(f"by {name}, {trend_words(t, study)}" for name, t in moving) + ".") if moving else ""
         out += [r"\needspace{16\baselineskip}" + r"\section{First-ply failure}",  # the section with its table
                 rf"With the strengths {'from our library' if spec.material.library else 'the team gave'} the engine finds the first ply to fail. "
                 r"The analysis is linear, so the factor scales the applied "
@@ -520,14 +582,22 @@ def results_chapter(spec, deck, solution, units: str, figures: Path, calculix: d
                 r"past that point. No other solver has checked first-ply failure: CalculiX prints no failure index. Plies that reach a "
                 r"criterion together tie (in a membrane model plies at the same angle always do, and plies whose stresses differ only in sign "
                 r"can); the table names the bottom-most and lists the others. The mode "
-                r"``interactive'' means the criterion combines the stress components, so no single one governs."
-                + (r" An element at the edge of a gripped tab sits where the rigid tab meets the coupon, where the stress is not expected to "
-                   r"settle as the mesh is refined (UNVERIFIED for this coupon): read its factor as first damage at the grip, not as a converged "
-                   r"number (Chapter~\ref{ch:reading})."
-                   if at_grip else ""),
+                r"``interactive'' means the criterion combines the stress components, so no single one governs. "
+                + (r"The answer is read over the gauge section, the elements between the grips that touch no gripped node, since a test coupon is "
+                   r"accepted when it breaks there. " if gauges else r"The coupon has no gauge section, so the answer is read over the whole model. ")
+                + (cited("Over the gauge section, " + trend) if trend and gauges else cited(trend[:1].upper() + trend[1:]) if trend else ""),
                 documents.long_table(["Criterion", "Factor", "Loading at failure", "Ply (angle)", f"Element (x, y in {escape(labels['length'])}), where", "Mode"],
                                      rows, r">{\raggedright\arraybackslash}p{2.1cm}rr>{\raggedright\arraybackslash}p{2cm}Y>{\raggedright\arraybackslash}p{1.9cm}")]
-    method = test_method_section(spec, deck, solution, units, calculix)
+        if clamped_rows:
+            edge = [(CRITERION.get(c, c), v[4]) for c, v in clamped.items() if v[4] is not None]
+            out += [r"\needspace{10\baselineskip}"
+                    + r"Beside the answer, not as it: a ply at the clamped edge of a gripped tab, where the rigid tab meets the coupon, reaches the "
+                    r"criterion earlier. The stress there grows as the mesh is refined, so its factor is first damage at the grip, not a converged "
+                    r"number" + (cited(": " + "; ".join(f"by {name} it moved by {moved_by(t)} at the last refinement" for name, t in edge)
+                                       + f" ({CONVERGENCE}).") if edge else "."),
+                    documents.long_table(["Criterion", "Factor", "Loading at failure", "Ply (angle)", f"Element (x, y in {escape(labels['length'])}), where", "Mode"],
+                                         clamped_rows, r">{\raggedright\arraybackslash}p{2.1cm}rr>{\raggedright\arraybackslash}p{2cm}Y>{\raggedright\arraybackslash}p{1.9cm}")]
+    method = test_method_section(spec, deck, solution, units, calculix, study)
     if method is not None:
         out.append(method[0])
         summary["test_method"] = method[1]
@@ -549,7 +619,7 @@ def three(value: float) -> str:
     return f"{float(f'{value:.3g}'):g}"
 
 
-def test_method_section(spec, deck, solution, units: str, calculix: dict | None) -> tuple[str, dict] | None:
+def test_method_section(spec, deck, solution, units: str, calculix: dict | None, study: dict | None = None) -> tuple[str, dict] | None:
     """The section on the test standard (ADR-0072): the specimen judged against the standard's clauses, the procedure's clauses left to the
     laboratory, and the quantities the standard reduces a test to, at three significant figures as the standards report them. None for a
     coupon that names no standard and states no strain measurement."""
@@ -567,18 +637,21 @@ def test_method_section(spec, deck, solution, units: str, calculix: dict | None)
         words = judged.words()
         out.append(escape(f"{judged.profile.designation} covers the {judged.profile.title.lower()}. {words[:1].upper()}{words[1:]}. Each requirement carries its clause, in our words: read the clause in your own copy of the standard. A "
                           "deviation is reported and does not stop the run, and the model is never said to conform: the test is the laboratory's."))
-        rows = [rf"{escape(j.requirement.clause)} & {escape(j.requirement.text)} & {escape(j.value)} & {escape(j.limit)} & {escape(VERDICT_WORDS[j.state])} \\"
+        out.append(escape("The Level column says what each row is: a requirement the count above is made of (Req.), a recommendation (Rec.) or "
+                          "a note; a recommendation or a note that is met is not counted."))
+        rows = [rf"{escape(j.requirement.clause)} & {escape(LEVEL_WORDS.get(j.requirement.level, j.requirement.level))} & {escape(j.requirement.text)} & "
+                rf"{escape(j.value)} & {escape(j.limit)} & {escape(VERDICT_WORDS[j.state])} \\"
                 for j in judged.judged if j.state != "lab"]
-        out.append(documents.long_table(["Clause", "Requirement", "This coupon", "The clause asks", "Verdict"], rows,
-                                        r">{\raggedright\arraybackslash}p{1.6cm}Y>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{3.1cm}"
-                                        r">{\raggedright\arraybackslash}p{1.5cm}"))
+        out.append(documents.long_table(["Clause", "Level", "Requirement", "This coupon", "The clause asks", "Verdict"], rows,
+                                        r">{\raggedright\arraybackslash}p{1.5cm}>{\raggedright\arraybackslash}p{0.9cm}Y>{\raggedright\arraybackslash}p{2.4cm}"
+                                        r">{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.5cm}"))
         lab = [j.requirement for j in judged.judged if j.state == "lab"]
         out.append(r"The clauses of the procedure, for the laboratory's report:" + "\n" + r"\begin{itemize}" + "\n"
                    + "\n".join(rf"\item {escape(r.clause)}: {escape(r.text)}" for r in lab) + "\n" + r"\end{itemize}")
     q = []
 
     def row(name: str, value, unit: str, how: str) -> None:
-        q.append(rf"{escape(name)} & {number(value, 3)} & {escape(unit)} & {escape(how)} \\")
+        q.append(rf"{escape(name)} & {number(value, 3)} & {escape(unit)} & {cited(how)} \\")
 
     red = tm["reduction"]
     row(f"{red['area'][:1].upper()}{red['area'][1:]} A", tm["area"], u["area"], f"width {three(tm['width'])} times thickness {three(tm['thickness'])} ({red['area_clause']})")
@@ -602,7 +675,9 @@ def test_method_section(spec, deck, solution, units: str, calculix: dict | None)
         row(f"{name}, {low} to {high} microstrain", c["modulus"], u["modulus"], "; ".join(filter(None, (red["modulus_clause"], red["range"], "a linear model gives the same slope over any range"))))
         if calculix:
             row(f"{name}, CalculiX", calculix["calculix"]["modulus"], u["modulus"],
-                f"its reaction and its displacements at the same two nodes; ours on the twin {three(calculix['ours']['modulus'])}, {calculix['difference']}")
+                f"its reaction and its displacements at the same two nodes; ours on the twin {three(calculix['ours']['modulus'])}, {calculix['difference']}. "
+                "Its reaction is the total it prints over the grip's node set, which its conventions file (Chapter 6) says may under-report on "
+                "shell nodes: whether this difference is the two models' stiffness or that reporting is UNVERIFIED")
         own = lt.get("isotropic", False)
         row("The material's E" if own else "Laminate modulus along the pull", lt["modulus"], u["modulus"],
             "as stated, through the engine's ABD of its one layer" if own else "classical laminate theory, the engine's ABD")
@@ -610,14 +685,18 @@ def test_method_section(spec, deck, solution, units: str, calculix: dict | None)
             row("Poisson's ratio", s["poisson"], "-", f"minus the strain across the width over the strain along it, at mid-length ({red['poisson_clause']})")
             row("The material's nu" if own else "Laminate Poisson's ratio", lt["poisson"], "-", "as stated" if own else "classical laminate theory")
     earliest = tm.get("earliest")
+    change = None
     if earliest:
         first = tm["fpf"][earliest]
         basis = tm["fpf_basis"]
-        row(f"First-ply-failure stress, {'gross' if red['area'] == 'gross area' else 'on the ' + red['area']} ({CRITERION.get(earliest, earliest)})", abs(first["stress"]), u["stress"], f"over {basis}, {first.get('place') or ''}")
+        change = fpf_trend(study, earliest, gauge=basis == "the gauge section")
+        trend = (f"; {trend_words(change, study)}" if change is not None and abs(change) >= study["settled_below"] else "")
+        row(f"First-ply-failure stress, {'gross' if red['area'] == 'gross area' else 'on the ' + red['area']} ({CRITERION.get(earliest, earliest)})", abs(first["stress"]), u["stress"],
+            f"over {basis}, {first.get('place') or ''}{trend}")
         if "net_stress" in first:
-            row("First-ply-failure stress, net", abs(first["net_stress"]), u["stress"], "the same load over the net area")
+            row("First-ply-failure stress, net", abs(first["net_stress"]), u["stress"], "the same load over the net area" + trend)
         if "strain" in first:
-            row("Strain at first-ply failure", abs(first["strain"]) * 1e6, "microstrain", "over the strain measurement")
+            row("Strain at first-ply failure", abs(first["strain"]) * 1e6, "microstrain", "over the strain measurement" + trend)
     out.append(r"The quantities the standard reduces a test to, from our engine's solution at three significant figures (the standards report three):")
     out.append(documents.long_table(["Quantity", "Value", "Unit", "How"], q, r">{\raggedright\arraybackslash}p{4.2cm}rlY"))
     notes = [r"A first-ply-failure stress is the load at which the first ply fails by the criterion, over the area: not the ultimate strength the "
@@ -641,8 +720,10 @@ def settled(values: list[float | None]) -> list[float | None]:
     finite = [abs(v) for v in values if v is not None and np.isfinite(v)]
     scale = max(finite) if finite else 0.0
     return [0.0 if v is not None and np.isfinite(v) and abs(v) < NOISE * scale else v for v in values]
-CLT_NOTE = (r"\textbf{Laminate theory}: the reaction over the width as $N_y$ with $N_x = N_{xy} = 0$ (free edges), the mid-plane strain from the "
-            r"laminate's stiffness, each ply at its middle. ")
+CLT_COLUMN = "Laminate theory at our reaction"  # not the hand check's free-edge laminate under the pull (Section 2.4), which predicts its own reaction
+CLT_NOTE = (r"\textbf{Laminate theory at our reaction}: our engine's reaction over the width as $N_y$ with $N_x = N_{xy} = 0$ (free edges), the "
+            r"mid-plane strain from the laminate's stiffness, each ply at its middle; its reaction row is ours by construction. The hand check of "
+            r"Section~\ref{sec:clt} is laminate theory under the pull itself, so its numbers differ from these by the grips' hold. ")
 
 
 def validation_section(deck, solution, record: dict, rows, c, units: str) -> str:
@@ -710,7 +791,7 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
             table.append(row([rf"Ply {k + 1} ({angle:g}°) {documents.MATH[name]}", escape(labels["stress"]), theory[i], kernel[i], solver[i]],
                              abaqus(i, k + 1) if with_abaqus else DASH))
     hint = (rf"To find a ply's cell in a viewer: in PrePoMax, open the part of ply $k$ (the $k$-th layer of bricks from the bottom) and read "
-            rf"the global component along the pull (S22 for a 0° ply, S11 for a 90° ply; a ±45° ply needs the rotation) at element {escape(element)}; "
+            rf"the global component along the ply's fibres (S22 for a 0° ply, S11 for a 90° ply; a ±45° ply needs the rotation) at element {escape(element)}; "
             r"in Abaqus/CAE, Layer $k$, section point MID, averaging off.")
     out = [r"\section{The validation table}\label{sec:validation}",
            rf"One table, the same quantity in every column, at the places where the solvers are expected to agree: the reaction, and the "
@@ -721,7 +802,7 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
            + (r"\textbf{Abaqus}: the element centroid, section point at the ply's middle, from the fields the team exported; -- for a layer "
               r"the team did not export. " if with_abaqus else "")
            + hint,
-           documents.long_table(["Quantity", "Unit", "Laminate theory", "Anisotropy", escape(solver_name)] + (["Abaqus"] if with_abaqus else []), table,
+           documents.long_table(["Quantity", "Unit", CLT_COLUMN, "Anisotropy", escape(solver_name)] + (["Abaqus"] if with_abaqus else []), table,
                                 r"Ylrrrr" if with_abaqus else r"Ylrrr", r"\footnotesize")]
     if not peaks:
         return "\n\n".join(out)
@@ -730,7 +811,9 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
     at_grip = False
     for peak in peaks:
         k = int(peak["ply"])
-        for i, (name, key) in enumerate((("sigma_1", "s1_max"), ("sigma_2", "s2_max"), ("tau_12", "t12_max_abs"))):
+        # one definition on both sides: each component at its largest magnitude, signed (fields.ply_peaks, frd.frd_ply_peaks' *_max_abs); a
+        # record written before the CalculiX side had that definition shows -- rather than a different quantity in the same row
+        for i, (name, key) in enumerate((("sigma_1", "s1_max_abs"), ("sigma_2", "s2_max_abs"), ("tau_12", "t12_max_abs"))):
             ours = peak[("S11", "S22", "S12")[i]]
             at_grip = at_grip or ours["touches_grip"]
             x, y = ours["xy"]
@@ -745,13 +828,16 @@ def validation_section(deck, solution, record: dict, rows, c, units: str) -> str
             rows_out.append(rf"{k} ({peak['angle']:g}°) & {documents.MATH[name]} & {number(ours['value'], 5)}, {escape(where)} & {viewer} & {DASH} \\")
     title = "Stress concentration at the clamped edge: not a validation value" if at_grip else "Peaks, per ply"
     out += [rf"\section{{{title}}}\label{{sec:peaks}}",
-            rf"Each ply's largest $\sigma_1$, $\sigma_2$ and $|\tau_{{12}}|$ in its own fibre axes over the whole coupon, {escape(labels['stress'])}. "
-            + (r"The peaks sit where the rigid tab meets the coupon, a stress concentration that grows as the mesh is refined, so the solvers are not "
-               r"expected to agree there and the numbers are not compared. " if at_grip else "")
+            rf"Each ply's $\sigma_1$, $\sigma_2$ and $\tau_{{12}}$ in its own fibre axes at their largest magnitude over the whole coupon, with "
+            rf"their sign, {escape(labels['stress'])}: the same definition in every column. "
+            + (r"A peak marked ``touches a grip'' sits where the rigid tab meets the coupon, a stress concentration that grows as the mesh is "
+               r"refined, so the solvers are not expected to agree there and the numbers are not compared. " if at_grip else "")
             + rf"The Anisotropy column is the element centroid. The {escape(solver_name)} column is what a viewer shows: the nodal value, extrapolated from the "
             r"integration points, so a corner node of the tab line reads above the centroid of the same element; its node and position (x, y, z) are "
             r"named so the engineer who opens the \texttt{.frd} in PrePoMax finds it, where S11 is the global $\sigma_{xx}$ across the width and S22 "
-            r"the global $\sigma_{yy}$ along the coupon. Von Mises is not a laminate quantity and is not reported.",
+            r"the global $\sigma_{yy}$ along the coupon. Von Mises is not a laminate quantity and is not reported. The Abaqus column is empty: no "
+            r"Abaqus run of this deck has come back yet, and the team's run is compared by the package's verify scripts (its README.txt), not "
+            r"in this table.",
             documents.long_table(["Ply (angle)", "Comp.", "Anisotropy, centroid", escape(solver_name) + ", corner node", "Abaqus"], rows_out,
                                  r">{\raggedright\arraybackslash}p{1.6cm}l>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}p{3.6cm}r", r"\footnotesize")]
     return "\n\n".join(out)
@@ -772,10 +858,10 @@ def worst_change(changes: list[float | None] | None) -> float | None:
     return max(finite, key=abs) if finite else None
 
 
-def convergence_section(spec, units: str) -> str:
+def convergence_section(spec, units: str, study: dict | None = None) -> str:
     """The mesh convergence study (ADR-0068), computed while the document is built as every number here is: one column per mesh, each
     cell the value and its change from the previous mesh, a last column saying whether the quantity has settled, and the words."""
-    study = convergence_study(spec)
+    study = study if study is not None else convergence_study(spec)
     out = [r"\section{Mesh convergence: what settles as the mesh is refined}\label{sec:convergence}"]
     if not study["studied"]:
         out.append(escape(f"Not studied: {study['reason']}."))
@@ -832,20 +918,28 @@ def convergence_section(spec, units: str) -> str:
                   "the elastic solution is singular, so a value read there grows with every refinement and is a trend, not a validation value.")
     for o in study["left_out"]:
         words += f" The {o['factor']}x mesh ({o['elements']} elements) was left out: past the study's cap of {study['cap']}."
-    out += [escape(words), documents.long_table(header, table, "Y" + "r" * len(meshes) + "l", r"\footnotesize")]
+    # every column wraps (a triple breaks at its slashes), so the table fits the page and its last column, the one the words rest on, is
+    # never pushed past the margin
+    columns = r">{\raggedright\arraybackslash}p{3.3cm}" + r">{\raggedleft\arraybackslash}X" * len(meshes) + r">{\raggedright\arraybackslash}p{1.7cm}"
+    out += [escape(words), documents.long_table(header, table, columns, r"\scriptsize\setlength{\tabcolsep}{3pt}")]
     return "\n\n".join(out)
 
 
 def verification_chapter(src: Sources, deck, solution, record: dict, rows, problems, summaries, units: str, map_drawn: bool, full_tables: bool, c,
-                         figures: Path, coupled_reaction: float | None = None, spec=None) -> str:
+                         figures: Path, coupled_reaction: float | None = None, spec=None, study: dict | None = None) -> str:
     solver = record["solver"]
     twin = next((r.kernel for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
     same = ""
     if coupled_reaction is not None and twin is not None:
         unit = documents.UNIT_LABEL[units]["force"]
-        same = (f" Our engine gives the coupled model of Chapter 5 and the twin the same reaction, {coupled_reaction:.6g} {unit}."
+        model = ("the coupled model of Chapter 5" if spec is not None and spec.grips is not None and spec.grips.kind == "coupling"
+                 else "the model of Chapter 5, whose grips hold the tab nodes directly as the twin's do,")
+        same = (f" Our engine gives {model} and the twin the same reaction, {coupled_reaction:.6g} {unit}."
                 if abs(coupled_reaction - twin) <= 1e-6 * abs(twin) else
-                f" Our engine gives the coupled model of Chapter 5 a reaction of {coupled_reaction:.6g} {unit} and the twin {twin:.6g} {unit}.")
+                f" Our engine gives {model} a reaction of {coupled_reaction:.6g} {unit} and the twin {twin:.6g} {unit}.")
+    same += (" CalculiX's reaction is the total it prints over the grip's node set, which its conventions file, printed below with the "
+             "solver's deck, says may under-report on shell nodes; whether the difference between its reaction and ours is the two models' "
+             "stiffness or that reporting is UNVERIFIED.")
     missing = unrecorded_probes(src, rows, units)
     out = [r"Verification asks whether another solver gives the same answer on the same model. It is not validation: that needs a test of a real "
            r"coupon, and none exists yet for this one.",
@@ -858,7 +952,7 @@ def verification_chapter(src: Sources, deck, solution, record: dict, rows, probl
            + r". Elsewhere Chapter~\ref{ch:results} is our engine's alone." + escape(same) + r" The record and the solver's conventions file are kept with us; this "
            r"chapter and Appendix~\ref{app:record} print them.",
            validation_section(deck, solution, record, rows, c, units),
-           *([convergence_section(spec, units)] if spec is not None else []),
+           *([convergence_section(spec, units, study)] if spec is not None else []),
            r"\section{CalculiX: every group of compared numbers}",
            documents.summary_section(record, rows, problems, summaries, units, METHOD),
            r"To see it yourself in PrePoMax 2.6: File, Import the CalculiX deck from the package (\texttt{2-our-model/calculix/}), run it, then File, "
@@ -936,7 +1030,7 @@ def record_points(rows, probes: dict[str, str] | None = None) -> str:
 
 
 def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units: str, scored, rubric_version: str,
-               probes: dict[str, str] | None = None) -> str:
+               probes: dict[str, str] | None = None, study: dict | None = None) -> str:
     solver = record["solver"]
     reaction = next((r for r in rows if r.group == "rf" and r.name == "Grip-Top" and r.component == 1), None)
     labels = documents.UNIT_LABEL[units]
@@ -945,17 +1039,26 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
         sense = "tension" if summary["reaction"] > 0 else "compression"
         text = rf"\textbf{{Our engine.}} The coupon carries {number(abs(summary['reaction']), 6)} {escape(labels['force'])} in {sense}"
         if "fpf" in summary:
-            criterion, factor, ply, angle = summary["fpf"]  # the earliest of the criteria
+            criterion, factor, ply, angle = summary["fpf"]  # the earliest of the criteria, over the answer's basis
             places = summary.get("fpf_places", {})
+            basis = summary.get("fpf_basis", "the whole model")
+            trends = summary.get("fpf_trends", {})
             where = lambda c2: escape(places[c2][0]) if c2 in places else ""  # noqa: E731
             tied = [p for p in places.get(criterion, ("", []))[1] if p != ply]
             others = "".join(rf" By {escape(CRITERION.get(c2, c2))} it fails at {number(f2, 3)}, {where(c2)}." for c2, f2, _, _ in summary.get("fpf_others", ()))
-            text += (rf"; the first ply to fail is ply {ply} ({angle:g}°" + (f", tied with plies {', '.join(map(str, tied))}" if tied else "")
+            trend = trend_words(trends.get(criterion), study)
+            text += (rf"; over {escape(basis)} the first ply to fail is ply {ply} ({angle:g}°"
+                     + (f", tied with ply{'s' if len(tied) > 1 else ''} {', '.join(map(str, tied))}" if tied else "")
                      + rf") by {escape(CRITERION.get(criterion, criterion))}, at {number(factor, 3)} of the applied loading, {where(criterion)}"
-                     + (", where it is not expected to settle as the mesh is refined (UNVERIFIED for this coupon; Chapter 7)"
-                        if places.get(criterion, ("", []))[0] == "at the edge of a gripped tab" else "")
-                     + (r", so the loading of this model is past first-ply failure" if factor < 1 else "") + "." + others
-                     + r" No other solver has checked first-ply failure")
+                     + (r", so the loading of this model is past first-ply failure" if factor < 1 else "")
+                     + (cited(f"; {trend}") if trend else "") + "." + others)
+            clamped = summary.get("fpf_clamped", {})
+            if clamped:
+                c2, (f2, p2, a2, _, t2) = min(clamped.items(), key=lambda item: item[1][0])
+                text += (rf" Beside the answer, not as it: at the clamped edge of a gripped tab ply {p2} ({a2:g}°) reaches "
+                         rf"{escape(CRITERION.get(c2, c2))} earlier, at {number(f2, 3)}, where the stress grows as the mesh is refined"
+                         + (cited(f" ({moved_by(t2)} at the last refinement, {CONVERGENCE})") if t2 is not None else "") + ".")
+            text += r" No other solver has checked first-ply failure"
         verdict.append(text + ".")
     if summary.get("test_method", {}).get("designation"):
         tm = summary["test_method"]
@@ -980,18 +1083,21 @@ def title_page(card: dict[str, str], record: dict, rows, summary: dict, c, units
     verdict.append(rf"\textbf{{Audit}} (rubric {escape(rubric_version)}, Chapter~\ref{{ch:audit}}): of its {len(scored)} rows for this test, our tools "
                    rf"judge {len(judged)}: {counts['Pass']} pass, {counts['Fail']} fail" + (f" ({escape(', '.join(failed))})" if failed else "")
                    + rf", {counts['N/A']} do not apply and {counts['Not checked']} are not checked yet; the auditor judges the other {len(scored) - len(judged)}.")
-    verdict.append(r"\textbf{Not validated.} " + escape(f"{card['Test data'][:1].upper()}{card['Test data'][1:]}."))
+    test_data = card["Test data"].strip()
+    verdict.append(r"\textbf{Not validated:} " + escape("no test data yet." if test_data.lower() in ("", "none") else f"test data {test_data}."))
     facts = [(escape(label), escape(value)) for label, value in card.items() if label not in ("Coupon", "Test")]
     return "\n".join([
         r"\begin{titlepage}", r"\sffamily",
-        r"{\color{accent}\bfseries\small ANISOTROPY AI \textperiodcentered{} COUPON REPORT}\par", r"\vspace*{1.6cm}",
+        r"{\color{accent}\bfseries\small ANISOTROPY \textperiodcentered{} COUPON REPORT}\par", r"\vspace*{1.6cm}",
         rf"{{\fontsize{{26}}{{32}}\selectfont\bfseries\color{{ink}} {escape(card['Coupon'])}}}\par", r"\vspace{0.3cm}",
         rf"{{\Large\bfseries\color{{ink}} {escape(card['Test'].capitalize())} coupon}}\par", r"\vspace{0.4cm}",
         r"{\large\color{muted} What was solved, the physics our engine uses, how the part is built in our engine and in \mbox{Abaqus/CAE}, "
         r"our results, and how they compare with other solvers}\par", r"\vspace{1cm}",
-        r"{\small\begin{tabular}{@{}p{2.8cm}p{\dimexpr\linewidth-3.3cm}@{}}", *[rf"{label} & {value} \\[0.3ex]" for label, value in facts], r"\end{tabular}}\par",
+        # a label wraps at its spaces and never hyphenates ("Strain measurement", not "measure-ment")
+        r"{\small\begin{tabular}{@{}>{\raggedright\arraybackslash\hyphenpenalty=10000\exhyphenpenalty=10000}p{3.1cm}p{\dimexpr\linewidth-3.6cm}@{}}",
+        *[rf"{label} & {value} \\[0.3ex]" for label, value in facts], r"\end{tabular}}\par",
         r"\vfill", r"\verdict{\raggedright " + " ".join(verdict) + r"}\par", r"\vspace{0.6cm}",  # each its own paragraph: no space inside a line
-        rf"{{\small\raggedright\color{{muted}} Built {date.today().isoformat()} by \texttt{{docs/models/coupon.py}} (anisotropy-fea {fea_version}, commit "
+        rf"{{\small\raggedright\color{{muted}} Built {manual.build_date()} by \texttt{{docs/models/coupon.py}} (anisotropy-fea {fea_version}, commit "
         rf"{escape(documents.git_commit())}). Every number is computed while the document is built, from the coupon's spec (the one file our "
         r"model is generated from, Chapter 3), its decks, our record of the CalculiX run" + (" and, for the team's values, their exports"
                                                                                             if c is not None else "") + r", except in "
@@ -1014,13 +1120,15 @@ def cae_script(spec) -> str | None:
         return None
 
 
-def package_contents(src: Sources, spec, package: Path) -> list[tuple[str, str]]:
+def package_contents(src: Sources, spec, package: Path, readme: bool = False) -> list[tuple[str, str]]:
     """The package of a coupon the team has not built, in the same numbered folders as one with a team model (ADR-0043 amendment 2),
-    without 1-team-model/."""
+    without 1-team-model/. With `readme`, the list as README.txt prints it below its steps, so a row may point to "step 1 above"; the PDF's
+    appendix gives the command itself, and names the README's step only when the README has the steps (`every_layer`)."""
     c = src.coupon
+    run = ("step 1 above" if readme else job_command(c) + " (README.txt, step 1)") if every_layer(spec) else job_command(c)
     out = [("README.txt", "this list, as plain text"), (f"{c}.pdf", "the coupon document"),
            (f"{package.name}-audit.xlsx", "the audit form: our tools' results locked; the auditor's results, observations and verdict to fill in"),
-           (f"2-our-model/abaqus/{c}-abaqus.inp", "our deck, for Abaqus: File, Import, Model (this click path is not checked by us), or run it as a job"),
+           (f"2-our-model/abaqus/{c}-abaqus.inp", "our deck, for Abaqus: run it as a job, " + run),
            *([(f"2-our-model/abaqus/{c}-build.py", "builds the same coupon in Abaqus/CAE as a model you can edit, with its partitions, layup, grips, "
                                                    "seeds and output requests: File, Run Script (this click path is not checked by us), or from a "
                                                    f"terminal, abaqus cae noGUI={c}-build.py -- save={c}.cae")] if cae_script(spec) is not None else []),
@@ -1058,19 +1166,46 @@ def every_layer(spec) -> bool:
     return bool(spec.output.abaqus.every_layer)
 
 
-def verify_lines(c: str, script: bool = False) -> list[str]:
-    """The README's steps for the engineer who verifies the coupon: run, read the ODB, compare, send back."""
-    return ["How to verify every output (Abaqus 2024 or later: its Python 3 runs the scripts)",
-            f"1. Run our deck 2-our-model/abaqus/{c}-abaqus.inp as a job, or build the coupon in Abaqus/CAE by Chapter 4 of the PDF:",
-            "   S4 elements (Reduced integration unticked), the same partitions and seeds, and S and E at the middle of every ply.",
-            *([f"   2-our-model/abaqus/{c}-build.py builds that model for you (File, Run Script), with a job ready to submit."] if script else []),
-            f"2. abaqus python {VERIFY}/abaqus_every_output.py <Job>.odb --out <folder>",
-            "   writes <Job>-every-output.csv (every element and ply) and <Job>-every-output-RF.csv (the reactions).",
-            f"3. abaqus python {VERIFY}/compare_every_output.py 4-results/ours-every-output.csv <folder>/<Job>-every-output.csv "
-            "--out <folder>/<Job>-comparison.csv",
-            "   prints the comparison by zone and the verdict; the CSV holds every value, yours beside ours.",
-            "4. Put back in the folder you received this package in: your job's .inp, the two CSVs of step 2, the printout of step 3 and its CSV,",
-            "   and the audit form filled in. What does not agree is what we fix.", ""]
+RESULTS_FOLDER = "results"  # where the verify steps write the team's files, inside the package folder
+
+
+def job_command(c: str) -> str:
+    """The command that runs our deck as an Abaqus job named for the coupon, from the package folder."""
+    return f"abaqus job={c} input=2-our-model/abaqus/{c}-abaqus.inp interactive"
+
+
+def verify_commands(c: str) -> tuple[str, str, str]:
+    """The three commands of the verify steps, complete, as they are pasted in the package folder: run the job, read its ODB, compare."""
+    return (job_command(c),
+            f"abaqus python {VERIFY}/abaqus_every_output.py {c}.odb --out {RESULTS_FOLDER}",
+            f"abaqus python {VERIFY}/compare_every_output.py 4-results/ours-every-output.csv {RESULTS_FOLDER}/{c}-every-output.csv "
+            f"--out {RESULTS_FOLDER}/{c}-comparison.csv")
+
+
+def verify_lines(c: str, script: bool = False, failure: bool = True) -> list[str]:
+    """The README's steps for the engineer who verifies the coupon: run, read the ODB, compare, send back. Every command is complete, so
+    it is pasted as it is, from the package folder. With `script`, the line naming the script that builds the model in Abaqus/CAE
+    (ADR-0094). With `failure` (the deck's material has *Fail Stress), a paragraph for row C7: the deck as written asks for no failure
+    indices, so it says where to add them before the job and where to read them after it."""
+    run, read, compare = verify_commands(c)
+    abaqus = chapter_number("ch:abaqus")
+    lines = ["How to verify every output (Abaqus 2024 or later: its Python 3 runs the scripts), from this folder:",
+             f"1. {run}",
+             f"   runs our deck as the job {c}. To build the coupon in Abaqus/CAE by Chapter {abaqus} of the PDF instead, name its job {c}:",
+             "   S4 elements (Reduced integration unticked), the same partitions and seeds, and S and E at the middle of every ply.",
+             *([f"   2-our-model/abaqus/{c}-build.py builds that model for you (File, Run Script), with a job ready to submit."] if script else []),
+             f"2. {read}",
+             f"   writes {RESULTS_FOLDER}/{c}-every-output.csv (every element and ply) and {RESULTS_FOLDER}/{c}-every-output-RF.csv (the reactions).",
+             f"3. {compare}",
+             "   prints the comparison by zone and the verdict; the CSV holds every value, yours beside ours.",
+             "4. Put back in the folder you received this package in: your job's .inp, the two CSVs of step 2, the printout of step 3 and its CSV,",
+             "   and the audit form filled in. What does not agree is what we fix."]
+    if failure:
+        lines += ["For the audit's first-ply-failure row (C7): the deck as written asks for no failure indices. Before step 1, add CFAILURE to the",
+                  f"last data line of the *Element Output in 2-our-model/abaqus/{c}-abaqus.inp, so that it reads S, E, SF, SE, CFAILURE; in",
+                  f"Abaqus/CAE, add it to the field output request instead (Chapter {abaqus}, Job and outputs). After the job, read TSAIH and MSTRS",
+                  "in Visualization at the element and ply that row C7 names."]
+    return lines + [""]
 
 
 def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, deck, solution, attempt: str | None) -> None:
@@ -1101,16 +1236,16 @@ def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, d
         (folder / VERIFY).mkdir()
         for name in VERIFY_TOOLS:
             shutil.copy2(paths.FEA / "tools" / name, folder / VERIFY / name)
-    contents = package_contents(src, spec, folder)
+    contents = package_contents(src, spec, folder, readme=True)
     width = max(len(path) for path, _ in contents)
     lines = [team.README_MARK, f"{card['Coupon']}, {card['Test']}: our model and its document", "",
              *[f"{label + ':':14} {value}" for label, value in card.items()], "",
              f"Attempt:       {attempt or 'none named'} (our attempt this package delivers)",
-             f"Built {date.today().isoformat()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {documents.git_commit()}).",
+             f"Built {manual.build_date()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {documents.git_commit()}).",
              f"Start with the PDF. Numbers in the files are in {units_words(deck_units)}"
              + (f"; the PDF states the coupon in {units_words(spec.units)}, as the team did." if deck_units != spec.units else "."),
              "There is no 1-team-model folder: the team has not built this coupon yet.", "",
-             *(verify_lines(src.coupon, script is not None) if every_layer(spec) else []),
+             *(verify_lines(src.coupon, script is not None, failure=any(m.fail_stress for m in deck.materials.values())) if every_layer(spec) else []),
              *[f"{path.ljust(width)}  {what}" for path, what in contents]]
     (folder / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
@@ -1154,7 +1289,8 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         c.package = package
     documents.difference_figure(rows, figures / "differences.png")
     map_drawn = documents.element_map(rows, summaries, element_centroids(rec_solution, deck_units), rec_solution, deck_units, figures / "element-map.png")
-    results, summary = results_chapter(spec, deck, solution, units, figures, calculix_method(src, record, rows, units))
+    study = convergence_study(spec)  # once: the results, the cover and the verification chapter cite the same study (ADR-0068)
+    results, summary = results_chapter(spec, deck, solution, units, figures, calculix_method(src, record, rows, units), study)
     abaqus = abaqus_chapter(src, spec, deck, solution, deck_units, committed, c, figures)
 
     # the audit (ADR-0043): our tools score the rubric; the chapter and the form show the same rows
@@ -1168,16 +1304,17 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
     fpf = summary.get("fpf")  # criterion, factor of the applied loading, ply, angle
     evidence = audit.gather(test_code=TEST_CODES[spec.kind][0], units=deck_units, card=coupon_card(spec), deck=deck, solution=solution, material=lib,
                             guide=audit.guide_counts(abaqus, rebuild.tag), c=c, fpf=fpf, rebuilt=rebuilt, fpf_others=summary.get("fpf_others", ()),
-                            fpf_notes=summary.get("fpf_notes", ()), every_output=every_layer(spec))
+                            fpf_notes=summary.get("fpf_notes", ()), every_output=every_layer(spec), fpf_basis=summary.get("fpf_basis"),
+                            build_chapter=chapter_number("ch:abaqus"), peaks_chapter=chapter_number("ch:verification"))
     scored = score(rubric, evidence)
     audited = audit.audited(card=card, package=package.name, attempt=attempt)
     compared = audit.files_compared(c=c, our_deck=f"2-our-model/abaqus/{c.spec_path.stem if c is not None else src.coupon}-abaqus.inp",
                                     spec=f"2-our-model/spec/{src.spec.name}",
                                     physics=tuple((s.item.check, "the auditor judges" if s.result is None else "not built yet" if s.result == "Not checked"
                                                    else "our tools judge") for s in scored if s.item.section == "D"),
-                                    every_output=every_layer(spec))
+                                    every_output=every_layer(spec), job=job_command(src.coupon))
     build_record = audit.build_record(team_deck=c.team_deck_path.name if c is not None else None, team_sha256=evidence.team_deck_sha256,
-                                      fea_version=fea_version, commit=commit, run_by=operator(), built=date.today().isoformat())
+                                      fea_version=fea_version, commit=commit, run_by=operator(), built=manual.build_date())
     form = f"{package.name}-audit.xlsx"
 
     headline = f"{card['Coupon']}, {card['Test']}"
@@ -1185,25 +1322,25 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         r"\documentclass[11pt,letterpaper,oneside]{report}", documents.PREAMBLE, CHAPTER_STYLE,
         rf"\hypersetup{{pdftitle={{{escape(headline)}: coupon report}}}}",
         r"\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0pt}",
-        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy AI \textperiodcentered{{}} Coupon report \textperiodcentered{{}} {escape(headline)}}}",
+        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy \textperiodcentered{{}} Coupon report \textperiodcentered{{}} {escape(headline)}}}",
         r"\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}",
         r"\fancyfoot[C]{\sffamily\scriptsize\color{muted}Compared with CalculiX at the probes of Chapter 6; not validated against a coupon test.}",
         r"\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\sffamily\scriptsize\color{muted}\thepage}\renewcommand{\headrulewidth}{0pt}}",
         r"\begin{document}",
-        title_page(card, record, rows, summary, c, units, scored, rubric.version, probe_names(src)),
+        title_page(card, record, rows, summary, c, units, scored, rubric.version, probe_names(src), study),
         r"\tableofcontents",
-        r"\chapter{The problem}\label{ch:problem}", problem_chapter(spec, card, c, units, figures, src.spec, tension_choices(src.team_files)),
-        r"\chapter{The physics: how our engine solves it}\label{ch:physics}",
+        chapter("ch:problem"), problem_chapter(spec, card, c, units, figures, src.spec, tension_choices(src.team_files)),
+        chapter("ch:physics"),
         physics_chapter(theory, rec_deck, rec_solution, record, rows, deck_units, TEST_CODES[spec.kind][0], tuple(spec.output.fpf_criteria)),
-        r"\chapter{Building the part in our engine}\label{ch:engine}", engine_chapter(src, deck, deck_units, committed),
-        r"\chapter{Building the part in Abaqus/CAE}\label{ch:abaqus}", abaqus,
-        r"\chapter{Results from our engine}\label{ch:results}", results,
-        r"\chapter{Verification against other solvers}\label{ch:verification}",
+        chapter("ch:engine"), engine_chapter(src, deck, deck_units, committed),
+        chapter("ch:abaqus"), abaqus,
+        chapter("ch:results"), results,
+        chapter("ch:verification"),
         verification_chapter(src, deck, solution, record, rows, problems, summaries, deck_units, map_drawn, full_tables, c, figures,
-                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None, spec),
-        r"\chapter{What this shows and what it does not}\label{ch:reading}", reading_chapter(src, card, c),
-        r"\chapter{The audit}\label{ch:audit}", audit.chapter(rubric, scored, audited + compared, form, deck_units, escape, code, team.table, documents.kv_table,
-                                                                    team_built=c is not None),
+                             from_si(summary["reaction_N"], "force", deck_units) if "reaction_N" in summary else None, spec, study),
+        chapter("ch:reading"), reading_chapter(src, card, c),
+        chapter("ch:audit"), audit.chapter(rubric, scored, audited + compared, form, deck_units, escape, code, team.table, documents.kv_table,
+                                           team_built=c is not None, every_output=every_layer(spec), job=job_command(src.coupon)),
         r"\appendix",
         r"\chapter{How the CalculiX numbers were mapped and judged}\label{sec:method}",
         documents.method_section(record).replace(r"\subsection{", r"\section{"),  # sections of the appendix chapter, numbered A.1, A.2
@@ -1243,17 +1380,26 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
 
 
 VERBATIM = re.compile(r"(\\begin\{(plainfile|enginecode|lstlisting)\}.*?\\end\{\2\})", re.S)
-ENGINE_SECTION = re.compile(r"engine theory, Sections? (\d)(?: and (\d))?")
+ENGINE_PRINTED = ("1", "2", "3", "4", "5")  # the engine theory's sections the physics chapter prints, each labelled sec:engine-<number>
+# the engine theory's section titles, lower case, by number: "laminate stiffness" is "3" (engine/docs/theory.md, "## 3. Laminate stiffness")
+ENGINE_TITLES = {m[2].strip().lower(): m[1] for m in re.finditer(r"^## (\d+)\. ([^(`\n]+)", (ROOT / "engine/docs/theory.md").read_text(encoding="utf-8"), re.M)
+                 if m[1] in ENGINE_PRINTED}
+# a pointer to the engine's theory, by number ("engine theory, Sections 3 and 4", as our own text writes it) or by title ("engine theory,
+# laminate stiffness", as fea/docs/theory.md writes it, since every document numbers the engine's sections its own way)
+ENGINE_SECTION = re.compile(r"engine theory, (?:Sections? (\d)(?: and (\d))?|(" + "|".join(sorted(map(re.escape, ENGINE_TITLES), key=len, reverse=True))
+                            + r")\b)")
 DECISION = re.compile(r"\s*\((?:[^()]*?[;,]\s*)?(?:see )?ADR-\d{4}[^()]*\)|,? as in ADR-\d{4}")
 
 
 def for_the_team(tex: str, theory: bool = True) -> str:
-    """The prose the team reads, outside the verbatim listings of files and code: a pointer to the engine's theory becomes a reference to
-    the section of this document that prints it (or, in a build without the theory, names the engine manual), and the numbers of our
-    decision records go, since the team does not have them."""
+    """The prose the team reads, outside the verbatim listings of files and code: a pointer to the engine's theory, by number or by title,
+    becomes a reference to the section of this document that prints it (or, in a build without the theory, names the engine manual), and
+    the numbers of our decision records go, since the team does not have them."""
     def section(m: re.Match) -> str:
         if not theory:
             return "the engine manual, " + m.group(0).removeprefix("engine theory, ")
+        if m.group(3):
+            return rf"Section~\ref{{sec:engine-{ENGINE_TITLES[m.group(3)]}}}"
         if m.group(2):
             return rf"Sections~\ref{{sec:engine-{m.group(1)}}} and~\ref{{sec:engine-{m.group(2)}}}"
         return rf"Section~\ref{{sec:engine-{m.group(1)}}}"
@@ -1302,12 +1448,29 @@ def accepted_attempt(src: Sources) -> str | None:
         return None
 
 
+BUILT_BY = "Anisotropy engineering"  # who builds a package, as a role: documents name roles and platforms, never a person (ADR-0042)
+
+# The document's chapters in order, by label: the one list the document is built from and the audit form's references are read from
+# (row C4 names the chapter that builds the deck in Abaqus/CAE), so the two cannot drift apart.
+CHAPTERS = (("ch:problem", "The problem"), ("ch:physics", "The physics: how our engine solves it"), ("ch:engine", "Building the part in our engine"),
+            ("ch:abaqus", "Building the part in Abaqus/CAE"), ("ch:results", "Results from our engine"),
+            ("ch:verification", "Verification against other solvers"), ("ch:reading", "What this shows and what it does not"),
+            ("ch:audit", "The audit"))
+
+
+def chapter_number(label: str) -> int:
+    """The chapter's number in the document, from CHAPTERS."""
+    return [name for name, _ in CHAPTERS].index(label) + 1
+
+
+def chapter(label: str) -> str:
+    """The chapter's heading with its label, from CHAPTERS."""
+    return rf"\chapter{{{dict(CHAPTERS)[label]}}}\label{{{label}}}"
+
+
 def operator() -> str:
-    """Who built the package: the git user of this checkout, or "not stated"."""
-    try:
-        return manual.run("git", "config", "user.name") or "not stated"
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "not stated"
+    """Who built the package, as the form's Record sheet states it: a role, not the git user of this checkout, since the form travels."""
+    return BUILT_BY
 
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")  # it prints characters from the library's text, which cp1252 pipes cannot encode

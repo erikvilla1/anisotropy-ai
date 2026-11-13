@@ -4,6 +4,7 @@
 - Date: 2026-10-28
 - Decided by: Founder, 2026-10-28 ("Coupon first, then general edges", the interaction question of the studio plan: the four coupon tests first, then any edge, tab, hole or face held or loaded; the shape of the spec and the studio's picking are the drafter's proposal) | Drafted by: Claude Code
 - Related: [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) (models from a spec), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (the form and its values file), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md) (part 5 of the studio plan), [ADR-0053](ADR-0053-plate-bending-by-an-mitc4-flat-shell-with-five-dofs-on-the-laminates-a-b-d-and-transverse-shear-stiffness.md) (the flat shell, the pressure sign), `fea/src/anisotropy_fea/spec.py`, `fea/src/anisotropy_fea/femodel.py`, `fea/src/anisotropy_fea/intake.py`, `fea/src/anisotropy_fea/checks.py`, `fea/checks/plate-pressure-isotropic/`, `lib/studio-plate.ts`, `components/studio/plate-panel.tsx`
+- Area: fea
 
 ## Context
 

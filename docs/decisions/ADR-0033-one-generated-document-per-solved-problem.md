@@ -4,6 +4,7 @@
 - Date: 2026-10-19
 - Decided by: Founder (pending review) | Drafted by: Claude Code
 - Related: ADR-0007 (validation cases are inputs, expected numbers and a source), ADR-0008 (the manual is generated from sources), ADR-0031 (one generated document per model comparison), `docs/problems/build.py`, `docs/problems/README.md`, `fea/tests/test_problem_documents.py`
+- Area: engine, docs
 
 ## Context
 

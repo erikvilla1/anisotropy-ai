@@ -4,6 +4,7 @@
 - Date: 2026-10-14
 - Decided by: Founder | Drafted by: Claude Code
 - Related: ADR-0025 (database stack), ADR-0003 (no silent defaults), ADR-0001 (engine computes every number), [documentation guide](../documentation-guide.md) Document 6, risks R-03 and R-04
+- Area: api
 
 ## Context
 

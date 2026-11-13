@@ -7,7 +7,7 @@ import importlib.util
 import re
 import subprocess
 import sys
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -42,7 +42,7 @@ NAMED_SPEC = LIBRARY_SPEC.replace('title = "The grips fixture as a spec"', 'titl
     .replace("[geometry]", CARD + "[geometry]", 1)
 CHAPTERS = ("The problem", "The physics: how our engine solves it", "Building the part in our engine", "Building the part in Abaqus/CAE",
             "Results from our engine", "Verification against other solvers", "What this shows and what it does not", "The audit")
-TODAY = date.today().isoformat()
+TODAY = datetime.now(timezone.utc).date().isoformat()  # the package folder carries the UTC day its README, cover and audit form print
 
 
 @pytest.fixture(scope="module")
@@ -235,7 +235,7 @@ def test_a_coupon_the_team_has_not_built_gets_its_chapters_and_one_package(coupo
     assert "Attempt:" in (package / "README.txt").read_text(encoding="utf-8")
     assert not any(name.endswith(".frd") for name in names) and not any(name.startswith("1-team-model") for name in names)  # one layout, no team deck
     readme = (package / "README.txt").read_text(encoding="utf-8").splitlines()
-    assert readme[0] == "Anisotropy AI share folder" and readme[1].startswith(f"{DESIGNATION}, unnotched tension")
+    assert readme[0] == "Anisotropy package" and readme[1].startswith(f"{DESIGNATION}, unnotched tension")
     assert any(line.startswith(f"{package.name}-audit.xlsx ") for line in readme) and "There is no 1-team-model folder" in "\n".join(readme)
     plies = (package / "4-results/ours-all-plies.csv").read_text(encoding="utf-8").splitlines()
     assert plies[0].startswith("team element,our element,x (mm),y (mm),ply (1 = bottom),angle (deg),S11 (MPa)") and plies[1].startswith(",")  # no team numbers
@@ -346,7 +346,7 @@ def test_the_team_comparison_joins_the_document_and_the_package(coupon, tmp_path
     assert result("C2") is None  # the fixture reports no S12: the row waits for the team, as rows C1, C4 and C7 do
     # the fixture deck types the constants to two decimals in MPa, our library carries more digits: a real difference, sized for the auditor
     assert result("B5") == "Fail" and "Largest relative difference" in form["Rubric"].cell(rows["B5"], RUBRIC_COLUMNS.index("Difference") + 1).value
-    assert r"Audit} (rubric 0.4" in tex
+    assert r"Audit} (rubric 0.5" in tex
     assert coupon.build_document(src, pdf=False, theory=False)[1] == package  # a second build replaces the package it wrote
 
 
@@ -448,3 +448,105 @@ def test_the_document_says_how_the_tension_screen_built_the_coupon(coupon, tmp_p
     (team / "2026-11-12" / "values-panels.json").write_text(json.dumps({"form_version": FORM_VERSION, "test": "unnotched tension"}), encoding="utf-8")
     assert coupon.tension_choices(team) == ()  # the latest delivery came from the panels: nothing was chosen for it
     assert coupon.built_section((), "mm-MPa") == ""
+
+# --------------------------------------------------------------------------------------------- the package audit's fixes (2026-11-12)
+
+def test_the_chapters_the_form_points_to_are_the_documents(coupon):
+    """The document is built from one list of chapters, and the audit form's chapter numbers are read from it (row C4)."""
+    assert tuple(title for _, title in coupon.CHAPTERS) == CHAPTERS
+    assert coupon.chapter_number("ch:abaqus") == CHAPTERS.index("Building the part in Abaqus/CAE") + 1 == 4
+    assert coupon.chapter("ch:abaqus") == r"\chapter{Building the part in Abaqus/CAE}\label{ch:abaqus}"
+
+
+def test_the_verify_steps_are_complete_commands(coupon):
+    """Every command of the README's steps pastes as it is: the job is named for the coupon, and nothing is left to invent."""
+    run, read, compare = coupon.verify_commands("IM78552-UNT-L1")
+    assert run == "abaqus job=IM78552-UNT-L1 input=2-our-model/abaqus/IM78552-UNT-L1-abaqus.inp interactive"
+    assert read == "abaqus python 5-verify/abaqus_every_output.py IM78552-UNT-L1.odb --out results"
+    assert compare.endswith("results/IM78552-UNT-L1-every-output.csv --out results/IM78552-UNT-L1-comparison.csv")
+    lines = coupon.verify_lines("IM78552-UNT-L1")
+    text = "\n".join(lines)
+    assert "<Job>" not in text and "<folder>" not in text and "not checked by us" not in text
+    # row C7 has its own paragraph: the deck as written asks for no failure indices, so it says where to add CFAILURE before step 1 (the
+    # command route included, on the deck's *Element Output line) and where to read the indices after the job; step 1 itself runs the deck
+    step1 = lines[lines.index(f"1. {run}"):lines.index(f"2. {read}")]
+    assert not any("CFAILURE" in line for line in step1)
+    c7 = text[text.index("row (C7)"):]
+    assert "asks for no failure indices" in c7 and "Before step 1" in c7 and "S, E, SF, SE, CFAILURE" in c7
+    assert "2-our-model/abaqus/IM78552-UNT-L1-abaqus.inp" in c7 and "TSAIH and MSTRS" in c7 and "Chapter 4, Job and outputs" in c7
+    assert "CFAILURE" not in "\n".join(coupon.verify_lines("IM78552-UNT-L1", failure=False))  # no strengths in the deck: no row C7 to feed
+
+
+def test_a_package_written_before_the_rename_is_still_ours(coupon, tmp_path):
+    """The package's first line names the company as it is now (ADR-0058); a package written before still counts as ours."""
+    team = coupon.team
+    for name, first in (("old", "Anisotropy AI share folder"), ("new", team.README_MARK), ("other", "Someone else's folder")):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "README.txt").write_text(first + "\nmore\n", encoding="utf-8")
+    assert team.README_MARK == "Anisotropy package"
+    assert team.package_is_ours(tmp_path / "old") and team.package_is_ours(tmp_path / "new") and not team.package_is_ours(tmp_path / "other")
+
+
+def test_the_documents_carry_the_companys_name():
+    """No generator writes the company's old name into a document, a form or its metadata (ADR-0058); the old package mark, kept only to
+    recognise an earlier package, is the one exception."""
+    root = Path(__file__).resolve().parents[2]
+    sources = [*root.glob("docs/models/*.py"), root / "docs/models/preamble.tex", root / "docs/manual/build.py", root / "docs/manual/main.tex",
+               *root.glob("docs/problems/*.py"), root / "fea/src/anisotropy_fea/audit.py", root / "fea/src/anisotropy_fea/intake.py"]
+    for path in sources:
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if "OLD_README_MARKS" not in line]
+        assert not [line for line in lines if "Anisotropy AI" in line or "ANISOTROPY AI" in line], path.name
+
+
+def test_every_builder_stamps_the_day_in_utc(coupon):
+    """The same commit is stamped with one date whether CI (UTC) or a laptop builds it."""
+    stamped = coupon.manual.build_date()
+    assert stamped.endswith(" UTC") and datetime.fromisoformat(stamped[:10])
+    # the package folder, and so the audit form's file name, carry the same day as the README, cover and audit form inside them
+    assert coupon.team.package_folder(Path("documents"), "X").name == f"{stamped[:10]}_X"
+    # no builder stamps the local day instead
+    root = Path(__file__).resolve().parents[2]
+    builders = [*root.glob("docs/models/*.py"), *root.glob("docs/problems/*.py"), root / "docs/manual/build.py"]
+    assert not [path.name for path in builders if "date.today()" in path.read_text(encoding="utf-8")]
+
+
+def test_a_math_span_that_crosses_a_line_stops_the_build(coupon):
+    manual = coupon.manual
+    assert manual.broken_math_spans("a $`x`$ b\n$`E_y`$ and $`\n" + r"\nu_{yx}`$") == [2, 3]  # the span theory.md had: \nu read as a line break
+    root = Path(__file__).resolve().parents[2]
+    for theory in ("fea/docs/theory.md", "engine/docs/theory.md"):
+        assert manual.broken_math_spans((root / theory).read_text(encoding="utf-8")) == [], theory
+
+
+def test_the_manual_prints_the_engines_and_the_finite_element_layers_records_only(coupon):
+    """D28: every decision record names its areas; the manual prints those of the engine and the finite element layer."""
+    manual = coupon.manual
+    root = Path(__file__).resolve().parents[2]
+    known = {"engine", "fea", "website", "api", "assistant", "data", "docs", "process", "hosting"}
+    for path in sorted((root / "docs/decisions").glob("ADR-*.md")):
+        found = set(manual.areas(path.read_text(encoding="utf-8")))
+        assert found and found <= known, path.name
+    printed = manual.decisions()
+    assert "A tested Python engine computes every number" in printed and "Coupon ply angles are counted from the coupon" in printed
+    assert "The licensed hero clip" not in printed and "Services menu is a full-width panel" not in printed
+
+
+def test_the_risk_register_prints_one_block_per_risk_in_its_order(coupon):
+    manual = coupon.manual
+    header = ["ID", "Risk", "Likelihood", "Impact", "Mitigation", "Status"]
+    text = manual.risk_blocks(header, [["R-2", "Second", "low", "high", "Do this.", "open"], ["R-1", "First", "high", "low", "Do that.", "closed"]])
+    assert text.index("R-2: Second") < text.index("R-1: First") and "Likelihood: low; impact: high; status: open." in text
+
+
+def test_a_nested_list_stays_nested(coupon):
+    tex = coupon.manual.convert("- one\n  - one a\n  - one b\n- two")
+    assert tex.count(r"\begin{itemize}") == 2 and tex.index(r"\item one a") > tex.index(r"\item one") and "- one a" not in tex
+
+
+def test_a_source_formula_keeps_its_operators(coupon):
+    """The validation table escapes a case's source, and inline() itself reads a star inside a word as a product: 0.27*10.3/147 is a
+    formula, not emphasis, for every caller (the problem documents' cover and problem section among them)."""
+    assert coupon.manual.escape("nu21 = 0.27*10.3/147") == "nu21 = 0.27*10.3/147"
+    assert coupon.manual.inline("nu21 = 0.27*10.3/147*2") == "nu21 = 0.27*10.3/147*2"  # inline() made '0.27\emph{10.3/147}2' of it
+    assert coupon.manual.inline("a *stated* choice") == r"a \emph{stated} choice"  # emphasis outside a word stays
+

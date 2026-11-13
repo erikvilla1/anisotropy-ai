@@ -39,24 +39,34 @@ def fill(cell, colour: str) -> None:
     cell.fill = PatternFill("solid", fgColor=colour)
 
 
+PICK_ERROR = "Pick a value from the list."  # what Excel says when a list cell is typed with anything else
+
+
 def listing(sheet, words: Sequence[str] | str, cells: Sequence[str]) -> None:
-    """A list to pick from: the fixed words, or a range reference such as "'Library materials'!$A$2:$A$21"."""
+    """A list to pick from: the fixed words, or a range reference such as "'Library materials'!$A$2:$A$21". Excel refuses any other text
+    (the error alert is on and stops), so a typo cannot pass for one of the words."""
     formula = words if isinstance(words, str) else '"' + ",".join(words) + '"'
-    validation = DataValidation(type="list", formula1=formula, allow_blank=True)
+    validation = DataValidation(type="list", formula1=formula, allow_blank=True, showErrorMessage=True, errorStyle="stop",
+                                errorTitle="Not on the list", error=PICK_ERROR)
     sheet.add_data_validation(validation)
     for cell in cells:
         validation.add(cell)
 
 
-def number_rule(sheet, cells: Sequence[str], whole: bool = False, at_least: float | None = None, above: float | None = None) -> None:
-    """A hint from Excel that a cell takes a number (whole or decimal), optionally bounded; the reader does the real refusal."""
+def number_rule(sheet, cells: Sequence[str], whole: bool = False, at_least: float | None = None, above: float | None = None,
+                label: str | None = None) -> None:
+    """Excel's check that a cell takes a number (whole or decimal), bounded by the row's own bounds when it has them; anything else is
+    refused with a message that names the row (`label`). The reader still does the real refusal."""
     kind = "whole" if whole else "decimal"
+    noun = "a whole number" if whole else "a number"
     if above is not None:
-        validation = DataValidation(type=kind, operator="greaterThan", formula1=str(above), allow_blank=True)
+        operator, bound, words = "greaterThan", str(above), f"{noun} above {above:g}"
     elif at_least is not None:
-        validation = DataValidation(type=kind, operator="greaterThanOrEqual", formula1=str(at_least), allow_blank=True)
-    else:
-        validation = DataValidation(type=kind, operator="greaterThan", formula1="-1E+300", allow_blank=True)
+        operator, bound, words = "greaterThanOrEqual", str(at_least), f"{noun} of at least {at_least:g}"
+    else:  # a row without bounds, such as a signed value: any number
+        operator, bound, words = "greaterThan", "-1E+300", noun
+    validation = DataValidation(type=kind, operator=operator, formula1=bound, allow_blank=True, showErrorMessage=True, errorStyle="stop",
+                                errorTitle="Not a valid number", error=f"{label}: {words}." if label else f"Enter {words}.")
     sheet.add_data_validation(validation)
     for cell in cells:
         validation.add(cell)

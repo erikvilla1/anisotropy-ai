@@ -4,6 +4,7 @@
 - Date: 2026-10-10
 - Decided by: Founder, 2026-10-10 | Drafted by: Claude Code
 - Related: `lib/source-rights.ts`, `tests/source-rights.test.ts`, [evaluation](../evaluations/website/2026-10-10-source-rights.md), [ADR-0007](ADR-0007-validation-cases-store-numbers-only.md), [ADR-0010](ADR-0010-public-citations-local-page-evidence.md), risks R-05, R-06 and R-14
+- Area: data
 
 ## Context
 

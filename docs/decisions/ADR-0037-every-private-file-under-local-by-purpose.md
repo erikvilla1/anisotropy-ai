@@ -4,6 +4,7 @@
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (by purpose; delete the old logs, merged-PR drafts and the pre-cleanup copy; keep the purge backups; fold `References/` and `output/` in) | Drafted by: Claude Code
 - Related: `.local/README.md`, [ADR-0018](ADR-0018-source-rights-classes.md), [ADR-0036](ADR-0036-one-folder-per-fea-test.md), the `workspace-layout` skill, [evaluation](../evaluations/2026-10-21-local-by-purpose.md)
+- Area: process
 
 ## Context
 

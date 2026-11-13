@@ -17,6 +17,7 @@ from .profile import Preset, Profile, Requirement, Subject
 
 STATE_OF_MISS = {"scope": "deviation", "mandatory": "deviation", "recommended": "advisory", "note": "note"}
 JUDGED_LEVELS = ("scope", "mandatory")  # the requirements a deviation is counted against
+LEVEL_WORDS = {"scope": "Req.", "mandatory": "Req.", "recommended": "Rec.", "note": "Note"}  # a row's level as a table prints it: Req. rows make the count
 
 
 @dataclass(frozen=True)

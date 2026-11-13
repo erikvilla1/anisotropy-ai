@@ -4,6 +4,7 @@
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: pull request #2, `engine/src/anisotropy_engine/engineering.py`
+- Area: engine
 
 ## Context
 

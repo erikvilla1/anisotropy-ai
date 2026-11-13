@@ -4,6 +4,7 @@
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: `engine/validation/README.md`, pull request #2
+- Area: engine
 
 ## Context
 

@@ -187,7 +187,7 @@ def title_block(result: dict, upload: str | None, run: str | None, compared: str
     if any(how):
         facts.append(("Compared", text(", ".join(h for h in how if h))))
     return "\n".join([
-        r"\begin{center}", r"{\sffamily\color{accent}\bfseries\small ANISOTROPY AI \textperiodcentered{} YOUR ABAQUS MODEL AND OURS}\par\medskip",
+        r"\begin{center}", r"{\sffamily\color{accent}\bfseries\small ANISOTROPY \textperiodcentered{} YOUR ABAQUS MODEL AND OURS}\par\medskip",
         rf"{{\sffamily\fontsize{{20}}{{26}}\selectfont\bfseries\color{{ink}} {text(b.get('job') or 'The model sent')}}}\par\smallskip",
         rf"{{\sffamily\large\color{{ink}} {TITLE}}}\par\smallskip",
         rf"{{\sffamily\color{{muted}} Beside our run of {text(ours['coupon'])}: the two models item by item, the pull force, and the results zone by zone}}",
@@ -335,7 +335,7 @@ def document(result: dict, upload: str | None = None, run: str | None = None, co
         r"\documentclass[11pt,letterpaper]{article}", PREAMBLE,
         rf"\hypersetup{{pdftitle={{{TITLE}: {head}}}}}",
         r"\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0pt}",
-        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy AI \textperiodcentered{{}} {TITLE} \textperiodcentered{{}} {head}}}",
+        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy \textperiodcentered{{}} {TITLE} \textperiodcentered{{}} {head}}}",
         r"\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}",
         r"\fancyfoot[C]{\sffamily\scriptsize\color{muted}One finite element model beside another; not validated against a coupon test.}",
         r"\begin{document}",

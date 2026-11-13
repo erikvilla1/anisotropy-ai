@@ -4,6 +4,7 @@
 - Date: 2026-11-13
 - Decided by: Founder, 2026-11-12 ("accept", on the audit's recommendation "State all rights reserved now, with a NOTICE that third-party values keep their owners' terms; revisit a source-available licence later") | Drafted by: Claude Code
 - Related: [ADR-0018](ADR-0018-source-rights-classes.md) (source rights classes), [ADR-0010](ADR-0010-public-citations-local-page-evidence.md), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md), [ADR-0081](ADR-0081-the-site-shows-uc-san-diegos-the-basement-mark-for-the-launchpad-cohort-the-team-is-part-of.md) (The Basement mark), `LICENSE`, `NOTICE`, `package.json`, `lib/source-rights.ts`, `README.md`
+- Area: process, data
 
 ## Context
 

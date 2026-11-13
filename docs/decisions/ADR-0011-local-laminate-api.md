@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Codex
 - Related: [API walkthrough](../../api/README.md), [evaluation](../evaluations/api/2026-10-03-api-chunk-1.md), [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0006](ADR-0006-no-job-queue-yet.md)
+- Area: api
 
 ## Context
 

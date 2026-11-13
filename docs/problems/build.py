@@ -25,7 +25,6 @@ import math
 import re
 import subprocess
 import sys
-from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -235,6 +234,30 @@ class Units:
 
 # --------------------------------------------------------------------------------------------- sections
 
+CRITERION_NAMES = {"max_stress": "maximum stress", "max_strain": "maximum strain", "tsai_hill": "Tsai-Hill", "tsai_wu": "Tsai-Wu"}
+
+
+def plural(count: int, word: str, words: str | None = None) -> str:
+    """'1 number', '2 numbers'."""
+    return f"{count} {word if count == 1 else (words or word + 's')}"
+
+
+def result_label(key: str) -> str:
+    """A compared result named for a reader, with its key after it: 'the first-ply-failure strength ratio by maximum stress
+    (fpf_ratio_max_stress)'; a key without a reader's name is printed as it is."""
+    base = key.split("[")[0]
+    if base.startswith("fpf_ratio_"):
+        criterion = base[len("fpf_ratio_"):]
+        return escape(f"the first-ply-failure strength ratio by {CRITERION_NAMES.get(criterion, criterion)}") + f" ({code(key)})"
+    return code(key)
+
+
+def units_words(units: Units) -> str:
+    """What the case's unit system means for the numbers a reader sees: stated in its units, converted to SI inside the engine."""
+    return escape(f"{units.system}: the case's numbers are stated in {units.label('modulus')} and {units.label('length')} (forces per width in "
+                  f"{units.label('N')}), and the engine converts them to SI base units on entry")
+
+
 def title_page(case: dict, case_path: Path, comparisons, problems: list[str]) -> str:
     agreeing = sum(c.agrees for c in comparisons)
     disagreeing = len(comparisons) - agreeing
@@ -243,25 +266,25 @@ def title_page(case: dict, case_path: Path, comparisons, problems: list[str]) ->
     elif disagreeing:
         worst = max((c for c in comparisons if not c.agrees), key=lambda c: abs(c.engine - c.expected) / c.allowed)
         verdict = (rf"\textbf{{The engine does not reproduce this source.}} {disagreeing} of {len(comparisons)} numbers lie outside the case's "
-                   rf"tolerance; the largest difference is {code(worst.key)}: source {number(worst.expected)}, engine {number(worst.engine)}.")
+                   rf"tolerance; the largest difference is {result_label(worst.key)}: source {number(worst.expected)}, engine {number(worst.engine)}.")
     else:
         closest = max(comparisons, key=lambda c: abs(c.engine - c.expected) / c.allowed if c.allowed else 0.0)
         ratio = abs(closest.engine - closest.expected) / closest.allowed if closest.allowed else 0.0
         verdict = (rf"\textbf{{The engine reproduces every number the source states.}} {len(comparisons)} of {len(comparisons)} compared values agree "
-                   rf"within the case's tolerance of {number(100 * case['expected']['tolerance'], 3)}\%; the one closest to the limit is {code(closest.key)} "
+                   rf"within the case's tolerance of {number(100 * case['expected']['tolerance'], 3)}\%; the one closest to the limit is {result_label(closest.key)} "
                    rf"at {number(ratio, 3)} of what is allowed (source {number(closest.expected)}, engine {number(closest.engine)}).")
     facts = [
         ("Case", code(rel(case_path))),
         ("Source of the answers", inline(case["source"].rstrip("."))),
-        ("Units of the case", escape(case["units"])),
+        ("Units of the case", units_words(Units(case["units"]))),
         ("Engine", escape(f"anisotropy-engine {engine_version()}: classical laminate theory, every function listed in this document")),
-        ("Compared", escape(f"{len(comparisons)} numbers, tolerance {100 * case['expected']['tolerance']:g} % of each source value")),
+        ("Compared", escape(plural(len(comparisons), "number")) + rf", tolerance {number(100 * case['expected']['tolerance'], 3)}\% of each source value"),
         ("Source commit", code(git_commit())),
-        ("Built", escape(date.today().isoformat())),
+        ("Built", escape(manual.build_date())),
     ]
     return "\n".join([
         r"\hypersetup{pageanchor=false}", r"\begin{titlepage}", r"\sffamily",
-        r"{\color{accent}\bfseries\small ANISOTROPY AI \textperiodcentered{} SOLVED PROBLEM}\par", r"\vspace*{2.5cm}",
+        r"{\color{accent}\bfseries\small ANISOTROPY \textperiodcentered{} SOLVED PROBLEM}\par", r"\vspace*{2.5cm}",
         rf"{{\fontsize{{22}}{{28}}\selectfont\bfseries\color{{ink}} {inline(case['title'])}}}\par", r"\vspace{0.6cm}",
         r"{\large\color{muted} The problem as the case states it, every step the engine takes with its equation and code, "
         r"the source's answers next to the engine's, and the reading}\par",
@@ -282,7 +305,7 @@ def about_section(reading_exists: bool) -> str:
         (r"\ref{sec:steps}", "How did the engine solve it, step by step?", r"\texttt{engine/docs/theory.md}, the \texttt{engine} source, and the numbers computed on the way"),
         (r"\ref{sec:comparison}", "Every compared number", "the case file (source) and the engine"),
         (r"\ref{sec:method}", "How were the inputs read and the numbers judged?", r"\texttt{anisotropy\_engine/cases.py}, listed"),
-        (r"\ref{sec:reading}", "What do we make of it, and what remains open?", "a reading note written by a person" if reading_exists else "no reading has been written yet"),
+        *([(r"\ref{sec:reading}", "What do we make of it, and what remains open?", "a reading note written by a person")] if reading_exists else []),
     ]
     body = "\n".join(rf"{a} & {b} & {c} \\" for a, b, c in rows)
     return "\n".join([
@@ -320,7 +343,8 @@ def summary_section(case: dict, comparisons, problems: list[str], units: Units) 
         out.append(long_table(["Result", "Unit", "Source", "Engine", "Difference", "Of allowed", "Agrees"], comparison_rows(failing, units),
                               r">{\raggedright\arraybackslash}p{3.6cm}lrrrrY", r"\scriptsize\setlength{\tabcolsep}{3pt}"))
     else:
-        out.append(rf"All {len(comparisons)} compared values agree. The full table is Section~\ref{{sec:comparison}}.")
+        out.append(("The one compared value agrees." if len(comparisons) == 1 else rf"All {len(comparisons)} compared values agree.")
+                   + r" The full table is Section~\ref{sec:comparison}.")
     return "\n\n".join(out)
 
 
@@ -360,10 +384,11 @@ def material_rows(name: str, lamina, units: Units, solution) -> list[tuple[str, 
 
 def problem_section(case: dict, case_path: Path, solution, units: Units) -> str:
     out = [rf"Source of the answers: {inline(case['source'].rstrip('.'))}. The case file is {code(rel(case_path))}; it is printed in full in the appendix. "
-           rf"Numbers below are in the case's units ({escape(case['units'])}); the engine converts them to SI on entry and back on exit (ADR-0002)."]
+           rf"Numbers below are stated in {units.text('modulus')} and {units.text('length')}, as the case gives them; the engine converts them "
+           r"to SI on entry and back on exit."]
     out.append(heading(1, "Materials"))
     for name, lamina in solution.materials.items():
-        out.append(rf"\textbf{{{escape(name)}}}" + ("" if len(solution.materials) == 1 else ""))
+        out.append(rf"\textbf{{{escape(material_name(case, name))}}}")
         out.append(kv_table(material_rows(name, lamina, units, solution)))
     out.append(heading(1, "Laminate"))
     z = ply_interfaces(solution.plies)
@@ -371,7 +396,7 @@ def problem_section(case: dict, case_path: Path, solution, units: Units) -> str:
             rf"{number(float(units.shown(z[k], 'length')))} & {number(float(units.shown(z[k + 1], 'length')))} \\"
             for k, (ply, name) in enumerate(zip(solution.plies, solution.ply_materials))]
     h = sum(ply.thickness_m for ply in solution.plies)
-    out.append(rf"{len(solution.plies)} plies, listed from the bottom face up (ADR-0004); angles counterclockwise from $x$ to the fibers; total thickness "
+    out.append(rf"{plural(len(solution.plies), 'ply', 'plies')}, listed from the bottom face up (ADR-0004); angles counterclockwise from $x$ to the fibers; total thickness "
                rf"$h = {mnumber(float(units.shown(h, 'length')))}${units.math('length')}. $z$ is measured from the mid-plane, positive upwards.")
     out.append(long_table(["Ply", r"Angle ($^\circ$)", "Material", f"Thickness ({units.text('length')})", f"$z$ bottom ({units.text('length')})", f"$z$ top ({units.text('length')})"],
                           rows, "rrlrrr"))
@@ -541,7 +566,8 @@ def steps_section(case: dict, solution, units: Units, theory: bool) -> str:
         for criterion, fpf in failures.items():
             g = fpf.governing
             loads = fpf.failure_loads.as_vector()
-            body.append(rf"\textbf{{{escape(criterion.replace('_', ' '))}.}} Strength ratio $R = {mnumber(fpf.strength_ratio)}$ on the variable loading; first failure in ply "
+            name = CRITERION_NAMES.get(criterion, criterion.replace("_", " "))
+            body.append(rf"\textbf{{{escape(name[:1].upper() + name[1:])}.}} Strength ratio $R = {mnumber(fpf.strength_ratio)}$ on the variable loading; first failure in ply "
                         rf"{g.ply_index + 1} ({mnumber(g.angle_deg)}$^\circ$) at $z = {mnumber(float(units.shown(g.z_m, 'length')))}${units.math('length')}, "
                         rf"{escape(g.mode)}. Loads at failure: $\mathbf{{N}} = [{', '.join(mnumber(float(v)) for v in units.shown(loads[:3], 'N'))}]${units.math('N')}, "
                         rf"$\mathbf{{M}} = [{', '.join(mnumber(float(v)) for v in units.shown(loads[3:], 'M'))}]${units.math('M')}.")
@@ -566,7 +592,8 @@ def steps_section(case: dict, solution, units: Units, theory: bool) -> str:
                       (r"$G_{xy}$", number(float(units.shown(constants.Gxy, "modulus"))) + " " + units.text("modulus")),
                       (r"$\nu_{xy}$", number(float(tidy([constants.nu_xy], 1.0)[0]))), (r"$\nu_{yx}$", number(float(tidy([constants.nu_yx], 1.0)[0]))),
                       (r"$\eta_{xs}$", number(float(tidy([constants.eta_xs], 1.0)[0]))), (r"$\eta_{ys}$", number(float(tidy([constants.eta_ys], 1.0)[0])))])]
-    body.append(r"The coupling ratios $\eta$ are printed as 0 when they are below $10^{-10}$: floating-point residue of a balanced laminate.")
+    if any(0.0 < abs(eta) < RESIDUE for eta in (constants.eta_xs, constants.eta_ys)):
+        body.append(r"$\eta$ below $10^{-10}$ is printed as 0.")
     step(f"Step {n}. Laminate engineering constants", "Laminate engineering constants", body)
 
     # 9 buckling
@@ -595,9 +622,9 @@ def method_section() -> str:
         r"A case file holds the inputs and only the numbers the source states, with a reference to where they came from (ADR-0007). The runner builds the "
         r"laminate, solves it once in SI, derives every result the inputs determine, converts back to the case's units, and judges each expected value by "
         r"\begin{equation*} |\,\text{engine} - \text{source}\,| \le \text{tolerance} \times \bigl(|\text{source}|\ \text{or, when the source is zero, the largest magnitude of its group}\bigr). \end{equation*}"
-        r"The same runner is what the test suite executes on every case at every change. Its code:",
-        manual.listing("load_case", "anisotropy_engine"), manual.listing("solve_case", "anisotropy_engine"),
-        manual.listing("engine_results", "anisotropy_engine"), manual.listing("compare", "anisotropy_engine")])
+        r"The same runner is what the test suite executes on every case at every change. Its code, the same for every problem, is "
+        r"printed once, in the engine manual's verification section (\texttt{load\_case}, \texttt{solve\_case}, \texttt{engine\_results} "
+        r"and \texttt{compare} in \texttt{engine/src/anisotropy\_engine/cases.py})."])
 
 
 def set_reading(case_path: Path) -> Path | None:
@@ -613,6 +640,14 @@ def reading_note(case_path: Path) -> Path | None:
         return beside
     note = set_reading(case_path)
     return note if note is not None and note.is_file() else None
+
+
+def material_name(case: dict, name: str) -> str:
+    """A material's name for the reader: its own, or, for the one material a case states without a name, the case's words for it."""
+    if name != "material":
+        return name
+    library = (case.get("material") or {}).get("library")
+    return f"The material, library record {library}" if library else "The case's material"
 
 
 def reading_section(case_path: Path) -> tuple[str, bool]:
@@ -651,7 +686,8 @@ def build(case_path: Path, out: Path | None, pdf: bool, theory: bool) -> tuple[P
         r"\documentclass[11pt,letterpaper]{article}", PREAMBLE,
         rf"\hypersetup{{pdftitle={{{escape(case['title'])}}}}}",
         r"\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0pt}",
-        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy AI \textperiodcentered{{}} Solved problem \textperiodcentered{{}} {inline(short)}}}",
+        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy \textperiodcentered{{}} Solved problem \textperiodcentered{{}} {inline(short)}}}",
+        r"\clubpenalty=10000\widowpenalty=10000",  # no line of a paragraph alone at the top or the foot of a page
         r"\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}",
         r"\fancyfoot[C]{\sffamily\scriptsize\color{muted}Internal use. Agreement with an answer key or a textbook is verification of the engine, not a test of a part.}",
         r"\begin{document}",
@@ -668,8 +704,8 @@ def build(case_path: Path, out: Path | None, pdf: bool, theory: bool) -> tuple[P
         steps_section(case, solution, units, theory),
         r"\section{Every compared number}\label{sec:comparison}", comparison_section(comparisons, units),
         r"\section{How the inputs were read and the numbers judged}\label{sec:method}", method_section(),
-        r"\section{Reading}\label{sec:reading}", reading,
-        r"\appendix", r"\section{The case file}", file_listing(case_path),
+        *([r"\section{Reading}\label{sec:reading}", reading] if reading_exists else []),  # no reading yet: no section to say so
+        r"\appendix", r"\needspace{8\baselineskip}" + r"\section{The case file}", file_listing(case_path),
         r"\end{document}",
     ]
     tex = out_dir / f"{stem}.tex"
@@ -695,7 +731,7 @@ def write_index(results: list[tuple[Path, dict, int, int]]) -> Path:
     total = sum(r[2] for r in results)
     agreeing = sum(r[3] for r in results)
     text = ("# Solved problems\n\n"
-            f"Built {date.today().isoformat()} from commit {git_commit()}. {len(results)} problems, {agreeing} of {total} source values reproduced by the engine. "
+            f"Built {manual.build_date()} from commit {git_commit()}. {len(results)} problems, {agreeing} of {total} source values reproduced by the engine. "
             "One document per problem, generated by `docs/problems/build.py` from the case files under `engine/validation/cases/` (ADR-0033).\n\n"
             + "\n".join(rows) + "\n")
     path = HERE / "build" / "index.md"

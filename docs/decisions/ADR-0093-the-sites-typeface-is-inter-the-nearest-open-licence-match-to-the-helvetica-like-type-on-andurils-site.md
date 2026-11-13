@@ -4,6 +4,7 @@
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 ("fonts and all") | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) amendment 19 (the home page after Anduril's), [ADR-0080](ADR-0080-the-logo-is-the-leads-triangle-and-wide-wordmark-traced-to-vectors-and-drawn-through-css-masks.md) amendment 4 (the logo's name), `app/globals.css`, `app/layout.tsx`, `package.json`
+- Area: website
 
 ## Context
 

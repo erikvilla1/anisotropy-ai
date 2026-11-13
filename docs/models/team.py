@@ -22,7 +22,6 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +30,9 @@ from pydantic import BaseModel, ConfigDict, PositiveFloat, ValidationError
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 PREAMBLE = (HERE / "preamble.tex").read_text(encoding="utf-8")
-README_MARK = "Anisotropy AI share folder"  # first line of every README.txt in our packages; only such a package is ever replaced
+README_MARK = "Anisotropy package"  # first line of every README.txt in our packages; only such a package is ever replaced
+OLD_README_MARKS = ("Anisotropy AI share folder",)  # the first line packages carried before the company was named Anisotropy (ADR-0058);
+# still recognised for one release, so a package written then is replaced, not refused
 
 
 def load_module(name: str, path: Path):
@@ -165,8 +166,10 @@ def pct(fraction: float, digits: int = 2) -> str:
 def table(header: list[str], rows: list[list[str]], spec: str, size: str = r"\small") -> str:
     head = " & ".join(r"\textbf{" + h + "}" for h in header) + r" \\"
     body = [" & ".join(cells) + (r" \\*" if k == len(rows) - 1 else r" \\") for k, cells in enumerate(rows)]  # the last row stays with the rule
+    # the bottom rule is written after the last row, not as a page foot: a foot that no longer fits under the last row would start a page of
+    # its own, with the repeated header above it and no row
     return "\n".join(["{" + size, rf"\begin{{xltabular}}{{\linewidth}}{{{spec}}}", r"\toprule", head, r"\midrule", r"\endhead",
-                      r"\bottomrule", r"\endlastfoot", *body, r"\end{xltabular}", "}"])  # the bottom rule stays with the last row
+                      *body, r"\bottomrule", r"\end{xltabular}", "}"])
 
 
 def figure(path: Path, caption: str, width: str = r"\linewidth", label: str | None = None) -> str:
@@ -387,10 +390,10 @@ def title_block(c: Comparison) -> str:
         ("Material source", escape(f"our library record {lib.material_id}, dataset {lib.dataset_id}: {source_text(lib)}" if lib is not None
                                    else c.material.source)),
         ("Compared", escape(f"{len(c.paired)} values ({', '.join(c.quantities)} at layers {', '.join(map(str, c.layers()))}) from the team's field reports")),
-        ("Built", escape(f"{date.today().isoformat()}, commit {git_commit()}, by docs/models/team.py")),
+        ("Built", escape(f"{manual.build_date()}, commit {git_commit()}, by docs/models/team.py")),
     ]
     return "\n".join([
-        r"\begin{center}", r"{\sffamily\color{accent}\bfseries\small ANISOTROPY AI \textperiodcentered{} THE TEAM'S MODEL AND OURS}\par\medskip",
+        r"\begin{center}", r"{\sffamily\color{accent}\bfseries\small ANISOTROPY \textperiodcentered{} THE TEAM'S MODEL AND OURS}\par\medskip",
         rf"{{\sffamily\fontsize{{20}}{{26}}\selectfont\bfseries\color{{ink}} {escape(c.card['Coupon'])}}}\par\smallskip",
         rf"{{\sffamily\large\color{{ink}} {escape(c.card['Test'].capitalize())} coupon}}\par\smallskip",
         r"{\sffamily\color{muted} What the team built in Abaqus, what we built with our engine, where our material comes from, and the results side by side}",
@@ -520,7 +523,7 @@ def material_section(c: Comparison) -> str:
         rf"(dataset {code(lib.dataset_id)}, record {escape(lib.record_revision or 'unrevised')}), and the generator writes its values, with "
         r"their source and page, into the deck header. The record's source:",
         rf"\begin{{quote}}{escape(source_text(lib))}.\end{{quote}}",
-        rf"Rights class {code(lib.rights)}: the values are cited by table and page and the source itself is not reproduced. The table lists "
+        rf"Rights class {code(lib.rights)}: the values are cited by page and the source itself is not reproduced. The table lists "
         r"every value the model uses, the page it comes from, and the value the team typed into their deck.",
         table(["Property", "Our library", "Source page", "Team's deck"], rows, r">{\raggedright\arraybackslash}p{2cm}>{\raggedright\arraybackslash}p{2.8cm}Y>{\raggedright\arraybackslash}p{3.6cm}"),
         escape(SYMBOLS),
@@ -663,8 +666,8 @@ def share_contents(c: Comparison) -> list[tuple[str, str]]:
         (f"{c.manifest.name}.pdf", "this document"),
         (f"{c.package.name}-audit.xlsx", "the audit form: our tools' results locked; the auditor's results, observations and verdict to fill in"),
         (f"1-team-model/{c.team_deck_path.name}", "the team's deck, as we received it"),
-        (f"2-our-model/abaqus/{stem}-abaqus.inp", "our deck of the same coupon, for Abaqus. Abaqus/CAE: File, Import, Model, choose the .inp file "
-                                                  "(this click path is not checked by us); or run it as a job from the command line"),
+        (f"2-our-model/abaqus/{stem}-abaqus.inp", "our deck of the same coupon, for Abaqus: run it as a job, "
+                                                  f"abaqus job={stem} input=2-our-model/abaqus/{stem}-abaqus.inp interactive"),
         (f"2-our-model/calculix/{c.calculix_deck_path.name}", "our twin for CalculiX, with the grips as direct constraints. PrePoMax: File, Import, then run it"),
         (f"2-our-model/calculix/{c.twin_abaqus_path.name}", "the same twin in Abaqus format: what our engine solved for the comparison with "
                                                            "CalculiX; not the deck to build from"),
@@ -717,7 +720,7 @@ def write_material_csv(path: Path, lib, material, units: str) -> None:
         writer.writerow(["dataset", lib.dataset_id, lib.dataset])
         writer.writerow(["record revision", lib.record_revision or ""])
         writer.writerow(["source", source_text(lib)])
-        writer.writerow(["rights class", lib.rights, "values cited by table and page; the source is not reproduced"])
+        writer.writerow(["rights class", lib.rights, "values cited by page; the source is not reproduced"])  # the record gives pages, no tables
         writer.writerow([])
         writer.writerow(["property", f"value ({units})", "unit", "value as the source gives it", "source unit", "basis", "source page (PDF)", "printed page", "link"])
         for v in lib.values:
@@ -754,14 +757,17 @@ def write_all_plies(path: Path, solution, deck, units: str, inverse: dict | None
 
 
 def package_folder(documents: Path, name: str) -> Path:
-    """The package under today's date, `documents/<YYYY-MM-DD>_<name>/`, so each package sent out says when it was built (ADR-0043)."""
-    return documents / f"{date.today().isoformat()}_{name}"
+    """The package under the day it is built, `documents/<YYYY-MM-DD>_<name>/`, so each package sent out says when it was built (ADR-0043).
+    The day is UTC, the build date its README, cover and audit form print (manual.build_date), so the folder and the audit form's file
+    name never carry a day other than the one inside them."""
+    return documents / f"{manual.build_date()[:10]}_{name}"
 
 
 def package_is_ours(folder: Path) -> bool:
-    """True when the folder's README.txt starts with README_MARK: a package this project wrote, safe to replace."""
+    """True when the folder's README.txt starts with README_MARK, or a mark it carried before (OLD_README_MARKS): a package this project
+    wrote, safe to replace."""
     try:
-        return (folder / "README.txt").read_text(encoding="utf-8").startswith(README_MARK)
+        return (folder / "README.txt").read_text(encoding="utf-8").startswith((README_MARK, *OLD_README_MARKS))
     except OSError:
         return False
 
@@ -815,7 +821,7 @@ def fill_share(c: Comparison, share: Path) -> None:
     lines = [README_MARK, f"{c.headline}: the team's Abaqus model and ours", "",
              *[f"{label + ':':14} {value}" for label, value in c.card.items()], "",
              f"{'Attempt:':14} {getattr(c, 'attempt', None) or 'none named'} (our attempt this package delivers)",
-             f"Built {date.today().isoformat()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {git_commit()}).",
+             f"Built {manual.build_date()} by docs/models/coupon.py (anisotropy-fea {fea_version}, commit {git_commit()}).",
              "Start with the PDF. Numbers in the files are in " + f"{c.length_unit}, {c.stress_unit} and {c.force_unit}.", ""]
     width = max(len(path) for path, _ in share_contents(c))
     lines += [f"{path.ljust(width)}  {what}" for path, what in share_contents(c)]
@@ -844,7 +850,7 @@ def write_team_summary(c: Comparison) -> Path:
         "# which stay local; no value of theirs is in this file. The case page's result table is generated from it (fea/tools/case_pages.py).",
         f"coupon = {toml_value(c.card['Coupon'])}",
         f"units = {toml_value(c.units)}",
-        f"built = {toml_value(date.today().isoformat())}",
+        f"built = {toml_value(manual.build_date()[:10])}",
         f"commit = {toml_value(git_commit())}",
         "",
         "[team]",

@@ -1,7 +1,7 @@
 ---
 name: decision-records
-description: How to write and amend decision records (ADRs) in docs/decisions of the Anisotropy AI repository. Load whenever a change chooses between alternatives (a library, algorithm, data format, architecture, units or conventions), whenever the founder decides something that changes an earlier ADR, and before changing an ADR's status. Covers new record or amendment, numbering, the Status, Decided by and Related lines, the numbered amendment heading, the As built section, evidence, the index row in docs/README.md and the changelog line.
-version: 0.1.0
+description: How to write and amend decision records (ADRs) in docs/decisions of the Anisotropy AI repository. Load whenever a change chooses between alternatives (a library, algorithm, data format, architecture, units or conventions), whenever the founder decides something that changes an earlier ADR, and before changing an ADR's status. Covers new record or amendment, numbering, the Status, Decided by, Related and Area lines, the numbered amendment heading, the As built section, evidence, the index row in docs/README.md and the changelog line.
+version: 0.1.1
 ---
 
 # Decision records
@@ -22,12 +22,13 @@ Whenever a change chooses between alternatives (AGENTS.md, documentation rule 1)
 ## Procedure: a new record
 
 1. Number: the highest `ADR-NNNN` in `docs/decisions/` plus one. The file is `ADR-NNNN-<the-decision-as-a-choice>.md`, and its title is `# ADR-NNNN: <the decision, stated as a choice>`.
-2. Copy `_template.md` and keep its headings exactly. `docs/manual/build.py` (`decisions()`) reads the `# ` title and the `- Status:` and `- Date:` lines. It also reads the sections Context, Options considered, Decision, Why (evidence) and How we will know it was wrong, and it fails if one is missing.
+2. Copy `_template.md` and keep its headings exactly. `docs/manual/build.py` (`decisions()`) reads the `# ` title and the `- Status:`, `- Date:` and `- Area:` lines. It also reads the sections Context, Options considered, Decision, Why (evidence) and How we will know it was wrong, and it fails if one is missing.
 3. Fill the header lines:
    - `- Status: Proposed`. It becomes `Accepted` only when the founder says so.
    - `- Date: YYYY-MM-DD`, the day the record was drafted.
    - `- Decided by: Founder, YYYY-MM-DD ("their words", on what) | Drafted by: Claude Code`. Quote the founder; a later decision appends its own date and words.
    - `- Related:` links to the ADRs and code paths it touches, in the form `[ADR-0030](ADR-0030-<slug>.md)` and `fea/src/...`.
+   - `- Area:` one or more of engine, fea, website, api, assistant, data, docs, process, hosting, separated by commas. The engine manual prints only the records whose Area names engine or fea (ADR-0008 amendment 1); a record without the line fails `fea/tests/test_coupon_document.py`.
 4. Context: facts only. Options considered: every option, the rejected ones with the reason they lost.
 5. Why (evidence): link real evidence, such as a test command and its output, a `file:line`, a source URL or a measurement. Where there is none, write "no evidence yet"; mark anything unchecked UNVERIFIED.
 6. When the code lands, add `## As built (YYYY-MM-DD)` after the Decision. It lists what was built and where, and names any difference from the plan.

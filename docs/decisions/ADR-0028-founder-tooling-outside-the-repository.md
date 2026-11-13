@@ -4,6 +4,7 @@
 - Date: 2026-10-14
 - Decided by: Founder, 2026-10-14; amendment 2: Founder, 2026-11-04 | Drafted by: Claude Code
 - Related: ADR-0023 (agent skills; Hermes part superseded here), ADR-0026 (actor list), ADR-0027 (deployment tiers), `docs/agents/README.md`, `scripts/link-agent-dirs.ps1`, `api/src/anisotropy_api/records.py`
+- Area: process
 
 ## Context
 

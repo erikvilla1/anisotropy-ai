@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Codex
 - Related: [walkthrough](../walkthroughs/chunk-3-constrained-analysis.md), [evaluation](../evaluations/2026-10-03-prescribed-curvature.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0004](ADR-0004-sign-and-stacking-conventions.md)
+- Area: engine
 
 ## Context
 

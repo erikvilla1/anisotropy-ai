@@ -128,8 +128,11 @@ export type TestMethod = {
   fpf_basis: string; earliest: string | null; note_b: boolean;
 };
 export type CltCheck = { Ny: number; width: number; strain: number[]; plies: { ply: number; angle: number; stress_12: number[] }[]; note: string };
-/** One ply's peaks in its own fibre axes read from the `.frd`'s bricks: nodal, extrapolated, as a viewer would show them per ply (ADR-0066). */
+/** One ply's peaks in its own fibre axes read from the `.frd`'s bricks: nodal, extrapolated, as a viewer would show them per ply (ADR-0066).
+ *  `s1_max` and `s2_max` are the largest signed values; `s1_max_abs` and `s2_max_abs` the values at the largest magnitude, signed, the
+ *  definition of our own per-ply peaks, absent from a record written before they were added. */
 export type FrdPly = { ply: number; angle: number; fibre: number; nodes: number; s1_max?: number; s1_max_node?: number; s1_max_xyz?: number[]; s2_max?: number; s2_max_node?: number;
+  s1_max_abs?: number; s1_max_abs_node?: number; s1_max_abs_xyz?: number[]; s2_max_abs?: number; s2_max_abs_node?: number; s2_max_abs_xyz?: number[];
   t12_max_abs?: number; t12_max_abs_node?: number; gauge_s1_max?: number; gauge_s1_max_node?: number };
 export type CalculixBeside = {
   record: string; units: string; tolerance: number; agree: string;

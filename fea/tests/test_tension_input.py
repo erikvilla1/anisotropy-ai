@@ -53,6 +53,9 @@ def test_the_size_comes_from_the_layups_d3039_class(angles, symmetric, size):
     values, built = complete_tension({"library": "im7-8552", "angles": angles, "symmetric": symmetric}, DAY)
     assert (values["width"], values["length"], values["tab_length"]) == size
     assert values["size_from"].startswith(f"{D3039}, Table 2, ")
+    if angles == [45, 0, -45, 90]:  # the grip length Table 2 does not give says who chose it, on the card and the README ("here" had no referent)
+        assert "the 56 mm grip length is the software's choice, since Table 2 gives none for this class" in values["size_from"]
+        assert next(b.reason for b in built if b.row == "tab_length").endswith("56 mm is the software's choice")
     assert values["test"] == "unnotched tension" and values["standard"] == D3039 and values["units"] == "mm-MPa"
     assert values["date"] == "2026-11-11"
 

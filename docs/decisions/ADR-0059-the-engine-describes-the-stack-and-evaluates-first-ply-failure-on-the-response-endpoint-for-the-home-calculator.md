@@ -4,6 +4,7 @@
 - Date: 2026-11-05
 - Decided by: Founder, 2026-10-31 (the website audit: the home page calculator "will still calculate the ABD matrices, first-ply failure (only when loading conditions are provided), and other useful features like total thickness, volume fraction, total weight, laminate type (i.e., anisotropic), etc."); the plan that puts every one of those numbers in the engine approved 2026-11-05 | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0012](ADR-0012-browser-calculator.md), [ADR-0013](ADR-0013-prescribed-curvature-analysis.md), [ADR-0020](ADR-0020-material-library-as-engine-input.md), [ADR-0021](ADR-0021-maximum-strain-and-tsai-hill.md), [ADR-0024](ADR-0024-api-exposes-the-case-format.md), [ADR-0026](ADR-0026-run-record-contents-and-startup-policy.md), `engine/src/anisotropy_engine/summary.py`, `engine/src/anisotropy_engine/library.py`, `engine/src/anisotropy_engine/cases.py`, `engine/validation/cases/library-as4-3501-stack-summary.toml`, `engine/tests/test_summary.py`, `api/src/anisotropy_api/schemas.py`, `api/src/anisotropy_api/main.py`, `api/tests/test_laminate_summary.py`
+- Area: engine, api
 
 ## Context
 

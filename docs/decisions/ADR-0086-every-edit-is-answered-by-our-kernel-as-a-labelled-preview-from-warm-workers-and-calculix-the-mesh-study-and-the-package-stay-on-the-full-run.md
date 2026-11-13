@@ -4,6 +4,7 @@
 - Date: 2026-11-10
 - Decided by: Founder, 2026-11-10 (asked what should update within seconds of an edit: "Live kernel, full run on request (Recommended)"; the plan of that day, part 3, approved) | Drafted by: Claude Code
 - Related: `fea/tools/studio_tool.py` (`live`, `serve`), `api/src/anisotropy_api/live.py`, `api/src/anisotropy_api/main.py` (`POST /v1/coupon-jobs/live`), `api/src/anisotropy_api/settings.py` (`ANISOTROPY_LIVE_WORKERS`), [docs/evaluations/fea/2026-11-10-live-solve.md](../evaluations/fea/2026-11-10-live-solve.md), [ADR-0026](ADR-0026-run-record-contents-and-startup-policy.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md), [ADR-0067](ADR-0067-we-build-on-open-source-solvers-our-kernel-stays-the-fast-path-for-flat-linear-laminates-and-new-physics-comes-from-calculix-under-our-composite-layer.md), [ADR-0068](ADR-0068-every-coupon-result-carries-a-mesh-convergence-study-by-the-kernel-on-two-refinements-of-its-mesh.md), [ADR-0085](ADR-0085-a-coupons-answer-is-given-per-criterion-in-its-gauge-section-fails-or-holds-the-loading-at-first-ply-failure-and-where-with-the-clamped-edge-reported-apart.md), risk R-23
+- Area: fea
 
 ## Context
 

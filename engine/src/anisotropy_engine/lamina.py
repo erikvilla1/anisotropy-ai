@@ -80,9 +80,9 @@ class Lamina(BaseModel):
 def strain_limits_from_strengths(ply: Lamina) -> StrainLimits:
     """Strain limits as strength divided by modulus: F1t/E1, F1c/E1, F2t/E2, F2c/E2, F6/G12.
 
-    This is the linear-to-failure assumption, the "failure strain allowables computed from
-    moduli" of the course. It is a choice the case must state; the engine never applies it on
-    its own (ADR-0021).
+    This is the linear-to-failure assumption: failure strain allowables computed from the
+    moduli. It is a choice the case must state; the engine never applies it on its own
+    (ADR-0021).
     """
     if ply.strengths is None:
         raise ValueError("Strain limits from strengths need all five strengths")

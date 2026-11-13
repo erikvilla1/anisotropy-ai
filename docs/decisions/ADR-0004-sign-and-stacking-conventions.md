@@ -4,6 +4,7 @@
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: `engine/README.md`, `engine/validation/README.md`
+- Area: engine
 
 ## Context
 
