@@ -24,6 +24,7 @@ Option 4. `scripts/hero-plate.py` builds and renders the film with Blender's Cyc
 - **The loop,** 12 s: the solid plate; the plies fan apart towards the camera; arrows for Nx go on at both x ends of every ply; ply 4 (+90°) glows amber; everything returns to the start, so the loop has no jump.
 - **Ply 4 is the engine's answer** for this stack under Nx: first-ply failure by maximum stress, ply 4 (+90°), transverse tension (`tests/fixtures/home/response-im7-quasi-loaded.json`, the answer the scroll tour shows live). The film shows which ply and no number.
 - **The script renders frames,** not a video, and skips frames that exist, so an interrupted render carries on. It uses the graphics chip when Cycles finds one.
+- **One command makes a video to watch.** `scripts/hero-plate.sh` renders a draft (960 by 540, 24 frames a second) or the final (1920 by 1080, 30 frames a second) into the git-ignored `.local/hero-plate/`, joins the frames with ffmpeg and opens the video. Run here on 2026-11-13 at a tiny size, it rendered 12 frames and wrote a playable file.
 
 ## Why (evidence)
 
