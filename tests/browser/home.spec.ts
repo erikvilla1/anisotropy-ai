@@ -78,7 +78,7 @@ test("the hero's clip plays in a square box on the black page, under the header,
   expect(clip.left).toBe((await rect(".site-header .wordmark")).left);
   await expect(page.locator("#overview .home-hero-media")).toHaveCSS("border-radius", "0px");
   // The page around it is the site's black, and the words sit inside the box, the statement and the mark on its middle line.
-  expect(await page.locator("#overview").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(13, 13, 13)");
+  expect(await page.locator("#overview").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(0, 0, 0)");
   for (const selector of ["#overview h1", "#overview .home-hero-row", "#overview .home-hero-backed"]) {
     const part = await rect(selector);
     expect(part.left, selector).toBeGreaterThanOrEqual(clip.left + 16);

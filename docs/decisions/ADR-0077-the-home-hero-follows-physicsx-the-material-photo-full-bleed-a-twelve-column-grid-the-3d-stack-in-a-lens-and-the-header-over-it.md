@@ -361,3 +361,13 @@ On phones it is one column.
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px: a frame taken after the exit shows the button alone at the foot of the clip, in its middle. `intro.spec.ts`: hidden while the words stand; after the exit visible, within 1 px of the clip's middle and in its lowest quarter; a press brings the tour's stage to the window's top and its first step plays; visible from the start with reduced motion: 4 of 4. `home.spec.ts`, which now counts the hero's one hidden button: 10 of 10. UNVERIFIED: phones, where the button and the Basement's mark share the foot of the clip.
 
+## Amendment 23, 2026-11-13 (the site's pages stand on pure black)
+
+**Context.** With a screenshot of the hero's frame and header the lead asked: "why isnt the background black black?" The page ground was the site's near-black, `#0d0d0d`, since the first dark design; Anduril's pages, which this hero follows, stand on pure black.
+
+**Decision.** On every page with the site's header the page ground, `--bg`, is `#000000`: the header, the hero's frame, the dark bands and the footer. The Services panel's ground becomes `#000000` with it, so the open panel is one surface with the page. Not changed: the workspace, an app whose panels were drawn for `#0d0d0d`; the tour's stage, which continues the 3D view's own lit ground (about `#0b0b0b` at its edges); cards and panels (`#141414` and lighter); the load veil (`#010101`).
+
+**Options considered.** Changing `--bg` for the whole site at `:root`: rejected, it would reach the workspace's panels without a look at each. Only the home hero's frame: rejected, the header and the next dark bands would then differ from it.
+
+**Evidence.** On 2026-11-13 on the dev server at 1440 px: the body's computed ground is `rgb(0, 0, 0)` on `/`, `/about`, `/library` and `/services`, and `rgb(13, 13, 13)` on `/workspace`; screenshots of the home hero, the Mission and Platform bands and the About page were looked at. `home.spec.ts` (which reads the hero's ground as `rgb(0, 0, 0)`), `expansion.spec.ts` and `intro.spec.ts`: 20 of 20. UNVERIFIED: the step from the hero's black frame to the tour stage's ground on a display that shows it, and every inner page beyond the three looked at.
+

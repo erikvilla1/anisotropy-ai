@@ -9,7 +9,7 @@
  * whatever the order of the stylesheets. */
 .services-menu,
 .services-backdrop {
-  --services-ground: #080808;
+  --services-ground: #000000;
   --services-ease: cubic-bezier(0.215, 0.61, 0.355, 1);
 }
 .services-menu {

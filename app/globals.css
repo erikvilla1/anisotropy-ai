@@ -2331,7 +2331,10 @@ img {
  * flow so it scrolls away, and over the hero's black ground on the home page. From 1201 px it follows Anduril's: 84 px tall,
  * 32 px margins, the logo at the left, the links in the middle of the page in semibold, Workspace in the top-right corner,
  * no version label. */
+/* The site's pages stand on pure black, as Anduril's do (ADR-0077 amendment 23). The workspace, an app with its own header,
+ * keeps the near-black its panels were drawn for. */
 html:has(.site-header:not(.chat-site-header)) {
+  --bg: #000000;
   scroll-padding-top: 0;
 }
 .site-header:not(.chat-site-header) {
