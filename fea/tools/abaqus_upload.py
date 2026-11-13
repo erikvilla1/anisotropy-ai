@@ -467,6 +467,9 @@ directory (create it if it is not there) and start Abaqus/CAE again. Under Plug-
     Open from Anisotropy...   builds the coupon from the build script you downloaded from a run's page
     Send to Anisotropy...     writes the file from a finished job, with the model open in the session, and sends it
 
+A model that Open from Anisotropy built knows which coupon it is, so a file sent from the menu is compared beside your
+newest finished run of that coupon with nothing more to type.
+
 Each asks in a small box and answers in the message area under the viewport. Your .cae and your ODB are not changed.
 """
 

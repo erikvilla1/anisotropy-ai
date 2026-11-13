@@ -66,9 +66,12 @@ def abaqus_of(monkeypatch, text: str = "", answers=None, mdb=None, session=None,
     return SimpleNamespace(log=log, asked=asked)
 
 
-def session_of(job_name: str, model_name: str = "IM7-UNT-L1", saved: str = "", shown=None):
-    """A session of Abaqus/CAE with one job created for one model, beside Abaqus's own empty Model-1."""
-    mdb = SimpleNamespace(jobs={job_name: SimpleNamespace(model=model_name)}, models={"Model-1": SimpleNamespace(), model_name: cae_model()},
+def session_of(job_name: str, model_name: str = "IM7-UNT-L1", saved: str = "", shown=None, description: str = ""):
+    """A session of Abaqus/CAE with one job created for one model, beside Abaqus's own empty Model-1. `description` is the model's:
+    the build script writes its own there, and a model drawn by hand has none."""
+    model = cae_model()
+    model.description = description
+    mdb = SimpleNamespace(jobs={job_name: SimpleNamespace(model=model_name)}, models={"Model-1": SimpleNamespace(), model_name: model},
                           pathName=saved)
     session = SimpleNamespace(currentViewportName="Viewport: 1", viewports={"Viewport: 1": SimpleNamespace(displayedObject=shown)})
     return mdb, session
@@ -240,6 +243,43 @@ def test_send_says_every_refusal_in_the_message_area_and_keeps_no_answer_that_wa
     menu.send_to_anisotropy()
     said = capsys.readouterr().out
     assert "Send to Anisotropy stopped:" in said and "RuntimeError: an error nobody planned for" in said and menu.connector().LISTENER is None
+
+
+def test_a_model_the_build_script_made_names_its_coupon_and_units_and_one_drawn_by_hand_names_none(menu, coupon, job, site, token_file, monkeypatch, tmp_path, capsys):  # noqa: F811
+    """The loop with nothing typed: the build script writes the coupon's name and the units on the model it makes, and Send reads
+    them there. The description is the one the writer puts in the script, so the two cannot drift apart unseen."""
+    written = ast.literal_eval(next(line.split(" = ", 1)[1] for line in write_cae_script(coupon).splitlines() if line.startswith("DESCRIPTION = ")))
+    odb = put(tmp_path, job, "IM7-UNT-L1")
+    shown = SimpleNamespace(path=str(odb))
+    mdb, session = session_of("IM7-UNT-L1", description=written, shown=shown)
+    assert menu.built_as(mdb, "IM7-UNT-L1") == {"coupon": "IM7-UNT-L1", "units": "mm-MPa"}
+    assert menu.built_as(mdb, "Model-1") == {} and menu.built_as(mdb, None) == {} and menu.built_as(SimpleNamespace(), "IM7-UNT-L1") == {}
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(menu, "reading_a_copy", lambda _none, original=menu.reading_a_copy: original(reader_of(job)))
+    menu.keep_answers({"units": "m-Pa", "address": "", "token_file": ""})  # the last time's units are not this model's
+    there_site = site()
+    there = abaqus_of(monkeypatch, mdb=mdb, session=session,
+                      answers=lambda fields: (fields[menu.ODB_FIELD], fields[menu.UNITS_FIELD], there_site.address, str(token_file)))
+    menu.send_to_anisotropy()
+    assert there.asked[0][0][1] == (menu.UNITS_FIELD, "mm-MPa")  # the model's own units are offered
+    said = capsys.readouterr().out
+    assert "this model was built from Anisotropy's coupon IM7-UNT-L1: the site puts the file beside your newest finished run of it" in said
+    assert "note:" not in said and "sent: upload" in said
+    assert open_bundle(tmp_path / "IM7-UNT-L1-anisotropy.zip").manifest["coupon"] == "IM7-UNT-L1"
+
+    # other units than the model's are said, and the file says what the user stated
+    abaqus_of(monkeypatch, mdb=mdb, session=session, answers=(str(odb), "m-Pa", "", ""))
+    menu.send_to_anisotropy()
+    said = capsys.readouterr().out
+    assert "note: the build script made this model in mm-MPa and you stated m-Pa" in said and "newest finished run" not in said
+    assert open_bundle(tmp_path / "IM7-UNT-L1-anisotropy.zip").manifest["units"] == "m-Pa"
+
+    # a model drawn by hand, or one whose description was changed, names no coupon: the file goes without one and nothing is said of it
+    for description in ("", "My own coupon, built by anisotropy_fea"):
+        mdb, session = session_of("IM7-UNT-L1", description=description, shown=shown)
+        abaqus_of(monkeypatch, mdb=mdb, session=session, answers=(str(odb), "mm-MPa", "", ""))
+        menu.send_to_anisotropy()
+        assert "coupon" not in capsys.readouterr().out and open_bundle(tmp_path / "IM7-UNT-L1-anisotropy.zip").manifest["coupon"] is None
 
 
 def test_the_model_is_the_one_the_job_was_created_for_and_the_journal_is_the_saved_models(menu, tmp_path):

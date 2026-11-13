@@ -12,7 +12,10 @@ Two things differ from the command, because here the model is open:
 
 - the model as built is read from the session, from the model the job of the ODB's name was created for. No `.cae` is opened or
   saved. When the session has no job of that name the file is written without the model, and the menu says so;
-- the ODB is read from a copy in a temporary folder, because reading ends by closing the ODB, and the one on the screen stays open.
+- the ODB is read from a copy in a temporary folder, because reading ends by closing the ODB, and the one on the screen stays open;
+- a model that Open from Anisotropy built says, in its description, which coupon of Anisotropy's it is and in which units. The units
+  are offered in the box, and the coupon's name goes with the file, so the site puts it beside your newest finished run of that
+  coupon with nothing typed. A model drawn by hand names no coupon, and the file is then sent without one.
 
 Every line is shown in the message area under the viewport. The answers, never the key itself, are kept in
 `.anisotropy/connector.json` in the home directory and offered the next time. Nothing here draws a window of its own: the questions
@@ -27,6 +30,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -36,6 +40,7 @@ from pathlib import Path
 MARK = "# Built by anisotropy_fea "  # in the first lines of every build script (`write_cae_script`)
 HEAD_LINES = 4
 SCRIPTS = "*-build.py"
+BUILT = re.compile(r"Built by anisotropy_fea \S+ from (\S+), spec sha256 [0-9a-f]+, units (\S+)")  # the model's description, by the same writer
 UNITS_FIRST = "mm-MPa"
 KEPT = ("units", "address", "token_file")
 ODB_FIELD = "The finished job's ODB:"
@@ -216,6 +221,16 @@ def model_of(mdb, job: str):
         return None
 
 
+def built_as(mdb, model) -> dict:
+    """What the build script wrote on the model it made: the coupon's name in Anisotropy and the units. Nothing for a model drawn by
+    hand, or one whose description was changed."""
+    try:
+        found = BUILT.search(str(getattr(mdb.models[model], "description", "") or "")) if model is not None else None
+    except Exception:  # noqa: BLE001
+        return {}
+    return {"coupon": found.group(1), "units": found.group(2)} if found else {}
+
+
 def journal_of(mdb):
     """The journal beside the session's saved `.cae`, when there is one."""
     try:
@@ -259,6 +274,14 @@ def send(odb: str, units: str, address: str = "", token_file: str = "", mdb=None
              "job solved. The results and the input file are")
     else:
         args.journal = journal_of(mdb)
+        built = built_as(mdb, name)
+        if built and built["units"] != units:
+            show(f"note: the build script made this model in {built['units']} and you stated {units}. The file says {units}; if the model "
+                 "was not changed to them, send it again with the model's own units")
+        if built:
+            args.coupon = built["coupon"]
+            show(f"this model was built from Anisotropy's coupon {built['coupon']}" + (": the site puts the file beside your newest finished "
+                 "run of it" if address else ""))
     return c.deliver(args, url, token, reading_a_copy(read_job), None, poster or c.post, as_built)
 
 
@@ -268,7 +291,9 @@ def send_to_anisotropy() -> None:
         from abaqus import getInputs, mdb, session
         kept = kept_answers()
         finished = finished_jobs(Path.cwd())
-        fields = ((ODB_FIELD, shown_odb(session) or (str(finished[0]) if finished else "")), (UNITS_FIELD, kept.get("units") or UNITS_FIRST),
+        offered = shown_odb(session) or (str(finished[0]) if finished else "")
+        built = built_as(mdb, model_of(mdb, Path(offered).stem)) if offered else {}
+        fields = ((ODB_FIELD, offered), (UNITS_FIELD, built.get("units") or kept.get("units") or UNITS_FIRST),
                   (ADDRESS_FIELD, kept.get("address", "")), (KEY_FIELD, kept.get("token_file", "")))
         answers = getInputs(fields=fields, label=SEND_LABEL, dialogTitle="Send to Anisotropy")
         if answers is None or len(answers) != len(fields) or answers[0] is None:
