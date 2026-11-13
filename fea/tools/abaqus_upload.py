@@ -5,6 +5,7 @@
         [--json <file>] [--pairs <file>.csv]
     uv run python tools/abaqus_upload.py pack --deck <job>.inp --every-output <job>-every-output.csv [--rf <job>-every-output-RF.csv]
         [--provenance <job>-every-output.json] [--journal <job>.jnl] [--model <model>.json] --units mm-MPa --out <bundle>.zip
+    uv run python tools/abaqus_upload.py connector --out anisotropy-connector.zip
 
 `check` reads a bundle (`anisotropy_fea.bundle`, version 1) and says what it holds and whether it is in scope: a deck our reader
 reads (flat S4 or S4R shells, one linear static step) and every element and ply in `tools/abaqus_every_output.py`'s columns.
@@ -21,7 +22,8 @@ Exit 0: agrees. 1: differs, or something that should be judged could not be. 2: 
 scope), with every reason. `--json` writes the result in each case: the page's card is drawn from it in a later step.
 
 `pack` writes a bundle from files that already exist, the output of `abaqus python tools/abaqus_every_output.py` and the deck that ran:
-what the connector does under the user's Abaqus in the next step.
+what `tools/anisotropy_connector.py` does in one command under the user's Abaqus (step 2). `connector --out <zip>` writes that
+connector's files as one zip to hand over.
 """
 
 from __future__ import annotations
@@ -32,17 +34,19 @@ import dataclasses
 import json
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 import numpy as np
 from scipy.spatial import cKDTree
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+TOOLS = Path(__file__).resolve().parent
+sys.path.insert(0, str(TOOLS))
 import compare_every_output as team  # noqa: E402  the comparison the team's engineers run: one set of rules for both
 
 from anisotropy_fea import __version__  # noqa: E402
 from anisotropy_fea.abaqus_reader import read_deck  # noqa: E402
-from anisotropy_fea.bundle import BundleRefused, open_bundle, write_bundle  # noqa: E402
+from anisotropy_fea.bundle import EPOCH, BundleRefused, open_bundle, write_bundle  # noqa: E402
 from anisotropy_fea.equivalence import EquivalenceError, deck_equivalence, equivalence_without_mesh, outline  # noqa: E402
 from anisotropy_fea.model import DeckError, expanded_layers  # noqa: E402
 from anisotropy_fea.units import DECK_UNIT_SYSTEMS, from_si, to_si  # noqa: E402
@@ -95,6 +99,29 @@ def read_reactions(path: Path) -> list[dict]:
             raise team.Refused(f"{path.name}: {exc}") from None
 
 
+MODEL_FORMAT = 1
+MODEL_GROUPS = ("parts", "materials", "sections", "steps", "boundary_conditions", "loads", "constraints", "field_output_requests")
+
+
+def model_facts(path: Path) -> dict:
+    """What the connector read from the `.cae` (the bundle's `model` role), counted. It is listed and never judged: the comparison is
+    made on the deck Abaqus solved, and what this file adds is how the model was built."""
+    try:
+        model = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        return {"read": False, "reason": f"{path.name} is not JSON: {exc}"}
+    if not isinstance(model, dict) or model.get("model_format") != MODEL_FORMAT:
+        found = model.get("model_format") if isinstance(model, dict) else type(model).__name__
+        return {"read": False, "reason": f"{path.name} is not a model of format {MODEL_FORMAT} (found {found!r})"}
+    groups = {name: len(model[name]) for name in MODEL_GROUPS if isinstance(model.get(name), list)}
+    parts = [part for part in model.get("parts") or [] if isinstance(part, dict)]
+    layups = [layup for part in parts for layup in part.get("layups") or [] if isinstance(layup, dict)]
+    not_read = model.get("not_read")
+    return {"read": True, "model": model.get("model"), "read_by": model.get("read_by"), "groups": groups,
+            "layups": [{"name": layup.get("name"), "plies": len(layup.get("plies") or [])} for layup in layups],
+            "not_read": [str(entry) for entry in not_read] if isinstance(not_read, list) else []}
+
+
 def check(bundle_path: Path) -> dict:
     """What a bundle holds, and whether the comparison takes it. Raises `BundleRefused` when it breaks the format."""
     bundle = open_bundle(bundle_path)
@@ -115,6 +142,7 @@ def check(bundle_path: Path) -> dict:
                 result["reactions"] = {"read": False, "reason": str(exc)}
         else:
             result["reactions"] = None
+        result["model"] = model_facts(files["model"]) if "model" in files else None
     result["in_scope"] = bool(result["deck"]["read"] and result["every_output"]["read"]
                               and (result["reactions"] is None or result["reactions"]["read"]))
     return result
@@ -342,6 +370,17 @@ def print_check(result: dict) -> None:
     rf = result["reactions"]
     print("the reactions: none in the bundle, so the pull force cannot be compared" if rf is None
           else f"the reactions: {rf['nodes']} nodes" if rf["read"] else f"the reactions: not read: {rf['reason']}")
+    model = result.get("model")
+    if model is None:
+        print("the model as built: not in the bundle (the connector adds it with --cae)")
+    elif not model["read"]:
+        print(f"the model as built: not read: {model['reason']}")
+    else:
+        counted = ", ".join(f"{count} {name.replace('_', ' ')}" for name, count in model["groups"].items())
+        plies = "; ".join(f"layup {layup['name']}: {layup['plies']} plies" for layup in model["layups"])
+        print(f"the model as built: {model['model']}: {counted}" + (f"; {plies}" if plies else ""))
+        for entry in model["not_read"]:
+            print(f"  not read from the .cae: {entry}")
     print("in scope: the comparison takes this bundle" if result["in_scope"] else "out of scope: the comparison does not take this bundle")
 
 
@@ -358,6 +397,35 @@ def pack(args) -> int:
                           job=args.job or args.deck.stem, coupon=args.coupon, results=results)
     print(f"{args.out}: bundle version {bundle.manifest['bundle_version']}, {len(bundle.files)} files, SHA-256 {bundle.sha256}")
     return 0
+
+
+CONNECTOR_FILES = {"anisotropy_connector.py": TOOLS, "abaqus_every_output.py": TOOLS, "abaqus_extract_fields.py": TOOLS,
+                   "bundle.py": TOOLS.parent / "src" / "anisotropy_fea"}
+CONNECTOR_README = """The Anisotropy connector: one command under your own Abaqus that turns a finished job into one file to send.
+
+Keep these files together in one folder. Nothing is sent anywhere: the command writes <job>-anisotropy.zip beside your ODB.
+
+The results and the input file Abaqus solved (no seat of Abaqus/CAE is used):
+
+    abaqus python anisotropy_connector.py <job>.odb --units mm-MPa
+
+The same, with the model as built read from your .cae (opened and read, never saved) and its journal:
+
+    abaqus cae noGUI=anisotropy_connector.py -- <job>.odb --units mm-MPa --cae <model>.cae
+
+--units states the system your model is written in, mm-MPa or m-Pa: an Abaqus model carries none.
+The job must ask for S and E at each ply's middle section point, and RF, as the package's input file does.
+"""
+
+
+def connector_zip(out: Path) -> list[str]:
+    """The connector's files and a note of its two commands in one zip to hand over, the same bytes for the same files."""
+    names = []
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in [(n, (folder / n).read_bytes()) for n, folder in CONNECTOR_FILES.items()] + [("README.txt", CONNECTOR_README.encode())]:
+            archive.writestr(zipfile.ZipInfo(f"anisotropy-connector/{name}", EPOCH), data, zipfile.ZIP_DEFLATED)
+            names.append(name)
+    return names
 
 
 def plain(value):
@@ -399,8 +467,13 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--job", default=None)
     c.add_argument("--coupon", default=None)
     c.add_argument("--out", type=Path, required=True)
+    c = commands.add_parser("connector", help="write the connector's files as one zip to hand to a user of Abaqus")
+    c.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "connector":
+            print(f"{args.out}: {', '.join(connector_zip(args.out))}")
+            return 0
         if args.command == "pack":
             return pack(args)
         if args.command == "check":
