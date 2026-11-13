@@ -27,19 +27,19 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0076)"
   await page.goto("/");
   const order = await page.locator("main > section").evaluateAll((sections) => sections.slice(0, 2).map((section) => section.id));
   expect(order).toEqual(["overview", "laminate"]);
-  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Anisotropy\s*one engineering platform/);
+  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/one engineering platform\s*for composite theory/);
 });
 
-const STATEMENT = /Anisotropy\s*one engineering platform\s*for composite theory\s*and real test data/;
+const STATEMENT = /^\s*one engineering platform\s*for composite theory\s*and real test data\s*$/;
 
-test("the hero's words are one statement, the tagline and one small line (ADR-0077 amendments 19 and 21)", async ({ page }) => {
+test("the hero's words are one statement, the name and one small line (ADR-0077 amendments 19, 21 and 27)", async ({ page }) => {
   const posts: Posted[] = [];
   await playApi(page, posts);
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
   await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
-  await expect(hero.locator(".home-hero-tagline")).toHaveText(/Composites\.\s*Calculated\./);
+  await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
   await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
   await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
   // No 3D view, chat box or link in the hero: the calculator below draws the stack, and the header's Workspace button is the

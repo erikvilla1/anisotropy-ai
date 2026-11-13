@@ -64,15 +64,15 @@ const frames = (page: Page) =>
     return taken;
   });
 
-const STATEMENT = "Anisotropy one engineering platform for composite theory and real test data";
+const STATEMENT = "one engineering platform for composite theory and real test data";
 
 async function expectHeroWhole(page: Page, blink = "type-caret-blink") {
   const hero = page.locator("#overview");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero.locator("[data-intro-run]")).toHaveCount(0);
-  await expect(hero.locator("h1")).toHaveText("Anisotropyone engineering platformfor composite theoryand real test data");
+  await expect(hero.locator("h1")).toHaveText("one engineering platformfor composite theoryand real test data");
   await expect(hero.locator("h1")).toHaveCSS("color", "rgb(255, 255, 255)");
-  await expect(hero.locator(".home-hero-tagline")).toHaveText("Composites.Calculated.");
+  await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
   await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
   for (const line of await hero.locator(".home-hero-tagline, .home-hero-note").all()) await expect(line).toHaveCSS("color", "rgb(255, 255, 255)");
   // The text cursor: on the statement's last line, at its end, taking no room, and blinking unless the visitor asked for

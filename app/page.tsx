@@ -53,13 +53,11 @@ export default function Home() {
           {heroVideo ? <HeroVideoKeeper /> : null}
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
-        {/* The words, in Anduril's arrangement (ADR-0077 amendment 19): one statement in large capitals in the middle, and
-            under it a row of the tagline, the mark and one short line. The load-in (ADR-0070 amendments 1 and 4) types
+        {/* The words, in Anduril's arrangement (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle,
+            and under it a row of the name, the mark and one short line. The load-in (ADR-0070 amendments 1 and 4) types
             the statement and the small lines in, and a text cursor blinks at the statement's end (components/intro-text.ts). */}
         <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="type" data-outro="type" data-intro-caret="">
-            Anisotropy
-            <br />
             one engineering platform
             <br />
             for composite theory
@@ -68,10 +66,9 @@ export default function Home() {
             <span className="type-caret" aria-hidden="true" />
           </h1>
           <div className="home-hero-row">
+            {/* The name, beside the mark, where the tagline stood until ADR-0077 amendment 27. */}
             <p className="home-hero-tagline" data-intro="type" data-outro="type">
-              Composites.
-              <br />
-              Calculated.
+              Anisotropy
             </p>
             <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />
             <div className="home-hero-notes">

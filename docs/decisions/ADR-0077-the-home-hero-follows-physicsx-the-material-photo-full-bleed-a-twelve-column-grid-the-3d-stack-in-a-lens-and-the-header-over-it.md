@@ -395,3 +395,11 @@ On phones it is one column.
 
 **Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` has the page note when the load-in is over and when the exit's copies appear, and reads the time between them as at least 2.9 s and under 4.2 s: 4 of 4. The run was made while the tour was being rebuilt in the same tree; these cases do not load its new parts.
 
+## Amendment 27, 2026-11-13 (the statement without the name; the name beside the mark)
+
+**Context.** With a screenshot of the hero the lead asked to "get rid of ANISOTROPY above the ONE..." and to "replace where it says composites. calculated. with ANISOTROPY".
+
+**Decision.** The statement is three lines: "one engineering platform / for composite theory / and real test data". The row under it reads the name, the triangle, then the cohort line: "Anisotropy" stands where "Composites. Calculated." stood, in the same setting. The tagline is no longer on the home page; the browser tab's title still carries it. The page's first heading no longer holds the name, which is in the header's logo and now beside the mark.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: a screenshot of the hero was looked at. `intro.spec.ts`, `home.spec.ts` and the overview case of `portfolio.spec.ts`, which read the new words: 15 of 15.
+

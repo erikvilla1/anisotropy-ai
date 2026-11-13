@@ -8,9 +8,9 @@ test("overview, the home page's blurbs, and material source document", async ({
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
-  // The hero's statement is the heading, and "Composites. Calculated." the tagline under it (ADR-0077 amendment 19).
+  // The hero's statement is the heading, and the name stands beside the mark under it (ADR-0077 amendments 19 and 27).
   await expect(page.getByRole("heading", { level: 1 })).toContainText("one engineering platform");
-  await expect(page.locator(".home-hero-tagline")).toContainText("Calculated");
+  await expect(page.locator(".home-hero-tagline")).toHaveText("Anisotropy");
   // The lab imagery carousel and its lightbox left the home page (audit of 2026-10-31, item 6).
   await expect(page.getByRole("button", { name: "Next research image" })).toHaveCount(0);
   for (const name of ["Your layup, calculated.", "Five ways to use it.", "Five people, two seats each.", "Lately."])

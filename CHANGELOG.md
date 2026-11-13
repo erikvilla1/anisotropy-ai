@@ -74,6 +74,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - The beta launch checks (ADR-0056, stage 5): `ANISOTROPY_JOBS_PER_USER_PER_DAY`, off unless set and needing run records on, gives each person (the signed-in email, else the actor) one running coupon job at a time and a daily cap counted in the `jobs` table; a request past either is refused with 429 and a sentence the studio's chat shows. The studio's live browser test runs against the hosted site with `PREVIEW_URL` and a Cloudflare Access service token (`CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`). `docs/evaluations/website/2026-11-05-beta-launch-checks.md` holds the measured numbers so far (job time, peak memory, file sizes, image size, from the image on the founder's machine and on GitHub's runner) and how to take the live ones (cold start, job time, peak memory and cost per job on Cloudflare), which are UNVERIFIED until a service token exists.
 
 ### Changed
+- The hero's statement no longer starts with the name; "Anisotropy" stands beside the triangle where "Composites. Calculated." stood (ADR-0077 amendment 27).
 - The hero's words leave three seconds after they have loaded in, not five (ADR-0077 amendment 26).
 - Nothing of the tour's stage shows while it comes up under the hero: its parts fade in when its first step starts. The five ticks along its foot are removed (ADR-0084 amendment 6).
 - The tour's stage and the 3D view stand on pure black too; only a faint pool of light under the stack is left on the ground (ADR-0077 amendment 25).
