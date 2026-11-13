@@ -146,6 +146,25 @@ export async function removeUpload(apiBase: string, id: string): Promise<void> {
 
 /** Where the file as it was sent is handed back from. It is a link, and a link carries no header, so the actor is named in the address. */
 export const sentFileUrl = (apiBase: string, id: string): string => `${base(apiBase)}${UPLOADS}/${encodeURIComponent(id)}/bundle?actor=${ACTOR}`;
+/** Where the comparison as a PDF is handed out from: the upload's own document, kept with it. A link, so the actor is in the address. */
+export const documentUrl = (apiBase: string, id: string): string => `${base(apiBase)}${UPLOADS}/${encodeURIComponent(id)}/document?actor=${ACTOR}`;
+
+/** Have the comparison's document written and kept, when it is not yet, so that the card can say it is being written; the link then
+ * answers at once. */
+export async function writeDocument(apiBase: string, id: string): Promise<void> {
+  await ask(`${base(apiBase)}${UPLOADS}/${encodeURIComponent(id)}/document`, { method: "POST", headers: actor }, "the PDF");
+}
+
+/** The card's words when the PDF could not be written; the comparison on the card stands either way. */
+export function documentProblem(error: unknown): { words: string; reasons: string[] } {
+  const status = error instanceof StudioError ? error.status : undefined;
+  if (status === 401 || status === 403) return { words: "Your sign-in has ended. Reload the page, sign in, and ask for the PDF again.", reasons: [] };
+  if (status === 404) return { words: "This file is no longer stored, or it belongs to someone else.", reasons: [] };
+  if (status === 409) return { words: "There is no comparison to print yet. Click Compare again, then ask for the PDF.", reasons: [] };
+  if (status === undefined) return { words: error instanceof StudioError ? error.message : "The PDF was not written. Try again.", reasons: [] };
+  return { words: "The PDF could not be written just now. The comparison above stands. Try again.", reasons: [] };
+}
+
 /** Where the connector's files are handed out as one zip. */
 export const connectorUrl = (apiBase: string): string => `${base(apiBase)}/v1/abaqus-connector`;
 

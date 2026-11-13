@@ -87,6 +87,19 @@ test("a model that differs says in how many places and shows each where it is; a
   await expect(what.nth(1)).toHaveText(/The pull force\s*17020 N\s*16210 N\s*the top grip/);
   await expect(card(page).getByTestId("abaqus-build")).toHaveCount(0); // the steps are for a run without a file yet
 
+  // the comparison as a PDF (step 7): the card has it written first and says so, then the browser saves it from the link, the actor in the address
+  const saved = page.waitForEvent("download");
+  await card(page).getByTestId("abaqus-document").click();
+  const download = await saved;
+  expect(download.suggestedFilename()).toBe("Job-1-compared-with-anisotropy.pdf");
+  expect(new URL(download.url()).pathname + new URL(download.url()).search).toBe(`/v1/abaqus-uploads/${differs.id}/document?actor=studio`);
+  expect(state.documents).toEqual([`POST ${differs.id}`, `GET ${differs.id}`]);
+  await expect(card(page).getByTestId("abaqus-verdict")).toHaveText("Differs in 2 places"); // the page stays where it was
+  state.onDocument = () => ({ status: 503, body: { detail: "The document could not be written: the document was not compiled: Tectonic stopped with exit code 1" } });
+  await card(page).getByTestId("abaqus-document").click();
+  await expect(card(page).getByTestId("abaqus-problem")).toHaveText("The PDF could not be written just now. The comparison above stands. Try again.");
+  expect(state.documents).toEqual([`POST ${differs.id}`, `GET ${differs.id}`, `POST ${differs.id}`]); // no link is followed for a PDF that was not written
+
   await card(page).getByTestId("abaqus-earlier").getByRole("button").click();
   await expect(card(page).getByTestId("abaqus-verdict")).toHaveText("Agrees with ours");
   await expect(card(page).getByTestId("abaqus-provenance")).toContainText("Job-0");

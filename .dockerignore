@@ -17,6 +17,7 @@ app
 components
 tests
 !tests/fixtures/studio/values.json
+!tests/fixtures/abaqus/differs.json
 services
 scripts
 test-results
