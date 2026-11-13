@@ -276,3 +276,183 @@ On phones it is one column.
 - **The workspace header** is 56 px tall on a 20 px gutter. On CAD and the viewer, which have no toolbar of their own, it links to All projects; on a phone that link takes the place of "Back to website", and the logo still leads home. Its links are 13 px on phones. On phones the workspace toolbar puts the project's name on a row of its own and keeps the kind on one line.
 
 **Evidence.** `npm run build` on 2026-11-12: every page lists the menu button before `id="site-menu"`; `out/workspace/cad.html` has the header's All projects link and `out/workspace/fea.html` does not; no page holds "Research preview" or `header-version`; the folded menu's underline for the current service row is in the shared stylesheet. `npm test` on 2026-11-13, rebased on main after #199: 255 tests, 254 passed, 0 failed, 1 skipped; `tests/site-metadata.test.ts`, 6 of 6, checks which addresses get the workspace header, where All projects shows, and that in the shell, the property table and a job's files ↗ sits only on a link with `target="_blank"` that says it opens a new tab or window (its check, run by hand on main's versions, flags four links in `site-shell.tsx` and two in `property-table.tsx`). `tests/browser/shell.spec.ts` (new: the menu's order, focus, Escape, outside press, Tab out and 44 px rows, the current service's row underlined in it, Back to top, the CAD header, the 404 page under an old address) and the existing site-wide specs: UNVERIFIED, not run in this change. No screenshots were taken: the header from 641 to 900 px, forced colours and the workspace header on a phone are UNVERIFIED.
+
+## Amendment 31, 2026-11-11 (the supporters' strip removed)
+
+Numbered 16 on its branch; renumbered when the branch took in main, where an amendment of 2026-11-12 had the number.
+
+**Context.** Going through the draft, the lead showed the "Supported by" strip and asked: "also get rid of this".
+
+**Decision.**
+- The strip leaves the home page. Under the demo the order is Mission and Platform, both dark with a hairline between them, About light, What is new dark. The labels stay 01 to 04.
+- Its component (`components/home/logo-strip.tsx`), its list (`lib/supporters.ts`) and its styles are deleted. They are in commit `a220d18` if a row of logos is wanted later.
+- The Launchpad cohort is still named twice: by the white mark in the hero (ADR-0081) and by About's line.
+
+**Options not chosen.** Hiding the strip with CSS: it would stay in the page. Recolouring the bands to keep dark and light in turn: Platform, About and What is new would each change ground, which the lead did not ask for.
+
+**Evidence.** On 2026-11-11, in the browser against the dev server at 1440 px: the page's sections are the hero, the calculator, Mission, Platform, About, What is new and the closing band; no page errors. A screenshot of Mission into Platform was looked at.
+- **Checks:** run on the same tree as ADR-0080 amendment 1 and recorded there, with the two browser tests that failed and what their re-runs showed.
+
+## Amendment 17, 2026-11-13 (a black page with the clip in a round box, after Scale)
+
+**Context.** The lead showed Scale's home page, where the hero's video plays in a box with round corners under the header, and asked: "make the homepage this style, keep same fonts and arrangements, just use the black background and rounded corners interior box for the hero vid."
+
+**Decision.**
+- **The page is black and the clip plays in a box.** The box starts under the header and stands on the page's margin at the sides and the foot, so its edges line up with the logo above and the sections below. Its corners are 20 px (16 px on phones).
+- **The header lies on the black strip above the box,** no longer over the picture. It is still placed over the hero and scrolls away with it.
+- **The words keep their arrangement inside the box:** the headline on columns 1 to 6 and the copy from the halfway line, where the header's links start; the badge bottom left and "Scroll to explore" bottom right, each as far from the box's edge as the headline is (32 px; 24 px under 1024 px; 16 px on phones).
+- **The shades are lighter and stop short of black.** The fade into the page at the foot and the shade under the header are gone, since neither is over the picture now. A 1 px hairline inside the edge marks the box where the clip is dark.
+- **The scroll tour takes the clip from the box** (ADR-0084): the hand-over starts from the box's place and corner radius, and the hero's black ground fades first so the shrinking clip uncovers the stage.
+
+**Options not chosen.**
+- Scale's 16 px frame with the logo moved to it: the logo and the box would leave the 32 px line the sections below stand on.
+- The words on the page's own columns, 16 px inside the box: too close to its round corners.
+- No hairline: where the clip is dark, the box's left and top edges were lost against the black page.
+
+**Evidence.** On 2026-11-13, in the browser against the production build with the committed clip:
+- **Measured.** At 1440 by 900 the header is 56 px tall and the box runs from x = 32 to 1408 and y = 64 to 868; the headline starts at x = 64, and the copy and the header's first link both at x = 736. At 1100 px the box starts at y = 86, at 900 px at x = 24 and y = 75, on a 390 px phone at x = 20 and y = 70 with 16 px corners. No sideways scroll and no page errors at any of the four.
+- **Looked at.** Screenshots of the hero at 1860, 1440, 1100, 900 and 390 px, and of the hand-over at five moments of the scroll: the box shrinks into the card with round corners throughout and lands on the top ply; back at the top the hero is as at rest.
+- **Checks.** `npm run typecheck` clean. `npm test`: 248 passed, 1 skipped, with a new case for the hand-over from the box. The whole browser suite against the build: 82 passed, 2 failed, 1 skipped, with a new case for the box and its margins in `home.spec.ts`.
+- **The two failures** are `portfolio.spec.ts` "the chat keeps a coupon across messages" and "mobile navigation and workspaces fit the screen". Both ask the workspace's assistant for the open-hole coupon, which ADR-0089 no longer offers; neither loads the home page, and CI does not run that file. They are left for a change to the workspace's tests.
+- **A stale test fixed on the way.** Two lines of `expansion.spec.ts` expected the workspace assistant's first question to be the test; since ADR-0089 offers one test it is the material, as `workspace.spec.ts` already reads it. Before the fix those two failed; after it the file passed 6 of 6. CI does not run this file either.
+- **UNVERIFIED:** the look on the lead's screen and on a real graphics card (the container draws WebGL in software), Safari and Firefox, and real phones and tablets.
+
+## Amendment 18, 2026-11-13 (the box is taken back: the clip fills the screen again)
+
+**Context.** Having seen amendment 17 on the page, the lead said: "I also dont like the whole scale ai background change I suggested, revert back to whole screen."
+
+**Decision.** Amendment 17 is undone in the code. The clip fills the hero again with the header over it, the shades and the paddings are as before amendment 17, and the scroll tour's hand-over starts from the whole window again (ADR-0084 amendment 2). The browser and unit cases written for the box go with it.
+
+**Evidence.** On 2026-11-13, in the browser against the dev server: at 1440 by 900 the clip's box is the whole window (0, 0, 1440 by 900) and the header lies over it; the same on a 390 px phone; no sideways scroll, no page errors. A screenshot of the hero was looked at. `npm run typecheck` clean; `npm test` 247 passed, 1 skipped; `home.spec.ts`, `intro.spec.ts`, `tour.spec.ts` and `expansion.spec.ts` against the dev server with the local API: 26 of 26.
+
+## Amendment 19, 2026-11-13 (the home page in the arrangement of Anduril's)
+
+**Context.** Minutes after amendment 18 the lead showed Anduril's home page and asked: "lets copy this exact same layout for our homepage too", "fonts and all", "arrangement, layout, etc...". There the header lies on a black strip with its links in the middle; under it a video plays in a box with square corners on the page's margin; one statement in large capitals stands in the middle of the box, and under it a row of a two-line tagline, the mark and two short monospace lines.
+
+**Decision.** The arrangement is followed; the words and the mark are ours.
+- **Header, on every page.** From 1201 px it is 84 px tall with the logo at the left, the links in the middle of the page in semibold 16 px, and Workspace at the right. On the home page it lies on the hero's black ground.
+- **The box.** The clip plays in a box with square corners from the header's foot to 32 px above the hero's foot, 32 px from each side (24 px under 1024 px, 20 px under 641 px). One even shade lies over it for the words.
+- **The statement** is the level-one heading, in capitals of medium weight set tight: "Anisotropy / bringing composite theory / and real test data into / one engineering platform". It is the hero's earlier first paragraph, shortened; nothing is claimed that the paragraph did not say. The second paragraph leaves the hero.
+- **The row under it.** "Composites. Calculated.", the earlier headline, is the tagline at the left; the triangle stands in the middle of the page; at the right, in monospace, "Fall 2026 Launchpad cohort" (ADR-0081) and under it "Explore" with a down arrow, which is the Scroll to explore button.
+- **The Basement's mark** stays in the box's bottom left corner, without its line of text, which the row now carries.
+- **Type.** The site's typeface changes with it (ADR-0093), and the logo's name is set in it (ADR-0080 amendment 4).
+- **The tour's hand-over** starts from the box again (ADR-0084 amendment 3).
+- **Under 761 px** the statement breaks where it needs to and the row stacks.
+- **Sizes.** Seeing it, the lead asked to "keep the logo the same size, but make the font lil smaller": the statement is 4.1 % of the window's width (59 px at 1440 px, where the reference's proportion gave 66 px), the tagline and the two small lines a tenth smaller, and the mark in the row as it was.
+
+**Not copied.** Anduril's "©" before the name, its own words, and its typeface, which is licensed.
+
+**Evidence.** On 2026-11-13, in the browser against the dev server with the committed clip:
+- **Measured at 1440 by 900:** the header is 84 px tall; the box runs from x = 32 to 1408 and y = 84 to 868; the statement, the mark and the header's links are each centred on x = 720. At 1880, 1100, 900 and 390 px the box follows the header and the margin (on the phone from x = 20 and y = 70). No sideways scroll and no page errors at the five sizes.
+- **Looked at:** screenshots of the hero at the five sizes, of the hand-over at three moments, and of About and the laminate workspace in the new typeface.
+- **Checks:** `npm run typecheck` clean; `npm test` 248 passed, 1 skipped. `home.spec.ts`, `intro.spec.ts`, `tour.spec.ts` and `expansion.spec.ts` against the dev server: 26 passed, 1 failed. The failure is `home.spec.ts` "typing a layup", the calculator's timing case that has failed before in this container; run alone twice, it passed twice.
+- **The whole browser suite on a production build,** run after the commit: 81 passed, 3 failed, 1 skipped. One failure was this change's: `portfolio.spec.ts` "overview" still looked for "Calculated" in the heading; it now reads the statement and the tagline, and passed when run again. The other two are the workspace's open-hole cases that ADR-0089 left stale (amendment 17's evidence names them).
+- **UNVERIFIED:** real phones and tablets, Safari and Firefox, and the lead's screen.
+
+## Amendment 20, 2026-11-13 (the hero's words leave five seconds after they load in)
+
+**Context.** The lead sent a recording of Anduril's hero, where the words are taken away after a few seconds and the video plays alone, and asked: "after it loads in, keep it there for like 5 seconds and have it disappear with this style animation". In the recording every line loses its characters from the end, the last few as random letters, the upper lines a little ahead; the block is gone in about half a second and the mark goes last.
+
+**Decision.**
+- Five seconds after the load-in has ended, with the page still at its top, the statement, the tagline and the two small lines are untyped that way, then the mark in the row fades. The clip then plays alone, with The Basement's mark still in its corner.
+- The five seconds count only while the page is at its top, so a visitor who has scrolled into the tour finds the words on the way back; they leave five seconds after that.
+- The words stay in the page, invisible, so a screen reader still reads the heading. The Explore button leaves the tab order with them.
+- A visitor who asked for reduced motion keeps the words.
+- It reuses the load-in's copies and windows, run backwards (`prepareOutro` in `components/intro-text.ts`; `components/home/hero-outro.tsx` starts it; ADR-0070 amendment 3).
+
+**Evidence.** On 2026-11-13, in the browser against the dev server at 1280 by 720: the load-in ended 2.5 s after the page was asked for, the words began to leave 5.1 s later and were gone 1.0 s after that. Afterwards five elements carried `data-outro-done` at opacity 0, the heading still held its text, the Explore button was hidden and The Basement's mark was at opacity 1; no page errors. A contact sheet of the exit at ten frames a second was looked at beside the lead's recording. `npm run typecheck` clean; `npm test` 248 passed, 1 skipped; `intro.spec.ts` (with a new case for this), `home.spec.ts` and `tour.spec.ts` against the dev server: 22 of 22. UNVERIFIED: the motion on a real graphics card and on phones.
+
+## Amendment 21, 2026-11-13 (the Explore button leaves; the statement is reworded)
+
+**Context.** Seeing amendments 19 and 20 on the page, the lead asked to "get rid of the explore button now" and, of the statement, "can we also change this to something else ... I like the message tho."
+
+**Decision.**
+- **The Explore button is removed** from the hero, with its component, its styles and its two browser cases. The row's right side is the one monospace line.
+- **The statement reads** "Anisotropy / one engineering platform / for composite theory / and real test data". It says what the earlier one said, without "bringing ... into". The wording is one proposal; three others were given to the lead to choose from.
+
+**Evidence.** On 2026-11-13 against the dev server: the hero holds no button; a screenshot at 1440 px was looked at; no page errors at 1440 and 390 px. `npm run typecheck` clean; `npm test` 248 passed, 1 skipped; `intro.spec.ts`, `home.spec.ts`, `tour.spec.ts` and the overview case of `portfolio.spec.ts`: 22 of 22.
+
+## Amendment 22, 2026-11-13 ("Scroll to explore" comes back, after the words have left)
+
+**Context.** Amendment 21 removed the Explore button from the hero's row. With the exit of amendment 20 in place the lead asked: "after it all disappears have the scroll to explore button appear at the bottom of the carbon fiber video centered".
+
+**Decision.** `components/home/scroll-to-explore.tsx` is a button, "Scroll to explore" over a down arrow, in the row's monospace capitals, at the foot of the clip in its middle, on the line the Basement's mark stands on. It cannot be seen, pointed at or focused while the words stand; when the hero carries `data-words="gone"` it fades in, and its arrow dips now and then. A press scrolls the page to the tour, whose first step plays when its stage fills the window (ADR-0084 amendment 5). A visitor who asked for reduced motion keeps the words and has the button from the start, with a still arrow.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: a frame taken after the exit shows the button alone at the foot of the clip, in its middle. `intro.spec.ts`: hidden while the words stand; after the exit visible, within 1 px of the clip's middle and in its lowest quarter; a press brings the tour's stage to the window's top and its first step plays; visible from the start with reduced motion: 4 of 4. `home.spec.ts`, which now counts the hero's one hidden button: 10 of 10. UNVERIFIED: phones, where the button and the Basement's mark share the foot of the clip.
+
+## Amendment 23, 2026-11-13 (the site's pages stand on pure black)
+
+**Context.** With a screenshot of the hero's frame and header the lead asked: "why isnt the background black black?" The page ground was the site's near-black, `#0d0d0d`, since the first dark design; Anduril's pages, which this hero follows, stand on pure black.
+
+**Decision.** On every page with the site's header the page ground, `--bg`, is `#000000`: the header, the hero's frame, the dark bands and the footer. The Services panel's ground becomes `#000000` with it, so the open panel is one surface with the page. Not changed: the workspace, an app whose panels were drawn for `#0d0d0d`; the tour's stage, which continues the 3D view's own lit ground (about `#0b0b0b` at its edges); cards and panels (`#141414` and lighter); the load veil (`#010101`).
+
+**Options considered.** Changing `--bg` for the whole site at `:root`: rejected, it would reach the workspace's panels without a look at each. Only the home hero's frame: rejected, the header and the next dark bands would then differ from it.
+
+**Evidence.** On 2026-11-13 on the dev server at 1440 px: the body's computed ground is `rgb(0, 0, 0)` on `/`, `/about`, `/library` and `/services`, and `rgb(13, 13, 13)` on `/workspace`; screenshots of the home hero, the Mission and Platform bands and the About page were looked at. `home.spec.ts` (which reads the hero's ground as `rgb(0, 0, 0)`), `expansion.spec.ts` and `intro.spec.ts`: 20 of 20. UNVERIFIED: the step from the hero's black frame to the tour stage's ground on a display that shows it, and every inner page beyond the three looked at.
+
+## Amendment 24, 2026-11-13 ("Scroll to explore" as Scale sets it, in the bottom right corner)
+
+**Context.** With a screenshot of Scale's home page the lead asked to "make the scroll to explore button appear in the same position as here and with the same type of box".
+
+**Decision.** The button of amendment 22 moves from the middle of the clip's foot to its bottom right corner, as far in from the right and the foot as the Basement's mark is from the left and the foot. It is set as Scale's: "Scroll to explore" in the site's typeface at 14 px, then a down arrow in a 34 px square with a 1 px white outline and 5 px corners. The arrow no longer dips. On hover or keyboard focus the square fills white and the arrow turns black. When it shows, and what a press does, are unchanged.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: a frame taken after the exit shows the button in the clip's bottom right corner; `intro.spec.ts` reads its distance from the clip's right edge and foot as equal to the mark's from the left edge and foot, the square as 34 by 34 px with a 1 px border and 5 px corners, and a press as bringing the tour's stage to the window's top: 4 of 4. UNVERIFIED: phones.
+
+## Amendment 25, 2026-11-13 (the tour's stage and the 3D view stand on pure black too)
+
+**Context.** Amendment 23 left the tour's stage on the 3D view's own ground, a dark grey that was lighter behind the stack. With a screenshot of it under the hero's black frame the lead asked: "should be all black too?"
+
+**Decision.** The 3D view's backdrop (`Backdrop` in `components/home/laminate-studio.tsx`) draws pure black in place of its grey gradient, in the tour and in the calculator's view. The stage's ground (`--tour-stage-ground`) is `#000000` with only the view's faint pool of light under the stack continued over it, so the view still has no edge; the unpinned tour's ground and the view's card are `#000000` as well. The pool, at most 6% white under the stack, and the stack's contact shadow on it are kept: they are what the stack stands on.
+
+**Evidence.** On 2026-11-13 on the dev server at 1440 by 900: in a screenshot of the stage at its first step the pixels at its four corners and the middle of each side read (0, 0, 0); in one taken part of the way down from the hero the frame under the clip and the stage's top are one black. `npm run typecheck` clean; `npm test` 249 passed, 1 skipped; the cases of `home.spec.ts` and `tour.spec.ts` that load the view and the stage: 13 of 13. UNVERIFIED: the view on a real graphics card, and whether the pool reads as light or as a grey patch on the lead's display.
+
+## Amendment 26, 2026-11-13 (the words leave after three seconds)
+
+**Context.** Of the five seconds the hero's words stood before leaving (amendment 20) the lead said: "lets have the main screen text animate after 3 seconds, it feels too long right now."
+
+**Decision.** The hold is three seconds (`HOLD_MS` in `components/home/hero-outro.tsx`). How it is counted is unchanged: from the end of the load-in, only while the page is at its top, checked every 0.2 s.
+
+**Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` has the page note when the load-in is over and when the exit's copies appear, and reads the time between them as at least 2.9 s and under 4.2 s: 4 of 4. The run was made while the tour was being rebuilt in the same tree; these cases do not load its new parts.
+
+## Amendment 27, 2026-11-13 (the statement without the name; the name beside the mark)
+
+**Context.** With a screenshot of the hero the lead asked to "get rid of ANISOTROPY above the ONE..." and to "replace where it says composites. calculated. with ANISOTROPY".
+
+**Decision.** The statement is three lines: "one engineering platform / for composite theory / and real test data". The row under it reads the name, the triangle, then the cohort line: "Anisotropy" stands where "Composites. Calculated." stood, in the same setting. The tagline is no longer on the home page; the browser tab's title still carries it. The page's first heading no longer holds the name, which is in the header's logo and now beside the mark.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: a screenshot of the hero was looked at. `intro.spec.ts`, `home.spec.ts` and the overview case of `portfolio.spec.ts`, which read the new words: 15 of 15.
+
+## Amendment 28, 2026-11-13 (the row reads the year, the mark, the name; the cohort goes beside The Basement's mark)
+
+**Context.** The lead: "Maybe lets move anisotropy to the right side of the penrose, and put ESTABLISHED 2026 on the left? I feel like the FALL 2026 LAUNCHPAD COHORT is out of place there... it doesnt say for what cohort nor do I think it should be a main description of the company. unless it goes by the logo in the bottom left right? which is uc san diego the basement, bc the reason I wanted to have it on the site was ... a good flex for credibility when someone first lands on the site."
+
+**Decision.**
+- The row under the statement reads "Established 2026" in the small monospace capitals on the triangle's left, and "Anisotropy" in the bold capitals on its right.
+- "Fall 2026 Launchpad cohort" leaves the row and stands beside The Basement's mark in the clip's bottom left corner, behind a hairline, so the line says whose cohort it is (ADR-0081). It fades in and out with the mark. On a narrow screen it stands under the mark, and "Scroll to explore" keeps only its square there, its words left for a screen reader.
+
+**Evidence.** On 2026-11-13 against the dev server: screenshots at 1440 px and at 390 px were looked at; the first 390 px one showed the cohort's line running into the button's words, which the narrow-screen rule above removes. `home.spec.ts` (the row's order and words, the cohort beside the mark), `intro.spec.ts` and the overview case of `portfolio.spec.ts`: 10 of 10. UNVERIFIED: "Established 2026" is the lead's statement; the repository holds no record of when the company was established. Permission to show The Basement's mark, as before.
+
+## Amendment 29, 2026-11-13 (the five portraits, a new order, and LinkedIn's mark under the pointer)
+
+**Context.** The lead uploaded five portraits to `public/assets/brand/Headshots/` on `main` and asked, with a recording of another site's card: "put the respective headshots in here ... when hover over it, have the linkedin icon appear circularly in the bottom right. we'll route the links later", and then "put tabassum in the middle, me on the right too".
+
+**Decision.**
+- **Portraits.** Each card's frame shows the person's portrait in place of the initials. `scripts/team-photos.py` cuts each original to the frame's 4 by 5 around the person, 800 by 1000 px and 59 to 78 KB, into `public/assets/team/`, the files `lib/team.ts` names. The originals are left where the lead put them; one is 10 MB, and a deploy serves them all.
+- **Whose is whose.** Four files carry a first name. The fifth, `IMG_7003.JPG`, is taken to be the lead's own by elimination.
+- **Order.** Christopher Valerio, Erik Villa, Tabassum Zaman, Jusung Park, Kai Saucedo. The About page lists the team from the same list, so its order changes too; it does not show the portraits yet.
+- **LinkedIn's mark.** A round black badge with the "in" in white comes up in the frame's bottom right corner while the pointer is over a card or the keyboard's focus is in it. No profile address is set yet, so the badge is only drawn and is hidden from a screen reader; when a person's address is put in `lib/team.ts` it becomes the link. Where there is no pointer to hover with, only a badge that is a link is shown.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: the five portraits load at 800 px wide in the new order, and the badge's opacity is 1 on the card under the pointer and 0 on the others; screenshots of the row and of one card under the pointer were looked at. `tests/team.test.ts` (each photo is a file under `public/`): 2 passed. `npm run typecheck` clean.
+
+**UNVERIFIED.**
+- **Consent.** Each portrait is added only with that person's consent (the rule in amendment 14's "Portraits and profiles"). The lead supplied the five; whether each person agreed to their portrait on a public site and in a public repository is the lead's to confirm before this is merged.
+- That `IMG_7003.JPG` is the lead's portrait.
+- LinkedIn's rules for showing its mark; phones and tablets.
+
+## Amendment 30, 2026-11-13 (the year reads "Est. 2026")
+
+**Context.** Seeing amendment 28's row, the lead asked: "maybe just put EST. 2026 to get more symmetry here?"
+
+**Decision.** The line on the triangle's left reads "Est. 2026" in place of "Established 2026", and is set wide (0.27 em between letters) so that it is as long as the name on the other side. The space the tracking leaves after the last figure is taken back, so both sides stand as far from the triangle.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: "Est. 2026" alone measured 101 px beside the name's 138 px; set wide it measures 138 px, and each side stands 34 px from the triangle. A screenshot was looked at. `home.spec.ts` and `intro.spec.ts`: 10 of 10. UNVERIFIED, as before: the year is the lead's statement.

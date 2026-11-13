@@ -115,3 +115,85 @@ What Anduril's code does:
 **Decision.** Option 2, the founder's answer to D10 on 2026-11-12: "accept" ("Keep the veil on the home first load only, and drop the 350 ms navigation delay"). `components/page-transition.tsx` starts in `enter` only when the first page is `/`; the click handler, the `leave` and `arrive` phases and their keyframes in `app/globals.css` are gone, so a link goes to its page at once, and amendment 2 no longer applies. The home's load-in moves (amendment 1) still play as the veil lifts, and reduced motion still gets neither. A focused skip link sits over the veil.
 
 **Evidence.** `npm run build` on 2026-11-12: `out/index.html` carries `page-transition is-enter`; `out/404.html`, `out/about.html`, `out/studio.html` and `out/workspace/fea.html` carry `is-idle`. `tests/browser/intro.spec.ts` now expects no veil after a header link, after Back and on a direct load of `/about`: UNVERIFIED, not run in this change (the browser suites run after the audit's fix groups).
+
+## Amendment 11, 2026-11-13 (the same moves run backwards take the hero's words away)
+
+Numbered 3 on its branch; renumbered when the branch took in main, where an amendment of 2026-11-12 had the number.
+
+**Decision.** `prepareOutro` in `components/intro-text.ts` takes the text of any element that carries `data-outro="type"` away line by line from the end of each line, with the typed line's windows run in reverse, and fades an element that carries `data-outro="fade"` after them. When it ends the elements carry `data-outro-done`, which the stylesheet makes invisible; their text stays in the page. The home hero uses it (ADR-0077 amendment 20).
+
+**A fault found on the way.** The window that shows the random letters was sized with its padding inside its height, so the letters of a large line set tight were cut off below. `.intro-win` now keeps its padding outside (`box-sizing: content-box`); the typed load-in's letters are whole as well.
+
+**Evidence.** Measured during the exit at 1280 px: the random letters' glyph box and the text's own were the same (top 237.1 px, 64 px tall) while the window ended 28 px above their foot; after the change a contact sheet shows the letters whole. The runs are in ADR-0077 amendment 20.
+
+## Amendment 4, 2026-11-13 (the statement is typed too; a text cursor; the mark turns; the Basement's mark joins)
+
+**Context.** After amendment 11 (the exit, written before this one) the lead asked, with a recording of a blinking text cursor: "can we make the inital animation same as the outro animation for the main center text and can we also add that blinking type line at the end", then "can we also make the triangle spin at the outro", and of The Basement's mark in the hero's corner, "this should also be a part of the animations".
+
+**Decision.**
+- **The home statement is typed in**, as the small lines are, in place of rising (`data-intro="type"`).
+- **A text cursor.** `.type-caret` (`app/intro.css`) is an empty mark after the statement's last word that takes no room and draws a thin line just after the last letter, a little taller than the capitals. It blinks once every 1.06 s, lit for half of it. While a copy plays, `data-intro-caret` gives the copy its own cursor, placed on the page's, which steps with the end of the last line as it is typed or taken away and shows only while that line is on the way. A visitor who asked for reduced motion gets a steady line.
+- **The triangle turns once as the words leave** (`data-outro="spin"`): one turn about its middle over the whole exit, slow at first and fast at the end, fading in the last part.
+- **The Basement's mark** fades in with the load-in (`data-intro="fade"`) and out with the triangle (`data-outro="fade"`). It stays in the page for a screen reader.
+
+**Options considered.** The cursor inside the typed line's window, which needs no placing: rejected, because the window cuts it off at the line's end, so it sat on the last letter. A typed move for the Basement's mark: not possible, it is an image.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px, a recording from first paint to after the exit was cut into contact sheets and looked at: the four lines of the statement are typed with random letters at their ends, the cursor steps along the last line, rests at its end and is lit then dark; at the exit it steps back, the triangle turns and fades, and the Basement's mark is gone with it. The triangle turns about 50% across and 61% down its box, which is the middle of its outline (50.1%, 60.8%) as computed from the path. `npm run typecheck` clean; `intro.spec.ts` (the cursor's place and blink, the copy's cursor, the turn's keyframes, the Basement's mark at opacity 0 after the exit), `home.spec.ts` and `tour.spec.ts`: 21 of 21, the last two after one case each was run again (see below). UNVERIFIED: the motion on a real graphics card, Safari, Firefox and phones.
+
+**Runs.** First run of the three files: 19 of 21. One failure was this change's own test, which asked a visitor with reduced motion for a blinking cursor; corrected. The other, `home.spec.ts` "a load turns on first-ply failure", passed when run again alone and does not touch the hero.
+
+## Amendment 5, 2026-11-13 (the triangle's turn is slower)
+
+**Context.** Seeing amendment 4's recording, the lead asked to "make the triangle spin slower. just one rotation." The turn was one full turn in about 0.9 s that sped up towards its end; the triangle looks the same every third of a turn, so it read as several.
+
+**Decision.** Still one full turn, now in 1.8 s, easing in and out (`cubic-bezier(0.45, 0, 0.55, 1)`), with the fade over its last part. It starts as the first character goes and takes its own time, so the words and the Basement's mark are gone about a second before it is.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px, a contact sheet of the exit at ten frames a second was looked at: the words are gone by 0.4 s, the triangle turns evenly until about 1.7 s and fades from about 1.2 s. `intro.spec.ts`: 4 of 4. UNVERIFIED: the motion on a real graphics card and on phones.
+
+## Amendment 6, 2026-11-13 (the triangle fades in with the words)
+
+**Context.** The lead asked: "can we also have the center triangle animate fade in with the other text".
+
+**Decision.** The hero's triangle carries `data-intro="fade"`: it fades in over the load-in's 1.5 s, starting 100 ms after the black lifts, as the Basement's mark does. Until then it was on the page as the black lifted.
+
+**Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` counts five elements waiting under the black (the three texts, the triangle and the Basement's mark): 4 of 4, run while the scroll tour was being reworked in the same tree, which these cases do not touch. UNVERIFIED: looked at only through that count, not on a recording.
+
+## Amendment 7, 2026-11-13 (the triangle turns anticlockwise)
+
+**Context.** Of amendment 5's turn the lead asked: "counter clockwise too."
+
+**Decision.** The turn ends at -360° in place of 360°: one turn anticlockwise, with the same length, easing and fade.
+
+**Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` reads the turn's keyframes as 0° to -360°: 4 of 4. A contact sheet of the triangle at ten frames a second was looked at: its top tips to the left first, and it has faded by about 1.4 s.
+
+## Amendment 8, 2026-11-13 (a quarter turn; the first load's lift is longer)
+
+**Context.** Of the triangle's turn the lead asked to "make it do 90º instead of 180º", and with a recording of the page loading, "the initial black fade in make a lil bit longer, its a tad bit too quick rn".
+
+**Decision.**
+- **The triangle makes a quarter turn**, 90° anticlockwise, in place of the full turn of amendments 5 and 7 (which the lead read as a half turn: the triangle looks the same every third of a turn). The length, 1.8 s, the easing and the fade are unchanged.
+- **The first load lifts out of black in 600 ms** in place of Anduril's 300 ms, with the same easing; the fallback that lifts without a script takes the same. The fades around navigation keep their 350 ms.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px, contact sheets of a recording were looked at: the page comes out of black over about half a second, the first letters arriving as it clears; at the exit the triangle's top tips left through a quarter turn and it has faded by about 1.4 s. `intro.spec.ts`, which reads the turn's keyframes as 0° to -90°: 4 of 4. UNVERIFIED: a real graphics card, Safari, Firefox and phones.
+
+## Amendment 9, 2026-11-13 (the triangle leaves first, and comes up as it fades in)
+
+**Context.** With a recording of amendment 8's exit, in which the triangle was still turning after the words had gone, the lead asked: "the triangle should be the first thing to start animating out and should be gone by the time all of the other text is gone", and then "can we also have the triangle appear in an upward movement as it fades in".
+
+**Decision.**
+- **On the way out the triangle is first.** Where an element turns (`data-outro="spin"`), the lines begin to go 350 ms after it starts, and its turn ends 150 ms before the last character goes. On the home hero that is a turn of about 0.95 s in place of 1.8 s; the quarter turn, the easing and the fade over its last part are unchanged. The Basement's mark still fades after the lines.
+- **On the way in the triangle comes up.** A fade may say how far below its place it starts (`data-intro-shift`), in place of 15% of its height; the hero's triangle starts its own height low.
+
+**Options considered.** Keeping the 1.8 s turn and slowing the lines to outlast it: rejected, the lead did not ask for slower text. Ending the turn with the last character: rejected, "gone by the time" is safer with a margin.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px, contact sheets of a recording were looked at: at the exit the triangle is already turned when the first characters go, has faded by about 0.6 s, and the last characters go at about 0.8 s; on the way in it rises as it fades in. `intro.spec.ts` reads the animations' own timing (the triangle's starts at 0 and ends before the last line's; the first line starts 300 ms or more later) and the fade's first keyframe, `translateY(100%)`: 4 of 4; `home.spec.ts`: 10 of 10. UNVERIFIED: a real graphics card, Safari, Firefox and phones.
+
+## Amendment 10, 2026-11-13 (a hitch at the start of the exit: every line lost its last character early)
+
+**Context.** With a recording of amendment 9's exit the lead asked: "why is there like a stutter on the animation out". Cut frame by frame, the recording shows the last character of every line gone in the frame the triangle starts, then nothing for about a third of a second, then the lines leaving.
+
+**Cause.** A leaving line plays the typed line's keyframes backwards after a wait. Each keyframe steps to the next at the end of its interval. While an animation waits, the browser reads a stepped keyframe from the side before its jump, so a waiting line was drawn at its second-to-last step, one character short. Before amendment 9 the waits were under 0.3 s and read as part of the move; the 350 ms the lines now wait for the triangle made it a hitch. Measured with the old keyframes: the seven waiting lines were drawn back 38, 51, 38, 39, 8, 8 and 12 px, their last characters' widths.
+
+**Decision.** The whole line is held over the last thousandth of a typed line's keyframes (`WHOLE_HOLD` in `components/intro-text.ts`), so the end a waiting line is read from is the whole line whichever side it is read from. The load-in uses the same keyframes and ends as before.
+
+**Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` holds a copy of each line's own animation at its first moment and reads how far the line is drawn back; with the old keyframes the case failed with the seven widths above, with the change every line reads 0. `intro.spec.ts` and `home.spec.ts`: 14 of 14. A contact sheet of a new recording at 25 frames a second was looked at: the lines are whole while the triangle starts to turn, and the first characters go about 0.35 s later. UNVERIFIED: Safari and Firefox, which may read a waiting stepped keyframe differently; the change is safe either way.

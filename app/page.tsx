@@ -3,14 +3,11 @@ import { join } from "node:path";
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
-import { DemoTour } from "@/components/home/demo-tour";
-import { EngineAnswersProvider } from "@/components/home/engine-answers";
-import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
-import { LaminateHero } from "@/components/home/laminate-hero";
-import { LogoStrip } from "@/components/home/logo-strip";
+import { HeroOutro } from "@/components/home/hero-outro";
+import { ProductDemo } from "@/components/home/product-demo";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
+import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { serviceHref, services, statusLabel } from "@/lib/services";
-import { supporters } from "@/lib/supporters";
 import { team } from "@/lib/team";
 import "./home.css";
 
@@ -42,9 +39,17 @@ const news = [
   },
 ];
 
-/** The home page: the hero first (ADR-0076, ADR-0077), a scroll-driven tour of one calculation (ADR-0084), the laminate
- * calculator as the demonstration, then bands on the mission, the supporters, the platform, the team and what is new, and the
- * closing band. The workflow and the roadmap live on About. */
+/** LinkedIn's "in", as letters only: the round ground is the badge's own (app/home.css, .home-face-in). */
+function LinkedInMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zM7.119 20.452H3.555V9h3.564v11.452z" />
+    </svg>
+  );
+}
+
+/** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
+ * platform, the team and what is new, and the closing band. The workflow and the roadmap live on About. */
 export default function Home() {
   return (
     <main id="main">
@@ -54,40 +59,51 @@ export default function Home() {
           {heroVideo ? <HeroVideoKeeper /> : null}
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
-        <div className="home-hero-grid">
-          {/* The load-in (ADR-0070 amendment 1): the headline rises, the paragraphs are typed in (components/intro-text.ts). */}
-          <h1 className="home-hero-title" id="home-hero-title" data-intro="rise">
-            Composites.
+        {/* The words, in Anduril's arrangement (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle,
+            and under it a row of the year, the mark and the name. The load-in (ADR-0070 amendments 1 and 4) types
+            the statement and the small lines in, and a text cursor blinks at the statement's end (components/intro-text.ts). */}
+        <div className="home-hero-stack">
+          <h1 className="home-hero-title" id="home-hero-title" data-intro="type" data-outro="type" data-intro-caret="">
+            one engineering platform
             <br />
-            Calculated.
+            for composite theory
+            <br />
+            and real test data
+            <span className="type-caret" aria-hidden="true" />
           </h1>
-          <div className="home-hero-copy">
-            <p data-intro="type">
-              We&apos;re bringing composite theory and real test data into one engineering platform, changing how laminates
-              and coupons are set up, analyzed and documented.
-            </p>
-            <p data-intro="type">
-              Spend less time on setup and reports. Spend more time on the structure. Trace every number back to its source.
+          <div className="home-hero-row">
+            {/* The row of ADR-0077 amendment 28: the year on the left, the mark, the name on the right. */}
+            <div className="home-hero-notes">
+              <p className="home-hero-note" data-intro="type" data-outro="type">
+                Est. 2026
+              </p>
+            </div>
+            <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />
+            <p className="home-hero-tagline" data-intro="type" data-outro="type">
+              Anisotropy
             </p>
           </div>
         </div>
-        {/* The programme the team is part of, in the hero's bottom left corner (ADR-0081). */}
-        <p className="home-hero-backed">
-          <span>Part of the Fall 2026 Launchpad cohort</span>
-          <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
-        </p>
-        {/* "Scroll to explore", in the hero's bottom right corner: one press scrolls to the tour's first step. */}
+        {/* Three seconds after the load-in the words are taken away and the clip plays alone (components/home/hero-outro.tsx). */}
+        <HeroOutro />
+        {/* Comes up at the foot of the clip once the words have left (ADR-0077 amendment 22). */}
         <ScrollToExplore />
+        {/* UC San Diego's The Basement mark, in the bottom left corner of the hero's box (ADR-0081). It fades in with the
+            load-in and out when the words leave (ADR-0070 amendment 4). */}
+        <p className="home-hero-backed" data-intro="fade" data-outro="fade">
+          <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
+          {/* The programme the team is part of (ADR-0081), beside the mark of the place that runs it (ADR-0077 amendment 28). */}
+          <span className="home-hero-cohort">Fall 2026 Launchpad cohort</span>
+        </p>
       </section>
-      {/* The tour of the calculator (components/home/demo-tour.tsx): the scroll takes a visitor through one real run, then leaves
-          them at the live calculator. The provider renders no element; it lets the tour show the answer the calculator asked for. */}
-      <EngineAnswersProvider>
-        <DemoTour apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
-        <LaminateHero apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
-      </EngineAnswersProvider>
-      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11 and 14), dark and
-          light in turn: Mission, the supporters' strip, Platform, About, What is new. Each numbered band opens with the kit's
-          head. The four principles close the Mission band as a strip. */}
+      {/* The laminate calculator and its tour left the home page on 2026-11-13 (ADR-0095): a feature, not the product. Their
+          components are kept, unmounted (components/home/laminate-hero.tsx, demo-tour.tsx); the full calculator is still at
+          /calculator and in the workspace. */}
+      {/* The product demo (ADR-0095 amendment 2): the coupon workspace in four beats, on black, a window tall, under the hero. */}
+      <ProductDemo />
+      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31):
+          Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
+          close the Mission band as a strip. */}
       <section className="band home-blurb home-mission" id="mission">
         <div className="band-head">
           <p className="band-label">01 / MISSION</p>
@@ -113,17 +129,6 @@ export default function Home() {
             </span>
           </li>
         </ul>
-      </section>
-      {/* The supporters' strip, after PhysicsX's logo strip: the logos come from lib/supporters.ts. One logo stands beside its
-          sentence; more take the whole row, and drift once they are wider than it (components/home/logo-strip.tsx). */}
-      <section className="band is-light home-blurb home-supporters" id="supporters" aria-labelledby="supporters-label">
-        <p className="band-label" id="supporters-label">
-          SUPPORTED BY
-        </p>
-        <div className={supporters.length > 1 ? "home-supporters-row is-many" : "home-supporters-row"}>
-          <LogoStrip supporters={supporters} label="Supported by" />
-          <p>Anisotropy is part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego.</p>
-        </div>
       </section>
       <section className="band home-blurb home-platform" id="platform">
         <div className="band-head">
@@ -174,7 +179,26 @@ export default function Home() {
             <article className="home-face" key={person.name}>
               <div className="home-face-frame">
                 {person.photo ? (
-                  <img src={person.photo} alt={`Portrait of ${person.name}`} loading="lazy" decoding="async" />
+                  <>
+                    <img src={person.photo} alt={`Portrait of ${person.name}`} width={800} height={1000} loading="lazy" decoding="async" />
+                    {/* LinkedIn's mark comes up in the frame's corner under the pointer (ADR-0057 amendment 2). It is a link
+                        once the person's profile address is in lib/team.ts; until then it is only drawn. */}
+                    {person.linkedin ? (
+                      <a
+                        className="home-face-in"
+                        href={person.linkedin}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
+                      >
+                        <LinkedInMark />
+                      </a>
+                    ) : (
+                      <span className="home-face-in" aria-hidden="true">
+                        <LinkedInMark />
+                      </span>
+                    )}
+                  </>
                 ) : (
                   <span aria-hidden="true">
                     {person.name

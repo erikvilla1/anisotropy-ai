@@ -1,6 +1,6 @@
 # ADR-0069: The licensed hero clip stays out of the public repository; a script makes its web copy, and the page plays it when present
 
-- Status: Proposed
+- Status: Proposed; amendment 1 lets the web copy and its poster be committed (the lead's decision)
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the hero), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) (what stays out of the repository), `scripts/hero-video.sh`, `app/page.tsx`, `app/home.css`, `.gitignore`
@@ -51,3 +51,18 @@ Option 3.
 
 - The team wants the clip on anisotropy.dev and option 4 is still not built.
 - The clip's licence or source changes, for example to footage the team shot itself, which could live in the repository.
+
+## Amendment 1, 2026-11-11 (the web copy and its poster may be committed, so the deployed site plays the clip)
+
+**Context.** The redesign went live on 2026-11-11 and its hero showed the still photo, because the deploy builds from this repository, which does not hold the clip. The lead asked for the clip to be committed: "i bought the license so put it in the public repo, no ones using it and we can make it private later. the website is not even public."
+
+**Decision (the lead's).** `public/media/hero.mp4` and `public/media/hero.jpg`, the web copy and its poster, may be committed. `.gitignore` ignores every other file in `public/media/`, so the original stays out; it stays in `.local/media/`. This takes option 1, rejected on 2026-11-07, for the web copy only. Option 4, storage outside the repository, was offered again and not taken.
+
+**What the lead was told first.**
+- Section 3 of the licence, quoted above, has not changed. As the drafter reads it, a file in a public repository is offered as a download on its own, which that section forbids. This is a reading, not legal advice.
+- Making the repository private later does not recall copies already cloned, forked or cached.
+- The repository is under Erik Villa's account, so a takedown notice would arrive there.
+
+**Evidence.** The clip is not on the drafter's machine; the lead commits the two files from their own. On 2026-11-11, with a stand-in clip in `public/media/` as the committed files will be, the production build exit 0 and its home page holds the video; `home.spec.ts`, `intro.spec.ts`, `tour.spec.ts` and `expansion.spec.ts` against that build: 26 of 26 passed. With the new ignore rule git lists `hero.mp4` and `hero.jpg` as untracked and no other file in the folder. UNVERIFIED: the real clip's size and look on the deployed site.
+
+**How we will know it was wrong.** iStock, Getty Images or GitHub sends a notice about the file. The two files then leave the repository and its history, and option 4 serves the clip.

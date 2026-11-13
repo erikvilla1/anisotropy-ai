@@ -29,10 +29,10 @@ test("the five services are unique, ordered as the audit lists them, and each ha
   assert.equal(findService("nowhere"), undefined);
 });
 
-test("the header lists About, Industries, Materials library, Services and Contact, with the services under Services", () => {
+test("the header lists About, Industries, Resources, Services and Contact, with the services under Services", () => {
   assert.deepEqual(
     primaryNav.map((item) => item.label),
-    ["About", "Industries", "Materials library", "Services", "Contact us"],
+    ["About", "Industries", "Resources", "Services", "Contact us"],
   );
   const labels = primaryNav.flatMap((item) => [item.label, ...(item.children ?? []).map((child) => child.label)]);
   assert.ok(!labels.includes("Calculator"));

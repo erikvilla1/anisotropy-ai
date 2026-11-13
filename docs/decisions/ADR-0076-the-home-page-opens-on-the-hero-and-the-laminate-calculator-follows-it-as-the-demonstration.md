@@ -1,6 +1,6 @@
 # ADR-0076: The home page opens on the hero, and the laminate calculator follows it as the demonstration
 
-- Status: Proposed; reverses items 4 and 5 of the CEO's website audit of 2026-10-31 (built under ADR-0058) until the CEO confirms
+- Status: Proposed; reverses items 4 and 5 of the CEO's website audit of 2026-10-31 (built under ADR-0058) until the CEO confirms; superseded for the home page by ADR-0095 on 2026-11-13 (the calculator is archived)
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
 - Related: [ADR-0058](ADR-0058-one-name-anisotropy-five-service-pages-under-a-services-menu-the-calculator-on-the-home-page-and-a-contact-page.md) (the home page as built), the CEO's website audit of 2026-10-31, revised 2026-11-01 (kept outside the repository), `app/page.tsx`, `tests/browser/home.spec.ts`

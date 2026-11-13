@@ -6,8 +6,10 @@
   --text: #efefef;
   --muted: #a0a0a0;
   --accent: #d4d4d4;
-  --font: "DM Sans Variable", Arial, sans-serif;
-  --heading: "Manrope Variable", Arial, sans-serif;
+  /* One typeface for the whole site, Inter, the nearest open-licence match to the Helvetica-like type on Anduril's site
+   * (ADR-0093). Its file carries the display cut, which the browser picks by itself at large sizes. */
+  --font: "Inter Variable", "Helvetica Neue", Arial, sans-serif;
+  --heading: "Inter Variable", "Helvetica Neue", Arial, sans-serif;
 }
 * {
   box-sizing: border-box;
@@ -1838,10 +1840,11 @@ main[tabindex="-1"]:focus {
   color: var(--muted);
 }
 
-/* The page veil (ADR-0070 amendments 1 and 3), after Anduril: its colour, #010101; 300 ms out of black on the home page's first
- * load, eased as Anduril's "easeOutCubic", and nowhere else: since amendment 3 no page fades around navigation. It never takes a
- * click. The first paint is black until components/page-transition.tsx has the page's text ready and lifts it; if no script runs
- * it lifts alone, at once where the browser reports scripting is off and after 2 s otherwise. */
+/* The page veil (ADR-0070 amendments 1 and 3), after Anduril: its colour, #010101; 600 ms out of black on the home page's first
+ * load (Anduril's 300 ms was a little quick for the lead, amendment 8), eased as Anduril's "easeOutCubic", and nowhere else:
+ * since amendment 3 no page fades around navigation. It never takes a click. The first paint is black until
+ * components/page-transition.tsx has the page's text ready and lifts it; if no script runs it lifts alone, at once where the
+ * browser reports scripting is off and after 2 s otherwise. */
 .page-transition {
   position: fixed;
   inset: 0;
@@ -1852,10 +1855,10 @@ main[tabindex="-1"]:focus {
 }
 .page-transition.is-enter {
   opacity: 1;
-  animation: page-veil-out 300ms cubic-bezier(0.215, 0.61, 0.355, 1) 2000ms forwards;
+  animation: page-veil-out 600ms cubic-bezier(0.215, 0.61, 0.355, 1) 2000ms forwards;
 }
 .page-transition.is-lift {
-  animation: page-veil-lift 300ms cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
+  animation: page-veil-lift 600ms cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
 }
 /* Two names for the same fade out, so that the change of state starts a new animation rather than retiming the last. */
 @keyframes page-veil-out {
@@ -1885,10 +1888,14 @@ main[tabindex="-1"]:focus {
   }
 }
 
-/* The site header after PhysicsX, the same on every page but the workspace's (ADR-0077 amendments 2 and 8): transparent, in the
- * page's flow so it scrolls away, and over the hero on the home page. From 1201 px: 56 px tall, 32 px margins, a 28 px mark, the
- * links from the halfway line (the hero's column 7) at up to 17 px, Workspace in the top-right corner, no version label. */
+/* The site header, the same on every page but the workspace's (ADR-0077 amendments 2, 8 and 19): transparent, in the page's
+ * flow so it scrolls away, and over the hero's black ground on the home page. From 1201 px it follows Anduril's: 84 px tall,
+ * 32 px margins, the logo at the left, the links in the middle of the page in semibold, Workspace in the top-right corner,
+ * no version label. */
+/* The site's pages stand on pure black, as Anduril's do (ADR-0077 amendment 23). The workspace, an app with its own header,
+ * keeps the near-black its panels were drawn for. */
 html:has(.site-header:not(.chat-site-header)) {
+  --bg: #000000;
   scroll-padding-top: 0;
 }
 .site-header:not(.chat-site-header) {
@@ -1952,17 +1959,20 @@ html:has(.site-header:not(.chat-site-header)) {
 @media (min-width: 1201px) {
   .site-header:not(.chat-site-header) {
     display: grid;
-    grid-template-columns: calc((100% - 32px) / 2) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     column-gap: 32px;
-    height: 56px;
+    height: 84px;
     padding: 0 32px;
   }
   .site-header:not(.chat-site-header) .wordmark {
     justify-self: start;
   }
   .site-header:not(.chat-site-header) .main-nav {
-    font-size: min(17px, 1.1vw);
-    gap: min(20px, 1.3vw);
+    justify-self: center;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    gap: min(44px, 2.6vw);
     white-space: nowrap;
   }
   .site-header:not(.chat-site-header) .header-actions {

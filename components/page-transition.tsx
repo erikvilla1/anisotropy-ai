@@ -8,7 +8,7 @@ import "@/app/intro.css";
 const FONT_WAIT_MS = 800; // the longest the black waits for the page's fonts, so the text is measured in its own type
 
 /** enter: the home page's first paint, black until this component lifts it (the stylesheet lifts it alone after 2 s if no script
- * runs); lift: the first load's 300 ms out of black. */
+ * runs); lift: the first load's 600 ms out of black (ADR-0070 amendment 8). */
 type Phase = "enter" | "lift" | "idle";
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;

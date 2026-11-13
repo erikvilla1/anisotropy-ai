@@ -5,9 +5,8 @@ import { ArrowDown } from "lucide-react";
 import { LaminateScene } from "./scene";
 import { AbdGrid, FailurePanel, PropertyRow, SpecsList, StackList } from "./laminate-panels";
 import { useEngineAnswers, useEngineEntry, type EngineEntry } from "./engine-answers";
-import { useScrollProgress } from "./use-scroll-progress";
-import { bridgeFrame, type BridgeGeometry } from "./tour-bridge";
-import { BRIDGE, STEPS, TOTAL, finalView, layupScript, sameView, span, viewAt, type TourView } from "./tour-timeline";
+import { useTourDriver } from "./tour-driver";
+import { STEPS, finalView, layupScript, sameView, span, viewAt, type TourView } from "./tour-timeline";
 import { buildAnalysisRequest, CalculationError, loadNames, requestAnalysis, type AnalysisRequest, type LoadName } from "@/lib/laminate-api";
 import { defaultHeroState, heroForm, zeroLoads } from "@/lib/home-calculator";
 import { expandLayup } from "@/lib/layup";
@@ -15,12 +14,13 @@ import { findLibraryOption, libraryOptions, type LibraryOption } from "@/lib/mat
 import { angleSlots } from "@/lib/studio-colors";
 import "@/app/home-tour.css";
 
-/** The tour is pinned and scroll-driven on a desktop-sized window whose visitor has not asked for reduced motion; everywhere
- * else it is an ordinary section with every step in view. The same query is written in app/home-tour.css. */
+/** The tour is one stage that holds the window and plays a step per scroll gesture ("pinned") on a desktop-sized window
+ * whose visitor has not asked for reduced motion; everywhere else it is an ordinary section with every step in view. The
+ * same query is written in app/home-tour.css. */
 const PINNED_QUERY = "(min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference)";
 /** The tour's example load, the one the page's tests use: Nx in N/m. */
 const TOUR_LOAD: { name: LoadName; value: string } = { name: "Nx", value: "25000" };
-/** How long a visitor rests on a step before the tour asks the engine for it, so scrolling straight past asks nothing. */
+/** How long a step has been reached before the tour asks the engine for it, so a visitor who turns straight back asks nothing. */
 const DWELL_MS = 400;
 const TIMEOUT_MS = 20_000;
 /** The pinned tour's 3D view is not part of the page's load: it is mounted when the browser is idle this long after the tour
@@ -57,7 +57,7 @@ function tourRun() {
 }
 
 const signed = (angle: number) => (angle > 0 ? `+${angle}` : String(angle));
-/** While the scroll drives the view, the pointer passing over it does not light a ply: the list beside it still does. */
+/** While the tour steers the view, the pointer passing over it does not light a ply: the list beside it still does. */
 const ignoreHover = () => {};
 
 /** What the engine's line says, in the calculator's own words. */
@@ -69,14 +69,7 @@ function engineLine(apiBaseUrl: string, entry: EngineEntry | undefined): string 
   return "Waiting for the engine.";
 }
 
-/** What the bridge writes on the hero while it plays: custom properties that app/home-tour.css reads. Removing them leaves the
- * hero exactly as its own stylesheet sets it. */
-const HERO_PROPERTIES = ["--tour-copy", "--tour-copy-lift", "--tour-copy-visibility", "--tour-shade", "--tour-media-clip", "--tour-media-transform", "--tour-media-opacity", "--tour-media-visibility"];
-function clearHero(hero: HTMLElement | null) {
-  if (hero) for (const name of HERO_PROPERTIES) hero.style.removeProperty(name);
-}
-
-/** A field of the calculator as the tour shows it: read-only, filled by the scroll. The live fields are in the calculator below. */
+/** A field of the calculator as the tour shows it: read-only, filled as its step plays. The live fields are in the calculator below. */
 function TourField({ label, value, hint, caret = false, quiet = false }: { label: ReactNode; value: string; hint?: string; caret?: boolean; quiet?: boolean }) {
   return (
     <div className={quiet ? "tour-field is-quiet" : "tour-field"}>
@@ -246,16 +239,16 @@ function HandoverCard({ option, layup, thickness_mm }: { option: LibraryOption; 
   );
 }
 
-/** The tour of the calculator between the hero and the calculator itself (the lead's request of 2026-11-09): the page's
- * scroll takes a visitor through one real run, from a library material to a first-ply failure, and then leaves them at the live
- * calculator. It reads the scroll position and never sets it; when its last step is done the stage lets go and the page scrolls
- * on. Every engine number it shows is an answer of the real engine to the stack on screen: the unloaded answer is the one the
- * calculator asked for when the page loaded, shared through `EngineAnswersProvider`, and the loaded one is asked for, once, when
- * the visitor reaches that step (ADR-0001). The material's constants are the library record's, as the calculator shows them. */
+/** The tour of the calculator between the hero and the calculator itself (the lead's requests of 2026-11-09 and 2026-11-13):
+ * a visitor's scrolling takes them through one real run, from a library material to a first-ply failure, and then leaves them
+ * at the live calculator. Each scroll gesture plays one whole step at constant speed (components/home/tour-driver.ts,
+ * ADR-0084 amendment 4); after the last step the stage lets go and the page scrolls on. Every engine number it shows is an
+ * answer of the real engine to the stack on screen: the unloaded answer is the one the calculator asked for when the page
+ * loaded, shared through `EngineAnswersProvider`, and the loaded one is asked for, once, when the visitor reaches that step
+ * (ADR-0001). The material's constants are the library record's, as the calculator shows them. */
 export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
   const root = useRef<HTMLDivElement>(null);
   const sceneBox = useRef<HTMLDivElement>(null);
-  const geometry = useRef<BridgeGeometry | null>(null);
   const loadsStep = useRef<HTMLLIElement>(null);
   const engineStep = useRef<HTMLLIElement>(null);
   const pinned = useMediaQuery(PINNED_QUERY);
@@ -271,8 +264,8 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
   const view = pinned ? scrolled ?? start : whole;
 
   // The 3D view is a second WebGL view on the page (the calculator has its own), so it is not mounted with the page. Pinned,
-  // the stage stands behind the hero from the first pixel of scroll: the view is mounted once the browser is idle after the
-  // load, or at the first scroll. Unpinned, it is mounted when the section comes within a screen of the window.
+  // the stage is one gesture away from the hero: the view is mounted once the browser is idle after the load, or at the
+  // first scroll. Unpinned, it is mounted when the section comes within a screen of the window.
   useEffect(() => {
     if (viewWanted) return;
     const want = () => setViewWanted(true);
@@ -304,72 +297,20 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
   const unloaded = useEngineEntry(run.unloadedJson);
   const loaded = useEngineEntry(run.loadedJson);
 
-  // The scroll: where the page is in the tour, once per frame. It only reads the position; what it writes are styles.
-  useScrollProgress(root, pinned, ({ screens, viewport }) => {
+  // The clock: tour-driver.ts plays it one step per scroll gesture and reports each frame. What is written here are styles.
+  useTourDriver(root, pinned, ({ clock, onStage }) => {
     const element = root.current;
     if (!element) return;
-    const t = Math.max(0, screens);
-    const phase = t < BRIDGE ? "bridge" : "steps";
-    if (element.dataset.phase !== phase) element.dataset.phase = phase;
-    // The bridge: the hero is held in the window, over the stage, and its clip is carried onto the top ply of the stack
-    // that stands behind it; then the clip fades off the ply.
-    const hero = document.getElementById("overview");
-    if (hero && t < BRIDGE) {
-      if (!geometry.current && sceneBox.current) {
-        const stage = element.getBoundingClientRect();
-        const box = sceneBox.current.getBoundingClientRect();
-        geometry.current = {
-          media: { x: 0, y: 0, width: hero.offsetWidth, height: hero.offsetHeight },
-          view: { x: box.left - stage.left, y: 0, width: box.width, height: viewport },
-        };
-        element.style.setProperty("--tour-hero-height", `${hero.offsetHeight}px`);
-      }
-      if (t <= 0 || !geometry.current) {
-        clearHero(hero);
-      } else {
-        const frame = bridgeFrame(t, geometry.current);
-        hero.style.setProperty("--tour-copy", frame.copy.toFixed(3));
-        hero.style.setProperty("--tour-copy-lift", `${frame.lift.toFixed(1)}px`);
-        hero.style.setProperty("--tour-copy-visibility", frame.copy > 0.001 ? "visible" : "hidden");
-        hero.style.setProperty("--tour-shade", frame.shade.toFixed(3));
-        hero.style.setProperty("--tour-media-clip", frame.clip);
-        hero.style.setProperty("--tour-media-transform", frame.transform);
-        hero.style.setProperty("--tour-media-opacity", frame.opacity.toFixed(3));
-        hero.style.setProperty("--tour-media-visibility", frame.media ? "visible" : "hidden");
-      }
-    }
-    STEPS.forEach((step, index) => element.style.setProperty(`--tour-rail-${index}`, span(t, step.start, step.end).toFixed(3)));
-    const next = viewAt(Math.min(t, TOTAL), run.script, run.angles.length, TOUR_LOAD.value);
+    const next = viewAt(clock, run.script, run.angles.length, TOUR_LOAD.value);
     setScrolled((current) => (current && sameView(current, next) ? current : next));
-    // A step is reached while the stage is at least half in view; past that the visitor is in the calculator.
-    const onStage = t <= TOTAL + 0.5;
+    // A step is reached while at least half of the stage is in the window; past that the visitor is in the calculator.
     const engine = onStage && next.engine >= 1;
     const loads = onStage && next.loaded;
     setReached((current) => (current.engine === engine && current.loads === loads ? current : { engine, loads }));
   });
-  // The bridge's geometry is measured again when the window or the view's box changes size; when the tour is no longer pinned
-  // the hero gets its own styles back.
-  useEffect(() => {
-    if (!pinned) return;
-    const forget = () => { geometry.current = null; };
-    window.addEventListener("resize", forget);
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(forget);
-    if (sceneBox.current) observer?.observe(sceneBox.current);
-    return () => {
-      window.removeEventListener("resize", forget);
-      observer?.disconnect();
-      geometry.current = null;
-      clearHero(document.getElementById("overview"));
-    };
-  }, [pinned]);
   useEffect(() => {
     if (pinned) return;
     // Unpinned, a step is reached when most of it is in view.
-    const element = root.current;
-    if (element) {
-      delete element.dataset.phase;
-      element.style.removeProperty("--tour-hero-height");
-    }
     setScrolled(null);
     if (typeof IntersectionObserver === "undefined") {
       setReached({ engine: true, loads: true });
@@ -488,10 +429,9 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
     },
   ];
   return (
-    <div className="demo-tour" id="tour" ref={root} role="region" aria-labelledby="tour-title"
-      data-mode={pinned ? "pinned" : "static"} style={{ "--tour-screens": TOTAL } as CSSProperties}>
-      {/* Without scripts nothing drives the scroll: the steps then lie in the page's flow, as they do for reduced motion. */}
-      <noscript><style>{".demo-tour{height:auto!important;margin-top:0!important;background:#080808!important}.demo-tour>.demo-tour-stage{visibility:visible!important}"}</style></noscript>
+    <div className="demo-tour" id="tour" ref={root} role="region" aria-labelledby="tour-title" data-mode={pinned ? "pinned" : "static"}>
+      {/* Without scripts nothing plays the steps: they then lie in the page's flow, as they do for reduced motion. */}
+      <noscript><style>{".demo-tour{height:auto!important;background:#080808!important}.demo-tour>.demo-tour-stage{visibility:visible!important}"}</style></noscript>
       <div className="demo-tour-stage">
         <div className="demo-tour-head">
           <p className="demo-tour-label">THE CALCULATOR / STEP BY STEP</p>
@@ -525,12 +465,6 @@ export function DemoTour({ apiBaseUrl }: { apiBaseUrl: string }) {
               </div>
               <div className="demo-tour-card">{step.card}</div>
             </li>
-          ))}
-        </ol>
-        <ol className="demo-tour-rail" aria-hidden="true">
-          {steps.map((step, index) => (
-            <li key={step.label} data-active={pinned && view.step === index ? "true" : undefined}
-              style={{ "--tour-fill": `var(--tour-rail-${index}, 0)` } as CSSProperties}>{step.label}</li>
           ))}
         </ol>
       </div>
