@@ -34,7 +34,8 @@ const SCRAMBLE_TICK_MS = 50; // Anduril redraws its random letters 20 times a se
 const LEAVE_SPEED = 0.7; // a line leaves in this share of the time it took to arrive
 const LEAVE_STAGGER_MS = 45;
 const LEAVE_FADE_MS = 160;
-const LEAVE_SPIN_MS = 1800; // the mark's one turn: unhurried, so it outlasts the words
+const LEAVE_SPIN_MS = 1800; // the mark's turn: unhurried, so it outlasts the words
+const LEAVE_SPIN_DEG = -90; // a quarter turn, anticlockwise
 const LEAVE_SPIN_EASE = "cubic-bezier(0.45, 0, 0.55, 1)"; // eases off the mark and into the stop
 
 // Random letters of about the real letter's width, so they sit in its place: narrow for narrow, and never the widest.
@@ -365,8 +366,8 @@ export function prepareIntro(root: ParentNode = document): IntroRun | null {
  *
  *   data-outro="type"  the text is taken away line by line from the end of each line, its last characters as random letters;
  *   data-outro="fade"  the element fades out, after the lines have gone;
- *   data-outro="spin"  the element turns once anticlockwise about its middle, slowly, starting as the lines go, and fades
- *                      at the end.
+ *   data-outro="spin"  the element makes a quarter turn anticlockwise about its middle, slowly, starting as the lines go,
+ *                      and fades at the end.
  *
  * It uses the load-in's copies and windows, run backwards. When it ends, each element carries `data-outro-done`, which the
  * stylesheet turns invisible; its text stays in the page for a screen reader. Null when there is nothing on screen to take
@@ -403,7 +404,7 @@ export function prepareOutro(root: ParentNode = document): IntroRun | null {
   const linesMs = totalMs;
   for (const element of fading) {
     if (element.dataset.outro === "spin") {
-      // One turn, anticlockwise, begun as the first character goes: it eases in and out and fades over its last part. It takes its own
+      // A quarter turn, anticlockwise, begun as the first character goes: it eases in and out and fades over its last part. It takes its own
       // time, so the words are gone before it is.
       const duration = Math.max(linesMs + LEAVE_FADE_MS, LEAVE_SPIN_MS);
       moves.push({
@@ -411,7 +412,7 @@ export function prepareOutro(root: ParentNode = document): IntroRun | null {
         keyframes: [
           { transform: "rotate(0deg)", opacity: 1, offset: 0 },
           { opacity: 1, offset: 0.7 },
-          { transform: "rotate(-360deg)", opacity: 0, offset: 1 },
+          { transform: `rotate(${LEAVE_SPIN_DEG}deg)`, opacity: 0, offset: 1 },
         ],
         options: { duration, easing: LEAVE_SPIN_EASE, fill: "both" },
       });

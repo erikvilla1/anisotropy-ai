@@ -2258,8 +2258,8 @@ img {
   color: var(--muted);
 }
 
-/* The page veil (ADR-0070 amendment 1), after Anduril: its colour, #010101; 300 ms out of black on the first load, eased as
- * Anduril's "easeOutCubic"; 350 ms into black before the next page ("easeOutSine") and 350 ms out of it ("easeInSine"). It never
+/* The page veil (ADR-0070 amendment 1), after Anduril: its colour, #010101; 600 ms out of black on the first load (Anduril's
+ * 300 ms was a little quick for the lead, amendment 8), eased as Anduril's "easeOutCubic"; 350 ms into black before the next page ("easeOutSine") and 350 ms out of it ("easeInSine"). It never
  * takes a click. The first paint is black until components/page-transition.tsx has the page's text ready and lifts it; if no
  * script runs it lifts alone, at once where the browser reports scripting is off and after 2 s otherwise. */
 .page-transition {
@@ -2272,10 +2272,10 @@ img {
 }
 .page-transition.is-enter {
   opacity: 1;
-  animation: page-veil-out 300ms cubic-bezier(0.215, 0.61, 0.355, 1) 2000ms forwards;
+  animation: page-veil-out 600ms cubic-bezier(0.215, 0.61, 0.355, 1) 2000ms forwards;
 }
 .page-transition.is-lift {
-  animation: page-veil-lift 300ms cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
+  animation: page-veil-lift 600ms cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
 }
 .page-transition.is-leave {
   animation: page-veil-in 350ms cubic-bezier(0.39, 0.575, 0.565, 1) forwards;

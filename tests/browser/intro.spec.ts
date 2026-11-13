@@ -129,7 +129,7 @@ test("five seconds after the load-in the hero's words are taken away and the cli
   await expectHeroWhole(page);
   await expect(hero.locator("h1")).toHaveCSS("opacity", "1");
   await expect(hero.locator(".home-hero-backed")).toHaveCSS("opacity", "1");
-  // They stand for five seconds, then are untyped in about a second, while the mark turns once (amendment 4 of ADR-0070).
+  // They stand for five seconds, then are untyped in about a second, while the mark turns (ADR-0070 amendments 4 to 8).
   const turn = await page.waitForFunction(
     () => {
       const move = document.querySelector("#overview .home-hero-mark")?.getAnimations()[0];
@@ -139,7 +139,7 @@ test("five seconds after the load-in the hero's words are taken away and the cli
     null,
     { timeout: 12_000 },
   );
-  expect(await turn.jsonValue()).toEqual(["rotate(0deg)", "", "rotate(-360deg)"]); // one turn, anticlockwise
+  expect(await turn.jsonValue()).toEqual(["rotate(0deg)", "", "rotate(-90deg)"]); // a quarter turn, anticlockwise
   await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 12_000 });
   for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");

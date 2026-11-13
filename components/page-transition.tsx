@@ -11,7 +11,7 @@ const STUCK_MS = 4000; // if the next page has not arrived by then, lift the vei
 const FONT_WAIT_MS = 800; // the longest the black waits for the page's fonts, so the text is measured in its own type
 
 /** enter: the first paint, black until this component lifts it (the stylesheet lifts it alone after 2 s if no script runs);
- * lift: the first load's 300 ms out of black; leave: 350 ms into black, then held; arrive: 350 ms out of black on the next page. */
+ * lift: the first load's 600 ms out of black; leave: 350 ms into black, then held; arrive: 350 ms out of black on the next page. */
 type Phase = "enter" | "lift" | "leave" | "arrive" | "idle";
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;

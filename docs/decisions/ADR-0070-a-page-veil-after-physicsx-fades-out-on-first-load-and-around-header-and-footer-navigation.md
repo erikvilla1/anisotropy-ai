@@ -154,3 +154,13 @@ What Anduril's code does:
 
 **Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` reads the turn's keyframes as 0° to -360°: 4 of 4. A contact sheet of the triangle at ten frames a second was looked at: its top tips to the left first, and it has faded by about 1.4 s.
 
+## Amendment 8, 2026-11-13 (a quarter turn; the first load's lift is longer)
+
+**Context.** Of the triangle's turn the lead asked to "make it do 90º instead of 180º", and with a recording of the page loading, "the initial black fade in make a lil bit longer, its a tad bit too quick rn".
+
+**Decision.**
+- **The triangle makes a quarter turn**, 90° anticlockwise, in place of the full turn of amendments 5 and 7 (which the lead read as a half turn: the triangle looks the same every third of a turn). The length, 1.8 s, the easing and the fade are unchanged.
+- **The first load lifts out of black in 600 ms** in place of Anduril's 300 ms, with the same easing; the fallback that lifts without a script takes the same. The fades around navigation keep their 350 ms.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px, contact sheets of a recording were looked at: the page comes out of black over about half a second, the first letters arriving as it clears; at the exit the triangle's top tips left through a quarter turn and it has faded by about 1.4 s. `intro.spec.ts`, which reads the turn's keyframes as 0° to -90°: 4 of 4. UNVERIFIED: a real graphics card, Safari, Firefox and phones.
+
