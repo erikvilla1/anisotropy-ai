@@ -1,8 +1,8 @@
 # ADR-0070: A page veil after PhysicsX fades out on first load and around header and footer navigation
 
-- Status: Proposed; the veil is black and the load-in follows Anduril's (amendment 1)
+- Status: Proposed; the veil is black and the load-in follows Anduril's (amendment 1); only the home page's first load is veiled and nothing fades around navigation (amendment 3)
 - Date: 2026-11-07
-- Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
+- Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07; Founder, 2026-11-12 ("accept": the veil on the home page's first load only, no navigation delay, amendment 3) | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the redesign after PhysicsX), `components/page-transition.tsx`, `app/layout.tsx`, `app/globals.css`
 
 ## Context
@@ -105,3 +105,13 @@ What Anduril's code does:
 **Decision.** The next page is requested when the veil's fade reports its end (`animationend`), so the old page is fully covered first. A timer 200 ms after the fade's length is the fallback for a browser that never reports the end.
 
 **Evidence.** On 2026-11-10, against the built site: `intro.spec.ts`, `home.spec.ts` and `tour.spec.ts` repeated five times each, 100 of 100 passed.
+
+## Amendment 3, 2026-11-12 (only the home page's first load is veiled; no fade around navigation; confirmed by the founder)
+
+**Context.** The site audit of 2026-11-12 (finding shell-12, decision D10) read from the code: an opaque veil on every marketing page's first load, lifted after the fonts (up to 800 ms) plus 300 ms, or by the stylesheet after 2 s when no script takes over; every header or footer link held back 350 ms, up to 550 ms; the skip link and the focus rings under the veil while the focus is already live; and the veil on the 404 page and on the old `/studio`, `/chat/view` and `/studio/view` addresses.
+
+**Options.** (1) Keep it on every page, add the old addresses to the pages without it, shorten the no-script fallback to 600 ms and raise the skip link over it: the audit's minimum; not chosen. (2) The veil on the home page's first load only, every other page shown from its first paint, and no delay on navigation: the audit's recommendation; chosen.
+
+**Decision.** Option 2, the founder's answer to D10 on 2026-11-12: "accept" ("Keep the veil on the home first load only, and drop the 350 ms navigation delay"). `components/page-transition.tsx` starts in `enter` only when the first page is `/`; the click handler, the `leave` and `arrive` phases and their keyframes in `app/globals.css` are gone, so a link goes to its page at once, and amendment 2 no longer applies. The home's load-in moves (amendment 1) still play as the veil lifts, and reduced motion still gets neither. A focused skip link sits over the veil.
+
+**Evidence.** `npm run build` on 2026-11-12: `out/index.html` carries `page-transition is-enter`; `out/404.html`, `out/about.html`, `out/studio.html` and `out/workspace/fea.html` carry `is-idle`. `tests/browser/intro.spec.ts` now expects no veil after a header link, after Back and on a direct load of `/about`: UNVERIFIED, not run in this change (the browser suites run after the audit's fix groups).

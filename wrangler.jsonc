@@ -13,12 +13,13 @@
   "routes": [{ "pattern": "anisotropy.dev", "custom_domain": true }],
   "workers_dev": false,
   "preview_urls": false,
-  // The site: Next.js writes it to out/. The Worker runs first only for the API's paths; everything else is a static file,
-  // /studio from studio.html with or without the slash, and a miss gets the site's 404 page.
+  // The site: Next.js writes it to out/. The Worker runs first only for the API's paths and the pages that moved (/chat, /studio
+  // and their viewers, each answered with a 301 to the workspace, ADR-0058 amendment 2); everything else is a static file, /about
+  // from about.html with or without the slash, and a miss gets the site's 404 page.
   "assets": {
     "directory": "./out",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"],
+    "run_worker_first": ["/api/*", "/chat", "/chat/*", "/studio", "/studio/*"],
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },

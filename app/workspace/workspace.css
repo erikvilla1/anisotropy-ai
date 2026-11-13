@@ -33,7 +33,10 @@
 }
 @media (max-width: 600px) {
   .ws-app { padding: 8px 12px 20px; }
-  .ws-title input { min-width: 0; width: 100%; }
+  .ws-title input { min-width: 0; width: 100%; text-overflow: ellipsis; }
+  /* The project's name takes a row of its own under "All projects" and the assistant's button; the kind stays on one line. */
+  .ws-title { order: 3; flex-basis: 100%; }
+  .ws-title > span { white-space: nowrap; }
 }
 .ws-stage .chat-spec { margin-bottom: 16px; }
 

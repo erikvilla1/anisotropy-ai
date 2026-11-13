@@ -11,7 +11,10 @@ import {
 import { ClosingBand } from "@/components/closing-band";
 import { MediaSlot } from "@/components/media-slot";
 import "../inner-pages.css";
-export const metadata = { title: "Industries — Anisotropy" };
+export const metadata = {
+  title: "Industries",
+  description: "Aerospace first, with research and education: composite coupons and materials analyzed from the evidence.",
+};
 const priorities = [
   {
     icon: Plane,

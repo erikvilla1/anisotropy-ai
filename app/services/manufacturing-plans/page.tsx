@@ -4,7 +4,7 @@ import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
-  title: "Manufacturing plans — Anisotropy",
+  title: "Manufacturing plans",
   description: "The ply book and the cure cycle from the same layup and material record. Planned, not built.",
 };
 

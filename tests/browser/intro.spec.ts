@@ -99,7 +99,7 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   expect(seen[seen.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0, copies: 0, running: 0 });
 });
 
-test("a header link goes to black before the next page, and Back does not (ADR-0070 amendment 1)", async ({ page }) => {
+test("a header link goes to its page at once, Back too, and only the home page's first load is veiled (ADR-0070 amendment 3)", async ({ page }) => {
   await record(page);
   await page.goto("/");
   const veil = page.locator(".page-transition");
@@ -107,14 +107,11 @@ test("a header link goes to black before the next page, and Back does not (ADR-0
   await frames(page);
   await page.locator(".site-header a[href='/about']").first().click();
   await expect(page).toHaveURL(/\/about\/?$/);
-  await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
+  await page.waitForTimeout(600);
   const forward = await frames(page);
-  // The old page is fully covered before the address changes, and the new page starts covered.
-  const arrived = forward.findIndex((frame) => frame.path.startsWith("/about"));
-  expect(arrived).toBeGreaterThan(0);
-  expect(forward[arrived - 1]).toMatchObject({ phase: "is-leave", opacity: 1, colour: "rgb(1, 1, 1)" });
-  expect(forward[arrived].opacity).toBe(1);
-  expect(forward[forward.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0 });
+  // No fade to black before the next page and none after it: every frame from the click on shows the page.
+  expect(forward.some((frame) => frame.path.startsWith("/about"))).toBe(true);
+  expect(forward.every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
   await page.goBack();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/");
   await expect(page.locator("#overview h1")).toBeVisible();
@@ -122,6 +119,12 @@ test("a header link goes to black before the next page, and Back does not (ADR-0
   const back = await frames(page);
   expect(back.every((frame) => frame.phase === "is-idle" && frame.opacity === 0 && frame.copies === 0)).toBe(true);
   await expectHeroWhole(page);
+  // Another page loaded on its own starts without the veil, from its first frame.
+  await page.goto("/about");
+  await page.waitForTimeout(300);
+  const direct = await frames(page);
+  expect(direct.length).toBeGreaterThan(0);
+  expect(direct.every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
 });
 
 test.describe("for a visitor who asks for reduced motion", () => {

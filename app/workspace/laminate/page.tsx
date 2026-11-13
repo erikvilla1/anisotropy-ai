@@ -4,7 +4,7 @@ import "../../studio/studio.css";
 import "../workspace.css";
 
 export const metadata: Metadata = {
-  title: "Laminate response | Anisotropy",
+  title: "Laminate response",
   description: "A stack under loads per unit width: the ABD matrices, the strains, every ply's stresses and first-ply failure, in the units you pick.",
 };
 

@@ -1,5 +1,9 @@
-.main-nav a[aria-current="page"] {
-  color: var(--accent);
+/* The header's item for the page or section the visitor is in, marked by more than its colour (the footer's is in globals.css). */
+.main-nav > a[aria-current],
+.services-menu > a[aria-current] {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
 }
 .inner-page {
   overflow: clip;
@@ -1136,9 +1140,6 @@
   color: #c6c6c6;
 }
 @media (max-width: 1200px) {
-  .header-version {
-    display: none;
-  }
   .about-thesis,
   .learning-section,
   .library-callout {
@@ -1161,12 +1162,6 @@
   }
 }
 @media (max-width: 900px) {
-  .main-nav {
-    gap: 15px;
-  }
-  .main-nav a {
-    font-size: 9px;
-  }
   .page-intro h1 {
     font-size: 47px;
     letter-spacing: -2px;

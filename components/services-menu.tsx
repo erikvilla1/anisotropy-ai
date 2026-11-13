@@ -150,7 +150,8 @@ export function ServicesMenu({ item, expanded, onNavigate }: {
         onPointerEnter={hoverOpen}
         onPointerLeave={hoverClose}
       >
-        <Link href={item.href} aria-current={current ? "page" : undefined} onClick={onNavigate}>
+        {/* "page" on the landing page itself; "true" on a service page, which is in the section but is not this link's page. */}
+        <Link href={item.href} aria-current={pathname === item.href ? "page" : current ? "true" : undefined} onClick={onNavigate}>
           {item.label}
         </Link>
         <button

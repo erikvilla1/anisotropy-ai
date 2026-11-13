@@ -4,7 +4,7 @@ import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
-  title: "Documentation — Anisotropy",
+  title: "Documentation",
   description: "Every solved coupon leaves a package, every calculation a record, and every material value carries the page it came from.",
 };
 

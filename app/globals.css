@@ -199,6 +199,11 @@ img {
 }
 .skip-link:focus {
   top: 10px;
+  z-index: 10001; /* over the home page's first-load veil */
+}
+/* A page's content takes the focus from script after a moved address opens it (components/redirect-to.tsx): no ring round it all. */
+main[tabindex="-1"]:focus {
+  outline: none;
 }
 .site-header {
   height: 86px;
@@ -229,6 +234,7 @@ img {
 }
 .main-nav {
   display: flex;
+  align-items: center;
   gap: 28px;
   font-size: 11px;
   color: #bababa;
@@ -246,11 +252,6 @@ img {
   align-items: center;
   gap: 22px;
 }
-.header-version {
-  font-size: 8px;
-  letter-spacing: 1px;
-  color: #888888;
-}
 .header-cta {
   background: #1f1f1f;
   padding: 11px 16px;
@@ -261,6 +262,16 @@ img {
 }
 .menu-toggle {
   display: none;
+}
+/* The Workspace link inside the folded menu; the button beside the links takes its place on wider screens. */
+.main-nav .mobile-chat-cta {
+  display: none;
+}
+/* The workspace's header: the logo, then its links back, "All projects" where a page has no toolbar of its own. */
+.chat-site-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
 }
 .principles-strip {
   display: flex;
@@ -1453,6 +1464,12 @@ img {
 .site-footer-bottom a:hover {
   opacity: 0.6;
 }
+/* The page the visitor is on, marked by more than its colour, as in the header (app/expansion.css). */
+.site-footer-nav a[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
 .site-footer-bottom {
   align-items: baseline;
   row-gap: 12px;
@@ -1609,9 +1626,6 @@ img {
     padding: 0 32px;
     gap: 20px;
   }
-  .header-version {
-    display: none;
-  }
   .main-nav {
     gap: 22px;
   }
@@ -1657,17 +1671,57 @@ img {
     font-size: 18px;
   }
 }
-@media (max-width: 900px) {
+@media (width <= 900px) {
+  /* Up to 900 px the header's links fold into a menu under a button (ADR-0077 amendment 16); in a row they would have to be
+   * set at 9 to 10 px to fit. Each row of the open menu is at least 44 px tall. */
+  .header-actions {
+    display: none;
+  }
+  .menu-toggle {
+    display: flex;
+    margin-left: auto;
+  }
   .main-nav {
-    gap: 17px;
+    display: none;
+  }
+  .main-nav.open {
+    display: flex;
+    position: absolute;
+    top: calc(100% - 1px);
+    left: 0;
+    right: 0;
+    background: #151515;
+    border-bottom: 1px solid #464646;
+    padding: 12px 25px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
   }
   .main-nav a {
-    font-size: 10px;
+    font-size: 14px;
   }
-  .header-cta {
-    font-size: 10px;
-    padding: 10px;
-    gap: 8px;
+  .main-nav.open > a,
+  .main-nav.open .services-menu > a,
+  .main-nav.open .services-panel-list a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .main-nav.open .services-panel-list li {
+    padding: 0;
+  }
+  /* In the folded menu the five service rows are header links too, so the current one is underlined as the others are; from
+   * 901 px the panel marks it with its 1 px rule instead (components/services-menu.css). */
+  .main-nav.open .services-panel-list a[aria-current="page"] {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 6px;
+  }
+  .main-nav .mobile-chat-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--accent);
   }
   .wordmark {
     font-size: 20px;
@@ -1810,33 +1864,6 @@ img {
   }
   .wordmark > svg {
     width: 24px;
-  }
-  .header-actions {
-    gap: 10px;
-  }
-  .header-cta {
-    display: none;
-  }
-  .menu-toggle {
-    display: flex;
-  }
-  .main-nav {
-    display: none;
-  }
-  .main-nav.open {
-    display: flex;
-    position: absolute;
-    top: 69px;
-    left: 0;
-    right: 0;
-    background: #151515;
-    border-bottom: 1px solid #464646;
-    padding: 20px 25px;
-    flex-direction: column;
-    gap: 20px;
-  }
-  .main-nav a {
-    font-size: 14px;
   }
   .principles-strip {
     padding: 24px;
@@ -2256,10 +2283,10 @@ img {
   color: var(--muted);
 }
 
-/* The page veil (ADR-0070 amendment 1), after Anduril: its colour, #010101; 300 ms out of black on the first load, eased as
- * Anduril's "easeOutCubic"; 350 ms into black before the next page ("easeOutSine") and 350 ms out of it ("easeInSine"). It never
- * takes a click. The first paint is black until components/page-transition.tsx has the page's text ready and lifts it; if no
- * script runs it lifts alone, at once where the browser reports scripting is off and after 2 s otherwise. */
+/* The page veil (ADR-0070 amendments 1 and 3), after Anduril: its colour, #010101; 300 ms out of black on the home page's first
+ * load, eased as Anduril's "easeOutCubic", and nowhere else: since amendment 3 no page fades around navigation. It never takes a
+ * click. The first paint is black until components/page-transition.tsx has the page's text ready and lifts it; if no script runs
+ * it lifts alone, at once where the browser reports scripting is off and after 2 s otherwise. */
 .page-transition {
   position: fixed;
   inset: 0;
@@ -2275,13 +2302,7 @@ img {
 .page-transition.is-lift {
   animation: page-veil-lift 300ms cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
 }
-.page-transition.is-leave {
-  animation: page-veil-in 350ms cubic-bezier(0.39, 0.575, 0.565, 1) forwards;
-}
-.page-transition.is-arrive {
-  animation: page-veil-arrive 350ms cubic-bezier(0.47, 0, 0.745, 0.715) forwards;
-}
-/* Three names for the same fade out, so that each change of state starts a new animation rather than retiming the last. */
+/* Two names for the same fade out, so that the change of state starts a new animation rather than retiming the last. */
 @keyframes page-veil-out {
   from {
     opacity: 1;
@@ -2296,22 +2317,6 @@ img {
   }
   to {
     opacity: 0;
-  }
-}
-@keyframes page-veil-arrive {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-@keyframes page-veil-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
   }
 }
 @media (scripting: none) {
@@ -2346,9 +2351,10 @@ html:has(.site-header:not(.chat-site-header)) {
 .site-header:not(.chat-site-header) .main-nav {
   color: #f4f4f4;
 }
-/* The Workspace button's hover (ADR-0077 amendment 15): a white fill sweeps in from the arrow's side, the words and the arrow
- * turn black, and the arrow turns from up-right to right; it runs back when the pointer leaves. The fill is a pseudo-element
- * under the words, scaled from the right edge. Keyboard focus shows the same state. */
+/* The Workspace button's hover (ADR-0077 amendment 15): a white fill sweeps in from the arrow's side and the words and the arrow
+ * turn black; it runs back when the pointer leaves. The arrow points right, as every link on this site does, so it no longer
+ * turns (amendment 16). The fill is a pseudo-element under the words, scaled from the right edge. Keyboard focus shows the same
+ * state. */
 .site-header:not(.chat-site-header) .header-cta {
   position: relative;
   isolation: isolate;
@@ -2371,9 +2377,6 @@ html:has(.site-header:not(.chat-site-header)) {
   transform-origin: right center;
   transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1);
 }
-.site-header:not(.chat-site-header) .header-cta svg {
-  transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1);
-}
 .site-header:not(.chat-site-header) .header-cta:hover,
 .site-header:not(.chat-site-header) .header-cta:focus-visible {
   background: transparent;
@@ -2385,14 +2388,9 @@ html:has(.site-header:not(.chat-site-header)) {
 .site-header:not(.chat-site-header) .header-cta:focus-visible::before {
   transform: scaleX(1);
 }
-.site-header:not(.chat-site-header) .header-cta:hover svg,
-.site-header:not(.chat-site-header) .header-cta:focus-visible svg {
-  transform: rotate(45deg);
-}
 @media (prefers-reduced-motion: reduce) {
   .site-header:not(.chat-site-header) .header-cta,
-  .site-header:not(.chat-site-header) .header-cta::before,
-  .site-header:not(.chat-site-header) .header-cta svg {
+  .site-header:not(.chat-site-header) .header-cta::before {
     transition: none;
   }
 }
@@ -2412,9 +2410,6 @@ html:has(.site-header:not(.chat-site-header)) {
     gap: min(20px, 1.3vw);
     white-space: nowrap;
   }
-  .site-header:not(.chat-site-header) .header-version {
-    display: none;
-  }
   .site-header:not(.chat-site-header) .header-actions {
     justify-self: end;
   }
@@ -2422,5 +2417,15 @@ html:has(.site-header:not(.chat-site-header)) {
     font-size: 14px;
     padding: 7px 12px;
   }
+}
+
+/* The page for an address that does not exist (app/not-found.tsx): the inner pages' opening on the page ground, then the way
+ * home and to the workspace. */
+.not-found-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+  margin-top: 32px;
 }
 
