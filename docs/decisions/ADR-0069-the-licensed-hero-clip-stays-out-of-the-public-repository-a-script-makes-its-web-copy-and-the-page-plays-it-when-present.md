@@ -1,6 +1,6 @@
 # ADR-0069: The licensed hero clip stays out of the public repository; a script makes its web copy, and the page plays it when present
 
-- Status: Proposed; amendment 1 lets the web copy and its poster be committed (the lead's decision)
+- Status: Proposed; amendment 1 lets the web copy and its poster be committed (the lead's decision); amendment 2 takes them out of the repository again and the deploy fetches them from a private R2 bucket (the founder's decision)
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the hero), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) (what stays out of the repository), `scripts/hero-video.sh`, `app/page.tsx`, `app/home.css`, `.gitignore`
@@ -66,3 +66,13 @@ Option 3.
 **Evidence.** The clip is not on the drafter's machine; the lead commits the two files from their own. On 2026-11-11, with a stand-in clip in `public/media/` as the committed files will be, the production build exit 0 and its home page holds the video; `home.spec.ts`, `intro.spec.ts`, `tour.spec.ts` and `expansion.spec.ts` against that build: 26 of 26 passed. With the new ignore rule git lists `hero.mp4` and `hero.jpg` as untracked and no other file in the folder. UNVERIFIED: the real clip's size and look on the deployed site.
 
 **How we will know it was wrong.** iStock, Getty Images or GitHub sends a notice about the file. The two files then leave the repository and its history, and option 4 serves the clip.
+
+## Amendment 2, 2026-11-13 (the web copy and its poster leave the repository; the deploy fetches them from a private R2 bucket; confirmed by the founder)
+
+**Context.** Pull request #180 merged on 2026-11-13 with `public/media/hero.mp4` and `public/media/hero.jpg` committed, as amendment 1 allowed. The professional audit of 2026-11-12 (finding home-20) read section 3 of the licence, quoted above, as forbidding a copy that the public repository offers for download on its own, as this record's drafter had on 2026-11-07 and 2026-11-11.
+
+**Options.** (1) Keep the files committed: rejected, for the reading of section 3 above. (2) Remove them from the repository and have the deploy fetch them from a private R2 bucket, so the site keeps the clip: chosen. (3) As option 2, and also purge the files from the git history: not chosen, because it rewrites `main` and everyone must clone again. (4) Ask the lead first: not chosen.
+
+**Decision.** The founder, 2026-11-13: "Move it out of the repo, keep it on the site". The two files leave the repository and `.gitignore` ignores all of `public/media/` again. The deploy (`.github/workflows/deploy.yml`) reads `media/hero.mp4` and `media/hero.jpg` from the R2 bucket named by the repository variable `HERO_MEDIA_BUCKET`, with the Cloudflare token it already uses, before it builds the site. If either file cannot be read, the build goes on without the clip and the hero shows its still. The bucket stays private: only the deploy reads it, and the site serves the clip as before, as part of the page. This is option 4 of 2026-11-07, storage outside the repository. The files stay in the history of commit 82f5854 and of clones made before this change.
+
+**Evidence.** No evidence yet that the deploy reads the bucket: it needs the files uploaded, the variable set and the token allowed to read R2, and it is UNVERIFIED until a deploy log shows the two files fetched. Without the files, the page's build-time check (`app/page.tsx`) leaves the video out, as it did before amendment 1.
