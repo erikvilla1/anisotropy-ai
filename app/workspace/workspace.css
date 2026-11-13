@@ -45,8 +45,9 @@
 .ws-panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); min-width: 0; }
 .ws-panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 11px 14px; font-family: var(--heading); font-size: 14px; }
 .ws-panel > summary::-webkit-details-marker { display: none; }
-.ws-panel > summary::before { content: "▸"; color: var(--muted); font-size: 11px; width: 10px; }
-.ws-panel[open] > summary::before { content: "▾"; }
+/* the marker is drawn, not read: its alternative text is empty (a browser without the "/" syntax keeps the first declaration) */
+.ws-panel > summary::before { content: "▸"; content: "▸" / ""; color: var(--muted); font-size: 11px; width: 10px; }
+.ws-panel[open] > summary::before { content: "▾"; content: "▾" / ""; }
 .ws-panel-note { font-family: var(--font); font-size: 11px; color: var(--muted); }
 .ws-panel > summary .studio-badge { margin-left: auto; }
 .ws-panel-body { padding: 0 14px 14px; }
@@ -67,12 +68,24 @@
 
 /* The laminate workspace (ADR-0062, part 5): the problem's strip, the stack in the centre, the panels' fields. */
 .ws-stage .lam-spec { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
-.ws-stage-stack .hero-laminate-canvas { aspect-ratio: 16 / 9; min-height: 300px; border-radius: 8px; }
-.ws-panel-body .lam-grid3 { margin: 8px 0; }
+/* the stack fills its panel's width and no more, at any width (it ran past the panel at 390 px) */
+.ws-stage-stack .hero-laminate-canvas { aspect-ratio: 16 / 9; width: 100%; min-width: 0; min-height: 0; max-height: 300px; border-radius: 8px; }
+/* the rail is 280 to 380 px wide: two value-and-unit fields a row, each value at least seven characters, the unit menu wide enough
+   for the longest unit it offers (N·mm/mm, kip·in/in) and no wider */
+.ws-panel-body .lam-grid3 { margin: 8px 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ws-panel-body .lam-field-row { grid-template-columns: minmax(7ch, 1fr) auto; }
+.ws-panel-body .lam-field-row input { min-width: 7ch; }
+.ws-panel-body .lam-field-row select { max-width: 13ch; }
 .ws-panel-body .lam-own { display: grid; gap: 10px; margin-top: 8px; }
 .ws-panel-body .lam-solve-options { flex-direction: column; align-items: stretch; gap: 10px; }
+/* the f₁₂* box and the checkbox keep their own size in the column (the chat's row rule made the box 150 px tall) */
+.ws-panel-body .lam-solve-options .chat-small-input { flex: none; }
 .ws-panel-body .lam-check { flex-direction: row; align-items: flex-start; gap: 8px; }
-.ws-panel-body .lam-check input { margin-top: 3px; }
+.ws-panel-body .lam-check input { margin-top: 3px; width: auto; flex: none; padding: 0; }
+.lam-conditions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 4px 2px; }
+@media (max-width: 600px) {
+  .ws-stage .lam-spec { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .ws-panel-body .lam-material > .lam-field select { max-width: none; font-size: 13px; }
 .ws-panel-body .studio-alert li { font-size: 12px; }
 

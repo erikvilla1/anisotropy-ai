@@ -747,9 +747,9 @@
  "model": null,
  "prose": [
   "The stack [0/45/-45/90/90/-45/45/0] of 8 plies is 1 mm thick, quasi-isotropic, symmetric and balanced, so no in-plane load bends it (B = 0).",
-  "Under Nx = 1e+05 N/m the mid-plane strain is eps_x = 1719 microstrain (it stretches along x), eps_y = -497 microstrain (it shortens along y), gamma_xy = 0 (no shear strain), and it does not curve.",
+  "Under Nx = 100000 N/m the mid-plane strain is eps_x = 1719 microstrain (it stretches along x), eps_y = -497 microstrain (it shortens along y), gamma_xy = 0 (no shear strain), and it does not curve.",
   "Its in-plane moduli are Ex = 58.18 GPa, Ey = 58.18 GPa, Gxy = 22.56 GPa and nu_xy = 0.2892.",
-  "By Tsai-Wu, ply 4 (90 degrees) fails first, by the interaction of its stresses, when every load reaches 3.207 times its value: Nx = 3.207e+05 N/m.",
+  "By Tsai-Wu, ply 4 (90°) fails first, by the interaction of its stresses, when every load reaches 3.207 times its value: Nx = 320700 N/m.",
   "By maximum stress that ply fails in transverse tension, when its sigma2 reaches F2t = 57 MPa.",
   "The other criteria give maximum stress R = 3.474 (ply 4), maximum strain R = 3.22 (ply 4), Tsai-Hill R = 3.434 (ply 4)."
  ],

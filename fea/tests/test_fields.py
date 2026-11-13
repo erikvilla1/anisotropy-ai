@@ -10,7 +10,7 @@ import pytest
 
 from anisotropy_fea import paths
 from anisotropy_fea.abaqus_reader import read_deck
-from anisotropy_fea.explain import MODE_WORDS, explanation, fact_sheet, numbers_in, result_sentences, setup_sentences
+from anisotropy_fea.explain import MODE_WORDS, explanation, fact_sheet, number, numbers_in, result_sentences, setup_sentences
 from anisotropy_fea.fields import MODES, applied_loading, field_data, nodal_averages, per_ply_spans, rounded, span
 from anisotropy_fea.membrane import solve_membrane
 from anisotropy_fea.mesh import KernelError
@@ -174,8 +174,19 @@ def test_the_limiting_ply_is_named_with_its_place_and_mode(data):
     sentence = next(s for s in result_sentences(facts) if f"the {facts[earliest + '_mode']}" in s or MODE_WORDS[facts[earliest + "_mode"]] in s)
     assert f"ply {facts[earliest + '_ply']} ({facts[earliest + '_angle']:.4g} degrees)" in sentence and facts[earliest + "_place"] in sentence
     assert ("holds at the applied loading" in sentence) == (facts[earliest + "_factor"] > 1.0) == (not facts[earliest + "_fails"])
-    loading = f"{facts[earliest + '_applied_at_failure']:.4g} {facts['applied_unit']}, {facts[earliest + '_reaction_at_failure']:.4g} N at the top grip"
-    assert loading in sentence and f"({facts[earliest + '_x']:.4g}, {facts[earliest + '_y']:.4g} mm)" in sentence
+    loading = f"{number(facts[earliest + '_applied_at_failure'])} {facts['applied_unit']}, {number(facts[earliest + '_reaction_at_failure'])} N at the top grip"
+    assert loading in sentence and f"({number(facts[earliest + '_x'])}, {number(facts[earliest + '_y'])} mm)" in sentence
+
+
+@pytest.mark.parametrize(("value", "written"), [
+    (16220.0, "16220"), (100000.0, "100000"), (-364.5, "-364.5"), (0.9748, "0.9748"), (0.001, "0.001"), (1.5e6, "1.5e+06"),
+    (6.018e-6, "6.018e-06"), (999999.7, "1e+06"), (0.0, "0"),
+])
+def test_a_sentence_writes_the_sites_one_number_rule_in_ascii(value, written):
+    """Plain digits from 0.001 up to a million and an exponent outside, four figures, as lib/number-format.ts prints them and the API's
+    laminate sentences write them; the page turns the exponent into "x 10^n" and the sign into a minus (ADR-0091 amendment 1)."""
+    assert number(value) == written
+    assert numbers_in(f"It is {written} N.") == [written]  # the guard reads it back as one number
 
 
 def test_without_criteria_the_explanation_says_so(solved):

@@ -1,19 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowUp, Check, Layers3, Play, RotateCcw, SlidersHorizontal, Sparkles } from "lucide-react";
-import { libraryOptions } from "@/lib/studio-form";
+import { ArrowLeft, ArrowUp, Check, Layers3, MessagesSquare, Play, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { COMMON_MATERIALS } from "@/lib/studio-chat";
 import {
-  hasCondition, libraryNameOf, LOAD_NAMES, loadsWithZeros, missingIn, nextStep, printedUnit, problemLines, readConstants, readLayupLine, readLibraryMaterial, readLoads,
-  readTemperature,
+  ANGLE_CONVENTION, hasCondition, LIBRARY_MATERIALS, libraryChoice, libraryNameOf, loadChip, LOAD_NAMES, loadsWithZeros, missingIn, nextStep, printedUnit, problemLines,
+  readConstants, readLayupLine, readLibraryMaterial, readLoads, readTemperature,
   readSystem, REPORT_SYSTEMS, systemUnit, type LaminateDraft, type LaminateStep, type LoadName, type Quantity, type ReportUnits,
 } from "@/lib/laminate-chat";
 import { blankOwn, TemperatureFields } from "@/components/workspace/panels/laminate-fields";
 import { conditionOf, conditionsNamed } from "@/lib/conditions";
 import { laminateDraftFrom, laminateOffer, laminateUnit, laminateUnitNeeded } from "@/lib/proposals";
 import { assistantInfo, proposeRows, StudioError, type AssistantInfo, type ProposalAnswer } from "@/lib/studio-api";
-import { shownSentence } from "@/lib/studio-copy";
 import { ProposalCard, type ProposalLine } from "./proposal-card";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { useLaminate } from "./laminate-context";
@@ -26,7 +24,7 @@ type Entry =
   | { id: number; role: "assistant"; kind: "proposal"; answer: ProposalAnswer };
 type NewEntry = Entry extends infer E ? (E extends unknown ? Omit<E, "id"> : never) : never;
 
-/** The layups offered as one click. In a laminate problem 0° runs along x, the direction of Nx, as in the textbooks. */
+/** The layups offered as one click. In a laminate problem 0° runs along x, the direction of Nx (ADR-0004). */
 const LAYUP_CHOICES: { notation: string; title: string }[] = [
   { notation: "[45/0/-45/90]s", title: "Quasi-isotropic" },
   { notation: "[0/90]2s", title: "Cross-ply" },
@@ -41,12 +39,12 @@ const PANEL_OF: Record<LaminateStep, { id: string; title: string }> = {
 };
 
 const QUESTIONS: Record<LaminateStep, { title: string; text: string }> = {
-  units: { title: "Which units is the problem stated in?", text: "Pick the system. A number typed with its own unit, like 10300 MPa or 0.0049 in, keeps that unit; the engine converts, never this page." },
+  units: { title: "Which units is the problem stated in?", text: "Pick the system. A value typed with a unit, like 10300 MPa or 0.0049 in, keeps that unit." },
   material: { title: "Which material?", text: "Pick one from the library, with its cited constants and strengths, or type the constants the problem gives, e.g. “E1 147 GPa, E2 10.3, G12 7, nu12 0.27, F1t 2280, F1c 1725, F2t 57, F2c 228, F6 76 MPa”. Without strengths no failure is predicted." },
-  layup: { title: "What is the layup?", text: "Laminate notation, bottom ply first, e.g. [0/45/-45/90]s, and the ply thickness. Here 0° runs along x, the direction of Nx, as in the textbooks; a coupon counts from its length, the direction it is pulled, so 0° is along the main axis in both workspaces." },
-  loads: { title: "What loads does it carry?", text: "Force and moment resultants per unit width, e.g. “Nx = 100 N/mm, everything else zero”. Every one of the six is stated; nothing is assumed." },
+  layup: { title: "What is the layup?", text: `Laminate notation, e.g. [0/45/-45/90]s, and the ply thickness. ${ANGLE_CONVENTION}` },
+  loads: { title: "What loads does it carry?", text: "Force and moment resultants per unit width, e.g. “Nx = 100 N/mm, everything else zero”. Use 0 for loads that do not act." },
   temperature: { title: "What temperature change?", text: "The change in °C, K or °F, e.g. “cooled by 150 °C” or “ΔT = -270 °F”, and for your own material both expansion coefficients, e.g. “alpha1 = -0.9e-6 /°C, alpha2 = 27e-6 /°C”. With loads it is held while they grow to failure; alone, the change itself grows to failure." },
-  review: { title: "Ready to solve", text: "The engine solves the stack by classical lamination theory: the A, B, D matrices, the mid-plane strains and curvatures, every ply's stresses and first-ply failure." },
+  review: { title: "Ready to solve", text: "Solve for the A, B and D matrices, the mid-plane strains and curvatures, every ply's stresses and first-ply failure, by classical laminate theory." },
 };
 
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
@@ -133,7 +131,10 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     const outcome = await solve();
     if (outcome.ok) return;
     if ("errors" in outcome) add({ role: "assistant", kind: "text", tone: "problem", title: "Something is still missing", body: <ul className="chat-understood">{outcome.errors.map((e) => <li key={e}>{e}</li>)}</ul> });
-    else add({ role: "assistant", kind: "text", tone: "problem", title: "The engine refused the problem", body: <p>{outcome.refused}</p> });
+    // only a refusal of the problem (422) asks to check it; an answer to another problem ran but is not shown, so it asks for a new
+    // solve; an outage says the analysis did not run
+    else add({ role: "assistant", kind: "text", tone: "problem", body: <p>{outcome.refused}</p>,
+      title: outcome.status === 422 ? "Check the problem" : "mismatch" in outcome && outcome.mismatch ? "Solve again" : "The analysis did not run" });
   }
 
   /** A message that names no value: the panel on the left that asks for the next thing, and a few phrases that would be read. */
@@ -308,17 +309,17 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
         return (
           <>
             <Chips>
-              {COMMON_MATERIALS.filter((id) => libraryOptions.some((m) => m.id === id)).map((id) => (
-                <button type="button" key={id} onClick={() => answerWith(libraryNameOf(id), { ...draftRef.current, material: { library: id } })}><Layers3 size={14} /> {libraryNameOf(id)}</button>
+              {COMMON_MATERIALS.map((id) => libraryChoice(id)).filter((m) => m !== undefined).map((m) => (
+                <button type="button" key={m.value} onClick={() => answerWith(libraryNameOf(m.value), { ...draftRef.current, material: { library: m.value } })}><Layers3 size={14} /> {libraryNameOf(m.value)}</button>
               ))}
             </Chips>
             <div className="chat-inline">
               <select aria-label="Another library material" defaultValue="" onChange={(e) => e.target.value && answerWith(libraryNameOf(e.target.value), { ...draftRef.current, material: { library: e.target.value } })}>
                 <option value="">Another library material…</option>
-                {libraryOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {LIBRARY_MATERIALS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </div>
-            <Chips><PanelLink step="material">My own constants, under Material</PanelLink></Chips>
+            <Chips><PanelLink step="material">Enter my own constants</PanelLink></Chips>
           </>
         );
       case "layup":
@@ -332,24 +333,27 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
                 }}><Layers3 size={14} /> {c.title} <code>{c.notation}</code></button>
               ))}
             </Chips>
-            <Chips><PanelLink step="layup">The layup and the ply thickness, under Layup</PanelLink></Chips>
+            <Chips><PanelLink step="layup">Open Layup</PanelLink></Chips>
           </>
         );
-      case "loads":
+      case "loads": {
+        const chip = loadChip(system);
         return (
           <>
             <Chips>
-              <button type="button" onClick={() => answerWith(`Nx = 100 ${printedUnit(systemUnit(system, "N"))}, the rest zero`, { ...draftRef.current, loads: loadsWithZeros({ Nx: { value: "100", unit: systemUnit(system, "N") } }, system) })}>
-                Nx = 100 {printedUnit(systemUnit(system, "N"))} only</button>
-              <PanelLink step="loads">All six loads, under Loads</PanelLink>
+              <button type="button" onClick={() => answerWith(`${chip.name} = ${chip.quantity.value} ${printedUnit(chip.quantity.unit)}, the rest zero`,
+                { ...draftRef.current, loads: loadsWithZeros({ [chip.name]: chip.quantity }, system) })}>
+                Set {chip.name} = {chip.quantity.value} {printedUnit(chip.quantity.unit)} and the rest to zero</button>
+              <PanelLink step="loads">Enter all six loads</PanelLink>
             </Chips>
           </>
         );
+      }
       case "temperature":
         return (
           <>
             <TemperatureFields draft={draft} system={system} disabled={solving} onChange={(patch) => setDraft({ ...draftRef.current, ...patch })} />
-            <Chips><PanelLink step="temperature">The temperature change, under Temperature change</PanelLink></Chips>
+            <Chips><PanelLink step="temperature">Open Temperature change</PanelLink></Chips>
           </>
         );
       case "review": {
@@ -357,7 +361,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
         return (
           <div className="lam-review" data-testid="laminate-review">
             <dl className="studio-summary">{lines.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v || "–"}</dd></div>)}</dl>
-            <p className="chat-note">Tsai-Wu&apos;s f12* and maximum strain are options under Solve.</p>
+            <p className="chat-note">Tsai-Wu&apos;s f₁₂* and maximum strain are options under Solve.</p>
             <div className="chat-actions">
               <button type="button" className="chat-primary" data-testid="laminate-solve" onClick={() => void solveNow()} disabled={solving}><Play size={14} /> Solve</button>
               <button type="button" className="chat-secondary" onClick={() => ask("material")}>Change the material</button>
@@ -375,13 +379,12 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     return (
       <div data-testid="laminate-answer">
         <h4>Solved</h4>
-        {answer.prose.slice(0, 2).map(shownSentence).map((sentence, i) => (sentence ? <p key={i}>{sentence}</p> : null))}
-        <p className="chat-note">Full results are in the centre.</p>
+        <p>Results are under the stack.</p>
         <Chips>
           <button type="button" onClick={() => ask("loads")}>Change the loads</button>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("material")}>Try another material</button>
-          <button type="button" onClick={startOver}><RotateCcw size={14} /> New problem</button>
+          <button type="button" onClick={startOver}><RotateCcw size={14} /> Start a new problem</button>
         </Chips>
       </div>
     );
@@ -401,7 +404,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     } else content = answerMessage(entry.stamp);
     return (
       <div className="chat-assistant" key={entry.id}>
-        <span className="message-avatar"><Sparkles size={15} /></span>
+        <span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span>
         <div>{content}</div>
       </div>
     );
@@ -418,8 +421,8 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
       </div>
       <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
         {entries.map(render)}
-        {reading ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
-        {solving ? <div className="chat-assistant"><span className="message-avatar"><Sparkles size={15} /></span><div><p className="chat-typing">Solving the stack…</p></div></div> : null}
+        {reading ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
+        {solving ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing">Solving the stack…</p></div></div> : null}
       </div>
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea aria-label="Message the laminate assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}

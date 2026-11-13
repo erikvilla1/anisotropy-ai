@@ -6,7 +6,9 @@
  */
 import unitTable from "../engine/src/anisotropy_engine/data/units.json";
 import { expandLayup } from "./layup";
-import { libraryOptions } from "./studio-form";
+import { libraryOptions, type LibraryOption } from "./material-library-options";
+import { formatNumber } from "./number-format";
+import { withSymbols } from "./studio-copy";
 
 export type Dimension = "pressure" | "length" | "force_per_length" | "moment_per_length" | "temperature_change" | "expansion";
 export type ReportUnits = "SI" | "mm-MPa" | "US" | "psi";
@@ -23,7 +25,7 @@ export const KIND_DIMENSION = unitTable.kinds as Record<Kind, Dimension>;
 const SYSTEM_UNITS = unitTable.systems as Record<ReportUnits, Record<string, string>>;
 export const REPORT_SYSTEMS: { id: ReportUnits; title: string; detail: string }[] = [
   { id: "SI", title: "SI", detail: "GPa, MPa, mm, N/m" },
-  { id: "mm-MPa", title: "mm, N and MPa", detail: "MPa, mm, N/mm, N·mm/mm; the units the coupon decks use" },
+  { id: "mm-MPa", title: "mm, N and MPa", detail: "MPa, mm, N/mm, N·mm/mm" },
   { id: "US", title: "US customary", detail: "Msi, ksi, in, lb/in" },
   { id: "psi", title: "psi and inches", detail: "psi, in, lb/in" },
 ];
@@ -86,8 +88,31 @@ export function blankDraft(): LaminateDraft {
   return { system: "", material: null, layup: null, thickness: null, loads: null, f12_star: "", strain_limits: false };
 }
 
-export const libraryThicknessOf = (id: string): number | null => libraryOptions.find((m) => m.id === id)?.thickness ?? null;
-export const libraryNameOf = (id: string): string => libraryOptions.find((m) => m.id === id)?.name ?? id;
+/** The stacking and angle convention (ADR-0004), in the one sentence the calculator, the Layup panel and the assistant all say. */
+export const ANGLE_CONVENTION = "Bottom ply first. Angles run counterclockwise from x (the Nx direction) to the fibres.";
+
+/** The library materials the laminate workspace offers: the calculator's list, one option per cited dataset with an elastic input set the
+ * engine can solve with, under the library's own labels (the founder's decision D21 of the 2026-11-12 audit; ADR-0060 amendment 2). */
+export const LIBRARY_MATERIALS: LibraryOption[] = libraryOptions;
+
+/** The library option a draft names: its value (`material::dataset`), or a material id alone, which projects saved before the one list
+ * hold and the model proposes; that is the material's first dataset, the one the library marks primary. */
+export const libraryChoice = (value: string): LibraryOption | undefined =>
+  LIBRARY_MATERIALS.find((m) => m.value === value) ?? LIBRARY_MATERIALS.find((m) => m.materialId === value);
+export const libraryThicknessOf = (value: string): number | null => {
+  const thickness = libraryChoice(value)?.thickness_mm;
+  return thickness ? Number(thickness) : null;
+};
+/** A material's name, the label's part before its dataset: "IM7 / 8552". */
+const materialName = (option: LibraryOption): string => option.label.split(" · ")[0];
+/** A library choice as the assistant's chips, the echo of a pick and the card above the stack name it: the material's name ("AS4 / 8552")
+ * when the list offers one dataset of it, its full label when it offers several, so the two IM7 / 8552 datasets stay apart. The select
+ * on the Material panel shows every full label. */
+export const libraryNameOf = (value: string): string => {
+  const option = libraryChoice(value);
+  if (!option) return value;
+  return LIBRARY_MATERIALS.filter((m) => m.materialId === option.materialId).length > 1 ? option.label : materialName(option);
+};
 
 /** The rows a step still needs; the API and the engine judge the values themselves. */
 export function missingIn(step: LaminateStep, draft: LaminateDraft): string[] {
@@ -166,21 +191,23 @@ export function readConstants(text: string, system: ReportUnits): { constants: P
     const match = new RegExp(String.raw`(?:^|[\s,;(])(?:${CONSTANT_PATTERNS[name]})\s*(?:=|:|of|is)?\s*${SIGNED}\s*${UNIT}`, "i").exec(text);
     if (!match) continue;
     const kind = KIND_OF_CONSTANT[name];
-    if (kind === null) { constants[name] = match[1]; understood.push(`${name} ${match[1]}`); continue; }
+    if (kind === null) { constants[name] = match[1]; understood.push(withSymbols(`${name} ${match[1]}`)); continue; }
     const quantity = quantityFrom(match[1], match[2], kind, system);
-    if (!quantity) { refused.push(`${name}: ${match[2]} is not a ${kind} unit`); continue; }
+    if (!quantity) { refused.push(withSymbols(`${name}: ${match[2]} is not a ${kind} unit`)); continue; }
     constants[name] = quantity;
-    understood.push(`${name} ${quantity.value} ${printedUnit(quantity.unit)}`);
+    understood.push(withSymbols(`${name} ${quantity.value} ${printedUnit(quantity.unit)}`));
   }
   return { constants, understood, refused };
 }
 
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-/** A library material named in a message, by id or name, the longest id first so "as4-8552" is not "as4-3501". */
+/** A library material named in a message, by id or name, the longest id first so "as4-8552" is not "as4-3501"; the option of its
+ * first dataset. */
 export function readLibraryMaterial(text: string): string | null {
   const squashed = squash(text);
-  return [...libraryOptions].sort((a, b) => b.id.length - a.id.length).find((m) => squashed.includes(squash(m.id)) || squashed.includes(squash(m.name)))?.id ?? null;
+  return [...LIBRARY_MATERIALS].sort((a, b) => b.materialId.length - a.materialId.length)
+    .find((m) => squashed.includes(squash(m.materialId)) || squashed.includes(squash(materialName(m))))?.value ?? null;
 }
 
 /** A layup in laminate notation and a ply thickness, "[0/45/-45/90]s, 0.125 mm plies" or "ply thickness 0.0049 in". */
@@ -270,6 +297,12 @@ export function readTemperature(text: string): { delta_T?: Quantity; alpha1?: Qu
   return out;
 }
 
+/** The one-click load the assistant offers: the same physical load in every system, in that system's units and kept as stated (the API
+ * converts, ADR-0060). Nx = 100 N/mm in SI and mm-MPa; 571 lb/in in US and psi, the value the engine reports for 100 N/mm in US units
+ * (tests/fixtures/studio/laminate-answer-us.json), so the page converts nothing. */
+export const loadChip = (system: ReportUnits): { name: LoadName; quantity: Quantity } =>
+  ({ name: "Nx", quantity: system === "US" || system === "psi" ? { value: "571", unit: "lb/in" } : { value: "100", unit: "N/mm" } });
+
 /** Six loads from the ones stated, the rest zero in the system's units, for a click or an "everything else zero". */
 export function loadsWithZeros(given: Partial<Record<LoadName, Quantity>>, system: ReportUnits): Record<LoadName, Quantity> {
   return Object.fromEntries(LOAD_NAMES.map((name) => [name, given[name] ?? { value: "0", unit: systemUnit(system, name.startsWith("N") ? "N" : "M") }])) as Record<LoadName, Quantity>;
@@ -280,7 +313,7 @@ export function loadsWithZeros(given: Partial<Record<LoadName, Quantity>>, syste
 export type QuantityJson = { value: number; unit: string };
 export type LaminateProblem = {
   title?: string;
-  material: ({ library: string } | { name: string; E1: QuantityJson; E2: QuantityJson; G12: QuantityJson; nu12: number; source?: string;
+  material: ({ library: string; dataset?: string } | { name: string; E1: QuantityJson; E2: QuantityJson; G12: QuantityJson; nu12: number; source?: string;
       alpha1?: QuantityJson; alpha2?: QuantityJson }
     & Partial<Record<"F1t" | "F1c" | "F2t" | "F2c" | "F6", QuantityJson>>) & { strain_limits?: "from-strengths" };
   layup: number[];
@@ -314,7 +347,11 @@ export function buildProblem(draft: LaminateDraft, reportUnits?: ReportUnits): {
   let material: LaminateProblem["material"];
   const limits = draft.strain_limits ? { strain_limits: "from-strengths" as const } : {};
   if (!draft.material) { errors.push("material: required"); material = { library: "" }; }
-  else if ("library" in draft.material) material = { library: draft.material.library, ...limits };
+  else if ("library" in draft.material) {
+    // a dataset picked from the one list goes as its material and dataset; a material id alone (an older project) as it was
+    const choice = draft.material.library.includes("::") ? libraryChoice(draft.material.library) : undefined;
+    material = choice ? { library: choice.materialId, dataset: choice.datasetId, ...limits } : { library: draft.material.library, ...limits };
+  }
   else {
     const own = draft.material.own;
     const strengths = STRENGTH_NAMES.filter((k) => filledConstant(own[k]));
@@ -344,12 +381,24 @@ export function buildProblem(draft: LaminateDraft, reportUnits?: ReportUnits): {
   return errors.length ? { errors } : { problem };
 }
 
+/** Whether an answer belongs to the problem sent: the API echoes the case it solved, its title (the stated layup and loads, as typed)
+ * and its layup, in the system asked for. An answer that does not match is not shown beside the problem (audit finding laminate-4). */
+export function answerMatches(problem: LaminateProblem, answer: { report_units: string; case: Record<string, unknown> }): boolean {
+  const layup = (answer.case.laminate as { layup?: unknown } | undefined)?.layup;
+  return answer.report_units === problem.report_units
+    && (problem.title === undefined || answer.case.title === problem.title)
+    && Array.isArray(layup) && layup.length === problem.layup.length && layup.every((angle, i) => Number(angle) === problem.layup[i]);
+}
+
+/** A ply as the results name it (style guide, rule 6): "Ply 4 · 90°", "Ply 3 · −45°"; no plus sign. */
+export const plyLabel = (ply: number, angle: number): string => `Ply ${ply} · ${formatNumber(angle, { zeros: false })}°`;
+
 /** The problem in a line each, for the card beside the chat: only what is stated. */
 export function problemLines(draft: LaminateDraft): [string, string][] {
   const material = !draft.material ? "" : "library" in draft.material ? libraryNameOf(draft.material.library)
     : [draft.material.own.name.trim() || "own constants", ...(["E1", "E2", "G12"] as ConstantName[]).map((k) => {
       const q = draft.material && "own" in draft.material ? draft.material.own[k] : undefined;
-      return q && typeof q !== "string" && q.value ? `${k} ${q.value} ${printedUnit(q.unit)}` : "";
+      return q && typeof q !== "string" && q.value ? withSymbols(`${k} ${q.value} ${printedUnit(q.unit)}`) : "";
     }).filter(Boolean)].join(", ");
   const recorded = draft.material && "library" in draft.material ? libraryThicknessOf(draft.material.library) : null;
   const thickness = draft.thickness?.value ? `${draft.thickness.value} ${printedUnit(draft.thickness.unit)} plies`

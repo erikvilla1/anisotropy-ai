@@ -147,11 +147,23 @@ def facts_of(case: dict[str, Any], results: dict[str, Any], solution: CaseSoluti
     return facts
 
 
+PLAIN_FROM, PLAIN_BELOW = 1e-3, 1e6  # the site's one number rule (lib/number-format.ts; ADR-0091 amendment 1)
+
+
 def _words(value: float | None) -> str:
-    """A fact as the sentence writes it: the printed value, four figures, without a trailing .0."""
+    """A fact as the sentence writes it: four significant figures without trailing zeros, plain digits from 0.001 up to a million
+    (100000, not 1e+05) and an exponent outside (1.5e+06), the site's one number rule. The page prints the exponent as "x 10^n" in
+    superscript and the sign as a minus; the sentence stays ASCII so the number guard reads it (ADR-0052)."""
     if value is None:
         return "unbounded"
-    return f"{value:.4g}" if abs(value) >= 1e-3 or value == 0 else f"{value:.3e}"
+    if value == 0:
+        return "0"
+    rounded = float(f"{value:.3e}")
+    if PLAIN_FROM <= abs(rounded) < PLAIN_BELOW:
+        text = f"{rounded:.4g}"
+        return text if "e" not in text else f"{rounded:f}".rstrip("0").rstrip(".")
+    mantissa, exponent = f"{value:.3e}".split("e")
+    return f"{mantissa.rstrip('0').rstrip('.')}e{int(exponent):+03d}"
 
 
 def _angle(angle: float) -> str:
@@ -198,10 +210,10 @@ def sentences_of(facts: dict[str, Any]) -> list[str]:
     at = [f"{name} = {_words(facts[f'{earliest}_{name}'])} {units['N' if name.startswith('N') else 'M']}" for name in LOAD_NAMES if f"{earliest}_{name}" in facts]
     how = f"in {mode}" if mode in MODE_COMPONENTS else "by the interaction of its stresses" if mode == "interactive" else f"in {mode}"
     if facts.get("thermal_only") and ratio is not None:  # nothing is loaded: the temperature change itself scales to failure
-        fourth = (f"By {CRITERION_WORDS[earliest]}, ply {ply} ({_angle(angle)} degrees) fails first, {how}, when the temperature change "
+        fourth = (f"By {CRITERION_WORDS[earliest]}, ply {ply} ({_angle(angle)}°) fails first, {how}, when the temperature change "
                   f"reaches {_words(ratio)} times its value: {_words(facts[f'{earliest}_delta_T_at_failure'])} {units['delta_T']}.")
     else:
-        fourth = (f"By {CRITERION_WORDS[earliest]}, ply {ply} ({_angle(angle)} degrees) fails first, {how}, "
+        fourth = (f"By {CRITERION_WORDS[earliest]}, ply {ply} ({_angle(angle)}°) fails first, {how}, "
                   + (f"when every load reaches {_words(ratio)} times its value: {', '.join(at)}." if ratio is not None and at
                      else "but no face reaches the criterion under these loads." if ratio is None else f"at {_words(ratio)} times the applied loads."))
         if facts.get("delta_T") is not None:
@@ -214,7 +226,7 @@ def sentences_of(facts: dict[str, Any]) -> list[str]:
         if earliest == "max_stress":
             sentences.append(f"That is {reaches}.")
         else:
-            which = "that ply" if facts["max_stress_ply"] == ply else f"ply {facts['max_stress_ply']} ({_angle(facts['max_stress_angle'])} degrees)"
+            which = "that ply" if facts["max_stress_ply"] == ply else f"ply {facts['max_stress_ply']} ({_angle(facts['max_stress_angle'])}°)"
             sentences.append(f"By maximum stress {which} fails in {facts['max_stress_mode']}, {reaches}.")
     others = [c for c in facts["criteria"] if c != earliest]
     if others:

@@ -47,9 +47,12 @@ test("the workspace opens on three tiles and the projects, the server's among th
   await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "material");
   await page.getByTestId("project-name").fill("OHT study");
   await expect.poll(() => Object.values(store).some((p) => p.name === "OHT study" && p.kind === "fea"), { timeout: 10_000 }).toBe(true); // PUT to the server a moment after the change
+  await expect(page.getByTestId("assistant-toggle")).toHaveAttribute("aria-expanded", "true"); // a disclosure: expanded, not "pressed" (WCAG 4.1.2)
+  await expect(page.getByTestId("assistant-toggle")).toHaveAttribute("aria-controls", "ws-assistant");
   await page.getByTestId("assistant-toggle").click();
   await expect(shell).toHaveAttribute("data-assistant", "closed");
   await expect(page.getByTestId("ws-assistant")).toHaveCount(0);
+  await expect(page.getByTestId("assistant-toggle")).toHaveAttribute("aria-expanded", "false");
   await page.getByTestId("assistant-toggle").click();
   await expect(page.getByTestId("ws-assistant")).toBeVisible();
 
@@ -67,7 +70,7 @@ test("the workspace opens on three tiles and the projects, the server's among th
   await expect(page.getByTestId("ws-stage").getByTestId("empty-stack")).toBeVisible();
   await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "units");
   await page.getByTestId("project-name").fill("ABD check");
-  await page.getByLabel("Units", { exact: true }).selectOption("mm-MPa"); // on the panel: the assistant moves on
+  await page.getByLabel("Stated in", { exact: true }).selectOption("mm-MPa"); // on the panel, named by its visible label (WCAG 2.5.3): the assistant moves on
   await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "material");
   await page.getByRole("link", { name: "All projects" }).click();
   const rows = page.getByTestId("workspace-projects").locator("tbody tr");

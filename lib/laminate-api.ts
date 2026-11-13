@@ -1,5 +1,7 @@
 import example from "../api/examples/zero-degree-tension.json";
 import { findLibraryOption } from "./material-library-options";
+import { settled } from "./studio-colors";
+import { ANALYSIS_UNAVAILABLE, customerText } from "./studio-copy";
 
 export const loadNames = ["Nx", "Ny", "Nxy", "Mx", "My", "Mxy"] as const;
 export type LoadName = (typeof loadNames)[number];
@@ -56,20 +58,35 @@ export type AnalysisResult = {
 };
 export type FieldErrors = Record<string, string>;
 
-/** Reuse the cited API example; only convert its input units for the form. */
+/** The library dataset the calculator's example uses: AS4 / 3501-6, as the material library cites it. */
+export const EXAMPLE_LIBRARY = "as4-3501::daniel-ishai-2006-as4-3501-v2";
+
+/** A library option's citation as the form shows it: the source and its page, without the dataset's id and record revision, which
+ * the API's answer still carries. */
+export const shownCitation = (citation: string): string => citation.replace(/ · dataset \S+ \(record [^)]*\)/, "");
+
+/** The example: AS4 / 3501-6 from the material library, its cited values as the select shows them (the request sends the dataset
+ * reference), under the API example's ply and uniaxial load, converted to the form's units. */
 export function exampleForm(): CalculatorForm {
+  const option = findLibraryOption(EXAMPLE_LIBRARY)!;
   return {
     material: {
-      library: "",
-      E1_GPa: String(example.material.E1_pa / 1e9),
-      E2_GPa: String(example.material.E2_pa / 1e9),
-      G12_GPa: String(example.material.G12_pa / 1e9),
-      nu12: String(example.material.nu12),
-      source_reference: example.material.source_reference,
+      library: option.value, E1_GPa: option.E1_GPa, E2_GPa: option.E2_GPa, G12_GPa: option.G12_GPa, nu12: option.nu12,
+      source_reference: shownCitation(option.citation),
     },
-    plies: example.plies.map((ply) => ({ angle_deg: String(ply.angle_deg), thickness_mm: String(ply.thickness_m * 1e3) })),
+    plies: example.plies.map((ply) => ({ angle_deg: String(ply.angle_deg), thickness_mm: option.thickness_mm ?? String(ply.thickness_m * 1e3) })),
     loads: Object.fromEntries(loadNames.map((name) => [name, String(example.loads[name])])) as Record<LoadName, string>,
   };
+}
+
+/** A, B and D as the page shows them, at the stack summary's tolerance (ADR-0059): B is zero when the stack has no extension–bending
+ * coupling, A16 and A26 when it has no extension–shear coupling, and any other entry below a billionth of its matrix's largest is roundoff. */
+export function shownMatrices(result: Pick<AnalysisResult, "A_N_per_m" | "B_N" | "D_N_m" | "summary">): { A: number[][]; B: number[][]; D: number[][] } {
+  const coupling = result.summary?.coupling;
+  const clean = (rows: number[][]) => { const flat = settled(rows.flat()); return rows.map((row, i) => flat.slice(3 * i, 3 * i + 3)); };
+  const A = clean(result.A_N_per_m).map((row, i) => row.map((v, j) => (coupling && !coupling.extension_shear && (i === 2) !== (j === 2) ? 0 : v)));
+  const B = coupling && !coupling.extension_bending ? result.B_N.map((row) => row.map(() => 0)) : clean(result.B_N);
+  return { A, B, D: clean(result.D_N_m) };
 }
 
 /** Preserve blanks as errors. Convert GPa/mm at the input boundary; perform no laminate math. */
@@ -148,7 +165,7 @@ export function readAnalysisResult(payload: unknown, request: AnalysisRequest): 
     || !matrix(payload.A_N_per_m) || !matrix(payload.B_N) || !matrix(payload.D_N_m)
     || !vector(payload.midplane_strain) || !vector(payload.curvature_per_m) || !sameInputs
     || !validSummary(payload.summary) || !validFailure(payload.first_ply_failure)) {
-    throw new CalculationError("The calculation service returned an unexpected result. Please try again.");
+    throw new CalculationError(UNEXPECTED_RESULT);
   }
   return payload as AnalysisResult;
 }
@@ -185,21 +202,33 @@ export function validFailure(value: unknown): boolean {
     && value.not_computed.every((item) => isObject(item) && typeof item.criterion === "string" && typeof item.reason === "string");
 }
 
-/** Send one explicit request; errors never fall back to example or locally computed results. */
+const UNEXPECTED_RESULT = "The analysis returned an unexpected result. Try again; if it happens again, contact us.";
+const NOT_STARTED = "The analysis could not start. Try again; if it fails again, contact us.";
+
+/** Send one explicit request; errors never fall back to example or locally computed results. An outage (no answer, or a 5xx) says
+ * the analysis is unavailable and the inputs are kept; only a refusal of the inputs (422) asks for them to be checked; any other
+ * refusal (signed out, a limit reached) gives the API's words when they can be shown, or says the analysis could not start. */
 export async function requestAnalysis(baseUrl: string, request: AnalysisRequest, signal: AbortSignal): Promise<AnalysisResult> {
-  const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/laminates/response`, {
-    // The actor header names this client in the run record (ADR-0026).
-    method: "POST", headers: { "Content-Type": "application/json", "X-Anisotropy-Actor": "calculator" },
-    // Same-origin credentials carry the Access sign-in cookie to the hosted /api and nothing to another origin (ADR-0056).
-    body: JSON.stringify(request), signal, credentials: "same-origin", cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/laminates/response`, {
+      // The actor header names this client in the run record (ADR-0026).
+      method: "POST", headers: { "Content-Type": "application/json", "X-Anisotropy-Actor": "calculator" },
+      // Same-origin credentials carry the Access sign-in cookie to the hosted /api and nothing to another origin (ADR-0056).
+      body: JSON.stringify(request), signal, credentials: "same-origin", cache: "no-store",
+    });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new CalculationError(ANALYSIS_UNAVAILABLE);
+  }
   let payload: unknown;
   try { payload = await response.json(); }
-  catch { throw new CalculationError("The calculation service returned an unreadable response. Please try again."); }
+  catch { throw new CalculationError(response.ok ? UNEXPECTED_RESULT : response.status >= 500 ? ANALYSIS_UNAVAILABLE : NOT_STARTED); }
   if (!response.ok) {
-    const message = response.status === 422 && isObject(payload) && typeof payload.detail === "string"
-      ? payload.detail : response.status === 422 ? "Review the highlighted inputs and try again." : "The calculation service could not complete this request. Please try again.";
-    throw new CalculationError(message, apiFieldErrors(payload));
+    if (response.status >= 500) throw new CalculationError(ANALYSIS_UNAVAILABLE);
+    const said = isObject(payload) && typeof payload.detail === "string" ? customerText(payload.detail) : null;
+    if (response.status !== 422) throw new CalculationError(said ?? NOT_STARTED);
+    throw new CalculationError(said ?? "Review the highlighted inputs and try again.", apiFieldErrors(payload));
   }
   return readAnalysisResult(payload, request);
 }

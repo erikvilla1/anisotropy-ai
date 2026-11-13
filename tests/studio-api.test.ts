@@ -64,7 +64,13 @@ test("a refusal carries the API's words and its status", async () => {
   }
   globalThis.fetch = (async () => { throw new TypeError("fetch failed"); }) as typeof fetch;
   try {
-    await assert.rejects(checkSetup("http://api.test", {}), /did not answer/);
+    await assert.rejects(checkSetup("http://api.test", {}), /Analysis is unavailable right now\. Your inputs are kept/); // an outage: what happened, what to do
+  } finally {
+    globalThis.fetch = original;
+  }
+  globalThis.fetch = (async () => new Response(JSON.stringify({ detail: "the container did not answer" }), { status: 503 })) as typeof fetch;
+  try {
+    await assert.rejects(checkSetup("http://api.test", {}), (error: StudioError) => error.status === 503 && /^Analysis is unavailable right now/.test(error.message));
   } finally {
     globalThis.fetch = original;
   }
