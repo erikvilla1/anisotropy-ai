@@ -15,6 +15,10 @@ import { assistantInfo, proposeRows, StudioError, type AssistantInfo, type Propo
 import { ProposalCard, type ProposalLine } from "./proposal-card";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { useLaminate } from "./laminate-context";
+import { workspace } from "@/lib/workspaces";
+
+/** The coupon workspace's one name, as its tile and header write it (audit fea-screens-10). */
+const COUPON_WORKSPACE = workspace("fea").title;
 
 type Entry =
   | { id: number; role: "user"; text: string }
@@ -144,7 +148,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
     add(...(echoed ? [] : [{ role: "user", text } as NewEntry]), { role: "assistant", kind: "text", title: "Pick a step on the left, or describe one thing",
       body: <div data-testid="chat-redirect" data-panel={where.id}>
         <p>{step === "review" ? "Everything is stated: solve it under Solve, or say “solve”." : `The next thing to state is ${QUESTIONS[step].title.toLowerCase().replace(/\?$/, "")}, under the ${where.title} panel.`} Or
-          type a phrase like “AS4/8552”, “E1 147 GPa, E2 10.3, G12 7, nu12 0.27”, “[0/90]2s, 0.125 mm plies” or “Nx = 100 N/mm, everything else zero”. Type “back” for the coupon tests.</p>
+          type a phrase like “AS4/8552”, “E1 147 GPa, E2 10.3, G12 7, nu12 0.27”, “[0/90]2s, 0.125 mm plies” or “Nx = 100 N/mm, everything else zero”. Type “back” for {COUPON_WORKSPACE}.</p>
         <Chips><PanelLink step={step}>Open {where.title}</PanelLink>{step !== "review" ? <button type="button" onClick={() => ask(step)}>Ask me here</button> : null}</Chips>
       </div> });
   }
@@ -302,7 +306,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
                 </button>
               ))}
             </div>
-            <Chips><button type="button" onClick={onBack}><ArrowLeft size={14} /> Back to the coupon tests</button></Chips>
+            <Chips><button type="button" onClick={onBack}><ArrowLeft size={14} /> Back to {COUPON_WORKSPACE}</button></Chips>
           </>
         );
       case "material":
@@ -415,7 +419,7 @@ export function LaminateChat({ onBack }: { onBack: () => void }) {
       <div className="chat-pane-top">
         <span><span className="status-dot" /> Laminate assistant</span>
         <span>
-          <button type="button" className="chat-link" onClick={onBack}><ArrowLeft size={13} /> Coupon tests</button>
+          <button type="button" className="chat-link" onClick={onBack}><ArrowLeft size={13} /> {COUPON_WORKSPACE}</button>
           <button type="button" className="icon-button" aria-label="Start a new problem" title="Start a new problem" onClick={startOver}><RotateCcw size={14} /></button>
         </span>
       </div>

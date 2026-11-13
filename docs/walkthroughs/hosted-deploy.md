@@ -76,7 +76,7 @@ To serve the Worker at another hostname without a moment unguarded (as amendment
 
 ## Limits per person
 
-`ANISOTROPY_JOBS_PER_USER_PER_DAY`, a Worker secret like the others, caps what one signed-in person can run: one job at a time and that many a day (UTC), counted in the jobs table. A request past a limit is refused with 429 and a sentence the studio's chat shows ("a job of you@example.com is still running", "you have started 20 job(s) today, the cap of 20 per person per day"). Unset, there is no cap. With the queue, a person's queued job counts as their one job; without it, the container's one-job-at-a-time rule applies to everybody.
+`ANISOTROPY_JOBS_PER_USER_PER_DAY`, a Worker secret like the others, caps what one signed-in person can run: one job at a time and that many a day (UTC), counted in the jobs table. A request past a limit is refused with 429 and a sentence the page shows ("Your analysis started at 12:03 UTC is still running. Wait for it to finish, then run this one.", "You have started 20 analyses today, the most allowed per day. ..."); the job's id and the actor go to the container's log (ADR-0091 amendment 2). Unset, there is no cap. With the queue, a person's queued job counts as their one job; without it, the container's one-job-at-a-time rule applies to everybody.
 
 ## Uploads from Abaqus: who sees them, and the connector's route
 

@@ -24,7 +24,7 @@ test("a finished run offers the way to Abaqus and back; a file sent is compared 
   await expect(card(page)).toHaveAttribute("data-verdict", "none", { timeout: 20_000 });
   await expect(card(page).locator("h3")).toHaveText("Compare with your Abaqus model");
   const build = card(page).getByTestId("abaqus-build"); // one action each way: the build script out, the connector's file back
-  await expect(build).toHaveAttribute("download", "UnnotchedTension_[45-0--45-90]s_build.py");
+  await expect(build).toHaveAttribute("download", "UnnotchedTension_[45,0,-45,90]s_build.py"); // plies parted by commas (audit fea-run-39)
   expect(await build.getAttribute("href")).toContain(`/v1/coupon-jobs/${JOB}/files/abaqus_build?name=`);
   expect(await card(page).getByTestId("abaqus-connector").getAttribute("href")).toMatch(/\/v1\/abaqus-connector$/);
   await expect(card(page)).toContainText("abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa");

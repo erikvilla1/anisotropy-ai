@@ -174,7 +174,7 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   await notch(page);
   await expectStop(page, 4);
   const report = page.getByTestId("demo-report");
-  await expect(report.locator(".demo-files li[data-shown]")).toHaveText(["Report (PDF)", "Full package (ZIP)", "Solver input (.inp)"]);
+  await expect(report.locator(".demo-files li[data-shown]")).toHaveText(["Report (PDF)", "Abaqus input file (.inp)"]); // the customer's downloads (D4, D18)
   await expect(report.getByRole("link", { name: "Open the workspace" })).toHaveAttribute("href", /\/workspace\/fea\/?$/);
   // A swipe up plays a beat backwards.
   expect(await swipe(page, -1)).toBe(28);

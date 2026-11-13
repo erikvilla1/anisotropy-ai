@@ -80,6 +80,9 @@ def test_the_form_definition_carries_the_list_and_never_the_switch(monkeypatch):
     assert block["tests"] == ["unnotched tension"] and block["standards"] == ["ASTM D3039/D3039M-17"]
     assert block["material_kinds"] == ["plies"] and block["dogbone"] is False and block["switch"] == ALL_TESTS_VARIABLE
     assert "ADR" not in block["not_available"]  # a sentence the page shows the engineer
+    for words in (block["not_available"], block["unsymmetric"], block["offered"]):  # in the product's words, no tool (ADR-0091 amendment 2)
+        assert not any(term in words.lower() for term in ("abaqus", "calculix", "studio", "comparison", "validated")), words
+    assert block["not_available"] == f"{block['not_offered']}. {block['offered']}"
 
 
 # --------------------------------------------------------------------------------------------- part 2: the software refuses them
@@ -97,7 +100,7 @@ from anisotropy_fea.tow_test import tow_answer
 from test_checks import TOOLS, by_id
 from test_intake import OHT_FILL, PUBLIC_FILL
 
-NOT_AVAILABLE = "is not available yet: the studio offers the unnotched tension coupon"
+NOT_AVAILABLE = "is not offered yet. This workspace runs the unnotched tension coupon"
 
 
 @pytest.fixture(autouse=True)
@@ -138,18 +141,18 @@ def test_with_the_switch_off_a_hidden_test_is_refused_on_its_test_row(tmp_path, 
     answer = checked(tmp_path, OHT_FILL)
     assert answer.state == "blocked"
     assert "Test: open-hole tension " + NOT_AVAILABLE in "\n".join(answer.problems)
-    assert any("not available yet" in item.message for item in answer.items if item.state in ("fail", "missing"))
+    assert any("not offered yet" in item.message for item in answer.items if item.state in ("fail", "missing"))
 
 
 def test_with_the_switch_on_the_same_hidden_test_is_judged_as_before(tmp_path):
     answer = checked(tmp_path, OHT_FILL)
-    assert not any("not available yet" in p for p in answer.problems)
+    assert not any("not offered yet" in p for p in answer.problems)
 
 
 @pytest.mark.parametrize(("changes", "words"), [
     ({"standard": "ASTM D638-22"}, "ASTM D638-22 " + NOT_AVAILABLE),
     ({"material_kind": "isotropic", "thickness": 3.2, "own_E": 3000.0, "own_nu": 0.35}, "one isotropic material " + NOT_AVAILABLE),
-    ({"narrow_width": 13.0, "narrow_length": 57.0, "radius": 76.0}, "a dog-bone " + NOT_AVAILABLE),
+    ({"narrow_width": 13.0, "narrow_length": 57.0, "radius": 76.0}, "a dog-bone is not offered yet, so leave them blank. This workspace runs"),
 ])
 def test_with_the_switch_off_d638_its_dogbone_and_one_isotropic_material_are_refused(tmp_path, closed, changes, words):
     answer = checked(tmp_path, PUBLIC_FILL, **changes)
@@ -167,8 +170,14 @@ def test_with_the_switch_off_the_tow_calculation_is_refused(tmp_path, closed):
     assert "fibre tow tension " + NOT_AVAILABLE in identity["message"]
 
 
+def test_the_api_matches_the_words_every_refusal_holds():
+    """The API tells a hidden coupon's refusal from a broken tool by these words (anisotropy_api.coupon_jobs.NOT_OFFERED)."""
+    source = (paths.ROOT / "api" / "src" / "anisotropy_api" / "coupon_jobs.py").read_text(encoding="utf-8")
+    assert f'NOT_OFFERED = "{enabled.NOT_OFFERED}"' in source and enabled.NOT_OFFERED in enabled.NOT_AVAILABLE
+
+
 def test_a_stored_coupon_of_a_hidden_test_is_kept_and_not_reopened_or_run(tmp_path, closed, monkeypatch):
-    with pytest.raises(NotOffered, match="its test, open-hole tension, is not available yet"):
+    with pytest.raises(NotOffered, match="its test, open-hole tension, is not offered yet, and the coupon is kept. This workspace runs"):
         refuse_hidden_kind("open_hole_tension", "IM7-OHT-L1", False)
     refuse_hidden_kind("unnotched_tension", "IM7-UNT-L1", False)
     refuse_hidden_kind("open_hole_tension", "IM7-OHT-L1", True)
@@ -177,11 +186,11 @@ def test_a_stored_coupon_of_a_hidden_test_is_kept_and_not_reopened_or_run(tmp_pa
     ours.mkdir(parents=True)
     (ours / f"{name}.toml").write_text((paths.CHECKS / "open-hole-im7-8552" / "open-hole-im7-8552.toml").read_text(encoding="utf-8"), encoding="utf-8")
     studio = load_tool("studio_tool", monkeypatch)
-    with pytest.raises(studio.IntakeError, match="not available yet"):
+    with pytest.raises(studio.IntakeError, match="not offered yet"):
         studio.values(name, tmp_path)
     run_coupon = load_tool("run_coupon", monkeypatch)
     monkeypatch.setattr(run_coupon.paths, "ours", lambda coupon: tmp_path / coupon / paths.OURS)
-    with pytest.raises(run_coupon.Refused, match="not available yet"):
+    with pytest.raises(run_coupon.Refused, match="not offered yet"):
         run_coupon.refuse_hidden(name)
 
 
@@ -200,12 +209,12 @@ def test_with_the_switch_off_an_unsymmetric_tension_layup_is_refused_on_its_symm
     assert unsymmetric.state == "blocked" and f"Symmetric: {enabled.UNSYMMETRIC}" in "\n".join(unsymmetric.problems)
     assert "ADR" not in enabled.UNSYMMETRIC and "[0/45/-45/90]s" in enabled.UNSYMMETRIC  # a sentence for the engineer, with a way out
     listed = checked(tmp_path / "listed", PUBLIC_FILL, angles=[45, 0, -45, 90, 90, -45, 0, 45], symmetric="no")  # every ply, the same both ways
-    assert listed.state == "ready" and not any("unsymmetric" in p for p in listed.problems)
+    assert listed.state == "ready" and not any(enabled.UNSYMMETRIC in p for p in listed.problems)
     assert checked(tmp_path / "s", PUBLIC_FILL).state == "ready"
 
 
 def test_with_the_switch_on_an_unsymmetric_tension_layup_is_judged_as_before(tmp_path):
-    assert not any("unsymmetric" in p for p in checked(tmp_path, PUBLIC_FILL, symmetric="no").problems)
+    assert not any(enabled.UNSYMMETRIC in p for p in checked(tmp_path, PUBLIC_FILL, symmetric="no").problems)
 
 
 def test_the_symmetric_rule_reads_the_whole_layup_and_the_form_definition_carries_its_words():

@@ -215,7 +215,7 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
     )),
     ("Material: pick one from our library, or give your own constants", (
         Field("library", "Library material", "list", LIBRARY_HELP),
-        Field("own_name", "Own material: name", "text", "the material's name as in your Abaqus model, no spaces, e.g. X840-Z60"),
+        Field("own_name", "Own material: name", "text", "the material's name as in your Abaqus model, no spaces, e.g. PREPREG-01"),
         Field("own_E1", "Own material: E1 (MPa)", "number", "stiffness along the fibres (Young's modulus in direction 1)", above=0),
         Field("own_E2", "Own material: E2 (MPa)", "number", "stiffness across the fibres, in the plane of the ply (direction 2)", above=0),
         Field("own_G12", "Own material: G12 (MPa)", "number", "in-plane shear stiffness (shear modulus in the 1-2 plane)", above=0),
@@ -1137,7 +1137,7 @@ def check_form(form: FormInput) -> Values:
     dogbone = None
     if any(cells.get(key) is not None for key in DOGBONE_KEYS):
         if not (offer_all or enabled.DOGBONE):
-            problems.append(f"{L('narrow_width')} and the other dog-bone rows: a dog-bone is {enabled.NOT_AVAILABLE}; leave them blank")
+            problems.append(f"{L('narrow_width')} and the other dog-bone rows: a dog-bone is {enabled.NOT_OFFERED}, so leave them blank. {enabled.OFFERED}")
         if kind and kind != "unnotched_tension":
             problems.append(f"{L('narrow_width')} and the other dog-bone rows: belong to unnotched tension only; leave them blank")
         missing = [L(key) for key in ("narrow_width", "narrow_length", "radius") if cells.get(key) is None]
@@ -1216,7 +1216,7 @@ def check_form(form: FormInput) -> Values:
         strengths = {key[4:]: number(key) for key in STRENGTH_KEYS}
         given = [k for k, v in strengths.items() if v is not None]
         if given and len(given) != len(STRENGTH_KEYS):
-            problems.append(f"Own material strengths: give all five (F1t, F1c, F2t, F2c, F6) or none; given {', '.join(given)}")
+            problems.append(f"Own material strengths: enter all five, or none; {', '.join(given)} given")
         own["strengths"] = strengths if len(given) == len(STRENGTH_KEYS) else None
     G13, G23 = number("G13"), number("G23")
     if isotropic is None:

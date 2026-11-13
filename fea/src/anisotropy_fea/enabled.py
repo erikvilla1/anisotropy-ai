@@ -25,12 +25,15 @@ STANDARDS: tuple[str, ...] = ("astm-d3039",)  # the profiles offered, by id; "no
 MATERIAL_KINDS: tuple[str, ...] = ("plies",)  # a laminate of plies; one isotropic material (the plastic of ASTM D638) waits
 DOGBONE = False  # the dog-bone's rows (ADR-0075) wait with D638: a tension coupon is a straight strip
 
-NOT_AVAILABLE = "not available yet: the studio offers the unnotched tension coupon, under ASTM D3039 or no standard, until its comparison with Abaqus is validated"
+# The words a customer reads when something is held back (ADR-0091 amendment 2): what is not offered, and what is. Every refusal of a
+# hidden test, standard or material holds NOT_OFFERED, which the API matches (anisotropy_api.coupon_jobs.NOT_OFFERED).
+NOT_OFFERED = "not offered yet"
+OFFERED = "This workspace runs the unnotched tension coupon, under ASTM D3039 or no standard."
+NOT_AVAILABLE = f"{NOT_OFFERED}. {OFFERED}"
 # a tension coupon's layup reads the same from both faces (the founder, 2026-11-11: "do a for right now"; ADR-0089 amendment 4): an
 # unsymmetric one bends as it is pulled, which the package, its every-output file and the comparison with Abaqus do not cover yet
 SYMMETRIC_ONLY = True
-UNSYMMETRIC = ("an unsymmetric layup is not available yet: it bends as it is pulled, which the comparison with Abaqus does not cover yet; "
-               "use a layup that reads the same from both faces, such as [0/45/-45/90]s")
+UNSYMMETRIC = "This layup is not symmetric. Use a layup that reads the same from both faces, such as [0/45/-45/90]s."
 
 
 class SwitchError(ValueError):
@@ -93,15 +96,16 @@ def refuse_hidden_kind(kind: str, name: str, every: bool | None = None) -> None:
     every = all_tests() if every is None else every
     test = TEST_CODES[kind][1] if kind in TEST_CODES else kind
     if not is_test_enabled(test, every):
-        raise NotOffered(f"{name}: its test, {test}, is {NOT_AVAILABLE}; the coupon is kept")
+        raise NotOffered(f"{name}: its test, {test}, is {NOT_OFFERED}, and the coupon is kept. {OFFERED}")
 
 
 class NotOffered(ValueError):
-    """A coupon of a test the studio does not offer yet (ADR-0089). Its message holds the words "not available yet"."""
+    """A coupon of a test the studio does not offer yet (ADR-0089). Its message holds the words of NOT_OFFERED."""
 
 
 def definition() -> dict:
     """The `enabled` block of the form's definition: the list itself, never the switch, so the page's file is the same however the
     process was started; the page asks the API whether the switch is on (`GET /v1/coupon-tests`)."""
     return {"tests": list(TESTS), "standards": list(standard_designations()), "material_kinds": list(MATERIAL_KINDS), "dogbone": DOGBONE,
-            "not_available": NOT_AVAILABLE, "symmetric_only": SYMMETRIC_ONLY, "unsymmetric": UNSYMMETRIC, "switch": ALL_TESTS_VARIABLE}
+            "not_available": NOT_AVAILABLE, "not_offered": NOT_OFFERED, "offered": OFFERED, "symmetric_only": SYMMETRIC_ONLY, "unsymmetric": UNSYMMETRIC,
+            "switch": ALL_TESTS_VARIABLE}

@@ -162,7 +162,7 @@ export function TowRail({ apiBaseUrl }: { apiBaseUrl: string }) {
           <button type="button" className="studio-button studio-button-primary" onClick={calculate} disabled={busy || !apiBaseUrl} data-testid="tow-calculate">Calculate</button>
         </div>
         <ChecklistPanel checklist={checklist} checking={busy} title="Record check" ready="calculated" subject="This record"
-          waiting="Select Calculate. The record is read and judged by the fea package, every number computed by the engine; a failed or missing item blocks the result, a deviation does not." />
+          waiting="Select Calculate. The record is read and judged; a failed or missing item blocks the result, a deviation does not." />
         {failing.length ? (
           <p className="ws-fix-links">
             {failing.map((item) => {

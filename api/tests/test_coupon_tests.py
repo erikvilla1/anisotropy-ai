@@ -45,8 +45,8 @@ from anisotropy_api.main import job_recorder
 HIDDEN_STAND_IN = '''import sys
 name = sys.argv[sys.argv.index("values") + 1]
 if name == "IM7-OHT-L1":
-    sys.exit(f"studio_tool: {name}: its test, open-hole tension, is not available yet: the studio offers the unnotched tension coupon, "
-             "under ASTM D3039 or no standard, until its comparison with Abaqus is validated; the coupon is kept")
+    sys.exit(f"studio_tool: {name}: its test, open-hole tension, is not offered yet, and the coupon is kept. This workspace runs the "
+             "unnotched tension coupon, under ASTM D3039 or no standard.")
 sys.exit("studio_tool: something else went wrong")
 '''
 
@@ -63,5 +63,5 @@ def hidden_studio(tmp_path, monkeypatch):
 def test_reopening_a_stored_coupon_of_a_hidden_test_is_a_422_that_says_why(hidden_studio):
     answer = client.get("/v1/coupons/IM7-OHT-L1/values")
     assert answer.status_code == 422
-    assert answer.json()["detail"].startswith("IM7-OHT-L1: its test, open-hole tension, is not available yet")
+    assert answer.json()["detail"].startswith("IM7-OHT-L1: its test, open-hole tension, is not offered yet")
     assert client.get("/v1/coupons/OTHER/values").status_code == 503  # any other failure of the tool stays a 503

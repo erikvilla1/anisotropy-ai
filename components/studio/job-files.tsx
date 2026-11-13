@@ -1,8 +1,8 @@
 "use client";
 
 import { ArrowUpRight, Download } from "lucide-react";
-import { DOWNLOADS, fileUrl, type Fields, type JobStatus } from "@/lib/studio-api";
-import { downloadName } from "@/lib/studio-copy";
+import { fileUrl, type Fields, type JobStatus } from "@/lib/studio-api";
+import { downloadName, downloadsFor } from "@/lib/studio-copy";
 
 /** What a job's files are named after (ADR-0091): the standard and the layup the package wrote, else the rows on the page. */
 export function namingOf(fields: Fields | null | undefined, form?: { standard?: string; test?: string; ply_1?: string } | null, layup?: string) {
@@ -13,11 +13,13 @@ export function namingOf(fields: Fields | null | undefined, form?: { standard?: 
   };
 }
 
-/** A job's files with their plain labels and saved names, and the results in a window of their own. */
-export function JobFiles({ apiBase, job, naming, viewer = true, testId }: {
-  apiBase: string; job: JobStatus; naming: ReturnType<typeof namingOf>; viewer?: boolean; testId?: string;
+/** A job's files with their plain labels and saved names, and the results in a window of their own. A customer is offered the report and
+ * the solver input; `all`, the development switch's view, offers the full package and the reference solver's files too (decision D4,
+ * ADR-0091 amendment 2). */
+export function JobFiles({ apiBase, job, naming, viewer = true, testId, all = false }: {
+  apiBase: string; job: JobStatus; naming: ReturnType<typeof namingOf>; viewer?: boolean; testId?: string; all?: boolean;
 }) {
-  const available = DOWNLOADS.filter(([key]) => key in job.outputs);
+  const available = downloadsFor(all).filter(([key]) => key in job.outputs);
   if (!available.length) return null;
   return (
     <ul className="studio-downloads" data-testid={testId}>

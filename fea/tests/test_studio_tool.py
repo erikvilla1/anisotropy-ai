@@ -91,7 +91,9 @@ def test_fixtures_hold_a_solved_public_coupon(tmp_path):
     fields = json.loads((out / "fields.json").read_text(encoding="utf-8"))
     explanation = json.loads((out / "explanation.json").read_text(encoding="utf-8"))
     assert fields["coupon"]["designation"] == DESIGNATION and fields["summary"]["reaction"]["value"] > 0 and set(fields["summary"]["fpf"]) == {"max_stress", "tsai_hill"}
-    assert explanation["writer"] == "template" and explanation["sentences"][0].startswith(f"{DESIGNATION}, unnotched tension")
+    assert explanation["writer"] == "template" and explanation["sentences"][0].startswith("By the ")  # the verdict first (ADR-0091 amendment 2)
+    assert any(s.startswith("Unnotched tension, [45/0/-45/90]s, under a displacement") for s in explanation["sentences"])
+    assert not any(DESIGNATION in s for s in explanation["sentences"])  # the record's name stays out of the words
     assert explanation["setup_sentences"][0].startswith(("The setup is ready to solve", "The setup is blocked"))
 
 

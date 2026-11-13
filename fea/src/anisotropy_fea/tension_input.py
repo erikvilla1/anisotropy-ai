@@ -101,8 +101,8 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
             out[key] = value
             built.append(Built(key, value, reason))
 
-    choose("test", TEST, "the one test offered for now")
-    choose("units", UNITS, "millimetres, megapascals and newtons, the units the solver input is written in")
+    choose("test", TEST, "the test this workspace runs")
+    choose("units", UNITS, "results and files use these units")
     choose("standard", D3039, "the standard of the unnotched tension test of a polymer-matrix composite")
     under_d3039 = str(out["standard"]).strip().lower() == D3039.lower()
     choose("filled_by", "studio", "the coupon was set up in the workspace")
@@ -117,45 +117,44 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
         choose("width", sizes["width"], why)
         choose("length", sizes["length"], why)
         choose("tab_length", tab, why if "tab_length" in sizes else
-               f"{why} grips through emery cloth and sets no grip length: {GRIP_LENGTH_MM:g} mm by default")
+               f"{why}: gripped through emery cloth, with no tab length given, so {GRIP_LENGTH_MM:g} mm by default")
         choose("size_from", why + ("" if "tab_length" in sizes else f"; the {GRIP_LENGTH_MM:g} mm grip length by default"),
-               "where the size comes from, for the coupon's identity card")
+               "where the size comes from")
     elif size_given:
-        choose("size_from", "the engineer's own size" + (f": a deviation from {D3039} Table 2 is reported, never refused" if under_d3039 else ""),
+        choose("size_from", "the dimensions you gave" + (f": a deviation from {D3039} Table 2 is reported, never refused" if under_d3039 else ""),
                "the size was given under Change settings")
     else:  # a layup in no Table 2 class, or no standard: the size is the engineer's to give, and the check asks for it by row
-        choose("size_from", "the engineer's own size" + (f": the layup is in no {D3039} Table 2 class" if under_d3039 else ""),
+        choose("size_from", "the dimensions you give" + (f": the layup is in no {D3039} Table 2 class" if under_d3039 else ""),
                "no size could be chosen, so the length, width and tab length are asked for under Change settings")
 
     choose("strain_device", "extensometer", f"strain is measured over a gauge length at mid-length ({D3039} §7.3)")
     choose("strain_length", EXTENSOMETER_MM, f"{EXTENSOMETER_MM:g} mm, within {D3039} §7.3.2's 10 to 50 mm, centred on the coupon")
-    choose("grips", "nodal", "clamped: every node of each tab held, the top one pulled")
+    choose("grips", "nodal", "every node of each tab is held; the top tab moves")  # the screen shows the value as "Clamped"
     choose("region", "tabs", "the grips hold the whole tab")
     if _blank(out.get("value")):
         choose("control", "displacement", "the top grip moves; the bottom one is held")
-        choose("value", PULL_MM, f"{PULL_MM:g} mm: the model is linear, so the answer, the loading at first-ply failure, does not depend on it")
-    choose("element_size", ELEMENT_SIZE_MM, f"{ELEMENT_SIZE_MM:g} mm, structured, with node rows at the tab lines and at the extensometer's "
-           "ends; the full run adds a mesh study")
+        choose("value", PULL_MM, "the model is linear, so R, the loading at first-ply failure, does not depend on it")
+    choose("element_size", ELEMENT_SIZE_MM, "a structured mesh, with node rows at the tab lines and at the extensometer's ends; the analysis "
+           "also checks the result on finer meshes")
     record = _record(out)
     if record is not None:  # the library gives no G13 or G23 (only CalculiX's brick and the Abaqus shell's transverse shear read them)
         lamina = library_material(str(out["library"]).strip()).lamina
         g12, e2 = lamina.G12 / 1e6, lamina.E2 / 1e6  # Pa to MPa, written to 0.01 MPa
         tape = str(record.get("architecture") or "").lower().startswith("unidirectional")
-        choose("G13", round(g12, 2), "not in the library: G13 = G12, the usual estimate (the form's Definitions); a pull in the plane does not load it")
+        choose("G13", round(g12, 2), "not in the library: G13 = G12, a usual estimate; an in-plane pull does not load it")
         if tape:
-            choose("G23", round(e2 / 3.0, 2), "not in the library: G23 = E2 / 3, the usual estimate for a tape (the form's Definitions); a pull in the "
-                                               "plane does not load it")
+            choose("G23", round(e2 / 3.0, 2), "not in the library: G23 = E2 / 3, a usual estimate for a tape; an in-plane pull does not load it")
         else:
-            choose("G23", round(g12, 2), "not in the library, and no estimate holds for a fabric: taken equal to G12 so the model builds; a pull in "
-                                          "the plane does not load it")
+            choose("G23", round(g12, 2), "not in the library, and no estimate holds for a fabric: taken equal to G12 so the model builds; an "
+                                          "in-plane pull does not load it")
     elif not _blank(out.get("own_G12")):
-        choose("G13", out["own_G12"], "not given: G13 = G12, the usual estimate (the form's Definitions); a pull in the plane does not load it")
-        choose("G23", out["own_G12"], "not given: taken equal to G12 so the model builds; a pull in the plane does not load it")
+        choose("G13", out["own_G12"], "not given: G13 = G12, a usual estimate; an in-plane pull does not load it")
+        choose("G23", out["own_G12"], "not given: taken equal to G12 so the model builds; an in-plane pull does not load it")
     strengths = ("own_F1t", "own_F1c", "own_F2t", "own_F2c", "own_F6")
     if record is None and any(_blank(out.get(key)) for key in strengths):
-        choose("criteria", "none", "the own material gives not all five strengths, so no first-ply failure criterion can be judged")
+        choose("criteria", "none", "not all five strengths are given, so no first-ply failure criterion can be judged")
     else:
-        choose("criteria", "all", "every first-ply failure criterion we compute is reported")
+        choose("criteria", "all", "all criteria the material's strengths allow")
     return out, tuple(built)
 
 

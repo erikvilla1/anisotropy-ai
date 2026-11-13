@@ -7,7 +7,7 @@ import { ArrowUpRight, Check, FileText, Layers3 } from "lucide-react";
 import { demoRun, demoScale, standardName } from "@/lib/demo-run";
 import { COMMON_MATERIALS } from "@/lib/studio-chat";
 import { legendGradient } from "@/lib/studio-colors";
-import { DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
+import { CUSTOMER_DOWNLOADS, DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
 import { libraryOptions } from "@/lib/studio-form";
 import { ASSISTANT, BEAT_COPY, DEMO_HEAD, FIELD_LABEL, FILES_HEAD, OPEN_WORKSPACE, recordedLine, resultLines, summaryCells } from "./product-demo-copy";
 import type { DemoSceneHandle } from "./product-demo-scene";
@@ -31,8 +31,8 @@ function useMediaQuery(query: string): boolean {
 
 /** Where each beat's words stand: under the model, or in a block at one side with the model at the other (Scale's arrangement). */
 const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", model: "left", analysis: "right", report: "under" };
-/** The three files the workspace lists first for a run. */
-const FILES = DOWNLOAD_LABELS.slice(0, 3).map(([, label]) => label);
+/** The files a customer downloads from a run (the audit's D4), in the workspace's own labels. */
+const FILES = DOWNLOAD_LABELS.filter(([key]) => CUSTOMER_DOWNLOADS.includes(key)).map(([, label]) => label);
 const materialName = (id: string) => libraryOptions.find((option) => option.id === id)?.name ?? id;
 
 /** The home page's demonstration of the product (ADR-0095): the coupon workspace in four beats, in a black box the size of the

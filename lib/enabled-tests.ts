@@ -10,6 +10,7 @@
 import {
   BENDING_KEYS, DOGBONE_KEYS, formDefinition, HOLE_KEYS, ISOTROPIC_KEYS, NO_STANDARD, type EnabledList, type StandardProfile, type StudioForm,
 } from "./studio-form";
+import { customerText } from "./studio-copy";
 
 export const ENABLED: EnabledList = formDefinition.enabled;
 
@@ -42,19 +43,41 @@ export function enabledWords(key: string, words: readonly string[], all: boolean
 export const isRowEnabled = (key: string, all: boolean): boolean => all || !HIDDEN_ROW_KEYS.includes(key);
 
 const capitalised = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
-/** The sentence for something hidden: "Open-hole tension is not available yet: the studio offers ...". */
-export const notAvailable = (what: string): string => `${capitalised(what)} is ${ENABLED.not_available}.`;
+/** The sentence for something hidden, in the product's words (ADR-0091 amendment 2): "Open-hole tension is not offered yet. This workspace
+ * runs the unnotched tension coupon, under ASTM D3039 or no standard." Passed through the page's guard, as every backend text is. */
+export const notAvailable = (what: string): string => {
+  const said = `${capitalised(what)} is ${ENABLED.not_available.replace(/\.?$/, ".")}`;
+  return customerText(said) ?? `${capitalised(what)} is not offered yet.`;
+};
+/** The same, without what is offered, for a place that says that itself (the tension screen's card): "Open-hole tension is not offered yet." */
+export const notOffered = (what: string): string => {
+  const said = `${capitalised(what)} is ${(ENABLED.not_offered ?? "not offered yet").replace(/\.?$/, ".")}`;
+  return customerText(said) ?? `${capitalised(what)} is not offered yet.`;
+};
 
-/** Why a form cannot be set up here with the list closed, or null when it can: its test, its standard, its material kind, or a dog-bone. */
-export function hiddenReason(form: StudioForm, all: boolean): string | null {
+/** Whether a layup the screen is given bends as it is pulled, which the tension coupon does not offer yet (ADR-0089 amendment 4): the
+ * plies, bottom first, mirrored when the notation is symmetric, do not read the same from both faces. */
+export const isUnsymmetricLayup = (layup: { plies: number[]; symmetric: boolean }): boolean => {
+  if (!ENABLED.symmetric_only || layup.symmetric) return false;
+  return layup.plies.some((angle, i) => angle !== layup.plies[layup.plies.length - 1 - i]);
+};
+
+/** What a form names that cannot be set up here with the list closed, or null when it can: its test, its standard, its material kind,
+ * or a dog-bone. */
+export function hiddenItem(form: StudioForm, all: boolean): string | null {
   if (all) return null;
   const test = (form.test ?? "").trim();
-  if (test && !isTestEnabled(test, all)) return notAvailable(test);
+  if (test && !isTestEnabled(test, all)) return test;
   const standard = (form.standard ?? "").trim();
-  if (!isStandardEnabled(standard, all)) return notAvailable(standard);
-  if (!isMaterialKindEnabled((form.material_kind ?? "").trim(), all)) return notAvailable("one isotropic material");
-  if (!ENABLED.dogbone && DOGBONE_KEYS.some((key) => (form[key] ?? "").trim())) return notAvailable("a dog-bone");
+  if (!isStandardEnabled(standard, all)) return standard;
+  if (!isMaterialKindEnabled((form.material_kind ?? "").trim(), all)) return "one isotropic material";
+  if (!ENABLED.dogbone && DOGBONE_KEYS.some((key) => (form[key] ?? "").trim())) return "a dog-bone";
   return null;
+}
+/** Why a form cannot be set up here with the list closed, or null when it can (`hiddenItem`), with what is offered instead. */
+export function hiddenReason(form: StudioForm, all: boolean): string | null {
+  const what = hiddenItem(form, all);
+  return what === null ? null : notAvailable(what);
 }
 
 /** Rows read from a message, or proposed by the model, without what the list keeps out: a hidden test, standard or material kind, and
