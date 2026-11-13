@@ -4,20 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { NavItem } from "@/lib/site-nav";
-import { serviceHref, services, statusLabel } from "@/lib/services";
 import "./services-menu.css";
 
 const LIST_ID = "services-menu";
+const TITLE_ID = "services-menu-title";
 /** Anduril's menu starts to open about 100 to 150 ms after the pointer arrives and starts to close about 150 to 200 ms
  * after it leaves (measured 2026-11-10), so a pointer that only crosses the item opens nothing. */
 const OPEN_DELAY_MS = 120;
 const CLOSE_DELAY_MS = 150;
 
 /** The Services item of the header: a link to the landing page plus a disclosure that opens a full-width panel under the
- * header, after Anduril's menu: a label and one paragraph on the left, the five service pages as large links from the
- * halfway line, each with how much of it exists. Disclosure pattern (a button with aria-expanded and a plain list), not a
- * menu role, so every entry stays an ordinary link. The stylesheet draws the panel, the header's ground and the blurred
- * layer over the page; on narrow screens it shows the list inside the open mobile navigation and hides the button. */
+ * header, after Anduril's menu: a label and one paragraph on the left, and under the same label the five service pages as
+ * large links, a plus before each, from where the header's links start (ADR-0082 amendment 1). Each page says how much of
+ * it exists; the menu does not. Disclosure pattern (a button with aria-expanded and a plain list), not a menu role, so
+ * every entry stays an ordinary link. The stylesheet draws the panel, the header's ground and the blurred layer over the
+ * page; on narrow screens it shows the list inside the open mobile navigation and hides the button. */
 export function ServicesMenu({ item, expanded, onNavigate }: {
   item: NavItem;
   /** True while the mobile navigation is open: the list then renders in place without the disclosure. */
@@ -35,7 +36,6 @@ export function ServicesMenu({ item, expanded, onNavigate }: {
   /** True while the panel is open only because the pointer is over it: a click on the button then keeps it open. */
   const openedByHover = useRef(false);
   const children = item.children ?? [];
-  const statusOf = new Map(services.map((service) => [serviceHref(service), statusLabel[service.status]]));
 
   function clearTimers() {
     if (openTimer.current) window.clearTimeout(openTimer.current);
@@ -82,6 +82,20 @@ export function ServicesMenu({ item, expanded, onNavigate }: {
     focusIndex.current = null;
   }, [open]);
   useEffect(() => clearTimers, []);
+  // The list starts under the header's first link, as Anduril's does. The links sit in the middle of the header, so where
+  // they start depends on their width: it is measured, when the panel opens and when the window changes, and handed to the
+  // stylesheet, which uses it from 1201 px.
+  useEffect(() => {
+    function place() {
+      const nav = root.current?.closest("nav");
+      if (!nav || !panel.current) return;
+      const x = nav.getBoundingClientRect().left - panel.current.getBoundingClientRect().left;
+      panel.current.style.setProperty("--services-list-x", `${Math.round(x)}px`);
+    }
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
 
   function links(): HTMLAnchorElement[] {
     return Array.from(root.current?.querySelectorAll<HTMLAnchorElement>(`#${LIST_ID} a`) ?? []);
@@ -174,15 +188,16 @@ export function ServicesMenu({ item, expanded, onNavigate }: {
               page says which.
             </p>
           </div>
-          <ul id={LIST_ID} className="services-panel-list">
-            {children.map((child, index) => {
-              const status = statusOf.get(child.href);
-              return (
+          <div className="services-panel-group">
+            <p className="services-panel-label" id={TITLE_ID}>
+              {item.label}
+            </p>
+            <ul id={LIST_ID} className="services-panel-list" aria-labelledby={TITLE_ID}>
+              {children.map((child) => (
                 <li key={child.href}>
                   <Link
                     href={child.href}
                     aria-current={pathname === child.href ? "page" : undefined}
-                    aria-describedby={status ? `${LIST_ID}-status-${index}` : undefined}
                     onClick={() => {
                       close();
                       onNavigate();
@@ -190,15 +205,10 @@ export function ServicesMenu({ item, expanded, onNavigate }: {
                   >
                     {child.label}
                   </Link>
-                  {status ? (
-                    <span className="services-panel-status" id={`${LIST_ID}-status-${index}`}>
-                      {status}
-                    </span>
-                  ) : null}
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
       <div className="services-backdrop" aria-hidden="true" />

@@ -1,7 +1,8 @@
 /* The Services menu of the header (components/services-menu.tsx; the five pages are ADR-0058's). The item is a link, then a
  * button that opens a panel as wide as the page under the header, after Anduril's menu as measured on 2026-11-10: one dark
- * ground behind the header and the panel, the page under it blurred 8 px and dimmed, a label and one paragraph in the first
- * columns, the links from the halfway line where the header's links start. Anduril's timing: the panel comes down in 500 ms
+ * ground behind the header and the panel with no rule under it, the page under it blurred 8 px and dimmed, a label and one
+ * paragraph at the left, and the same label over the links, a plus before each, from where the header's links start
+ * (ADR-0082 amendment 1). Anduril's timing: the panel comes down in 500 ms
  * and its content fades in over 500 ms, 100 ms later; the layer over the page takes 600 ms in and 300 ms out; all eased
  * cubic-bezier(0.215, 0.61, 0.355, 1). Nothing slides: the panel is uncovered from its top edge, here with a clip, there
  * with a height. Selectors start at .services-menu so they outrank the header's own rules for its links (.main-nav a)
@@ -67,7 +68,7 @@
 .services-menu .services-panel-list li {
   position: relative;
 }
-/* The whole row is the link's target; the status beside it is its description, not part of its name. */
+/* The whole row is the link's target. */
 .services-menu .services-panel-list li a::after {
   content: "";
   position: absolute;
@@ -77,13 +78,6 @@
 .services-menu .services-panel-list li a:hover {
   opacity: 1;
   color: inherit;
-}
-.services-menu .services-panel-status {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--muted);
 }
 .services-backdrop {
   display: none;
@@ -126,10 +120,11 @@
     grid-template-columns: minmax(0, 1fr);
     row-gap: 40px;
     padding: 40px 24px 48px;
-    border-bottom: 1px solid var(--line);
     background: var(--services-ground);
-    font-size: 16px;
-    line-height: 24px;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: -0.01em;
     white-space: normal;
     visibility: hidden;
     pointer-events: none;
@@ -159,56 +154,49 @@
     opacity: 1;
     transition-delay: 0.1s;
   }
-  .services-menu .services-panel-intro {
+  /* Both sides are a label, then what it names, so the paragraph and the first link start on one line. */
+  .services-menu .services-panel-intro,
+  .services-menu .services-panel-group {
     display: grid;
-    gap: 20px;
+    align-content: start;
+    gap: 30px;
     min-width: 0;
   }
-  /* The label of a band (app/sections.css), three sizes down: monospace, upper case, a tick before it. */
+  /* Anduril's label: the site's typeface, small capitals in semibold. */
   .services-menu .services-panel-label {
-    display: flex;
-    align-items: center;
-    gap: 15px;
     margin: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 13px;
+    font-weight: 600;
     line-height: 20px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
     text-transform: uppercase;
-  }
-  .services-menu .services-panel-label::before {
-    content: "";
-    flex: none;
-    width: 1px;
-    height: 11px;
-    background: currentColor;
   }
   .services-menu .services-panel-intro > p:last-child {
     max-width: 30em;
     margin: 0;
-    color: var(--muted);
   }
   .services-menu .services-panel-list {
     min-width: 0;
   }
   .services-menu .services-panel-list li {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 32px;
+    display: flex;
     align-items: baseline;
-    padding: 4px 0;
+    gap: 9px;
     transition: opacity 0.15s var(--services-ease);
   }
-  .services-menu .services-panel-list li a {
-    justify-self: start;
-    font-size: 22px;
-    line-height: 28px;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
+  /* Anduril's plus before each link; it is drawn, not read. */
+  .services-menu .services-panel-list li::before {
+    content: "+" / "";
+    flex: none;
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 30px;
   }
-  .services-menu .services-panel-status {
-    font-size: 12px;
-    line-height: 16px;
+  .services-menu .services-panel-list li a {
+    font-size: 20px;
+    line-height: 30px;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
   }
   /* The header's own hover fades the link under the pointer; in the list the other rows step back instead. */
   .services-menu .services-panel-list:hover li:not(:hover),
@@ -219,8 +207,8 @@
   .services-menu .services-panel-list li a[aria-current="page"]::before {
     content: "";
     position: absolute;
-    top: 9px;
-    bottom: 9px;
+    top: 7px;
+    bottom: 7px;
     left: -16px;
     width: 1px;
     background: currentColor;
@@ -255,31 +243,29 @@
   }
 }
 /* From 1024 px the panel is on the page's twelve columns: the label and the paragraph in columns 1 to 4 and the list from
- * column 7, the halfway line. Each row's status ends on the right margin. */
+ * column 7, the halfway line. */
 @media (min-width: 1024px) {
   .services-menu .services-panel {
     grid-template-columns: repeat(12, minmax(0, 1fr));
     column-gap: 32px;
-    align-items: baseline;
-    padding: 64px 32px;
+    padding: 72px 32px;
   }
   .services-menu .services-panel-intro {
     grid-column: 1 / 5;
   }
-  .services-menu .services-panel-list {
+  .services-menu .services-panel-group {
     grid-column: 7 / 13;
   }
 }
-/* From 1201 px the header is on the same columns, its links from column 7: the status moves in to column 10. */
+/* From 1201 px the header's links sit in the middle of the page, and the list starts under the first of them, as Anduril's
+ * does: the script measures where that is (--services-list-x, from the panel's left edge). Until it has, the halfway line. */
 @media (min-width: 1201px) {
-  .services-menu .services-panel-list li {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+  .services-menu .services-panel {
+    grid-template-columns: calc(var(--services-list-x, 50%) - 64px) minmax(0, 1fr);
   }
-  .services-menu .services-panel-list li a {
-    grid-column: 1 / 4;
-  }
-  .services-menu .services-panel-status {
-    grid-column: 4 / 7;
+  .services-menu .services-panel-intro,
+  .services-menu .services-panel-group {
+    grid-column: auto;
   }
 }
 
@@ -292,7 +278,8 @@
     gap: 14px;
   }
   .services-menu-button,
-  .services-menu .services-panel-intro {
+  .services-menu .services-panel-intro,
+  .services-menu .services-panel-label {
     display: none;
   }
   .services-menu .services-panel-list {
@@ -300,14 +287,6 @@
     border-left: 1px solid #464646;
   }
   .services-menu .services-panel-list li {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 16px;
     padding: 6px 0;
-  }
-  .services-menu .services-panel-status {
-    font-size: 11px;
-    line-height: 16px;
   }
 }

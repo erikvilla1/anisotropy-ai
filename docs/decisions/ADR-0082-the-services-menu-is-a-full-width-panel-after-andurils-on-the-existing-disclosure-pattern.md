@@ -59,3 +59,18 @@ Option 3, as built in `components/services-menu.tsx` and `components/services-me
 - The lead rejects it at the walkthrough.
 - The two menu tests of `expansion.spec.ts` fail on a quiet machine.
 - A keyboard or screen-reader user cannot reach or leave the panel.
+
+## Amendment 1, 2026-11-13 (Anduril's panel more closely: no rule under it, no statuses, a plus before each link)
+
+**Context.** With a screenshot of the open panel the lead asked to "get rid of that white line under the black top header box, its faint but visible", then, with a screenshot of Anduril's Lattice panel, "this is also how it should look like, so get rid of the in part, planned, etc..."
+
+**Decision.**
+- **No rule under the panel.** Its 1 px bottom border is removed; the panel ends where its ground ends.
+- **No status beside a link**, at any width, and no `aria-describedby`. How much of a service exists is still stated on its page and counted in the panel's paragraph, which is unchanged.
+- **Anduril's arrangement.** A label, "SERVICES", over each side, in the site's typeface in small semibold capitals without the kit's tick; the paragraph in the text colour at 15/20 px; the links at 20/30 px in medium weight with a plus before each, which is drawn and not read. The list is named by its label.
+- **Where the list starts.** From 1201 px, under the header's first link, as Anduril's does. The header's links sit in the middle of the page since ADR-0077 amendment 19, so that place depends on their width: the script measures it when the panel opens and when the window changes, and gives it to the stylesheet as `--services-list-x`. From 1024 to 1200 px the list stays on column 7.
+
+**Options considered.** Keeping the list on the halfway line at every width: rejected, it no longer lines up with the header's links, which is the point of Anduril's panel. Placing the list by a fixed share of the width: rejected, the links' width changes with the typeface loading and the viewport.
+
+**Evidence.** On 2026-11-13 against the dev server, with the panel open on `/about`: at 1440 px the header's first link and the list both start at x = 437, at 1880 px at x = 644; at 1100 px the list is on column 7 (x = 566); at 800 px the two sides stack; the panel's bottom border is 0 px at all four. Screenshots at 1440 px and of the open mobile navigation at 390 px were looked at. `npm run typecheck` clean; the two menu cases of `expansion.spec.ts`, the first with new checks for the border, the statuses, the list's name and its place: 2 of 2, after one failure of the new status check, which had read the paragraph's own words and now reads only the list. UNVERIFIED: a screen reader's reading of the plus (`content: "+" / ""`), Safari and Firefox.
+
