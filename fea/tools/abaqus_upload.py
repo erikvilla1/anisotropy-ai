@@ -179,19 +179,25 @@ def items_of(items) -> list[dict]:
     return [{"item": i.item, "yours": i.team, "ours": i.ours, "same": i.same} for i in items]
 
 
+# Abaqus/CAE writes an input file's material lines to six significant digits, whatever the model holds (Abaqus 2025: 162095.744 in the
+# model, 162096. in the file it solved). A model sent back from Abaqus/CAE therefore states our constants to six digits, and two
+# constants that are one number at six digits are the same here, said as such on the item (ADR-0094).
+MATERIAL_DIGITS = 6
+
+
 def compare_models(their_deck, our_deck, shift: tuple[float, float], units: str, tolerance: float, same_mesh: bool) -> dict:
     """The two models: item by item when their meshes are one mesh, else without the mesh; and why, when it is the second."""
     reason = "the two meshes differ"
     if same_mesh:
         shift_si = (to_si(shift[0], "length", units), to_si(shift[1], "length", units))
         try:
-            eq = deck_equivalence(moved_deck(their_deck, shift_si), our_deck, to_si(tolerance, "length", units), units)
+            eq = deck_equivalence(moved_deck(their_deck, shift_si), our_deck, to_si(tolerance, "length", units), units, MATERIAL_DIGITS)
             return {"compared": "item by item", "same": eq.same_model, "items": items_of(eq.items),
                     "largest_node_offset": from_si(eq.largest_node_offset, "length", units)}
         except EquivalenceError as exc:
             reason = str(exc)
     try:
-        items = equivalence_without_mesh(their_deck, our_deck, units)
+        items = equivalence_without_mesh(their_deck, our_deck, units, MATERIAL_DIGITS)
     except EquivalenceError as exc:
         return {"compared": "not compared", "same": None, "items": [], "reason": str(exc)}
     return {"compared": "without the mesh", "same": all(i.same is not False for i in items), "items": items_of(items), "reason": reason}

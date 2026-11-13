@@ -72,6 +72,14 @@ def _close(a: float | None, b: float | None) -> bool:
     return abs(a - b) <= RELATIVE * max(abs(a), abs(b), 1e-300)
 
 
+def _same_written(a: float | None, b: float | None, digits: int) -> bool:
+    """Whether two constants are one number written to `digits` significant digits: within half a unit of the last digit, at its
+    largest (a leading 1). Abaqus/CAE writes an input file's material lines to six (seen on Abaqus 2025, ADR-0094)."""
+    if a is None or b is None:
+        return a is None and b is None
+    return abs(a - b) <= 0.5 * 10.0 ** (1 - digits) * max(abs(a), abs(b), 1e-300)
+
+
 def _match_points(reference: np.ndarray, ours: np.ndarray, tolerance: float, what: str) -> tuple[np.ndarray, float]:
     """Index into `ours` of the point at each reference position; one to one and within the tolerance, or refused."""
     if len(reference) != len(ours):
@@ -114,8 +122,10 @@ def _axis_words(part, section) -> str:
     return f"from {section.rotation_deg:g} deg past x ({section.orientation})"
 
 
-def _section_items(add, reference: Deck, ours: Deck, ref_part, our_part, length, stress, stress_unit: str) -> None:
-    """What the two models are made of, whatever their meshes: the section, the layup, and each ply's material constants."""
+def _section_items(add, reference: Deck, ours: Deck, ref_part, our_part, length, stress, stress_unit: str, material_digits: int | None = None) -> None:
+    """What the two models are made of, whatever their meshes: the section, the layup, and each ply's material constants. With
+    `material_digits`, two constants that are one number written to that many significant digits count as the same, and the item says
+    so; without it they must agree within RELATIVE."""
     # section, layup, orientation, material constants per ply
     if len(ref_part.sections) != 1 or len(our_part.sections) != 1:
         raise EquivalenceError("equivalence compares decks with one shell section")
@@ -153,9 +163,15 @@ def _section_items(add, reference: Deck, ours: Deck, ref_part, our_part, length,
         ref_values = [getattr(reference.materials[layer.material].elastic, name) for layer in ref_layers]
         our_values = [getattr(ours.materials[layer.material].elastic, name) for layer in our_layers]
         shown = (lambda v: f"{v:g}") if name == "nu12" else stress
+        paired = len(ref_values) == len(our_values)
+        exact = paired and all(_close(a, b) for a, b in zip(ref_values, our_values))
+        written = not exact and paired and material_digits is not None and all(_same_written(a, b, material_digits) for a, b in zip(ref_values, our_values))
+        if not exact:  # two values that differ are shown with the digits that tell them apart, in the same unit
+            factor = 1.0 if name == "nu12" else float(stress(1.0))  # the unit's factor, from the formatter the caller gave
+            shown = lambda v, factor=factor: f"{v * factor:.10g}"  # noqa: E731
         text = lambda values, shown=shown: ", ".join(sorted({"none" if v is None else shown(v) for v in values}))  # noqa: E731
-        add(f"Material {label}" + ("" if name == "nu12" else f" ({stress_unit})"), text(ref_values), text(our_values),
-            len(ref_values) == len(our_values) and all(_close(a, b) for a, b in zip(ref_values, our_values)))
+        add(f"Material {label}" + ("" if name == "nu12" else f" ({stress_unit})"), text(ref_values),
+            text(our_values) + (f" (one number written to {material_digits} significant digits)" if written else ""), exact or written)
     strength_text = lambda deck, names: "; ".join(  # noqa: E731
         f"{n}: none" if deck.materials[n].fail_stress is None else
         f"{n}: F1t {stress(deck.materials[n].fail_stress.Xt)}, F1c {stress(abs(deck.materials[n].fail_stress.Xc))}, F2t {stress(deck.materials[n].fail_stress.Yt)}, "
@@ -163,8 +179,9 @@ def _section_items(add, reference: Deck, ours: Deck, ref_part, our_part, length,
     add("Strengths (*Fail Stress)", strength_text(reference, ref_materials), strength_text(ours, our_materials), None)
 
 
-def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) -> DeckEquivalence:
+def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str, material_digits: int | None = None) -> DeckEquivalence:
     """Compare two SI decks of one part and one instance each; `tolerance` (m) is the largest node offset that counts as the same position.
+    `material_digits` is for a deck Abaqus/CAE wrote from a model of ours (`_section_items`).
 
     The comparison is made in SI; `units` ("mm-MPa" or "m-Pa") is only how the item texts state lengths and stresses.
     """
@@ -219,7 +236,7 @@ def deck_equivalence(reference: Deck, ours: Deck, tolerance: float, units: str) 
     add("Element connectivity", "as written", "every element on the same corner nodes" if not unmatched else f"{unmatched} elements have no counterpart",
         unmatched == 0)
 
-    _section_items(add, reference, ours, ref_part, our_part, length, stress, stress_unit)
+    _section_items(add, reference, ours, ref_part, our_part, length, stress, stress_unit, material_digits)
 
     # grips: couplings by their reference point
     our_couplings = {reference_node(ours, c): c for c in ours.couplings}
@@ -278,7 +295,7 @@ def outline(deck: Deck) -> tuple[float, float, float, float]:
     return float(xyz[:, 0].min()), float(xyz[:, 1].min()), float(xyz[:, 0].max()), float(xyz[:, 1].max())
 
 
-def equivalence_without_mesh(reference: Deck, ours: Deck, units: str) -> tuple[EquivalenceItem, ...]:
+def equivalence_without_mesh(reference: Deck, ours: Deck, units: str, material_digits: int | None = None) -> tuple[EquivalenceItem, ...]:
     """What two SI decks of one coupon are made of, compared without pairing their meshes (ADR-0094): the outline's size, the element
     type, the section, the layup and each ply's constants, and the steps. The nodes, the elements, the grips, the boundary conditions and
     the loads are counted and listed, not judged: on two meshes they cannot be paired, and the reaction's comparison stands for them."""
@@ -309,7 +326,7 @@ def equivalence_without_mesh(reference: Deck, ours: Deck, units: str) -> tuple[E
         f"{len(our_part.elements.labels)} {our_part.elements.element_type}", None)
     add("Element type", ref_part.elements.element_type, our_part.elements.element_type,
         ref_part.elements.element_type == our_part.elements.element_type)
-    _section_items(add, reference, ours, ref_part, our_part, length, stress, stress_unit)
+    _section_items(add, reference, ours, ref_part, our_part, length, stress, stress_unit, material_digits)
     held = lambda deck: f"{len(_held(deck))} nodes held or moved, {len(deck.couplings)} couplings"  # noqa: E731
     add("Grips and boundary conditions", held(reference), held(ours), None)
     add("Steps", ", ".join(f"{s.name} (linear static)" for s in reference.steps), ", ".join(f"{s.name} (linear static)" for s in ours.steps),

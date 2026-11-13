@@ -214,6 +214,24 @@ def test_another_layup_in_the_deck_differs_on_the_model_even_when_the_numbers_ag
     assert all(criteria(result).values())
 
 
+def test_a_deck_abaqus_cae_wrote_states_our_material_to_six_digits_and_that_is_the_same_material(tool, runs, tmp_path):
+    """Abaqus/CAE writes an input file's material lines to six significant digits whatever its model holds (Abaqus 2025, the round trip
+    of the build script): `162096., 8963.18, 0.316, 4688.43, 4688.43, 2987.73` for our 162095.744, 8963.184481, ..., 4688.434959."""
+    text = runs["ours"]["deck"].read_text(encoding="utf-8")
+    ours = "162095.744, 8963.184481, 0.316, 4688.434959, 4688.43, 2987.73"
+    assert text.count(ours) == 1
+    result = compared(tool, runs, bundle_of(tmp_path / "written", runs["ours"], deck_text=text.replace(ours, "162096., 8963.18,   0.316, 4688.43, 4688.43, 2987.73")))
+    assert result["verdict"] == "agrees" and result["model"]["same"] is True
+    listed = {i["item"]: i for i in result["model"]["items"]}
+    assert listed["Material E1 (MPa)"] == {"item": "Material E1 (MPa)", "yours": "162096", "same": True,
+                                           "ours": "162095.744 (one number written to 6 significant digits)"}
+    assert listed["Material E2 (MPa)"]["ours"].startswith("8963.184481 (one number") and listed["Material G13 (MPa)"]["ours"] == "4688.43"
+    # a constant that differs in its fifth digit is another material, and both are shown with the digits that tell them apart
+    result = compared(tool, runs, bundle_of(tmp_path / "other", runs["ours"], deck_text=text.replace(ours, ours.replace("162095.744", "162105."))))
+    assert result["verdict"] == "differs" and [(i["item"], i["yours"], i["ours"]) for i in result["model"]["items"] if i["same"] is False] == [
+        ("Material E1 (MPa)", "162105", "162095.744")]
+
+
 def test_a_coupon_of_another_size_differs_and_its_results_are_not_placed_on_ours(tool, runs, tmp_path):
     result = compared(tool, runs, bundle_of(tmp_path / "smaller", runs["coarse"], scale=0.9))
     assert result["verdict"] == "differs"

@@ -111,11 +111,21 @@ def read(path: Path, step_name, frame_index, instance_name) -> dict:
                 strain[(int(value.elementLabel), int(value.sectionPoint.number))] = tuple(float(v) for v in value.data)
         reactions = []
         if "RF" in frame.fieldOutputs.keys():
-            for value in frame.fieldOutputs["RF"].getSubset(region=instance).values:
+            rf_field = frame.fieldOutputs["RF"]
+            for value in rf_field.getSubset(region=instance).values:
                 rf = tuple(float(v) for v in value.data)
                 if any(rf):
                     x, y, _ = coordinates[int(value.nodeLabel)]
                     reactions.append([str(int(value.nodeLabel)), number(x), number(y), number(rf[0]), number(rf[1])])
+            # a coupled grip's reaction is on its reference point, a node of the assembly and of no instance (Abaqus 2025: with kinematic
+            # couplings every reaction on the instance is zero). Its label is the assembly's own and may repeat an instance node's.
+            points = {int(n.label): tuple(float(c) for c in n.coordinates) for n in odb.rootAssembly.nodes}
+            for value in rf_field.values:
+                if value.instance is None and int(value.nodeLabel) in points:
+                    rf = tuple(float(v) for v in value.data)
+                    if any(rf):
+                        x, y, _ = points[int(value.nodeLabel)]
+                        reactions.append([str(int(value.nodeLabel)), number(x), number(y), number(rf[0]), number(rf[1])])
         return {"odb": str(odb.name), "solver": str(odb.jobData.version), "created": str(odb.jobData.creationTime), "step": str(step.name),
                 "frame_index": index, "frame": descriptions[index], "instance": str(instance.name), "points": points, "stress": stress,
                 "strain": strain, "centroids": centroids, "components": tuple(str(c) for c in s_field.componentLabels),
