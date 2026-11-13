@@ -1,6 +1,6 @@
 # ADR-0095: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
 
-- Status: Proposed
+- Status: Proposed, with amendments 1 to 3
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) and [ADR-0084](ADR-0084-a-scroll-driven-tour-leads-from-the-hero-into-the-calculator-with-the-engines-own-answers.md), which this supersedes for the home page; [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md) (the live solve the demo does not call); ADR-0001; ADR-0042; ADR-0045; ADR-0091
@@ -101,4 +101,12 @@ Where it stands:
 **Options considered.** Keeping the clip's height on black and holding in the middle: rejected, the strip of the hero's clip at the top reads as a fault once the box has no edge. A hairline around a black box, to keep the "box under the clip": not chosen, the lead asked for the black ground, not a box.
 
 **Evidence.** On 2026-11-13 against the dev server: screenshots of the four beats at 1440 by 900 and a recording at 1280 by 800 with swipes sent as a trackpad sends them were looked at; no page errors. `npm run typecheck` clean; `demo.spec.ts` (the stage is black, as wide as the clip and a window tall, straight after the hero), `home.spec.ts` and `intro.spec.ts`: 20 of 20. UNVERIFIED, as in amendment 1: a real graphics card, trackpad, wheel and touch screen, Safari and Firefox. The lead's earlier remark that the black stage is "too much black space" while it comes up empty stands against this choice; it was the lead's to make.
+
+## Amendment 3, 2026-11-13 (one more home case of the calculator is removed; CI found it)
+
+**What happened.** The archive removed the calculator's cases from `tests/browser/home.spec.ts` and missed one in `tests/browser/calculator.spec.ts`: "the home page's laminate view asks the real engine for its default stack and shows the engine's description (ADR-0059)". It opens the home page and waits for a request to the API. The home page now asks the API for nothing (`home.spec.ts` checks that), so the case timed out in CI's `calculator-browser` job on the first run after the archive.
+
+**Decision.** The case is removed with the view it tested, as the others were. Nothing replaces it in the browser: the view is not mounted on any page.
+
+**Evidence.** CI run 43491534208, job `calculator-browser`, on `fd462a0`: 1 failed, 8 passed, "page.waitForResponse: Test timeout of 30000ms exceeded" at `calculator.spec.ts:21`. The same failure in a cloud container on a production build. The engine's description of that stack is still tested without a browser: `engine/tests/test_summary.py` and `api/tests/test_laminate_summary.py` (found by search; not run locally, CI's `engine` and `api` jobs passed on the same commit). The calculator's eight other browser cases after the removal: see the pull request.
 
