@@ -305,3 +305,25 @@ On phones it is one column.
 **Decision.** Amendment 17 is undone in the code. The clip fills the hero again with the header over it, the shades and the paddings are as before amendment 17, and the scroll tour's hand-over starts from the whole window again (ADR-0084 amendment 2). The browser and unit cases written for the box go with it.
 
 **Evidence.** On 2026-11-13, in the browser against the dev server: at 1440 by 900 the clip's box is the whole window (0, 0, 1440 by 900) and the header lies over it; the same on a 390 px phone; no sideways scroll, no page errors. A screenshot of the hero was looked at. `npm run typecheck` clean; `npm test` 247 passed, 1 skipped; `home.spec.ts`, `intro.spec.ts`, `tour.spec.ts` and `expansion.spec.ts` against the dev server with the local API: 26 of 26.
+
+## Amendment 19, 2026-11-13 (the home page in the arrangement of Anduril's)
+
+**Context.** Minutes after amendment 18 the lead showed Anduril's home page and asked: "lets copy this exact same layout for our homepage too", "fonts and all", "arrangement, layout, etc...". There the header lies on a black strip with its links in the middle; under it a video plays in a box with square corners on the page's margin; one statement in large capitals stands in the middle of the box, and under it a row of a two-line tagline, the mark and two short monospace lines.
+
+**Decision.** The arrangement is followed; the words and the mark are ours.
+- **Header, on every page.** From 1201 px it is 84 px tall with the logo at the left, the links in the middle of the page in semibold 16 px, and Workspace at the right. On the home page it lies on the hero's black ground.
+- **The box.** The clip plays in a box with square corners from the header's foot to 32 px above the hero's foot, 32 px from each side (24 px under 1024 px, 20 px under 641 px). One even shade lies over it for the words.
+- **The statement** is the level-one heading, in capitals of medium weight set tight: "Anisotropy / bringing composite theory / and real test data into / one engineering platform". It is the hero's earlier first paragraph, shortened; nothing is claimed that the paragraph did not say. The second paragraph leaves the hero.
+- **The row under it.** "Composites. Calculated.", the earlier headline, is the tagline at the left; the triangle stands in the middle of the page; at the right, in monospace, "Fall 2026 Launchpad cohort" (ADR-0081) and under it "Explore" with a down arrow, which is the Scroll to explore button.
+- **The Basement's mark** stays in the box's bottom left corner, without its line of text, which the row now carries.
+- **Type.** The site's typeface changes with it (ADR-0093), and the logo's name is set in it (ADR-0080 amendment 4).
+- **The tour's hand-over** starts from the box again (ADR-0084 amendment 3).
+- **Under 761 px** the statement breaks where it needs to and the row stacks.
+
+**Not copied.** Anduril's "©" before the name, its own words, and its typeface, which is licensed.
+
+**Evidence.** On 2026-11-13, in the browser against the dev server with the committed clip:
+- **Measured at 1440 by 900:** the header is 84 px tall; the box runs from x = 32 to 1408 and y = 84 to 868; the statement, the mark and the header's links are each centred on x = 720. At 1880, 1100, 900 and 390 px the box follows the header and the margin (on the phone from x = 20 and y = 70). No sideways scroll and no page errors at the five sizes.
+- **Looked at:** screenshots of the hero at the five sizes, of the hand-over at three moments, and of About and the laminate workspace in the new typeface.
+- **Checks:** `npm run typecheck` clean; `npm test` 248 passed, 1 skipped. `home.spec.ts`, `intro.spec.ts`, `tour.spec.ts` and `expansion.spec.ts` against the dev server: 26 passed, 1 failed. The failure is `home.spec.ts` "typing a layup", the calculator's timing case that has failed before in this container; run alone twice, it passed twice.
+- **UNVERIFIED:** the whole browser suite on a production build with the new typeface, real phones and tablets, Safari and Firefox, and the lead's screen.

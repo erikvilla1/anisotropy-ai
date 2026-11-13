@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 // The load-in (ADR-0070 amendment 1): the page starts under a black veil, the veil lifts once the hero's text is ready, the
-// headline rises and the paragraphs are typed in by a copy laid over the page's own text. The veil and the copies are read on
+// statement rises and the small lines are typed in by a copy laid over the page's own text. The veil and the copies are read on
 // every frame from the first paint, because they are gone again within a few seconds.
 
 type Frame = {
@@ -59,19 +59,17 @@ const frames = (page: Page) =>
     return taken;
   });
 
-const paragraphs = [
-  "We're bringing composite theory and real test data into one engineering platform, changing how laminates and coupons are set up, analyzed and documented.",
-  "Spend less time on setup and reports. Spend more time on the structure. Trace every number back to its source.",
-];
+const STATEMENT = "Anisotropy bringing composite theory and real test data into one engineering platform";
 
 async function expectHeroWhole(page: Page) {
   const hero = page.locator("#overview");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero.locator("[data-intro-run]")).toHaveCount(0);
-  await expect(hero.locator("h1")).toHaveText("Composites.Calculated.");
+  await expect(hero.locator("h1")).toHaveText("Anisotropybringing composite theoryand real test data intoone engineering platform");
   await expect(hero.locator("h1")).toHaveCSS("color", "rgb(255, 255, 255)");
-  await expect(hero.locator(".home-hero-copy p")).toHaveText(paragraphs);
-  for (const paragraph of await hero.locator(".home-hero-copy p").all()) await expect(paragraph).toHaveCSS("color", "rgb(244, 244, 244)");
+  await expect(hero.locator(".home-hero-tagline")).toHaveText("Composites.Calculated.");
+  await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
+  for (const line of await hero.locator(".home-hero-tagline, .home-hero-note").all()) await expect(line).toHaveCSS("color", "rgb(255, 255, 255)");
 }
 
 test("the home page loads out of black and the hero's words are typed in (ADR-0070 amendment 1)", async ({ page }) => {
@@ -84,18 +82,18 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   const seen = await frames(page);
   // The first paint is black, #010101.
   expect(seen[0]).toMatchObject({ phase: "is-enter", shown: true, opacity: 1, colour: "rgb(1, 1, 1)", copies: 0 });
-  // The headline and the two paragraphs are made ready while the black still covers the page, so the finished text is never
+  // The statement and the two small lines are made ready while the black still covers the page, so the finished text is never
   // seen before its move: a copy each, hidden from assistive technology, over the page's own text, which stays in place.
   const ready = seen.findIndex((frame) => frame.copies > 0);
   expect(ready).toBeGreaterThan(0);
-  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, running: 3, ownHeadline: "Composites. Calculated." });
+  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, running: 3, ownHeadline: STATEMENT });
   expect(seen.slice(0, ready).every((frame) => frame.opacity === 1)).toBe(true);
   // The copies go once the moves have played: the headline's 1.6 s, with room for a busy machine.
   const lifting = seen.findIndex((frame) => frame.phase === "is-lift");
   const gone = seen.findIndex((frame, index) => index > ready && frame.copies === 0);
   expect(lifting).toBeGreaterThanOrEqual(ready);
   expect(gone).toBeGreaterThan(lifting);
-  expect(seen.slice(ready, gone).every((frame) => frame.ownHeadline === "Composites. Calculated.")).toBe(true);
+  expect(seen.slice(ready, gone).every((frame) => frame.ownHeadline === STATEMENT)).toBe(true);
   expect(seen[seen.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0, copies: 0, running: 0 });
 });
 

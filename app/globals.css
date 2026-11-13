@@ -6,8 +6,10 @@
   --text: #efefef;
   --muted: #a0a0a0;
   --accent: #d4d4d4;
-  --font: "DM Sans Variable", Arial, sans-serif;
-  --heading: "Manrope Variable", Arial, sans-serif;
+  /* One typeface for the whole site, Inter, the nearest open-licence match to the Helvetica-like type on Anduril's site
+   * (ADR-0093). Its file carries the display cut, which the browser picks by itself at large sizes. */
+  --font: "Inter Variable", "Helvetica Neue", Arial, sans-serif;
+  --heading: "Inter Variable", "Helvetica Neue", Arial, sans-serif;
 }
 * {
   box-sizing: border-box;
@@ -2325,9 +2327,10 @@ img {
   }
 }
 
-/* The site header after PhysicsX, the same on every page but the workspace's (ADR-0077 amendments 2 and 8): transparent, in the
- * page's flow so it scrolls away, and over the hero on the home page. From 1201 px: 56 px tall, 32 px margins, a 28 px mark, the
- * links from the halfway line (the hero's column 7) at up to 17 px, Workspace in the top-right corner, no version label. */
+/* The site header, the same on every page but the workspace's (ADR-0077 amendments 2, 8 and 19): transparent, in the page's
+ * flow so it scrolls away, and over the hero's black ground on the home page. From 1201 px it follows Anduril's: 84 px tall,
+ * 32 px margins, the logo at the left, the links in the middle of the page in semibold, Workspace in the top-right corner,
+ * no version label. */
 html:has(.site-header:not(.chat-site-header)) {
   scroll-padding-top: 0;
 }
@@ -2399,17 +2402,20 @@ html:has(.site-header:not(.chat-site-header)) {
 @media (min-width: 1201px) {
   .site-header:not(.chat-site-header) {
     display: grid;
-    grid-template-columns: calc((100% - 32px) / 2) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     column-gap: 32px;
-    height: 56px;
+    height: 84px;
     padding: 0 32px;
   }
   .site-header:not(.chat-site-header) .wordmark {
     justify-self: start;
   }
   .site-header:not(.chat-site-header) .main-nav {
-    font-size: min(17px, 1.1vw);
-    gap: min(20px, 1.3vw);
+    justify-self: center;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    gap: min(44px, 2.6vw);
     white-space: nowrap;
   }
   .site-header:not(.chat-site-header) .header-version {

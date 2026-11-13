@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["svgpathtools"]
 # ///
-"""Cuts the site's triangle and tab icon from the designer's approved logo (ADR-0080 amendments 2 and 3).
+"""Cuts the site's triangle and tab icon from the designer's approved logo (ADR-0080 amendments 2 and 4).
 
 The approved file is the stacked logo on a 1920 by 1080 artboard: the triangle, one path, over the name. The site sets the
 triangle beside the name (app/brand.css), so this writes the triangle on its own, cropped to its ink and filled with the
@@ -13,9 +13,9 @@ current colour, and the tab icon with the same triangle:
 
     uv run scripts/brand-logo.py
 
-The name on the site is not the approved file's lettering: scripts/brand-wordmark.py draws it (amendment 3). The triangle's
-outline is the designer's, unchanged: only the box around it and the fill are set here. It prints the file's width and
-height in the artboard's units, which app/brand.css uses for the proportions.
+The name on the site is not the approved file's lettering: it is the word set in the site's own typeface (amendment 4).
+The triangle's outline is the designer's, unchanged: only the box around it and the fill are set here. It prints the file's
+width and height in the artboard's units, which app/brand.css uses for the proportions.
 """
 
 import xml.etree.ElementTree as ET

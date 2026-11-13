@@ -52,30 +52,40 @@ export default function Home() {
           {heroVideo ? <HeroVideoKeeper /> : null}
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
-        <div className="home-hero-grid">
-          {/* The load-in (ADR-0070 amendment 1): the headline rises, the paragraphs are typed in (components/intro-text.ts). */}
+        {/* The words, in Anduril's arrangement (ADR-0077 amendment 19): one statement in large capitals in the middle, and
+            under it a row of the tagline, the mark and two short lines. The load-in (ADR-0070 amendment 1) raises the
+            statement and types the small lines (components/intro-text.ts). */}
+        <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="rise">
-            Composites.
+            Anisotropy
             <br />
-            Calculated.
+            bringing composite theory
+            <br />
+            and real test data into
+            <br />
+            one engineering platform
           </h1>
-          <div className="home-hero-copy">
-            <p data-intro="type">
-              We&apos;re bringing composite theory and real test data into one engineering platform, changing how laminates
-              and coupons are set up, analyzed and documented.
+          <div className="home-hero-row">
+            <p className="home-hero-tagline" data-intro="type">
+              Composites.
+              <br />
+              Calculated.
             </p>
-            <p data-intro="type">
-              Spend less time on setup and reports. Spend more time on the structure. Trace every number back to its source.
-            </p>
+            <span className="home-hero-mark" aria-hidden="true" />
+            <div className="home-hero-notes">
+              {/* The programme the team is part of (ADR-0081). */}
+              <p className="home-hero-note" data-intro="type">
+                Fall 2026 Launchpad cohort
+              </p>
+              {/* One press scrolls to the tour's first step. */}
+              <ScrollToExplore />
+            </div>
           </div>
         </div>
-        {/* The programme the team is part of, in the hero's bottom left corner (ADR-0081). */}
+        {/* UC San Diego's The Basement mark, in the bottom left corner of the hero's box (ADR-0081). */}
         <p className="home-hero-backed">
-          <span>Part of the Fall 2026 Launchpad cohort</span>
           <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
         </p>
-        {/* "Scroll to explore", in the hero's bottom right corner: one press scrolls to the tour's first step. */}
-        <ScrollToExplore />
       </section>
       {/* The tour of the calculator (components/home/demo-tour.tsx): the scroll takes a visitor through one real run, then leaves
           them at the live calculator. The provider renders no element; it lets the tour show the answer the calculator asked for. */}

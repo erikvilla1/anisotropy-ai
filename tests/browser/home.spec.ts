@@ -27,27 +27,73 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0076)"
   await page.goto("/");
   const order = await page.locator("main > section").evaluateAll((sections) => sections.slice(0, 2).map((section) => section.id));
   expect(order).toEqual(["overview", "laminate"]);
-  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Composites/);
+  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Anisotropy\s*bringing composite theory/);
 });
 
-test("the hero's words are only the headline and the two paragraphs (ADR-0077)", async ({ page }) => {
+const STATEMENT = /Anisotropy\s*bringing composite theory\s*and real test data into\s*one engineering platform/;
+
+test("the hero's words are one statement, the tagline and two small lines (ADR-0077 amendment 19)", async ({ page }) => {
   const posts: Posted[] = [];
   await playApi(page, posts);
   await page.goto("/");
   const hero = page.locator("#overview");
-  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/Composites\.\s*Calculated\./);
-  await expect(hero.locator(".home-hero-copy p")).toHaveCount(2);
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
+  await expect(hero.locator(".home-hero-tagline")).toHaveText(/Composites\.\s*Calculated\./);
+  await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
+  await expect(hero.getByRole("button", { name: "Scroll to explore" })).toBeVisible();
+  await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
   // No 3D view, chat box or link in the hero: the calculator below draws the stack, and the header's Workspace button is the way in.
   await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);
   await expect(hero.getByRole("textbox")).toHaveCount(0);
   await expect(hero.getByRole("link")).toHaveCount(0);
   await expect.poll(() => posts.length).toBe(1);
-  // The header lies over the hero on the home page; elsewhere it is the same header in the page's flow, 56 px tall (ADR-0077
-  // amendment 8).
+  // The header lies over the hero's black ground on the home page; elsewhere it is the same header in the page's flow, 84 px
+  // tall, with its links in the middle of the page (ADR-0077 amendments 8 and 19).
   await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
   await page.goto("/about");
   await expect(page.locator(".site-header")).toHaveCSS("position", "relative");
-  await expect(page.locator(".site-header")).toHaveCSS("height", "56px");
+  await expect(page.locator(".site-header")).toHaveCSS("height", "84px");
+  const nav = await page.locator(".site-header .main-nav").evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return Math.round(box.left + box.width / 2);
+  });
+  expect(Math.abs(nav - page.viewportSize()!.width / 2)).toBeLessThanOrEqual(1);
+});
+
+test("the hero's clip plays in a square box on the black page, under the header, with the words in its middle (ADR-0077 amendment 19)", async ({ page }) => {
+  await playApi(page, []);
+  await page.goto("/");
+  const rect = (selector: string) => page.locator(selector).first().evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return { left: Math.round(box.left), top: Math.round(box.top), right: Math.round(box.right), bottom: Math.round(box.bottom) };
+  });
+  const viewport = page.viewportSize()!;
+  const clip = await rect("#overview .home-hero-media");
+  const header = await rect(".site-header");
+  // The box stands on the page's 32 px margin at the sides and the foot, and starts under the header.
+  expect([clip.left, viewport.width - clip.right, viewport.height - clip.bottom]).toEqual([32, 32, 32]);
+  expect(clip.top).toBe(header.bottom);
+  expect(clip.left).toBe((await rect(".site-header .wordmark")).left);
+  await expect(page.locator("#overview .home-hero-media")).toHaveCSS("border-radius", "0px");
+  // The page around it is the site's black, and the words sit inside the box, the statement and the mark on its middle line.
+  expect(await page.locator("#overview").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(13, 13, 13)");
+  for (const selector of ["#overview h1", "#overview .home-hero-row", "#overview .home-hero-backed", "#overview .home-hero-explore"]) {
+    const part = await rect(selector);
+    expect(part.left, selector).toBeGreaterThanOrEqual(clip.left + 16);
+    expect(part.right, selector).toBeLessThanOrEqual(clip.right - 16);
+    expect(part.top, selector).toBeGreaterThanOrEqual(clip.top + 16);
+    expect(part.bottom, selector).toBeLessThanOrEqual(clip.bottom - 16);
+  }
+  for (const selector of ["#overview h1", "#overview .home-hero-mark"]) {
+    const part = await rect(selector);
+    expect(Math.abs((part.left + part.right) / 2 - viewport.width / 2), selector).toBeLessThanOrEqual(1);
+  }
+  // On a phone the box follows the narrower margin.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const phone = await rect("#overview .home-hero-media");
+  expect([phone.left, 390 - phone.right]).toEqual([20, 20]);
+  expect(phone.top).toBeGreaterThanOrEqual((await rect(".site-header")).bottom);
 });
 
 test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }) => {

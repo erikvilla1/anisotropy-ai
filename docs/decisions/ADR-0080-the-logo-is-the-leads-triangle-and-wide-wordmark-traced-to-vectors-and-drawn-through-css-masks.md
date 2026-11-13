@@ -1,6 +1,6 @@
 # ADR-0080: The logo is the lead's triangle and wide wordmark, traced to vectors and drawn through CSS masks
 
-- Status: Proposed; the triangle is the designer's approved outline and the name is set in Archivo at weight 800 (amendments 2 and 3)
+- Status: Proposed; the triangle is the designer's approved outline and the name is the word in the site's typeface (amendments 2 and 4)
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-10 ("swap the current logos … triangle first then anisotropy") | Drafted by: Claude Code
 - Related: [ADR-0079](ADR-0079-the-wordmark-is-set-in-archivo-at-weight-800-the-nearest-open-licence-match-to-physicsx-s-lettering.md) (the wordmark this replaces), [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the header), `app/brand.css`, `components/site-shell.tsx`, `public/assets/brand/`, `app/layout.tsx`
@@ -93,3 +93,11 @@ Option 3.
 **Evidence.** On 2026-11-13, in the browser against the dev server: at 1440 px the triangle is 34.3 by 28 px from x = 32 and the name 186.4 by 19.3 px from x = 77.5, both centred on y = 27.5; on a 390 px phone 26.9 by 22 px and 146.4 by 15.2 px, both centred on y = 34.5; no sideways scroll, no page errors. A screenshot of the header was looked at. `npm run typecheck` clean; `npm test` 248 passed, 1 skipped.
 
 **How we will know it was wrong.** The designer or the lead wants one lettering in every place the logo appears, and the approved files and the site still differ.
+
+## Amendment 4, 2026-11-13 (the name is the word itself, in the site's typeface, after Anduril's logo)
+
+**Context.** Of amendment 3's lettering the lead said it was "not matching" the rest of the page and asked for "the same font as others"; then, shown nothing new yet, "I dont like that font either. going for this", with Anduril's logo: heavy capitals set tight, close beside the mark, in the same type family as that site's text.
+
+**Decision.** The name is no longer a drawing. It is the link's own word, set in the site's typeface (Inter, ADR-0093) at weight 800 in capitals with -0.02 em tracking; its capitals are about six tenths of the triangle's height and the gap to the triangle is a quarter of it. Where the browser can trim a line to its capitals the name is centred on the triangle exactly. `scripts/brand-wordmark.py` and `anisotropy-wordmark.svg` are deleted. A first setting in the earlier site typeface at weight 500 was made and not kept.
+
+**Evidence.** On 2026-11-13 at 1440 px on the dev server the logo is 196 by 28 px from x = 32 in the 84 px header; screenshots of the header at five widths were looked at. `expansion.spec.ts` still reads the link's text as "Anisotropy" (in the 26 that passed, ADR-0077 amendment 19). UNVERIFIED: the name before the typeface has loaded, when it shows in the fallback face for a moment.

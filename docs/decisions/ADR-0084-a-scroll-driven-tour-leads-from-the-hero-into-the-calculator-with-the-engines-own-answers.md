@@ -1,6 +1,6 @@
 # ADR-0084: A scroll-driven tour leads from the hero into the calculator, with the engine's own answers
 
-- Status: Proposed; amendment 1 (the bridge from the hero's round box) is undone by amendment 2
+- Status: Proposed; the bridge starts from the hero's box, now with square corners (amendments 1 to 3)
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-09 and 2026-11-10 | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md) (the engine computes every number), [ADR-0059](ADR-0059-the-engine-describes-the-stack-and-evaluates-first-ply-failure-on-the-response-endpoint-for-the-home-calculator.md) (the home calculator's endpoint), [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the hero and the demo), [ADR-0083](ADR-0083-the-laminate-view-draws-carbon-plies-with-a-procedural-fibre-pattern-and-takes-four-props-for-the-scroll-tour.md) (the 3D view's props), `components/home/demo-tour.tsx`, `components/home/tour-timeline.ts`, `components/home/tour-bridge.ts`, `components/home/engine-answers.tsx`, `app/home-tour.css`, `tests/browser/tour.spec.ts`, `tests/tour-timeline.test.ts`
@@ -91,3 +91,11 @@ On 2026-11-10, in headless Chromium on the dev server:
 **Decision.** Amendment 1 is undone in the code: the bridge measures the hero as the whole window, the corners start square, and the hero's ground is no longer a layer the tour fades. Its unit case and its lines in `tour.spec.ts` are removed.
 
 **Evidence.** ADR-0077 amendment 18 has the runs: `tour.spec.ts` passed in the 26 of 26, and `tests/tour-timeline.test.ts` in the 247.
+
+## Amendment 3, 2026-11-13 (the bridge starts from the hero's box again, with square corners)
+
+**Context.** The hero's clip plays in a box again, in Anduril's arrangement (ADR-0077 amendment 19).
+
+**Decision.** Amendment 1's code returns: the bridge measures the box's place and corner radius, which is now 0, and the hero's black ground fades first. Its unit case and its lines in `tour.spec.ts` return, reading a radius of 0 on the page.
+
+**Evidence.** ADR-0077 amendment 19 has the runs; `tour.spec.ts` passed in them, and a screenshot of the hand-over at three moments shows the box shrinking into the card and landing on the top ply.

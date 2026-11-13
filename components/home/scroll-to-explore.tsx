@@ -19,7 +19,7 @@ function jumpTo(top: number) {
   }
 }
 
-/** "Scroll to explore", at the hero's bottom right (the lead's request of 2026-11-09, after Scale's): one press scrolls the
+/** "Scroll to explore", the second small line under the hero's statement (ADR-0077 amendment 19): one press scrolls the
  * page to the first step of the tour (components/home/demo-tour.tsx). It scrolls only when pressed, and lets go at once if the
  * visitor scrolls, touches or presses a key; the page's own scrolling is never taken over. A visitor who asked for reduced
  * motion is taken there without the move. */
@@ -58,9 +58,9 @@ export function ScrollToExplore() {
     frame = window.requestAnimationFrame(step);
   }
   return (
-    <button type="button" className="home-hero-explore" onClick={explore}>
-      <span>Scroll to explore</span>
-      <span className="home-hero-explore-box" aria-hidden="true"><ArrowDown size={16} strokeWidth={1.5} /></span>
+    <button type="button" className="home-hero-explore" aria-label="Scroll to explore" onClick={explore}>
+      <ArrowDown aria-hidden="true" strokeWidth={1.5} />
+      <span>Explore</span>
     </button>
   );
 }

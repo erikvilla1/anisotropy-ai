@@ -392,54 +392,36 @@
   padding: 5px 6px;
 }
 
-/* "Scroll to explore" (components/home/scroll-to-explore.tsx), at the hero's bottom right, after Scale's: the words and a
- * down arrow in a small bordered square. On a phone only the square is shown, clear of the line at the bottom left. */
+/* "Scroll to explore" (components/home/scroll-to-explore.tsx): the second small line under the hero's statement, a down
+ * arrow and one word in the row's monospace capitals, set in from the line above as Anduril sets its own. */
 .home-hero-explore {
-  position: absolute;
-  z-index: 2;
-  right: 32px;
-  bottom: 32px;
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 0.7em;
+  margin-left: 5.6em;
   padding: 0;
   border: 0;
   background: none;
-  font-size: 15px;
-  line-height: 20px;
-  color: #ffffff;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  transition: opacity 0.15s;
 }
-.home-hero-explore-box {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid #ffffffb3;
-  border-radius: 4px;
-  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+.home-hero-explore svg {
+  width: 1em;
+  height: 1em;
 }
-.home-hero-explore:hover .home-hero-explore-box {
-  border-color: #ffffff;
-  background: #ffffff;
-  color: #080808;
+.home-hero-explore:hover {
+  opacity: 0.6;
 }
 .home-hero-explore:focus-visible {
   outline: 2px solid #ffffff;
   outline-offset: 6px;
-  color: #ffffff;
 }
 @media (max-width: 760px) {
   .home-hero-explore {
-    right: 20px;
-    bottom: 20px;
-  }
-  .home-hero-explore > span:first-child {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+    margin-left: 0;
   }
 }
 
@@ -488,18 +470,20 @@
   .demo-tour[data-mode="pinned"][data-phase="steps"] > .demo-tour-stage {
     pointer-events: auto;
   }
-  /* The bridge. The hero stays in the window while it plays, over the stage and with no ground of its own: the scroll then
-   * moves the hero's clip, not the page, and what the shrinking clip uncovers is the stage, with the stack standing on it.
+  /* The bridge. The hero stays in the window while it plays, over the stage: the scroll then moves the hero's clip, not the
+   * page. Its black ground fades first, so what the shrinking clip uncovers is the stage, with the stack standing on it.
    * When the bridge is done the hero returns to the page's flow, above the window and under the stage. */
   main:has(> .demo-tour[data-mode="pinned"][data-phase="bridge"]) > .home-hero {
     position: sticky;
     top: 0;
     z-index: 2;
-    background: none;
+  }
+  .home-hero[style*="--tour-ground"]::before {
+    opacity: var(--tour-ground, 1);
   }
   /* The tour writes the bridge's moves on the hero as custom properties (components/home/tour-bridge.ts); these rules apply
-   * only while it has, so at rest the hero is exactly as app/home.css sets it. The words leave; the clip keeps its middle,
-   * shrinks into a card and is carried onto the top ply by one transform; the shades laid over it for the words go. */
+   * only while it has, so at rest the hero is exactly as app/home.css sets it. The words leave; the clip's box keeps its
+   * middle, shrinks into a card and is carried onto the top ply by one transform; the shades laid over it for the words go. */
   .home-hero[style*="--tour-copy"] > :not(.home-hero-media) {
     filter: opacity(var(--tour-copy, 1));
     translate: 0 var(--tour-copy-lift, 0px);
@@ -508,6 +492,8 @@
   .home-hero[style*="--tour-media"] > .home-hero-media {
     transform: var(--tour-media-transform, none);
     transform-origin: 0 0;
+    /* The clip path now draws the corners, from the box's own radius to the card's and then square. */
+    border-radius: 0;
     clip-path: var(--tour-media-clip, none);
     opacity: var(--tour-media-opacity, 1);
     visibility: var(--tour-media-visibility, visible);

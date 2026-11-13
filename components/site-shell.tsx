@@ -13,8 +13,7 @@ function Wordmark({ onClick }: { onClick?: () => void }) {
   return (
     <Link className="wordmark" href="/" aria-label="Anisotropy home" onClick={onClick}>
       <span className="brand-mark" aria-hidden="true" />
-      <span className="brand-name" aria-hidden="true" />
-      <span className="brand-text">Anisotropy</span>
+      <span className="brand-name">Anisotropy</span>
     </Link>
   );
 }

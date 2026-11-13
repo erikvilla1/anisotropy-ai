@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import "@fontsource-variable/dm-sans";
-import "@fontsource-variable/manrope";
+import "@fontsource-variable/inter/opsz.css";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import "./expansion.css";

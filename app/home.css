@@ -921,28 +921,48 @@
   }
 }
 
-/* The hero after PhysicsX's home page (ADR-0077): the material photo full-bleed, only the headline on columns 1 to 6 and two
- * short paragraphs from column 7 of a 12-column grid (32 px gutters and margins, as measured there on 2026-11-07). The header
- * (app/globals.css) lies over the hero on this page and scrolls away with it. */
+/* The hero (ADR-0077 and its amendment 19), in the arrangement of Anduril's home page. The page is black; the header lies
+ * on the black strip at the top; under it the material clip plays in a box with square corners that stands on the page's
+ * margin at the sides and the foot. The words are in the middle of the box: one statement in large capitals, and under it a
+ * row of the tagline, the mark and two short monospace lines.
+ *   --hero-top    where the box starts: the header's height
+ *   --hero-frame  the black frame at the sides and the foot: the page's margin
+ *   --hero-pad    the words' least distance from the box's edge
+ * The ground is a layer of its own so the scroll tour can fade it while it carries the box away (app/home-tour.css). */
 .home-hero {
+  --hero-top: 84px;
+  --hero-frame: 32px;
+  --hero-pad: 32px;
+  --hero-radius: 0px;
   position: relative;
   min-height: max(640px, 100svh);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 104px 32px;
+  align-items: center;
+  padding: calc(var(--hero-top) + 40px) calc(var(--hero-frame) + var(--hero-pad)) calc(var(--hero-frame) + 40px);
   overflow: hidden;
   isolation: isolate;
-  background: #080808;
+  text-align: center;
+  color: #ffffff;
+}
+.home-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  background: var(--bg);
 }
 .home-hero-media {
   position: absolute;
-  inset: 0;
+  inset: var(--hero-top) var(--hero-frame) var(--hero-frame);
   z-index: -2;
+  border-radius: var(--hero-radius);
+  overflow: hidden;
   background: url("/assets/images/carbon-weave.jpg") 68% center / cover;
   filter: grayscale(1);
 }
-/* The clip (ADR-0069) covers the still when its web copy is present; the shades lie over both so the copy reads the same. */
+/* The clip (ADR-0069) covers the still when its web copy is present; one even shade lies over both so the white words read. */
 .home-hero-video,
 .home-hero-video video {
   position: absolute;
@@ -955,56 +975,75 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(90deg, #080808f2 0%, #080808cc 34%, #08080899 66%, #080808b3 100%),
-    linear-gradient(0deg, var(--bg) 0%, transparent 26%),
-    linear-gradient(180deg, #080808b3 0%, transparent 22%);
+  background: #080808b8;
 }
-/* The clip is already dark footage, so it takes lighter shades than the bright still, and a lift of its own; the left keeps
- * enough shade for the headline, the bottom still fades into the page. */
+/* The clip is already dark footage, so it takes a lighter shade than the bright still, and a lift of its own. */
 .home-hero-media.has-video::after {
-  background-image:
-    linear-gradient(90deg, #080808a6 0%, #08080873 36%, #08080826 68%, #08080840 100%),
-    linear-gradient(0deg, var(--bg) 0%, transparent 22%),
-    linear-gradient(180deg, #08080880 0%, transparent 16%);
+  background: #08080859;
 }
 .home-hero-video video {
   filter: brightness(1.17) contrast(1.05);
 }
-.home-hero-grid {
+.home-hero-stack {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: 32px;
-  align-items: center;
+  justify-items: center;
+  row-gap: clamp(28px, 3.2vw, 56px);
   width: 100%;
 }
-.home-hero-title {
-  grid-column: 1 / 7;
-  position: relative;
-  z-index: 2;
-}
-.home-hero-copy {
-  grid-column: 7 / 13;
-  position: relative;
-  z-index: 2;
-}
+/* The statement: capitals of medium weight, set tight, the lines close. Measured on Anduril's page at 1880 px: capitals 62 px
+ * tall on a 71 px pitch. */
 .home-hero h1 {
+  margin: 0;
   font-family: var(--font);
-  font-weight: 400;
-  font-size: clamp(48px, 5.9vw, 85px);
-  line-height: 1;
+  font-weight: 500;
+  font-size: clamp(34px, 4.7vw, 92px);
+  line-height: 0.86;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
-  letter-spacing: -0.03em;
-  color: #fff;
+  color: #ffffff;
 }
-.home-hero-copy > p {
-  max-width: 440px;
-  font-size: 18px;
-  line-height: 24px;
-  color: #f4f4f4;
+/* The row under it: the tagline ends on the mark's left, the mark stands in the middle of the page, the two lines start on
+ * its right. */
+.home-hero-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: clamp(20px, 2.4vw, 44px);
+  width: 100%;
 }
-.home-hero-copy > p + p {
-  margin-top: 16px;
+.home-hero-tagline {
+  justify-self: end;
+  margin: 0;
+  font-size: clamp(16px, 1.65vw, 31px);
+  font-weight: 700;
+  line-height: 1.32;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  text-align: right;
+}
+.home-hero-mark {
+  display: block;
+  width: clamp(58px, 5.4vw, 102px);
+  aspect-ratio: 246.24 / 201.022;
+  background: currentColor;
+  -webkit-mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
+  mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
+}
+.home-hero-notes {
+  justify-self: start;
+  display: grid;
+  justify-items: start;
+  row-gap: clamp(6px, 0.7vw, 12px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(13px, 1.35vw, 25px);
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.home-hero-note {
+  margin: 0;
 }
 /* The lens (ADR-0071): a 4:3 window over the clip, its right edge on the gutter before the copy and its foot just above the
  * headline's middle, under the words. Through it the clip is dimmed and blurred like glass, and our results play in colour on
@@ -1086,61 +1125,72 @@
     display: none;
   }
 }
-/* The programme badge (ADR-0081): a small monospace line over UC San Diego's The Basement mark in white, in the hero's bottom
- * left corner, on the page's 32 px margin. */
+/* UC San Diego's The Basement mark (ADR-0081), in white, in the bottom left corner of the hero's box. */
 .home-hero-backed {
   position: absolute;
   z-index: 2;
-  left: 32px;
-  bottom: 32px;
-  display: grid;
-  gap: 10px;
+  left: calc(var(--hero-frame) + var(--hero-pad));
+  bottom: calc(var(--hero-frame) + var(--hero-pad));
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 16px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #efefefa6;
 }
 .home-hero-backed img {
   display: block;
   width: auto;
   height: 40px;
 }
+/* The header is taller or shorter below 1201 px and the page's margin narrower below 1024 and 641 px: the box follows both.
+ * Under 1024 px the statement may break where it needs to, and under 761 px the row stacks. */
+@media (max-width: 1200px) {
+  .home-hero {
+    --hero-top: 86px;
+  }
+}
 @media (max-width: 1023px) {
   .home-hero {
-    padding: 120px 24px 96px;
+    --hero-top: 75px;
+    --hero-frame: 24px;
+    --hero-pad: 24px;
   }
-  .home-hero-grid {
+  .home-hero h1 {
+    font-size: clamp(30px, 5.4vw, 56px);
+  }
+}
+@media (max-width: 760px) {
+  .home-hero {
+    padding-bottom: calc(var(--hero-frame) + 88px);
+  }
+  .home-hero h1 {
+    white-space: normal;
+    font-size: clamp(30px, 9.4vw, 46px);
+    line-height: 0.92;
+    letter-spacing: -0.03em;
+  }
+  .home-hero-row {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: 40px;
+    justify-items: center;
+    row-gap: 20px;
   }
-  .home-hero-title,
-  .home-hero-copy {
-    grid-column: 1;
+  .home-hero-tagline,
+  .home-hero-notes {
+    justify-self: center;
+    justify-items: center;
+    text-align: center;
+  }
+  .home-hero-tagline {
+    font-size: 19px;
+  }
+  .home-hero-notes {
+    font-size: 13px;
   }
 }
 @media (max-width: 640px) {
   .home-hero {
-    padding: 104px 20px 80px;
-  }
-  .home-hero-backed {
-    left: 20px;
-    bottom: 20px;
+    --hero-top: 70px;
+    --hero-frame: 20px;
+    --hero-pad: 16px;
   }
   .home-hero-backed img {
-    height: 32px;
-  }
-  .home-hero-grid {
-    row-gap: 32px;
-  }
-  .home-hero h1 {
-    font-size: clamp(40px, 12.3vw, 52px);
-    letter-spacing: -0.02em;
-  }
-  .home-hero-copy > p {
-    font-size: 17px;
+    height: 30px;
   }
 }
 
