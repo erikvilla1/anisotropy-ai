@@ -6,6 +6,7 @@ import { ClosingBand } from "@/components/closing-band";
 import { DemoTour } from "@/components/home/demo-tour";
 import { EngineAnswersProvider } from "@/components/home/engine-answers";
 import { HeroOutro } from "@/components/home/hero-outro";
+import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { serviceHref, services, statusLabel } from "@/lib/services";
@@ -72,7 +73,7 @@ export default function Home() {
               <br />
               Calculated.
             </p>
-            <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-outro="spin" />
+            <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />
             <div className="home-hero-notes">
               {/* The programme the team is part of (ADR-0081). */}
               <p className="home-hero-note" data-intro="type" data-outro="type">
@@ -83,6 +84,8 @@ export default function Home() {
         </div>
         {/* Five seconds after the load-in the words are taken away and the clip plays alone (components/home/hero-outro.tsx). */}
         <HeroOutro />
+        {/* Comes up at the foot of the clip once the words have left (ADR-0077 amendment 22). */}
+        <ScrollToExplore />
         {/* UC San Diego's The Basement mark, in the bottom left corner of the hero's box (ADR-0081). It fades in with the
             load-in and out when the words leave (ADR-0070 amendment 4). */}
         <p className="home-hero-backed" data-intro="fade" data-outro="fade">

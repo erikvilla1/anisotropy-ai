@@ -164,3 +164,15 @@ What Anduril's code does:
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px, contact sheets of a recording were looked at: the page comes out of black over about half a second, the first letters arriving as it clears; at the exit the triangle's top tips left through a quarter turn and it has faded by about 1.4 s. `intro.spec.ts`, which reads the turn's keyframes as 0° to -90°: 4 of 4. UNVERIFIED: a real graphics card, Safari, Firefox and phones.
 
+## Amendment 9, 2026-11-13 (the triangle leaves first, and comes up as it fades in)
+
+**Context.** With a recording of amendment 8's exit, in which the triangle was still turning after the words had gone, the lead asked: "the triangle should be the first thing to start animating out and should be gone by the time all of the other text is gone", and then "can we also have the triangle appear in an upward movement as it fades in".
+
+**Decision.**
+- **On the way out the triangle is first.** Where an element turns (`data-outro="spin"`), the lines begin to go 350 ms after it starts, and its turn ends 150 ms before the last character goes. On the home hero that is a turn of about 0.95 s in place of 1.8 s; the quarter turn, the easing and the fade over its last part are unchanged. The Basement's mark still fades after the lines.
+- **On the way in the triangle comes up.** A fade may say how far below its place it starts (`data-intro-shift`), in place of 15% of its height; the hero's triangle starts its own height low.
+
+**Options considered.** Keeping the 1.8 s turn and slowing the lines to outlast it: rejected, the lead did not ask for slower text. Ending the turn with the last character: rejected, "gone by the time" is safer with a margin.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px, contact sheets of a recording were looked at: at the exit the triangle is already turned when the first characters go, has faded by about 0.6 s, and the last characters go at about 0.8 s; on the way in it rises as it fades in. `intro.spec.ts` reads the animations' own timing (the triangle's starts at 0 and ends before the last line's; the first line starts 300 ms or more later) and the fade's first keyframe, `translateY(100%)`: 4 of 4; `home.spec.ts`: 10 of 10. UNVERIFIED: a real graphics card, Safari, Firefox and phones.
+

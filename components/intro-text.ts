@@ -4,6 +4,8 @@
  *   data-intro="rise"  each line of the text rises out from behind its own bottom edge (for a big heading);
  *   data-intro="fade"  the element fades in while it moves up 15% of its height (for an image or a block);
  *   data-intro-delay   milliseconds after the black starts to lift, to override the order below;
+ *   data-intro-shift   on a fade: how far below its place the element starts, as a CSS length or a share of its own height
+ *                      ("80%"), in place of 15%, for one that should be seen to come up;
  *   data-intro-caret   on a typed element that ends with a `.type-caret` (app/intro.css), the page's own blinking text
  *                      cursor: a copy of it rides the end of the last line while that line is typed or taken away.
  *
@@ -34,8 +36,10 @@ const SCRAMBLE_TICK_MS = 50; // Anduril redraws its random letters 20 times a se
 const LEAVE_SPEED = 0.7; // a line leaves in this share of the time it took to arrive
 const LEAVE_STAGGER_MS = 45;
 const LEAVE_FADE_MS = 160;
-const LEAVE_SPIN_MS = 1800; // the mark's turn: unhurried, so it outlasts the words
-const LEAVE_SPIN_DEG = -90; // a quarter turn, anticlockwise
+const LEAVE_SPIN_DEG = -90; // the mark's quarter turn, anticlockwise
+const LEAVE_SPIN_LEAD_MS = 350; // the mark starts first: the lines begin to go this long after it
+const LEAVE_SPIN_EARLY_MS = 150; // and it is gone this long before the last character
+const LEAVE_SPIN_ALONE_MS = 900; // the turn's length where there are no lines to go with it
 const LEAVE_SPIN_EASE = "cubic-bezier(0.45, 0, 0.55, 1)"; // eases off the mark and into the stop
 
 // Random letters of about the real letter's width, so they sit in its place: narrow for narrow, and never the widest.
@@ -297,10 +301,12 @@ export function prepareIntro(root: ParentNode = document): IntroRun | null {
       element.setAttribute("data-intro-run", "fade");
       marked.push(element);
       const start = delay ?? FADE_DELAY_MS;
+      const asked = element.dataset.introShift?.trim() ?? "";
+      const shift = /^\d+(\.\d+)?(px|%|em|rem|vh|vw)$/.test(asked) ? asked : FADE_SHIFT;
       moves.push({
         element,
         keyframes: [
-          { opacity: 0, transform: `translateY(${FADE_SHIFT})` },
+          { opacity: 0, transform: `translateY(${shift})` },
           { opacity: 1, transform: "translateY(0)" },
         ],
         options: { duration: FADE_MS, delay: start, easing: EASE_OUT_EXPO, fill: "both" },
@@ -366,8 +372,8 @@ export function prepareIntro(root: ParentNode = document): IntroRun | null {
  *
  *   data-outro="type"  the text is taken away line by line from the end of each line, its last characters as random letters;
  *   data-outro="fade"  the element fades out, after the lines have gone;
- *   data-outro="spin"  the element makes a quarter turn anticlockwise about its middle, slowly, starting as the lines go,
- *                      and fades at the end.
+ *   data-outro="spin"  the element makes a quarter turn anticlockwise about its middle and fades. It is the first to move:
+ *                      the lines begin to go a moment after it, and it is gone a moment before the last of them.
  *
  * It uses the load-in's copies and windows, run backwards. When it ends, each element carries `data-outro-done`, which the
  * stylesheet turns invisible; its text stays in the page for a screen reader. Null when there is nothing on screen to take
@@ -381,10 +387,14 @@ export function prepareOutro(root: ParentNode = document): IntroRun | null {
   let lines = 0;
   let totalMs = 0;
 
-  for (const element of Array.from(root.querySelectorAll<HTMLElement>("[data-outro]"))) {
-    if (element.hasAttribute("data-intro-run") || element.hasAttribute("data-outro-done") || element.closest(".intro-overlay")) continue;
+  const leaving = Array.from(root.querySelectorAll<HTMLElement>("[data-outro]")).filter((element) => {
+    if (element.hasAttribute("data-intro-run") || element.hasAttribute("data-outro-done") || element.closest(".intro-overlay")) return false;
     const box = element.getBoundingClientRect();
-    if (!(box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < window.innerHeight)) continue;
+    return box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < window.innerHeight;
+  });
+  // A mark that turns starts first, so the lines wait for it.
+  const lead = leaving.some((element) => element.dataset.outro === "spin") ? LEAVE_SPIN_LEAD_MS : 0;
+  for (const element of leaving) {
     const measured = element.dataset.outro === "type" ? measureLines(element) : null;
     if (!measured) {
       fading.push(element);
@@ -394,7 +404,7 @@ export function prepareOutro(root: ParentNode = document): IntroRun | null {
     overlays.push(built.overlay);
     marked.push(element);
     for (const [index, line] of built.rows.entries()) {
-      const typed = typedLine(line.row, line.text, lines * LEAVE_STAGGER_MS, true, index === built.rows.length - 1 ? ownCaret(element) : null);
+      const typed = typedLine(line.row, line.text, lead + lines * LEAVE_STAGGER_MS, true, index === built.rows.length - 1 ? ownCaret(element) : null);
       if (!typed) continue;
       moves.push(...typed.moves);
       lines += 1;
@@ -404,9 +414,9 @@ export function prepareOutro(root: ParentNode = document): IntroRun | null {
   const linesMs = totalMs;
   for (const element of fading) {
     if (element.dataset.outro === "spin") {
-      // A quarter turn, anticlockwise, begun as the first character goes: it eases in and out and fades over its last part. It takes its own
-      // time, so the words are gone before it is.
-      const duration = Math.max(linesMs + LEAVE_FADE_MS, LEAVE_SPIN_MS);
+      // A quarter turn, anticlockwise, that eases in and out and fades over its last part. It begins at once, before any
+      // line, and ends a little before the last character goes.
+      const duration = linesMs > 0 ? Math.max(LEAVE_SPIN_LEAD_MS, linesMs - LEAVE_SPIN_EARLY_MS) : LEAVE_SPIN_ALONE_MS;
       moves.push({
         element,
         keyframes: [

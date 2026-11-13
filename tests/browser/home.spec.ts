@@ -42,8 +42,9 @@ test("the hero's words are one statement, the tagline and one small line (ADR-00
   await expect(hero.locator(".home-hero-tagline")).toHaveText(/Composites\.\s*Calculated\./);
   await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
   await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
-  // No 3D view, chat box, button or link in the hero: the calculator below draws the stack, and the header's Workspace button is the way in.
-  await expect(hero.getByRole("button")).toHaveCount(0);
+  // No 3D view, chat box or link in the hero: the calculator below draws the stack, and the header's Workspace button is the
+  // way in. Its one button, "Scroll to explore", is hidden while the words stand (tests/browser/intro.spec.ts).
+  await expect(hero.getByRole("button", { includeHidden: true })).toHaveCount(1);
   await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);
   await expect(hero.getByRole("textbox")).toHaveCount(0);
   await expect(hero.getByRole("link")).toHaveCount(0);

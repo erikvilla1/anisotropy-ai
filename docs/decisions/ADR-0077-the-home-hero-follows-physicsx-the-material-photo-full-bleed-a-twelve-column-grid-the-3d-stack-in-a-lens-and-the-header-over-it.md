@@ -352,3 +352,12 @@ On phones it is one column.
 - **The statement reads** "Anisotropy / one engineering platform / for composite theory / and real test data". It says what the earlier one said, without "bringing ... into". The wording is one proposal; three others were given to the lead to choose from.
 
 **Evidence.** On 2026-11-13 against the dev server: the hero holds no button; a screenshot at 1440 px was looked at; no page errors at 1440 and 390 px. `npm run typecheck` clean; `npm test` 248 passed, 1 skipped; `intro.spec.ts`, `home.spec.ts`, `tour.spec.ts` and the overview case of `portfolio.spec.ts`: 22 of 22.
+
+## Amendment 22, 2026-11-13 ("Scroll to explore" comes back, after the words have left)
+
+**Context.** Amendment 21 removed the Explore button from the hero's row. With the exit of amendment 20 in place the lead asked: "after it all disappears have the scroll to explore button appear at the bottom of the carbon fiber video centered".
+
+**Decision.** `components/home/scroll-to-explore.tsx` is a button, "Scroll to explore" over a down arrow, in the row's monospace capitals, at the foot of the clip in its middle, on the line the Basement's mark stands on. It cannot be seen, pointed at or focused while the words stand; when the hero carries `data-words="gone"` it fades in, and its arrow dips now and then. A press scrolls the page to the tour, whose first step plays when its stage fills the window (ADR-0084 amendment 5). A visitor who asked for reduced motion keeps the words and has the button from the start, with a still arrow.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: a frame taken after the exit shows the button alone at the foot of the clip, in its middle. `intro.spec.ts`: hidden while the words stand; after the exit visible, within 1 px of the clip's middle and in its lowest quarter; a press brings the tour's stage to the window's top and its first step plays; visible from the start with reduced motion: 4 of 4. `home.spec.ts`, which now counts the hero's one hidden button: 10 of 10. UNVERIFIED: phones, where the button and the Basement's mark share the foot of the clip.
+

@@ -1141,6 +1141,77 @@
   width: auto;
   height: 40px;
 }
+/* "Scroll to explore" (components/home/scroll-to-explore.tsx; ADR-0077 amendment 22): at the foot of the clip, in its
+ * middle, on the Basement mark's line. It is not there, for the eye, the pointer or the keyboard, until the hero's words have
+ * left (`data-words="gone"`, set by components/home/hero-outro.tsx); then it fades in, and its arrow dips now and then. */
+.home-hero-explore {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: calc(var(--hero-frame) + var(--hero-pad));
+  transform: translateX(-50%);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #ffffff;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s linear 0.3s;
+}
+.home-hero[data-words="gone"] .home-hero-explore {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.7s ease 0.15s,
+    visibility 0s;
+}
+.home-hero-explore svg {
+  width: 18px;
+  height: 18px;
+  animation: home-hero-explore-dip 2.4s ease-in-out infinite;
+}
+.home-hero-explore:hover span,
+.home-hero-explore:hover svg {
+  opacity: 0.6;
+}
+.home-hero-explore:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 4px;
+}
+@keyframes home-hero-explore-dip {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(5px);
+  }
+}
+/* A visitor who asked for reduced motion keeps the hero's words, so the button is there from the start, and its arrow is still. */
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-explore {
+    opacity: 1;
+    visibility: visible;
+    transition: none;
+  }
+  .home-hero-explore svg {
+    animation: none;
+  }
+}
 /* The header is taller or shorter below 1201 px and the page's margin narrower below 1024 and 641 px: the box follows both.
  * Under 1024 px the statement may break where it needs to, and under 761 px the row stacks. */
 @media (max-width: 1200px) {

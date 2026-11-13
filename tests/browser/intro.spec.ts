@@ -13,6 +13,7 @@ type Frame = {
   colour: string;
   copies: number; // the copies that play the moves
   riders: number; // the copies' own text cursors
+  markFrom: string; // where the hero's triangle starts its fade from, while it fades in
   hiddenCopies: number; // of those, the ones hidden from assistive technology
   running: number; // elements whose own text is transparent while a copy plays
   ownHeadline: string; // the headline's own text nodes, without any copy
@@ -36,6 +37,7 @@ async function record(page: Page) {
           colour: style.backgroundColor,
           copies: copies.length,
           riders: document.querySelectorAll(".intro-overlay .intro-caret").length,
+          markFrom: String((document.querySelector("#overview .home-hero-mark")?.getAnimations()[0]?.effect as KeyframeEffect | undefined)?.getKeyframes()[0]?.transform ?? ""),
           hiddenCopies: copies.filter((copy) => copy.getAttribute("aria-hidden") === "true" && copy.hasAttribute("inert")).length,
           running: document.querySelectorAll("[data-intro-run]").length,
           ownHeadline: headline
@@ -120,6 +122,8 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   expect(gone).toBeGreaterThan(lifting);
   expect(seen.slice(ready, gone).every((frame) => frame.ownHeadline === STATEMENT)).toBe(true);
   expect(seen[seen.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0, copies: 0, running: 0 });
+  // The triangle comes up as it fades in: it starts its own height low (ADR-0070 amendment 9).
+  expect(seen.some((frame) => frame.markFrom === "translateY(100%)")).toBe(true);
 });
 
 test("five seconds after the load-in the hero's words are taken away and the clip plays alone (ADR-0077 amendment 20)", async ({ page }) => {
@@ -129,17 +133,39 @@ test("five seconds after the load-in the hero's words are taken away and the cli
   await expectHeroWhole(page);
   await expect(hero.locator("h1")).toHaveCSS("opacity", "1");
   await expect(hero.locator(".home-hero-backed")).toHaveCSS("opacity", "1");
-  // They stand for five seconds, then are untyped in about a second, while the mark turns (ADR-0070 amendments 4 to 8).
+  // "Scroll to explore" is not there while the words stand.
+  const explore = hero.locator(".home-hero-explore");
+  await expect(explore).toBeHidden();
+  // They stand for five seconds, then are untyped in about a second, while the mark turns (ADR-0070 amendments 4 to 9).
   const turn = await page.waitForFunction(
     () => {
       const move = document.querySelector("#overview .home-hero-mark")?.getAnimations()[0];
-      const steps = move ? (move.effect as KeyframeEffect).getKeyframes().map((step) => String(step.transform ?? "")) : [];
-      return steps.length ? steps : null;
+      if (!move) return null;
+      // The windows of the typed lines: when the first begins to go and when the last has gone (the letters' flicker never ends).
+      const lines = Array.from(document.querySelectorAll("#overview .intro-overlay .intro-win"))
+        .flatMap((box) => box.getAnimations())
+        .map((line) => line.effect!.getComputedTiming())
+        .filter((timing) => Number.isFinite(Number(timing.endTime)));
+      if (!lines.length) return null;
+      const mark = move.effect!.getComputedTiming();
+      return {
+        steps: (move.effect as KeyframeEffect).getKeyframes().map((step) => String(step.transform ?? "")),
+        markStart: Number(mark.delay),
+        markEnd: Number(mark.endTime),
+        linesStart: Math.min(...lines.map((timing) => Number(timing.delay))),
+        linesEnd: Math.max(...lines.map((timing) => Number(timing.endTime))),
+      };
     },
     null,
     { timeout: 12_000 },
   );
-  expect(await turn.jsonValue()).toEqual(["rotate(0deg)", "", "rotate(-90deg)"]); // a quarter turn, anticlockwise
+  const exit = (await turn.jsonValue())!;
+  expect(exit.steps).toEqual(["rotate(0deg)", "", "rotate(-90deg)"]); // a quarter turn, anticlockwise
+  // The mark is the first to move and has gone before the last character does (ADR-0070 amendment 9).
+  expect(exit.markStart).toBe(0);
+  expect(exit.linesStart).toBeGreaterThanOrEqual(300);
+  expect(exit.markEnd).toBeLessThan(exit.linesEnd);
+  expect(exit.markEnd).toBeGreaterThan(exit.linesStart);
   await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 12_000 });
   for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");
@@ -148,6 +174,23 @@ test("five seconds after the load-in the hero's words are taken away and the cli
   // The statement and the Basement's mark are still in the page for a screen reader.
   await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
   await expect(hero.getByAltText("UC San Diego, The Basement")).toHaveCount(1);
+  // With the words gone, "Scroll to explore" comes up at the foot of the clip, in its middle (ADR-0077 amendment 22) ...
+  await expect(explore).toBeVisible();
+  await expect(explore).toHaveText("Scroll to explore");
+  await expect(explore).toHaveCSS("opacity", "1");
+  const placed = await page.evaluate(() => {
+    const button = document.querySelector("#overview .home-hero-explore")!.getBoundingClientRect();
+    const clip = document.querySelector("#overview .home-hero-media")!.getBoundingClientRect();
+    return { offCentre: Math.abs((button.left + button.right) / 2 - (clip.left + clip.right) / 2), fromFoot: clip.bottom - button.bottom, height: button.height, clip: clip.height };
+  });
+  expect(placed.offCentre).toBeLessThanOrEqual(1);
+  expect(placed.fromFoot).toBeGreaterThanOrEqual(16);
+  expect(placed.fromFoot + placed.height).toBeLessThan(placed.clip / 4);
+  // ... and a press scrolls the page to the tour, whose first step then plays.
+  await explore.click();
+  const tour = page.locator("#tour");
+  await expect.poll(() => tour.evaluate((stage) => Math.round(stage.getBoundingClientRect().top)), { timeout: 10_000 }).toBe(0);
+  await expect(tour).toHaveAttribute("data-stop", "1", { timeout: 15_000 });
 });
 
 test("a header link goes to black before the next page, and Back does not (ADR-0070 amendment 1)", async ({ page }) => {
@@ -183,6 +226,8 @@ test.describe("for a visitor who asks for reduced motion", () => {
     await page.goto("/");
     await expectHeroWhole(page, "none");
     await expect(page.locator(".page-transition")).toBeHidden();
+    // The words stay, so "Scroll to explore" is there from the start.
+    await expect(page.locator("#overview .home-hero-explore")).toBeVisible();
     await page.waitForTimeout(1500);
     const seen = await frames(page);
     expect(seen.length).toBeGreaterThan(0);
