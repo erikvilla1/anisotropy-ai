@@ -1,5 +1,13 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { sampleCSV } from "../../lib/demo";
+
+/** The workspace as the product shows it (ADR-0089, ADR-0090): one test is offered, the unnotched tension coupon, so the assistant has no
+ * test to ask for and opens on the material. Nothing in this file stands in for the API, so the page shows what the API offers; one started
+ * with ANISOTROPY_ALL_TESTS=on shows every test, development's view, whose scenarios are studio.spec.ts's with its stand-in API. The first
+ * question is asked once the API has answered about the switch, so waiting for it also waits for that answer. */
+const expectProductView = (page: Page) =>
+  expect(page.getByTestId("chat-question"), "the workspace should offer the unnotched tension coupon only: is the API running with ANISOTROPY_ALL_TESTS=on?")
+    .toHaveAttribute("data-step", "material");
 
 test("overview, the home page's blurbs, and material source document", async ({
   page,
@@ -27,23 +35,25 @@ test("the chat keeps a coupon across messages and starts over on request", async
   page,
 }) => {
   await page.goto("/workspace/fea");
+  await expectProductView(page);
   const box = page.getByRole("textbox", { name: "Message the coupon assistant" });
-  await box.fill("Open-hole tension 250 x 36 mm, 6 mm hole");
+  // The unnotched tension coupon, the test the workspace offers; the chat of the hidden tests, the open hole among them, is
+  // studio.spec.ts's, with the switch on.
+  await box.fill("Unnotched tension 250 x 25 mm, 56 mm tabs");
   await page.getByRole("button", { name: "Send message" }).click();
-  await expect(page.getByTestId("chat-spec")).toContainText("250 × 36 mm");
+  await expect(page.getByTestId("chat-spec")).toContainText("250 × 25 mm, 56 mm tabs");
   await box.fill("AS4/8552, 20 kN");
   await box.press("Enter");
-  await expect(page.getByTestId("chat-spec")).toContainText("Ø6 mm hole");
   await expect(page.getByTestId("chat-spec")).toContainText("20000 N force");
   await expect(page.getByTestId("chat-spec")).toContainText("AS4");
+  await expect(page.getByTestId("chat-spec")).toContainText("250 × 25 mm, 56 mm tabs"); // the first message's size and tabs, kept by the second
   await box.fill("hello");
   await box.press("Enter");
-  // A message that names no value is sent to the panel holding the next thing to state (ADR-0062 part 5);
-  // the library lists no G13 or G23 for AS4/8552, so that is the shear moduli, on the layup and material panel.
-  await expect(page.getByText("Pick a step on the left, or describe one thing")).toBeVisible();
-  const redirect = page.getByTestId("chat-redirect").last();
-  await expect(redirect).toHaveAttribute("data-panel", "layup");
-  await expect(redirect).toContainText("The next thing to state is out-of-plane shear moduli, under the Layup and material panel.");
+  // A message that names no value changes nothing and is answered with the next thing to state (ADR-0062 part 5, in ADR-0091's words):
+  // the layup, since the tension screen leaves G13 and G23 to the software (ADR-0090). The panel the answer names is not asserted here:
+  // the tension screen has no step panels; studio.spec.ts follows that link on the full panels.
+  await expect(page.getByText("Not sure what to change")).toBeVisible();
+  await expect(page.getByTestId("chat-redirect").last()).toContainText("Next: what is the layup");
   await page.getByRole("button", { name: "Start a new coupon" }).click();
   await expect(page.locator(".chat-user")).toHaveCount(0);
   await expect(page.getByTestId("chat-spec")).not.toContainText("250");
@@ -103,8 +113,10 @@ test("mobile navigation and workspaces fit the screen", async ({ page }) => {
   await expect(
     page.getByRole("textbox", { name: "Message the coupon assistant" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /^Open-hole tension/ }).click();
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material");
+  // No test to tap: one is offered (ADR-0089), so the assistant opens on the material. A tap on one of its choices moves it on.
+  await expectProductView(page);
+  await page.getByRole("button", { name: "IM7 / 8552", exact: true }).click();
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "layup");
   await page.screenshot({
     path: ".preview/mobile-workspace.png",
     fullPage: false,
