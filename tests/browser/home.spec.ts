@@ -1,172 +1,135 @@
 import { test, expect, type Page } from "@playwright/test";
-import quasi from "../fixtures/home/response-im7-quasi.json";
-import loaded from "../fixtures/home/response-im7-quasi-loaded.json";
 
-// The home page's laminate calculator with the API played from tests/fixtures/home: two answers of the real engine for the
-// IM7/8552 quasi-isotropic stack, unloaded and under Nx = 25 kN/m, captured on 2026-11-05 (the evaluation note says how).
-// The service's inputs echo is replaced by the request's own, as the page checks them (readAnalysisResult).
+// The home page's hero. The laminate calculator and its tour left the page on 2026-11-13 (ADR-0095); the cases that read
+// them, and the tour's own browser cases, went with them; they are in the history before that commit.
 
-type Posted = { plies: { angle_deg: number; thickness_m: number }[]; loads: Record<string, number>; material: Record<string, string> };
-
-async function playApi(page: Page, posts: Posted[]) {
-  await page.route("**/v1/laminates/response", async (route) => {
-    const body = route.request().postDataJSON() as Posted;
-    posts.push(body);
-    const hasLoad = Object.values(body.loads).some((value) => value !== 0);
-    await route.fulfill({ status: 200, json: { ...(hasLoad ? loaded : quasi), inputs: body } });
+/** Every request the page makes to the API, so a case can say the page asks the engine for nothing. */
+function apiRequests(page: Page): string[] {
+  const asked: string[] = [];
+  page.on("request", (request) => {
+    if (/\/v1\//.test(new URL(request.url()).pathname)) asked.push(request.url());
   });
+  return asked;
 }
 
-// The calculator's own parts. The tour above it (tests/browser/tour.spec.ts) shows the same components, so their test ids
-// are looked up inside the calculator.
-const calculator = (page: Page) => page.locator("#laminate");
-const scene = (page: Page) => calculator(page).getByTestId("laminate-scene").or(calculator(page).getByTestId("webgl-missing"));
-
-test("the hero opens the page and the laminate calculator follows it (ADR-0076)", async ({ page }) => {
-  await playApi(page, []);
+test("the hero opens the page, and the laminate calculator and its tour are not on it (ADR-0095)", async ({ page }) => {
+  const asked = apiRequests(page);
   await page.goto("/");
-  const order = await page.locator("main > section").evaluateAll((sections) => sections.slice(0, 2).map((section) => section.id));
-  expect(order).toEqual(["overview", "laminate"]);
-  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Composites/);
+  expect(await page.locator("main > *").first().getAttribute("id")).toBe("overview");
+  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/one engineering platform\s*for composite theory/);
+  await expect(page.locator("#laminate, #tour")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Your layup, calculated." })).toHaveCount(0);
+  // With the calculator gone the page asks the engine for nothing.
+  await page.waitForTimeout(1200);
+  expect(asked).toEqual([]);
 });
 
-test("the hero's words are only the headline and the two paragraphs (ADR-0077)", async ({ page }) => {
-  const posts: Posted[] = [];
-  await playApi(page, posts);
+const STATEMENT = /^\s*one engineering platform\s*for composite theory\s*and real test data\s*$/;
+
+test("the hero's words are one statement and a row of the year, the mark and the name (ADR-0077 amendments 19, 21, 27 and 28)", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("#overview");
-  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/Composites\.\s*Calculated\./);
-  await expect(hero.locator(".home-hero-copy p")).toHaveCount(2);
-  // No 3D view, chat box or link in the hero: the calculator below draws the stack, and the header's Workspace button is the way in.
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
+  // The row under it: the year, the triangle, the name (amendment 28).
+  await expect(hero.locator(".home-hero-note")).toHaveText("Est. 2026");
+  await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
+  const row = await hero.evaluate((el) => ["note", "mark", "tagline"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
+  expect(row[0]).toBeLessThan(row[1]);
+  expect(row[1]).toBeLessThan(row[2]);
+  // The cohort stands beside the mark of the place that runs it, in the clip's bottom left corner.
+  await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
+  await expect(hero.locator(".home-hero-backed .home-hero-cohort")).toHaveText("Fall 2026 Launchpad cohort");
+  // No 3D view, chat box or link in the hero: the header's Workspace button is the way in. Its one button, "Scroll to explore", is hidden while the words stand (tests/browser/intro.spec.ts).
+  await expect(hero.getByRole("button", { includeHidden: true })).toHaveCount(1);
   await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);
   await expect(hero.getByRole("textbox")).toHaveCount(0);
   await expect(hero.getByRole("link")).toHaveCount(0);
-  await expect.poll(() => posts.length).toBe(1);
-  // The header lies over the hero on the home page; elsewhere it is the same header in the page's flow, 56 px tall (ADR-0077
-  // amendment 8).
+  // The header lies over the hero's black ground on the home page; elsewhere it is the same header in the page's flow, 84 px
+  // tall, with its links in the middle of the page (ADR-0077 amendments 8 and 19).
   await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
   await page.goto("/about");
   await expect(page.locator(".site-header")).toHaveCSS("position", "relative");
-  await expect(page.locator(".site-header")).toHaveCSS("height", "56px");
+  await expect(page.locator(".site-header")).toHaveCSS("height", "84px");
+  const nav = await page.locator(".site-header .main-nav").evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return Math.round(box.left + box.width / 2);
+  });
+  expect(Math.abs(nav - page.viewportSize()!.width / 2)).toBeLessThanOrEqual(1);
+});
+
+test("the hero's clip plays in a square box on the black page, under the header, with the words in its middle (ADR-0077 amendment 19)", async ({ page }) => {
+  await page.goto("/");
+  const rect = (selector: string) => page.locator(selector).first().evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return { left: Math.round(box.left), top: Math.round(box.top), right: Math.round(box.right), bottom: Math.round(box.bottom) };
+  });
+  const viewport = page.viewportSize()!;
+  const clip = await rect("#overview .home-hero-media");
+  const header = await rect(".site-header");
+  // The box stands on the page's 32 px margin at the sides and the foot, and starts under the header.
+  expect([clip.left, viewport.width - clip.right, viewport.height - clip.bottom]).toEqual([32, 32, 32]);
+  expect(clip.top).toBe(header.bottom);
+  expect(clip.left).toBe((await rect(".site-header .wordmark")).left);
+  await expect(page.locator("#overview .home-hero-media")).toHaveCSS("border-radius", "0px");
+  // The page around it is the site's black, and the words sit inside the box, the statement and the mark on its middle line.
+  expect(await page.locator("#overview").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(0, 0, 0)");
+  for (const selector of ["#overview h1", "#overview .home-hero-row", "#overview .home-hero-backed"]) {
+    const part = await rect(selector);
+    expect(part.left, selector).toBeGreaterThanOrEqual(clip.left + 16);
+    expect(part.right, selector).toBeLessThanOrEqual(clip.right - 16);
+    expect(part.top, selector).toBeGreaterThanOrEqual(clip.top + 16);
+    expect(part.bottom, selector).toBeLessThanOrEqual(clip.bottom - 16);
+  }
+  for (const selector of ["#overview h1", "#overview .home-hero-mark"]) {
+    const part = await rect(selector);
+    expect(Math.abs((part.left + part.right) / 2 - viewport.width / 2), selector).toBeLessThanOrEqual(1);
+  }
+  // On a phone the box follows the narrower margin.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const phone = await rect("#overview .home-hero-media");
+  expect([phone.left, 390 - phone.right]).toEqual([20, 20]);
+  expect(phone.top).toBeGreaterThanOrEqual((await rect(".site-header")).bottom);
 });
 
 test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }) => {
-  await playApi(page, []);
   await page.goto("/");
   await expect(page.locator("#overview .home-hero-lens")).toHaveCount(0);
   // The recording stays committed, ready for the lens's return.
   expect((await page.request.get("/assets/hero-lens/lens.mp4")).status()).toBe(200);
 });
 
-test("the demo sits on its heading's columns, and the engine's answer on the same ones (ADR-0077 amendment 10)", async ({ page }) => {
-  await playApi(page, []);
-  await page.goto("/");
-  await expect(calculator(page).getByTestId("abd-grid")).toBeVisible();
-  const left = (selector: string) => page.locator(selector).first().evaluate((el) => Math.round(el.getBoundingClientRect().left));
-  const statementText = await page.locator(".hero-laminate-statement h2").evaluate((el) => Math.round(el.getBoundingClientRect().left));
-  expect(await left(".hero-laminate-inputs")).toBe(await left(".hero-laminate-label"));
-  expect(await left(".hero-laminate-view")).toBe(statementText);
-  expect(await left(".hero-results-main")).toBe(await left(".hero-laminate-view"));
-  expect(await left(".hero-results-end")).toBe(await left(".hero-laminate-stack"));
-  // No column leaves a gap: the view, the inputs and the plies are one row tall.
-  const heights = await page.locator(".hero-laminate-view, .hero-laminate-inputs, .hero-laminate-stack")
-    .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
-  expect(new Set(heights).size).toBe(1);
-});
-
-test("the home page draws the stack, posts it once and shows the engine's description", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  const posts: Posted[] = [];
-  await playApi(page, posts);
-  await page.goto("/");
-  await expect(scene(page)).toBeVisible();
-  await expect.poll(() => posts.length).toBe(1);
-  expect(posts[0].material).toEqual({ library_id: "im7-8552", dataset_id: "ncamp-im7-8552-2019-rtd-measured-v1" });
-  expect(posts[0].plies.map((ply) => ply.angle_deg)).toEqual([45, -45, 0, 90, 90, 0, -45, 45]);
-  for (const ply of posts[0].plies) expect(ply.thickness_m).toBeCloseTo(0.00018288, 12);
-  await expect(calculator(page).getByTestId("stack-row")).toHaveCount(8);
-  const specs = calculator(page).getByTestId("specs");
-  await expect(specs).toContainText("Quasi-isotropic");
-  await expect(specs).toContainText("symmetric, balanced");
-  await expect(specs).toContainText("1.463 mm");
-  await expect(specs).toContainText("2.312 kg/m²");
-  await expect(specs).toContainText("bending–twisting");
-  await expect(calculator(page).getByTestId("failure-panel")).toHaveCount(0);
-  await expect(calculator(page).getByTestId("abd-grid").getByRole("table", { name: "A matrix" })).toContainText("9.88 × 10⁷"); // the site's one number rule, three figures
-  await expect(calculator(page).getByTestId("property-row")).toContainText("1580");
-  await expect(calculator(page).getByTestId("property-row")).toContainText("57.3");
-  await page.waitForTimeout(700);
-  expect(posts.length).toBe(1);
-  expect(errors).toEqual([]);
-});
-
-test("typing a layup posts the expanded plies once the typing settles; an unreadable one posts nothing", async ({ page }) => {
-  const posts: Posted[] = [];
-  await playApi(page, posts);
-  await page.goto("/");
-  await expect.poll(() => posts.length).toBe(1);
-  // Reaching the calculator scrolls the page through the tour, which may ask the engine for its own loaded case on the way
-  // (ADR-0084; tour.spec.ts covers that request). This test counts the calculator's requests, which carry no load here.
-  const own = () => posts.filter((post) => Object.values(post.loads).every((value) => value === 0));
-  const layup = page.getByLabel("Layup", { exact: true });
-  await layup.fill("[0/90]s");
-  await expect.poll(() => own().length).toBe(2);
-  expect(own()[1].plies.map((ply) => ply.angle_deg)).toEqual([0, 90, 90, 0]);
-  await expect(calculator(page).getByTestId("stack-row")).toHaveCount(4);
-  await layup.pressSequentially("x", { delay: 20 });
-  await expect(page.locator("#hero-layup-hint")).toContainText("Could not read the layup");
-  await expect(page.locator(".hero-laminate-results").getByRole("alert")).toContainText("Could not read the layup");
-  await page.waitForTimeout(700);
-  expect(own().length).toBe(2);
-  await layup.fill("[0/45/-45/90]");
-  await layup.fill("[0/45]");
-  await expect.poll(() => own().length).toBe(3);
-  expect(own()[2].plies.map((ply) => ply.angle_deg)).toEqual([0, 45]);
-  await page.waitForTimeout(700);
-  expect(own().length).toBe(3);
-});
-
-test("a load turns on first-ply failure, with the engine's reasons for the criteria it did not run", async ({ page }) => {
-  const posts: Posted[] = [];
-  await playApi(page, posts);
-  await page.goto("/");
-  await expect.poll(() => posts.length).toBe(1);
-  await page.getByText("Add loads per unit width").click();
-  await page.getByLabel("Nx (N/m)", { exact: true }).fill("25000");
-  await expect.poll(() => posts.length).toBe(2);
-  expect(posts[1].loads.Nx).toBe(25000);
-  const panel = calculator(page).getByTestId("failure-panel");
-  await expect(panel).toBeVisible();
-  await expect(panel).toContainText("Maximum stress");
-  await expect(panel).toContainText("28.1");
-  await expect(panel).toContainText("4 (+90°)");
-  await expect(panel).toContainText("transverse tension");
-  await expect(panel).toContainText("Tsai-Hill");
-  await expect(panel).toContainText("Not computed: Maximum strain");
-});
-
-test("Want to check the math? carries the stack to the full calculator", async ({ page }) => {
-  const posts: Posted[] = [];
-  await playApi(page, posts);
-  await page.goto("/");
-  await expect.poll(() => posts.length).toBe(1);
-  await page.getByRole("link", { name: "Want to check the math?" }).click();
-  await expect(page).toHaveURL(/\/calculator\/?$/);
-  await expect(page.getByLabel("Ply 1 angle (°)", { exact: true })).toHaveValue("45");
-  await expect(page.getByLabel("Ply 8 angle (°)", { exact: true })).toHaveValue("45");
-  await expect(page.getByLabel("Ply 1 thickness (mm)", { exact: true })).toHaveValue("0.18288");
-  await expect(page.getByLabel("Library material", { exact: true })).toHaveValue("im7-8552::ncamp-im7-8552-2019-rtd-measured-v1");
-  await expect(page.getByText("Inputs carried over from the home page")).toBeVisible();
-  await expect(page.getByTestId("calculation-results")).toHaveCount(0);
-});
-
 test("the home page fits a phone without horizontal scroll", async ({ page }) => {
-  const posts: Posted[] = [];
-  await playApi(page, posts);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await expect(scene(page)).toBeVisible();
-  await expect.poll(() => posts.length).toBe(1);
+  await expect(page.locator("#overview h1")).toBeVisible();
+  await page.locator("#mission").scrollIntoViewIfNeeded();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test("the About cards show the five portraits in the lead's order, and LinkedIn's mark comes up under the pointer (ADR-0077 amendment 29)", async ({ page }) => {
+  await page.goto("/");
+  const cards = page.locator("#working .home-face");
+  await cards.first().scrollIntoViewIfNeeded();
+  await expect(cards.locator("h3")).toHaveText(["Christopher Valerio", "Erik Villa", "Tabassum Zaman", "Jusung Park", "Kai Saucedo"]);
+  // Every frame holds a portrait that has loaded, from the site's own files, and no initials.
+  await expect.poll(() => cards.locator("img").evaluateAll((images) => images.map((image) => (image as HTMLImageElement).naturalWidth))).toEqual([800, 800, 800, 800, 800]);
+  expect(await cards.locator("img").evaluateAll((images) => images.every((image) => new URL((image as HTMLImageElement).src).pathname.startsWith("/assets/team/")))).toBe(true);
+  await expect(cards.locator(".home-face-frame > span:not(.home-face-in)")).toHaveCount(0);
+  // The mark is drawn in the frame's bottom right corner only for the card under the pointer; with no profile address yet it is not a link.
+  const badge = (index: number) => cards.nth(index).locator(".home-face-in");
+  await expect(badge(2)).toHaveCSS("opacity", "0");
+  await cards.nth(2).hover();
+  await expect(badge(2)).toHaveCSS("opacity", "1");
+  await expect(badge(0)).toHaveCSS("opacity", "0");
+  await expect(badge(2)).toHaveCSS("border-radius", "50%");
+  const corner = await cards.nth(2).evaluate((card) => {
+    const frame = card.querySelector(".home-face-frame")!.getBoundingClientRect();
+    const mark = card.querySelector(".home-face-in")!.getBoundingClientRect();
+    return [Math.round(frame.right - mark.right), Math.round(frame.bottom - mark.bottom)];
+  });
+  expect(corner[0]).toBeLessThanOrEqual(14);
+  expect(corner[1]).toBeLessThanOrEqual(14);
+  await expect(page.locator("#working a.home-face-in")).toHaveCount(0);
+});
+

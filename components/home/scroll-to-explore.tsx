@@ -1,66 +1,30 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { ArrowDown } from "lucide-react";
-import { STEPS } from "./tour-timeline";
-import "@/app/home-tour.css";
 
-/** How long the button's scroll takes, so the bridge from the clip into the 3D view is seen on the way. */
-const DURATION_MS = 1500;
-/** Where the button stops: the tour's first step, with its words up. */
-const FIRST_STEP_AT = STEPS[0].at(0.14);
-const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
-/** Sets the scroll position at once, whatever `scroll-behavior` the page has; a browser that does not know "instant" gets the plain call. */
-function jumpTo(top: number) {
-  try {
-    window.scrollTo({ top, behavior: "instant" });
-  } catch {
-    window.scrollTo(0, top);
-  }
-}
-
-/** "Scroll to explore", at the hero's bottom right (the lead's request of 2026-11-09, after Scale's): one press scrolls the
- * page to the first step of the tour (components/home/demo-tour.tsx). It scrolls only when pressed, and lets go at once if the
- * visitor scrolls, touches or presses a key; the page's own scrolling is never taken over. A visitor who asked for reduced
- * motion is taken there without the move. */
+/** "Scroll to explore" (ADR-0077 amendments 22 and 24): a small button in the bottom right corner of the hero's clip, the
+ * words and then a down arrow in a square outline, as Scale's home page sets its own. It is hidden
+ * while the hero's words stand and comes up once they have left (components/home/hero-outro.tsx marks the hero
+ * `data-words="gone"`; app/home.css shows the button then). A visitor who asked for reduced motion keeps the words and sees
+ * the button from the start. One press scrolls the page to the section that follows the hero; the page's own scrolling is
+ * not taken over. */
 export function ScrollToExplore() {
-  const stop = useRef<(() => void) | null>(null);
-  useEffect(() => () => stop.current?.(), []);
   function explore() {
-    const tour = document.getElementById("tour");
-    if (!tour) return;
-    stop.current?.();
-    const top = tour.getBoundingClientRect().top + window.scrollY;
-    const pinned = tour.dataset.mode === "pinned";
-    const target = Math.round(pinned ? top + FIRST_STEP_AT * window.innerHeight : top);
-    // Unpinned, the tour is an ordinary section: the page's own scroll behaviour takes the visitor to its top.
-    if (!pinned) {
-      window.scrollTo({ top: target });
-      return;
-    }
-    const from = window.scrollY;
-    const started = performance.now();
-    let frame = 0;
-    const events = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
-    const cancel = () => {
-      window.cancelAnimationFrame(frame);
-      for (const name of events) window.removeEventListener(name, cancel);
-      stop.current = null;
-    };
-    const step = (now: number) => {
-      const share = Math.min(1, (now - started) / DURATION_MS);
-      jumpTo(from + (target - from) * easeInOut(share));
-      if (share < 1) frame = window.requestAnimationFrame(step);
-      else cancel();
-    };
-    for (const name of events) window.addEventListener(name, cancel, { passive: true });
-    stop.current = cancel;
-    frame = window.requestAnimationFrame(step);
+    // The section that follows the hero, whatever it is: brought to the window's top, or to its middle if it is shorter
+    // than the window.
+    const next = document.getElementById("overview")?.nextElementSibling;
+    if (!next) return;
+    const box = next.getBoundingClientRect();
+    const top = box.top + window.scrollY - Math.max(0, (window.innerHeight - box.height) / 2);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: Math.round(top), behavior: reduced ? "auto" : "smooth" });
   }
   return (
     <button type="button" className="home-hero-explore" onClick={explore}>
       <span>Scroll to explore</span>
-      <span className="home-hero-explore-box" aria-hidden="true"><ArrowDown size={16} strokeWidth={1.5} /></span>
+      <span className="home-hero-explore-box" aria-hidden="true">
+        <ArrowDown strokeWidth={1.5} />
+      </span>
     </button>
   );
 }

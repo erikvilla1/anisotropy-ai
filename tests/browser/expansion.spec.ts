@@ -33,7 +33,8 @@ test("navigation routes load directly with research-focused About", async ({
   await page.getByRole("link", { name: "Development process streamlining" }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await page.reload();
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
+  // One test is offered for now (ADR-0089), so the assistant's first question is the material, as workspace.spec.ts reads it.
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material");
   expect(errors).toEqual([]);
 });
 
@@ -90,6 +91,18 @@ test("the Services disclosure lists the five service pages and the contact page 
   await expect(button).toHaveAttribute("aria-expanded", "true");
   const fem = nav.getByRole("link", { name: "Finite element modeling", exact: true });
   await expect(fem).toBeVisible();
+  // Anduril's panel (ADR-0082 amendment 1): no rule under it, no status beside a link, the list named by its label and
+  // starting under the header's first link.
+  const panel = nav.locator(".services-panel");
+  await expect(panel).toHaveCSS("border-bottom-width", "0px");
+  await expect(panel.locator(".services-panel-list")).not.toContainText(/In part|Available|Planned/i);
+  await expect(panel.locator(".services-panel-list li > :not(a)")).toHaveCount(0);
+  await expect(nav.getByRole("list", { name: "Services" }).getByRole("link")).toHaveCount(5);
+  const lefts = await nav.evaluate((el) => [
+    el.querySelector(":scope > a")!.getBoundingClientRect().left,
+    el.querySelector(".services-panel-list")!.getBoundingClientRect().left,
+  ]);
+  expect(Math.abs(lefts[0] - lefts[1])).toBeLessThanOrEqual(1);
   await page.keyboard.press("Escape");
   await expect(button).toHaveAttribute("aria-expanded", "false");
   await expect(button).toBeFocused();

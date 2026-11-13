@@ -110,7 +110,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
-  background: linear-gradient(160deg, #131313, #0d0d0d 70%);
+  background: #000000;
   touch-action: pan-y;
 }
 .hero-laminate-canvas canvas {
@@ -496,12 +496,12 @@
   }
 }
 
-/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11 and 14): Mission dark, the
- * supporters' strip light, Platform dark, About light, News dark. Each numbered band opens with the kit's head. Platform's
- * cards start at column 4, under the statement, three columns wide and three to a row. The label column holds only labels, so
- * the news dates sit in it and each item's words start under the statement. The four principles close the Mission band as a
- * strip on all twelve columns, and About's five face cards take the whole width. Every colour here is one of the band's
- * variables, so one rule serves both grounds; only the supporters' logos keep their own colours. */
+/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31): Mission and Platform
+ * dark, About light, News dark. Each numbered band opens with the kit's head. Platform's cards start at column 4, under the
+ * statement, three columns wide and three to a row. The label column holds only labels, so the news dates sit in it and each
+ * item's words start under the statement. The four principles close the Mission band as a strip on all twelve columns, and
+ * About's five face cards take the whole width. Every colour here is one of the band's variables, so one rule serves both
+ * grounds. */
 .home-link {
   display: inline-flex;
   align-items: center;
@@ -566,104 +566,6 @@
 .home-principles svg {
   margin-left: 4px;
   vertical-align: -2px;
-}
-/* The supporters' strip, after PhysicsX's logo strip (measured there on 2026-11-10: a 16 px grey monospace label, 32 px
- * under it one row of logos 22 to 44 px tall, drifting left at about 40 px a second). It is a shorter band than the others.
- * With one logo the row is the logo in the label's columns and its sentence from column 4, where every statement starts;
- * with more, the logos take the whole row and the sentence sits under them. */
-.band.home-supporters {
-  padding-top: 64px;
-  padding-bottom: 64px;
-}
-.home-supporters .band-label {
-  margin-bottom: 32px;
-  color: var(--muted);
-}
-.home-supporters-row {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: 32px;
-  row-gap: 32px;
-  align-items: center;
-}
-.home-supporters-row > .logo-strip {
-  grid-column: 1 / 4;
-}
-.home-supporters-row.is-many > .logo-strip {
-  grid-column: 1 / -1;
-}
-.home-supporters-row > p {
-  grid-column: 4 / -1;
-  font-size: 18px;
-  line-height: 26px;
-  color: var(--muted);
-  text-wrap: balance;
-}
-/* The logo row (components/home/logo-strip.tsx). A logo is its owner's mark: it keeps its colours and its proportions, 40 px
- * tall and at most 200 px wide. The row moves only once the component finds the logos wider than it: then the set and its
- * copy drift left by one set's width, each set ending on a gap, so the loop has no seam. It stops under the pointer and
- * while it has the keyboard's focus. */
-.logo-strip {
-  --logo-strip-gap: 96px;
-  min-width: 0;
-  overflow: hidden;
-}
-.logo-strip:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 5px;
-}
-.logo-strip-track {
-  display: flex;
-  width: max-content;
-}
-.logo-strip-set {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--logo-strip-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.logo-strip-set li {
-  flex: none;
-}
-.logo-strip-set img {
-  width: auto;
-  height: 40px;
-  max-width: 200px;
-  object-fit: contain;
-}
-.logo-strip.is-moving .logo-strip-set {
-  padding-right: var(--logo-strip-gap);
-}
-.logo-strip.is-moving .logo-strip-track {
-  animation: logo-strip-drift var(--logo-strip-pass, 60s) linear infinite;
-}
-.logo-strip.is-moving:hover .logo-strip-track,
-.logo-strip.is-moving:focus-within .logo-strip-track {
-  animation-play-state: paused;
-}
-@keyframes logo-strip-drift {
-  to {
-    transform: translateX(-50%);
-  }
-}
-/* No drift for a visitor who asked for less motion: the copy goes and the logos wrap onto as many rows as they need. */
-@media (prefers-reduced-motion: reduce) {
-  .logo-strip.is-moving .logo-strip-track {
-    width: auto;
-    animation: none;
-  }
-  .logo-strip.is-moving .logo-strip-set {
-    flex: 1 1 auto;
-    flex-wrap: wrap;
-    row-gap: 24px;
-    padding-right: 0;
-  }
-  .logo-strip.is-moving .logo-strip-set[aria-hidden] {
-    display: none;
-  }
 }
 /* Three cards to a row from column 4: nine columns and eight gutters split in three is three columns and two gutters each,
  * so the cards' edges fall on the head's columns. */
@@ -783,10 +685,56 @@
   color: var(--muted);
   opacity: 0.5;
 }
+.home-face-frame {
+  position: relative;
+}
 .home-face-frame img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* LinkedIn's mark (ADR-0057 amendment 2): a round black badge in the frame's bottom right corner that comes up while the
+ * pointer is over the card, or while the keyboard's focus is in it. Where there is no pointer to hover with, a badge that
+ * is a link is always there. */
+.home-face-frame .home-face-in {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #000000;
+  color: #ffffff;
+  font-size: 0;
+  letter-spacing: 0;
+  opacity: 0;
+  transform: scale(0.85);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+.home-face-in svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+.home-face:hover .home-face-in,
+.home-face:focus-within .home-face-in {
+  opacity: 1;
+  transform: scale(1);
+}
+@media (hover: none) {
+  .home-face-frame a.home-face-in {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-face-frame .home-face-in {
+    transition: none;
+  }
 }
 .home-face h3 + p {
   margin-top: 8px;
@@ -834,8 +782,7 @@
   max-width: 36em;
 }
 /* Narrower than 1280 px the cards and the principles go two to a row and the faces three; under 1024 px the head stacks, so
- * the cards take the whole width and the supporters' sentence goes under its logo; on a phone the cards go one to a row and
- * the faces two. */
+ * the cards take the whole width; on a phone the cards go one to a row and the faces two. */
 @media (max-width: 1279px) {
   .home-cards,
   .home-principles {
@@ -855,13 +802,6 @@
   .home-news article > div {
     grid-column: 4 / -1;
   }
-  .home-supporters-row {
-    row-gap: 24px;
-  }
-  .home-supporters-row > .logo-strip,
-  .home-supporters-row > p {
-    grid-column: 1 / -1;
-  }
 }
 @media (max-width: 760px) {
   .home-cards {
@@ -876,24 +816,6 @@
   }
   .home-principles li {
     font-size: 12px;
-  }
-  .band.home-supporters {
-    padding-top: 48px;
-    padding-bottom: 48px;
-  }
-  .home-supporters .band-label {
-    margin-bottom: 24px;
-  }
-  .home-supporters-row > p {
-    font-size: 16px;
-    line-height: 24px;
-  }
-  .logo-strip {
-    --logo-strip-gap: 56px;
-  }
-  .logo-strip-set img {
-    height: 32px;
-    max-width: 160px;
   }
   .home-faces {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1045,28 +967,48 @@
   }
 }
 
-/* The hero after PhysicsX's home page (ADR-0077): the material photo full-bleed, only the headline on columns 1 to 6 and two
- * short paragraphs from column 7 of a 12-column grid (32 px gutters and margins, as measured there on 2026-11-07). The header
- * (app/globals.css) lies over the hero on this page and scrolls away with it. */
+/* The hero (ADR-0077 and its amendment 19), in the arrangement of Anduril's home page. The page is black; the header lies
+ * on the black strip at the top; under it the material clip plays in a box with square corners that stands on the page's
+ * margin at the sides and the foot. The words are in the middle of the box: one statement in large capitals, and under it a
+ * row of the tagline, the mark and one short monospace line.
+ *   --hero-top    where the box starts: the header's height
+ *   --hero-frame  the black frame at the sides and the foot: the page's margin
+ *   --hero-pad    the words' least distance from the box's edge
+ * The ground is a layer of its own, under the box. */
 .home-hero {
+  --hero-top: 84px;
+  --hero-frame: 32px;
+  --hero-pad: 32px;
+  --hero-radius: 0px;
   position: relative;
   min-height: max(640px, 100svh);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 104px 32px;
+  align-items: center;
+  padding: calc(var(--hero-top) + 40px) calc(var(--hero-frame) + var(--hero-pad)) calc(var(--hero-frame) + 40px);
   overflow: hidden;
   isolation: isolate;
-  background: #080808;
+  text-align: center;
+  color: #ffffff;
+}
+.home-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  background: var(--bg);
 }
 .home-hero-media {
   position: absolute;
-  inset: 0;
+  inset: var(--hero-top) var(--hero-frame) var(--hero-frame);
   z-index: -2;
+  border-radius: var(--hero-radius);
+  overflow: hidden;
   background: url("/assets/images/carbon-weave.jpg") 68% center / cover;
   filter: grayscale(1);
 }
-/* The clip (ADR-0069) covers the still when its web copy is present; the shades lie over both so the copy reads the same. */
+/* The clip (ADR-0069) covers the still when its web copy is present; one even shade lies over both so the white words read. */
 .home-hero-video,
 .home-hero-video video {
   position: absolute;
@@ -1079,56 +1021,83 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(90deg, #080808f2 0%, #080808cc 34%, #08080899 66%, #080808b3 100%),
-    linear-gradient(0deg, var(--bg) 0%, transparent 26%),
-    linear-gradient(180deg, #080808b3 0%, transparent 22%);
+  background: #080808b8;
 }
-/* The clip is already dark footage, so it takes lighter shades than the bright still, and a lift of its own; the left keeps
- * enough shade for the headline, the bottom still fades into the page. */
+/* The clip is already dark footage, so it takes a lighter shade than the bright still, and a lift of its own. */
 .home-hero-media.has-video::after {
-  background-image:
-    linear-gradient(90deg, #080808a6 0%, #08080873 36%, #08080826 68%, #08080840 100%),
-    linear-gradient(0deg, var(--bg) 0%, transparent 22%),
-    linear-gradient(180deg, #08080880 0%, transparent 16%);
+  background: #08080859;
 }
 .home-hero-video video {
   filter: brightness(1.17) contrast(1.05);
 }
-.home-hero-grid {
+.home-hero-stack {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: 32px;
-  align-items: center;
+  justify-items: center;
+  row-gap: clamp(28px, 3.2vw, 56px);
   width: 100%;
 }
-.home-hero-title {
-  grid-column: 1 / 7;
-  position: relative;
-  z-index: 2;
-}
-.home-hero-copy {
-  grid-column: 7 / 13;
-  position: relative;
-  z-index: 2;
-}
+/* The statement: capitals of medium weight, set tight, the lines close. Measured on Anduril's page at 1880 px: capitals 62 px
+ * tall on a 71 px pitch. Ours is set a little smaller than that at the lead's word, since its lines are longer; the mark in
+ * the row keeps its size. */
 .home-hero h1 {
+  margin: 0;
   font-family: var(--font);
-  font-weight: 400;
-  font-size: clamp(48px, 5.9vw, 85px);
-  line-height: 1;
+  font-weight: 500;
+  font-size: clamp(32px, 4.1vw, 80px);
+  line-height: 0.86;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
-  letter-spacing: -0.03em;
-  color: #fff;
+  color: #ffffff;
 }
-.home-hero-copy > p {
-  max-width: 440px;
-  font-size: 18px;
-  line-height: 24px;
-  color: #f4f4f4;
+/* The row under it: the tagline ends on the mark's left, the mark stands in the middle of the page, the monospace line
+ * starts on its right. */
+.home-hero-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: clamp(20px, 2.4vw, 44px);
+  width: 100%;
 }
-.home-hero-copy > p + p {
-  margin-top: 16px;
+/* The name, on the mark's right (ADR-0077 amendment 28). */
+.home-hero-tagline {
+  justify-self: start;
+  margin: 0;
+  font-size: clamp(15px, 1.5vw, 28px);
+  font-weight: 700;
+  line-height: 1.32;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.home-hero-mark {
+  display: block;
+  /* The middle of the triangle, which lies below the middle of its box: the mark turns about it when the words leave. */
+  transform-origin: 50% 61%;
+  width: clamp(58px, 5.4vw, 102px);
+  aspect-ratio: 246.24 / 201.022;
+  background: currentColor;
+  -webkit-mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
+  mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
+}
+/* The year, on the mark's left. */
+.home-hero-notes {
+  justify-self: end;
+  display: grid;
+  justify-items: end;
+  row-gap: clamp(6px, 0.7vw, 12px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(12px, 1.22vw, 23px);
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: right;
+}
+/* The year is set wide, so its line is as long as the name on the mark's other side (ADR-0077 amendment 30). The space
+ * that tracking leaves after the last figure is taken back, so the line still ends where the gap to the mark begins. */
+.home-hero-note {
+  margin: 0 -0.27em 0 0;
+  letter-spacing: 0.27em;
 }
 /* The lens (ADR-0071): a 4:3 window over the clip, its right edge on the gutter before the copy and its foot just above the
  * headline's middle, under the words. Through it the clip is dimmed and blurred like glass, and our results play in colour on
@@ -1210,61 +1179,180 @@
     display: none;
   }
 }
-/* The programme badge (ADR-0081): a small monospace line over UC San Diego's The Basement mark in white, in the hero's bottom
- * left corner, on the page's 32 px margin. */
+/* UC San Diego's The Basement mark (ADR-0081), in white, in the bottom left corner of the hero's box. */
 .home-hero-backed {
   position: absolute;
   z-index: 2;
-  left: 32px;
-  bottom: 32px;
-  display: grid;
-  gap: 10px;
+  left: calc(var(--hero-frame) + var(--hero-pad));
+  bottom: calc(var(--hero-frame) + var(--hero-pad));
+  display: flex;
+  align-items: center;
+  gap: 16px;
   margin: 0;
+}
+/* The cohort, beside the mark of the place that runs it (ADR-0077 amendment 28): small monospace capitals behind a hairline. */
+.home-hero-cohort {
+  padding-left: 16px;
+  border-left: 1px solid #ffffff66;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 16px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #efefefa6;
+  white-space: nowrap;
+  color: #ffffff;
 }
 .home-hero-backed img {
   display: block;
   width: auto;
   height: 40px;
 }
+/* "Scroll to explore" (components/home/scroll-to-explore.tsx; ADR-0077 amendments 22 and 24): in the bottom right corner of
+ * the clip, as far in as the Basement mark is on the left, set as Scale's is: the words in the site's typeface, then a down
+ * arrow in a square outline with soft corners. It is not there, for the eye, the pointer or the keyboard, until the hero's
+ * words have left (`data-words="gone"`, set by components/home/hero-outro.tsx); then it fades in. */
+.home-hero-explore {
+  position: absolute;
+  z-index: 2;
+  right: calc(var(--hero-frame) + var(--hero-pad));
+  bottom: calc(var(--hero-frame) + var(--hero-pad));
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: #ffffff;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s linear 0.3s;
+}
+.home-hero[data-words="gone"] .home-hero-explore {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.7s ease 0.15s,
+    visibility 0s;
+}
+.home-hero-explore-box {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ffffff;
+  border-radius: 5px;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+.home-hero-explore-box svg {
+  width: 16px;
+  height: 16px;
+}
+.home-hero-explore:hover .home-hero-explore-box,
+.home-hero-explore:focus-visible .home-hero-explore-box {
+  background: #ffffff;
+  color: #000000;
+}
+.home-hero-explore:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 6px;
+}
+/* A visitor who asked for reduced motion keeps the hero's words, so the button is there from the start. */
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-explore {
+    opacity: 1;
+    visibility: visible;
+    transition: none;
+  }
+}
+/* The header is taller or shorter below 1201 px and the page's margin narrower below 1024 and 641 px: the box follows both.
+ * Under 1024 px the statement may break where it needs to, and under 761 px the row stacks. */
+@media (max-width: 1200px) {
+  .home-hero {
+    --hero-top: 86px;
+  }
+}
 @media (max-width: 1023px) {
   .home-hero {
-    padding: 120px 24px 96px;
+    --hero-top: 75px;
+    --hero-frame: 24px;
+    --hero-pad: 24px;
   }
-  .home-hero-grid {
+  .home-hero h1 {
+    font-size: clamp(30px, 5.4vw, 56px);
+  }
+}
+@media (max-width: 760px) {
+  .home-hero {
+    padding-bottom: calc(var(--hero-frame) + 88px);
+  }
+  .home-hero h1 {
+    white-space: normal;
+    font-size: clamp(30px, 9.4vw, 46px);
+    line-height: 0.92;
+    letter-spacing: -0.03em;
+  }
+  .home-hero-row {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: 40px;
+    justify-items: center;
+    row-gap: 20px;
   }
-  .home-hero-title,
-  .home-hero-copy {
-    grid-column: 1;
+  .home-hero-tagline,
+  .home-hero-notes {
+    justify-self: center;
+    justify-items: center;
+    text-align: center;
+  }
+  .home-hero-tagline {
+    font-size: 19px;
+  }
+  .home-hero-notes {
+    font-size: 13px;
+  }
+  /* Stacked and centred: the space after the last figure is balanced on the left instead. */
+  .home-hero-note {
+    margin-right: 0;
+    padding-left: 0.27em;
   }
 }
 @media (max-width: 640px) {
   .home-hero {
-    padding: 104px 20px 80px;
-  }
-  .home-hero-backed {
-    left: 20px;
-    bottom: 20px;
+    --hero-top: 70px;
+    --hero-frame: 20px;
+    --hero-pad: 16px;
   }
   .home-hero-backed img {
-    height: 32px;
+    height: 30px;
   }
-  .home-hero-grid {
-    row-gap: 32px;
+  /* On a narrow screen the cohort stands under the mark, so the Scroll to explore button keeps its corner. */
+  .home-hero-backed {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
-  .home-hero h1 {
-    font-size: clamp(40px, 12.3vw, 52px);
-    letter-spacing: -0.02em;
+  .home-hero-cohort {
+    padding-left: 0;
+    border-left: 0;
+    font-size: 11px;
   }
-  .home-hero-copy > p {
-    font-size: 17px;
+  /* The button keeps its square; its words would run into the cohort's line, so they are kept for a screen reader only. */
+  .home-hero-explore > span:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

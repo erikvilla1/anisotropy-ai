@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import "@fontsource-variable/dm-sans";
-import "@fontsource-variable/manrope";
+import "@fontsource-variable/inter/opsz.css";
 import "./globals.css";
 import "./expansion.css";
 import "./research.css";

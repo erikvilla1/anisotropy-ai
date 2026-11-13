@@ -79,3 +79,13 @@ Four pull requests, in the order the plan set: the site map (the name, the heade
 - **Not done here:** a noindex on the old addresses, since the founder deferred the indexing policy (decision D12, "later"); a title and description for `/library` and `/data`, whose client pages need a server layout in the library's own folder, left to the library's fix group.
 
 **Evidence.** `npm run build` on 2026-11-12: `out/404.html` holds one `<title>`, "Page not found | Anisotropy", `id="main"`, Next's `noindex` and no white inline style; `out/index.html`, `out/about.html`, `out/workspace/fea.html` and `out/studio.html` are titled "Anisotropy | Composites. Calculated.", "About | Anisotropy", "Coupon FEA | Anisotropy" and "Coupon FEA | Anisotropy"; every page carries `og:image` 1200 × 630 with its alt text and `theme-color` #0d0d0d; KaTeX's rules (the 25 349-byte chunk) are linked from `out/library.html` only, and the stylesheets `out/404.html` links come to 101 701 bytes. `npm test` on 2026-11-13, rebased on main after #199: 255 tests, 254 passed, 0 failed, 1 skipped; of them `tests/site-metadata.test.ts` (bare titles, the template, the workspace's and the shell's heads free of banned terms, the old addresses' heads equal to their new pages, the shell's four old addresses the Worker's) 6 of 6 and `tests/worker-routing.test.ts` (the moved paths, the query kept, the Worker run first for each) 5 of 5. `npm run typecheck` and `npm run typecheck:worker`: exit 0. The 301 on the hosted site: UNVERIFIED, not deployed.
+
+## Amendment 3, 2026-11-13 (the library's link reads "Resources")
+
+Numbered 2 on its branch; renumbered when the branch took in main, where an amendment of 2026-11-12 had the number.
+
+**Context.** The lead asked to "rename Materials Library to Resources in the header."
+
+**Decision.** The link to `/library` reads "Resources". The header and the footer draw their links from one list (`lib/site-nav.ts`), so both change. The address and the page's own title, "Materials library", stay; other pages' links to it keep their wording.
+
+**Evidence.** On 2026-11-13: `tests/site-map.test.ts` expects About, Industries, Resources, Services, Contact us: 2 passed, 0 failed. The two menu cases of `expansion.spec.ts`: 2 of 2. UNVERIFIED: whether the page will hold more than the materials library, which the new word suggests.

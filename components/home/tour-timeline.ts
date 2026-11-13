@@ -1,5 +1,7 @@
-/** The tour's clock (the scroll-driven tour of the home page's calculator). Time is scroll: `t` is how far the page has
- * scrolled into the tour, in viewport heights. Nothing here knows a laminate quantity; it only says what is on screen when. */
+/** The tour's clock (the stepped tour of the home page's calculator, ADR-0084 amendment 4). `t` is the tour's own time. It
+ * stands still at a stop and runs at one constant speed while a step plays (components/home/tour-driver.ts); the page's scroll
+ * does not move it. One unit of `t` is what one screen of scroll was when the scroll drove the tour, so the lengths below
+ * read as they did. Nothing here knows a laminate quantity; it only says what is on screen when. */
 
 export const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 /** 0 before `from`, 1 after `to`, linear between. */
@@ -19,16 +21,14 @@ export function keyed(keys: [number, number][], t: number): number {
   return keys[keys.length - 1][1];
 }
 
-/** The bridge from the hero's clip into the 3D view takes the first screen of scroll. */
-export const BRIDGE = 1;
 export const STEP_IDS = ["material", "layup", "engine", "loads", "handover"] as const;
 export type StepId = (typeof STEP_IDS)[number];
-/** How many screens of scroll each step takes. */
-const LENGTHS: Record<StepId, number> = { material: 0.8, layup: 1.1, engine: 0.8, loads: 0.9, handover: 0.45 };
+/** How long each step is on the clock. */
+const LENGTHS: Record<StepId, number> = { material: 0.6, layup: 1.1, engine: 0.8, loads: 0.9, handover: 0.45 };
 
 export type StepRange = { id: StepId; start: number; end: number; at: (u: number) => number };
 export const STEPS: StepRange[] = (() => {
-  let start = BRIDGE;
+  let start = 0;
   return STEP_IDS.map((id) => {
     const from = start;
     const end = from + LENGTHS[id];
@@ -36,11 +36,16 @@ export const STEPS: StepRange[] = (() => {
     return { id, start: from, end, at: (u: number) => from + (end - from) * u };
   });
 })();
-/** The whole pinned sequence, in screens: after it the stage lets go and the page scrolls on as usual. */
+/** The whole sequence on the clock. */
 export const TOTAL = STEPS[STEPS.length - 1].end;
 const [MATERIAL, LAYUP, ENGINE, LOADS, HANDOVER] = STEPS;
-/** The first step's words come in as the bridge ends. */
-const FIRST_STEP_FROM = BRIDGE - 0.1;
+/** Where the clock stands still: at 0 before the first step has played, which is seen only while the stage comes into the
+ * window, and then at the end of each step. A step is the move from one stop to the next. */
+export const STOPS: number[] = [0, ...STEPS.map((step) => step.end)];
+/** The clock's one speed while a step plays, in units a second, forwards and back. At 0.25 the five steps take 2.4, 4.4, 3.2,
+ * 3.6 and 1.8 s, and the layup's 14 characters are typed in about 2 s. It was 0.6, which the lead found far too fast
+ * (ADR-0084 amendment 5). */
+export const CLOCK_PER_SECOND = 0.25;
 
 /** When each ply starts to come down as the layup is typed, on a clock of one unit per character. A listed ply starts when the
  * slash or the bracket that ends its angle is typed; a mirrored one follows the `s`. */
@@ -64,7 +69,7 @@ function laidAt(script: LayupScript, clock: number): number {
 
 /** What the tour shows at one moment. Every field is quantised, so the page renders again only when something visible changed. */
 export type TourView = {
-  /** The step whose words and panel are up: an index into STEP_IDS, or -1 while the bridge plays. */
+  /** The step whose words and panel are up: an index into STEP_IDS. */
   step: number;
   /** The material is picked in the library list. */
   picked: boolean;
@@ -90,46 +95,45 @@ export type TourView = {
   azimuth: number;
 };
 
-/** The camera's turn when the hero's clip lands on the top ply, and how far it turns on from there to the end of the tour. At
- * -24° the ply's long edges lie nearly level on screen, so the clip lies back onto it with hardly a twist; the turn then ends at
- * 0°, the view's resting position, which is where the calculator below shows the same stack. */
+/** The camera's turn when the tour starts, and how far it turns on from there to the end. It ends at 0°, the view's resting
+ * position, which is where the calculator below shows the same stack. */
 export const AZIMUTH_START = -24;
 const AZIMUTH_SWEEP = 24;
-export const azimuthAt = (t: number) => AZIMUTH_START + AZIMUTH_SWEEP * span(t, BRIDGE, TOTAL);
-/** The plies separate in the last fifth of the bridge, once the clip has become the top ply. */
-export const BRIDGE_EXPLODE_FROM = 0.8;
+export const azimuthAt = (t: number) => AZIMUTH_START + AZIMUTH_SWEEP * span(t, 0, TOTAL);
+/** The share of the layup step in which the stack that stood through the material step is taken away, before the typing. */
+const LAYUP_CLEARED = 0.14;
 
 const round = (value: number, steps: number) => Math.round(value * steps) / steps;
 
+/** A step's panel takes about a fifth of a second to come up when its move starts (app/home-tour.css), so what a step types
+ * or shows starts a fifth or so into it; what it ends on is complete a little before its stop. */
 export function viewAt(t: number, script: LayupScript, plyCount: number, loadText: string): TourView {
-  const step = t < FIRST_STEP_FROM ? -1 : Math.max(0, STEPS.findIndex((range) => t < range.end));
-  const index = t >= TOTAL ? STEPS.length - 1 : step;
+  // A step owns its range and the stop at its end, so the next step's words come up as its move starts.
+  const found = STEPS.findIndex((range) => t <= range.end);
   const material = span(t, MATERIAL.start, MATERIAL.end);
   const layup = span(t, LAYUP.start, LAYUP.end);
   const engine = span(t, ENGINE.start, ENGINE.end);
   const loads = span(t, LOADS.start, LOADS.end);
-  const clock = span(layup, 0.1, 0.8) * script.end;
-  const cleared = LAYUP.at(0.06);
-  const laid = t < cleared ? plyCount * (1 - span(t, MATERIAL.at(0.8), cleared)) : laidAt(script, clock);
+  const clock = span(layup, 0.2, 0.84) * script.end;
+  const laid = layup < LAYUP_CLEARED ? plyCount * (1 - span(layup, 0, LAYUP_CLEARED)) : laidAt(script, clock);
   const explode = keyed([
-    [BRIDGE_EXPLODE_FROM, 0], [BRIDGE, 1], // the plies separate as the bridge ends
-    [MATERIAL.at(0.35), 0.62], // and settle, still apart
-    [LAYUP.at(0.8), 0.62], [LAYUP.at(0.97), 0.12], // the laid plies close up
-    [ENGINE.at(0.02), 0.12], [ENGINE.at(0.16), 0], // one laminate for the engine
-    [LOADS.at(0.4), 0], [LOADS.at(0.62), 0.6], // opened again, to show the ply that fails first
-    [HANDOVER.at(0.05), 0.6], [HANDOVER.at(0.7), 0], // and closed for the hand-over
+    [MATERIAL.at(0.1), 0], [MATERIAL.at(0.75), 0.62], // the closed stack opens as the material is picked
+    [LAYUP.at(0.86), 0.62], [LAYUP.at(0.98), 0.12], // the laid plies close up
+    [ENGINE.at(0.04), 0.12], [ENGINE.at(0.2), 0], // one laminate for the engine
+    [LOADS.at(0.56), 0], [LOADS.at(0.84), 0.6], // opened again, to show the ply that fails first
+    [HANDOVER.at(0.1), 0.6], [HANDOVER.at(0.9), 0], // and closed for the hand-over
   ], t);
   return {
-    step: index,
-    picked: material >= 0.1,
-    constants: round(span(material, 0.18, 0.62), 40),
+    step: found < 0 ? STEPS.length - 1 : found,
+    picked: material >= 0.12,
+    constants: round(span(material, 0.2, 0.88), 40),
     layupChars: Math.min(script.text.length, Math.floor(clock + 1e-6)),
     laid: round(laid, 50),
-    thickness: layup >= 0.05,
-    engine: engine >= 0.52 ? 3 : engine >= 0.36 ? 2 : engine >= 0.1 ? 1 : 0,
-    loadChars: Math.min(loadText.length, Math.floor(span(loads, 0.12, 0.36) * loadText.length + 1e-6)),
-    loaded: loads >= 0.4,
-    mark: loads >= 0.5 && t < HANDOVER.at(0.35),
+    thickness: layup >= LAYUP_CLEARED,
+    engine: engine >= 0.75 ? 3 : engine >= 0.45 ? 2 : engine >= 0.15 ? 1 : 0,
+    loadChars: Math.min(loadText.length, Math.floor(span(loads, 0.2, 0.48) * loadText.length + 1e-6)),
+    loaded: loads >= 0.52,
+    mark: loads >= 0.66 && t < HANDOVER.at(0.4),
     explode: round(explode, 100),
     azimuth: round(azimuthAt(t), 5),
   };

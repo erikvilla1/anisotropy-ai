@@ -1,11 +1,12 @@
 /* The tour of the calculator between the hero and the calculator (components/home/demo-tour.tsx). Its ground is dark: it
- * continues the hero and its clip, and the live calculator after it stays white. Two layouts share one markup. By default the
- * tour is an ordinary section: a head, the 3D view, then the steps one under another, each with its words and its panel. On a
- * desktop-sized window whose visitor has not asked for reduced motion the stage is one viewport tall and pinned inside a tall
- * wrapper, and the scroll steps through it. The type and the grid are the site's (app/sections.css): 12 columns, 32 px gutters
- * and margins, monospace labels, headings 38/41 px at weight 400. */
+ * continues the hero, and the live calculator after it stays white. Two layouts share one markup. By default the tour is an
+ * ordinary section: a head, the 3D view, then the steps one under another, each with its words and its panel. On a
+ * desktop-sized window whose visitor has not asked for reduced motion it is one stage, one window tall, in the page's flow
+ * under the hero: while it fills the window each scroll gesture plays one step on it (components/home/tour-driver.ts,
+ * ADR-0084 amendment 4). The type and the grid are the site's (app/sections.css): 12 columns, 32 px gutters and margins,
+ * monospace labels, headings 38/41 px at weight 400. */
 .demo-tour {
-  --tour-ground: #080808;
+  --tour-ground: #000000;
   --bg: #0d0d0d;
   --panel: #141414;
   --raised: #1b1b1b;
@@ -128,9 +129,6 @@
   border-radius: 12px;
   background: #101010;
 }
-.demo-tour-rail {
-  display: none;
-}
 .tour-card-head {
   display: flex;
   justify-content: space-between;
@@ -155,7 +153,7 @@
 .tour-card-head .tour-hint {
   text-align: right;
 }
-/* A read-only field: the scroll fills it. The live fields are in the calculator below. */
+/* A read-only field: its step fills it. The live fields are in the calculator below. */
 .tour-field {
   display: flex;
   flex-direction: column;
@@ -392,129 +390,54 @@
   padding: 5px 6px;
 }
 
-/* "Scroll to explore" (components/home/scroll-to-explore.tsx), at the hero's bottom right, after Scale's: the words and a
- * down arrow in a small bordered square. On a phone only the square is shown, clear of the line at the bottom left. */
-.home-hero-explore {
-  position: absolute;
-  z-index: 2;
-  right: 32px;
-  bottom: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-size: 15px;
-  line-height: 20px;
-  color: #ffffff;
-}
-.home-hero-explore-box {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid #ffffffb3;
-  border-radius: 4px;
-  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
-}
-.home-hero-explore:hover .home-hero-explore-box {
-  border-color: #ffffff;
-  background: #ffffff;
-  color: #080808;
-}
-.home-hero-explore:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 6px;
-  color: #ffffff;
-}
-@media (max-width: 760px) {
-  .home-hero-explore {
-    right: 20px;
-    bottom: 20px;
-  }
-  .home-hero-explore > span:first-child {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
-/* The pinned tour. Before the page's script has set the mode the stage is not shown, so nothing overlaps the hero. */
+/* The stepped tour ("pinned": the stage holds the window while its steps play). */
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
-  /* Where the 3D view stands on the stage, and the stage's ground: the view's own ground (the backdrop that
-   * components/home/laminate-studio.tsx draws: lighter behind the stack, darker outward) continued over the whole stage, so the
-   * view has no edge. The hero takes the same ground while the bridge plays, behind its clip. */
+  /* Where the 3D view stands on the stage, and the stage's ground: pure black, as the page and the view's own ground are
+   * (ADR-0077 amendment 25), with the one light the view draws on its ground continued over the stage, so the view has no
+   * edge: the floor's faint pool of light under the stack. */
   :root {
     --tour-scene-x: 47.3vw;
     --tour-scene-width: min(44vw, 72vh);
-    /* Two layers, as the view draws them: the floor's faint pool of light under the stack, over the backdrop's own gradient.
-     * The stops follow the view's shaders (a Gaussian for the pool, a smoothstep for the backdrop), in display values. */
+    /* The pool's stops follow the view's shader (a Gaussian), in display values. */
     --tour-stage-ground:
       radial-gradient(ellipse calc(1.156 * var(--tour-scene-width)) calc(0.58 * var(--tour-scene-width)) at var(--tour-scene-x) calc(50vh + 0.15 * var(--tour-scene-width)),
         rgb(255 255 255 / 0.06) 0%, rgb(255 255 255 / 0.0569) 12.5%, rgb(255 255 255 / 0.0485) 25%, rgb(255 255 255 / 0.0373) 37.5%,
         rgb(255 255 255 / 0.0257) 50%, rgb(255 255 255 / 0.016) 62.5%, rgb(255 255 255 / 0.0075) 75%, rgb(255 255 255 / 0.0022) 87.5%,
         rgb(255 255 255 / 0) 100%),
-      radial-gradient(ellipse calc(0.78 * var(--tour-scene-width)) 69.64vh at var(--tour-scene-x) 46vh,
-        rgb(28.6 28.6 28.6) 0%, rgb(27.8 27.8 27.8) 12.5%, rgb(25.8 25.8 25.8) 25%, rgb(22.9 22.9 22.9) 37.5%, rgb(19.6 19.6 19.6) 50%,
-        rgb(16.4 16.4 16.4) 62.5%, rgb(13.5 13.5 13.5) 75%, rgb(11.5 11.5 11.5) 87.5%, rgb(10.7 10.7 10.7) 100%),
-      rgb(10.7 10.7 10.7);
+      #000000;
   }
-  /* The wrapper starts at the top of the hero and is as tall as the scroll the tour takes plus the one screen the stage fills.
-   * Only the stage takes the pointer, and only once the bridge from the hero is done. */
+  /* The tour is one window tall from the first paint, so nothing moves when the page's script sets the mode; until it has,
+   * the stage is not shown, because its markup is still the unpinned tour's with every step up. */
   .demo-tour {
-    height: calc((var(--tour-screens) + 1) * 100vh);
-    margin-top: calc(-1 * var(--tour-hero-height, max(640px, 100svh)));
-    background: none;
-    pointer-events: none;
+    height: 100vh;
   }
-  .demo-tour:not([data-mode="pinned"]) > .demo-tour-stage,
-  .demo-tour[data-mode="pinned"]:not([data-phase]) > .demo-tour-stage {
+  .demo-tour:not([data-mode="pinned"]) > .demo-tour-stage {
     visibility: hidden;
   }
   .demo-tour[data-mode="pinned"] > .demo-tour-stage {
-    position: sticky;
-    top: 0;
-    height: 100vh;
+    position: relative;
+    height: 100%;
     padding: 0;
     overflow: hidden;
+    background: #000000;
   }
-  .demo-tour[data-mode="pinned"] > .demo-tour-stage {
+  /* Nothing of the stage shows while it comes up under the hero (ADR-0084 amendment 6): until its first step starts, with
+   * the stage filling the window, its parts and the light on its ground are not drawn. They fade in as that step begins,
+   * and go again when the tour is back at its start, out of sight. */
+  .demo-tour[data-mode="pinned"] > .demo-tour-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
     background: var(--tour-stage-ground);
   }
-  .demo-tour[data-mode="pinned"][data-phase="steps"] > .demo-tour-stage {
-    pointer-events: auto;
+  .demo-tour[data-mode="pinned"] > .demo-tour-stage::before,
+  .demo-tour[data-mode="pinned"] > .demo-tour-stage > * {
+    transition: opacity 0.9s ease;
   }
-  /* The bridge. The hero stays in the window while it plays, over the stage and with no ground of its own: the scroll then
-   * moves the hero's clip, not the page, and what the shrinking clip uncovers is the stage, with the stack standing on it.
-   * When the bridge is done the hero returns to the page's flow, above the window and under the stage. */
-  main:has(> .demo-tour[data-mode="pinned"][data-phase="bridge"]) > .home-hero {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background: none;
-  }
-  /* The tour writes the bridge's moves on the hero as custom properties (components/home/tour-bridge.ts); these rules apply
-   * only while it has, so at rest the hero is exactly as app/home.css sets it. The words leave; the clip keeps its middle,
-   * shrinks into a card and is carried onto the top ply by one transform; the shades laid over it for the words go. */
-  .home-hero[style*="--tour-copy"] > :not(.home-hero-media) {
-    filter: opacity(var(--tour-copy, 1));
-    translate: 0 var(--tour-copy-lift, 0px);
-    visibility: var(--tour-copy-visibility, visible);
-  }
-  .home-hero[style*="--tour-media"] > .home-hero-media {
-    transform: var(--tour-media-transform, none);
-    transform-origin: 0 0;
-    clip-path: var(--tour-media-clip, none);
-    opacity: var(--tour-media-opacity, 1);
-    visibility: var(--tour-media-visibility, visible);
-    will-change: transform;
-  }
-  .home-hero[style*="--tour-shade"] > .home-hero-media::after {
-    opacity: var(--tour-shade, 1);
+  .demo-tour[data-mode="pinned"][data-stop="0"]:not([data-moving]) > .demo-tour-stage::before,
+  .demo-tour[data-mode="pinned"][data-stop="0"]:not([data-moving]) > .demo-tour-stage > * {
+    opacity: 0;
+    transition: none;
   }
   .demo-tour[data-mode="pinned"] .demo-tour-head {
     position: absolute;
@@ -525,7 +448,9 @@
     white-space: nowrap;
   }
   /* The view stands in the middle, between the words and the panel, the full height of the stage; its sides fade into the
-   * ground so the view has no edge. */
+   * ground so the view has no edge. The tour steers the view, so its own drag is off (components/home/laminate-scene.tsx),
+   * and a finger on it scrolls the page as it does beside it: the view's controls write `touch-action: none` on the box
+   * they listen on, which would otherwise keep every touch. */
   .demo-tour[data-mode="pinned"] .demo-tour-scene {
     position: absolute;
     top: 0;
@@ -550,6 +475,9 @@
     border-radius: 0;
     background: none;
   }
+  .demo-tour[data-mode="pinned"] .demo-tour-scene .hero-laminate-canvas > div {
+    touch-action: pan-y !important;
+  }
   .demo-tour[data-mode="pinned"] .demo-tour-note {
     position: absolute;
     left: 0;
@@ -563,7 +491,9 @@
     display: block;
     pointer-events: none;
   }
-  /* One step at a time: its words at the left, its panel at the right, both centred on the stage's height. */
+  /* One step at a time: its words at the left, its panel at the right, both centred on the stage's height. A step's move
+   * starts as its words come up, so they come up quickly: the step before is gone in 0.15 s and this one is up 0.2 s
+   * after that, by when the clock has what it types still ahead of it (components/home/tour-timeline.ts). */
   .demo-tour[data-mode="pinned"] .demo-tour-step {
     position: absolute;
     inset: 0;
@@ -572,24 +502,24 @@
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+    transition: opacity 0.15s linear, visibility 0s linear 0.15s;
   }
   .demo-tour[data-mode="pinned"] .demo-tour-step[data-active] {
     opacity: 1;
     visibility: visible;
-    transition: opacity 0.4s ease 0.15s, visibility 0s;
+    transition: opacity 0.2s linear 0.1s, visibility 0s;
   }
-  .demo-tour[data-mode="pinned"][data-phase="steps"] .demo-tour-step[data-active] > * {
+  .demo-tour[data-mode="pinned"] .demo-tour-step[data-active] > * {
     pointer-events: auto;
   }
   .demo-tour[data-mode="pinned"] .demo-tour-text {
     grid-column: 1 / 5;
     transform: translateY(14px);
-    transition: transform 0.5s ease;
+    transition: transform 0.3s ease-out;
   }
   .demo-tour[data-mode="pinned"] .demo-tour-step[data-active] .demo-tour-text {
     transform: none;
-    transition-delay: 0.15s;
+    transition-delay: 0.1s;
   }
   .demo-tour[data-mode="pinned"] .demo-tour-text h3,
   .demo-tour[data-mode="pinned"] .demo-tour-text > p:last-child {
@@ -600,52 +530,6 @@
     max-height: 100%;
     overflow: hidden;
     background: #101010f2;
-  }
-  /* Where the tour is: five ticks along the foot of the stage, the current one filling with the scroll. */
-  .demo-tour[data-mode="pinned"] .demo-tour-rail {
-    position: absolute;
-    left: 32px;
-    right: 32px;
-    bottom: 28px;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    column-gap: 32px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-  .demo-tour[data-mode="pinned"][data-phase="steps"] .demo-tour-rail {
-    opacity: 1;
-  }
-  .demo-tour-rail li {
-    position: relative;
-    padding-top: 12px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    line-height: 16px;
-    letter-spacing: 0.06em;
-    color: #6f6f6f;
-    transition: color 0.3s;
-  }
-  .demo-tour-rail li[data-active] {
-    color: var(--text);
-  }
-  .demo-tour-rail li::before,
-  .demo-tour-rail li::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background: var(--line);
-  }
-  .demo-tour-rail li::after {
-    background: var(--text);
-    transform: scaleX(var(--tour-fill, 0));
-    transform-origin: 0 50%;
   }
 }
 /* A smaller desktop: the view is a little narrower, so the stack clears the words and the panel. */
@@ -725,9 +609,6 @@
   }
   .demo-tour[data-mode="pinned"] .demo-tour-note {
     bottom: 64px;
-  }
-  .demo-tour[data-mode="pinned"] .demo-tour-rail {
-    bottom: 20px;
   }
 }
 /* A very low window: the engine's panel keeps the answer and drops the request's lines. */

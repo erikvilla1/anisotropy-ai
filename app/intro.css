@@ -44,6 +44,9 @@
  * its left edge. */
 .intro-win {
   display: block;
+  /* The padding lies outside the stated height, so a window that is "100%" tall is the line and its padding, not the line
+   * less its padding, which cut the random letters of a large, tightly set line short. */
+  box-sizing: content-box;
   overflow: hidden;
   margin: calc(-1 * var(--intro-pad, 6px)) 0 calc(-1 * var(--intro-pad, 6px)) calc(-1 * var(--intro-pad, 6px));
   padding: var(--intro-pad, 6px) 0 var(--intro-pad, 6px) var(--intro-pad, 6px);
@@ -91,4 +94,50 @@
 .intro-overlay[data-armed] .intro-win-in,
 .intro-overlay[data-armed] .intro-roll {
   will-change: transform, opacity;
+}
+/* The way out (prepareOutro in components/intro-text.ts): an element whose words were taken away stays in the page for a
+ * screen reader and takes no room from the pointer. */
+[data-outro-done] {
+  opacity: 0;
+  pointer-events: none;
+}
+/* The text cursor. `.type-caret` is the page's own: an empty inline mark put straight after a text's last word. It takes no
+ * room, so the line keeps its place, and it sits on the baseline at the text's end; from there it draws a thin line a
+ * little taller than the capitals, a little after the last letter, which blinks once a second as a cursor at rest does.
+ * While a copy plays over the text it is transparent with the text, and the copy carries its own (`.intro-caret`, placed on
+ * the page's by components/intro-text.ts), which steps along with the end of the line and does not blink. The blink starts
+ * again, lit, when the copy goes. A visitor who asked for reduced motion gets a steady line. */
+.type-caret {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: baseline;
+}
+.type-caret::after {
+  content: "";
+  position: absolute;
+  left: 0.1em;
+  bottom: -0.05em;
+  width: max(2px, 0.045em);
+  height: 0.82em;
+  background: currentColor;
+  animation: type-caret-blink 1.06s step-end infinite;
+}
+.intro-caret {
+  position: absolute;
+  display: block;
+}
+[data-intro-run] .type-caret::after {
+  animation: none;
+}
+@keyframes type-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .type-caret::after {
+    animation: none;
+  }
 }
