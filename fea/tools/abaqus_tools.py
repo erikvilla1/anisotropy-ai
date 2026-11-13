@@ -18,8 +18,9 @@ alphabet, and every file argument is a bare name in the one work folder. Whoever
 chooses among three names: no script, no path and no number comes from them (ADR-0001). A tool whose output is already in the folder is
 refused, so nothing is written over, and a chain with a gap (send before run) is refused whole before anything runs.
 
-Until an upload has somewhere to go (ADR-0094, step 5), `send` hands the bundle to the comparison on this machine: it solves the same
-spec with our kernel into `<work>/ours/` and writes `<job>-comparison.json`, what `abaqus_upload.py compare` gives.
+`send` hands the bundle to the comparison on this machine: it solves the same spec with our kernel into `<work>/ours/` and writes
+`<job>-comparison.json`, what `abaqus_upload.py compare` gives. It does not pass the bundle on to the site: that is the connector's own
+`--send` (ADR-0094, step 5), which this tool does not use yet.
 
 Every call is written to `<work>/abaqus-tools.json`: the tool, who chose it, the command as run, when, how long, what was said and
 each file it left with its size and SHA-256. Abaqus/CAE ends with exit code 0 whatever happened (seen on Abaqus 2025), so a tool

@@ -20,6 +20,7 @@ export const CONTAINER_VARIABLES = [
   "ANISOTROPY_R2_BUCKET", "ANISOTROPY_R2_ENDPOINT", "ANISOTROPY_R2_ACCESS_KEY_ID", "ANISOTROPY_R2_SECRET_ACCESS_KEY",
   "ANISOTROPY_ASSISTANT_PROVIDER", "ANISOTROPY_ASSISTANT_MODEL", "ANTHROPIC_API_KEY",
   "ANISOTROPY_JOBS_PER_USER_PER_DAY",
+  "ANISOTROPY_FOUNDER_EMAILS", "ANISOTROPY_CONNECTOR_UPLOADS",
   "ANISOTROPY_GIT_COMMIT",
 ] as const;
 
@@ -53,10 +54,12 @@ export function apiEnvironment(env: object): Record<string, string> {
 }
 
 /** What a solver container does not get: the sign-in (no browser reaches it; the consumer's requests carry no token), the browser's
- * origins, the assistant and the per-user cap, which are the API container's business. */
+ * origins, the assistant, the per-user cap, and who sees an upload and how the connector's route is opened (ADR-0094 step 5: both
+ * are refused by the API without the sign-in), which are the API container's business. */
 const NOT_FOR_SOLVERS: readonly ContainerVariable[] = [
   "ANISOTROPY_ACCESS_TEAM_DOMAIN", "ANISOTROPY_ACCESS_AUD", "ANISOTROPY_ALLOWED_ORIGINS",
   "ANISOTROPY_ASSISTANT_PROVIDER", "ANISOTROPY_ASSISTANT_MODEL", "ANTHROPIC_API_KEY", "ANISOTROPY_JOBS_PER_USER_PER_DAY",
+  "ANISOTROPY_FOUNDER_EMAILS", "ANISOTROPY_CONNECTOR_UPLOADS",
 ];
 
 /** A solver container: the database, the store and the commit, and the role `solver`. */

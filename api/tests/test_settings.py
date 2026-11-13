@@ -222,3 +222,37 @@ def test_a_role_needs_the_jobs_table_and_the_store(role):
 def test_an_unknown_role_is_refused():
     with pytest.raises(RuntimeError, match="must be one of queue, solver"):
         load_settings({**ON, **STORE, JOB_ROLE_VARIABLE: "worker"})
+
+
+from anisotropy_api.settings import CONNECTOR_UPLOADS_VARIABLE, FOUNDER_EMAILS_VARIABLE
+
+BEHIND_ACCESS = {**ON, ACCESS_TEAM_DOMAIN_VARIABLE: "myteam.cloudflareaccess.com", ACCESS_AUDIENCE_VARIABLE: "a" * 64}
+
+
+def test_no_founder_sees_every_upload_and_the_connectors_route_keeps_access_unless_set():
+    for environ in (ON, OFF, BEHIND_ACCESS, {**BEHIND_ACCESS, CONNECTOR_UPLOADS_VARIABLE: " off "}, {**ON, CONNECTOR_UPLOADS_VARIABLE: "off"}):
+        assert load_settings(environ).founder_emails == frozenset() and load_settings(environ).connector_uploads is False
+
+
+def test_the_founders_are_named_by_email_behind_access():
+    settings = load_settings({**BEHIND_ACCESS, FOUNDER_EMAILS_VARIABLE: " One@Example.com , two@example.com "})
+    assert settings.founder_emails == frozenset({"one@example.com", "two@example.com"})
+
+
+@pytest.mark.parametrize("value", ["erik", "one@example.com;two@example.com", "one@example.com,", "one@example.com two@example.com", "@example.com"])
+def test_a_founders_list_that_is_not_emails_is_refused(value):
+    with pytest.raises(RuntimeError, match=FOUNDER_EMAILS_VARIABLE):
+        load_settings({**BEHIND_ACCESS, FOUNDER_EMAILS_VARIABLE: value})
+
+
+def test_founders_without_access_are_refused_not_ignored():
+    with pytest.raises(RuntimeError, match="only Cloudflare Access gives"):
+        load_settings({**ON, FOUNDER_EMAILS_VARIABLE: "one@example.com"})
+
+
+def test_the_connectors_route_is_opened_to_its_token_only_by_the_word_on_behind_access():
+    assert load_settings({**BEHIND_ACCESS, CONNECTOR_UPLOADS_VARIABLE: " ON "}).connector_uploads is True
+    with pytest.raises(RuntimeError, match="must be 'on' or 'off'"):
+        load_settings({**BEHIND_ACCESS, CONNECTOR_UPLOADS_VARIABLE: "yes"})
+    with pytest.raises(RuntimeError, match="without Access\\s+the route takes an upload token already"):
+        load_settings({**ON, CONNECTOR_UPLOADS_VARIABLE: "on"})

@@ -28,7 +28,7 @@ from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 
-from .access import AccessMiddleware
+from .access import CONNECTOR_UPLOADS, AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
@@ -36,17 +36,23 @@ from .proposals import model_view_of_form, source_guard
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, NotOffered, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
                           studio_command)
-from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, fetch_project, fetch_run, git_commit, list_projects, list_runs,
-                      owns_project, project_jobs, record_run, stop_orphans, update_project, upsert_project)
+from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, count_uploads, delete_upload, fetch_project, fetch_run, fetch_upload,
+                      git_commit, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
+                      live_upload_tokens, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
+                      upsert_project, use_upload_token)
 from .settings import all_tests, allowed_origins, environment, load_settings
-from .storage import R2Store, content_type, download_name, restore, sync
+from .storage import FolderStore, R2Store, content_type, download_name, restore, sync, upload_key
+from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_token, ours_of,
+                      token_digest)
+from .uploads import tool_command as upload_command
 from .schemas import (
     AnalysisRequest, AnalysisResponse, AssistantInfo, CaseRequest, CouponTests, CaseResponse, ComparisonOutput, CouponCheckRequest, CouponCheckResponse, CouponJobOutput,
     LiveSolveResponse, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
-    ProjectRename, ProposalRequest, ProposalResponse, RunOutput, RunSummary, VerificationResponse,
+    ProjectRename, ProposalRequest, ProposalResponse, RunOutput, RunSummary, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
+    VerificationResponse,
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
@@ -56,6 +62,8 @@ ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
 COUPON_JOBS = "/v1/coupon-jobs"
 SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only its Durable Object reaches (worker/index.ts)
 PROJECTS = "/v1/projects"
+UPLOADS = "/v1/abaqus-uploads"  # the uploads from Abaqus, each its owner's alone (ADR-0094 part 6)
+UPLOAD_TOKENS = "/v1/upload-tokens"  # what the connector sends with
 
 
 def job_recorder(app: FastAPI):
@@ -103,11 +111,16 @@ async def lifespan(app: FastAPI):
     app.state.assistant = assistant_for(settings.assistant.provider, settings.assistant.model)  # the template unless a provider is named (ADR-0052)
     # our kernel's answer to every edit (ADR-0086): warm workers, started on the first live request
     app.state.live = LiveSolver(studio_command(), Path(tempfile.gettempdir()) / "anisotropy-live", settings.live_workers)
+    # The uploads from Abaqus (ADR-0094 part 6): in the bucket under their own prefix, or in a folder of the local disk without one.
+    app.state.uploads = Uploads(store if store is not None else FolderStore(LOCAL_UPLOADS), upload_command(), founders=settings.founder_emails)
     # Behind Cloudflare Access, every request but /healthz must carry a valid token (ADR-0056); None means no sign-in, the local API.
+    # The connector's one route passes on its upload token alone only when the settings say so (ADR-0094 step 5).
+    app.state.connector_uploads = settings.connector_uploads
     app.state.access_verifier = access_verifier(settings.access) if settings.access.on else None
     yield
     app.state.live.close()
     app.state.access_verifier = None
+    app.state.connector_uploads = False
     if app.state.records is not None:
         app.state.records.dispose()
         app.state.records = None
@@ -131,7 +144,7 @@ app.add_middleware(AccessMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(allowed_origins(environment())),
-    allow_methods=["GET", "POST", "PUT", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor"],
     expose_headers=[RUN_ID_HEADER, "Location"],
     allow_credentials=False,
@@ -600,6 +613,286 @@ def rename_project(project_id: uuid.UUID, change: ProjectRename, actor: Actor, r
     except SQLAlchemyError as exc:
         raise _database_error(exc) from exc
     return ProjectOutput.of(row)
+
+
+# ----------------------------------------------------------------------------- the uploads from Abaqus (ADR-0094 part 6, step 5)
+
+def _email(request: Request) -> str | None:
+    return getattr(request.state, "user_email", None)
+
+
+def _uploads(request: Request) -> Uploads:
+    uploads = getattr(request.app.state, "uploads", None)
+    if uploads is None:
+        raise HTTPException(status_code=503, detail="Uploads are not set up: the API was started without its startup step")
+    return uploads
+
+
+@app.post(UPLOAD_TOKENS, status_code=201, response_model=UploadTokenCreated)
+def create_upload_token(wanted: UploadTokenInput, actor: Actor, request: Request) -> UploadTokenCreated:
+    """A token for the connector (ADR-0094 part 6): what `anisotropy_connector.py --send` sends a bundle with, in the name of who
+    created it. The token is in this answer and nowhere else: the API keeps its SHA-256 only. At most a few live tokens per person;
+    cancel one to make another."""
+    engine = _records_engine(request)
+    token, digest, hint = new_token()
+    try:
+        if live_upload_tokens(engine, actor=actor, user_email=_email(request)) >= MAX_TOKENS:
+            raise HTTPException(status_code=429, detail=f"You have {MAX_TOKENS} tokens that are not cancelled; cancel one to create another")
+        row = insert_upload_token(engine, token_id=uuid.uuid4(), actor=actor, user_email=_email(request), name=wanted.name, token_sha256=digest,
+                                  hint=hint, now=dt.datetime.now(dt.timezone.utc))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return UploadTokenCreated.with_token(row, token)
+
+
+@app.get(UPLOAD_TOKENS, response_model=list[UploadTokenOutput])
+def list_upload_tokens_endpoint(actor: Actor, request: Request) -> list[UploadTokenOutput]:
+    """The requester's tokens, newest first, the cancelled ones among them; never a token itself."""
+    engine = _records_engine(request)
+    try:
+        rows = list_upload_tokens(engine, actor=actor, user_email=_email(request))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return [UploadTokenOutput.of(row) for row in rows]
+
+
+@app.delete(UPLOAD_TOKENS + "/{token_id}", response_model=UploadTokenOutput)
+def cancel_upload_token(token_id: uuid.UUID, actor: Actor, request: Request) -> UploadTokenOutput:
+    """Cancel a token: from now on a bundle sent with it is refused. Its row stays, so the uploads it sent still name it. 404 for a
+    token that is not the requester's."""
+    engine = _records_engine(request)
+    try:
+        row = revoke_upload_token(engine, token_id, actor=actor, user_email=_email(request), now=dt.datetime.now(dt.timezone.utc))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No token {token_id} of yours")
+    return UploadTokenOutput.of(row)
+
+
+async def _read_bundle(request: Request) -> bytes:
+    """The request's body, a bundle's zip as it is, refused past the size a bundle may have before more of it is read."""
+    too_large = HTTPException(status_code=413, detail=f"A bundle is at most {MAX_BUNDLE_BYTES} bytes as sent")
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_BUNDLE_BYTES:
+        raise too_large
+    received = bytearray()
+    async for chunk in request.stream():
+        received += chunk
+        if len(received) > MAX_BUNDLE_BYTES:
+            raise too_large
+    if not received:
+        raise HTTPException(status_code=422, detail="The request has no body: send the bundle's zip, <job>-anisotropy.zip, as the body")
+    return bytes(received)
+
+
+def _token_owner(request: Request, authorization: Annotated[str | None, Header()] = None):
+    """Who the connector's request speaks for: the owner of the upload token it carries. 401 for no token, an unknown one or a
+    cancelled one, in the same words, before any of the body is read."""
+    engine = _records_engine(request)
+    token = bearer(authorization)
+    try:
+        row = None if token is None else use_upload_token(engine, token_digest(token), dt.datetime.now(dt.timezone.utc))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    if row is None:
+        raise HTTPException(status_code=401, headers={"WWW-Authenticate": "Bearer"}, detail=(
+            "This route takes a bundle sent with an upload token, and the request carries none that stands: create one on the site and "
+            "send it as  Authorization: Bearer <token>  (a cancelled token is refused)"))
+    return row
+
+
+async def _connector_bundle(request: Request, owner=Depends(_token_owner)):
+    return owner, await _read_bundle(request)
+
+
+def _requesters_upload(request: Request, actor: str, upload_id: uuid.UUID, *, reading: bool):
+    """The upload by its id when it is the requester's; when only reading, also when the requester is a founder (ADR-0094 part 6). 404
+    otherwise, so no upload is confirmed to a stranger."""
+    engine = _records_engine(request)
+    try:
+        row = fetch_upload(engine, upload_id)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    mine = row is not None and owns_project(row, actor, _email(request))
+    if row is None or not (mine or (reading and _uploads(request).sees_all(_email(request)))):
+        raise HTTPException(status_code=404, detail=f"No upload {upload_id} of yours")
+    return engine, row
+
+
+def _our_run(request: Request, row, job_id: uuid.UUID | None) -> Job:
+    """The finished run of ours an upload stands beside: the job named, or, with none named, the owner's newest finished job of the
+    coupon the bundle names. Raises `NotCompared` with the reason when there is none."""
+    jobs = _coupon_jobs(request)
+    if job_id is None:
+        if not row.coupon:
+            raise NotCompared("the bundle names no coupon of ours (the connector's --coupon) and no run was named: name one with job_id")
+        found = latest_done_job(request.app.state.records, coupon=row.coupon, actor=row.actor, user_email=row.user_email)
+        if found is None:
+            raise NotCompared(f"you have no finished run of {row.coupon} here to stand beside it: run the coupon, or name a run with job_id")
+        job_id = found.id
+    job = jobs.get(job_id)
+    if job is None:
+        raise NotCompared(f"there is no coupon job {job_id}")
+    if job.state != "done":
+        raise NotCompared(f"coupon job {job_id} is {job.state}; an upload stands beside a run that is done")
+    return job
+
+
+def _compare_upload(request: Request, row, job_id: uuid.UUID | None, *, asked: bool):
+    """Put the stored bundle beside a run of ours and write the job, the verdict and the comparison to its row. When no comparison
+    can be made: at an upload (`asked` False) the row keeps the reason and the upload stands; when the owner asked for this comparison,
+    the reason is the answer, 409 or 503, and the row keeps what it had."""
+    uploads, engine = _uploads(request), request.app.state.records
+    try:
+        if not row.in_scope:
+            raise NotCompared("the bundle is out of the comparison's scope; the upload's facts say what our reader did not take")
+        job = _our_run(request, row, job_id)
+        with uploads.folder() as folder:
+            bundle = Path(folder) / "bundle.zip"
+            try:
+                uploads.store.get(row.object_key, bundle)
+                ours, deck = ours_of(_coupon_jobs(request), job, Path(folder) / "ours")
+            except NotCompared:
+                raise
+            except Exception as exc:  # the store's own errors or the disk's
+                raise ToolFailed(f"the files could not be fetched: {str(exc).splitlines()[0] if str(exc) else type(exc).__name__}") from exc
+            found = uploads.compare(bundle, ours, deck)
+        found["compared_by"] = {"api": version("anisotropy-api"), "git_commit": getattr(request.app.state, "git_commit", None)}
+        return update_upload(engine, row.id, job_id=job.id, verdict=found["verdict"], comparison=found,
+                             compared_at=dt.datetime.now(dt.timezone.utc), not_compared=None)
+    except (NotCompared, ToolFailed) as exc:
+        failed = isinstance(exc, ToolFailed)
+        if asked:
+            raise HTTPException(status_code=503 if failed else 409, detail=f"Not compared: {exc}") from exc
+        try:
+            return update_upload(engine, row.id, not_compared=f"the comparison did not run: {exc}" if failed else str(exc))
+        except SQLAlchemyError as inner:
+            raise _database_error(inner) from inner
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+
+
+def _receive_upload(request: Request, data: bytes, *, actor: str, user_email: str | None, token_id: uuid.UUID | None, may_train: bool,
+                    job_id: uuid.UUID | None) -> UploadOutput:
+    """Check the bundle, store it under its own prefix with its owner's row, and put it beside a run of ours when there is one."""
+    engine, uploads = _records_engine(request), _uploads(request)
+    try:
+        if count_uploads(engine, actor=actor, user_email=user_email) >= MAX_UPLOADS:
+            raise HTTPException(status_code=429, detail=f"You have {MAX_UPLOADS} uploads stored; delete one to send another")
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    upload_id = uuid.uuid4()
+    key = upload_key(str(upload_id))
+    with uploads.folder() as folder:
+        bundle = Path(folder) / "bundle.zip"
+        bundle.write_bytes(data)
+        try:
+            facts = uploads.check(bundle)
+        except UploadRefused as exc:
+            raise HTTPException(status_code=422, detail="Not a bundle this version takes, so nothing was stored: " + "; ".join(exc.problems)) from exc
+        except ToolFailed as exc:
+            raise HTTPException(status_code=503, detail=f"The bundle was not checked, so nothing was stored: {exc}") from exc
+        stated = facts["bundle"]
+        try:
+            uploads.store.put(key, bundle, "application/zip", f'attachment; filename="{upload_id}.zip"')
+        except Exception as exc:  # boto3 raises its own families, the disk OSError: either way the bundle is not kept
+            raise HTTPException(status_code=503, detail=f"The bundle could not be stored: {str(exc).splitlines()[0] if str(exc) else type(exc).__name__}") from exc
+    try:
+        row = insert_upload(engine, id=upload_id, actor=actor, user_email=user_email, token_id=token_id, created_at=dt.datetime.now(dt.timezone.utc),
+                            bundle_sha256=hashlib.sha256(data).hexdigest(), bundle_bytes=len(data), object_key=key, units=stated["units"],
+                            job=stated.get("job"), coupon=stated.get("coupon"), in_scope=bool(facts["in_scope"]), facts=facts, may_train=may_train)
+    except SQLAlchemyError as exc:
+        try:
+            uploads.store.delete(key)  # no row names it, so nobody could ever read or delete it
+        except Exception:  # noqa: BLE001
+            print(f"the bundle {key} was stored and its row was not written; it could not be removed either", flush=True)
+        raise _database_error(exc) from exc
+    return UploadOutput.of(_compare_upload(request, row, job_id, asked=False))
+
+
+OurRun = Annotated[uuid.UUID | None, Query(description="the finished coupon job of ours to compare beside; default the owner's newest of the bundle's coupon")]
+
+
+@app.post(UPLOADS, status_code=201, response_model=UploadOutput)
+def send_upload(actor: Actor, request: Request, data: Annotated[bytes, Depends(_read_bundle)], job_id: OurRun = None, may_train: bool = False) -> UploadOutput:
+    """Send a bundle from the signed-in browser (ADR-0094 step 5): the request's body is the zip the connector wrote. It is checked
+    by `fea/tools/abaqus_upload.py check`; one that breaks the format is refused with every reason, 422, and nothing is stored. A bundle
+    is stored under its own prefix and belongs to the requester: the signed-in email behind Cloudflare Access, the actor locally. It
+    is then put beside a finished run of ours, the job `job_id` names or the requester's newest of the coupon the bundle names, and
+    the answer carries the verdict and the comparison, or `not_compared` with the reason. `may_train` is the box of part 6, off unless
+    sent. 413 past the size a bundle may have, 429 past the number a person may store."""
+    return _receive_upload(request, data, actor=actor, user_email=_email(request), token_id=None, may_train=may_train, job_id=job_id)
+
+
+@app.post(CONNECTOR_UPLOADS, status_code=201, response_model=UploadOutput)
+def send_upload_from_connector(request: Request, sent: Annotated[tuple, Depends(_connector_bundle)], job_id: OurRun = None) -> UploadOutput:
+    """Send a bundle from the connector (ADR-0094 step 5): `anisotropy_connector.py --send` under the user's own Abaqus, with an upload
+    token as `Authorization: Bearer <token>`. The upload belongs to who created the token; everything else is `POST /v1/abaqus-uploads`.
+    401 without a token that stands, a cancelled one included. Behind Cloudflare Access this route is reached without Access's token
+    only when ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application lets the path through."""
+    owner, data = sent
+    return _receive_upload(request, data, actor=owner.actor, user_email=owner.user_email, token_id=owner.id, may_train=False, job_id=job_id)
+
+
+@app.get(UPLOADS, response_model=list[UploadOutput])
+def list_uploads_endpoint(actor: Actor, request: Request, limit: Annotated[int, Query(ge=1, le=200)] = 50) -> list[UploadOutput]:
+    """The requester's uploads, newest first, without their facts and comparisons; a founder named in the settings sees every
+    owner's (ADR-0094 part 6)."""
+    engine = _records_engine(request)
+    try:
+        rows = list_uploads(engine, actor=actor, user_email=_email(request), everyone=_uploads(request).sees_all(_email(request)), limit=limit)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return [UploadOutput.of(row, full=False) for row in rows]
+
+
+@app.get(UPLOADS + "/{upload_id}", response_model=UploadOutput)
+def upload_detail(upload_id: uuid.UUID, actor: Actor, request: Request) -> UploadOutput:
+    """One upload with what the check found and, once compared, the comparison. 404 for anyone but its owner and the founders."""
+    _engine, row = _requesters_upload(request, actor, upload_id, reading=True)
+    return UploadOutput.of(row)
+
+
+@app.get(UPLOADS + "/{upload_id}/bundle")
+def upload_bundle(upload_id: uuid.UUID, actor: Actor, request: Request) -> Response:
+    """The bundle as it was sent, the same bytes: a redirect to a short-lived link when a bucket holds it, the file itself otherwise."""
+    _engine, row = _requesters_upload(request, actor, upload_id, reading=True)
+    store = _uploads(request).store
+    try:  # the job's name is the user's own text: it names the download only when it is a plain file name
+        filename = download_name(f"{row.job}-anisotropy.zip", ".zip") if row.job else f"{row.id}.zip"
+    except ValueError:
+        filename = f"{row.id}.zip"
+    if isinstance(store, FolderStore):
+        path = store.path(row.object_key)
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail=f"The bundle of upload {upload_id} is no longer on this disk")
+        return FileResponse(path, media_type="application/zip", filename=filename)
+    return RedirectResponse(store.link(row.object_key, filename=filename), status_code=307)
+
+
+@app.post(UPLOADS + "/{upload_id}/compare", response_model=UploadOutput)
+def compare_upload(upload_id: uuid.UUID, actor: Actor, request: Request, job_id: OurRun = None) -> UploadOutput:
+    """Put the upload beside a run of ours again, the one `job_id` names or the owner's newest of the bundle's coupon: after a first
+    run of the coupon, or beside another run. The row then holds this comparison in place of the last; when none can be made the
+    reason is answered, 409, and the row keeps what it had. Its owner alone."""
+    _engine, row = _requesters_upload(request, actor, upload_id, reading=False)
+    return UploadOutput.of(_compare_upload(request, row, job_id, asked=True))
+
+
+@app.delete(UPLOADS + "/{upload_id}", status_code=204)
+def delete_upload_endpoint(upload_id: uuid.UUID, actor: Actor, request: Request) -> Response:
+    """Delete an upload: its bundle from the store, then its row with the comparison. Its owner alone; nothing of it is kept."""
+    engine, row = _requesters_upload(request, actor, upload_id, reading=False)
+    try:
+        _uploads(request).store.delete(row.object_key)
+    except Exception as exc:  # the row stays while the bundle may still be there, so the delete can be asked again
+        raise HTTPException(status_code=503, detail=f"The bundle could not be deleted, so the upload stands: {str(exc).splitlines()[0] if str(exc) else type(exc).__name__}") from exc
+    try:
+        delete_upload(engine, row.id)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return Response(status_code=204)
 
 
 @app.get(COUPON_JOBS, response_model=list[CouponJobOutput])

@@ -416,7 +416,7 @@ CONNECTOR_FILES = {"anisotropy_connector.py": TOOLS, "abaqus_every_output.py": T
                    "bundle.py": TOOLS.parent / "src" / "anisotropy_fea"}
 CONNECTOR_README = """The Anisotropy connector: one command under your own Abaqus that turns a finished job into one file to send.
 
-Keep these files together in one folder. Nothing is sent anywhere: the command writes <job>-anisotropy.zip beside your ODB.
+Keep these files together in one folder. Nothing is sent anywhere unless you ask: the command writes <job>-anisotropy.zip beside your ODB.
 
 The results and the input file Abaqus solved (no seat of Abaqus/CAE is used):
 
@@ -430,6 +430,10 @@ command prints: the bundle's path, or "refused:" with the reason. It also writes
 
 --units states the system your model is written in, mm-MPa or m-Pa: an Abaqus model carries none.
 The job must ask for S and E at each ply's middle section point, and RF, as the package's input file does.
+
+To send the bundle as well, add  --send https://<the site>/api  to either command. It goes with the upload token you
+created on the site: put the token in a file and name it with --token-file, or set ANISOTROPY_UPLOAD_TOKEN. Never put the
+token on the command line. The upload is yours alone, and the command prints whether it agrees with our run.
 """
 
 

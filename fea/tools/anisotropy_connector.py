@@ -3,6 +3,7 @@
     abaqus python anisotropy_connector.py <job>.odb --units mm-MPa
         [--inp <job>.inp] [--journal <model>.jnl] [--out <bundle>.zip] [--step Step-1] [--frame -1] [--instance COUPON-1] [--coupon <name>]
     abaqus cae noGUI=anisotropy_connector.py -- <job>.odb --units mm-MPa --cae <model>.cae [--model Model-1]
+    ... --send https://<the site>/api [--token-file <file>] [--our-run <id of a run of ours>]
 
 The first form needs no seat of Abaqus/CAE. It reads the job's ODB as `abaqus_every_output.py` does (every element and ply at each
 layer's middle section point, and the reactions), takes the input file Abaqus solved from beside the ODB, and writes
@@ -10,9 +11,16 @@ layer's middle section point, and the reactions), takes the input file Abaqus so
 Abaqus/CAE without its window and also reads the model as built from the `.cae` (the parts, the materials, the layup ply by ply, the
 steps, the boundary conditions, the output requests) into `<job>-model.json`, and takes the `.jnl` beside the `.cae` as text.
 
-The deck system is stated, never inferred: an Abaqus model carries no units (ADR-0002, ADR-0003). Nothing is sent anywhere: the
-command writes one file, and the user decides where it goes. No path of the user's machine is written into the manifest; a journal
-is the user's own file and goes in as it is.
+The deck system is stated, never inferred: an Abaqus model carries no units (ADR-0002, ADR-0003). Nothing is sent anywhere unless the
+user asks with `--send`: the command writes one file, and the user decides where it goes. No path of the user's machine is written
+into the manifest; a journal is the user's own file and goes in as it is.
+
+With `--send <address>` (step 5) the bundle just written, and nothing else, goes to Anisotropy at that address with the upload token the
+user created on the site: read from the file `--token-file` names, or from the environment variable ANISOTROPY_UPLOAD_TOKEN, never from
+the command line, where Abaqus would write it into `abaqus.rpy`. The token is not printed. The address must be https, or this machine
+itself. The upload is its owner's alone; the answer says whether it agrees with a run of ours (`--our-run`, or the owner's newest
+finished run of `--coupon`). A redirect is not followed, so the token is never passed on to another address. When the sending fails
+the bundle is still beside the ODB, and the line printed says why.
 
 The connector is four files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`.
 `uv run python tools/abaqus_upload.py connector --out anisotropy-connector.zip` writes them as one zip to hand over; in the repository
@@ -40,14 +48,25 @@ import platform
 import shutil
 import sys
 import tempfile
+import os
 import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
-CONNECTOR = "anisotropy-connector 0.2.0"
+CONNECTOR = "anisotropy-connector 0.3.0"
 MODEL_FORMAT = 1
 UNITS = ("mm-MPa", "m-Pa")
 FILES = ("anisotropy_connector.py", "bundle.py", "abaqus_every_output.py", "abaqus_extract_fields.py")  # what is handed over, together
 TEXT_LIMIT = 400  # an Abaqus object printed as text is cut here: a region's repr can run to thousands of characters
+SEND_ROUTE = "/v1/connector/uploads"  # the one route of the API an upload token opens (ADR-0094 step 5)
+TOKEN_VARIABLE = "ANISOTROPY_UPLOAD_TOKEN"
+TOKEN_PREFIX = "anisotropy_upload_"
+SEND_TIMEOUT_S = 300.0
+THIS_MACHINE = ("localhost", "127.0.0.1", "::1")
+VERDICTS = {"agrees": "Agrees with ours", "differs": "Differs from ours", "incomplete": "Not every part could be compared",
+            "refused": "The comparison does not take this bundle beside that run"}
 
 
 class Refused(Exception):
@@ -404,6 +423,110 @@ def files_of(args, folder: Path, read_job=None, read_model=None) -> tuple[dict, 
     return files, results
 
 
+# ------------------------------------------------------------------------------------------------ sending the bundle (step 5)
+
+class NotSent(Exception):
+    """The bundle was written and could not be sent."""
+
+
+def send_address(address: str, our_run=None) -> str:
+    """Where the bundle is posted: the site's API address with the connector's route. https only, apart from this machine itself,
+    because the request carries the token."""
+    parts = urllib.parse.urlsplit(address.strip())
+    if parts.scheme not in ("http", "https") or not parts.hostname or parts.query or parts.fragment or parts.username or parts.password:
+        raise Refused("--send takes the address of Anisotropy's API and nothing more, such as https://<the site>/api: no name or password in "
+                      "it, no question mark, no #")
+    if parts.scheme == "http" and parts.hostname not in THIS_MACHINE:
+        raise Refused("--send takes an https address: the request carries your upload token, which must not cross a network in the clear")
+    query = "?" + urllib.parse.urlencode({"job_id": our_run}) if our_run else ""
+    return f"{parts.scheme}://{parts.netloc}{parts.path.rstrip('/')}{SEND_ROUTE}{query}"
+
+
+def token_of(token_file, environ=None) -> str:
+    """The upload token, from the file named or from the environment; refused with what to do when there is none. Never printed."""
+    environ = os.environ if environ is None else environ
+    if token_file is not None:
+        if not token_file.is_file():
+            raise Refused(f"no token file at {token_file}")
+        with io.open(str(token_file), encoding="utf-8-sig") as handle:
+            token = handle.read().strip()
+        where = f"the file {token_file.name}"
+    else:
+        token = environ.get(TOKEN_VARIABLE, "").strip()
+        where = f"the environment variable {TOKEN_VARIABLE}"
+        if not token:
+            raise Refused(f"--send needs your upload token: create one on the site, then name the file that holds it with --token-file, or set "
+                          f"{TOKEN_VARIABLE}. It is not taken on the command line, where Abaqus would write it into abaqus.rpy")
+    if not token.startswith(TOKEN_PREFIX) or len(token.split()) != 1:
+        raise Refused(f"{where} does not hold an upload token: one starts with {TOKEN_PREFIX}")
+    return token
+
+
+def request_of(url: str, token: str, data: bytes):
+    """The one request that carries a bundle: its zip as the body, the token in the Authorization header."""
+    return urllib.request.Request(url, data=data, method="POST", headers={
+        "Authorization": f"Bearer {token}", "Content-Type": "application/zip", "Accept": "application/json", "User-Agent": CONNECTOR})
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is an answer, not a place to go: the token is for the address the user named and no other."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def post(request, timeout: float):
+    """(status, body) of the request as sent, without following a redirect."""
+    opener = urllib.request.build_opener(NoRedirect)
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            return response.status, response.read()
+    except urllib.error.HTTPError as answer:
+        return answer.code, answer.read()
+
+
+def detail_of(body: bytes) -> str:
+    """What the API said in a refusal, as one line; nothing when the body is not its JSON (a sign-in page, a proxy's own page)."""
+    try:
+        detail = json.loads(body.decode("utf-8")).get("detail")
+    except (ValueError, AttributeError, UnicodeDecodeError):
+        return ""
+    return detail if isinstance(detail, str) else json.dumps(detail) if detail is not None else ""
+
+
+def send(url: str, token: str, bundle: Path, poster=post) -> dict:
+    """Post the bundle and return the API's answer, the upload as it now stands. Raises `NotSent` with the reason."""
+    with io.open(str(bundle), "rb") as handle:
+        data = handle.read()
+    try:
+        status, body = poster(request_of(url, token, data), SEND_TIMEOUT_S)
+    except (urllib.error.URLError, OSError) as exc:
+        raise NotSent(f"the address did not answer: {getattr(exc, 'reason', exc)}") from None
+    if 300 <= status < 400:
+        raise NotSent(f"the address answered with a redirect ({status}), as a sign-in page does: the site does not take a connector's "
+                      "upload at this address yet, or the address is not the API's")
+    if status != 201:
+        said = detail_of(body)
+        raise NotSent(f"the site refused it ({status})" + (f": {said}" if said else ""))
+    try:
+        answer = json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        answer = None
+    if not isinstance(answer, dict) or not isinstance(answer.get("id"), str):
+        raise NotSent("the address answered, and not as Anisotropy's API does: is it the API's address?")
+    return answer
+
+
+def say_sent(answer: dict) -> None:
+    """The upload's id, whose it is, and the verdict when the site put it beside a run of ours."""
+    say(f"sent: upload {answer['id']}, yours alone ({answer.get('bundle_bytes')} bytes, SHA-256 {answer.get('bundle_sha256')})")
+    verdict = answer.get("verdict")
+    if verdict in VERDICTS:
+        say(f"{VERDICTS[verdict]}: beside the run {answer.get('job_id')}")
+    else:
+        say(f"not compared yet: {answer.get('not_compared') or 'no run of ours stood beside it'}")
+
+
 class Parser(argparse.ArgumentParser):
     """argparse, saying its help and its errors where the user sees them (`say`)."""
 
@@ -425,13 +548,22 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--frame", type=int, default=None)
     parser.add_argument("--instance", default=None)
     parser.add_argument("--coupon", default=None, help="the coupon's name in Anisotropy, when you know it")
-    return parser.parse_args(argv)
+    parser.add_argument("--send", default=None, metavar="ADDRESS", help="also send the bundle to Anisotropy's API at this address, such as "
+                                                                       "https://<the site>/api, with your upload token")
+    parser.add_argument("--token-file", type=Path, default=None, help=f"the file that holds your upload token; default the environment variable {TOKEN_VARIABLE}")
+    parser.add_argument("--our-run", default=None, help="the id of the run of ours to compare beside; default your newest finished run of --coupon")
+    args = parser.parse_args(argv)
+    if args.send is None and (args.token_file is not None or args.our_run is not None):
+        parser.error("--token-file and --our-run go with --send")
+    return args
 
 
-def main(argv=None, read_job=None, read_model=None) -> int:
+def main(argv=None, read_job=None, read_model=None, poster=post) -> int:
     args = parse(command_line(sys.argv) if argv is None else argv)
     bundle = load("bundle")
     out = args.out or args.odb.with_name(f"{args.odb.stem}-anisotropy.zip")
+    # what sending needs is judged before the ODB is read, so a missing token costs no time
+    url, token = (send_address(args.send, args.our_run), token_of(args.token_file)) if args.send is not None else (None, None)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:  # Abaqus/CAE may still hold the copy of the .cae
         files, results = files_of(args, Path(folder), read_job, read_model)
         written = bundle.write_bundle(out, files, args.units, CONNECTOR, abaqus=results["solver"], python=abaqus_python(), job=args.odb.stem,
@@ -442,14 +574,20 @@ def main(argv=None, read_job=None, read_model=None) -> int:
     if "model" not in written.files:
         say("  the model as built is not in it: add --cae <model>.cae under  abaqus cae noGUI=anisotropy_connector.py -- ...")
     say(f"SHA-256 {written.sha256}")
+    if url is not None:
+        try:
+            say_sent(send(url, token, out, poster))
+        except NotSent as exc:
+            say(f"not sent: {exc}. The bundle is written: {out}", error=True)
+            return 1
     return 0
 
 
-def run(argv=None, read_job=None, read_model=None) -> int:
-    """`main`, with every ending said in one place: exit 0 written, 2 refused or stopped. Abaqus/CAE writes an error of a script in
-    `abaqus.rpy` only and ends with 0, so there nothing may leave this function unsaid."""
+def run(argv=None, read_job=None, read_model=None, poster=post) -> int:
+    """`main`, with every ending said in one place: exit 0 written (and sent, when asked), 1 written and not sent, 2 refused or
+    stopped. Abaqus/CAE writes an error of a script in `abaqus.rpy` only and ends with 0, so there nothing may leave this function unsaid."""
     try:
-        return main(argv, read_job, read_model)
+        return main(argv, read_job, read_model, poster)
     except Refused as exc:
         say(f"refused: {exc}", error=True)
     except SystemExit as exc:  # argparse, which has said why

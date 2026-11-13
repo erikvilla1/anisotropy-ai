@@ -42,6 +42,10 @@ test("the API's container is told to queue jobs only when the Worker has the que
   // a solver gets the database, the store and the role; no sign-in, origins, assistant or per-user cap
   assert.deepEqual(solverEnvironment({ ...env, ANISOTROPY_R2_BUCKET: "b", ANTHROPIC_API_KEY: "k", ANISOTROPY_ALLOWED_ORIGINS: "https://anisotropy.dev" }),
                    { DATABASE_URL: "postgresql://u:p@h/db", ANISOTROPY_R2_BUCKET: "b", ANISOTROPY_JOB_ROLE: "solver" });
+  // who sees an upload and the connector's route (ADR-0094 step 5) reach the API's container and never a solver, which has no sign-in
+  const uploads = { ANISOTROPY_FOUNDER_EMAILS: "founder@example.com", ANISOTROPY_CONNECTOR_UPLOADS: "on" };
+  assert.deepEqual(apiEnvironment({ ...env, ...uploads }), { ...env, ...uploads });
+  assert.deepEqual(solverEnvironment({ ...env, ...uploads }), { DATABASE_URL: "postgresql://u:p@h/db", ANISOTROPY_JOB_ROLE: "solver" });
   for (const path of ["/v1/solver", "/v1/solver/jobs/x", "/v1/solver/jobs/x/stop"]) assert.ok(isSolverPath(path), path);
   for (const path of ["/v1/coupon-jobs", "/v1/solvers", "/v1/coupon-jobs/v1/solver/"]) assert.ok(!isSolverPath(path), path);
 });

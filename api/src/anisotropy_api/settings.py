@@ -55,6 +55,15 @@ LIVE_WORKERS_DEFAULT = 1
 # `on` offers every test again, for development; unset or `off` keeps the list. The fea package reads the same variable from the
 # environment its processes inherit (`anisotropy_fea.enabled`), so a change needs a restart. The hosted tier never sets it.
 ALL_TESTS_VARIABLE = "ANISOTROPY_ALL_TESTS"
+# The uploads from Abaqus (ADR-0094 part 6, step 5). An upload is its owner's alone; the founders also see every upload, and who they
+# are is named here by signed-in email, comma-separated. An email exists only behind Cloudflare Access, so the variable needs it.
+FOUNDER_EMAILS_VARIABLE = "ANISOTROPY_FOUNDER_EMAILS"
+# The connector on a user's machine cannot sign in to Cloudflare Access. `on`: the one route it sends to, POST /v1/connector/uploads,
+# is let through without Access's token and checked by the upload token alone; the Access application needs a bypass policy for that
+# path, or the request never arrives. Unset or `off`: that route needs Access's token like every other, so only a signed-in browser
+# uploads. Without Access (the local API) the route takes an upload token as it is, and the variable is refused.
+CONNECTOR_UPLOADS_VARIABLE = "ANISOTROPY_CONNECTOR_UPLOADS"
+EMAIL = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")
 LOCAL_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001")
 
 
@@ -121,6 +130,8 @@ class Settings:
     job_role: str | None = None  # None: jobs run in this process; "queue" or "solver" with the job queue (ADR-0056 amendment 3)
     live_workers: int = LIVE_WORKERS_DEFAULT  # warm live-solve workers (ADR-0086); 0: a fresh process per live solve
     all_tests: bool = False  # every test offered (ADR-0089); False: the unnotched tension coupon only
+    founder_emails: frozenset[str] = frozenset()  # who also sees every upload from Abaqus (ADR-0094 part 6); lower case
+    connector_uploads: bool = False  # behind Access, the connector's route is checked by the upload token alone (ADR-0094 step 5)
 
 
 def environment() -> Mapping[str, str]:
@@ -151,7 +162,39 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
                     allowed_origins=allowed_origins(environ), storage=storage_settings(environ),
                     jobs_per_user_per_day=jobs_per_user_per_day(environ, records_on=switch == "on"),
                     job_role=job_role(environ, records_on=switch == "on", storage_on=storage_settings(environ).on),
-                    live_workers=live_workers(environ), all_tests=all_tests(environ))
+                    live_workers=live_workers(environ), all_tests=all_tests(environ),
+                    founder_emails=founder_emails(environ, access_on=access_settings(environ).on),
+                    connector_uploads=connector_uploads(environ, access_on=access_settings(environ).on))
+
+
+def founder_emails(environ: Mapping[str, str], *, access_on: bool) -> frozenset[str]:
+    """The founders' signed-in emails, lower case, or none when unset. Each must be an email; and since only Cloudflare Access gives a
+    request an email, the list without Access is refused rather than ignored (ADR-0003)."""
+    raw = environ.get(FOUNDER_EMAILS_VARIABLE, "").strip()
+    if not raw:
+        return frozenset()
+    emails = [part.strip().lower() for part in raw.split(",")]
+    wrong = [email for email in emails if not EMAIL.match(email)]
+    if wrong:
+        raise RuntimeError(f"{FOUNDER_EMAILS_VARIABLE} must list emails separated by commas; not one: {', '.join(repr(email) for email in wrong)}")
+    if not access_on:
+        raise RuntimeError(f"{FOUNDER_EMAILS_VARIABLE} names who sees every upload by signed-in email, which only Cloudflare Access gives; set "
+                           f"{ACCESS_TEAM_DOMAIN_VARIABLE} and {ACCESS_AUDIENCE_VARIABLE}, or unset it")
+    return frozenset(emails)
+
+
+def connector_uploads(environ: Mapping[str, str], *, access_on: bool) -> bool:
+    """Whether, behind Access, the connector's route is checked by the upload token alone: `on`; unset, blank or `off` keeps Access's
+    token on it. Any other word is refused, and so is `on` without Access, where the route takes an upload token already (ADR-0003)."""
+    raw = environ.get(CONNECTOR_UPLOADS_VARIABLE, "").strip().lower()
+    if not raw:
+        return False
+    if raw not in {"on", "off"}:
+        raise RuntimeError(f"{CONNECTOR_UPLOADS_VARIABLE} must be 'on' or 'off', not {raw!r}; unset it to keep Cloudflare Access's token on the connector's route")
+    if raw == "on" and not access_on:
+        raise RuntimeError(f"{CONNECTOR_UPLOADS_VARIABLE}=on lets the connector's route past Cloudflare Access, which is off here: without Access "
+                           f"the route takes an upload token already; unset it, or set {ACCESS_TEAM_DOMAIN_VARIABLE} and {ACCESS_AUDIENCE_VARIABLE}")
+    return raw == "on"
 
 
 def job_role(environ: Mapping[str, str], *, records_on: bool, storage_on: bool) -> str | None:

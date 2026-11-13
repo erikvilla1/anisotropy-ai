@@ -62,6 +62,27 @@ Every request needs the `X-Anisotropy-Actor` header. A second job while one runs
 
 `uv run python -m anisotropy_api.abaqus_round_trip "build this coupon in Abaqus and compare" --coupon <coupon>.toml --folder <work>` runs on the machine that has Abaqus and is no endpoint. It asks `fea/tools/abaqus_tools.py` which of its three tools (build, run, send) are done in the folder, lets the assistant choose among those left, and starts the tool's `plan` with the chosen names. With `ANISOTROPY_ASSISTANT_PROVIDER` set (ADR-0052), the model is given the sentence, the tools' names and descriptions and which are done, and answers with names in a fixed schema; `tool_guard` keeps the names on offer, once each, in the tools' own order. With it unset, or when the model gives no answer, every step that is not done runs and the command says the words were not read. The model sees no file, path, coupon or result, and nothing it writes reaches a command. The exit code is the tools' (0 the bundle agrees with ours, 1 it differs, 2 refused or nothing chosen). Tests: `tests/test_abaqus_round_trip.py`, with a stub client and a stand-in for the tools.
 
+## Uploads from Abaqus (ADR-0094, step 5)
+
+```text
+POST   /v1/upload-tokens                 {"name": "..."}; the answer holds the token, this once
+GET    /v1/upload-tokens                 the requester's tokens, never a token itself
+DELETE /v1/upload-tokens/{id}            cancel one; a bundle sent with it is refused from then on
+POST   /v1/abaqus-uploads                the bundle's zip as the body [?job_id=<a finished coupon job>&may_train=true]
+POST   /v1/connector/uploads             the same, from the connector, with  Authorization: Bearer <token>
+GET    /v1/abaqus-uploads                the requester's uploads; a founder sees every owner's
+GET    /v1/abaqus-uploads/{id}           one upload with what the check found and the comparison
+GET    /v1/abaqus-uploads/{id}/bundle    the bundle as sent, the same bytes
+POST   /v1/abaqus-uploads/{id}/compare   beside a run of ours again [?job_id=...]
+DELETE /v1/abaqus-uploads/{id}           the bundle and its row, gone
+```
+
+A bundle is what `fea/tools/anisotropy_connector.py` writes under the user's own Abaqus. The API judges it with `fea/tools/abaqus_upload.py check`, the same command a person runs; a file that breaks the format is refused with every reason, 422, and nothing is stored. A bundle is stored as one object, `uploads/<id>/bundle.zip`, in the bucket when one is named and under `.local/abaqus/` otherwise, and its row in `abaqus_uploads` names its owner: the signed-in email behind Cloudflare Access, the actor locally, as a project's. Only the owner opens, downloads, compares and deletes it; to anyone else it does not exist (404). The founders named in `ANISOTROPY_FOUNDER_EMAILS` list, open and download every upload and change none.
+
+The comparison is `abaqus_upload.py compare` beside a finished coupon job's own files, taken from that job's package. The job is the one `job_id` names, or with none the owner's newest finished job of the coupon the bundle names. It runs inside the upload's request; when it cannot be made, the upload stands and `not_compared` says why. The verdict and every number are that command's. No run record is written for an upload: run records are read by every signed-in user, and an upload is private.
+
+A token is 256 random bits after `anisotropy_upload_`. It is in the answer that creates it and nowhere after: the table keeps its SHA-256. The connector sends with it: `abaqus python anisotropy_connector.py <job>.odb --units mm-MPa --send http://127.0.0.1:8000 --token-file <file>`. Behind Cloudflare Access the connector's route needs Access's token like every other, unless `ANISOTROPY_CONNECTOR_UPLOADS=on`, which lets that one POST through to be checked by the upload token alone; the Access application then needs a bypass policy for `/api/v1/connector/uploads`. Limits: a bundle of 50 MB as sent, 100 stored uploads and 10 live tokens per person. Tests: `tests/test_abaqus_uploads.py`, against the test database, with the real check and comparison; they are skipped without `TEST_DATABASE_URL` or `uv`.
+
 ## Database (run records, ADR-0025)
 
 Run records will be stored in a local PostgreSQL 17 that Docker runs from `docker-compose.yml` at the repository root. Docker Desktop must be running. Copy `.env.example` to `.env`, set `POSTGRES_PASSWORD` (Compose refuses to start without it) and then, from the repository root:

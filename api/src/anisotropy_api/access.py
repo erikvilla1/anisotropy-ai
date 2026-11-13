@@ -7,6 +7,10 @@ settings nothing here runs, and the API is the local one with no sign-in (ADR-00
 The keys are read from https://<team>.cloudflareaccess.com/cdn-cgi/access/certs and cached. Access rotates them every six weeks
 and keeps the old one valid for seven days, so a token whose key id is not in the cached set makes the client fetch the set again.
 A service token carries no email; its request passes with no email recorded.
+
+One route is the connector's (ADR-0094 step 5): POST /v1/connector/uploads, sent from a user's machine under Abaqus, where nobody
+signs in. Only when the settings say so (`app.state.connector_uploads`) is that one request let through without Access's token; its
+handler then checks the upload token the owner created, and nothing else is reachable that way.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from .settings import AccessSettings
 HEADER = "Cf-Access-Jwt-Assertion"
 ALGORITHMS = ["RS256"]  # what Access signs with; nothing else is accepted
 EXEMPT_PATHS = frozenset({"/healthz"})  # what a platform polls before any user has signed in
+CONNECTOR_UPLOADS = "/v1/connector/uploads"  # POST alone, and only with the setting on: checked by an upload token in its handler
 
 
 class TeamKeysUnavailable(RuntimeError):
@@ -76,6 +81,9 @@ class AccessMiddleware:
         verify = getattr(scope["app"].state, "access_verifier", None)
         if verify is None or scope["path"] in EXEMPT_PATHS or scope["method"] == "OPTIONS":
             await self.app(scope, receive, send)
+            return
+        if scope["method"] == "POST" and scope["path"] == CONNECTOR_UPLOADS and getattr(scope["app"].state, "connector_uploads", False):
+            await self.app(scope, receive, send)  # no email from Access: the handler names the owner from the upload token
             return
         wanted = HEADER.lower().encode("latin-1")
         token = next((value.decode("latin-1").strip() for name, value in scope["headers"] if name == wanted), "")

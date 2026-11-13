@@ -20,7 +20,7 @@ from pathlib import Path
 
 from contextlib import contextmanager
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, func, inspect, select, text, update
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Engine, ForeignKey, String, Text, Uuid, create_engine, delete, func, inspect, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -150,6 +150,62 @@ class ProjectRow(Base):
     __table_args__ = (CheckConstraint(f"kind IN ({_sql_list(PROJECT_KINDS)})", name="projects_kind_known"),)
 
 
+UPLOAD_VERDICTS = ("agrees", "differs", "incomplete", "refused")
+
+
+class UploadTokenRow(Base):
+    """What the connector sends with (ADR-0094 part 6, migration 0010): the SHA-256 of a token its owner created, never the token, the
+    token's last characters to tell one from another, and when it was last used and cancelled. The owner is a project's: the signed-in
+    email behind Cloudflare Access, or the actor locally. A cancelled token keeps its row, so the uploads it sent still name it."""
+
+    __tablename__ = "upload_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    actor: Mapped[str] = mapped_column(String(40), nullable=False)
+    user_email: Mapped[str | None] = mapped_column(String(320))
+    name: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    token_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    hint: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UploadRow(Base):
+    """A bundle sent from a user's own Abaqus (ADR-0094 part 6, migration 0010): private, its owner's alone. The bundle itself is in the
+    object store under `object_key`; the row keeps its SHA-256 and size, what the check found (`facts`, `in_scope`), the token it came
+    with when the connector sent it, and, once it was put beside a run of ours, that job, the verdict and the comparison as
+    `fea/tools/abaqus_upload.py compare` wrote it. `not_compared` says why no comparison was made. `may_train` is false unless its owner
+    ticked the box. The row is deleted with the bundle when the owner asks."""
+
+    __tablename__ = "abaqus_uploads"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    actor: Mapped[str] = mapped_column(String(40), nullable=False)
+    user_email: Mapped[str | None] = mapped_column(String(320))
+    token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("upload_tokens.id"))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    bundle_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    object_key: Mapped[str] = mapped_column(Text, nullable=False)
+    units: Mapped[str] = mapped_column(String(20), nullable=False)
+    job: Mapped[str | None] = mapped_column(Text)
+    coupon: Mapped[str | None] = mapped_column(Text)
+    in_scope: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    facts: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    may_train: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    job_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("jobs.id"))
+    verdict: Mapped[str | None] = mapped_column(String(12))
+    comparison: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    compared_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    not_compared: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint(f"verdict IS NULL OR verdict IN ({_sql_list(UPLOAD_VERDICTS)})", name="abaqus_uploads_verdict_known"),
+        CheckConstraint("(verdict IS NULL) = (comparison IS NULL)", name="abaqus_uploads_verdict_has_comparison"),
+    )
+
+
 CONNECT_TIMEOUT_S = 5
 # TCP keepalives and the user timeout, libpq's own parameters: a connection whose network went away under it (a container's can,
 # ADR-0056 amendment 5) fails within about half a minute instead of waiting for an answer that never comes. A system without one of
@@ -172,7 +228,7 @@ def check_ready(engine: Engine) -> None:
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-            for table in (Run.__tablename__, JobRow.__tablename__, ProjectRow.__tablename__):
+            for table in (Run.__tablename__, JobRow.__tablename__, ProjectRow.__tablename__, UploadTokenRow.__tablename__, UploadRow.__tablename__):
                 if not inspect(connection).has_table(table):
                     raise RuntimeError(
                         f"The database at {shown} has no '{table}' table. "
@@ -383,6 +439,111 @@ def stop_orphans(engine: Engine, reason: str) -> int:
             row.state, row.message, row.finished_at = "stopped", reason, now
         session.commit()
         return len(rows)
+
+
+# ------------------------------------------------------------------------------- the uploads from Abaqus (ADR-0094 part 6, step 5)
+
+def _by_owner(statement, row, user_email: str | None, actor: str):
+    """A project's rule for any owned table: the signed-in email behind Access; locally, with no email, the actor."""
+    return statement.where(row.user_email == user_email) if user_email is not None else statement.where(row.user_email.is_(None), row.actor == actor)
+
+
+def insert_upload_token(engine: Engine, *, token_id: uuid.UUID, actor: str, user_email: str | None, name: str, token_sha256: str, hint: str,
+                        now: dt.datetime) -> UploadTokenRow:
+    with Session(engine, expire_on_commit=False) as session:
+        row = UploadTokenRow(id=token_id, actor=actor, user_email=user_email, name=name, token_sha256=token_sha256, hint=hint, created_at=now)
+        session.add(row)
+        session.commit()
+        return row
+
+
+def list_upload_tokens(engine: Engine, *, actor: str, user_email: str | None) -> list[UploadTokenRow]:
+    """The requester's tokens, newest first, the cancelled ones among them."""
+    statement = _by_owner(select(UploadTokenRow).order_by(UploadTokenRow.created_at.desc(), UploadTokenRow.id), UploadTokenRow, user_email, actor)
+    with Session(engine, expire_on_commit=False) as session:
+        return list(session.scalars(statement))
+
+
+def live_upload_tokens(engine: Engine, *, actor: str, user_email: str | None) -> int:
+    """How many of the requester's tokens are not cancelled."""
+    statement = _by_owner(select(func.count()).select_from(UploadTokenRow).where(UploadTokenRow.revoked_at.is_(None)), UploadTokenRow, user_email, actor)
+    with Session(engine) as session:
+        return session.scalar(statement)
+
+
+def revoke_upload_token(engine: Engine, token_id: uuid.UUID, *, actor: str, user_email: str | None, now: dt.datetime) -> UploadTokenRow | None:
+    """The requester's token, cancelled (once: a second call leaves the first time); None when there is none of theirs by that id."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.get(UploadTokenRow, token_id)
+        if row is None or not owns_project(row, actor, user_email):
+            return None
+        if row.revoked_at is None:
+            row.revoked_at = now
+            session.commit()
+        return row
+
+
+def use_upload_token(engine: Engine, token_sha256: str, now: dt.datetime) -> UploadTokenRow | None:
+    """The token with that digest when it is not cancelled, marked as used now; None for an unknown or a cancelled one."""
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.scalars(select(UploadTokenRow).where(UploadTokenRow.token_sha256 == token_sha256, UploadTokenRow.revoked_at.is_(None))).first()
+        if row is None:
+            return None
+        row.last_used_at = now
+        session.commit()
+        return row
+
+
+def insert_upload(engine: Engine, **fields) -> UploadRow:
+    with Session(engine, expire_on_commit=False) as session:
+        row = UploadRow(**fields)
+        session.add(row)
+        session.commit()
+        return row
+
+
+def fetch_upload(engine: Engine, upload_id: uuid.UUID) -> UploadRow | None:
+    with Session(engine, expire_on_commit=False) as session:
+        return session.get(UploadRow, upload_id)
+
+
+def list_uploads(engine: Engine, *, actor: str, user_email: str | None, everyone: bool = False, limit: int = 50) -> list[UploadRow]:
+    """The requester's uploads, newest first; `everyone` lists every owner's, which is for a founder alone (ADR-0094 part 6)."""
+    statement = select(UploadRow).order_by(UploadRow.created_at.desc(), UploadRow.id).limit(limit)
+    if not everyone:
+        statement = _by_owner(statement, UploadRow, user_email, actor)
+    with Session(engine, expire_on_commit=False) as session:
+        return list(session.scalars(statement))
+
+
+def count_uploads(engine: Engine, *, actor: str, user_email: str | None) -> int:
+    with Session(engine) as session:
+        return session.scalar(_by_owner(select(func.count()).select_from(UploadRow), UploadRow, user_email, actor))
+
+
+def update_upload(engine: Engine, upload_id: uuid.UUID, **fields) -> UploadRow:
+    with Session(engine, expire_on_commit=False) as session:
+        row = session.get(UploadRow, upload_id)
+        if row is None:
+            raise LookupError(f"no row for upload {upload_id}")
+        for name, value in fields.items():
+            setattr(row, name, value)
+        session.commit()
+        return row
+
+
+def delete_upload(engine: Engine, upload_id: uuid.UUID) -> None:
+    with Session(engine) as session:
+        session.execute(delete(UploadRow).where(UploadRow.id == upload_id))
+        session.commit()
+
+
+def latest_done_job(engine: Engine, *, coupon: str, actor: str, user_email: str | None) -> JobRow | None:
+    """The requester's newest job of that coupon that is done, or None: the run of ours an upload is put beside when none is named."""
+    statement = _by_person(select(JobRow).where(JobRow.coupon == coupon, JobRow.state == "done").order_by(JobRow.started_at.desc(), JobRow.id).limit(1),
+                           user_email, actor)
+    with Session(engine, expire_on_commit=False) as session:
+        return session.scalars(statement).first()
 
 
 # ----------------------------------------------------------------------------------- the job queue (ADR-0056 amendment 3)
