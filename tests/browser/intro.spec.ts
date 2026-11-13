@@ -59,13 +59,13 @@ const frames = (page: Page) =>
     return taken;
   });
 
-const STATEMENT = "Anisotropy bringing composite theory and real test data into one engineering platform";
+const STATEMENT = "Anisotropy one engineering platform for composite theory and real test data";
 
 async function expectHeroWhole(page: Page) {
   const hero = page.locator("#overview");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero.locator("[data-intro-run]")).toHaveCount(0);
-  await expect(hero.locator("h1")).toHaveText("Anisotropybringing composite theoryand real test data intoone engineering platform");
+  await expect(hero.locator("h1")).toHaveText("Anisotropyone engineering platformfor composite theoryand real test data");
   await expect(hero.locator("h1")).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Composites.Calculated.");
   await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
@@ -82,7 +82,7 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   const seen = await frames(page);
   // The first paint is black, #010101.
   expect(seen[0]).toMatchObject({ phase: "is-enter", shown: true, opacity: 1, colour: "rgb(1, 1, 1)", copies: 0 });
-  // The statement and the two small lines are made ready while the black still covers the page, so the finished text is never
+  // The statement, the tagline and the small line are made ready while the black still covers the page, so the finished text is never
   // seen before its move: a copy each, hidden from assistive technology, over the page's own text, which stays in place.
   const ready = seen.findIndex((frame) => frame.copies > 0);
   expect(ready).toBeGreaterThan(0);
@@ -105,12 +105,11 @@ test("five seconds after the load-in the hero's words are taken away and the cli
   await expect(hero.locator("h1")).toHaveCSS("opacity", "1");
   // They stand for five seconds, then are untyped in about a second.
   await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 12_000 });
-  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-explore"])
+  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
-  // The statement is still in the page for a screen reader; the button cannot be reached; the Basement's mark stays.
+  // The statement is still in the page for a screen reader, and the Basement's mark stays.
   await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
-  await expect(hero.locator(".home-hero-explore")).toBeHidden();
   await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
 });
 

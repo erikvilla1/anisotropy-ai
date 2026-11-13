@@ -924,7 +924,7 @@
 /* The hero (ADR-0077 and its amendment 19), in the arrangement of Anduril's home page. The page is black; the header lies
  * on the black strip at the top; under it the material clip plays in a box with square corners that stands on the page's
  * margin at the sides and the foot. The words are in the middle of the box: one statement in large capitals, and under it a
- * row of the tagline, the mark and two short monospace lines.
+ * row of the tagline, the mark and one short monospace line.
  *   --hero-top    where the box starts: the header's height
  *   --hero-frame  the black frame at the sides and the foot: the page's margin
  *   --hero-pad    the words' least distance from the box's edge
@@ -1004,8 +1004,8 @@
   white-space: nowrap;
   color: #ffffff;
 }
-/* The row under it: the tagline ends on the mark's left, the mark stands in the middle of the page, the two lines start on
- * its right. */
+/* The row under it: the tagline ends on the mark's left, the mark stands in the middle of the page, the monospace line
+ * starts on its right. */
 .home-hero-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -1045,10 +1045,6 @@
 }
 .home-hero-note {
   margin: 0;
-}
-/* Once the words have been taken away (components/home/hero-outro.tsx), the Explore button cannot be reached either. */
-.home-hero[data-words="gone"] .home-hero-explore {
-  visibility: hidden;
 }
 /* The lens (ADR-0071): a 4:3 window over the clip, its right edge on the gutter before the copy and its foot just above the
  * headline's middle, under the words. Through it the clip is dimmed and blurred like glass, and our results play in colour on

@@ -25,7 +25,6 @@ const range = (id: (typeof STEPS)[number]["id"]) => STEPS.find((item) => item.id
 async function scrollToScreens(page: Page, screens: number) {
   await page.evaluate((value) => window.scrollTo({ top: Math.round(value * window.innerHeight), behavior: "instant" }), screens);
 }
-const scrolledScreens = (page: Page) => page.evaluate(() => window.scrollY / window.innerHeight);
 /** Opens the home page and waits until the tour is pinned and has read the scroll once. Before the page's script runs, the
  * markup is the unpinned tour with everything shown (and the stage hidden by the stylesheet), which is not what these tests read. */
 async function openPinned(page: Page) {
@@ -33,25 +32,6 @@ async function openPinned(page: Page) {
   await expect(tour(page)).toHaveAttribute("data-mode", "pinned");
   await expect(tour(page)).toHaveAttribute("data-phase", "bridge");
 }
-
-test("Scroll to explore, under the hero's statement, scrolls to the tour's first step", async ({ page }) => {
-  await playApi(page, []);
-  await openPinned(page);
-  const button = page.locator("#overview").getByRole("button", { name: "Scroll to explore" });
-  await expect(button).toBeVisible();
-  // It is the second small line of the row under the statement, inside the box the clip plays in (ADR-0077 amendment 19).
-  const box = (await button.boundingBox())!;
-  const clip = (await page.locator("#overview .home-hero-media").boundingBox())!;
-  const statement = (await page.locator("#overview h1").boundingBox())!;
-  expect(box.y).toBeGreaterThan(statement.y + statement.height);
-  expect(box.x).toBeGreaterThan(clip.x + clip.width / 2);
-  expect(box.y + box.height).toBeLessThan(clip.y + clip.height);
-  await button.click();
-  await expect.poll(() => scrolledScreens(page), { timeout: 8000 }).toBeCloseTo(range("material").at(0.14), 2);
-  await expect(step(page, "material")).toHaveAttribute("data-active", "true");
-  await expect(tour(page).getByRole("heading", { name: "Start from a cited material." })).toBeVisible();
-  await expect(tour(page).locator(".demo-tour-stage")).toHaveCSS("position", "sticky");
-});
 
 test("the bridge holds the hero in the window while its clip is carried onto the 3D view, then lets it go", async ({ page }) => {
   await playApi(page, []);
@@ -215,10 +195,6 @@ test("with reduced motion every step is shown, nothing is pinned, and the loaded
   await expect(step(page, "engine").getByTestId("specs")).toContainText("Quasi-isotropic");
   await expect(step(page, "engine").getByTestId("abd-grid")).toBeVisible();
   await page.waitForTimeout(900);
-  expect(posts.length).toBe(1);
-  // Scroll to explore takes the visitor to the top of the section, without the move.
-  await page.locator("#overview").getByRole("button", { name: "Scroll to explore" }).click();
-  await expect.poll(() => tour(page).evaluate((element) => Math.round(element.getBoundingClientRect().top))).toBe(0);
   expect(posts.length).toBe(1);
   await step(page, "loads").scrollIntoViewIfNeeded();
   await expect.poll(() => posts.length).toBe(2);

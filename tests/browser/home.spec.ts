@@ -27,12 +27,12 @@ test("the hero opens the page and the laminate calculator follows it (ADR-0076)"
   await page.goto("/");
   const order = await page.locator("main > section").evaluateAll((sections) => sections.slice(0, 2).map((section) => section.id));
   expect(order).toEqual(["overview", "laminate"]);
-  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Anisotropy\s*bringing composite theory/);
+  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/Anisotropy\s*one engineering platform/);
 });
 
-const STATEMENT = /Anisotropy\s*bringing composite theory\s*and real test data into\s*one engineering platform/;
+const STATEMENT = /Anisotropy\s*one engineering platform\s*for composite theory\s*and real test data/;
 
-test("the hero's words are one statement, the tagline and two small lines (ADR-0077 amendment 19)", async ({ page }) => {
+test("the hero's words are one statement, the tagline and one small line (ADR-0077 amendments 19 and 21)", async ({ page }) => {
   const posts: Posted[] = [];
   await playApi(page, posts);
   await page.goto("/");
@@ -41,9 +41,9 @@ test("the hero's words are one statement, the tagline and two small lines (ADR-0
   await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
   await expect(hero.locator(".home-hero-tagline")).toHaveText(/Composites\.\s*Calculated\./);
   await expect(hero.locator(".home-hero-note")).toHaveText("Fall 2026 Launchpad cohort");
-  await expect(hero.getByRole("button", { name: "Scroll to explore" })).toBeVisible();
   await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
-  // No 3D view, chat box or link in the hero: the calculator below draws the stack, and the header's Workspace button is the way in.
+  // No 3D view, chat box, button or link in the hero: the calculator below draws the stack, and the header's Workspace button is the way in.
+  await expect(hero.getByRole("button")).toHaveCount(0);
   await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);
   await expect(hero.getByRole("textbox")).toHaveCount(0);
   await expect(hero.getByRole("link")).toHaveCount(0);
@@ -78,7 +78,7 @@ test("the hero's clip plays in a square box on the black page, under the header,
   await expect(page.locator("#overview .home-hero-media")).toHaveCSS("border-radius", "0px");
   // The page around it is the site's black, and the words sit inside the box, the statement and the mark on its middle line.
   expect(await page.locator("#overview").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(13, 13, 13)");
-  for (const selector of ["#overview h1", "#overview .home-hero-row", "#overview .home-hero-backed", "#overview .home-hero-explore"]) {
+  for (const selector of ["#overview h1", "#overview .home-hero-row", "#overview .home-hero-backed"]) {
     const part = await rect(selector);
     expect(part.left, selector).toBeGreaterThanOrEqual(clip.left + 16);
     expect(part.right, selector).toBeLessThanOrEqual(clip.right - 16);

@@ -392,39 +392,6 @@
   padding: 5px 6px;
 }
 
-/* "Scroll to explore" (components/home/scroll-to-explore.tsx): the second small line under the hero's statement, a down
- * arrow and one word in the row's monospace capitals, set in from the line above as Anduril sets its own. */
-.home-hero-explore {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.7em;
-  margin-left: 5.6em;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: inherit;
-  transition: opacity 0.15s;
-}
-.home-hero-explore svg {
-  width: 1em;
-  height: 1em;
-}
-.home-hero-explore:hover {
-  opacity: 0.6;
-}
-.home-hero-explore:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 6px;
-}
-@media (max-width: 760px) {
-  .home-hero-explore {
-    margin-left: 0;
-  }
-}
-
 /* The pinned tour. Before the page's script has set the mode the stage is not shown, so nothing overlaps the hero. */
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
   /* Where the 3D view stands on the stage, and the stage's ground: the view's own ground (the backdrop that

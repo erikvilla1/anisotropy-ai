@@ -1,8 +1,9 @@
 /* The logo (ADR-0080 and its amendments 2 and 4): the triangle, then the name, close together and centred on one line, as
  * Anduril sets its own. The triangle is the designer's approved outline, cut from the stacked logo by scripts/brand-logo.py
  * and drawn through a CSS mask, so it takes the colour of the text around it: light on the dark header and footer, dark on a
- * light ground. The name is the word itself in the site's typeface, in heavy capitals set tight. One number sets the size,
- * the triangle's height; the name's capitals are about six tenths as tall. */
+ * light ground. The name is the word itself in the site's typeface, set as the hero's statement is: capitals of medium
+ * weight in the display cut, set tight. One number sets the size, the triangle's height; the name's capitals are about six
+ * tenths as tall. */
 .wordmark {
   --brand-h: 24px;
   display: inline-flex;
@@ -24,9 +25,11 @@
 .wordmark .brand-name {
   font-family: var(--font);
   font-size: calc(var(--brand-h) * 0.86);
-  font-weight: 800;
+  font-weight: 500;
+  /* The display cut, which the browser would only choose by itself at the statement's size. */
+  font-variation-settings: "opsz" 32;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
   text-transform: uppercase;
   text-box: trim-both cap alphabetic;
 }

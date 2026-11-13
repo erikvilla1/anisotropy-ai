@@ -8,7 +8,6 @@ import { EngineAnswersProvider } from "@/components/home/engine-answers";
 import { HeroOutro } from "@/components/home/hero-outro";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
-import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { serviceHref, services, statusLabel } from "@/lib/services";
 import { team } from "@/lib/team";
 import "./home.css";
@@ -54,17 +53,17 @@ export default function Home() {
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
         {/* The words, in Anduril's arrangement (ADR-0077 amendment 19): one statement in large capitals in the middle, and
-            under it a row of the tagline, the mark and two short lines. The load-in (ADR-0070 amendment 1) raises the
+            under it a row of the tagline, the mark and one short line. The load-in (ADR-0070 amendment 1) raises the
             statement and types the small lines (components/intro-text.ts). */}
         <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="rise" data-outro="type">
             Anisotropy
             <br />
-            bringing composite theory
-            <br />
-            and real test data into
-            <br />
             one engineering platform
+            <br />
+            for composite theory
+            <br />
+            and real test data
           </h1>
           <div className="home-hero-row">
             <p className="home-hero-tagline" data-intro="type" data-outro="type">
@@ -78,8 +77,6 @@ export default function Home() {
               <p className="home-hero-note" data-intro="type" data-outro="type">
                 Fall 2026 Launchpad cohort
               </p>
-              {/* One press scrolls to the tour's first step. */}
-              <ScrollToExplore />
             </div>
           </div>
         </div>

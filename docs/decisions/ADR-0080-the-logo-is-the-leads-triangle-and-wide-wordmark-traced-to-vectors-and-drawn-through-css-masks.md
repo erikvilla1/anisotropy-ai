@@ -101,3 +101,11 @@ Option 3.
 **Decision.** The name is no longer a drawing. It is the link's own word, set in the site's typeface (Inter, ADR-0093) at weight 800 in capitals with -0.02 em tracking; its capitals are about six tenths of the triangle's height and the gap to the triangle is a quarter of it. Where the browser can trim a line to its capitals the name is centred on the triangle exactly. `scripts/brand-wordmark.py` and `anisotropy-wordmark.svg` are deleted. A first setting in the earlier site typeface at weight 500 was made and not kept.
 
 **Evidence.** On 2026-11-13 at 1440 px on the dev server the logo is 196 by 28 px from x = 32 in the 84 px header; screenshots of the header at five widths were looked at. `expansion.spec.ts` still reads the link's text as "Anisotropy" (in the 26 that passed, ADR-0077 amendment 19). UNVERIFIED: the name before the typeface has loaded, when it shows in the fallback face for a moment.
+
+## Amendment 5, 2026-11-13 (the name set as the hero's statement is)
+
+**Context.** The lead asked to "use the same font used in center text for top left logo font text."
+
+**Decision.** The name keeps the site's typeface and takes the statement's setting: weight 500 in place of 800, -0.04 em tracking, and the display cut, which the browser would not choose by itself at the logo's size and is asked for by name.
+
+**Evidence.** On 2026-11-13 at 1440 px on the dev server: the name is 24.08 px at weight 500 with -0.04 em tracking and the optical size at 32; the statement is 59.04 px at weight 500 with -0.04 em tracking. A screenshot of the header over the hero was looked at.

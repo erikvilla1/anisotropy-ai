@@ -342,3 +342,13 @@ On phones it is one column.
 - It reuses the load-in's copies and windows, run backwards (`prepareOutro` in `components/intro-text.ts`; `components/home/hero-outro.tsx` starts it; ADR-0070 amendment 3).
 
 **Evidence.** On 2026-11-13, in the browser against the dev server at 1280 by 720: the load-in ended 2.5 s after the page was asked for, the words began to leave 5.1 s later and were gone 1.0 s after that. Afterwards five elements carried `data-outro-done` at opacity 0, the heading still held its text, the Explore button was hidden and The Basement's mark was at opacity 1; no page errors. A contact sheet of the exit at ten frames a second was looked at beside the lead's recording. `npm run typecheck` clean; `npm test` 248 passed, 1 skipped; `intro.spec.ts` (with a new case for this), `home.spec.ts` and `tour.spec.ts` against the dev server: 22 of 22. UNVERIFIED: the motion on a real graphics card and on phones.
+
+## Amendment 21, 2026-11-13 (the Explore button leaves; the statement is reworded)
+
+**Context.** Seeing amendments 19 and 20 on the page, the lead asked to "get rid of the explore button now" and, of the statement, "can we also change this to something else ... I like the message tho."
+
+**Decision.**
+- **The Explore button is removed** from the hero, with its component, its styles and its two browser cases. The row's right side is the one monospace line.
+- **The statement reads** "Anisotropy / one engineering platform / for composite theory / and real test data". It says what the earlier one said, without "bringing ... into". The wording is one proposal; three others were given to the lead to choose from.
+
+**Evidence.** On 2026-11-13 against the dev server: the hero holds no button; a screenshot at 1440 px was looked at; no page errors at 1440 and 390 px. `npm run typecheck` clean; `npm test` 248 passed, 1 skipped; `intro.spec.ts`, `home.spec.ts`, `tour.spec.ts` and the overview case of `portfolio.spec.ts`: 22 of 22.
