@@ -16,14 +16,15 @@ export function WorkspaceShell({ title, kind, rail, stage, assistant }: {
       <header className="ws-topbar">
         <Link className="chat-link" href={WORKSPACE_ROOT}><ArrowLeft size={13} /> All projects</Link>
         <div className="ws-title">{title}<span>{kind}</span></div>
-        <button type="button" className="chat-link" aria-pressed={open} onClick={() => setOpen((o) => !o)} data-testid="assistant-toggle">
+        {/* a disclosure, not a toggle: its label says what a press does, aria-expanded says the state (WCAG 4.1.2) */}
+        <button type="button" className="chat-link" aria-expanded={open} aria-controls={open ? "ws-assistant" : undefined} onClick={() => setOpen((o) => !o)} data-testid="assistant-toggle">
           {open ? <><PanelRightClose size={13} /> Hide assistant</> : <><MessagesSquare size={13} /> Show assistant</>}
         </button>
       </header>
       <div className="ws-columns">
         <aside className="ws-rail" aria-label="Setup" data-testid="ws-rail">{rail}</aside>
         <section className="ws-stage" aria-label="Model and results" data-testid="ws-stage">{stage}</section>
-        {open ? <aside className="ws-assistant" aria-label="Assistant" data-testid="ws-assistant">{assistant}</aside> : null}
+        {open ? <aside className="ws-assistant" id="ws-assistant" aria-label="Assistant" data-testid="ws-assistant">{assistant}</aside> : null}
       </div>
     </div>
   );

@@ -5,8 +5,12 @@
  * guard (`customerText`) and the browser test read.
  */
 import type { JobStatus } from "./studio-api";
+import { inProse } from "./number-format";
 
-/** Words that never reach a customer's screen: our tools and vendors, our records and scripts, the team's own language. */
+/** What an outage says, on the calculator and in the workspaces: what happened and what to do (style guide, rule 8). */
+export const ANALYSIS_UNAVAILABLE = "Analysis is unavailable right now. Your inputs are kept; try again in a minute, and contact us if it continues.";
+
+/** Words that never reach a customer's screen: our tools and vendors, our records and scripts, the team's own language and machinery. */
 export const BANNED_TERMS: { label: string; pattern: RegExp }[] = [
   { label: "Anthropic", pattern: /anthropic/i },
   { label: "Claude", pattern: /\bclaude\b/i },
@@ -20,6 +24,9 @@ export const BANNED_TERMS: { label: string; pattern: RegExp }[] = [
   { label: "for the team", pattern: /\bfor the team\b/i },
   { label: "free solver", pattern: /\bfree solver\b/i },
   { label: "our engine", pattern: /\bour (engine|kernel)\b/i },
+  { label: "engine", pattern: /\bengines?\b/i },
+  { label: "decks", pattern: /\bdecks\b/i },
+  { label: "case runner", pattern: /\bcase runner\b/i },
   { label: "ADR number", pattern: /\bADR-\d{4}\b/ },
   { label: "environment variable", pattern: /\bNEXT_PUBLIC_|\bANISOTROPY_[A-Z_]+\b/ },
 ];
@@ -40,15 +47,19 @@ export function customerText(text: string | null | undefined): string | null {
 }
 
 /** A sentence of the explanation as the page shows it: an aside about another program's viewer, which jobs solved before ADR-0091 still
- * carry, is cut; a sentence that still holds a banned term is left out. */
+ * carry, is cut; a sentence that still holds a banned term is left out; its numbers read as the page prints them ("1.622e+04" from an
+ * older job is "16220", "1.5e+06" is "1.5 × 10⁶", the minus sign; ADR-0091 amendment 1). */
 export function shownSentence(text: string): string | null {
-  return customerText(withSymbols(text).replace(/;\s*these are element centroids[^.;]*?,?\s*not the [^.;]*?a viewer such as PrePoMax shows\./, "."));
+  const shown = customerText(withSymbols(text).replace(/;\s*these are element centroids[^.;]*?,?\s*not the [^.;]*?a viewer such as PrePoMax shows\./, "."));
+  return shown === null ? null : inProse(shown);
 }
 
-/** The ASCII names the explanation templates write (eps_x, gamma_xy, sigma_2, tau12, nu_xy) as the symbols the rest of the page uses. */
+/** The ASCII names the explanation templates and the chat's echoes write (eps_x, gamma_xy, sigma_2, tau12, nu_xy, E1, G12) as the
+ * symbols the rest of the page uses. */
 const SYMBOLS: [RegExp, string][] = [
   [/\beps_x\b/g, "εx"], [/\beps_y\b/g, "εy"], [/\bgamma_xy\b/g, "γxy"], [/\bnu_xy\b/g, "νxy"], [/\bnu_?12\b/g, "ν₁₂"],
   [/\bsigma_?1\b/g, "σ₁"], [/\bsigma_?2\b/g, "σ₂"], [/\btau_?12\b/g, "τ₁₂"], [/\bkappa_x\b/g, "κx"], [/\bkappa_y\b/g, "κy"], [/\bkappa_xy\b/g, "κxy"],
+  [/\bE1\b/g, "E₁"], [/\bE2\b/g, "E₂"], [/\bG12\b/g, "G₁₂"],
 ];
 export const withSymbols = (text: string): string => SYMBOLS.reduce((out, [pattern, symbol]) => out.replace(pattern, symbol), text);
 

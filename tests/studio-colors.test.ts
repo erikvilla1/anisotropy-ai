@@ -37,8 +37,12 @@ test("colours are flat triples and a missing value is the named grey", () => {
 test("legend ticks and printed numbers", () => {
   assert.deepEqual(legendTicks({ min: 0, max: 100 }, 5), [0, 25, 50, 75, 100]);
   assert.equal(printed(123.456789), "123.5");
-  assert.equal(printed(0.000012345), "1.234e-5");
+  assert.equal(printed(0.000012345), "1.234 × 10⁻⁵"); // the site's one rule (lib/number-format.ts): no programmer's e-notation
   assert.equal(printed(2787.75), "2788");
+  assert.equal(printed(16211.4), "16210"); // plain up to a million, as the Summary prints a reaction
+  assert.equal(printed(1.5e6), "1.5 × 10⁶");
+  assert.equal(printed(-364.5), "−364.5"); // the minus sign, as the convergence table's percentChange prints it
+  assert.equal(printed(0.0026), "0.0026"); // no trailing zeros in a readout
   assert.equal(printed(0), "0");
   assert.equal(printed(null), "–");
 });

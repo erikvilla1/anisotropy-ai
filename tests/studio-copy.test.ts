@@ -90,6 +90,11 @@ test("the guard keeps the product's words and drops tools, files, paths and exit
   assert.equal(checkText({ state: "fail", message: "the CalculiX twin cannot be written", rows: ["Element size (mm)"] }), "Change the inputs listed.");
   assert.equal(checkText({ state: "pending", message: "CalculiX runs after the check" }), "Not checked yet.");
   assert.deepEqual(bannedIn("its SPOOLES solver stopped"), ["SPOOLES"]);
+  // the laminate's machinery words (audit, laminate-2): the engine, the decks, the case runner; an engineer is not an engine
+  for (const text of ["the engine converts, never this page", "the units the coupon decks use", "the engine's case runner lists both", "Engine 0.1.0"]) {
+    assert.notDeepEqual(bannedIn(text), [], text);
+  }
+  assert.deepEqual(bannedIn("Run by A. Engineer, engineering shear strain"), []);
 });
 
 test("an explanation sentence loses another viewer's aside, and the ASCII names become symbols", () => {
@@ -97,12 +102,32 @@ test("an explanation sentence loses another viewer's aside, and the ASCII names 
   assert.equal(shownSentence(sentence), "In the gauge section, the largest tension along the fibres (σ₁) is 1203 MPa in ply 2.");
   assert.equal(shownSentence("Reference solver installed: CalculiX 2.22 at C:\\Tools\\ccx.exe."), null);
   assert.equal(withSymbols("eps_x = 1719 microstrain, gamma_xy = 0, nu_xy = 0.31, sigma2 reaches F2t, tau12 = 3"), "εx = 1719 microstrain, γxy = 0, νxy = 0.31, σ₂ reaches F2t, τ₁₂ = 3");
+  assert.equal(withSymbols("E1 147 GPa, E2 10300 MPa, G12 7 GPa, nu12 0.27, F1t 2280 MPa"), "E₁ 147 GPa, E₂ 10300 MPa, G₁₂ 7 GPa, ν₁₂ 0.27, F1t 2280 MPa");
+  // the numbers read as the page prints them (ADR-0091 amendment 1): plain below a million, the minus sign, the layup as written
+  assert.equal(shownSentence("Under Nx = 1e+05 N/m the mid-plane strain is eps_x = 1719 microstrain, eps_y = -497 microstrain."),
+    "Under Nx = 100000 N/m the mid-plane strain is εx = 1719 microstrain, εy = −497 microstrain.");
+  // a coupon job solved before the rule: its sentence quotes the grip's force as the Summary beside it prints it
+  const grip = (fixture("explanation").sentences as string[]).find((s) => s.includes("grip carries"))!;
+  assert.match(grip, /1\.622e\+04 N/);
+  assert.match(shownSentence(grip)!, /grip carries 16220 N/);
+  assert.equal(shownSentence("The stack [0/45/-45/90/90/-45/45/0] of 8 plies is 1 mm thick."), "The stack [0/45/-45/90/90/-45/45/0] of 8 plies is 1 mm thick.");
   for (const name of ["explanation"]) {
     for (const dir of ["studio", "studio-standards", "studio-bending", "studio-plate"]) {
       for (const s of fixture(name, dir).sentences as string[]) {
         const shown = shownSentence(s);
         if (shown !== null) assert.deepEqual(bannedIn(shown), [], shown);
       }
+    }
+  }
+});
+
+test("every sentence of a laminate answer is shown, with no machinery word and no e-notation (laminate-2, laminate-6)", () => {
+  for (const name of ["laminate-answer", "laminate-answer-us"]) {
+    for (const s of fixture(name).prose as string[]) {
+      const shown = shownSentence(s);
+      assert.notEqual(shown, null, s);
+      assert.deepEqual(bannedIn(shown!), [], shown!);
+      assert.doesNotMatch(shown!, /\de[-+]\d/, shown!);
     }
   }
 });

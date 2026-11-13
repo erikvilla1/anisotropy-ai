@@ -114,7 +114,7 @@ test("the engine step shows the calculator's own answer: one POST before the loa
   await expect(specs).toContainText("symmetric, balanced");
   await expect(specs).toContainText("1.463 mm");
   await expect(specs).toContainText("2.312 kg/m²");
-  await expect(step(page, "engine").getByTestId("abd-grid").getByRole("table", { name: "A matrix" })).toContainText("9.88e+7");
+  await expect(step(page, "engine").getByTestId("abd-grid").getByRole("table", { name: "A matrix" })).toContainText("9.88 × 10⁷"); // the site's one number rule, three figures
   await expect(step(page, "engine")).toContainText(`Engine ${quasi.engine_version}`);
   await page.waitForTimeout(900);
   expect(posts.length).toBe(1);

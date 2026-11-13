@@ -4,7 +4,7 @@ import "./calculator.css";
 
 export const metadata: Metadata = {
   title: "Laminate calculator",
-  description: "Calculate laminate stiffness, mid-plane strains and curvatures with the Anisotropy engine.",
+  description: "Calculate laminate stiffness, mid-plane strains and curvatures.",
 };
 
 export default function CalculatorPage() {

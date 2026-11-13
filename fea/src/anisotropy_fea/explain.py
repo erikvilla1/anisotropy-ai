@@ -38,10 +38,21 @@ EXTREME_WORDS = {("S11", "tension"): "the largest tension along the fibres (sigm
                  ("S22", "tension"): "the largest tension across the fibres (sigma_2)", ("S22", "compression"): "the largest compression across the fibres (sigma_2)",
                  ("S12", "largest"): "the largest in-plane shear (tau_12)"}
 DIGITS = 4
+PLAIN_FROM, PLAIN_BELOW = 1e-3, 1e6  # the site's one number rule (lib/number-format.ts; ADR-0091 amendment 1)
 
 
 def number(value: float) -> str:
-    return f"{value:.{DIGITS}g}"
+    """A value as a sentence writes it: DIGITS significant figures without trailing zeros, plain digits from 0.001 up to a million
+    (16220, not 1.622e+04) and an exponent outside (1.5e+06), the site's one number rule. The page prints the exponent as "x 10^n"
+    in superscript and the sign as a minus; the sentence stays ASCII so the number guard reads it (ADR-0052)."""
+    if value == 0 or not math.isfinite(value):
+        return f"{value:g}"
+    rounded = float(f"{value:.{DIGITS - 1}e}")
+    if PLAIN_FROM <= abs(rounded) < PLAIN_BELOW:
+        text = f"{rounded:.{DIGITS}g}"
+        return text if "e" not in text else f"{rounded:f}".rstrip("0").rstrip(".")
+    mantissa, exponent = f"{value:.{DIGITS - 1}e}".split("e")
+    return f"{mantissa.rstrip('0').rstrip('.')}e{int(exponent):+03d}"
 
 
 def printed(value: float) -> float:
