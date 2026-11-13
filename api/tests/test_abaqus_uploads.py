@@ -10,6 +10,7 @@ real `fea/tools/abaqus_upload.py`: no stand-in judges a bundle here. No Abaqus r
 import datetime as dt
 import importlib.util
 import io
+import json
 import shutil
 import subprocess
 import sys
@@ -342,6 +343,121 @@ def test_behind_access_an_upload_is_its_owners_a_second_user_gets_not_found_and_
     assert as_a_link(client, f"{ROUTE}/{upload['id']}/bundle", params={"actor": "browser"}, headers=signed(OTHER), follow_redirects=False).status_code == 404
     assert client.delete(f"{ROUTE}/{upload['id']}", headers=signed()).status_code == 204
     assert key not in store.objects and client.get(ROUTE, headers=signed(FOUNDER)).json() == []
+
+
+# ------------------------------------------------------------------------------------------------------- the document (step 7)
+
+DOCUMENT_STUB = [sys.executable, str(Path(__file__).with_name("document_stub.py"))]
+TECTONIC = shutil.which("tectonic") is not None or (Path.home() / "AppData/Local/Programs/tectonic/tectonic.exe").exists()  # docs/manual/build.py `tectonic`
+
+
+def stub_said(pdf: bytes) -> dict:
+    assert pdf.startswith(b"%PDF-1.4\n")
+    return json.loads(pdf.split(b"\n", 1)[1])
+
+
+def test_the_comparison_is_written_as_a_document_kept_with_the_upload_and_deleted_with_it(local, made, monkeypatch, tmp_path):
+    client, registry, kept, engine = local
+    log = tmp_path / "stub.log"
+    monkeypatch.setattr(kept, "writer", DOCUMENT_STUB)
+    monkeypatch.setenv("DOCUMENT_STUB_LOG", str(log))
+    upload = client.post(ROUTE, content=bundle(made, "differs")).json()
+    address, bundle_key = f"{ROUTE}/{upload['id']}/document", f"uploads/{upload['id']}/bundle.zip"
+    for answer in (client.post(address), client.get(address)):  # no run of ours beside it yet: nothing to print
+        assert answer.status_code == 409 and answer.json()["detail"] == f"Not compared: {upload['not_compared']}"
+    assert not log.exists() and kept.store.keys("") == [bundle_key]
+
+    job_id = run_on_this_disk(registry, engine, made)
+    compared = client.post(f"{ROUTE}/{upload['id']}/compare").json()
+    assert compared["verdict"] == "differs"
+    when = dt.datetime.fromisoformat(compared["compared_at"])
+    key = f"uploads/{upload['id']}/compared-{when.astimezone(dt.timezone.utc):%Y%m%dT%H%M%S%f}Z.pdf"
+    written = client.post(address)
+    assert written.status_code == 200 and written.json() == {"upload_id": upload["id"], "compared_at": compared["compared_at"],
+                                                              "filename": "Job-1-compared-with-anisotropy.pdf"}
+    assert kept.store.keys("") == [bundle_key, key]  # beside the bundle, under the upload's own prefix: never in the run's files
+    assert not any(registry.root.rglob("*.pdf")) and not list(kept.scratch.iterdir())
+
+    got = client.get(address)
+    assert got.status_code == 200 and got.headers["content-type"] == "application/pdf"
+    assert "Job-1-compared-with-anisotropy.pdf" in got.headers["content-disposition"]
+    assert stub_said(got.content) == {"upload": upload["id"], "run": f"our run {job_id}", "verdict": "differs",
+                                      "compared": f"{when.astimezone(dt.timezone.utc):%Y-%m-%d %H:%M} UTC"}  # written from the row's comparison
+    linked = as_a_link(client, address, params={"actor": "studio"})  # the page's link
+    assert linked.status_code == 200 and linked.content == got.content
+    assert log.read_text(encoding="utf-8").splitlines() == [f"{upload['id']} pdf"]  # written once, then handed out from the store
+    assert as_a_link(client, address).status_code == 422
+    stranger = {"X-Anisotropy-Actor": "test"}
+    for answer in (client.get(address, headers=stranger), client.post(address, headers=stranger), as_a_link(client, address, params={"actor": "test"})):
+        assert answer.status_code == 404 and answer.json()["detail"] == f"No upload {upload['id']} of yours"
+
+    again = client.post(f"{ROUTE}/{upload['id']}/compare").json()  # a new comparison: the document of the last one is not handed out for it
+    assert again["compared_at"] != compared["compared_at"]
+    later = dt.datetime.fromisoformat(again["compared_at"])
+    new_key = f"uploads/{upload['id']}/compared-{later.astimezone(dt.timezone.utc):%Y%m%dT%H%M%S%f}Z.pdf"
+    assert stub_said(client.get(address).content)["compared"] == f"{later.astimezone(dt.timezone.utc):%Y-%m-%d %H:%M} UTC"
+    assert kept.store.keys("") == [bundle_key, new_key] and len(log.read_text(encoding="utf-8").splitlines()) == 2
+
+    assert client.delete(f"{ROUTE}/{upload['id']}").status_code == 204
+    assert kept.store.keys("") == [] and client.get(address).status_code == 404  # the document goes with the upload
+
+
+def test_a_document_that_cannot_be_written_is_answered_with_the_reason_and_nothing_is_kept(local, made, monkeypatch):
+    client, registry, kept, engine = local
+    monkeypatch.setattr(kept, "writer", DOCUMENT_STUB)
+    run_on_this_disk(registry, engine, made)
+    upload = client.post(ROUTE, content=bundle(made, "agrees")).json()
+    address = f"{ROUTE}/{upload['id']}/document"
+    said = {"refused": (409, "Not compared: the comparison was refused, so there is nothing to print: a stand-in's reason"),
+            "latex": (503, "The document could not be written: the document was not compiled: Tectonic is not installed, so no PDF was written"),
+            "silent": (503, "The document could not be written: the bundle's command failed: the stand-in stopped before it answered")}
+    for mode, (status, detail) in said.items():
+        monkeypatch.setenv("DOCUMENT_STUB", mode)
+        for answer in (client.post(address), client.get(address)):
+            assert answer.status_code == status and answer.json()["detail"] == detail
+    monkeypatch.setattr(kept, "writer", None)
+    monkeypatch.setattr(uploads, "document_command", lambda: None)
+    assert client.get(address).status_code == 503 and "uv is not on PATH" in client.get(address).json()["detail"]
+    assert kept.store.keys("") == [f"uploads/{upload['id']}/bundle.zip"] and str(kept.scratch) not in client.get(address).text
+    assert not list(kept.scratch.iterdir())
+
+
+def test_the_real_command_writes_the_document_where_tectonic_is_installed_and_says_so_where_it_is_not(local, made):
+    """`docs/models/upload.py` itself, from a comparison the real command made. CI's api job has no Tectonic; a machine that has it
+    gets the PDF."""
+    client, registry, kept, engine = local
+    run_on_this_disk(registry, engine, made)
+    upload = client.post(ROUTE, content=bundle(made, "differs")).json()
+    got = client.get(f"{ROUTE}/{upload['id']}/document")
+    if TECTONIC:
+        assert got.status_code == 200 and got.content.startswith(b"%PDF") and len(kept.store.keys("")) == 2
+    else:
+        assert got.status_code == 503, got.text
+        assert got.json()["detail"] == "The document could not be written: the document was not compiled: Tectonic is not installed, so no PDF was written"
+        assert kept.store.keys("") == [f"uploads/{upload['id']}/bundle.zip"]
+    assert not list(kept.scratch.iterdir())
+
+
+def test_behind_access_the_document_is_a_short_lived_link_for_its_owner_and_the_founders_alone(hosted, made, monkeypatch):
+    client, registry, store, engine = hosted
+    monkeypatch.setattr(app.state.uploads, "writer", DOCUMENT_STUB)
+    run_in_the_bucket(registry, engine, made)
+    upload = client.post(ROUTE, content=bundle(made, "agrees"), headers=signed()).json()
+    assert upload["verdict"] == "agrees"
+    address = f"{ROUTE}/{upload['id']}/document"
+    when = dt.datetime.fromisoformat(upload["compared_at"])
+    key = f"uploads/{upload['id']}/compared-{when.astimezone(dt.timezone.utc):%Y%m%dT%H%M%S%f}Z.pdf"
+    for answer in (client.get(address, headers=signed(OTHER)), client.post(address, headers=signed(OTHER))):  # to a second user it does not exist
+        assert answer.status_code == 404
+    assert key not in store.objects and client.get(address).status_code == 401
+
+    link = as_a_link(client, address, params={"actor": "browser"}, headers=signed(), follow_redirects=False)  # the page's link, signed in
+    assert link.status_code == 307 and link.headers["location"] == f"https://store.test/{key}?expires=600&filename=Job-1-compared-with-anisotropy.pdf"
+    assert store.objects[key][1] == "application/pdf" and stub_said(store.objects[key][0])["upload"] == upload["id"]
+    founder = client.get(address, headers=signed(FOUNDER), follow_redirects=False)  # the founders also read it
+    assert founder.status_code == 307 and founder.headers["location"] == link.headers["location"]
+    assert client.delete(f"{ROUTE}/{upload['id']}", headers=signed()).status_code == 204
+    assert not [k for k in store.objects if k.startswith(f"uploads/{upload['id']}/")]
 
 
 # ------------------------------------------------------------------------------------------------------- the tokens
