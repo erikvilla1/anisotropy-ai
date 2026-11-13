@@ -72,7 +72,7 @@ export default function Home() {
               <br />
               Calculated.
             </p>
-            <span className="home-hero-mark" aria-hidden="true" data-outro="spin" />
+            <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-outro="spin" />
             <div className="home-hero-notes">
               {/* The programme the team is part of (ADR-0081). */}
               <p className="home-hero-note" data-intro="type" data-outro="type">

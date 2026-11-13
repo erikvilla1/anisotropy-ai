@@ -110,8 +110,8 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   // seen before its move: a copy each, hidden from assistive technology, over the page's own text, which stays in place.
   const ready = seen.findIndex((frame) => frame.copies > 0);
   expect(ready).toBeGreaterThan(0);
-  // The Basement's mark, an image, waits with them to fade in, and the statement's copy carries the one text cursor.
-  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, riders: 1, running: 4, ownHeadline: STATEMENT });
+  // The triangle and the Basement's mark wait with them to fade in, and the statement's copy carries the one text cursor.
+  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, riders: 1, running: 5, ownHeadline: STATEMENT });
   expect(seen.slice(0, ready).every((frame) => frame.opacity === 1)).toBe(true);
   // The copies go once the moves have played: the headline's 1.6 s, with room for a busy machine.
   const lifting = seen.findIndex((frame) => frame.phase === "is-lift");

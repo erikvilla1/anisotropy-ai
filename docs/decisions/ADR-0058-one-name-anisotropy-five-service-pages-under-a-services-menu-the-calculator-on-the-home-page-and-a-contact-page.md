@@ -62,3 +62,12 @@ Four pull requests, in the order the plan set: the site map (the name, the heade
 **Decision.** Option 3. `app/chat/page.tsx`, `app/chat/view/page.tsx`, `app/studio/page.tsx` and `app/studio/view/page.tsx` render `RedirectTo` (`components/redirect-to.tsx`) towards `/workspace/fea` and `/workspace/fea/view`, so `?material=`, `?prompt=` and `?job=` arrive where they are read. The header's call to action reads "Open the workspace" and goes to `/workspace`; the service pages' access sections go to `/workspace/fea` ("Open the workspace", "Describe a coupon"); the materials page's "Discuss this material", the home composer, the data page and the industries page follow. The header and the footer treat `/workspace/*` as `/chat` was treated: the short header, no footer. `tests/site-map.test.ts` admits `/workspace` and its pages as access targets.
 
 **Evidence.** `npm run typecheck`: clean; `npm test`: 142 passed; `npx playwright test --config playwright.studio.config.ts`: 13 passed (the eleven studio scenarios on the new routes, the two workspace scenarios); the site-wide scenarios `expansion`, `portfolio` and `home` against `serve out`: 15 passed; `STUDIO_LIVE=1 npx playwright test --config playwright.studio-live.config.ts`: 1 passed (1.1 min), the example coupon checked and solved from the left column of `/workspace/fea`.
+
+## Amendment 2, 2026-11-13 (the library's link reads "Resources")
+
+**Context.** The lead asked to "rename Materials Library to Resources in the header."
+
+**Decision.** The link to `/library` reads "Resources". The header and the footer draw their links from one list (`lib/site-nav.ts`), so both change. The address and the page's own title, "Materials library", stay; other pages' links to it keep their wording.
+
+**Evidence.** On 2026-11-13: `tests/site-map.test.ts` expects About, Industries, Resources, Services, Contact us: 2 passed, 0 failed. The two menu cases of `expansion.spec.ts`: 2 of 2. UNVERIFIED: whether the page will hold more than the materials library, which the new word suggests.
+

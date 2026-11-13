@@ -118,3 +118,11 @@ Option 3.
 
 **Evidence.** On 2026-11-13 at 1440 px on the dev server the name's computed weight is 700 and it is 144.7 px wide beside the 34.3 by 28 px triangle; a screenshot of the header at twice the size was looked at.
 
+## Amendment 7, 2026-11-13 (the name is two pixels larger)
+
+**Context.** Seeing amendment 6, the lead asked to "make this font size like 2 points larger".
+
+**Decision.** The name's size is 0.93 of the triangle's height in place of 0.86: 26 px beside the header's 28 px triangle, where it was 24 px. The triangle keeps its size.
+
+**Evidence.** On 2026-11-13 at 1440 px on the dev server (`/about`): the name is 159.1 px wide where it was 144.7 px, beside the 34.3 by 28 px triangle; a screenshot of the header at twice the size was looked at.
+

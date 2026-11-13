@@ -1,7 +1,8 @@
 import { serviceHref, services } from "./services";
 
 /** The header's items in the order of the audit of 2026-10-31 (ADR-0058). Calculator and Studio left the
- * header: the calculator lives on the home page and the studio is reached from the finite element page. */
+ * header: the calculator lives on the home page and the studio is reached from the finite element page. The materials
+ * library's link reads "Resources" (the lead's wording of 2026-11-13); the page it opens keeps its own title. */
 export type NavItem = {
   label: string;
   href: string;
@@ -11,7 +12,7 @@ export type NavItem = {
 export const primaryNav: readonly NavItem[] = [
   { label: "About", href: "/about" },
   { label: "Industries", href: "/industries" },
-  { label: "Materials library", href: "/library" },
+  { label: "Resources", href: "/library" },
   {
     label: "Services",
     href: "/services",

@@ -130,3 +130,19 @@ What Anduril's code does:
 
 **Runs.** First run of the three files: 19 of 21. One failure was this change's own test, which asked a visitor with reduced motion for a blinking cursor; corrected. The other, `home.spec.ts` "a load turns on first-ply failure", passed when run again alone and does not touch the hero.
 
+## Amendment 5, 2026-11-13 (the triangle's turn is slower)
+
+**Context.** Seeing amendment 4's recording, the lead asked to "make the triangle spin slower. just one rotation." The turn was one full turn in about 0.9 s that sped up towards its end; the triangle looks the same every third of a turn, so it read as several.
+
+**Decision.** Still one full turn, now in 1.8 s, easing in and out (`cubic-bezier(0.45, 0, 0.55, 1)`), with the fade over its last part. It starts as the first character goes and takes its own time, so the words and the Basement's mark are gone about a second before it is.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px, a contact sheet of the exit at ten frames a second was looked at: the words are gone by 0.4 s, the triangle turns evenly until about 1.7 s and fades from about 1.2 s. `intro.spec.ts`: 4 of 4. UNVERIFIED: the motion on a real graphics card and on phones.
+
+## Amendment 6, 2026-11-13 (the triangle fades in with the words)
+
+**Context.** The lead asked: "can we also have the center triangle animate fade in with the other text".
+
+**Decision.** The hero's triangle carries `data-intro="fade"`: it fades in over the load-in's 1.5 s, starting 100 ms after the black lifts, as the Basement's mark does. Until then it was on the page as the black lifted.
+
+**Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` counts five elements waiting under the black (the three texts, the triangle and the Basement's mark): 4 of 4, run while the scroll tour was being reworked in the same tree, which these cases do not touch. UNVERIFIED: looked at only through that count, not on a recording.
+

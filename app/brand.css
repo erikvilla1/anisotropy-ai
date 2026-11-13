@@ -3,7 +3,7 @@
  * and drawn through a CSS mask, so it takes the colour of the text around it: light on the dark header and footer, dark on a
  * light ground. The name is the word itself in the site's typeface, in the hero statement's display cut and capitals, but
  * bold (amendment 6): at this small size the statement's medium weight read thin beside the triangle. One number sets the
- * size, the triangle's height; the name's capitals are about six tenths as tall. */
+ * size, the triangle's height; the name's capitals are about two thirds as tall (amendment 7). */
 .wordmark {
   --brand-h: 24px;
   display: inline-flex;
@@ -24,7 +24,7 @@
  * the line centres them on the triangle exactly; elsewhere they sit within a pixel of it. */
 .wordmark .brand-name {
   font-family: var(--font);
-  font-size: calc(var(--brand-h) * 0.86);
+  font-size: calc(var(--brand-h) * 0.93);
   font-weight: 700;
   /* The display cut, which the browser would only choose by itself at the statement's size. */
   font-variation-settings: "opsz" 32;
