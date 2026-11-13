@@ -35,7 +35,7 @@ const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", mo
 const FILES = DOWNLOAD_LABELS.slice(0, 3).map(([, label]) => label);
 const materialName = (id: string) => libraryOptions.find((option) => option.id === id)?.name ?? id;
 
-/** The home page's demonstration of the product (ADR-0094): the coupon workspace in four beats, in a black box the size of the
+/** The home page's demonstration of the product (ADR-0095): the coupon workspace in four beats, in a black box the size of the
  * hero's clip, directly under it. Each beat uses the workspace's own names and shapes, cut down for a first look: the assistant's
  * question and chips, the setup's summary, the run's stages with the stress field, and the files. Nothing is asked of the API:
  * the model, the field's colours and every number are one recorded run of the solver on a public example (lib/demo-run.ts).

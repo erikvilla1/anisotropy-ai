@@ -1,4 +1,4 @@
-/** The run the home page's product demo replays (ADR-0094): one answer of the repository's own solver for a public example,
+/** The run the home page's product demo replays (ADR-0095): one answer of the repository's own solver for a public example,
  * recorded by scripts/demo-run.py into lib/demo-run.json. Nothing here computes a result: the numbers are the recorded run's,
  * picked out and worded. */
 import record from "./demo-run.json";

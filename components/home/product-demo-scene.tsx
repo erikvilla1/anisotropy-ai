@@ -10,7 +10,7 @@ import { clamp01, poseAt, sceneAt, type LayupScript } from "./product-demo-timel
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
 export type DemoSceneHandle = { clock: number; redraw: (() => void) | null };
 
-/** The product demo's centre model (ADR-0094): the recorded run's coupon, one slab a ply, on the black box. Its place and
+/** The product demo's centre model (ADR-0095): the recorded run's coupon, one slab a ply, on the black box. Its place and
  * orientation, how far its plies stand apart, the mesh and the stress field's colours are all read from the demo's clock on
  * each frame (components/home/product-demo-timeline.ts) and written to transforms and uniforms; nothing is computed here but
  * where things are drawn. The coupon is drawn in millimetres, its thickness enlarged so the plies can be told apart. */

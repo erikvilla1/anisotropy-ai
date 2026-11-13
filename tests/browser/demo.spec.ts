@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import run from "../../lib/demo-run.json";
 import { bannedIn } from "../../lib/studio-copy";
 
-// The product demo under the hero (ADR-0094): a box the size of the hero's clip, black as the page is (amendment 2), in which the coupon workspace is shown in
+// The product demo under the hero (ADR-0095): a box the size of the hero's clip, black as the page is (amendment 2), in which the coupon workspace is shown in
 // four beats from one recorded run of the solver. The page scrolls to the box as any page does; once the box stands in the
 // window one scroll gesture plays one whole beat. `data-stop` on the box says where the demo's clock stands (0 while
 // the box is empty, 1 to 4 at the end of each beat) and `data-moving` is there while a beat plays.

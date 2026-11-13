@@ -106,7 +106,9 @@ What Anduril's code does:
 
 **Evidence.** On 2026-11-10, against the built site: `intro.spec.ts`, `home.spec.ts` and `tour.spec.ts` repeated five times each, 100 of 100 passed.
 
-## Amendment 3, 2026-11-13 (the same moves run backwards take the hero's words away)
+## Amendment 11, 2026-11-13 (the same moves run backwards take the hero's words away)
+
+Numbered 3 on its branch; renumbered when the branch took in main, where an amendment of 2026-11-12 had the number.
 
 **Decision.** `prepareOutro` in `components/intro-text.ts` takes the text of any element that carries `data-outro="type"` away line by line from the end of each line, with the typed line's windows run in reverse, and fades an element that carries `data-outro="fade"` after them. When it ends the elements carry `data-outro-done`, which the stylesheet makes invisible; their text stays in the page. The home hero uses it (ADR-0077 amendment 20).
 
@@ -116,7 +118,7 @@ What Anduril's code does:
 
 ## Amendment 4, 2026-11-13 (the statement is typed too; a text cursor; the mark turns; the Basement's mark joins)
 
-**Context.** After amendment 3 the lead asked, with a recording of a blinking text cursor: "can we make the inital animation same as the outro animation for the main center text and can we also add that blinking type line at the end", then "can we also make the triangle spin at the outro", and of The Basement's mark in the hero's corner, "this should also be a part of the animations".
+**Context.** After amendment 11 (the exit, written before this one) the lead asked, with a recording of a blinking text cursor: "can we make the inital animation same as the outro animation for the main center text and can we also add that blinking type line at the end", then "can we also make the triangle spin at the outro", and of The Basement's mark in the hero's corner, "this should also be a part of the animations".
 
 **Decision.**
 - **The home statement is typed in**, as the small lines are, in place of rising (`data-intro="type"`).

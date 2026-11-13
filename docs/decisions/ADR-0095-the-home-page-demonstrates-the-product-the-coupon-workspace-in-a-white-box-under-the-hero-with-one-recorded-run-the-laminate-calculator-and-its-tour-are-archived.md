@@ -1,4 +1,4 @@
-# ADR-0094: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
+# ADR-0095: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
 
 - Status: Proposed
 - Date: 2026-11-13

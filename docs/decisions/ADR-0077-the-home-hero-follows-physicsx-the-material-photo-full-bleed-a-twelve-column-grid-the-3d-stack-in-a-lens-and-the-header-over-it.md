@@ -260,7 +260,9 @@ On phones it is one column.
 
 **Evidence.** In the browser on 2026-11-10 at 1440 px, on the dev server: at rest the button is outlined with white words and an up-right arrow; hovered, its words are rgb(13, 13, 13), its border white, the fill at full width and the arrow turned 45°; after the pointer leaves it returns to the rest state. Screenshots of each state were looked at. UNVERIFIED: touch screens, where there is no hover.
 
-## Amendment 16, 2026-11-11 (the supporters' strip removed)
+## Amendment 31, 2026-11-11 (the supporters' strip removed)
+
+Numbered 16 on its branch; renumbered when the branch took in main, where an amendment of 2026-11-12 had the number.
 
 **Context.** Going through the draft, the lead showed the "Supported by" strip and asked: "also get rid of this".
 

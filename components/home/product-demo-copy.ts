@@ -1,4 +1,4 @@
-/** The product demo's words (ADR-0094), in one place so the unit test can read every one against the product view's banned terms
+/** The product demo's words (ADR-0095), in one place so the unit test can read every one against the product view's banned terms
  * (lib/studio-copy.ts, ADR-0091). The names of the materials, the run's stages and the files are the workspace's own and are
  * imported where they are shown; the numbers are the recorded run's (lib/demo-run.ts). */
 import { degrees, kilonewtons, standardName, type DemoRun } from "@/lib/demo-run";

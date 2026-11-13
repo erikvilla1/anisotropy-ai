@@ -63,7 +63,9 @@ Four pull requests, in the order the plan set: the site map (the name, the heade
 
 **Evidence.** `npm run typecheck`: clean; `npm test`: 142 passed; `npx playwright test --config playwright.studio.config.ts`: 13 passed (the eleven studio scenarios on the new routes, the two workspace scenarios); the site-wide scenarios `expansion`, `portfolio` and `home` against `serve out`: 15 passed; `STUDIO_LIVE=1 npx playwright test --config playwright.studio-live.config.ts`: 1 passed (1.1 min), the example coupon checked and solved from the left column of `/workspace/fea`.
 
-## Amendment 2, 2026-11-13 (the library's link reads "Resources")
+## Amendment 3, 2026-11-13 (the library's link reads "Resources")
+
+Numbered 2 on its branch; renumbered when the branch took in main, where an amendment of 2026-11-12 had the number.
 
 **Context.** The lead asked to "rename Materials Library to Resources in the header."
 

@@ -44,7 +44,7 @@ Option 3.
 
 ## Amendment 1, 2026-11-11 (the mark is shown once, in white on the hero)
 
-**Context.** The lead asked for the supporters' strip to be removed (ADR-0077 amendment 16). It was the only place that showed the mark in its own colours.
+**Context.** The lead asked for the supporters' strip to be removed (ADR-0077 amendment 31). It was the only place that showed the mark in its own colours.
 
 **Decision.** The mark is shown once, in white, in the hero's bottom left corner. `public/assets/partners/uc-san-diego-the-basement.png`, the colour copy, is deleted because nothing shows it; it is in commit `c28de06`. The About section still names the cohort in words.
 

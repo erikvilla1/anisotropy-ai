@@ -45,7 +45,7 @@ export type TourPlay = {
   /** The clock's speed while a step plays, in units a second. Default: the calculator tour's. */
   clockPerSecond?: number;
   /** Where in the window the element's top edge is while it holds the window, in pixels from the window's top. Default 0;
-   * the product demo's box is held in the middle of the window (ADR-0094). */
+   * the product demo's box is held in the middle of the window (ADR-0095). */
   anchor?: () => number;
   /** A page that comes to rest within this many pixels of where the element holds the window, by a link, the scroll bar or a
    * restored position (no wheel, key or finger just before), is put there. Default 0: only a page already there counts. */

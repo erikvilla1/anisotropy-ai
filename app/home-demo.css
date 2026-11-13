@@ -1,4 +1,4 @@
-/* The product demo (components/home/product-demo.tsx, ADR-0094): a black stage under the hero, as wide as the hero's clip and
+/* The product demo (components/home/product-demo.tsx, ADR-0095): a black stage under the hero, as wide as the hero's clip and
  * one window tall, in which the coupon workspace is shown in four beats (amendment 2; in amendment 1 it was a white box the
  * size of the clip). It has no edge on the black page; the small cards in it are the workspace's dark panels, behind a hairline. Two layouts share one markup: by
  * default an ordinary section, the beats one under another; on a desktop-sized window whose visitor has not asked for reduced

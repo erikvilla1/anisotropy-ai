@@ -1,4 +1,4 @@
-/** The product demo's clock (ADR-0094): what the home page's demonstration of the coupon workspace shows when. Four beats, played
+/** The product demo's clock (ADR-0095): what the home page's demonstration of the coupon workspace shows when. Four beats, played
  * one whole beat per scroll gesture by components/home/tour-driver.ts. `t` is the demo's own time; it stands still at a stop and
  * runs at one speed while a beat plays. Nothing here knows a number of the recorded run; it only says what is on screen when. */
 

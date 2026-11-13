@@ -97,12 +97,12 @@ export default function Home() {
           <span className="home-hero-cohort">Fall 2026 Launchpad cohort</span>
         </p>
       </section>
-      {/* The laminate calculator and its tour left the home page on 2026-11-13 (ADR-0094): a feature, not the product. Their
+      {/* The laminate calculator and its tour left the home page on 2026-11-13 (ADR-0095): a feature, not the product. Their
           components are kept, unmounted (components/home/laminate-hero.tsx, demo-tour.tsx); the full calculator is still at
           /calculator and in the workspace. */}
-      {/* The product demo (ADR-0094): the coupon workspace in four beats, in a white box the size of the clip, under it. */}
+      {/* The product demo (ADR-0095): the coupon workspace in four beats, in a white box the size of the clip, under it. */}
       <ProductDemo />
-      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 16):
+      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31):
           Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
           close the Mission band as a strip. */}
       <section className="band home-blurb home-mission" id="mission">

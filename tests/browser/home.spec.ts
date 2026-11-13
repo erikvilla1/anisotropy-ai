@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// The home page's hero. The laminate calculator and its tour left the page on 2026-11-13 (ADR-0094); the cases that read
+// The home page's hero. The laminate calculator and its tour left the page on 2026-11-13 (ADR-0095); the cases that read
 // them, and the tour's own browser cases, went with them; they are in the history before that commit.
 
 /** Every request the page makes to the API, so a case can say the page asks the engine for nothing. */
@@ -12,7 +12,7 @@ function apiRequests(page: Page): string[] {
   return asked;
 }
 
-test("the hero opens the page, and the laminate calculator and its tour are not on it (ADR-0094)", async ({ page }) => {
+test("the hero opens the page, and the laminate calculator and its tour are not on it (ADR-0095)", async ({ page }) => {
   const asked = apiRequests(page);
   await page.goto("/");
   expect(await page.locator("main > *").first().getAttribute("id")).toBe("overview");

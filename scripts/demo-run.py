@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Records the run the home page's product demo replays (ADR-0094).
+"""Records the run the home page's product demo replays (ADR-0095).
 
     python3 scripts/demo-run.py
 

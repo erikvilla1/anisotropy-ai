@@ -496,7 +496,7 @@
   }
 }
 
-/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 16): Mission and Platform
+/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31): Mission and Platform
  * dark, About light, News dark. Each numbered band opens with the kit's head. Platform's cards start at column 4, under the
  * statement, three columns wide and three to a row. The label column holds only labels, so the news dates sit in it and each
  * item's words start under the statement. The four principles close the Mission band as a strip on all twelve columns, and

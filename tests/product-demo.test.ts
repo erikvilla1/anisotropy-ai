@@ -6,7 +6,7 @@ import { decide } from "../components/home/tour-stepper";
 import { demoRun, demoScale, runProblems, standardName } from "../lib/demo-run";
 import { bannedIn, DOWNLOAD_LABELS, RUN_STEPS } from "../lib/studio-copy";
 
-// The product demo of the home page (ADR-0094): the recorded run it replays, its clock and its words.
+// The product demo of the home page (ADR-0095): the recorded run it replays, its clock and its words.
 
 const script = layupScript(demoRun.coupon.layup, demoRun.coupon.angles.length);
 const counts = { cells: 5, stages: RUN_STEPS.length, files: 3 };
