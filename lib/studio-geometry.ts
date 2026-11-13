@@ -4,7 +4,7 @@
  * number drawn comes from the fea package's preview or fields; a scale factor is a display choice, named as such.
  */
 
-export type Vec2 = number[];
+type Vec2 = number[];
 
 /** Two triangles per quad, keeping the quad's orientation (counterclockwise seen from +z). */
 export function quadsToTriangles(quads: number[][]): number[] {
@@ -33,7 +33,7 @@ export function boundaryEdges(quads: number[][]): [number, number][] {
   return [...counts.entries()].filter(([, n]) => n === 1).map(([key]) => seen.get(key)!);
 }
 
-export type PlateMesh = {
+type PlateMesh = {
   positions: number[]; // x, y, z per vertex
   triangles: number[]; // vertex indices, three per triangle: the top face first (two per element), then the bottom, then the walls
   vertexNode: number[]; // the mesh node each vertex stands on

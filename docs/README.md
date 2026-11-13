@@ -1,6 +1,6 @@
 # Documentation
 
-Where to find what Anisotropy AI has built, why, and how we know it works.
+Where to find what Anisotropy has built, why, and how we know it works.
 
 ## Start here
 
@@ -20,10 +20,10 @@ Where to find what Anisotropy AI has built, why, and how we know it works.
 | How do I run my own problem through the engine? | [Engine cheat sheet](engine-cheat-sheet.md) and the [engine card](components/engine.md) |
 | How do I send a whole case over HTTP? | [Case endpoint note](api-case-endpoint-2026-10-11.md) and the [API card](components/api.md) |
 | What happened this week? | [Weekly briefs](weekly/) |
-| How does the API call the engine? | [Chunk 1 walkthrough](../api/README.md) and [API component card](components/api.md) |
-| How does the website call the API? | [Chunk 2 walkthrough](walkthroughs/chunk-2-calculator.md) and [calculator component card](components/calculator.md) |
-| How do we solve for moments under a curvature constraint? | [Chunk 3 walkthrough](walkthroughs/chunk-3-constrained-analysis.md) and [analysis card](components/prescribed-curvature.md) |
-| How is the studio hosted, deployed and rolled back? | [The hosted tier walkthrough](walkthroughs/hosted-deploy.md) and [ADR-0056](decisions/ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md) |
+| How does the API call the engine? | [The API walkthrough](../api/README.md) and [API component card](components/api.md) |
+| How does the website call the API? | [The calculator walkthrough](walkthroughs/chunk-2-calculator.md) and [calculator component card](components/calculator.md) |
+| How do we solve for moments under a curvature constraint? | [The prescribed-curvature walkthrough](walkthroughs/chunk-3-constrained-analysis.md) and [analysis card](components/prescribed-curvature.md) |
+| How is the workspace hosted, deployed and rolled back? | [The hosted tier walkthrough](walkthroughs/hosted-deploy.md) and [ADR-0056](decisions/ADR-0056-the-hosted-tier-runs-on-cloudflare-with-one-solver-image-r2-access-and-neon-postgres-invite-only.md) |
 | How should the workspace's words read to a customer? | [Copy style guide](copy-style-guide.md) (ADR-0091) |
 | What do AI agents read before working here? | [Agent skills](agents/README.md) |
 | What should every agent, in any tool, know about the company? | [The shared brain](brain/README.md) (ADR-0057) |
@@ -84,7 +84,7 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0022](decisions/ADR-0022-plate-buckling.md) | Plate buckling: Navier closed form for specially orthotropic laminates, Ritz sine series otherwise, simply supported edges |
 | [0023](decisions/ADR-0023-agent-skills-in-the-docs-vault.md) | Agent skills live in `docs/agents/skills`, and `docs/` is the Obsidian vault (proposed) |
 | [0024](decisions/ADR-0024-api-exposes-the-case-format.md) | The API exposes the engine's case format as one endpoint instead of one contract per operation |
-| [0025](decisions/ADR-0025-run-records-in-local-postgresql.md) | Run records go in PostgreSQL, run locally in Docker, reached through SQLAlchemy and Alembic (proposed; the hosted tier's records go to Neon, ADR-0056; Neon's plain address routed to psycopg and migrations over the unpooled one, amendment 1) |
+| [0025](decisions/ADR-0025-run-records-in-local-postgresql.md) | Run records go in PostgreSQL, run locally in Docker, reached through SQLAlchemy and Alembic (proposed; the hosted tier's records go to Neon, ADR-0056; Neon's plain address routed to psycopg and migrations over the unpooled one, amendment 1; the unused `@neon/env` removed, amendment 2) |
 | [0026](decisions/ADR-0026-run-record-contents-and-startup-policy.md) | A run record is immutable, keeps rejected runs, names its actor; the API refuses to start without the database (proposed; the signed-in email on every record and the actor `browser`, amendment 1) |
 | [0027](decisions/ADR-0027-deployment-tiers-and-assistant-model-location.md) | Regulated customers run the whole stack inside their own boundary; the assistant's model is a per-deployment setting, off until configured (proposed; order of work extended by ADR-0048; item 2, the assistant's record, is ADR-0052; the invite-only hosted tier is built now on Cloudflare, before the self-hosted packaging, from one image for both tiers, ADR-0056) |
 | [0028](decisions/ADR-0028-founder-tooling-outside-the-repository.md) | Hermes and post-drafting tooling live outside the repository and call the API as an outside client (proposed; the facts its assistants share may live in `docs/brain/`, amendment 2, ADR-0057) |
@@ -155,12 +155,30 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0093](decisions/ADR-0093-the-sites-typeface-is-inter-the-nearest-open-licence-match-to-the-helvetica-like-type-on-andurils-site.md) | The site's typeface is Inter, self-hosted with its display cut, the nearest open-licence match to the Helvetica-like type on Anduril's site; DM Sans and Manrope are removed (proposed) |
 | [0094](decisions/ADR-0094-models-move-to-and-from-abaqus-through-a-connector-under-the-users-own-abaqus-and-one-versioned-bundle-compared-privately.md) | Models move to and from Abaqus through a connector that runs under the user's own Abaqus and one versioned bundle: a build script for the way out, the comparison by our tested code, an upload private to its owner, the result as a card on the run's page; steps 1 to 4 built, the bundle format, the comparison command, the connector, the build script and the assistant's three tools (build, run, send), and run under Abaqus 2025, where a coupon built by the script, solved and sent back agrees with ours, also as one command; steps 5 and 6 built, merged and deployed on 2026-11-13, the uploads with their owner check, private storage and tokens, and the card on a finished run that sends a file and shows the answer first; step 7 built, merged and deployed on 2026-11-13, the comparison as a PDF of the upload's own, kept with the upload and opened from the card; step 8 built, an Anisotropy menu in Abaqus/CAE (Open from Anisotropy, Send to Anisotropy) and a watched folder that sends each job as it finishes (proposed; who sees an upload, naming Abaqus on its card and the assistant's three tools confirmed by the founder) |
 | [0095](decisions/ADR-0095-the-home-page-demonstrates-the-product-the-coupon-workspace-in-a-white-box-under-the-hero-with-one-recorded-run-the-laminate-calculator-and-its-tour-are-archived.md) | The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run of the repository's own solver; the laminate calculator and its tour leave the home page, their code kept (proposed) |
+| [0096](decisions/ADR-0096-the-repository-is-all-rights-reserved-by-anisotropy-and-third-party-values-keep-their-owners-terms.md) | The repository is all rights reserved by Anisotropy (`LICENSE`), and third-party values keep their owners' terms by the rights classes of ADR-0018 (`NOTICE`); a source-available licence may be revisited later (proposed) |
+| [0097](decisions/ADR-0097-the-changelog-gets-a-dated-section-per-production-deploy-one-sentence-and-its-record-per-line.md) | The changelog gets a dated section per production deploy, one sentence and its record per line (proposed) |
 
 New decisions use the [template](decisions/_template.md).
 
-## Material data documents
+## Latest checks
 
-Latest checks: [run listing](evaluations/api/2026-10-14-run-records-list.md), [.local by purpose](evaluations/2026-10-21-local-by-purpose.md), [model comparison documents](evaluations/fea/2026-10-18-model-comparison-documents.md), [CalculiX first comparison](evaluations/fea/2026-10-15-calculix-first-comparison.md), [models from a spec](evaluations/fea/2026-10-15-models-from-a-spec.md), [manual covers the finite element layer](evaluations/fea/2026-10-15-manual-covers-fea.md), [ply recovery and first-ply failure](evaluations/fea/2026-10-15-ply-recovery-failure.md), [membrane kernel](evaluations/fea/2026-10-15-membrane-kernel.md), [Abaqus deck reader](evaluations/fea/2026-10-15-deck-reader.md), [Hermes out, actor renamed](evaluations/api/2026-10-14-hermes-out.md), [calculator endpoints recorded](evaluations/api/2026-10-14-run-records-calculator.md), [run records written and read back](evaluations/api/2026-10-14-run-records-write.md), [run records table and startup policy](evaluations/api/2026-10-14-run-records-table.md), [run records database](evaluations/api/2026-10-14-run-records-database.md), [engine, 11 October](evaluations/2026-10-11-criteria-buckling-loader.md), [API case endpoint](evaluations/api/2026-10-11-case-endpoint.md), [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md) and [source rights](evaluations/website/2026-10-10-source-rights.md). Website-only evaluations live in their subdirectory so the generated engine manual selects engine evidence.
+Every check is a dated note in [evaluations/](evaluations/): the engine's at the top level, the API's, the finite element layer's and the website's in their own folders, so the generated engine manual selects engine evidence. Newest first:
+
+- 2026-11-10: [the live solve, measured](evaluations/fea/2026-11-10-live-solve.md)
+- 2026-11-05: [the site map](evaluations/website/2026-11-05-site-map.md), [the stack summary and first-ply failure on the response endpoint](evaluations/2026-11-05-laminate-summary.md), [the home page's laminate calculator](evaluations/website/2026-11-05-home-laminate-hero.md), [beta launch checks](evaluations/website/2026-11-05-beta-launch-checks.md), [About and Industries](evaluations/website/2026-11-05-about-industries.md)
+- 2026-10-28: [the coupon studio's foundations](evaluations/fea/2026-10-28-studio-foundations.md), [the plate kind](evaluations/fea/2026-10-28-plate-kind.md), [plate bending](evaluations/fea/2026-10-28-plate-bending.md), [the coupon studio page](evaluations/website/2026-10-28-coupon-studio.md), [the assistant](evaluations/api/2026-10-28-assistant.md)
+- 2026-10-25: [the generated Abaqus decks run as written](evaluations/fea/2026-10-25-abaqus-decks-as-written.md)
+- 2026-10-21: [.local by purpose](evaluations/2026-10-21-local-by-purpose.md)
+- 2026-10-19: [solved problem documents](evaluations/2026-10-19-solved-problem-documents.md), [micromechanics](evaluations/2026-10-19-micromechanics.md), [open-hole coupons on a Gmsh O-grid](evaluations/fea/2026-10-19-gmsh-open-hole.md)
+- 2026-10-18: [model comparison documents](evaluations/fea/2026-10-18-model-comparison-documents.md), [X840 / Z60 in the material library](evaluations/website/2026-10-18-x840-z60-library.md)
+- 2026-10-15: [CalculiX first comparison](evaluations/fea/2026-10-15-calculix-first-comparison.md), [models from a spec](evaluations/fea/2026-10-15-models-from-a-spec.md), [manual covers the finite element layer](evaluations/fea/2026-10-15-manual-covers-fea.md), [ply recovery and first-ply failure](evaluations/fea/2026-10-15-ply-recovery-failure.md), [membrane kernel](evaluations/fea/2026-10-15-membrane-kernel.md), [Abaqus deck reader](evaluations/fea/2026-10-15-deck-reader.md)
+- 2026-10-14: [run listing](evaluations/api/2026-10-14-run-records-list.md), [Hermes out, actor renamed](evaluations/api/2026-10-14-hermes-out.md), [calculator endpoints recorded](evaluations/api/2026-10-14-run-records-calculator.md), [run records written and read back](evaluations/api/2026-10-14-run-records-write.md), [run records table and startup policy](evaluations/api/2026-10-14-run-records-table.md), [run records database](evaluations/api/2026-10-14-run-records-database.md)
+- 2026-10-11: [engine, 11 October](evaluations/2026-10-11-criteria-buckling-loader.md), [API case endpoint](evaluations/api/2026-10-11-case-endpoint.md)
+- 2026-10-10: [source rights](evaluations/website/2026-10-10-source-rights.md)
+- 2026-10-03: [engine inputs](evaluations/2026-10-03-input-validation.md), [website inputs and citations](evaluations/website/2026-10-03-input-validation.md), [prescribed curvature](evaluations/2026-10-03-prescribed-curvature.md), [the local API](evaluations/api/2026-10-03-api-chunk-1.md), [the calculator's connection](evaluations/website/2026-10-03-calculator-chunk-2.md)
+- 2026-10-02: [engine 0.1 verification](evaluations/2026-10-02_engine-0.1-verification.md)
+
+## Material data documents
 
 | Document | Contents |
 | --- | --- |
@@ -181,6 +199,6 @@ Latest checks: [run listing](evaluations/api/2026-10-14-run-records-list.md), [.
 | [material-release-nasa-im7-8552-2026-10-10.md](material-release-nasa-im7-8552-2026-10-10.md) | NASA 2023 IM7 / 8552 characterization as a second dataset of the IM7 / 8552 record |
 | [material-release-library-completion-2026-10-10.md](material-release-library-completion-2026-10-10.md) | Three NCAMP plain weave records and two MIL-HDBK-17-2F historical records; close-out of the public-sources research |
 
-## Added when the parts exist
+## Still missing
 
-From the documentation guide, these wait until the parts they describe are built: component cards for the language model and the report generator, and the per-run provenance record (run records, next). The weekly brief started on 2026-10-11 in `weekly/`; the engine has a [component card](components/engine.md). The local API now has a [component card](components/api.md) and [evaluation](evaluations/api/2026-10-03-api-chunk-1.md).
+Two documents the documentation guide asks for are not written yet: a component card for the assistant's language model (ADR-0052, ADR-0088; its endpoints are on the [API card](components/api.md)) and one for the report generator (`docs/models/`, described in its [README](models/README.md)). The guide's per-run provenance record exists as the run records (ADR-0025, ADR-0026; [API card](components/api.md)). The weekly brief has one issue, of 2026-10-11, in `weekly/`.

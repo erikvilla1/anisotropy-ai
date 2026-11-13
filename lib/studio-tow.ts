@@ -4,10 +4,10 @@
  * text while the engineer types and builds the values object `POST /v1/tow-tests` reads. Nothing here judges or computes: the fea package
  * judges the record, the engine computes every number.
  */
-import { FORM_VERSION, formDefinition, NO_STANDARD, standardsFor, type Checklist, type FieldDefinition, type SectionDefinition, type StudioForm } from "./studio-form";
+import { FORM_VERSION, formDefinition, type Checklist, type FieldDefinition, type SectionDefinition, type StudioForm } from "./studio-form";
 import type { PanelState } from "./workspace-panels";
 
-export type TowDefinition = {
+type TowDefinition = {
   test: string; kind: string; shared: string[]; sections: SectionDefinition[]; specimen_fields: FieldDefinition[]; item_of_row: Record<string, string>;
   failure_code: { type: Record<string, string>; area: Record<string, string>; location: Record<string, string> };
   units: Record<string, string>;
@@ -15,22 +15,18 @@ export type TowDefinition = {
 /** One specimen as typed: its rows by key, text. */
 export type TowSpecimenRow = Record<string, string>;
 
-export const towDefinition = (formDefinition as unknown as { tow: TowDefinition }).tow;
+const towDefinition = (formDefinition as unknown as { tow: TowDefinition }).tow;
 export const TOW_TEST = towDefinition.test;
-export const towSections: SectionDefinition[] = towDefinition.sections;
+const towSections: SectionDefinition[] = towDefinition.sections;
 export const towFields: FieldDefinition[] = towSections.flatMap((section) => section.fields);
 export const towFieldByKey: Record<string, FieldDefinition> = Object.fromEntries(towFields.map((field) => [field.key, field]));
 export const specimenFields: FieldDefinition[] = towDefinition.specimen_fields;
-export const TOW_KEYS = towFields.map((field) => field.key);
 /** The coupon form's rows the tow reads too, and the labels its checklist names them by. */
-export const TOW_SHARED = towDefinition.shared;
+const TOW_SHARED = towDefinition.shared;
 const SHARED_LABELS: Record<string, string> = { test: "Test", standard: "Standard", filled_by: "Filled in by", date: "Date", notes: "Notes to us" };
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
 export const isTow = (form: StudioForm): boolean => form.test === TOW_TEST;
-
-/** The standard a tow record may name: none, or the tow's standard (D4018). */
-export const towStandards = (): string[] => [NO_STANDARD, ...standardsFor(TOW_TEST).map((p) => p.designation)];
 
 /** The tow's rows the form does not hold yet, at the definition's defaults (bundles: 1): what picking the tow test adds, never overwriting a
  * row already typed. */
@@ -40,7 +36,7 @@ export function towDefaults(form: StudioForm): StudioForm {
   return rows;
 }
 
-export function blankSpecimen(n: number): TowSpecimenRow {
+function blankSpecimen(n: number): TowSpecimenRow {
   const row: TowSpecimenRow = {};
   for (const field of specimenFields) row[field.key] = field.default === null || field.default === undefined ? "" : String(field.default);
   row.id = String(n);

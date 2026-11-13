@@ -6,7 +6,7 @@ import { BENDING_TESTS, DOGBONE_TEST, FOUR_POINT_TEST, isIsotropic, OPEN_HOLE_TE
 import { libraryThickness, pliesOf } from "./studio-chat";
 import type { PlateLists } from "./studio-plate";
 
-export type SketchBox = { name: string; x0: number; x1: number; y0: number; y1: number };
+type SketchBox = { name: string; x0: number; x1: number; y0: number; y1: number };
 export type Sketch = {
   /** x, across the coupon, and y, along the load (ADR-0004), in the coupon's own length unit. */
   width: number; length: number;
@@ -38,7 +38,7 @@ export type Sketch = {
  * section of half-width a over half its length l, a fillet of radius R tangent to it, then the full half-width b, reached at a corner or,
  * with an outer radius RO (D638 Type IV), through a second arc tangent to both. Plain geometry for the drawing; null when the sizes make no
  * dog-bone (the check says why, by row). */
-export type DogboneOutline = { a: number; b: number; l: number; R: number; RO: number | null; sTangent: number; sFull: number; halfLength: number };
+type DogboneOutline = { a: number; b: number; l: number; R: number; RO: number | null; sTangent: number; sFull: number; halfLength: number };
 
 export function dogboneOutline(narrowWidth: number, narrowLength: number, radius: number, outerRadius: number | null, width: number, length: number): DogboneOutline | null {
   const a = narrowWidth / 2, b = width / 2, l = narrowLength / 2, R = radius;
