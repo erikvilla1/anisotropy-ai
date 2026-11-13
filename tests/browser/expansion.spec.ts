@@ -66,10 +66,13 @@ test("material filters, empty state, references and scope handoff", async ({
   await page
     .getByRole("button", { name: "7781 / E-765", exact: false })
     .click();
-  await page.getByRole("link", { name: "Discuss this material" }).click();
-  await expect(page).toHaveURL(/\/workspace\/fea\/?$/); // not a library material of the engine: the assistant asks from the start
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
-  await page.goto("/workspace/fea?material=im7-8552");
+  await expect(page).toHaveURL(/[?&]material=7781-e765/); // the address names the selected material
+  // Not a material the coupon workspace can analyse, so the library offers no link that would drop it.
+  await expect(page.getByRole("link", { name: /Analyse in Workspace/ })).toHaveCount(0);
+  await page.goto("/library?material=im7-8552");
+  await expect(page.getByRole("heading", { name: "IM7 / 8552", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: /Analyse in Workspace/ }).click();
+  await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
 });
 

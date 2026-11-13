@@ -5,15 +5,16 @@ import { curatedMaterials as materials, currentMaterial } from "@/lib/curated-ma
 import { useMaterialFeed } from "./material-provenance";
 import { CitedMaterialProperties } from "./cited-material-properties";
 
-export function MaterialBrowser() {
+/** The materials tab. The page owns the selected material so a link can name it (/library?material=im7-8552). */
+export function MaterialBrowser({ selected, onSelect }: { selected: string | null; onSelect: (id: string) => void }) {
   const { feed, stale } = useMaterialFeed();
   const [search, setSearch] = useState("");
   const [family, setFamily] = useState("All families");
-  const [selected, setSelected] = useState(materials[0].id);
+  const [announcement, setAnnouncement] = useState("");
   const filtered = materials.filter(
     (m) =>
       (family === "All families" || m.family === family) &&
-      `${m.id} ${m.name} ${m.family} ${m.architecture} ${m.conditions} ${m.family.startsWith("Carbon") ? "carbon fiber" : ""}`
+      `${m.id} ${m.name} ${m.family} ${m.architecture} ${m.conditions} ${m.family.startsWith("Carbon") ? "carbon fibre carbon fiber" : ""}`
         .toLowerCase()
         .includes(search.trim().toLowerCase()),
   );
@@ -26,7 +27,7 @@ export function MaterialBrowser() {
           <Search size={17} />
           <input
             aria-label="Search materials"
-            placeholder="Search a material, process, or architecture…"
+            placeholder="Search materials"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -42,16 +43,20 @@ export function MaterialBrowser() {
             <option key={f}>{f}</option>
           ))}
         </select>
-        <span aria-live="polite">{filtered.length} materials</span>
+        <span aria-live="polite">{filtered.length} {filtered.length === 1 ? "material" : "materials"}</span>
       </div>
+      <p className="sr-only" aria-live="polite">{announcement}</p>
       {current ? (
         <div className="material-browser source-materials">
-          <div className="material-list" aria-label="Material records">
+          <div className="material-list" role="group" aria-label="Material records">
             {filtered.map((m) => (
               <button
                 key={m.id}
                 aria-pressed={current.id === m.id}
-                onClick={() => setSelected(m.id)}
+                onClick={() => {
+                  onSelect(m.id);
+                  setAnnouncement(`${m.name} selected`);
+                }}
               >
                 <Layers3 size={18} />
                 <span>

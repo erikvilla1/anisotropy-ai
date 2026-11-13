@@ -102,6 +102,27 @@ test("reference publication is explicit, immutable, and preserves its revision a
   assert.throws(() => requireEngineeringProperties("divinycell-h45"), /No qualified/);
 });
 
+test("a changed document stays reported until a reviewed release covers it, even when the next check finds it unchanged", t => {
+  const db = new MonitorStore(":memory:", [source]); t.after(() => db.close());
+  db.recordSuccess(source, doc());
+  let status = buildCatalog(db).sources[0];
+  // The fixture is not the copy the library's values were reviewed against (lib/source-provenance.ts).
+  assert.equal(status.outcome, "baseline");
+  assert.equal(status.changedSinceReview, true);
+  db.review(db.state(source.id).snapshot_id!, "accepted", "Reviewer", "Checked");
+  publishReference(db, "divinycell-h45", status.fingerprint!, "Reviewer", "Checked");
+  assert.equal(buildCatalog(db).sources[0].changedSinceReview, false);
+  const changed = doc(table.replace("11 12 13", "21 22 23").replace("rev 26", "rev 27"));
+  db.recordSuccess(source, changed);
+  status = buildCatalog(db).sources[0];
+  assert.equal(status.outcome, "changed");
+  assert.equal(status.changedSinceReview, true);
+  db.recordSuccess(source, changed); // the next check finds the same new document
+  status = buildCatalog(db).sources[0];
+  assert.equal(status.outcome, "unchanged");
+  assert.equal(status.changedSinceReview, true);
+});
+
 test("failed or overdue checks prevent publishing; changed tables expose an extraction failure", t => {
   const db = new MonitorStore(":memory:", [source]); t.after(() => db.close());
   db.recordSuccess(source, doc());

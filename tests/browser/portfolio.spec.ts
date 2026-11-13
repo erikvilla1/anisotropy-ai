@@ -49,46 +49,48 @@ test("the chat keeps a coupon across messages and starts over on request", async
   await expect(page.getByTestId("chat-spec")).not.toContainText("250");
 });
 
-test("example data and local CSV imports validate before submission", async ({
+test("example data and local CSV imports are checked before the records are downloaded", async ({
   page,
 }) => {
   await page.goto("/data");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  for (const part of [page.locator(".studio-heading"), page.locator("#data-panel")])
+    await expect(part).not.toContainText(/PREVIEW|LAB LOOP|\bdemo\b|\btrain\b|submission/i);
+  const intro = page.getByRole("heading", { level: 2, name: /Every coupon adds evidence/ });
+  await expect(intro).toBeVisible();
+  // The intro keeps its own size; the page's generic h2 rule (40 px) does not reach it.
+  expect(await intro.evaluate(el => getComputedStyle(el).fontSize)).toBe("27px");
+  await expect(page.locator(".data-workspace .studio-mode")).toHaveCSS("font-size", "11px");
   await page.getByRole("button", { name: "Load example data" }).click();
-  await expect(page.getByText("Preview schema checks passed")).toBeVisible();
-  await page.getByRole("button", { name: "Preview submission" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Submission preview complete." }),
-  ).toBeVisible();
+  await expect(page.getByText("File checked: ready for review.")).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download review package" }).click();
-  expect((await download).suggestedFilename()).toBe("submission-preview.json");
+  await page.getByRole("button", { name: "Download checked records (JSON)" }).click();
+  expect((await download).suggestedFilename()).toBe("example-coupons-checked.json");
+  await expect(page.getByText("Checked records downloaded.", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Remove dataset" }).click();
-  await page.getByLabel("Upload test CSV").setInputFiles({
+  await page.getByLabel("Choose a test CSV").setInputFiles({
     name: "invalid.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(sampleCSV.replace("48.2", "-1")),
   });
   await expect(
-    page.getByText("failure_load_kN must be a positive number.", {
+    page.getByText("Failure load (kN) must be a positive number.", {
       exact: false,
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Preview submission" }),
+    page.getByRole("button", { name: "Download checked records (JSON)" }),
   ).toBeDisabled();
   await page.getByRole("button", { name: "Remove dataset" }).click();
-  await page.getByLabel("Upload test CSV").setInputFiles({
+  await page.getByLabel("Choose a test CSV").setInputFiles({
     name: "valid.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(sampleCSV),
   });
   await expect(
-    page.getByRole("button", { name: "Preview submission" }),
+    page.getByRole("button", { name: "Download checked records (JSON)" }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Preview submission" }).click();
-  await expect(
-    page.getByText("No records were sent to a server.", { exact: false }),
-  ).toBeVisible();
+  await expect(page.locator(".data-steps li[aria-current=step]")).toContainText("Download checked records");
 });
 
 test("mobile navigation and workspaces fit the screen", async ({ page }) => {
@@ -110,6 +112,7 @@ test("mobile navigation and workspaces fit the screen", async ({ page }) => {
     fullPage: false,
   });
   await page.goto("/data");
+  await expect(page.locator(".data-intro h2")).toHaveCSS("font-size", "24px");
   await page.getByRole("button", { name: "Load example data" }).click();
   expect(
     await page.evaluate(

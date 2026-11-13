@@ -77,8 +77,8 @@ NASA-STD-7009A (models and simulations) and ASME V&V 10 (computational solid mec
 | [0015](decisions/ADR-0015-course-inputs-and-several-materials.md) | Cases read course Excel inputs and describe several materials per laminate |
 | [0016](decisions/ADR-0016-mixed-load-deformation-conditions.md) | One general solver for mixed load and deformation conditions |
 | [0017](decisions/ADR-0017-failure-with-fixed-and-variable-loads.md) | First-ply failure holds fixed loads and thermal stress constant and scales the rest |
-| [0018](decisions/ADR-0018-source-rights-classes.md) | Every cited source carries a rights class that decides what the website shows (ASTM test standards are licensed references, amendment 1) |
-| [0019](decisions/ADR-0019-physics-library-mirrors-engine-theory.md) | The physics library presents every equation the engine implements, naming its function and source |
+| [0018](decisions/ADR-0018-source-rights-classes.md) | Every cited source carries a rights class that decides what the website shows (ASTM test standards are licensed references, amendment 1; review records off the pages, printed pages and printed figures only, amendment 2, proposed) |
+| [0019](decisions/ADR-0019-physics-library-mirrors-engine-theory.md) | The physics library presents every equation the engine implements, naming its function and source (the function named off the page, amendment 1, proposed) |
 | [0020](decisions/ADR-0020-material-library-as-engine-input.md) | The engine loads materials from the website's cited library through one exported JSON file |
 | [0021](decisions/ADR-0021-maximum-strain-and-tsai-hill.md) | Maximum strain and Tsai-Hill join the failure criteria; strain limits are explicit or derived only by stated choice |
 | [0022](decisions/ADR-0022-plate-buckling.md) | Plate buckling: Navier closed form for specially orthotropic laminates, Ritz sine series otherwise, simply supported edges |

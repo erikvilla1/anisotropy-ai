@@ -10,25 +10,31 @@
  */
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { curatedMaterials, materialDatasets, type CitedMaterial } from "../lib/curated-materials";
+import { citedByPrintedPage, curatedMaterials, materialDatasets, type CitedMaterial } from "../lib/curated-materials";
 
 export const libraryExportPath = resolve(__dirname, "../engine/src/anisotropy_engine/data/material-library.json");
 
 function dataset(material: CitedMaterial, primary: boolean) {
-  const { id, title, authors, publisher, revision, date, url, sha256, page, rights } = material.source;
+  // Customer fields only: this file also reaches the browser through lib/material-library-options.ts, so review records
+  // (lib/source-provenance.ts) stay out of it. A book, or a source whose link opens a search, is cited by its printed page
+  // only (ADR-0018 amendment 2): its PDF page stays in the record and is not exported. `kind` and `linkKind` tell the
+  // engine which links are the document itself, so only those get a #page= anchor.
+  const { id, title, authors, publisher, revision, date, url, rights, kind, linkKind } = material.source;
+  const printedOnly = citedByPrintedPage(material.source);
+  const page = printedOnly ? material.source.printedPage ?? material.source.page : material.source.page;
   return {
     materialId: material.id, name: material.name, family: material.family, architecture: material.architecture,
     datasetId: material.datasetId, dataset: material.dataset, primary,
     recordRevision: material.recordRevision ?? null, reviewedOn: material.reviewedOn ?? null,
     conditions: material.conditions, application: material.application,
     elasticInputs: material.elasticInputs ?? null,
-    source: { id, title, authors: authors ?? null, publisher, revision, date, url, sha256, page, rights },
+    source: { id, title, authors: authors ?? null, publisher, revision, date, url, page, rights, kind: kind ?? null, linkKind: linkKind ?? null },
     properties: material.properties.map(p => ({
       key: p.key, label: p.label, value: p.value,
       ...(p.valueEnd === undefined ? {} : { valueEnd: p.valueEnd }),
       ...(p.valueQualifier === undefined ? {} : { valueQualifier: p.valueQualifier }),
       unit: p.unit, symbol: p.symbol ?? p.key, basis: p.basis, direction: p.direction, method: p.method,
-      sourcePage: p.sourcePage, ...(p.printedPage === undefined ? {} : { printedPage: p.printedPage }),
+      sourcePage: printedOnly ? p.printedPage ?? p.sourcePage : p.sourcePage, ...(p.printedPage === undefined ? {} : { printedPage: p.printedPage }),
       ...(p.sourceValue === undefined ? {} : { sourceValue: p.sourceValue }),
       ...(p.sourceUnit === undefined ? {} : { sourceUnit: p.sourceUnit }),
     })),

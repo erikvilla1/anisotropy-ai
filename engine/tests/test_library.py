@@ -44,6 +44,25 @@ def test_im7_8552_defaults_to_the_ncamp_dataset_and_converts_printed_units_to_si
     assert "CAM-RP-2009-015" in m.citation and m.rights == "open-publisher"
 
 
+def test_a_book_or_a_search_link_is_cited_by_printed_page_and_a_document_link_opens_at_its_page():
+    # ADR-0018 amendment 2: the textbook links to its publisher and the dissertation to a search, so neither link is the
+    # document; both are cited by printed page only, with no #page= anchor and no PDF page in the export.
+    book = library_material("as4-3501")
+    assert book.value("E1").page == 377 and book.value("E1").printed_page == 377
+    assert "#page=" not in book.value("E1").reference_url
+    assert find_dataset("as4-3501")["source"]["page"] == 377
+    dissertation = library_material("x840-z60-pw")
+    assert dissertation.value("E1").page == 79 and dissertation.value("E1").printed_page == 79
+    assert "#page=" not in dissertation.value("E1").reference_url
+    record = find_dataset("x840-z60-pw")
+    assert record["source"]["page"] == 79 and record["source"]["linkKind"] == "search"
+    assert {p["sourcePage"] for p in record["properties"]} == {79}
+    # The NASA report's link is the public PDF itself: its value opens at the PDF page and also names the printed one.
+    nasa = library_material("im7-8552", "nasa-tm-20230001560-im7-8552-rt-measured-v1")
+    assert nasa.value("E1").page == 18 and nasa.value("E1").printed_page == 12
+    assert nasa.value("E1").reference_url.endswith("TM-20230001560.pdf#page=18")
+
+
 def test_the_nasa_dataset_of_the_same_material_is_a_separate_choice_with_direct_compression():
     m = library_material("im7-8552", "nasa-tm-20230001560-im7-8552-rt-measured-v1")
     assert m.lamina.E1 == pytest.approx(23.105148e6 * PSI, rel=1e-12)

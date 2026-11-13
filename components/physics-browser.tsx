@@ -1,9 +1,11 @@
 "use client";
 import { useState } from "react";
 import { ArrowUpRight, ChevronDown, Search } from "lucide-react";
-import { physicsTopics, deferredPhysicsTopics } from "@/lib/physics";
-import { checkedExamples, bookReference } from "@/lib/physics-foundations";
+import { physicsTopics } from "@/lib/physics";
 import { MathFormula } from "./math-formula";
+
+const count = (n: number) => `${n} ${n === 1 ? "equation" : "equations"}`;
+
 export function PhysicsBrowser() {
   const [selected, setSelected] = useState("clt");
   const [query, setQuery] = useState("");
@@ -15,14 +17,6 @@ export function PhysicsBrowser() {
   );
   return (
     <div className="physics-catalog">
-      <div className="physics-intro">
-        <span className="eyebrow">COMPOSITE MECHANICS</span>
-        <h2>Equations with a reference.</h2>
-        <p>
-          Look up the equation, its units and when it applies. These {physicsTopics.reduce((n, t) => n + t.methods.length, 0)} reference cards cover
-          lamina and laminate fundamentals. They do not calculate a component analysis.
-        </p>
-      </div>
       <div className="physics-browser">
         <nav className="topic-list" aria-label="Physics topics">
           {physicsTopics.map((t, i) => (
@@ -34,17 +28,17 @@ export function PhysicsBrowser() {
                 setQuery("");
               }}
             >
-              <span>0{i + 1}</span>
+              <span>{String(i + 1).padStart(2, "0")}</span>
               <strong>
                 {t.title}
-                <small>{t.methods.length} equations &amp; methods</small>
+                <small>{count(t.methods.length)}</small>
               </strong>
             </button>
           ))}
         </nav>
         <div className="topic-content">
           <span className="tiny-label">{topic.subtitle}</span>
-          <h3>{topic.title}</h3>
+          <h2>{topic.title}</h2>
           <div className="topic-assumptions">
             <strong>Assumptions & conventions</strong>
             <p>{topic.assumptions}</p>
@@ -53,7 +47,7 @@ export function PhysicsBrowser() {
             <Search size={16} />
             <input
               aria-label="Search this physics topic"
-              placeholder="Find a function or equation…"
+              placeholder="Search equations"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -74,16 +68,14 @@ export function PhysicsBrowser() {
                   <MathFormula name={m.name} />
                   <p>{m.detail}</p>
                   <p className="equation-units"><strong>Units</strong> · {m.units}</p>
-                  {m.reference && <p className="equation-reference"><a href={m.reference.url} target="_blank" rel="noreferrer">{m.reference.title} <ArrowUpRight size={13} /></a><br />{m.reference.location}</p>}
+                  {m.reference && <p className="equation-reference"><a href={m.reference.url} target="_blank" rel="noreferrer">{m.reference.title} <ArrowUpRight size={13} /><span className="sr-only"> (opens in a new tab)</span></a><br />{m.reference.location}</p>}
                 </div>
               </details>
             ))}
           </div>
-          {!matches.length && (
-            <p className="empty-library">
-              No functions match within this topic.
-            </p>
-          )}
+          <div role="status">
+            {!matches.length && <p className="empty-library">No equations match. Clear the search or choose another topic.</p>}
+          </div>
           <a
             className="topic-source"
             href={topic.url}
@@ -92,18 +84,10 @@ export function PhysicsBrowser() {
           >
             {topic.source}
             <ArrowUpRight size={15} />
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </div>
       </div>
-      <details className="physics-review-panel">
-        <summary>Worked examples &amp; equation checks</summary>
-        <p>Three textbook examples have been reproduced, alongside checks of axis rotation, stiffness symmetry and units. These verify selected formulas; they do not validate a CAD or FEA solver.</p>
-        {checkedExamples.map(example => <section key={example.name}><h4>{example.name}</h4><p>{example.inputs}</p><p>{example.result}</p><a href={bookReference.url} target="_blank" rel="noreferrer">{example.reference} <ArrowUpRight size={13} /></a></section>)}
-      </details>
-      <details className="physics-review-panel">
-        <summary>Later research: CAD, FEA &amp; advanced models</summary>
-        <ul>{deferredPhysicsTopics.map(topic => <li key={topic.title}><strong>{topic.title}</strong><p>{topic.detail}</p></li>)}</ul>
-      </details>
     </div>
   );
 }

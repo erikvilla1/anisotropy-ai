@@ -11,7 +11,7 @@ npm install
 npm run monitor:start
 ```
 
-Open http://127.0.0.1:3210. The service immediately checks sources that are due, then checks the schedule every minute. Each successful source is due again in 24 hours. Failures retry after 15 minutes, increasing to a maximum of six hours. Source failures remain visible alongside the last successful check. The monitor must remain running on an awake machine; no OS service, external scheduler, email alert, or cloud deployment is installed. On restart, overdue checks run again.
+Open http://127.0.0.1:3210. To see the feed on the library page, run the website with the flag on: `NEXT_PUBLIC_MATERIAL_MONITOR=on npm run dev` (PowerShell: `$env:NEXT_PUBLIC_MATERIAL_MONITOR = "on"; npm run dev`). Without it the page fetches no feed and says the values are pinned to the cited edition. The service immediately checks sources that are due, then checks the schedule every minute. Each successful source is due again in 24 hours. Failures retry after 15 minutes, increasing to a maximum of six hours. Source failures remain visible alongside the last successful check. The monitor must remain running on an awake machine; no OS service, external scheduler, email alert, or cloud deployment is installed. On restart, overdue checks run again.
 
 For an external scheduler, the one-shot command checks only due sources and exits nonzero on failures:
 
@@ -42,7 +42,7 @@ Eight ASTM adapters track D3039, D6641, D5379, D5766, C273, C365, D1621 and D162
 
 Dates come only from explicit source evidence. Month-only dates remain month-only. Copyright, crawl and upload dates are not revision dates. ASTM catalog update dates are labeled separately from material revisions. The public lookup shows a clearly labeled access date when no publication/revision date is established.
 
-The service atomically writes `public/materials/catalog-status.json` and also updates `out/materials/catalog-status.json` if an export exists. This generated feed is ignored by Git. It excludes original documents, full source text, reviewer names/notes, paths and tokens. The website refreshes it every 30 seconds. A missing feed, request failure or heartbeat older than three minutes marks monitoring unavailable; each source also reports failure/overdue status. The running service refreshes its heartbeat every minute. One-shot-only deployments lose the live-connected indication between runs.
+The service atomically writes `public/materials/catalog-status.json` and also updates `out/materials/catalog-status.json` if an export exists. This generated feed is ignored by Git. It excludes original documents, full source text, reviewer names/notes, paths and tokens. A website build made with `NEXT_PUBLIC_MATERIAL_MONITOR=on` reads it every 30 seconds and stops asking after a 404; without the flag (the hosted build) the website reads no feed and says the values are pinned to the cited edition. A missing feed, request failure or heartbeat older than three minutes marks monitoring unavailable; each source also reports failure/overdue status. The running service refreshes its heartbeat every minute. One-shot-only deployments lose the live-connected indication between runs.
 
 A remote static host requires a persistent worker and protected publication of the feed with caching disabled; uploading `out/` alone does not provide automatic monitoring. Run `npm test` for monitor, provenance and product tests.
 
