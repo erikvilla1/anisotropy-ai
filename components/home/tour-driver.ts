@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
-import { CLOCK_PER_SECOND, STOPS } from "./tour-timeline";
-import { HOLD_PX, LAST_STOP, crossed, decide, startsGesture, wheelPixels, type WheelMemory } from "./tour-stepper";
+import { CLOCK_PER_SECOND as TOUR_CLOCK_PER_SECOND, STOPS as TOUR_STOPS } from "./tour-timeline";
+import { HOLD_PX, crossed, decide, startsGesture, wheelPixels, type WheelMemory } from "./tour-stepper";
 
 /** How fast the page is put on the stage over the last of the way, when one event asks for more than is left: window heights
  * a second, at constant speed. */
@@ -39,12 +39,31 @@ export type TourFrame = {
  * from the browser and answered with one move at constant speed, the clock from one stop to the next. Up from the first
  * step and down from the last are the browser's again, and so is the way back up from the calculator. `onFrame` is called whenever the clock moves or the stage comes on or
  * goes off; the element carries `data-stop` (where the clock stands) and `data-moving` (while a move plays). */
-export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: boolean, onFrame: (frame: TourFrame) => void) {
+export type TourPlay = {
+  /** Where the clock stands still, from 0. Default: the calculator tour's stops. */
+  stops?: number[];
+  /** The clock's speed while a step plays, in units a second. Default: the calculator tour's. */
+  clockPerSecond?: number;
+  /** Where in the window the element's top edge is while it holds the window, in pixels from the window's top. Default 0;
+   * the product demo's box is held in the middle of the window (ADR-0094). */
+  anchor?: () => number;
+  /** A page that comes to rest within this many pixels of where the element holds the window, by a link, the scroll bar or a
+   * restored position (no wheel, key or finger just before), is put there. Default 0: only a page already there counts. */
+  settleWithin?: number;
+};
+
+export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: boolean, onFrame: (frame: TourFrame) => void, play?: TourPlay) {
   const latest = useRef(onFrame);
   latest.current = onFrame;
+  const options = useRef(play);
+  options.current = play;
   useEffect(() => {
     const element = tour.current;
     if (!enabled || !element) return;
+    const STOPS = options.current?.stops ?? TOUR_STOPS;
+    const CLOCK_PER_SECOND = options.current?.clockPerSecond ?? TOUR_CLOCK_PER_SECOND;
+    const LAST_STOP = STOPS.length - 1;
+    const anchor = () => options.current?.anchor?.() ?? 0;
     let stop = 0;
     let clock = 0;
     let moving = false; // a step is playing, or the page is being put on the stage
@@ -62,9 +81,9 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     let wheel: WheelMemory = null;
     let touch: { x: number; y: number; ours: boolean | null } | null = null;
 
-    const place = () => ({ top: element.getBoundingClientRect().top, viewport: window.innerHeight || 1 });
-    /** Where the page must be scrolled to for the stage to fill the window. */
-    const stageY = () => Math.round(window.scrollY + element.getBoundingClientRect().top);
+    const place = () => ({ top: element.getBoundingClientRect().top - anchor(), viewport: window.innerHeight || 1 });
+    /** Where the page must be scrolled to for the stage to stand where it holds the window. */
+    const stageY = () => Math.round(window.scrollY + element.getBoundingClientRect().top - anchor());
     // "instant": the site's `scroll-behavior: smooth` would otherwise ease every one of these.
     const scrollPage = (top: number) => window.scrollTo({ top, behavior: "instant" });
     const align = () => {
@@ -164,7 +183,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     /** Asks the rules what a gesture means and plays it. True when the tour took it, so the browser must not scroll. */
     function act(direction: 1 | -1, fresh: boolean, reach: number): boolean {
       lastInput = performance.now();
-      const action = decide(stop, moving, place(), direction, fresh, reach);
+      const action = decide(stop, moving, place(), direction, fresh, reach, LAST_STOP);
       if (action.kind === "native") {
         clampUntil = 0;
         return false;
@@ -223,9 +242,16 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     };
 
     const onRest = () => {
+      if (moving) return;
+      const off = Math.abs(place().top);
       // The page came to rest with the stage filling the window by some other way (a link to it, the scroll bar, a restored
       // position) and the tour has not started: its first step plays.
-      if (!moving && stop === 0 && Math.abs(place().top) <= HOLD_PX) play(1);
+      if (off <= HOLD_PX) {
+        if (stop === 0) play(1);
+        return;
+      }
+      // Or it came to rest near there without a wheel, a key or a finger: it is put there, as a link to the stage means.
+      if (off <= (options.current?.settleWithin ?? 0) && performance.now() - lastInput > INPUT_MS) carry(stageY(), settle);
     };
     const onScroll = () => {
       window.clearTimeout(rest);
@@ -248,8 +274,10 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       held = !off;
       if (!moving) {
         // Out of sight, the tour is where a visitor coming back to it expects it: at its start from above, at its end from below.
-        if (top >= viewport && stop !== 0) jump(0);
-        else if (top <= -viewport && stop !== LAST_STOP) jump(LAST_STOP);
+        // (Read from the element's own edges: where it holds the window need not be the window's top.)
+        const edges = element.getBoundingClientRect();
+        if (edges.top >= viewport && stop !== 0) jump(0);
+        else if (edges.bottom <= 0 && stop !== LAST_STOP) jump(LAST_STOP);
       }
       if (Math.abs(top) < viewport / 2 !== onStage) tell();
       rest = window.setTimeout(onRest, REST_MS);

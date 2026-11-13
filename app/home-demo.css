@@ -1,0 +1,440 @@
+/* The product demo (components/home/product-demo.tsx, ADR-0094): a white box with the hero clip's width and height, directly
+ * under the clip on the black page, in which the coupon workspace is shown in four beats. The box is light; the small cards in
+ * it are dark, as the workspace's own panels are, so they read as pieces of the product. Two layouts share one markup: by
+ * default an ordinary section, the beats one under another; on a desktop-sized window whose visitor has not asked for reduced
+ * motion, one stage in which a scroll gesture plays one whole beat. The margins are the hero's (app/home.css): 32 px of
+ * black at the sides and the foot, and the header's height above. */
+.product-demo {
+  --demo-top: 84px;
+  --demo-frame: 32px;
+  --demo-ink: #0a0a0a;
+  --demo-soft: #55585c;
+  --demo-rule: #e2e2e2;
+  position: relative;
+  z-index: 1;
+  /* The black under the box is a margin, so the section is as tall as its box: a link that brings the section to the window's
+   * middle (the hero's "Scroll to explore") brings the box there, which is where it holds the window. */
+  margin: 0 0 var(--demo-frame);
+  padding: 0 var(--demo-frame);
+  background: #000000;
+}
+@media (max-width: 1200px) {
+  .product-demo {
+    --demo-top: 86px;
+  }
+}
+@media (max-width: 1023px) {
+  .product-demo {
+    --demo-top: 75px;
+    --demo-frame: 24px;
+  }
+}
+@media (max-width: 640px) {
+  .product-demo {
+    --demo-top: 70px;
+    --demo-frame: 20px;
+  }
+}
+.product-demo-box {
+  position: relative;
+  min-height: calc(max(640px, 100svh) - var(--demo-top) - var(--demo-frame));
+  padding: 56px clamp(20px, 4vw, 64px) 64px;
+  background: #ffffff;
+  color: var(--demo-ink);
+  overflow: hidden;
+}
+.demo-label {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--demo-soft);
+}
+.product-demo-head h2 {
+  margin: 14px 0 0;
+  font-size: clamp(28px, 3vw, 44px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.product-demo-view {
+  position: relative;
+  height: clamp(220px, 34vw, 360px);
+  margin: 24px 0 8px;
+}
+.product-demo-view canvas {
+  display: block;
+}
+.product-demo-beats {
+  display: grid;
+  gap: 56px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.product-demo-beat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 761px) {
+  .product-demo-beat {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    column-gap: 48px;
+  }
+}
+.product-demo-words h3 {
+  margin: 12px 0 0;
+  font-size: clamp(26px, 2.5vw, 38px);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+.product-demo-words > p:last-child {
+  max-width: 30em;
+  margin: 14px 0 0;
+  font-size: 17px;
+  line-height: 26px;
+  color: var(--demo-soft);
+}
+.product-demo-recorded {
+  margin: 40px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  color: #7a7d80;
+}
+
+/* The cards: the workspace's dark panels, small. */
+.demo-card {
+  margin: 0;
+  padding: 18px 20px 20px;
+  border-radius: 14px;
+  background: #0e0e0f;
+  color: #efefef;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: left;
+  box-shadow: 0 18px 50px #0000002e;
+}
+.demo-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: #9a9a9a;
+}
+.demo-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #cfcfcf;
+}
+.demo-question {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 22px;
+}
+.demo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.demo-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid #343434;
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+}
+.demo-chips li[data-picked] {
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #0a0a0a;
+}
+.demo-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+.demo-field {
+  margin: 0;
+}
+.demo-field span {
+  display: block;
+  font-size: 12px;
+  line-height: 16px;
+  color: #9a9a9a;
+}
+.demo-field strong {
+  display: block;
+  min-height: 36px;
+  margin-top: 6px;
+  padding: 7px 11px;
+  border: 1px solid #343434;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.demo-typed i {
+  display: inline-block;
+  width: 1px;
+  height: 15px;
+  margin-left: 2px;
+  background: currentColor;
+  vertical-align: -2px;
+}
+.demo-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.demo-summary > div {
+  padding: 13px 18px 14px;
+  border-bottom: 1px solid #242424;
+}
+.demo-summary > div:nth-child(odd) {
+  border-right: 1px solid #242424;
+}
+.demo-summary > div:last-child {
+  grid-column: 1 / -1;
+  border-bottom: 0;
+  border-right: 0;
+}
+.demo-summary dt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  color: #8a8a8a;
+}
+.demo-summary dd {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 20px;
+  color: #6c6c6c;
+  transition: color 0.3s;
+}
+.demo-summary [data-filled] dd {
+  color: #efefef;
+}
+.demo-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 18px;
+}
+.demo-stages li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #6c6c6c;
+  transition: color 0.25s;
+}
+.demo-stages li span {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.demo-stages li[data-state="current"] {
+  color: #efefef;
+}
+.demo-stages li[data-state="done"] {
+  color: #b9b9b9;
+}
+.demo-stages li[data-state="done"] span {
+  border-color: #efefef;
+  background: #efefef;
+  color: #0a0a0a;
+}
+.demo-legend,
+.demo-result {
+  margin-top: 16px;
+  transition: opacity 0.5s;
+}
+.demo-legend p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: #9a9a9a;
+}
+.demo-legend-bar {
+  display: block;
+  height: 10px;
+  margin: 8px 0 5px;
+  border-radius: 2px;
+}
+.demo-legend .demo-legend-ends {
+  display: flex;
+  justify-content: space-between;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #cfcfcf;
+}
+.demo-result {
+  padding-top: 14px;
+  border-top: 1px solid #242424;
+}
+.demo-result p {
+  margin: 0;
+}
+.demo-result p + p {
+  margin-top: 4px;
+  color: #a8a8a8;
+}
+.demo-files {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  font-size: 15px;
+}
+.demo-files li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: opacity 0.4s;
+}
+.demo-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border: 1px solid #ffffff;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.15s, color 0.15s;
+}
+.demo-open:hover,
+.demo-open:focus-visible {
+  background: #ffffff;
+  color: #0a0a0a;
+}
+
+/* The stage. From the first paint the box has the clip's height, so nothing moves when the page's script sets the mode; until
+ * it has, nothing in the box is shown, because the markup is still the ordinary section's with every beat up. */
+@media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  .product-demo-box {
+    height: calc(max(640px, 100svh) - var(--demo-top) - var(--demo-frame));
+    min-height: 0;
+    padding: 0;
+  }
+  .product-demo:not([data-mode="pinned"]) .product-demo-box > * {
+    visibility: hidden;
+  }
+  /* The box comes up empty: its parts are there once it holds the window and the first beat starts, and go again when the
+   * demo is back at its start. */
+  .product-demo[data-mode="pinned"] .product-demo-box > * {
+    transition: opacity 0.7s ease;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-box:not([data-stop]) > *,
+  .product-demo[data-mode="pinned"] .product-demo-box[data-stop="0"]:not([data-moving]) > * {
+    opacity: 0;
+    transition: none;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-view {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    margin: 0;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-beats {
+    display: block;
+    position: absolute;
+    inset: 0;
+  }
+  /* A beat's words and its card: in as its beat plays, out as the next begins (--shown, written by the page), rising a
+   * little as they come. Only the beat that is up takes the pointer. */
+  .product-demo[data-mode="pinned"] .product-demo-beat {
+    position: absolute;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(14px, 2.2vh, 24px);
+    opacity: var(--shown, 0);
+    translate: 0 calc((1 - var(--shown, 0)) * 16px);
+    pointer-events: none;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-beat[data-active="true"] {
+    pointer-events: auto;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-beat[data-side="under"] {
+    left: 50%;
+    bottom: clamp(40px, 6vh, 64px);
+    width: min(740px, 70%);
+    transform: translateX(-50%);
+    text-align: center;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-beat[data-side="under"] .product-demo-words > p:last-child {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-beat[data-side="left"],
+  .product-demo[data-mode="pinned"] .product-demo-beat[data-side="right"] {
+    top: 50%;
+    width: min(430px, 34%);
+    transform: translateY(-50%);
+  }
+  .product-demo[data-mode="pinned"] .product-demo-beat[data-side="left"] {
+    left: clamp(32px, 5vw, 80px);
+  }
+  .product-demo[data-mode="pinned"] .product-demo-beat[data-side="right"] {
+    right: clamp(32px, 5vw, 80px);
+  }
+  .product-demo[data-mode="pinned"] .demo-legend:not([data-shown]),
+  .product-demo[data-mode="pinned"] .demo-result:not([data-shown]),
+  .product-demo[data-mode="pinned"] .demo-files li:not([data-shown]) {
+    opacity: 0;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-recorded {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 14px;
+    margin: 0;
+    text-align: center;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-recorded:not([data-shown]) {
+    opacity: 0;
+  }
+}
+/* A low window: the words' paragraph goes, so the model keeps its room. */
+@media (min-width: 1024px) and (min-height: 600px) and (max-height: 759px) and (prefers-reduced-motion: no-preference) {
+  .product-demo[data-mode="pinned"] .product-demo-beat[data-side="under"] .product-demo-words > p:last-child {
+    display: none;
+  }
+}

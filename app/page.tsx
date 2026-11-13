@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
 import { HeroOutro } from "@/components/home/hero-outro";
+import { ProductDemo } from "@/components/home/product-demo";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { serviceHref, services, statusLabel } from "@/lib/services";
@@ -99,6 +100,8 @@ export default function Home() {
       {/* The laminate calculator and its tour left the home page on 2026-11-13 (ADR-0094): a feature, not the product. Their
           components are kept, unmounted (components/home/laminate-hero.tsx, demo-tour.tsx); the full calculator is still at
           /calculator and in the workspace. */}
+      {/* The product demo (ADR-0094): the coupon workspace in four beats, in a white box the size of the clip, under it. */}
+      <ProductDemo />
       {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 16):
           Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
           close the Mission band as a strip. */}

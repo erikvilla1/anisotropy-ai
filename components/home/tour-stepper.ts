@@ -55,12 +55,13 @@ export type Action =
 /** What a gesture does. `stop` is where the clock stands, `moving` is true while a step plays or the page is being put on
  * the stage, `direction` is 1 for down (on in the page) and -1 for up, `fresh` is false for the later events of one wheel
  * gesture, and `reach` is how far this event asks the page to scroll, in pixels (0 when that is not known). */
-export function decide(stop: number, moving: boolean, place: Place, direction: 1 | -1, fresh: boolean, reach = 0): Action {
+export function decide(stop: number, moving: boolean, place: Place, direction: 1 | -1, fresh: boolean, reach = 0, last = LAST_STOP): Action {
   if (moving) return { kind: "swallow" };
   if (Math.abs(place.top) <= HOLD_PX) {
     if (!fresh) return { kind: "swallow" };
-    // Past the last step the stage lets go, and the page scrolls on to the calculator.
-    if (direction > 0) return stop < LAST_STOP ? { kind: "step", to: stop + 1 } : { kind: "native" };
+    // Past the last step (`last`: the calculator tour's own unless a caller plays other stops) the stage lets go, and the
+    // page scrolls on.
+    if (direction > 0) return stop < last ? { kind: "step", to: stop + 1 } : { kind: "native" };
     // Up from the first step there is nothing to play back: the stage lets go, and the page scrolls up to the hero.
     return stop > 1 ? { kind: "step", to: stop - 1 } : { kind: "native" };
   }
