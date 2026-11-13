@@ -10,8 +10,6 @@ import os
 import shutil
 from pathlib import Path
 
-import pytest
-
 from test_anisotropy_connector import connector, job, reader_of  # noqa: F401  the fixtures of the connector's own tests
 from test_connector_send import TOKEN, site, token_file  # noqa: F401
 
