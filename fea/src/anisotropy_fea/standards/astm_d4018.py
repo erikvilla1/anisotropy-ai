@@ -1,6 +1,6 @@
 """ASTM D4018: tensile properties of a resin-impregnated carbon or graphite fibre tow, as a profile (ADR-0074).
 
-Read from the D4018-23 copy licensed to UC San Diego. Each value below carries its clause; the wording is ours. The standard is in SI only
+Read from the D4018-23 edition. Each value below carries its clause; the wording is ours. The standard is in SI only
 (§1.5). It judges a test record, not a model: the fibre, its mass per unit length and density, the impregnated strand, the tensile set-up
 and the specimens tested. The record is a `TowSubject`, in SI; the numbers (strength, chord modulus, statistics) are the engine's
 (`anisotropy_engine.tow`), and the fea package's `tow_test` reads the studio's rows into both.
@@ -248,7 +248,7 @@ REPORT_ITEMS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 PROFILE = Profile(
     id=ID, designation=DESIGNATION, title="Tensile properties of continuous-filament carbon and graphite fibre tows", kinds=(KIND,),
     catalog_url="https://store.astm.org/d4018-23.html",
-    edition_note="read from the D4018-23 copy licensed to UC San Diego",
+    edition_note="ASTM D4018-23",
     systems="SI only (§1.5)",
     requirements=REQUIREMENTS, aliases=("d4018",),
 )

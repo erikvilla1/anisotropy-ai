@@ -1,5 +1,5 @@
 import library from "../engine/src/anisotropy_engine/data/material-library.json";
-import { PSI_MPA } from "./material-analysis";
+import { PSI_MPA } from "./property-numbers";
 
 /** Library datasets the calculator and the laminate workspace can pick: those with an elastic input set the engine can solve with. Display values only;
  * the API resolves the dataset itself and returns the SI values it used. */

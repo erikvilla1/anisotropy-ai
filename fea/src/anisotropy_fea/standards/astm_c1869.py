@@ -1,6 +1,6 @@
 """ASTM C1869: open-hole tensile strength of fibre-reinforced advanced ceramic composites, as a profile (ADR-0072).
 
-Read from the C1869-18 (reapproved 2023) copy licensed to UC San Diego. Each value below carries its clause; the wording is ours. The
+Read from the C1869-18 edition, reapproved 2023. Each value below carries its clause; the wording is ours. The
 standard is in SI only (§1.8), so a coupon stated in inches is held to the millimetre values, converted exactly.
 
 C1869 covers ceramic matrix composites (§1.1, §1.4). Every material in our library has a polymer matrix, whose open-hole standard is ASTM
@@ -221,7 +221,7 @@ REQUIREMENTS = (
 PROFILE = Profile(
     id=ID, designation=DESIGNATION, title="Open-hole tensile strength of fibre-reinforced advanced ceramic composites", kinds=("open_hole_tension",),
     catalog_url="https://store.astm.org/c1869-18.html",
-    edition_note="read from the C1869-18 (reapproved 2023) copy licensed to UC San Diego",
+    edition_note="ASTM C1869-18, reapproved 2023",
     systems="SI only (§1.8)",
     requirements=REQUIREMENTS, variants=(SPECIMEN_A, SPECIMEN_B), variant_words=("A", "B", OTHER), aliases=("c1869",),
 )

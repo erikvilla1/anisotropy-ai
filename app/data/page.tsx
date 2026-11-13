@@ -1,22 +1,13 @@
-"use client";
-import Link from "next/link";
-import { Workspace } from "@/components/data-workspace";
+import type { Metadata } from "next";
+import { DataView } from "./data-view";
+
+// Test-data checking has no submission yet, so this page stays out of search results and out of the site navigation.
+export const metadata: Metadata = {
+  title: "Test data",
+  description: "Check a CSV of coupon results in your browser, or try the example. Nothing is uploaded.",
+  robots: { index: false, follow: false },
+};
+
 export default function DataPage() {
-  return (
-    <main id="main" className="inner-page chat-page">
-      <div className="section studio-heading">
-        <div>
-          <span className="eyebrow">RESEARCH / TEST-DATA PREVIEW</span>
-          <h1>Bring the evidence together.</h1>
-          <p>
-            Inspect a sample submission, or check a CSV locally in your browser.
-          </p>
-        </div>
-        <Link className="text-button" href="/workspace/fea">
-          Open the coupon assistant →
-        </Link>
-      </div>
-      <Workspace activeTab="data" setActiveTab={() => {}} standalone />
-    </main>
-  );
+  return <DataView />;
 }

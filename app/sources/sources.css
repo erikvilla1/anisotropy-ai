@@ -25,4 +25,5 @@
 .source-page-links a{border:1px solid #4c4c4c;border-radius:4px;padding:9px 12px;color:#dedede}
 .source-page-links a[aria-current=page]{background:#2f2f2f;border-color:#a3a3a3}
 .source-empty p{max-width:65ch;font-size:15px;line-height:1.8;color:#bfbfbf}
+.source-empty .text-button{margin-top:24px;font-size:13px}
 @media(max-width:650px){.source-heading{flex-direction:column;gap:16px}.source-location{flex-direction:row;flex-wrap:wrap;gap:8px 16px;white-space:normal;width:100%}.source-location strong{width:100%}.source-values{grid-template-columns:1fr}.source-values>div+div{border-left:0;border-top:1px solid #4c4c4c}.source-values>div{padding:14px 16px}.source-values strong{font-size:20px}.source-attribution{flex-direction:column}.source-heading h1{overflow-wrap:anywhere}.source-content{padding-top:24px}.source-back{margin-bottom:22px}}

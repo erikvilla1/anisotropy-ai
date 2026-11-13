@@ -79,6 +79,9 @@ export type SourceStatus = {
   dateMeaning: string; lastChecked: string | null; lastSuccess: string | null; nextCheck: string;
   outcome: string; failed: boolean; review: "accepted" | "rejected" | "pending" | "not-captured";
   propertyExtraction: "not-configured" | "not-captured" | "ready-for-review" | "review-required";
+  // The captured document differs from every copy the shown values were reviewed against. `outcome` compares only with the
+  // check before, so this keeps a change reported until a reviewed release replaces the values.
+  changedSinceReview: boolean;
 };
 export type MaterialFeed = {
   schemaVersion: 1; generatedAt: string;

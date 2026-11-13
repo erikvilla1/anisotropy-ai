@@ -1,5 +1,8 @@
 // Every source the library cites carries a rights class that says what the website may
 // do with it. The policy below is the single place that decides what is shown (ADR-0018).
+// The evidence for each source's class is a review record and lives in lib/source-provenance.ts.
+import { textbookSource } from "./textbook-source";
+
 export type SourceRights = "public-domain" | "open-publisher" | "licensed-reference" | "user-supplied";
 
 export type RightsPolicy = {
@@ -9,29 +12,34 @@ export type RightsPolicy = {
   copyDocument: boolean;    // host a copy of the document, scans or extracted text
   linkDocument: boolean;    // link to the publisher's own copy of the document
   publicRecord: boolean;    // the dataset may appear in the public library at all
-  summary: string;
+  summary: string;          // what the class means, for the references list
+  note: string;             // one line beside a dataset's rights chip
 };
 
 export const sourceRightsPolicy: Record<SourceRights, RightsPolicy> = {
   "public-domain": {
     label: "Public domain",
     showValues: true, copyDocument: true, linkDocument: true, publicRecord: true,
-    summary: "Free of copyright, for example a US government work. Values, tables and quoted text may be shown and a copy may be hosted.",
+    summary: "Free of copyright, for example a US government handbook. We show its values with their page and link the official copy.",
+    note: "Free of copyright. Values are shown with their page; the official copy is linked.",
   },
   "open-publisher": {
     label: "Open publisher data",
     showValues: true, copyDocument: false, linkDocument: true, publicRecord: true,
-    summary: "The publisher distributes the document publicly, for example NCAMP reports, NASA reports and manufacturer datasheets. Values are shown with their citation and a link to the publisher's copy. No copy is hosted here.",
+    summary: "Published openly by its owner, for example NCAMP and NASA reports or a manufacturer's datasheet. We show the values with their page and link the publisher's copy.",
+    note: "Published openly by its owner. Values are shown with their page; the publisher's copy is linked.",
   },
   "licensed-reference": {
     label: "Licensed reference",
     showValues: true, copyDocument: false, linkDocument: false, publicRecord: true,
-    summary: "A copyrighted work we hold a copy of without redistribution rights, for example a textbook or CMH-17. Only the individual recorded values used by this library are shown, with the exact table and page, and readers are directed to their own copy. No scans, extracted text, tables or PDFs are published.",
+    summary: "A copyrighted work, or one whose terms are not confirmed, for example a textbook or CMH-17. We show only individual values with their table or figure and page; consult your own copy.",
+    note: "Values are cited by table or figure and page; consult your own copy.",
   },
   "user-supplied": {
     label: "User supplied",
     showValues: false, copyDocument: false, linkDocument: false, publicRecord: false,
-    summary: "Data a user uploads, such as internal allowables or their own licensed handbook extracts. Visible only in that user's private workspace and never published.",
+    summary: "Data a user supplies. Never shown on public pages.",
+    note: "Never shown on public pages.",
   },
 };
 
@@ -43,20 +51,17 @@ export function rightsPolicy(rights: SourceRights): RightsPolicy {
   return policy;
 }
 
-// Handbooks the library names on its references panel. MIL-HDBK-17-2F also backs two historical records.
+// Handbooks the library relies on. MIL-HDBK-17-2F also backs two historical records.
 export const handbookReferences = [
   { id: "mil-hdbk-17-2f", title: "MIL-HDBK-17-2F · Composite Materials Handbook, Volume 2: Polymer Matrix Composites, Materials Properties (2002; canceled 2013, superseded by CMH-17)",
     publisher: "US Department of Defense", rights: "public-domain" as const,
-    rightsEvidence: "Cover carries Distribution Statement A, approved for public release, distribution unlimited; issued as a DoD handbook (17 U.S.C. § 105). Canceled 26 March 2013 per ASSIST; historical data only.",
     url: "https://quicksearch.dla.mil/qsDocDetails.aspx?ident_number=53882" },
   { id: "cmh-17-2g", title: "CMH-17 Rev. G · Composite Materials Handbook, Volume 2 (SAE International, 2012)",
     publisher: "CMH-17 at Wichita State University; published by SAE International", rights: "licensed-reference" as const,
-    rightsEvidence: "Copyrighted; sold by SAE. Section-level citations only. No handbook content is reproduced; readers consult their own copy.",
     url: "https://saemobilus.sae.org/content/R-423" },
-  { id: "daniel-ishai-2006", title: "Daniel and Ishai · Engineering Mechanics of Composite Materials, second edition (Oxford University Press, 2006)",
+  { id: "daniel-ishai-2006", title: textbookSource.fullCitation,
     publisher: "Oxford University Press", rights: "licensed-reference" as const,
-    rightsEvidence: "Copyrighted textbook; no redistribution permission recorded (ADR-0010). Individual values cited by table and printed page.",
-    url: "https://global.oup.com/academic/product/engineering-mechanics-of-composite-materials-9780195150971" },
+    url: textbookSource.url },
 ];
 
 /** The test standards a coupon may follow (ADR-0072): licensed references under ADR-0018 amendment 1. The fea package holds individual values
@@ -65,22 +70,14 @@ export const handbookReferences = [
 export const testStandardReferences = [
   { designation: "ASTM D3039/D3039M-17", title: "Standard Test Method for Tensile Properties of Polymer Matrix Composite Materials",
     publisher: "ASTM International", rights: "licensed-reference" as const,
-    rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
-      + "with their clause only; readers consult their own copy. The publisher lists D3039/D3039M-17(2025), a reapproval, as active.",
     url: "https://store.astm.org/d3039_d3039m-17r25.html" },
   { designation: "ASTM D638-22", title: "Standard Test Method for Tensile Properties of Plastics",
     publisher: "ASTM International", rights: "licensed-reference" as const,
-    rightsEvidence: "Copyrighted and sold by ASTM; the founder supplied copies of D638-22, the active edition, and D638-14, kept out of the repository. "
-      + "Individual values with their clause only, in our words; readers consult their own copy (ADR-0075).",
     url: "https://store.astm.org/d0638-22.html" },
   { designation: "ASTM C1869-18(2023)", title: "Standard Test Method for Open-Hole Tensile Strength of Fiber-Reinforced Advanced Ceramic Composites",
     publisher: "ASTM International", rights: "licensed-reference" as const,
-    rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
-      + "with their clause only; readers consult their own copy.",
     url: "https://store.astm.org/c1869-18.html" },
   { designation: "ASTM D4018-23", title: "Standard Test Methods for Properties of Continuous Filament Carbon and Graphite Fiber Tows",
     publisher: "ASTM International", rights: "licensed-reference" as const,
-    rightsEvidence: "Copyrighted and sold by ASTM; the team reads a copy licensed to UC San Diego, stamped no further reproductions. Individual values "
-      + "with their clause only; readers consult their own copy. No finite element model: the engine reduces a test record (ADR-0074).",
     url: "https://store.astm.org/d4018-23.html" },
 ];

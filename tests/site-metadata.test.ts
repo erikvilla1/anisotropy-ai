@@ -47,10 +47,11 @@ test("every page's title is its bare name, which the template follows with the s
     assert.doesNotMatch(h.title!, /[|—]|Anisotropy\s*$/, `${h.file}: "${h.title}"`);
     assert.ok(h.title!.length > 0 && h.title!.length <= 40, `${h.file}: "${h.title}"`);
   }
-  // a page with no title of its own falls back to the home's: only the home, and the two client pages whose folder is the
-  // library's to give a server layout (/library, /data), may do that
+  // a page with no title of its own takes its folder's layout's (the library's client page, from app/library/layout.tsx);
+  // only the home falls back to the root's
   for (const h of all.filter((x) => x.file.endsWith("/page.tsx") && x.title === null)) {
-    assert.ok(["/", "/library", "/data"].includes(h.route), `${h.file} has no title of its own`);
+    const layout = all.find((x) => x.file === h.file.replace(/page\.tsx$/, "layout.tsx"));
+    assert.ok(h.route === "/" || Boolean(layout?.title), `${h.file} has no title of its own or in its folder's layout`);
   }
   assert.equal(all.find((h) => h.file === "app/not-found.tsx")?.title, "Page not found");
 });

@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { textbookPages, textbookSource } from "../lib/textbook-source";
+import { provenanceOf } from "../lib/source-provenance";
 
 // Usage: npx tsx scripts/render-textbook-evidence.ts <supplied.pdf> [pdftoppm executable]
 // Regenerates four cited pages for LOCAL inspection only. Never writes to public/.
@@ -11,7 +12,8 @@ async function main() {
   if (!input) throw new Error("Provide the supplied Daniel and Ishai PDF path.");
   const pdf = path.resolve(input);
   const hash = (data: Buffer) => createHash("sha256").update(data).digest("hex");
-  if (hash(await readFile(pdf)) !== textbookSource.sha256) throw new Error("This PDF does not match the reviewed textbook edition and fingerprint.");
+  const fingerprint = provenanceOf(textbookSource.id).sha256;
+  if (hash(await readFile(pdf)) !== fingerprint) throw new Error("This PDF does not match the reviewed textbook edition and fingerprint.");
   const output = path.resolve(".local", "sources", "textbook-evidence", textbookSource.id);
   await mkdir(output, { recursive: true });
   const pages = [];
@@ -21,7 +23,7 @@ async function main() {
     const bytes = await readFile(destination);
     pages.push({ ...page, sha256: hash(bytes), width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) });
   }
-  const manifest = { sourceId: textbookSource.id, sourceTitle: textbookSource.title, sourceSha256: textbookSource.sha256,
+  const manifest = { sourceId: textbookSource.id, sourceTitle: textbookSource.title, sourceSha256: fingerprint,
     method: "Uncropped original PDF pages rendered to PNG with Poppler; no table reconstruction or numerical editing.", pages };
   await writeFile(path.join(output, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Rendered ${pages.length} source pages for local inspection in ${output}.`);
