@@ -15,7 +15,7 @@ import numpy as np
 
 from .lamina import Lamina
 from .laminate import Ply, ply_interfaces
-from .response import Loads, PlySurface, abd_matrix, ply_surfaces
+from .response import Loads, PlySurface, abd_matrix, ply_surface_arrays, ply_surfaces
 from .rotation import strain_transformation, stress_transformation, transformed_reduced_stiffness
 
 
@@ -86,3 +86,22 @@ def thermal_ply_surfaces(plies: list[Ply], eps0: np.ndarray, kappa: np.ndarray, 
         stress_xy = transformed_reduced_stiffness(ply.material, ply.angle_deg) @ (surface.strain_xy - free)
         surfaces.append(replace(surface, stress_xy=stress_xy, stress_12=stress_transformation(ply.angle_deg) @ stress_xy))
     return surfaces
+
+
+def thermal_ply_surface_arrays(plies: list[Ply], eps0: np.ndarray, kappa: np.ndarray,
+                               delta_T: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """`thermal_ply_surfaces` for n mid-plane states under one uniform temperature change (ADR-0073 amendment 1): eps0 and kappa are
+    (n, 3), and the result is strain_xy, stress_xy, strain_12 and stress_12, each (n, plies, 2, 3), as `ply_surface_arrays` gives them,
+    with each stress from the mechanical strain only, Q_bar (eps0 + z * kappa - alpha * delta_T). The same operations as
+    `thermal_ply_surfaces`, row by row, so a finite element kernel holds a temperature change's stress in one call per section."""
+    delta_T = _temperature_change(delta_T)
+    strain_xy, stress_xy, strain_12, stress_12 = ply_surface_arrays(plies, eps0, kappa)
+    for k, ply in enumerate(plies):
+        free = thermal_expansion_xy(ply.material, ply.angle_deg) * delta_T
+        q_bar = transformed_reduced_stiffness(ply.material, ply.angle_deg)
+        t_sigma = stress_transformation(ply.angle_deg)
+        for face in (0, 1):
+            stress = (q_bar @ (strain_xy[:, k, face] - free)[:, :, None])[:, :, 0]
+            stress_xy[:, k, face] = stress
+            stress_12[:, k, face] = (t_sigma @ stress[:, :, None])[:, :, 0]
+    return strain_xy, stress_xy, strain_12, stress_12
