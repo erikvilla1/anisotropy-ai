@@ -923,7 +923,7 @@
      "key": "own_name",
      "label": "Own material: name",
      "kind": "text",
-     "help": "the material's name as in your Abaqus model, no spaces, e.g. X840-Z60",
+     "help": "the material's name as in your Abaqus model, no spaces, e.g. PREPREG-01",
      "required": false,
      "default": null,
      "words": [],
@@ -1713,10 +1713,17 @@
    "plies"
   ],
   "dogbone": false,
-  "not_available": "not available yet: the studio offers the unnotched tension coupon, under ASTM D3039 or no standard, until its comparison with Abaqus is validated",
+  "not_available": "not offered yet. This workspace runs the unnotched tension coupon, under ASTM D3039 or no standard.",
+  "not_offered": "not offered yet",
+  "offered": "This workspace runs the unnotched tension coupon, under ASTM D3039 or no standard.",
   "symmetric_only": true,
-  "unsymmetric": "an unsymmetric layup is not available yet: it bends as it is pulled, which the comparison with Abaqus does not cover yet; use a layup that reads the same from both faces, such as [0/45/-45/90]s",
+  "unsymmetric": "This layup is not symmetric. Use a layup that reads the same from both faces, such as [0/45/-45/90]s.",
   "switch": "ANISOTROPY_ALL_TESTS"
+ },
+ "tension": {
+  "control": "displacement",
+  "value": 1.0,
+  "units": "mm-MPa"
  },
  "criteria": [
   "all",

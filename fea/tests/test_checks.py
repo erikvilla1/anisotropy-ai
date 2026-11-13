@@ -58,19 +58,22 @@ def test_a_complete_setup_passes_every_item(tmp_path):
     items = by_id(checked)
     assert [item.id for item in checked.items] == [item_id for item_id, _ in ITEMS] and checked.state == "ready" and checked.problems == ()
     assert {item.state for item in checked.items} == {"pass"} and checked.designation == DESIGNATION and not checked.coupon_exists and checked.attempts == 0
-    assert "a new coupon" in items["identity"].message and "mm, MPa and N" in items["units"].message
+    assert items["identity"].message == "IM7 / 8552, unnotched tension"  # the material and the test, no record or attempt (ADR-0091 amendment 2)
+    assert items["units"].message == "every value in mm, MPa and N; results come back in the same units"
     assert "250 by 25 mm, 56 mm tabs with a node row on each tab line" in items["geometry"].message
-    assert "library im7-8552" in items["material"].message and "strengths given" in items["material"].message
-    assert "8 plies [45/0/-45/90]s" in items["laminate"].message and "B = 0" in items["laminate"].message
+    assert items["material"].message.startswith("IM7 / 8552: Hexcel 8552 IM7") and items["material"].message.endswith("; strengths given")
+    assert "rights class" not in items["material"].message and "library im7-8552" not in items["material"].message
+    assert "8 plies [45/0/-45/90]s" in items["laminate"].message and items["laminate"].message.endswith("symmetric, so stretching and bending do not couple")
     assert "through a reference point at each end" in items["constraints"].message and "no rigid-body motion is left" in items["constraints"].message
     assert items["load"].message == "displacement of 1 mm on the top grip along the coupon, a pull"
     assert items["mesh"].message.startswith("1200 elements, 1331 nodes (structured mesh, order 1); aspect ratio")
-    assert items["criterion"].message == "first-ply failure by max_stress, tsai_hill"
-    assert "node centre at (12.5, 125)" in items["probes"].message and "element centre, element near_grip" in items["probes"].message
-    assert items["solver"].message == "version 2.22, ready" and items["document"].message == "the report is written as a PDF"
+    assert items["criterion"].message == "first-ply failure by maximum stress and Tsai-Hill"
+    assert items["probes"].message == "results are read at the coupon centre and near a grip"
+    assert items["solver"].message == "version 2.22" and items["document"].message == "the report is written as a PDF"
+    assert [label for _, label in ITEMS][0] == "Coupon" and [label for _, label in ITEMS][-3:] == ["Result points", "Reference solver ready", "Report ready to write"]
     assert model is not None and model.mesh.element_count == 1200 and quality is not None and quality.element_count == 1200
     as_dict = checked.as_dict()
-    assert as_dict["state"] == "ready" and as_dict["items"][0] == {"id": "identity", "label": "Who and which coupon", "state": "pass",
+    assert as_dict["state"] == "ready" and as_dict["items"][0] == {"id": "identity", "label": "Coupon", "state": "pass",
                                                                    "message": items["identity"].message, "rows": [], "requirements": []}
     assert items["standard"].message.startswith("no standard picked: the size comes from") and items["standard"].requirements == ()
     json.dumps(as_dict)
@@ -80,7 +83,7 @@ def test_an_existing_coupon_counts_its_attempts(tmp_path):
     root = tmp_path / "root"
     convert(values_file(tmp_path / "first", PUBLIC_FILL), root=root, day="2026-10-28")
     checked, _, _ = checklist(tmp_path / "second", PUBLIC_FILL, root=root)
-    assert checked.coupon_exists and checked.attempts == 1 and "this run is attempt 2" in by_id(checked)["identity"].message
+    assert checked.coupon_exists and checked.attempts == 1 and "attempt" not in by_id(checked)["identity"].message  # the record stays out of the words
     assert coupon_attempts(root, DESIGNATION) == (True, 1) and coupon_attempts(root, "NONE-UNT-L9") == (False, 0)
 
 
@@ -183,8 +186,18 @@ def test_a_transverse_shear_modulus_far_from_g12_warns(tmp_path):
     checked, _, _ = checklist(tmp_path, PUBLIC_FILL, G13=100.0, G23=100.0)
     items = by_id(checked)
     assert checked.state == "ready" and items["material"].state == "warn"
-    assert items["material"].message.startswith("G13 = 100 MPa, G23 = 100 MPa against G12 = ") and "the shell model does not use it" in items["material"].message
+    assert items["material"].message.startswith("G13 = 100 MPa, G23 = 100 MPa against G12 = ")
+    assert items["material"].message.endswith("far from G12, so the reference solver check may differ more than usual")
     assert items["material"].rows == ("G13 (MPa)", "G23 (MPa)")
+
+
+def test_some_of_the_own_strengths_are_refused_under_the_material_on_all_five_rows(tmp_path):
+    """fea-run-33: the refusal is filed under Material defined, not the coupon, and marks each strength's row."""
+    checked, _, _ = checklist(tmp_path, PUBLIC_FILL, **{**own_constants(), "own_F6": None})
+    items = by_id(checked)
+    assert checked.state == "blocked" and items["material"].state == "fail" and "enter all five, or none" in items["material"].message
+    assert {f"Own material: {s} (MPa)" for s in ("F1t", "F1c", "F2t", "F2c", "F6")} <= set(items["material"].rows)
+    assert items["identity"].state != "fail" and "enter all five" not in items["identity"].message
 
 
 def test_constants_the_engine_refuses_fail_the_material(tmp_path):
@@ -200,7 +213,7 @@ def test_what_is_not_installed_is_named(tmp_path):
     checked, _, _ = setup_checklist(form, tmp_path / "none", ccx=lambda: None, tectonic=lambda: None, gmsh=lambda: None)
     items = by_id(checked)
     assert checked.state == "blocked" and items["solver"].state == "fail" and "CalculiX not found" in items["solver"].message
-    assert items["document"].state == "warn" and "without its PDF" in items["document"].message
+    assert items["document"].state == "warn" and items["document"].message == "the report PDF cannot be written here; the results are still kept"
     checked, _, _ = setup_checklist(read_values(values_file(tmp_path / "oht", OHT_FILL)), tmp_path / "none", ccx=CCX, tectonic=lambda: "t", gmsh=lambda: None)
     items = by_id(checked)
     assert items["mesh"].state == "fail" and "Gmsh is not installed" in items["mesh"].message and items["mesh"].rows == ("Hole diameter (mm)",)
@@ -329,10 +342,10 @@ def test_a_coupon_stated_in_inches_is_checked_and_named_in_inches(tmp_path):
     checked, model, quality = checklist(tmp_path, in_inches(PUBLIC_FILL))
     items = by_id(checked)
     assert checked.state == "ready" and {item.state for item in checked.items} == {"pass"} and model.spec.units == "in-psi"
-    assert items["units"].message == ("every row in in, psi and lbf; the results come back in the same units; the solver input is written in "
+    assert items["units"].message == ("every value in in, psi and lbf; results come back in the same units; the solver input is written in "
                                       "mm, MPa and N")
     assert items["geometry"].message.startswith("9.84252 by 0.984252 in, 2.20472 in tabs")
-    assert "displacement of 0.0393701 in on the top grip" in items["load"].message and items["probes"].message.endswith("(in)")
+    assert "displacement of 0.0393701 in on the top grip" in items["load"].message and items["probes"].message.startswith("results are read at")
     preview = preview_data(model, quality)
     assert preview["units"] == "in-psi" and preview["loaded"]["unit"] == "in"
     checked, _, _ = checklist(tmp_path / "blank", in_inches(PUBLIC_FILL), length=None, width="wide", G23=None)

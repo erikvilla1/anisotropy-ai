@@ -59,7 +59,7 @@ test("the Specimen row shows for a standard that names specimens; the tab and st
 });
 
 test("a hint does not stop at e.g.", () => {
-  assert.equal(shortHelp({ ...fieldByKey.notes, help: "the number of plies, e.g. 8. More below." }), "the number of plies, e.g. 8.");
+  assert.equal(shortHelp({ ...fieldByKey.notes, help: "the number of plies, e.g. 8. More below." }), "The number of plies, e.g. 8.");
 });
 
 test("the sketch draws bonded tabs with their bevel and the strain measurement as typed, and names the standard", () => {

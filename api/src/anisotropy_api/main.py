@@ -34,13 +34,13 @@ from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .proposals import model_view_of_form, source_guard
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
-from .coupon_jobs import (LOCAL_FEA, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, NotOffered, RecordingFailed, SolverBusy, UnknownCoupon, runner_command,
-                          studio_command)
+from .coupon_jobs import (FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, NotOffered, RecordingFailed,
+                          SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, count_uploads, delete_upload, fetch_project, fetch_run, fetch_upload,
                       git_commit, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
                       live_upload_tokens, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
-from .settings import all_tests, allowed_origins, environment, load_settings
+from .settings import all_tests, allowed_origins, docs_urls, environment, load_settings
 from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, sync, upload_document_key, upload_key,
                       upload_prefix)
 from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_token, ours_of,
@@ -57,6 +57,8 @@ from .schemas import (
 )
 
 RUN_ID_HEADER = "X-Anisotropy-Run-Id"
+# "off" on the 503 of an API that keeps no records, so the page tells "this server keeps no projects" from an outage (ADR-0091 amendment 2)
+RECORDS_HEADER = "X-Anisotropy-Records"
 # With the job queue (ADR-0056 amendment 3), a queued job's answer carries its id here; the Worker sends the id to the queue and
 # drops the header, so a browser never sees it.
 ENQUEUE_HEADER = "X-Anisotropy-Enqueue"
@@ -132,8 +134,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Anisotropy engine API",
     version=version("anisotropy-api"),
-    description="Local development: one-material laminate stiffness and deformation in SI base units.",
+    description="Composite laminate and coupon analysis: every number computed by the engine and the fea package.",
     lifespan=lifespan,
+    **docs_urls(environment()),  # no /docs, /redoc or OpenAPI schema behind Access, the hosted tier (ADR-0091 amendment 2)
 )
 
 # The Access check sits inside the CORS layer (the last middleware added is the outermost), so a preflight is answered without a
@@ -149,7 +152,7 @@ app.add_middleware(
     allow_origins=list(allowed_origins(environment())),
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-Anisotropy-Actor"],
-    expose_headers=[RUN_ID_HEADER, "Location"],
+    expose_headers=[RUN_ID_HEADER, RECORDS_HEADER, "Location"],
     allow_credentials=False,
 )
 
@@ -228,9 +231,8 @@ def _record(request: Request, actor: str, problem: BaseModel, *, response: dict 
                           git_commit=getattr(request.app.state, "git_commit", None), response=response, error=error,
                           llm_provider=llm[0], llm_model_version=llm[1], user_email=getattr(request.state, "user_email", None))
     except SQLAlchemyError as exc:
-        raise HTTPException(status_code=503, detail=(
-            f"The result was not returned because it could not be recorded: {str(exc).splitlines()[0]}"
-        )) from exc
+        print(f"a run of {request.url.path} could not be recorded: {str(exc).splitlines()[0]}", flush=True)  # the cause stays in the log
+        raise HTTPException(status_code=503, detail="The result was not returned because it could not be recorded. Try again in a minute.") from exc
 
 
 def _run_header(run_id: uuid.UUID | None) -> dict[str, str] | None:
@@ -302,7 +304,8 @@ def _records_engine(request: Request):
     """The connection pool, or 503 when recording is switched off: there is nothing to read."""
     engine = getattr(request.app.state, "records", None)
     if engine is None:
-        raise HTTPException(status_code=503, detail="Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read")
+        raise HTTPException(status_code=503, detail="Records are switched off on this server, so there is nothing to read",
+                            headers={RECORDS_HEADER: "off"})
     return engine
 
 
@@ -361,9 +364,8 @@ def _coupon_jobs(request: Request) -> CouponJobs:
 def _known_job(jobs: CouponJobs, job_id: uuid.UUID) -> Job:
     job = jobs.get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail=(
-            f"No coupon job {job_id}: not in this API process, and not in the jobs table (which exists when run records are on); every "
-            f"job that ended has its receipt in GET /v1/runs?endpoint={COUPON_JOBS}"))
+        # not in this process, nor in the jobs table (none without records); a job that ended has its receipt among the runs
+        raise HTTPException(status_code=404, detail="These results are no longer available. Run the analysis again from your project.")
     return job
 
 
@@ -532,7 +534,8 @@ def calculate_tow_test(problem: TowTestRequest, actor: Actor, request: Request, 
 # ----------------------------------------------------------------------------------------------- the projects (ADR-0062 part 6)
 
 def _database_error(exc: SQLAlchemyError) -> HTTPException:
-    return HTTPException(status_code=503, detail=f"The run records database did not answer: {str(exc).splitlines()[0]}")
+    print(f"the records did not answer: {str(exc).splitlines()[0]}", flush=True)  # the cause stays in the log, not in the answer
+    return HTTPException(status_code=503, detail="Saved projects could not be read right now. Try again in a minute.")
 
 
 def _own_project_id(request: Request, actor: str, project_id: str | None) -> uuid.UUID | None:
@@ -1028,7 +1031,7 @@ def _download_name(name: str | None, suffix: str) -> str | None:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-DownloadName = Annotated[str | None, Query(max_length=120, description="save the file under this name (ADR-0091)")]
+DownloadName = Annotated[str | None, Query(max_length=120, description="File name for the download: letters, digits and _ . , ( ) [ ] + -")]
 
 
 @app.get(COUPON_JOBS + "/{job_id}/package")
@@ -1056,9 +1059,22 @@ def coupon_job_file(job_id: uuid.UUID, key: str, request: Request, name: Downloa
     """One file of a job by its key (ADR-0051): `fields`, `explanation`, `checklist` and `preview` as soon as the tool reports them,
     while the job runs; every key the status lists once it is done; `package` is the zip. An unknown key names the keys there are.
     Once a job is done and an object store holds its files, the answer is a redirect to a short-lived link there (ADR-0050 amendment 2).
-    With `name`, the file is saved under that name, which must end in the file's own suffix (ADR-0091)."""
+    With `name`, the file is saved under that name, which must end in the file's own suffix (ADR-0091). The page asks for the files a
+    customer downloads by their neutral names (`solver_input`, `reference_input`, `reference_results`); the solver inputs are then served
+    from here with a neutral header, never as a link to the team's copy (ADR-0091 amendment 2)."""
     jobs = _coupon_jobs(request)
     job = _known_job(jobs, job_id)
+    alias, key = key, FILE_ALIASES.get(key, key)
+    if alias in NEUTRAL_DECKS:
+        try:
+            path = jobs.output_file(job, key)
+        except (KeyError, FileNotFoundError, PermissionError) as exc:
+            # a link the browser opens itself, so the answer is the page's words; the cause goes to the log (ADR-0091 amendment 2)
+            print(f"coupon job {job_id}: no file {alias} ({key}): {exc}", flush=True)
+            raise HTTPException(status_code=404, detail="This file is no longer available. Run the analysis again from your project.") from exc
+        filename = _download_name(name, path.suffix) or f"{alias}{path.suffix}"
+        return Response(neutral_deck(path.read_text(encoding="utf-8"), NEUTRAL_DECKS[alias]), media_type=content_type(path),
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
     stored = job.stored.get(key)
     if name is not None and stored is not None:
         _download_name(name, Path(stored).suffix or (".zip" if key == "package" else ""))

@@ -4,6 +4,7 @@
  * does, through `POST /v1/coupon-jobs/check`, and its refusals come back by row.
  */
 import definition from "./coupon-form-definition.json";
+import { rowProblems } from "./studio-copy";
 
 export type FieldKind = "text" | "number" | "whole" | "date" | "list" | "angle";
 /** The kind of unit a row's number carries: a length, a stress, a force, or an amount that is a length or a force by the loading type. */
@@ -35,8 +36,14 @@ export type FormDefinition = {
   /** The tests the studio offers until the first workflow is validated (ADR-0089): the list, never the switch; the API says whether the
    * switch shows every test (`GET /v1/coupon-tests`). */
   enabled: EnabledList;
+  /** The load the tension screen's coupon is given when the engineer gives none (anisotropy_fea.tension_input), shown before the check. */
+  tension?: { control: string; value: number; units: string };
 };
-export type EnabledList = { tests: string[]; standards: string[]; material_kinds: string[]; dogbone: boolean; not_available: string; switch: string };
+export type EnabledList = {
+  tests: string[]; standards: string[]; material_kinds: string[]; dogbone: boolean; not_available: string; switch: string;
+  /** The words of a refusal, what is offered, and the sentence an unsymmetric tension layup is refused with (ADR-0089 amendment 4). */
+  not_offered?: string; offered?: string; symmetric_only?: boolean; unsymmetric?: string;
+};
 /** A size a standard names: a specimen (C1869 A, B) or a class of laminate (D3039 Table 2), by row, in every unit system. */
 export type StandardPreset = {
   key: string; label: string; clause: string; minimum: string[]; note: string; values: Record<string, Record<string, number>>;
@@ -275,23 +282,27 @@ export type Checklist = {
   built?: { row: string; value: unknown; reason: string }[];
 };
 
-/** The rows a checklist names, by field key, with the item's message: what the form highlights. */
+/** The rows a checklist names, by field key, each with its own problem as the page may show it (`rowProblems`, audit fea-run-49): what the
+ * form highlights. A field never shows another field's problem, and a problem that cannot be shown reads "Check this value.". */
 export function rowErrorsFrom(checklist: Checklist): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const item of checklist.items) {
     if (item.state !== "fail" && item.state !== "missing") continue;
+    const problems = rowProblems(item, (label) => label in fieldByLabel);
     for (const label of item.rows) {
       const field = fieldByLabel[label];
-      if (field && !errors[field.key]) errors[field.key] = item.message;
+      if (field && !errors[field.key]) errors[field.key] = problems[label];
     }
   }
   return errors;
 }
 
-/** The first sentence of a row's help, for the hint under its input; "e.g." and "i.e." do not end a sentence. */
+/** The first sentence of a row's help, for the hint under its input, as a sentence: its first letter up and a full stop, not the ';' or
+ * ',' it was cut at (audit fea-run-J2-3); "e.g." and "i.e." do not end a sentence. */
 export function shortHelp(field: FieldDefinition): string {
-  const text = field.help.split(/(?<!\be\.g\.|\bi\.e\.)(?<=[.;])\s/)[0] ?? "";
-  return text.length > 140 ? text.slice(0, 137).trimEnd() + "..." : text;
+  const text = (field.help.split(/(?<!\be\.g\.|\bi\.e\.)(?<=[.;])\s/)[0] ?? "").trim().replace(/[;,:]$/, "");
+  const cut = text.length > 140 ? text.slice(0, 137).trimEnd() + "..." : text;
+  return cut ? `${cut.charAt(0).toUpperCase()}${cut.slice(1)}${/[.?!]$/.test(cut) ? "" : "."}` : "";
 }
 
 export const libraryOptions: { id: string; name: string; thickness: number | null }[] = formDefinition.library.map((entry) => ({

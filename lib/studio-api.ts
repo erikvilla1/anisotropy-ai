@@ -3,7 +3,7 @@
  * the browser draws what the fea package wrote and computes nothing (ADR-0001).
  */
 import type { Checklist, StudioValues } from "./studio-form";
-import { ANALYSIS_UNAVAILABLE, customerText, DOWNLOAD_LABELS, sentence } from "./studio-copy";
+import { ANALYSIS_UNAVAILABLE, ANSWER_UNREADABLE, customerText, DOWNLOAD_LABELS, failedText, FILE_URL_KEY, JOB_GONE, RESULTS_UNREADABLE, sentence } from "./studio-copy";
 
 export const ACTOR = "studio";
 export const POLL_MS = 2000;
@@ -147,8 +147,21 @@ export type Explanation = { writer: string; facts: Record<string, unknown>; sent
 export type CouponSummary = { name: string; designation: string | null; kind: string; test: string; title: string; layup: string; status: string | null;
   accepted: string | null; attempts: number; category: string | null; problem?: string | null };
 
+/** A failed call in words the page may show, with the answer's status and, for an API that keeps no records, `RECORDS_OFF`. */
 export class StudioError extends Error {
-  constructor(message: string, public status?: number) { super(message); }
+  constructor(message: string, public status?: number, public code?: string) { super(message); }
+}
+/** The header an API that keeps no records puts on its 503, and the code the page gives that answer (ADR-0091 amendment 2). */
+export const RECORDS_HEADER = "X-Anisotropy-Records";
+export const RECORDS_OFF = "records_off";
+/** The refusals a user can act on: their words are shown when fit to show. Any other status says what failed and what to do
+ * (`failedText`, audit fea-run-48), an outage says so, and a job that is gone says so (audit fea-screens-2). */
+const ACTIONABLE = new Set([400, 409, 422, 429]);
+
+/** An answer the page cannot read: the reason to the console, the plain words to the screen (audit fea-run-48). */
+function unreadable(reason: string, shown = ANSWER_UNREADABLE): StudioError {
+  console.warn(`the analysis service's answer could not be read: ${reason}`);
+  return new StudioError(shown);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -157,7 +170,9 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function base(url: string): string { return url.replace(/\/+$/, ""); }
 
-async function call(url: string, init: RequestInit & { signal?: AbortSignal }, what: string): Promise<unknown> {
+/** A call to the API: its answer, or a `StudioError` in words the page may show. `what` names the request in the product's words
+ * ("starting the analysis"); it heads a refusal that is not a sentence of its own and picks the words of a failure (`failedText`). */
+async function call(url: string, init: RequestInit & { signal?: AbortSignal }, what: string, notFound?: string): Promise<unknown> {
   let response: Response;
   try {
     // Same-origin credentials: hosted, the page and /api share anisotropy.dev, so the browser sends the Access sign-in cookie
@@ -169,16 +184,28 @@ async function call(url: string, init: RequestInit & { signal?: AbortSignal }, w
   }
   let payload: unknown = null;
   const text = await response.text();
+  const code = response.headers?.get(RECORDS_HEADER) === "off" ? RECORDS_OFF : undefined;
   try { payload = text ? JSON.parse(text) : null; }
-  catch { throw new StudioError(response.status >= 500 ? ANALYSIS_UNAVAILABLE : `The analysis service sent an answer the page cannot read (${what}). Try again.`, response.status); }
-  if (response.status >= 500) throw new StudioError(ANALYSIS_UNAVAILABLE, response.status);
+  catch {
+    if (response.status >= 500) throw new StudioError(ANALYSIS_UNAVAILABLE, response.status, code);
+    throw unreadable(`${what}: not JSON (status ${response.status})`);
+  }
+  const detail = isObject(payload) ? payload.detail : null;
+  const message = typeof detail === "string" ? detail
+    : Array.isArray(detail) ? detail.map((d) => (isObject(d) ? `${(d.loc as unknown[] | undefined)?.filter((p) => p !== "body").join(".")}: ${d.msg}` : String(d))).join("; ")
+    : `status ${response.status}`;
+  if (response.status >= 500) {
+    if (!code) console.warn(`${what}: status ${response.status}: ${message}`); // the service's own words stay in the console
+    throw new StudioError(ANALYSIS_UNAVAILABLE, response.status, code);
+  }
   if (!response.ok) {
-    const detail = isObject(payload) ? payload.detail : null;
-    const message = typeof detail === "string" ? detail
-      : Array.isArray(detail) ? detail.map((d) => (isObject(d) ? `${(d.loc as unknown[] | undefined)?.filter((p) => p !== "body").join(".")}: ${d.msg}` : String(d))).join("; ")
-      : `status ${response.status}`;
-    // the API's own words when they are fit to show (ADR-0091); otherwise what failed and what to do
-    throw new StudioError(customerText(message) && !/^status \d+$/.test(message) ? `${sentence(what)}: ${message}` : `${sentence(what)} failed. Try again.`, response.status);
+    if (response.status === 404 && notFound) throw new StudioError(notFound, 404);
+    // the API's own words when the user can act on them and they are fit to show (ADR-0091); otherwise what failed and what to do
+    const shown = ACTIONABLE.has(response.status) && !/^status \d+$/.test(message) ? customerText(message) : null;
+    if (!shown) console.warn(`${what}: status ${response.status}: ${message}`);
+    // a refusal written as a sentence ("Another analysis is running. Wait for it to finish, then run this one.") stands alone
+    const said = shown ? (/^[A-Z][\s\S]*[.!?]$/.test(shown) ? shown : `${sentence(what)}: ${shown}`) : failedText(what);
+    throw new StudioError(said, response.status);
   }
   return payload;
 }
@@ -189,7 +216,7 @@ export function readChecklist(payload: unknown): Checklist {
   if (!isObject(payload) || !Array.isArray(payload.items) || (payload.state !== "ready" && payload.state !== "blocked")
     || !payload.items.every((item) => isObject(item) && typeof item.id === "string" && typeof item.label === "string" && typeof item.state === "string"
       && typeof item.message === "string" && Array.isArray(item.rows))) {
-    throw new StudioError("The setup check answered with an unexpected shape.");
+    throw unreadable("the setup check's checklist");
   }
   return payload as unknown as Checklist;
 }
@@ -198,7 +225,7 @@ export function readPreview(payload: unknown): Preview {
   if (!isObject(payload) || !isObject(payload.mesh) || !Array.isArray(payload.mesh.nodes) || !Array.isArray(payload.mesh.quads)
     || !Array.isArray(payload.held) || !isObject(payload.loaded) || !Array.isArray(payload.plies) || !isObject(payload.geometry) || !isObject(payload.coupon)
     || typeof payload.units !== "string") {
-    throw new StudioError("The preview answered with an unexpected shape.");
+    throw unreadable("the preview");
   }
   return payload as unknown as Preview;
 }
@@ -207,16 +234,16 @@ export function readFields(payload: unknown): Fields {
   if (!isObject(payload) || !isObject(payload.mesh) || !Array.isArray(payload.mesh.nodes) || !Array.isArray(payload.mesh.quads)
     || !isObject(payload.nodal) || !Array.isArray(payload.nodal.displacement) || !isObject(payload.element) || !isObject(payload.summary)
     || !isObject(payload.summary.max_displacement) || !isObject(payload.summary.fpf) || typeof payload.units !== "string" || !isObject(payload.labels)) {
-    throw new StudioError("The fields file has an unexpected shape.");
+    throw unreadable("the fields", RESULTS_UNREADABLE);
   }
   const mesh = payload.mesh as Record<string, unknown>;
-  if ((payload.nodal as Record<string, unknown[]>).displacement.length !== (mesh.nodes as unknown[]).length) throw new StudioError("The fields file does not match its mesh.");
+  if ((payload.nodal as Record<string, unknown[]>).displacement.length !== (mesh.nodes as unknown[]).length) throw unreadable("the fields do not match their mesh", RESULTS_UNREADABLE);
   return payload as unknown as Fields;
 }
 
 export function readExplanation(payload: unknown): Explanation {
   if (!isObject(payload) || typeof payload.writer !== "string" || !Array.isArray(payload.sentences) || !payload.sentences.every((s) => typeof s === "string")) {
-    throw new StudioError("The explanation file has an unexpected shape.");
+    throw unreadable("the explanation", RESULTS_UNREADABLE);
   }
   return { writer: payload.writer, facts: isObject(payload.facts) ? payload.facts : {}, sentences: payload.sentences as string[],
     setup_sentences: Array.isArray(payload.setup_sentences) ? (payload.setup_sentences as string[]) : [] };
@@ -225,7 +252,7 @@ export function readExplanation(payload: unknown): Explanation {
 export function readJob(payload: unknown): JobStatus {
   if (!isObject(payload) || typeof payload.job_id !== "string" || typeof payload.state !== "string" || !isObject(payload.outputs)
     || !Array.isArray(payload.stages_done) || !Array.isArray(payload.log_tail)) {
-    throw new StudioError("The job status has an unexpected shape.");
+    throw unreadable("the job's status");
   }
   return payload as unknown as JobStatus;
 }
@@ -233,7 +260,7 @@ export function readJob(payload: unknown): JobStatus {
 export async function checkSetup(apiBase: string, values: StudioValues, signal?: AbortSignal, projectId: string | null = null): Promise<CheckAnswer> {
   const body = { values, ...(projectId ? { project_id: projectId } : {}) }; // the project the derived designation is written back to (ADR-0062 part 6)
   const payload = await call(`${base(apiBase)}/v1/coupon-jobs/check`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the setup check");
-  if (!isObject(payload)) throw new StudioError("The setup check answered with an unexpected shape.");
+  if (!isObject(payload)) throw unreadable("the setup check");
   const checklist = readChecklist(payload.checklist);
   const preview = payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview);
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, designation: checklist.designation, checklist, preview };
@@ -246,8 +273,8 @@ export type LiveAnswer = CheckAnswer & { fields: Fields | null; explanation: Exp
 
 export async function liveSolve(apiBase: string, values: StudioValues, signal?: AbortSignal, projectId: string | null = null): Promise<LiveAnswer> {
   const body = { values, ...(projectId ? { project_id: projectId } : {}) };
-  const payload = await call(`${base(apiBase)}/v1/coupon-jobs/live`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the live solve");
-  if (!isObject(payload)) throw new StudioError("The live solve answered with an unexpected shape.");
+  const payload = await call(`${base(apiBase)}/v1/coupon-jobs/live`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the preview");
+  if (!isObject(payload)) throw unreadable("the live solve");
   const checklist = readChecklist(payload.checklist);
   const preview = payload.preview === null || payload.preview === undefined ? null : readPreview(payload.preview);
   const fields = payload.fields === null || payload.fields === undefined ? null : readFields(payload.fields);
@@ -282,7 +309,7 @@ export type TowAnswer = { run_id: string | null; state: "ready" | "blocked"; che
 export async function towTest(apiBase: string, values: Record<string, unknown>, signal?: AbortSignal, projectId: string | null = null): Promise<TowAnswer> {
   const body = { values, ...(projectId ? { project_id: projectId } : {}) };
   const payload = await call(`${base(apiBase)}/v1/tow-tests`, { method: "POST", headers, body: JSON.stringify(body), signal }, "the tow calculation");
-  if (!isObject(payload)) throw new StudioError("The tow calculation answered with an unexpected shape.");
+  if (!isObject(payload)) throw unreadable("the tow calculation");
   const checklist = readChecklist(payload.checklist);
   const result = isObject(payload.result) && Array.isArray(payload.result.specimens) ? (payload.result as unknown as TowResult) : null;
   return { run_id: typeof payload.run_id === "string" ? payload.run_id : null, state: checklist.state, checklist, result };
@@ -290,16 +317,16 @@ export async function towTest(apiBase: string, values: Record<string, unknown>, 
 
 export async function startSolve(apiBase: string, values: StudioValues, runBy: string, replace: boolean, signal?: AbortSignal, projectId: string | null = null): Promise<JobStatus> {
   const body = { values, run_by: runBy, replace, ...(projectId ? { project_id: projectId } : {}) };
-  return readJob(await call(`${base(apiBase)}/v1/coupon-jobs`, { method: "POST", headers, body: JSON.stringify(body), signal }, "starting the solve"));
+  return readJob(await call(`${base(apiBase)}/v1/coupon-jobs`, { method: "POST", headers, body: JSON.stringify(body), signal }, "starting the analysis"));
 }
 
 export async function getJob(apiBase: string, jobId: string, signal?: AbortSignal): Promise<JobStatus> {
-  return readJob(await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}`, { method: "GET", signal }, "the job's status"));
+  return readJob(await call(`${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}`, { method: "GET", signal }, "the analysis's progress", JOB_GONE));
 }
 
 export async function listJobs(apiBase: string, signal?: AbortSignal): Promise<JobStatus[]> {
-  const payload = await call(`${base(apiBase)}/v1/coupon-jobs`, { method: "GET", signal }, "the jobs");
-  if (!Array.isArray(payload)) throw new StudioError("The job list has an unexpected shape.");
+  const payload = await call(`${base(apiBase)}/v1/coupon-jobs`, { method: "GET", signal }, "the analyses");
+  if (!Array.isArray(payload)) throw unreadable("the job list");
   return payload.map(readJob);
 }
 
@@ -320,7 +347,7 @@ const text = (v: unknown): string | null => (typeof v === "string" ? v : null);
 export function readProjectRecord(payload: unknown): ProjectRecord {
   if (!isObject(payload) || typeof payload.id !== "string" || (payload.kind !== "fea" && payload.kind !== "laminate") || typeof payload.name !== "string"
     || !isObject(payload.content) || typeof payload.created_at !== "string" || typeof payload.updated_at !== "string") {
-    throw new StudioError("The API answered a project with an unexpected shape.");
+    throw unreadable("a project");
   }
   const jobs = Array.isArray(payload.jobs) ? payload.jobs.filter(isObject).map((j) => ({
     job_id: String(j.job_id), state: (["queued", "running", "done", "stopped", "refused"].includes(String(j.state)) ? j.state : "stopped") as JobState,
@@ -330,10 +357,10 @@ export function readProjectRecord(payload: unknown): ProjectRecord {
     designation: text(payload.designation), last_check_run_id: text(payload.last_check_run_id), created_at: payload.created_at, updated_at: payload.updated_at, jobs };
 }
 
-/** The requester's projects on the server, the last changed first; a 503 means the API keeps no projects (run records off). */
+/** The requester's projects on the server, the last changed first; a 503 that says so means the API keeps no projects (`noProjectStore`). */
 export async function listProjects(apiBase: string, signal?: AbortSignal): Promise<ProjectRecord[]> {
   const payload = await call(`${base(apiBase)}${PROJECTS}`, { method: "GET", headers, signal }, "the projects");
-  if (!Array.isArray(payload)) throw new StudioError("The API answered the projects with an unexpected shape.");
+  if (!Array.isArray(payload)) throw unreadable("the projects");
   return payload.map(readProjectRecord);
 }
 
@@ -350,33 +377,36 @@ export async function renameProject(apiBase: string, id: string, name: string, s
   return readProjectRecord(await call(`${base(apiBase)}${PROJECTS}/${encodeURIComponent(id)}`, { method: "PATCH", headers, body: JSON.stringify({ name }), signal }, "renaming the project"));
 }
 
-/** True when the API keeps no projects: run records are switched off there (503). */
-export const noProjectStore = (error: unknown): boolean => error instanceof StudioError && error.status === 503;
+/** True when the API keeps no projects: it said so on its 503 (`RECORDS_HEADER`). An outage, a network error or any other 5xx is not
+ * this: the page then says the saved projects could not be loaded (audit fea-screens-3). */
+export const noProjectStore = (error: unknown): boolean => error instanceof StudioError && error.code === RECORDS_OFF;
 
 export async function listCoupons(apiBase: string, signal?: AbortSignal): Promise<CouponSummary[]> {
   const payload = await call(`${base(apiBase)}/v1/coupons`, { method: "GET", signal }, "the coupons");
-  if (!Array.isArray(payload) || !payload.every((c) => isObject(c) && typeof c.name === "string")) throw new StudioError("The coupon list has an unexpected shape.");
+  if (!Array.isArray(payload) || !payload.every((c) => isObject(c) && typeof c.name === "string")) throw unreadable("the coupon list");
   return payload as CouponSummary[];
 }
 
 export async function couponValues(apiBase: string, name: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
-  const payload = await call(`${base(apiBase)}/v1/coupons/${encodeURIComponent(name)}/values`, { method: "GET", signal }, "the coupon's rows");
-  if (!isObject(payload) || !isObject(payload.values)) throw new StudioError("The coupon's rows have an unexpected shape.");
+  const payload = await call(`${base(apiBase)}/v1/coupons/${encodeURIComponent(name)}/values`, { method: "GET", signal }, "the coupon's values");
+  if (!isObject(payload) || !isObject(payload.values)) throw unreadable("the coupon's rows");
   return payload.values;
 }
 
-/** Where one of a job's files is, by key: a link for the downloads and the address the viewer loads the fields from. With `name`, the
- * API hands the file out under that name (ADR-0091). */
+/** Where one of a job's files is, by key: a link for the downloads and the address the viewer loads the fields from. A solver file is
+ * asked for by its neutral name, so no address names a program (ADR-0091 amendment 2). With `name`, the API hands the file out under
+ * that name (ADR-0091). */
 export function fileUrl(apiBase: string, jobId: string, key: string, name?: string): string {
-  return `${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(key)}${name ? `?name=${encodeURIComponent(name)}` : ""}`;
+  const asked = FILE_URL_KEY[key] ?? key;
+  return `${base(apiBase)}/v1/coupon-jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(asked)}${name ? `?name=${encodeURIComponent(name)}` : ""}`;
 }
 
 export async function fetchFields(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Fields> {
-  return readFields(await call(fileUrl(apiBase, jobId, "fields"), { method: "GET", signal }, "the fields"));
+  return readFields(await call(fileUrl(apiBase, jobId, "fields"), { method: "GET", signal }, "the results", JOB_GONE));
 }
 
 export async function fetchExplanation(apiBase: string, jobId: string, signal?: AbortSignal): Promise<Explanation> {
-  return readExplanation(await call(fileUrl(apiBase, jobId, "explanation"), { method: "GET", signal }, "the explanation"));
+  return readExplanation(await call(fileUrl(apiBase, jobId, "explanation"), { method: "GET", signal }, "the explanation", JOB_GONE));
 }
 
 export type ExplainAnswer = { run_id: string | null; job_id: string; kind: "setup" | "result"; writer: string; model: string | null; prose: string[];
@@ -385,7 +415,7 @@ export type ExplainAnswer = { run_id: string | null; job_id: string; kind: "setu
 export function readExplainAnswer(payload: unknown): ExplainAnswer {
   if (!isObject(payload) || typeof payload.writer !== "string" || !Array.isArray(payload.prose) || !payload.prose.every((s) => typeof s === "string")
     || typeof payload.withheld !== "boolean") {
-    throw new StudioError("The explanation answered with an unexpected shape.");
+    throw unreadable("the explanation", RESULTS_UNREADABLE);
   }
   return payload as unknown as ExplainAnswer;
 }
@@ -398,9 +428,10 @@ export async function explainJob(apiBase: string, jobId: string, kind: "setup" |
   return readExplainAnswer(payload);
 }
 
-/** The files of a job the page offers for download, in the order it lists them, with their plain names (ADR-0091): the report, the
- * package, the solver input and the reference solver's input and results. The other outputs (the fields, the explanation, the record, the
- * summary, the `.vtu`, the setup check, the preview) remain job outputs the viewer and the explanation read; they are not offered as files. */
+/** The files of a job the page may offer for download, in the order it lists them, with their plain names (ADR-0091): the report, the
+ * package, the solver input and the reference solver's input and results; a customer is offered the report and the solver input
+ * (`downloadsFor`, ADR-0091 amendment 2). The other outputs (the fields, the explanation, the record, the summary, the `.vtu`, the setup
+ * check, the preview) remain job outputs the viewer and the explanation read; they are not offered as files. */
 export const DOWNLOADS: [string, string][] = DOWNLOAD_LABELS;
 
 // ----------------------------------------------------------------------------------------------- laminate problems (ADR-0060)
@@ -425,7 +456,7 @@ const vector3 = (v: unknown): v is number[] => Array.isArray(v) && v.length === 
 
 /** The answer's shape, checked before anything is drawn: the matrices, the strains, every ply's stresses and the words. */
 export function readLaminateAnswer(payload: unknown): LaminateAnswer {
-  const bad = () => new StudioError("The laminate solve answered with an unexpected shape.");
+  const bad = () => unreadable("the laminate solve");
   if (!isObject(payload) || typeof payload.engine_version !== "string" || typeof payload.report_units !== "string" || !isObject(payload.units)
     || !isObject(payload.results) || !isObject(payload.summary) || !isObject(payload.case) || !Array.isArray(payload.criteria)
     || typeof payload.writer !== "string" || !Array.isArray(payload.prose) || !payload.prose.every((s) => typeof s === "string")
@@ -476,7 +507,7 @@ const isText = (v: unknown): v is string => typeof v === "string";
 const isTextOrNull = (v: unknown): v is string | null => v === null || typeof v === "string";
 
 export function readProposalAnswer(payload: unknown): ProposalAnswer {
-  const bad = () => new StudioError("The proposals answered with an unexpected shape.");
+  const bad = () => unreadable("the proposals");
   if (!isObject(payload) || !isText(payload.writer) || !isTextOrNull(payload.model) || !isTextOrNull(payload.question) || !isTextOrNull(payload.reason)
     || !Array.isArray(payload.proposals) || !Array.isArray(payload.conditions) || !Array.isArray(payload.dropped)) throw bad();
   for (const p of payload.proposals) {

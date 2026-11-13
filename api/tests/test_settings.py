@@ -256,3 +256,14 @@ def test_the_connectors_route_is_opened_to_its_token_only_by_the_word_on_behind_
         load_settings({**BEHIND_ACCESS, CONNECTOR_UPLOADS_VARIABLE: "yes"})
     with pytest.raises(RuntimeError, match="without Access\\s+the route takes an upload token already"):
         load_settings({**ON, CONNECTOR_UPLOADS_VARIABLE: "on"})
+
+
+from anisotropy_api.settings import docs_urls
+
+
+def test_the_api_publishes_its_documentation_locally_and_not_behind_access():
+    """The hosted tier, behind Cloudflare Access, serves no /docs, /redoc or OpenAPI schema; a local API keeps them (ADR-0091 amendment 2)."""
+    assert docs_urls({}) == {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    assert docs_urls({ACCESS_TEAM_DOMAIN_VARIABLE: " "}) == docs_urls({})
+    assert docs_urls({ACCESS_TEAM_DOMAIN_VARIABLE: "team.cloudflareaccess.com", ACCESS_AUDIENCE_VARIABLE: "aud"}) == {
+        "docs_url": None, "redoc_url": None, "openapi_url": None}

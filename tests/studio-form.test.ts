@@ -78,13 +78,17 @@ test("a checklist's failing rows land on their fields", () => {
     ...checklist, state: "blocked",
     items: checklist.items.map((item) => item.id === "geometry" ? { ...item, state: "missing", message: "Length (mm): required", rows: ["Length (mm)", "Width (mm)"] } : item),
   };
-  assert.deepEqual(rowErrorsFrom(blocked), { length: "Length (mm): required", width: "Length (mm): required" });
+  assert.deepEqual(rowErrorsFrom(blocked), { length: "Required.", width: "Check this value." }); // each field its own problem (fea-run-49)
   assert.deepEqual(rowErrorsFrom(checklist), {});
 });
 
-test("a row's hint is its help's first sentence", () => {
-  assert.ok(shortHelp(fieldByKey.length).startsWith("the whole coupon"));
-  assert.ok(shortHelp(fieldByKey.G13).length <= 140);
+test("a row's hint is its help's first sentence, as a sentence", () => {
+  assert.ok(shortHelp(fieldByKey.length).startsWith("The whole coupon"));
+  assert.ok(shortHelp(fieldByKey.G13).length <= 141);
+  for (const field of fields) {
+    const hint = shortHelp(field);
+    if (hint) assert.match(hint, /^[^a-z].*[.?!]$/, field.key); // capitalised and ended, never cut on ';' (fea-run-J2-3)
+  }
 });
 
 test("the form carries the engine's unit systems: labels per row, defaults per system and the library's constants, nothing converted here", () => {
@@ -116,5 +120,5 @@ test("the form carries the engine's unit systems: labels per row, defaults per s
   assert.ok(Math.abs(im7.E1 - 23.51e6) < 1e4 && Math.abs(im7.ply_thickness! - 0.0072) < 1e-9);
   assert.equal(libraryConstantsIn("no-such-material", "in-psi"), null);
   assert.deepEqual(rowErrorsFrom({ ...checklist, items: [{ id: "geometry", label: "Geometry defined", state: "missing", message: "Length (in): required", rows: ["Length (in)"] }] }),
-    { length: "Length (in): required" });
+    { length: "Required." });
 });

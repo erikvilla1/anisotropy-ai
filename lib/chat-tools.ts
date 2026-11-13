@@ -16,13 +16,13 @@ export const CHAT_TOOLS: readonly ChatTool[] = [
   {
     id: "laminate",
     title: "Laminate response",
-    detail: "a stack under loads per unit width, no coupon: the ABD matrices, strains, every ply's stresses and first-ply failure in seconds, in the units you pick",
+    detail: "ABD matrices, strains, ply stresses and first-ply failure for a laminate under loads, in your units.",
     words: /\b(laminate (response|problem|theory)|abd|classical lamination|hand calc|homework)\b/i,
   },
   {
     id: "coupon",
-    title: "Coupon test",
-    detail: "a test coupon set up, checked, solved by finite elements and verified, drawn ply by ply",
+    title: "Coupon FEA",
+    detail: "Set up, check and solve a test coupon by finite elements, ply by ply.",
     words: /\b(coupon|open-hole|unnotched|bending|in-plane shear|plate|fea|finite element|calculix)\b/i,
   },
 ];

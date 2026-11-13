@@ -18,6 +18,8 @@ import { POLL_MS, firstWatch, jobIdOf, retryDelay, solverNames, startInPool, sta
          type Watch, type WatchStep } from "./solver-queue";
 
 type WorkerEnv = Env & Partial<Record<ContainerVariable, string>>;
+/** What a job the API filed but the Worker could not queue answers: what happened and what to do, never the cause. */
+const NOT_QUEUED = "The analysis could not be queued. Start it again; if it keeps failing, contact us.";
 
 export class ApiContainer extends Container<WorkerEnv> {
   defaultPort = 8080;  // uvicorn in the image; a request waits until the API listens
@@ -109,12 +111,15 @@ export default {
     headers.delete(ENQUEUE_HEADER);
     const jobId = jobIdOf({ job_id: queued });
     if (jobId === null || env.JOB_QUEUE == null) {
-      return Response.json({ detail: "the job was filed but could not be queued: the API named no job, or the Worker has no queue" }, { status: 503 });
+      // the cause stays in the log; the answer says what happened and what to do (ADR-0091 amendment 2)
+      console.log(`coupon job ${queued}: filed but not queued: ${jobId === null ? "the API named no job" : "the Worker has no queue"}`);
+      return Response.json({ detail: NOT_QUEUED }, { status: 503 });
     }
     try {
       await env.JOB_QUEUE.send({ job_id: jobId });
     } catch (error) {
-      return Response.json({ detail: `the job ${jobId} was filed but could not be queued (${String(error)}); start it again` }, { status: 503 });
+      console.log(`coupon job ${jobId}: filed but not queued: ${String(error)}`);
+      return Response.json({ detail: NOT_QUEUED }, { status: 503 });
     }
     return new Response(answer.body, { status: answer.status, statusText: answer.statusText, headers });
   },

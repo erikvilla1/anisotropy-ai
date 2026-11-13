@@ -121,7 +121,8 @@ def test_the_checklist_judges_the_rigid_body_motions_of_a_plate(tmp_path):
     items = {item.id: item for item in checklist.items}
     assert items["constraints"].state == "pass" and "no rigid-body motion is left" in items["constraints"].message
     assert items["load"].state == "pass" and "pressure of -0.01 MPa on Face" in items["load"].message
-    assert items["laminate"].state == "pass" and "flat shell kernel" in items["laminate"].message
+    assert items["laminate"].state == "pass" and items["laminate"].message.endswith("symmetric, so stretching and bending do not couple")
+    assert "kernel" not in items["laminate"].message  # the machinery stays out of the words (ADR-0091 amendment 2)
     assert rigid_modes_left(model) == ("", "")
     # drop the corner pins: the plate can slide and turn in its plane
     data = json.loads(PLATE_VALUES.read_text(encoding="utf-8"))

@@ -29,13 +29,16 @@ async function quietApi(page: import("@playwright/test").Page, store: Record<str
   });
 }
 
-test("the workspace opens on three tiles and the projects, the server's among them, and a new project opens the three-column FEA workspace (ADR-0062)", async ({ page }) => {
+test("the workspace opens on two tiles and the projects, the server's among them, and a new project opens the three-column FEA workspace (ADR-0062)", async ({ page }) => {
   const store: Record<string, Record<string, unknown>> = {};
   await quietApi(page, store);
   await page.goto("/workspace");
   const tiles = page.getByTestId("workspace-tiles");
-  await expect(tiles.locator("[data-workspace]")).toHaveCount(3);
-  await expect(tiles.locator("[data-workspace=cad]")).toHaveAttribute("data-status", "planned");
+  await expect(tiles.locator("[data-workspace]")).toHaveCount(2); // the CAD tile is gone (decision D5)
+  await expect(tiles.locator("[data-workspace=cad]")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Start a project");
+  await expect(tiles.locator("[data-workspace=fea] h3")).toHaveText("New Coupon FEA project"); // the workspace's one name, as written
+  await expect(page.getByTestId("projects-source")).toHaveText("Saved to your account and in this browser.");
   await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "server"); // the list is the browser's merged with the server's (part 6)
   await expect(page.getByTestId("workspace-projects")).toContainText("From the server"); // a project this browser never held
   await page.getByRole("button", { name: /New coupon fea project/i }).click();
@@ -78,7 +81,9 @@ test("the workspace opens on three tiles and the projects, the server's among th
   await expect(rows.first()).toHaveAttribute("data-kind", "laminate");
   await expect(rows.first()).toContainText("ABD check");
   await expect(rows.nth(2)).toContainText("From the server");
-  await expect(rows.nth(2)).toContainText("Open-hole tension: not available yet"); // kept and listed, not offered (ADR-0089)
+  await expect(rows.nth(2)).toContainText("Open-hole tension: not offered yet"); // kept and listed, not offered (ADR-0089)
+  await expect(rows.first()).toContainText("Laminate response");
+  await expect(rows.nth(1)).toContainText("Coupon FEA");
   await expect.poll(() => Object.values(store).some((p) => p.name === "ABD check" && p.kind === "laminate"), { timeout: 10_000 }).toBe(true);
   await rows.nth(1).getByRole("button", { name: "Open" }).click(); // the coupon project, untouched
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
@@ -100,6 +105,6 @@ test("the old addresses go to the workspace with their query, and the service pa
   await expect(page.getByRole("link", { name: "Open the workspace", exact: true })).toHaveAttribute("href", /\/workspace\/fea$/);
   await page.goto("/workspace/laminate");
   await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "units");
-  await page.goto("/workspace/cad");
-  await expect(page.getByTestId("cad-placeholder")).toContainText("What is planned");
+  await page.goto("/workspace/cad"); // no CAD page in the workspace (decision D5)
+  await expect(page.getByTestId("cad-placeholder")).toHaveCount(0);
 });

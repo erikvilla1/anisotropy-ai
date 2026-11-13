@@ -1,7 +1,7 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { printed } from "../../lib/studio-colors";
-import { bannedIn, bannedInAbaqusCard } from "../../lib/studio-copy";
+import { ANALYSIS_UNAVAILABLE, bannedIn, bannedInAbaqusCard } from "../../lib/studio-copy";
 import { exchangeState, LIMITS, mockExchange, uploadOf } from "./abaqus-api";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
@@ -23,9 +23,10 @@ test.beforeEach(async ({ page }) => {
 const TENSION_BUILT = [
   { row: "width", value: 25, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
   { row: "length", value: 250, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
-  { row: "tab_length", value: 56, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric grips through emery cloth and sets no grip length: 56 mm by default" },
+  { row: "tab_length", value: 56, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric: gripped through emery cloth, with no tab length given, so 56 mm by default" },
   { row: "strain_length", value: 25, reason: "25 mm, within ASTM D3039/D3039M-17 §7.3.2's 10 to 50 mm, centred on the coupon" },
-  { row: "value", value: 1, reason: "1 mm: the model is linear, so the answer, the loading at first-ply failure, does not depend on it" },
+  { row: "control", value: "displacement", reason: "the top grip moves; the bottom one is held" },
+  { row: "value", value: 1, reason: "the model is linear, so R, the loading at first-ply failure, does not depend on it" },
 ];
 
 /** The API, played from the public fixtures: the check, the solve, a job that runs then ends, its files, and the coupons. */
@@ -44,7 +45,11 @@ async function mockApi(page: Page, calls: { checks: unknown[]; solves: unknown[]
     if (path === "/v1/coupon-tests" && request.method() === "GET") return json(route, { all: options.allTests ?? true });
     if (path === "/v1/workspace/assistant" && options.writer === "model") return json(route, { proposes: false, provider: "anthropic", model: "claude-opus-5-5" });
     if (path === "/v1/coupons" && request.method() === "GET") return json(route, fixture("coupons"));
-    if (path.startsWith("/v1/projects")) return json(route, { detail: "Run records are switched off (ANISOTROPY_RUN_RECORDS=off); there is nothing to read" }, 503); // no project store: the browser keeps the project alone
+    if (path.startsWith("/v1/projects")) { // no project store, and the API says so: the browser keeps the project alone (ADR-0091 amendment 2)
+      // the page and the API are on two origins in CI, so the header must be exposed to be read, as the API's CORS layer does (main.py)
+      return route.fulfill({ status: 503, contentType: "application/json", headers: { "X-Anisotropy-Records": "off", "Access-Control-Expose-Headers": "X-Anisotropy-Records" },
+        body: JSON.stringify({ detail: "Records are switched off on this server, so there is nothing to read" }) });
+    }
     if (path === "/v1/coupons/IM7-UNT-L1/values") return json(route, { name: "IM7-UNT-L1", values: fixture("values") });
     if (path === "/v1/tow-tests" && request.method() === "POST") { // a fibre tow record, answered by the package from the public fixture (ADR-0074)
       (calls.tows ??= []).push(request.postDataJSON());
@@ -196,9 +201,10 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("job-message")).toContainText("Verified against reference solver: 57 of 57 values agree");
   await expect(page.getByTestId("job-progress").locator("li[data-state=done]")).toHaveCount(5); // the five steps of a finished job (ADR-0091)
   const outputs = page.getByTestId("panel-outputs"); // the files in the left column, named by the standard and the layup (ADR-0091)
-  await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("href", /\/v1\/coupon-jobs\/0f3a2c9e[^/]*\/files\/package\?name=UnnotchedTension_%5B45-0--45-90%5Ds_package\.zip$/);
-  await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("download", "UnnotchedTension_[45-0--45-90]s_package.zip");
-  await expect(outputs.locator("a[data-key=prepomax_results]")).toHaveText("Reference solver results (.frd)");
+  await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("href", /\/v1\/coupon-jobs\/0f3a2c9e[^/]*\/files\/package\?name=UnnotchedTension_%5B45%2C0%2C-45%2C90%5Ds_package\.zip$/);
+  await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("download", "UnnotchedTension_[45,0,-45,90]s_package.zip"); // commas (fea-run-39)
+  await expect(outputs.locator("a[data-key=prepomax_results]")).toHaveText("Reference solver results (.frd)"); // the development view lists every file (D4)
+  await expect(outputs.locator("a[data-key=prepomax_results]")).toHaveAttribute("href", /\/files\/reference_results\?name=/); // by a neutral name
   await expect(page.getByTestId("downloads")).toHaveCount(0); // not twice: the centre leaves the files to the left column
   await expect(page.getByTestId("viewer-link")).toHaveAttribute("href", "/workspace/fea/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
   await page.getByLabel("Field", { exact: true }).selectOption("S22");
@@ -252,7 +258,9 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   expect(sent.span).toBe(48);
   expect(sent.tab_length).toBeUndefined(); // the hidden rows are not sent
   expect(sent.grips).toBeUndefined();
-  await expect(page.getByTestId("preview")).toContainText("Support-Left");
+  await expect(page.getByTestId("preview")).toContainText("Left support: held along z"); // the sets in words (audit fea-run-16)
+  await expect(page.getByTestId("preview")).toContainText("Left pin: held along x, y");
+  await expect(page.getByTestId("preview")).not.toContainText("Pin-Left");
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }); // 15 s was passed twice on CI runners that ran every test of this file at half speed
@@ -421,7 +429,12 @@ test("the tension screen takes the material and the layup, builds the model, say
 
   await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, 6 mm hole");
   await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
-  await expect(page.getByTestId("chat-not-available").last()).toContainText("Open-hole tension is not available yet");
+  await expect(page.getByTestId("chat-not-available").last()).toContainText(
+    "Open-hole tension is not offered yet. This workspace runs the unnotched tension coupon, under ASTM D3039 or no standard."); // no tool, no open validation
+  // a layup that bends as it is pulled is refused on the page, before Run analysis, in the setup check's words (audit repository-2)
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await expect(page.getByTestId("tension-screen").getByRole("alert")).toHaveText("This layup is not symmetric. Use a layup that reads the same from both faces, such as [0/45/-45/90]s.");
 
   await page.getByLabel("Material", { exact: true }).selectOption("as4-8552"); // its library record gives no ply thickness: the screen asks
   await expect(page.getByTestId("library-ply-thickness")).toBeVisible();
@@ -431,6 +444,14 @@ test("the tension screen takes the material and the layup, builds the model, say
   await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
   await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
   await expect(page.getByTestId("tension-missing")).toHaveCount(0);
+  // a layup refused after a good one never reaches the form, which keeps the good one: Run analysis waits until it is fixed (review R2-3)
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await expect(page.getByTestId("tension-screen").getByRole("alert")).toContainText("This layup is not symmetric.");
+  await expect(page.getByTestId("build-button")).toBeDisabled();
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await expect(page.getByTestId("build-button")).toBeEnabled();
   await page.getByTestId("build-button").click();
   await expect.poll(() => calls.solves.length).toBe(1); // ready, so Build goes on to the full analysis
   const sent = (calls.checks.at(-1) as { values: Record<string, unknown> }).values;
@@ -441,9 +462,15 @@ test("the tension screen takes the material and the layup, builds the model, say
   const built = page.getByTestId("tension-built");
   await expect(built.locator("tr[data-row=width]")).toContainText("ASTM D3039/D3039M-17, Table 2, balanced and symmetric");
   await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm by default");
-  await expect(page.getByTestId("tension-files")).toContainText("Solver input (.inp)", { timeout: 45_000 }); // the job ends at the eighth poll, slower on CI
+  await expect(built.locator("tr[data-row=value] th")).toHaveText("Applied displacement (mm)"); // the label alone in the row header (uiux-fea-run-29)
+  await expect(built.locator("tr[data-row=value] td").last()).toHaveText("The model is linear, so R, the loading at first-ply failure, does not depend on it.");
+  await expect(page.getByTestId("tension-files")).toContainText("Abaqus input file (.inp)", { timeout: 45_000 }); // the job ends at the eighth poll, slower on CI
   await expect(page.getByTestId("tension-files")).toContainText("Report (PDF)");
-  await expect(page.getByTestId("tension-files").locator("a[data-key=document]")).toHaveAttribute("download", "D3039_[45-0--45-90]s_report.pdf");
+  await expect(page.getByTestId("tension-files").locator("a[data-key=document]")).toHaveAttribute("download", "D3039_[45,0,-45,90]s_report.pdf");
+  // a customer gets the report and the solver input, asked for by what it is; the team's package and reference files stay out (D4)
+  await expect(page.getByTestId("tension-files").locator("a[data-key=abaqus_deck]")).toHaveAttribute("href", /\/files\/solver_input\?name=D3039_%5B45%2C0%2C-45%2C90%5Ds_solver\.inp$/);
+  await expect(page.getByTestId("tension-files").locator("a[data-key=package], a[data-key=prepomax_deck], a[data-key=prepomax_results]")).toHaveCount(0);
+  await expect(page.getByTestId("status")).toHaveText("Done. Download the report and files under Files.");
 });
 
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {
@@ -510,7 +537,7 @@ test("the studio's old addresses go to the chat with their query (ADR-0055 amend
   // is /chat with or without it by the time it is read; that the chat got the material is the next line.
   await expect(page).toHaveURL(/\/workspace\/fea\/?(\?material=im7-8552)?$/);
   await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
-  await expect(page.getByTestId("coupon-tool")).toContainText("Coupon test"); // the first question lists the tools
+  await expect(page.getByTestId("coupon-tool")).toContainText("Coupon FEA"); // the first question lists the tools, by the workspace's one name
   await page.goto("/studio/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
   await expect(page).toHaveURL(/\/workspace\/fea\/view\/?\?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00$/);
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
@@ -1083,7 +1110,8 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "anthropic", { timeout: 15_000 }); // a model wrote it; the page does not say so
   await page.getByTestId("answer-table").getByRole("button", { name: "Show" }).first().click();
   await expect(page.getByTestId("probe")).toBeVisible();
-  await expect(page.getByTestId("tension-files").locator("a[data-key=prepomax_results]")).toHaveText("Reference solver results (.frd)");
+  await expect(page.getByTestId("tension-files").locator("a[data-key=abaqus_deck]")).toHaveText("Abaqus input file (.inp)");
+  await expect(page.getByTestId("tension-files").locator("a[data-key=prepomax_results]")).toHaveCount(0); // the team's file, not the customer's (D4)
   await expectNoBannedTerms(page, "done, with the probe table and the files");
   // the card of the user's own Abaqus (ADR-0094 part 7), with a model that differs, an upload key just made and every fold open: it names
   // Abaqus and the connector's file and nothing else of the list; the rest of the page still names neither
@@ -1161,4 +1189,80 @@ test("the laminate workspace never names its machinery, unsolved or solved, and 
   await page.getByTestId("assistant-toggle").click();
   await expect(page.getByTestId("assistant-toggle")).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByTestId("assistant-toggle")).not.toHaveAttribute("aria-pressed", /.*/);
+});
+
+/** Every word a workspace page carries for a reader, a screen reader or a search engine (audit fea-screens-19): the title, the meta
+ * description, the main text, the attributes and the links' addresses, the service's own address part left aside. `part` reads the card
+ * of the user's own Abaqus alone, or everything but it: that card may name Abaqus and the connector's file (ADR-0094 part 7), its build
+ * script's link among them, and is judged by its own list. */
+async function pageWords(page: Page, part: "outside the Abaqus card" | "the Abaqus card" = "outside the Abaqus card"): Promise<string> {
+  return page.evaluate((inside) => {
+    const main = (document.querySelector("main") ?? document.body).cloneNode(true) as HTMLElement;
+    const cards = [...main.querySelectorAll("[data-names-abaqus]")];
+    if (!inside) cards.forEach((card) => card.remove());
+    const read = (root: Element) => {
+      const attributes = [...root.querySelectorAll("[aria-label], [title], [placeholder], a[download]")]
+        .flatMap((el) => ["aria-label", "title", "placeholder", "download"].map((name) => el.getAttribute(name) ?? ""));
+      const hrefs = [...root.querySelectorAll("a[href]")].map((a) => (a.getAttribute("href") ?? "").replace("/v1/", "/"));
+      return [root.textContent ?? "", ...attributes, ...hrefs].join("\n");
+    };
+    if (inside) return cards.map(read).join("\n");
+    const description = document.querySelector('meta[name="description"]')?.getAttribute("content") ?? "";
+    return [document.title, description, read(main)].join("\n");
+  }, part === "the Abaqus card");
+}
+const expectNoBannedWords = async (page: Page, where: string) => {
+  expect(bannedIn(await pageWords(page)), where).toEqual([]);
+  expect(bannedInAbaqusCard(await pageWords(page, "the Abaqus card")), `${where}: the Abaqus card`).toEqual([]);
+};
+
+test("no workspace page names a tool, its machinery or a record, in its head, its text or its links, the service up or down (audit fea-screens-19)", async ({ page }) => {
+  test.setTimeout(120_000);
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false });
+  await page.goto("/workspace");
+  await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "browser"); // the stand-in keeps no projects, and says so
+  await expect(page.getByTestId("projects-source")).toHaveText("Projects are saved in this browser only; clearing its site data removes them.");
+  await expect(page.getByTestId("workspace-tiles").locator("[data-workspace]")).toHaveCount(2); // no CAD tile (D5)
+  await expectNoBannedWords(page, "the chooser");
+  await page.goto("/workspace/fea");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await expect(page.getByTestId("chat-spec")).toContainText("1 mm displacement"); // the load the package will apply, before any check
+  await page.getByLabel("Message the coupon assistant", { exact: true }).fill("Open-hole tension, 6 mm hole");
+  await page.getByLabel("Message the coupon assistant", { exact: true }).press("Enter");
+  await expect(page.getByTestId("chat-not-available").last()).toContainText("not offered yet");
+  await expectNoBannedWords(page, "the coupon workspace, a hidden test named");
+  await page.goto("/workspace/laminate");
+  await expectNoBannedWords(page, "the laminate workspace");
+  await page.goto("/workspace/fea/view");
+  await expectNoBannedWords(page, "the viewer with no job");
+  await page.goto("/workspace/fea/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 });
+  await expectNoBannedWords(page, "the viewer with a job");
+  // an old link to a job the service no longer has, answered in an older API's words: the page says it plainly
+  await page.route(API, (route) => (/^\/v1\/coupon-jobs\/[^/]+$/.test(new URL(route.request().url()).pathname)
+    ? route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: "No coupon job x: not in this API process, and not in the jobs "
+      + "table (which exists when run records are on); every job that ended has its receipt in GET /v1/runs?endpoint=/v1/coupon-jobs" }) })
+    : route.fallback()));
+  await page.goto("/workspace/fea/view?job=00000000-0000-0000-0000-000000000000");
+  // scoped: the route announcer of the App Router has role=alert too
+  await expect(page.locator(".studio-viewer").getByRole("alert")).toHaveText("These results are no longer available. Run the analysis again from your project.");
+  await expect(page.locator(".studio-viewer").getByRole("status")).toHaveCount(0); // no "Loading results…" under it
+  await expectNoBannedWords(page, "the viewer, the job gone");
+  // the service down: every call answers 503, with no word that it keeps no records
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await page.route(API, (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "the container did not answer" }) }));
+  await page.goto("/workspace");
+  await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "down");
+  await expect(page.getByTestId("projects-source")).toHaveText("Saved projects could not be loaded. Showing the ones in this browser. Reload to try again.");
+  await expectNoBannedWords(page, "the chooser, the service down");
+  await page.goto("/workspace/fea");
+  await expect(page.getByTestId("tension-screen")).toBeVisible();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await page.getByTestId("build-button").click();
+  await expect(page.getByTestId("tension-screen").getByRole("alert")).toHaveText(ANALYSIS_UNAVAILABLE);
+  await expect(page.getByText(ANALYSIS_UNAVAILABLE, { exact: true })).toHaveCount(1); // said once, in the rail, not again in the assistant (fea-run-48)
+  await expectNoBannedWords(page, "the coupon workspace, the service down");
 });

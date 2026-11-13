@@ -80,10 +80,11 @@ class JobLimited(RuntimeError):
 
 
 class JobBusy(RuntimeError):
-    """A job is running; one runs at a time."""
+    """A job is running; one runs at a time. The message is what the page shows (ADR-0091 amendment 2); the running job's id is kept
+    on the exception and printed to the log, never in the answer."""
 
     def __init__(self, job_id: uuid.UUID):
-        super().__init__(f"coupon job {job_id} is running; one runs at a time, so wait for it to end")
+        super().__init__("Another analysis is running. Wait for it to finish, then run this one.")
         self.job_id = job_id
 
 
@@ -95,12 +96,41 @@ class CheckTimedOut(RuntimeError):
     """The studio tool did not answer in time."""
 
 
-# The words the fea package puts in every refusal of a test the studio does not offer yet (anisotropy_fea.enabled.NOT_AVAILABLE).
-NOT_OFFERED = "not available yet"
+# The words the fea package puts in every refusal of a test the studio does not offer yet (anisotropy_fea.enabled.NOT_OFFERED).
+NOT_OFFERED = "not offered yet"
 
 
 class NotOffered(ValueError):
     """A stored coupon of a test the studio does not offer yet (ADR-0089): a 422, not a failure of the tool."""
+
+
+# The files a customer downloads, by the names the page asks for them (ADR-0091 amendment 2): what the file is, not the program it is
+# for. The pipeline's own keys stay as they are for the team's tools and the stored jobs.
+FILE_ALIASES = {"solver_input": "abaqus_deck", "reference_input": "prepomax_deck", "reference_results": "prepomax_results"}
+NEUTRAL_DECKS = {"solver_input": "Solver input", "reference_input": "Reference solver input"}  # served with a neutral header: its title
+# The comment lines a customer's copy of a solver input keeps: the test, the standard, the strain measurement, the mesh, the layup and the
+# units. The rest (the tool and spec that wrote it, the coupon's record, the team's model, the material's rights class, notes on our own
+# conventions) stays in the team's copy, in the package.
+DECK_COMMENTS_KEPT = ("** Test:", "** Standard:", "** Strain measurement:", "** mesh ", "** layup ", "** units of this deck")
+
+
+def neutral_deck(text: str, title: str) -> str:
+    """A solver input as a customer downloads it: every keyword and data line as written, its comments cut to DECK_COMMENTS_KEPT, and the
+    title line under *HEADING, when there is one, replaced by `title`."""
+    out: list[str] = []
+    heading = False
+    for line in text.splitlines():
+        if line.startswith("**"):
+            if line.startswith(DECK_COMMENTS_KEPT):
+                out.append(line)
+            continue
+        if heading and not line.startswith("*"):
+            out.append(title)  # the *HEADING's title line: the reference deck's names the program that wrote it
+            heading = False
+            continue
+        heading = line.strip().upper() == "*HEADING"
+        out.append(line)
+    return "\n".join(out) + "\n"
 
 
 class UnknownCoupon(KeyError):
@@ -288,6 +318,7 @@ class CouponJobs:
         with self.lock:
             busy = next((job for job in self.jobs.values() if job.state == "running"), None)
             if busy is not None:
+                print(f"coupon job refused: {busy.id} is running; one runs at a time", flush=True)
                 raise JobBusy(busy.id)
             job_id = uuid.uuid4()
             job = Job(job_id, actor, inputs, self._folder() / str(job_id), dt.datetime.now(dt.timezone.utc), user_email=user_email, project_id=project_id)
@@ -346,17 +377,20 @@ class CouponJobs:
 
     def _within_limits(self, actor: str, user_email: str | None) -> None:
         """The hosted tier's per-user limits (ADR-0056), from the jobs table: one running job per person, and at most `per_day` jobs
-        started since midnight UTC, whatever became of them. Refused with the reason the studio shows."""
-        who = user_email or f"the actor {actor}"
+        started since midnight UTC, whatever became of them. Refused with the reason the page shows, in the person's words (ADR-0091
+        amendment 2); the job's id and the actor go to the log, not to the answer."""
         running = running_job_of(self.table, user_email, actor)
         if running is not None:
-            raise JobLimited(f"a job of {who} is still {running.state} ({running.id}, started {running.started_at:%H:%M} UTC); one runs at a time per person, "
-                             "so wait for it to end or open it")
+            print(f"coupon job refused for the actor {actor}: {running.id} is still {running.state}; one runs at a time per person", flush=True)
+            still = "waiting to start" if running.state == "queued" else "running"
+            raise JobLimited(f"Your analysis started at {running.started_at:%H:%M} UTC is still {still}. Wait for it to finish, "
+                             "then run this one.")
         midnight = dt.datetime.now(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         started = jobs_started_since(self.table, user_email, actor, midnight)
         if started >= self.per_day:
-            raise JobLimited(f"{who} has started {started} job(s) today, the cap of {self.per_day} per person per day (UTC); the next one can start "
-                             "tomorrow, or ask for a higher cap")
+            print(f"coupon job refused for the actor {actor}: {started} started today, the cap is {self.per_day}", flush=True)
+            raise JobLimited(f"You have started {started} {'analysis' if started == 1 else 'analyses'} today, the most allowed per day. You can "
+                             "start another after midnight UTC, or contact us for a higher limit.")
 
     def _run(self, job: Job, args: list[str]) -> None:
         result = job.folder / "outcome.json"

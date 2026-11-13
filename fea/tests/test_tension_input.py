@@ -61,7 +61,7 @@ def test_a_layup_in_no_class_gets_no_size_and_the_check_asks_for_it_by_row(tmp_p
     values, built = complete_tension({"library": "im7-8552", "angles": [0, 45], "symmetric": "no"}, DAY)
     assert d3039_class(values) is None
     assert not {"length", "width", "tab_length"} & set(chosen(built))
-    assert values["size_from"] == f"the engineer's own size: the layup is in no {D3039} Table 2 class"
+    assert values["size_from"] == f"the dimensions you give: the layup is in no {D3039} Table 2 class"  # a customer reads it (audit review R2-10)
     checklist = setup_checklist(read_values(values_file(tmp_path, {"library": "im7-8552", "angles": [0, 45], "symmetric": "no"})),
                                 tmp_path / "none", **TOOLS)[0]
     assert checklist.state == "blocked"
@@ -77,7 +77,7 @@ def test_every_choice_names_its_row_and_its_reason_and_no_given_row_is_changed()
     rows = chosen(built)
     assert not set(given) & set(rows), "a row the engineer gave is never chosen again"
     assert all(b.row in FIELDS and b.reason.strip() for b in built)
-    assert values["size_from"].startswith("the engineer's own size: a deviation from " + D3039)
+    assert values["size_from"].startswith("the dimensions you gave: a deviation from " + D3039)
     assert "control" not in rows and "value" not in rows
 
 

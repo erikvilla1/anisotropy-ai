@@ -5,10 +5,40 @@
  * guard (`customerText`) and the browser test read.
  */
 import type { JobStatus } from "./studio-api";
-import { inProse } from "./number-format";
+import { formatNumber, inProse } from "./number-format";
 
 /** What an outage says, on the calculator and in the workspaces: what happened and what to do (style guide, rule 8). */
 export const ANALYSIS_UNAVAILABLE = "Analysis is unavailable right now. Your inputs are kept; try again in a minute, and contact us if it continues.";
+/** A job the API no longer has: an old viewer link, or a job of a container that has since restarted (ADR-0091 amendment 2). */
+export const JOB_GONE = "These results are no longer available. Run the analysis again from your project.";
+/** Results whose file the page cannot read; the reason goes to the console, never to the screen. */
+export const RESULTS_UNREADABLE = "The results could not be read. Reload the page; if it happens again, contact us.";
+/** Any other answer the page cannot read. */
+export const ANSWER_UNREADABLE = "The answer could not be read. Reload the page; if it happens again, contact us.";
+/** What failed, by the request's name (`what` in `lib/studio-api.ts`), when the service's own words cannot be shown (audit fea-run-48). */
+export const FAILED_WORDS: Record<string, string> = {
+  "the setup check": "The setup could not be checked",
+  "the preview": "The preview could not be loaded",
+  "the tow calculation": "The tow calculation could not be run",
+  "starting the analysis": "The analysis could not be started",
+  "the analysis's progress": "The analysis's progress could not be read",
+  "the analyses": "The analyses could not be loaded",
+  "the projects": "Your projects could not be loaded",
+  "saving the project": "The project could not be saved",
+  "the project": "This project could not be opened",
+  "renaming the project": "The project could not be renamed",
+  "the coupons": "The coupons could not be loaded",
+  "the coupon's values": "The coupon could not be opened",
+  "the results": "The results could not be loaded",
+  "the explanation": "The explanation could not be loaded",
+  "the laminate solve": "The laminate could not be solved",
+  "the proposals": "The message could not be read",
+  "the tests offered": "The tests offered could not be loaded",
+  "the assistant": "The assistant could not be reached",
+};
+/** A failed request in words: what failed, then what to do. */
+export const failedText = (what: string): string =>
+  `${FAILED_WORDS[what] ?? `${sentence(what)} could not be completed`}. Reload the page; if it happens again, contact us.`;
 
 /** Words that never reach a customer's screen: our tools and vendors, our records and scripts, the team's own language and machinery. */
 export const BANNED_TERMS: { label: string; pattern: RegExp }[] = [
@@ -22,18 +52,31 @@ export const BANNED_TERMS: { label: string; pattern: RegExp }[] = [
   { label: ".toml", pattern: /\.toml\b/i },
   { label: "the founder", pattern: /\bthe founder\b/i },
   { label: "for the team", pattern: /\bfor the team\b/i },
-  { label: "free solver", pattern: /\bfree solver\b/i },
+  { label: "free solver", pattern: /\bfree solver\b|\bsolver is free\b/i },
   { label: "our engine", pattern: /\bour (engine|kernel)\b/i },
   { label: "engine", pattern: /\bengines?\b/i },
   { label: "decks", pattern: /\bdecks\b/i },
   { label: "case runner", pattern: /\bcase runner\b/i },
   { label: "ADR number", pattern: /\bADR-\d{4}\b/ },
   { label: "environment variable", pattern: /\bNEXT_PUBLIC_|\bANISOTROPY_[A-Z_]+\b/ },
+  // the service's machinery (audit fea-screens-2, fea-screens-19): its endpoints, its parts and its records
+  { label: "endpoint", pattern: /\/v1\// },
+  { label: "API", pattern: /\bAPI\b/ },
+  { label: "Worker", pattern: /\bWorker\b/ },
+  { label: "jobs table", pattern: /\bjobs? table\b/i },
+  { label: "run records", pattern: /\brun records?\b/i },
+  { label: "database", pattern: /\bdatabases?\b/i },
+  { label: "set name", pattern: /\bGrip-(?:Top|Bottom)\b/ },
 ];
+
+/** The one phrase that names a banned tool and may still be shown: the customer's solver file, which opens in Abaqus (the audit's D18:
+ * "Abaqus input file (.inp)" on the site and in the workspace, the founder's "accept" of 2026-11-12). */
+export const ALLOWED_PHRASE = /Abaqus input file \(\.inp\)/g;
 
 /** The banned terms a text holds, by label; empty when it is fit to show. */
 export function bannedIn(text: string): string[] {
-  return BANNED_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.label);
+  const shown = text.replace(ALLOWED_PHRASE, "");
+  return BANNED_TERMS.filter((t) => t.pattern.test(shown)).map((t) => t.label);
 }
 
 /** What the card of the user's own Abaqus may name (ADR-0094 part 7, a change to ADR-0091): Abaqus, because there it is the user's own
@@ -44,21 +87,34 @@ export function bannedInAbaqusCard(text: string): string[] {
   return bannedIn(text).filter((label) => !ABAQUS_CARD_ALLOWS.includes(label));
 }
 
-/** A message from the API or the pipeline, shown as it is only when it holds no banned term, no file path and no exit code; null
- * otherwise, so the page says the plain thing instead. */
+/** A file path with a file name ("tools/run.py"), or a folder path of two or more folders ("fea/checks/unnotched-im7-8552/"); a layup
+ * ("[45/0/-45/90]s") or a material ("IM7/8552") is neither. */
+const PATH = /(^|\s)\.?\/?[\w.-]+\/[\w./-]+\.\w+|(^|[\s("'])[A-Za-z_.][\w.-]*\/[\w.-]+\//;
+
+/** A job's or a project's id ("0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00"): never in a message, though an address may carry one. */
+const ID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+
+/** A message from the API or the pipeline, shown as it is only when it holds no banned term, no file or folder path, no id and no exit
+ * code; null otherwise, so the page says the plain thing instead. */
 export function customerText(text: string | null | undefined): string | null {
   if (!text) return null;
   const trimmed = text.trim();
   if (!trimmed || bannedIn(trimmed).length) return null;
-  if (/[A-Za-z]:\\|(^|\s)\.?\/?[\w.-]+\/[\w./-]+\.\w+|exited with code|Traceback|\bat line \d+/i.test(trimmed)) return null;
+  if (/[A-Za-z]:\\|exited with code|Traceback|\bat line \d+/i.test(trimmed) || PATH.test(trimmed) || ID.test(trimmed)) return null;
   return trimmed;
 }
 
+/** A coupon's record name at the head of a sentence ("IM7-UNT-L1, unnotched tension, ..."), which jobs solved before ADR-0091 amendment 2
+ * still carry: the material code, the test code and the layup code. */
+const DESIGNATION_HEAD = /^[A-Z][A-Z0-9]*-[A-Z0-9]{2,4}-L[1-9]\d*,\s*/;
+
 /** A sentence of the explanation as the page shows it: an aside about another program's viewer, which jobs solved before ADR-0091 still
- * carry, is cut; a sentence that still holds a banned term is left out; its numbers read as the page prints them ("1.622e+04" from an
- * older job is "16220", "1.5e+06" is "1.5 × 10⁶", the minus sign; ADR-0091 amendment 1). */
+ * carry, is cut, and so is a record's name at its head; a sentence that still holds a banned term is left out; its numbers read as the
+ * page prints them ("1.622e+04" from an older job is "16220", "1.5e+06" is "1.5 × 10⁶", the minus sign; ADR-0091 amendment 1). */
 export function shownSentence(text: string): string | null {
-  const shown = customerText(withSymbols(text).replace(/;\s*these are element centroids[^.;]*?,?\s*not the [^.;]*?a viewer such as PrePoMax shows\./, "."));
+  const symbols = withSymbols(text);
+  const named = DESIGNATION_HEAD.test(symbols) ? sentence(symbols.replace(DESIGNATION_HEAD, "")) : symbols; // the test opens the sentence then
+  const shown = customerText(named.replace(/;\s*these are element centroids[^.;]*?,?\s*not the [^.;]*?a viewer such as PrePoMax shows\./, "."));
   return shown === null ? null : inProse(shown);
 }
 
@@ -75,15 +131,61 @@ export const withSymbols = (text: string): string => SYMBOLS.reduce((out, [patte
 export const sentence = (text: string): string => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 
 /** A setup-check item's message as the page shows it: the package's words when they are fit to show, else the plain state. The
- * environment items (the reference solver, the document builder) name paths and programs, which stay in the check's record. */
+ * environment items (the reference solver, the document builder) name paths and programs, which stay in the check's record. An item
+ * the engineer can act on names its inputs when its own words cannot be shown, so it is never a dead end (audit repository-2). */
 export function checkText(item: { state: string; message: string; rows?: string[] }): string {
   const said = customerText(item.message);
   if (said) return said;
   if (item.state === "pass") return "Ready.";
   if (item.state === "warn") return "Review this setting.";
   if (item.state === "pending") return "Not checked yet.";
+  const rows = [...new Set(item.rows ?? [])].filter((row) => customerText(row) !== null);
+  if (rows.length) return `${item.state === "missing" ? "Inputs to fill in" : "Inputs to change"}: ${rows.join(", ")}.`;
   if (item.rows?.length) return item.state === "missing" ? "Fill in the inputs listed." : "Change the inputs listed.";
   return "Not available right now. Try again later, or contact us.";
+}
+
+/** The problem a check item names for each of its rows (audit fea-run-49), by label: the item's message split where the package joined
+ * its problems ("; " outside parentheses), each problem given to the rows its head names ("Length (mm): required", "A, B and C: ...")
+ * as words fit to show. A row no problem names gets "Check this value.", unless the item's one problem names a group of rows rather than
+ * a field ("Own material strengths: enter all five, or none"), which is every row's; `isField` tells a field's label from a group's. */
+export function rowProblems(item: { message: string; rows: string[] }, isField: (label: string) => boolean = () => true): Record<string, string> {
+  const parts: { named: string[]; words: string }[] = [];
+  let depth = 0, start = 0;
+  const pieces: string[] = [];
+  for (let i = 0; i < item.message.length; i++) {
+    const char = item.message[i];
+    depth += char === "(" ? 1 : char === ")" ? -1 : 0;
+    if (depth <= 0 && item.message.startsWith("; ", i)) { pieces.push(item.message.slice(start, i)); start = i + 2; }
+  }
+  pieces.push(item.message.slice(start));
+  const stems = (label: string) => [label, label.split(" (")[0]];
+  for (const piece of pieces) {
+    let rest = piece;
+    const named: string[] = [];
+    for (;;) {
+      const label = item.rows.filter((l) => stems(l).some((s) => rest.startsWith(s) && /^($|[:, ])/.test(rest.slice(s.length))))
+        .sort((a, b) => b.length - a.length)[0];
+      if (!label) break;
+      named.push(label);
+      rest = rest.slice(stems(label).find((s) => rest.startsWith(s))!.length);
+      const separator = /^(, | and | or )/.exec(rest);
+      if (!separator) break;
+      rest = rest.slice(separator[0].length);
+    }
+    const words = rest.replace(/^:\s*/, "").trim();
+    if (!named.length && parts.length && !piece.includes(": ")) parts[parts.length - 1].words += `; ${piece}`; // the rest of the previous problem
+    else parts.push({ named, words: named.length ? words : piece.trim() });
+  }
+  const shown = (words: string) => {
+    const said = customerText(words);
+    return said ? `${sentence(said).replace(/[.;,:]$/, "")}.` : "Check this value.";
+  };
+  const out: Record<string, string> = {};
+  for (const part of parts) for (const label of part.named) out[label] ??= shown(part.words);
+  const group = parts.length === 1 && parts[0].named.length > 0 && !parts[0].named.some(isField) ? shown(parts[0].words) : null;
+  for (const label of item.rows) out[label] ??= group ?? "Check this value.";
+  return out;
 }
 
 // ------------------------------------------------------------------------------------------------------------- the run's steps
@@ -160,8 +262,11 @@ export function runProblem(job: Pick<JobStatus, "state" | "stage" | "message" | 
 }
 
 /** One line on what the run has done so far, under the headline. */
-export function runDetail(job: Pick<JobStatus, "state" | "stage" | "result">): string {
-  if (job.state === "queued") return "The analysis starts when a solver is free.";
+export function runDetail(job: Pick<JobStatus, "state" | "stage" | "result"> & { message?: string | null }): string {
+  if (job.state === "queued") {
+    const ahead = queueAhead(job.message);
+    return ahead ? `Waiting for the ${ahead === 1 ? "run" : `${ahead} runs`} ahead.` : "The analysis starts in a moment.";
+  }
   if (job.state !== "running") return "";
   const step = stepOfStage(job.stage);
   if (job.result || step === "report") return "Results are ready. The report follows.";
@@ -186,9 +291,10 @@ export function verificationOf(result: string | null | undefined, beside?: { agr
     : { line: `Reference solver check: ${agree} of ${of} values ${how}`, verified: false };
 }
 
-/** The run's state in the side panel: the plain problem when it ended badly, else done with where the files are, else the headline. */
+/** The run's state in the side panel: the plain problem when it ended badly, else done with where the files are, else the headline. No
+ * position words: below 1100 px the results sit under the setup, not in a centre column (audit fea-run-50). */
 export function runStatus(job: Parameters<typeof runProblem>[0] & Pick<JobStatus, "result">, filesUnder: string): string {
-  return runProblem(job) ?? (job.state === "done" ? `Done. Results are in the centre, files under ${filesUnder}.`
+  return runProblem(job) ?? (job.state === "done" ? `Done. Download the report and files under ${filesUnder}.`
     : `${runHeadline(job)}${job.state === "running" ? "…" : "."}`);
 }
 
@@ -198,21 +304,59 @@ export function runStatus(job: Parameters<typeof runProblem>[0] & Pick<JobStatus
 export const DOWNLOAD_LABELS: [string, string][] = [
   ["document", "Report (PDF)"],
   ["package", "Full package (ZIP)"],
-  ["abaqus_deck", "Solver input (.inp)"],
+  ["abaqus_deck", "Abaqus input file (.inp)"],
   ["prepomax_deck", "Reference solver input (.inp)"],
   ["prepomax_results", "Reference solver results (.frd)"],
 ];
+/** What a customer downloads (decision D4, ADR-0091 amendment 2): the report and the solver input. The full package, the reference solver's
+ * input and its results are the team's verification material, offered only where every test is (the development switch). */
+export const CUSTOMER_DOWNLOADS: readonly string[] = ["document", "abaqus_deck"];
+/** The files offered, in order: the customer's, or every one with the development switch on. */
+export const downloadsFor = (all: boolean): [string, string][] => DOWNLOAD_LABELS.filter(([key]) => all || CUSTOMER_DOWNLOADS.includes(key));
+/** The neutral name a file is asked for by (ADR-0091 amendment 2): what it is, not the program it is for; the API maps it back. */
+export const FILE_URL_KEY: Record<string, string> = { abaqus_deck: "solver_input", prepomax_deck: "reference_input", prepomax_results: "reference_results" };
 const DOWNLOAD_SUFFIX: Record<string, string> = {
   document: "_report.pdf", package: "_package.zip", abaqus_deck: "_solver.inp", prepomax_deck: "_reference.inp", prepomax_results: "_reference.frd",
   abaqus_build: "_build.py", // the script that builds the coupon in Abaqus/CAE: offered on the Abaqus card alone, never in the list of files
 };
 
-/** What a downloaded file is called: the standard and the layup, then what it is, e.g. `D3039_[45-0--45-90]s_report.pdf`. Only
- * letters, digits and `_ . , ( ) [ ] + -` survive, which the API accepts as a file name. */
+/** What a downloaded file is called: the standard and the layup, then what it is, e.g. `D3039_[45,0,-45,90]s_report.pdf`; the plies are
+ * parted by commas, so a −45 ply reads as one (audit fea-run-39). Only letters, digits and `_ . , ( ) [ ] + -` survive, which the API
+ * accepts as a file name. */
 export function downloadName(key: string, coupon: { standard?: string | null; test?: string | null; layup?: string | null }): string {
   const standard = coupon.standard?.match(/\bD\d{3,4}\b/)?.[0];
   const test = (coupon.test ?? "").split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("");
-  const layup = (coupon.layup ?? "").replace(/±/g, "+-").replace(/\//g, "-").replace(/\s+/g, "");
+  const layup = (coupon.layup ?? "").replace(/±/g, "+-").replace(/\//g, ",").replace(/\s+/g, "");
   const base = [standard ?? (test || "Coupon"), layup].filter(Boolean).join("_").replace(/[^A-Za-z0-9_.,()[\]+-]/g, "-");
   return `${base.slice(0, 100)}${DOWNLOAD_SUFFIX[key] ?? ""}`;
+}
+
+// ------------------------------------------------------------------------------------------- what is held and what is loaded
+
+/** The mesh's set names in words (audit fea-run-16): the grips, the supports and the loading noses; a plate's own region names as written. */
+const SET_WORDS: Record<string, string> = { "Grip-Bottom": "bottom grip", "Grip-Top": "top grip", "Support-Left": "left support", "Support-Right": "right support",
+  "Pin-Left": "left pin", "Pin-Right": "right pin" };
+export const setWords = (set: string): string => SET_WORDS[set] ?? (/^Nose/.test(set) ? "loading nose" : set);
+
+/** A held set in one line, every direction it holds merged: "Bottom grip: fixed", "Top grip: free to move along the coupon only", or the
+ * directions ("Left support: held along z"). `dofs` 1-3 are x, y, z and 4-6 the rotations about them; y runs along a coupon. */
+export function heldWords(set: string, dofs: number[], directions: string[]): string {
+  const held = new Set(dofs);
+  const name = sentence(setWords(set));
+  if ([1, 2, 3, 4, 5, 6].every((d) => held.has(d))) return `${name}: fixed`;
+  if (!held.has(2) && [1, 3, 4, 5, 6].every((d) => held.has(d))) return `${name}: free to move along the coupon only`;
+  return `${name}: held along ${[...new Set(directions)].join(", ")}`;
+}
+
+/** What a loaded set does, in the words the results use: "Top grip: pulled 1 mm along the coupon", "Top grip: pulled by 10000 N along the
+ * coupon"; a load across or out of the plane names its direction. */
+export function loadWords(load: { set: string; control: string; dof: number; direction: string; value: number; unit: string }): string {
+  const name = sentence(setWords(load.set));
+  const printed = (value: number) => formatNumber(value, { zeros: false }); // a readout: no trailing zeros
+  const amount = `${printed(Math.abs(load.value))} ${load.unit}`;
+  if (load.dof === 2 && (load.control === "displacement" || load.control === "force")) {
+    const verb = load.value < 0 ? "pushed" : "pulled";
+    return `${name}: ${verb} ${load.control === "force" ? "by " : ""}${amount} along the coupon`;
+  }
+  return `${name}: ${load.control} ${printed(load.value)} ${load.unit} along ${load.direction}`;
 }

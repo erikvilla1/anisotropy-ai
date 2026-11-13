@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DOWNLOADS, explainJob, isActive, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
+import { explainJob, isActive, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
 import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
-import { customerText, shownSentence } from "@/lib/studio-copy";
+import { customerText, downloadsFor, heldWords, loadWords, setWords, shownSentence } from "@/lib/studio-copy";
+import { useAllTests } from "./project-context";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
 import { AbaqusCard } from "./abaqus-card";
@@ -41,7 +42,7 @@ export function SummaryPanel({ fields, onShow }: { fields: Fields; onShow: (elem
       <h3>Summary</h3>
       <dl className="studio-summary">
         <div><dt>Applied</dt><dd>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}{s.applied.direction ? `, ${s.applied.direction}` : ""}</dd></div>
-        <div><dt>Reaction at {s.reaction.set}</dt><dd data-testid="summary-reaction">{printed(Math.abs(s.reaction.value))} {lab.force} ({s.reaction.sense})
+        <div><dt>Reaction at {setWords(s.reaction.set)}</dt><dd data-testid="summary-reaction">{printed(Math.abs(s.reaction.value))} {lab.force} ({s.reaction.sense})
           {cx?.reaction ? <span data-testid="summary-reaction-calculix">; reference solver {printed(Math.abs(cx.reaction.calculix))} {lab.force} ({cx.reaction.difference})</span> : null}</dd></div>
         <div><dt>Largest displacement</dt><dd>{printed(s.max_displacement.value)} {lab.length} at node {s.max_displacement.label.split(".").pop()}
           {s.max_displacement.axis === "z" ? " (the deflection w)" : ""}</dd></div>
@@ -483,11 +484,12 @@ export function ExplanationPanel({ explanation, answer }: { explanation: Explana
 }
 
 export function Downloads({ apiBase, job, fields }: { apiBase: string; job: JobStatus; fields: Fields | null }) {
-  if (!DOWNLOADS.some(([key]) => key in job.outputs)) return null;
+  const all = useAllTests(apiBase); // the customer's files, or every file with the development switch on (decision D4)
+  if (!downloadsFor(all).some(([key]) => key in job.outputs)) return null;
   return (
     <div className="studio-panel" data-testid="downloads">
       <h3>Files</h3>
-      <JobFiles apiBase={apiBase} job={job} naming={namingOf(fields)} viewer={false} />
+      <JobFiles apiBase={apiBase} job={job} naming={namingOf(fields)} viewer={false} all={all} />
       {isActive(job.state) ? <p className="studio-muted">More files appear as the analysis finishes.</p> : null}
     </div>
   );
@@ -577,10 +579,13 @@ export function ResultsView({ fields, explanation, job, apiBase, preview, live =
   const colorScale = useMemo(() => scaleFor(values.values, !values.signed, values.range), [values]);
   const field = useMemo<SceneField>(() => ({ by: values.by, values: values.values, scale: { min: colorScale.min, max: colorScale.max, stops: colorScale.stops, bands: contours } }),
     [values, colorScale, contours]);
-  const held: SceneMarker[] = preview ? preview.held.filter((h, i, all) => all.findIndex((x) => x.set === h.set) === i)
-    .map((h) => ({ nodes: fields.mesh.node_sets[h.set] ?? preview.mesh.node_sets[h.set] ?? [], label: `held: ${h.set}` })) : [];
+  // the sets in words, one line per set, as the model's key says them (audit fea-run-16)
+  const held: SceneMarker[] = preview ? [...new Set(preview.held.map((h) => h.set))].map((set) => {
+    const of = preview.held.filter((h) => h.set === set);
+    return { nodes: fields.mesh.node_sets[set] ?? preview.mesh.node_sets[set] ?? [], label: heldWords(set, of.flatMap((h) => h.dofs), of.flatMap((h) => h.directions)) };
+  }) : [];
   const loaded = preview ? { nodes: fields.mesh.node_sets[preview.loaded.set] ?? preview.mesh.node_sets[preview.loaded.set] ?? [],
-    direction: preview.loaded.direction, label: `${preview.loaded.control} ${printed(preview.loaded.value)} ${preview.loaded.unit}` } : null;
+    direction: preview.loaded.direction, label: loadWords(preview.loaded) } : null;
   const readout = picked !== null ? elementReadout(fields, picked, choice, printed) : null;
   const show = (element: number, ply: number, criterion: string, face?: string | null) => {
     setHighlight(element); setPicked(element);

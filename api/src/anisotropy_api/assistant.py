@@ -189,20 +189,21 @@ def number_guard(prose: str, facts: dict[str, Any]) -> Guard:
 
 def model_view_of_checklist(checklist: dict[str, Any]) -> dict[str, Any]:
     """What the model may see of a checklist: the items' ids, labels, states, rows and messages, the material's source cut to its kind
-    (a library record, or the team's own constants) so a source the team named stays with the coupon (R-11)."""
+    (a library record, or the engineer's own constants, in the words of before or after ADR-0091 amendment 2) so a source the team or
+    the customer named stays with the coupon (R-11). The coupon's record name is left out, so the model cannot write it (audit fea-run-8)."""
     items = []
     for item in checklist.get("items", []):
         message = str(item.get("message", ""))
         if item.get("id") == "material":
-            message = re.sub(r"the team's own constants: .*?(;|$)", r"the team's own constants\1", message)
+            message = re.sub(r"(the team's|your) own constants(?:: |, from ).*?(;|$)", r"\1 own constants\2", message)
         items.append({"id": item.get("id"), "label": item.get("label"), "state": item.get("state"), "message": message, "rows": list(item.get("rows", []))})
-    return {"state": checklist.get("state"), "designation": checklist.get("designation"), "items": items}
+    return {"state": checklist.get("state"), "items": items}
 
 
 def model_view_of_facts(facts: dict[str, Any]) -> dict[str, Any]:
     """What the model may see of a fact sheet: every fact but the notes and names the form carries (the sheet holds none today; the rule
-    is stated so a later fact does not slip through)."""
-    return {key: value for key, value in facts.items() if key not in ("filled_by", "notes", "date")}
+    is stated so a later fact does not slip through), and not the coupon's record name, which the page never shows (audit fea-run-8)."""
+    return {key: value for key, value in facts.items() if key not in ("filled_by", "notes", "date", "designation")}
 
 
 class TemplateAssistant:

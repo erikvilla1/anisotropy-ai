@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ENABLED, enabledStandards, enabledTests, enabledWords, hiddenReason, HIDDEN_ROW_KEYS, isRowEnabled, isStandardEnabled, isTestEnabled, notAvailable,
-  understoodWithout, withoutHidden,
+  ENABLED, enabledStandards, enabledTests, enabledWords, hiddenItem, hiddenReason, HIDDEN_ROW_KEYS, isRowEnabled, isStandardEnabled, isTestEnabled,
+  isUnsymmetricLayup, notAvailable, notOffered, understoodWithout, withoutHidden,
 } from "../lib/enabled-tests";
+import { bannedIn } from "../lib/studio-copy";
 import { couponOffer } from "../lib/proposals";
 import { exampleForm, fieldByKey, NO_STANDARD, STANDARDS, standardsFor } from "../lib/studio-form";
 
@@ -36,12 +37,18 @@ test("a form says why it cannot be set up with the list closed, and nothing with
   const tension = exampleForm("2026-11-11");
   assert.equal(hiddenReason(tension, false), null);
   assert.equal(hiddenReason({ ...tension, standard: D3039 }, false), null);
-  assert.match(hiddenReason({ ...tension, test: "open-hole tension" }, false) ?? "", /^Open-hole tension is not available yet: the studio offers the unnotched tension coupon/);
-  assert.match(hiddenReason({ ...tension, standard: "ASTM D638-22" }, false) ?? "", /^ASTM D638-22 is not available yet/);
-  assert.match(hiddenReason({ ...tension, material_kind: "isotropic" }, false) ?? "", /^One isotropic material is not available yet/);
-  assert.match(hiddenReason({ ...tension, narrow_width: "13" }, false) ?? "", /^A dog-bone is not available yet/);
+  assert.equal(hiddenReason({ ...tension, test: "open-hole tension" }, false),
+    "Open-hole tension is not offered yet. This workspace runs the unnotched tension coupon, under ASTM D3039 or no standard.");
+  assert.match(hiddenReason({ ...tension, standard: "ASTM D638-22" }, false) ?? "", /^ASTM D638-22 is not offered yet\. /);
+  assert.match(hiddenReason({ ...tension, material_kind: "isotropic" }, false) ?? "", /^One isotropic material is not offered yet/);
+  assert.match(hiddenReason({ ...tension, narrow_width: "13" }, false) ?? "", /^A dog-bone is not offered yet/);
   assert.equal(hiddenReason({ ...tension, test: "fibre tow tension" }, true), null);
-  assert.equal(notAvailable("plate"), `Plate is ${ENABLED.not_available}.`);
+  assert.equal(notAvailable("plate"), `Plate is ${ENABLED.not_available}`); // one full stop, not two
+  for (const words of [notAvailable("open-hole tension"), ENABLED.unsymmetric ?? ""]) assert.deepEqual(bannedIn(words), [], words); // ADR-0091 amendment 2
+  // the tension screen's card says what is not offered, and its own sentence says what Run analysis makes: no coupon named twice
+  assert.equal(hiddenItem({ ...tension, test: "open-hole tension" }, false), "open-hole tension");
+  assert.equal(hiddenItem(tension, false), null);
+  assert.equal(notOffered("open-hole tension"), "Open-hole tension is not offered yet.");
 });
 
 test("rows read from a message lose a hidden test and the hidden tests' rows, and the note says so", () => {
@@ -51,7 +58,7 @@ test("rows read from a message lose a hidden test and the hidden tests' rows, an
   assert.deepEqual([...dropped].sort(), ["hole_diameter", "standard", "test"]);
   assert.deepEqual(understoodWithout(["test: open-hole tension", "hole 6 mm", "width 36 mm", "standard: ASTM C1869-18(2023)"], dropped), ["width 36 mm"]);
   assert.equal(notes.length, 2);
-  assert.match(notes[0], /^Open-hole tension is not available yet/);
+  assert.match(notes[0], /^Open-hole tension is not offered yet/);
   assert.deepEqual(withoutHidden(read, true), { rows: read, notes: [], dropped: [] });
   assert.deepEqual(withoutHidden({ test: "unnotched tension", standard: D3039, length: "250" }, false).rows, { test: "unnotched tension", standard: D3039, length: "250" });
 });
@@ -66,4 +73,11 @@ test("the model is offered only what the page offers: tension, D3039 or none, an
   const open = Object.fromEntries(couponOffer(form, true).rows.map((r) => [r.key, r]));
   assert.equal(open.test.choices?.length, fieldByKey.test.words.length);
   assert.ok(open.hole_diameter && open.material_kind);
+});
+
+test("a layup that bends as it is pulled is caught on the page, before the run, in the setup check's words (audit repository-2)", () => {
+  assert.equal(isUnsymmetricLayup({ plies: [45, 0, -45, 90], symmetric: false }), true);
+  assert.equal(isUnsymmetricLayup({ plies: [45, 0, -45, 90], symmetric: true }), false);
+  assert.equal(isUnsymmetricLayup({ plies: [0, 90, 90, 0], symmetric: false }), false, "listed whole, it reads the same from both faces");
+  assert.equal(ENABLED.unsymmetric, "This layup is not symmetric. Use a layup that reads the same from both faces, such as [0/45/-45/90]s.");
 });
