@@ -10,7 +10,7 @@ import { clamp01, poseAt, sceneAt, type LayupScript } from "./product-demo-timel
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
 export type DemoSceneHandle = { clock: number; redraw: (() => void) | null };
 
-/** The product demo's centre model (ADR-0094): the recorded run's coupon, one slab a ply, on the white box. Its place and
+/** The product demo's centre model (ADR-0094): the recorded run's coupon, one slab a ply, on the black box. Its place and
  * orientation, how far its plies stand apart, the mesh and the stress field's colours are all read from the demo's clock on
  * each frame (components/home/product-demo-timeline.ts) and written to transforms and uniforms; nothing is computed here but
  * where things are drawn. The coupon is drawn in millimetres, its thickness enlarged so the plies can be told apart. */
@@ -18,7 +18,7 @@ export type DemoSceneHandle = { clock: number; redraw: (() => void) | null };
 const PLY_THICK = 2.2; // mm as drawn: the real ply is 0.18 mm
 const PLY_GAP = 15; // mm between plies when they stand fully apart
 const PLY_DROP = 30; // mm above its place a ply starts when it is laid
-const CARBON: [number, number, number] = [0.105, 0.108, 0.115];
+const CARBON: [number, number, number] = [0.15, 0.154, 0.163]; // a dark grey that still reads on the black ground
 const CAMERA_Z = 12;
 const CAMERA_FOV = 20;
 
@@ -97,7 +97,7 @@ function buildModel() {
     face.position.z = PLY_THICK / 2 + 0.12;
     // The slab is pushed back in depth a little, so its top never shows through the face that lies on it.
     const slab = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(0.06, 0.062, 0.066), transparent: true, toneMapped: false, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2,
+      color: new THREE.Color(0.085, 0.088, 0.094), transparent: true, toneMapped: false, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2,
     });
     const rim = new THREE.LineBasicMaterial({ color: new THREE.Color(...hexToRgb(slots.get(angle) ?? "#888888")), transparent: true, toneMapped: false });
     const edge = new THREE.LineSegments(rimGeometry, rim);
@@ -118,9 +118,9 @@ function shadowTexture(): THREE.CanvasTexture {
   canvas.width = canvas.height = size;
   const context = canvas.getContext("2d")!;
   const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, "rgba(0,0,0,0.5)");
-  gradient.addColorStop(0.6, "rgba(0,0,0,0.16)");
-  gradient.addColorStop(1, "rgba(0,0,0,0)");
+  gradient.addColorStop(0, "rgba(255,255,255,0.5)");
+  gradient.addColorStop(0.6, "rgba(255,255,255,0.16)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
   return new THREE.CanvasTexture(canvas);
@@ -175,7 +175,7 @@ function Coupon({ handle, script }: { handle: DemoSceneHandle; script: LayupScri
       ply.mesh.opacity = opacity * scene.mesh * (0.5 - 0.3 * scene.field);
       ply.mesh.color.setScalar(0.88 - 0.8 * scene.field);
     });
-    // A soft shadow on the white ground, just under the model: as wide as the coupon is long on the screen, and deeper the
+    // A faint pool of light on the black ground, just under the model (a shadow, when the ground was white): as wide as the coupon is long on the screen, and deeper the
     // further the plies stand apart.
     const laidShare = clamp01(scene.laid / count);
     const stack = ((count - 1) * step + PLY_THICK) * unit; // the stack's height in the world
@@ -183,7 +183,7 @@ function Coupon({ handle, script }: { handle: DemoSceneHandle; script: LayupScri
     const long = demoRun.coupon.length * unit * Math.cos(pose.yaw);
     shadow.mesh.position.set(x, y - reach - 0.03 * height, -1);
     shadow.mesh.scale.set(long * 1.15, 0.09 * height + 0.5 * reach, 1);
-    shadow.material.opacity = 0.5 * scene.presence * laidShare;
+    shadow.material.opacity = 0.16 * scene.presence * laidShare;
   });
 
   return (
@@ -205,7 +205,7 @@ function webglAvailable(): boolean {
   }
 }
 
-/** The view fills its box and has no ground of its own: the white box shows through. A browser without WebGL draws nothing here;
+/** The view fills its box and has no ground of its own: the black box shows through. A browser without WebGL draws nothing here;
  * the words and the cards still tell the run. */
 export function ProductDemoSceneCanvas({ handle, script }: { handle: DemoSceneHandle; script: LayupScript }) {
   const available = useMemo(() => (typeof document === "undefined" ? false : webglAvailable()), []);

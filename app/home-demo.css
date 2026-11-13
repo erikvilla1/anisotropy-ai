@@ -1,20 +1,20 @@
-/* The product demo (components/home/product-demo.tsx, ADR-0094): a white box with the hero clip's width and height, directly
- * under the clip on the black page, in which the coupon workspace is shown in four beats. The box is light; the small cards in
- * it are dark, as the workspace's own panels are, so they read as pieces of the product. Two layouts share one markup: by
+/* The product demo (components/home/product-demo.tsx, ADR-0094): a black stage under the hero, as wide as the hero's clip and
+ * one window tall, in which the coupon workspace is shown in four beats (amendment 2; in amendment 1 it was a white box the
+ * size of the clip). It has no edge on the black page; the small cards in it are the workspace's dark panels, behind a hairline. Two layouts share one markup: by
  * default an ordinary section, the beats one under another; on a desktop-sized window whose visitor has not asked for reduced
  * motion, one stage in which a scroll gesture plays one whole beat. The margins are the hero's (app/home.css): 32 px of
  * black at the sides and the foot, and the header's height above. */
 .product-demo {
   --demo-top: 84px;
   --demo-frame: 32px;
-  --demo-ink: #0a0a0a;
-  --demo-soft: #55585c;
-  --demo-rule: #e2e2e2;
+  --demo-ink: #ffffff;
+  --demo-soft: #a0a0a0;
+  --demo-rule: #2d2d2d;
   position: relative;
   z-index: 1;
-  /* The black under the box is a margin, so the section is as tall as its box: a link that brings the section to the window's
-   * middle (the hero's "Scroll to explore") brings the box there, which is where it holds the window. */
-  margin: 0 0 var(--demo-frame);
+  /* The section is as tall as its stage, a window, so it holds the window with its top edge on the window's: nothing of the
+   * hero shows above it then, and the hero's "Scroll to explore" brings it there. */
+  margin: 0;
   padding: 0 var(--demo-frame);
   background: #000000;
 }
@@ -37,9 +37,8 @@
 }
 .product-demo-box {
   position: relative;
-  min-height: calc(max(640px, 100svh) - var(--demo-top) - var(--demo-frame));
   padding: 56px clamp(20px, 4vw, 64px) 64px;
-  background: #ffffff;
+  background: #000000;
   color: var(--demo-ink);
   overflow: hidden;
 }
@@ -114,12 +113,12 @@
   margin: 0;
   padding: 18px 20px 20px;
   border-radius: 14px;
+  border: 1px solid #262626;
   background: #0e0e0f;
   color: #efefef;
   font-size: 14px;
   line-height: 20px;
   text-align: left;
-  box-shadow: 0 18px 50px #0000002e;
 }
 .demo-card-head {
   display: flex;
@@ -338,12 +337,11 @@
   color: #0a0a0a;
 }
 
-/* The stage. From the first paint the box has the clip's height, so nothing moves when the page's script sets the mode; until
+/* The stage. From the first paint the box is a window tall, so nothing moves when the page's script sets the mode; until
  * it has, nothing in the box is shown, because the markup is still the ordinary section's with every beat up. */
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
   .product-demo-box {
-    height: calc(max(640px, 100svh) - var(--demo-top) - var(--demo-frame));
-    min-height: 0;
+    height: max(640px, 100svh);
     padding: 0;
   }
   .product-demo:not([data-mode="pinned"]) .product-demo-box > * {

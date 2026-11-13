@@ -35,12 +35,12 @@ const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", mo
 const FILES = DOWNLOAD_LABELS.slice(0, 3).map(([, label]) => label);
 const materialName = (id: string) => libraryOptions.find((option) => option.id === id)?.name ?? id;
 
-/** The home page's demonstration of the product (ADR-0094): the coupon workspace in four beats, in a white box the size of the
+/** The home page's demonstration of the product (ADR-0094): the coupon workspace in four beats, in a black box the size of the
  * hero's clip, directly under it. Each beat uses the workspace's own names and shapes, cut down for a first look: the assistant's
  * question and chips, the setup's summary, the run's stages with the stress field, and the files. Nothing is asked of the API:
  * the model, the field's colours and every number are one recorded run of the solver on a public example (lib/demo-run.ts).
  *
- * On a desktop the box holds the window while it stands in its middle, and one scroll gesture plays one whole beat
+ * On a desktop the stage is a window tall and holds the window while it fills it, and one scroll gesture plays one whole beat
  * (components/home/tour-driver.ts); the page scrolls to it and away from it as any page does. The centre model changes place
  * and orientation between beats in one eased move, and the words change sides (product-demo-timeline.ts). With reduced motion
  * or a small window the beats lie one under another and no gesture is taken. */
@@ -68,8 +68,7 @@ export function ProductDemo() {
   }, {
     stops: DEMO_STOPS,
     clockPerSecond: DEMO_CLOCK_PER_SECOND,
-    // The box holds the window while it stands in the window's middle.
-    anchor: () => Math.round(((window.innerHeight || 0) - (box.current?.offsetHeight ?? 0)) / 2),
+    // The stage is a window tall and holds the window with its top edge on the window's (the driver's own line).
     settleWithin: 160,
   });
   // Not stepped: every beat is finished, and the view shows the run's end.

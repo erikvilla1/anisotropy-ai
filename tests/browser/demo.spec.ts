@@ -2,9 +2,9 @@ import { test, expect, type Page } from "@playwright/test";
 import run from "../../lib/demo-run.json";
 import { bannedIn } from "../../lib/studio-copy";
 
-// The product demo under the hero (ADR-0094): a white box the size of the hero's clip, in which the coupon workspace is shown in
+// The product demo under the hero (ADR-0094): a box the size of the hero's clip, black as the page is (amendment 2), in which the coupon workspace is shown in
 // four beats from one recorded run of the solver. The page scrolls to the box as any page does; once the box stands in the
-// window's middle one scroll gesture plays one whole beat. `data-stop` on the box says where the demo's clock stands (0 while
+// window one scroll gesture plays one whole beat. `data-stop` on the box says where the demo's clock stands (0 while
 // the box is empty, 1 to 4 at the end of each beat) and `data-moving` is there while a beat plays.
 
 // The four beats take 4.4, 3.2, 5.6 and 2.8 s, and several cases play all of them.
@@ -13,7 +13,8 @@ test.describe.configure({ timeout: 120_000 });
 const demo = (page: Page) => page.locator("#demo");
 const box = (page: Page) => page.locator("#demo .product-demo-box");
 const beat = (page: Page, id: string) => box(page).locator(`[data-beat="${id}"]`);
-/** How far the box's top edge is from where it holds the window, the line that puts the box in the window's middle. */
+/** How far the stage's top edge is from where it holds the window: the window's top, for a stage a window tall (the formula
+ * is the middle's, which is the same line). */
 const offLine = (page: Page) => box(page).evaluate((element) => {
   const rect = element.getBoundingClientRect();
   return Math.round(rect.top - Math.round((window.innerHeight - rect.height) / 2));
@@ -62,17 +63,19 @@ async function openPinned(page: Page) {
 }
 const kilonewtons = (newtons: number) => (newtons / 1000).toFixed(1);
 
-test("the demo is a white box with the clip's width and height, 32 px under it, on the black page", async ({ page }) => {
+test("the demo is a black stage under the hero, as wide as the clip and a window tall", async ({ page }) => {
   await openPinned(page);
   const rects = await page.evaluate(() => {
     const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
     return { clip: rect("#overview .home-hero-media"), box: rect("#demo .product-demo-box"), section: rect("#demo"), next: rect("#mission") };
   });
-  expect([rects.box.width, rects.box.height]).toEqual([rects.clip.width, rects.clip.height]);
+  // As wide as the clip, a window tall, straight after the hero (whose own foot is the 32 px of black under the clip), and
+  // followed at once by the next band.
   expect([rects.box.left, rects.box.right]).toEqual([rects.clip.left, rects.clip.right]);
+  expect(rects.box.height).toBe(page.viewportSize()!.height);
   expect(rects.box.top - rects.clip.bottom).toBe(32);
-  expect(rects.next.top - rects.box.bottom).toBe(32);
-  await expect(box(page)).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  expect(rects.next.top).toBe(rects.box.bottom);
+  await expect(box(page)).toHaveCSS("background-color", "rgb(0, 0, 0)");
   await expect(demo(page)).toHaveCSS("background-color", "rgb(0, 0, 0)");
   // The order of the page: the hero, the demo, then the bands.
   const order = await page.locator("main > *").evaluateAll((elements) => elements.map((element) => element.id).filter(Boolean));
@@ -81,7 +84,7 @@ test("the demo is a white box with the clip's width and height, 32 px under it, 
   await expect(box(page).locator("[class*='rail'], [class*='tick']")).toHaveCount(0);
 });
 
-test("the page scrolls to the box as any page does; the box comes up empty and the first beat plays once it stands in the window's middle", async ({ page }) => {
+test("the page scrolls to the box as any page does; the box comes up empty and the first beat plays once it fills the window", async ({ page }) => {
   const asked: string[] = [];
   page.on("request", (request) => { if (request.url().includes("/v1/")) asked.push(request.url()); });
   await openPinned(page);
@@ -103,7 +106,7 @@ test("the page scrolls to the box as any page does; the box comes up empty and t
   const left = await offLine(page);
   expect(left).toBeGreaterThan(0);
   expect(left).toBeLessThanOrEqual(100);
-  // The notch that would pass the line is stopped on it: the box is in the window's middle, and the first beat plays.
+  // The notch that would pass the line is stopped on it: the stage fills the window, and the first beat plays.
   await notch(page);
   await expect(box(page)).toHaveAttribute("data-moving", "true");
   await expectStop(page, 1);
@@ -244,7 +247,7 @@ test("up from the first beat and down from the last the page scrolls as any page
   await expectStop(page, 0);
 });
 
-test("Scroll to explore brings the box to the window's middle, and the first beat plays", async ({ page }) => {
+test("Scroll to explore brings the stage to fill the window, and the first beat plays", async ({ page }) => {
   await page.goto("/");
   await expect(demo(page)).toHaveAttribute("data-mode", "pinned");
   const explore = page.locator("#overview .home-hero-explore");
@@ -289,12 +292,12 @@ test.describe("on a touch screen", () => {
   });
 });
 
-test("with reduced motion the beats lie one under another in the white box, finished, and no gesture is taken", async ({ page }) => {
+test("with reduced motion the beats lie one under another in the box, finished, and no gesture is taken", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   await expect(demo(page)).toHaveAttribute("data-mode", "static");
   expect(await box(page).getAttribute("data-stop")).toBeNull();
-  await expect(box(page)).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(box(page)).toHaveCSS("background-color", "rgb(0, 0, 0)");
   await page.mouse.move(700, 500);
   await page.mouse.wheel(0, 240);
   await expect.poll(() => scrollY(page)).toBe(240);
@@ -311,7 +314,7 @@ test("with reduced motion the beats lie one under another in the white box, fini
   expect(new Set(tops).size).toBe(4);
 });
 
-test("on a phone the demo is one column in the white box and nothing overflows sideways", async ({ page }) => {
+test("on a phone the demo is one column in the box and nothing overflows sideways", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(demo(page)).toHaveAttribute("data-mode", "static");
