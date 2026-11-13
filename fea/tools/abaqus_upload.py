@@ -1,0 +1,424 @@
+"""A model sent from Abaqus beside a run of ours: check its bundle, compare it, or pack one from files (ADR-0094, step 1).
+
+    uv run python tools/abaqus_upload.py check <bundle>.zip [--json <file>]
+    uv run python tools/abaqus_upload.py compare <bundle>.zip --ours <package>/4-results/ours-every-output.csv --our-deck <our deck>.inp
+        [--json <file>] [--pairs <file>.csv]
+    uv run python tools/abaqus_upload.py pack --deck <job>.inp --every-output <job>-every-output.csv [--rf <job>-every-output-RF.csv]
+        [--provenance <job>-every-output.json] [--journal <job>.jnl] [--model <model>.json] --units mm-MPa --out <bundle>.zip
+
+`check` reads a bundle (`anisotropy_fea.bundle`, version 1) and says what it holds and whether it is in scope: a deck our reader
+reads (flat S4 or S4R shells, one linear static step) and every element and ply in `tools/abaqus_every_output.py`'s columns.
+
+`compare` puts the bundle beside a run of ours, from that run's own files: our every-output file with its JSON, and our deck. Nothing is
+solved here. The model is compared item by item (`anisotropy_fea.equivalence`), after moving a coupon drawn elsewhere onto ours. The
+results are compared by the rules of `tools/compare_every_output.py`, the comparison the team's engineers run themselves (ADR-0089
+amendment 3): paired by element number or by position, judged by zone, the reaction and the gauge within 1 %, the free length within
+3 %. A model on another mesh cannot be paired element by element: then the model is compared without its mesh, each of its gauge
+elements stands beside ours nearest its centroid, the reaction is compared, the free length is reported and not judged, and the result
+says so. A bundle in the other deck system is converted to ours first.
+
+Exit 0: agrees. 1: differs, or something that should be judged could not be. 2: refused (the bundle breaks the format, or is out of
+scope), with every reason. `--json` writes the result in each case: the page's card is drawn from it in a later step.
+
+`pack` writes a bundle from files that already exist, the output of `abaqus python tools/abaqus_every_output.py` and the deck that ran:
+what the connector does under the user's Abaqus in the next step.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import dataclasses
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+import numpy as np
+from scipy.spatial import cKDTree
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import compare_every_output as team  # noqa: E402  the comparison the team's engineers run: one set of rules for both
+
+from anisotropy_fea import __version__  # noqa: E402
+from anisotropy_fea.abaqus_reader import read_deck  # noqa: E402
+from anisotropy_fea.bundle import BundleRefused, open_bundle, write_bundle  # noqa: E402
+from anisotropy_fea.equivalence import EquivalenceError, deck_equivalence, equivalence_without_mesh, outline  # noqa: E402
+from anisotropy_fea.model import DeckError, expanded_layers  # noqa: E402
+from anisotropy_fea.units import DECK_UNIT_SYSTEMS, from_si, to_si  # noqa: E402
+
+STRESSES = team.QUANTITIES[:9]  # the rest are strains, numbers without a unit
+RF_COLUMNS = ("Node", "X", "Y", "RF1", "RF2")
+
+
+class OutOfScope(Exception):
+    """The bundle is well formed and this comparison does not take it; `problems` says why."""
+
+    def __init__(self, problems):
+        self.problems = tuple(problems)
+        super().__init__("; ".join(self.problems))
+
+
+def bundle_facts(bundle) -> dict:
+    m = bundle.manifest
+    return {"sha256": bundle.sha256, "bundle_version": m["bundle_version"], "created": m["created"], "units": m["units"],
+            "written_by": m["written_by"], "job": m.get("job"), "coupon": m.get("coupon"), "results": m.get("results"),
+            "files": {role: dataclasses.asdict(entry) for role, entry in bundle.files.items()}}
+
+
+def deck_facts(path: Path, units: str):
+    """(the deck in SI, its facts) or (None, {"read": False, "reason"}): whether our reader takes it."""
+    try:
+        deck = read_deck(path, units)
+    except (DeckError, ValueError) as exc:
+        return None, {"read": False, "reason": str(exc)}
+    facts = {"read": True, "parts": len(deck.parts), "steps": [step.name for step in deck.steps], "notes": list(deck.notes)}
+    if len(deck.parts) == 1:
+        part = next(iter(deck.parts.values()))
+        facts.update(nodes=len(part.nodes), elements=len(part.elements) if part.elements is not None else 0,
+                     element_type=part.elements.element_type if part.elements is not None else None)
+        if len(part.sections) == 1:
+            layers = expanded_layers(part.sections[0])
+            facts.update(plies=len(layers), layup="/".join(f"{layer.angle_deg:g}" for layer in layers))
+    return deck, facts
+
+
+def read_reactions(path: Path) -> list[dict]:
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        missing = [name for name in RF_COLUMNS if name not in (reader.fieldnames or ())]
+        if missing:
+            raise team.Refused(f"{path.name} has no column {', '.join(missing)}: is it what abaqus_every_output.py wrote?")
+        try:
+            return [{"Node": int(row["Node"]), **{name: float(row[name]) for name in RF_COLUMNS[1:]}} for row in reader]
+        except ValueError as exc:
+            raise team.Refused(f"{path.name}: {exc}") from None
+
+
+def check(bundle_path: Path) -> dict:
+    """What a bundle holds, and whether the comparison takes it. Raises `BundleRefused` when it breaks the format."""
+    bundle = open_bundle(bundle_path)
+    result = {"bundle": bundle_facts(bundle)}
+    with tempfile.TemporaryDirectory() as folder:
+        files = bundle.extract(folder)
+        _, result["deck"] = deck_facts(files["deck"], bundle.units)
+        try:
+            rows = team.read_rows(files["every_output"], False)
+            result["every_output"] = {"read": True, "rows": len(rows), "elements": len({key[0] for key in rows}),
+                                      "layers": len({key[1] for key in rows})}
+        except team.Refused as exc:
+            result["every_output"] = {"read": False, "reason": str(exc)}
+        if "reactions" in files:
+            try:
+                result["reactions"] = {"read": True, "nodes": len(read_reactions(files["reactions"]))}
+            except team.Refused as exc:
+                result["reactions"] = {"read": False, "reason": str(exc)}
+        else:
+            result["reactions"] = None
+    result["in_scope"] = bool(result["deck"]["read"] and result["every_output"]["read"]
+                              and (result["reactions"] is None or result["reactions"]["read"]))
+    return result
+
+
+def in_our_units(rows: dict, reactions: list[dict] | None, theirs: str, ours: str):
+    """Their values in our deck system: lengths, stresses and forces converted, strains as they are."""
+    if theirs == ours:
+        return rows, reactions
+    factor = lambda kind: DECK_UNIT_SYSTEMS[theirs][kind] / DECK_UNIT_SYSTEMS[ours][kind]  # noqa: E731
+    length, stress, force = factor("length"), factor("stress"), factor("force")
+    converted = {key: {name: value * (length if name in ("X", "Y") else stress if name in STRESSES else 1.0) for name, value in values.items()}
+                 for key, values in rows.items()}
+    moved = None if reactions is None else [
+        {"Node": r["Node"], "X": r["X"] * length, "Y": r["Y"] * length, "RF1": r["RF1"] * force, "RF2": r["RF2"] * force} for r in reactions]
+    return converted, moved
+
+
+def moved_deck(deck, shift_si: tuple[float, float]):
+    """The deck with every node moved by the shift, so that a coupon drawn elsewhere is compared in our place."""
+    add = np.array([shift_si[0], shift_si[1], 0.0])
+    parts = {name: dataclasses.replace(part, nodes=dataclasses.replace(part.nodes, xyz=part.nodes.xyz + add)) for name, part in deck.parts.items()}
+    return dataclasses.replace(deck, parts=parts, assembly_nodes=dataclasses.replace(deck.assembly_nodes, xyz=deck.assembly_nodes.xyz + add))
+
+
+def items_of(items) -> list[dict]:
+    return [{"item": i.item, "yours": i.team, "ours": i.ours, "same": i.same} for i in items]
+
+
+def compare_models(their_deck, our_deck, shift: tuple[float, float], units: str, tolerance: float, same_mesh: bool) -> dict:
+    """The two models: item by item when their meshes are one mesh, else without the mesh; and why, when it is the second."""
+    reason = "the two meshes differ"
+    if same_mesh:
+        shift_si = (to_si(shift[0], "length", units), to_si(shift[1], "length", units))
+        try:
+            eq = deck_equivalence(moved_deck(their_deck, shift_si), our_deck, to_si(tolerance, "length", units), units)
+            return {"compared": "item by item", "same": eq.same_model, "items": items_of(eq.items),
+                    "largest_node_offset": from_si(eq.largest_node_offset, "length", units)}
+        except EquivalenceError as exc:
+            reason = str(exc)
+    try:
+        items = equivalence_without_mesh(their_deck, our_deck, units)
+    except EquivalenceError as exc:
+        return {"compared": "not compared", "same": None, "items": [], "reason": str(exc)}
+    return {"compared": "without the mesh", "same": all(i.same is not False for i in items), "items": items_of(items), "reason": reason}
+
+
+def zone_by_centroid(y: float, lines: dict):
+    """A centroid's zone along the coupon, by our lines; None in the tabs and within one width of a tab line, which are not compared
+    on another mesh."""
+    low, high = lines["tab_length"] + lines["width"], lines["length"] - lines["tab_length"] - lines["width"]
+    if lines["gauge_from"] <= y <= lines["gauge_to"]:
+        return "gauge"
+    return "free length" if low <= y <= high else None
+
+
+def compare_by_position(ours_rows: dict, your_rows: dict, lines: dict, shift: tuple[float, float], floor: float):
+    """On two meshes: each of their gauge and free-length elements beside ours nearest its centroid. Returns the tables by zone as
+    `compare_every_output.compare` gives them, every pair's differences, the pairs, our values beside each of theirs, and our element
+    for each of theirs."""
+    ours_at, yours_at = team.centroids(ours_rows), team.centroids(your_rows)
+    our_labels = sorted(ours_at)
+    tree = cKDTree(np.array([ours_at[label] for label in our_labels]))
+    reach = max(team.mean_size(ours_at), team.mean_size(yours_at))
+    nearest, zones = {}, {}
+    for label, (x, y) in yours_at.items():
+        zone = zone_by_centroid(y + shift[1], lines)
+        if zone is None:
+            continue
+        distance, index = tree.query((x + shift[0], y + shift[1]))
+        if distance > reach:
+            raise team.Refused(f"your element {label} at ({x:g}, {y:g}) has no element of ours within {reach:g}: not the same coupon")
+        nearest[label], zones[label] = our_labels[int(index)], zone
+    if not nearest:
+        raise team.Refused("none of your elements lies between the tabs of our coupon: not the same coupon, or it lies along another axis")
+    beside = {(label, layer): dict(ours_rows[(nearest[label], layer)], zone=zones[label]) for (label, layer) in your_rows if label in nearest}
+    yours = {key: your_rows[key] for key in beside}
+    tables, differences, pairs = team.compare(beside, yours, {label: label for label in nearest}, floor)
+    for table in tables.values():
+        for q in team.QUANTITIES:
+            table[q]["our_element"] = nearest[table[q]["your_element"]]
+    return tables, differences, pairs, beside, nearest
+
+
+def reaction_of(reactions: list[dict] | None, meta: dict, shift: tuple[float, float]):
+    """Their RF2 summed over the nodes at or above our top tab line, beside ours: `compare_every_output.reaction`'s rule."""
+    if not reactions:
+        return None
+    top = meta["reaction"]["top_from"]
+    tolerance = 1e-6 * max(1.0, abs(top))
+    rows = [r for r in reactions if r["Y"] + shift[1] >= top - tolerance]
+    if not rows:
+        raise team.Refused(f"no reaction at or above the top tab line, Y = {top:g} {meta['length_unit']}")
+    yours, ours = sum(r["RF2"] for r in rows), meta["reaction"]["ours"]
+    return {"nodes": len(rows), "yours": yours, "ours": ours, "difference": (ours - yours) / abs(yours) if yours else float("inf")}
+
+
+def compare(bundle_path: Path, ours_csv: Path, our_deck_path: Path, pairs_out: Path | None = None) -> dict:
+    """The bundle beside a run of ours. Raises `BundleRefused` or `OutOfScope`; otherwise the result, with its verdict."""
+    bundle = open_bundle(bundle_path)
+    meta_path = ours_csv.with_suffix(".json")
+    if not meta_path.is_file():
+        raise OutOfScope([f"no {meta_path.name} beside {ours_csv.name}: both come from the run's 4-results folder"])
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    units = meta["units"]
+    with tempfile.TemporaryDirectory() as folder:
+        files = bundle.extract(folder)
+        problems = []
+        their_deck, their_facts = deck_facts(files["deck"], bundle.units)
+        if their_deck is None:
+            problems.append(f"our reader does not take the bundle's deck: {their_facts['reason']}")
+        try:
+            your_rows = team.read_rows(files["every_output"], False)
+        except team.Refused as exc:
+            problems.append(str(exc))
+        try:
+            reactions = read_reactions(files["reactions"]) if "reactions" in files else None
+        except team.Refused as exc:
+            problems.append(str(exc))
+        if problems:
+            raise OutOfScope(problems)
+    ours_rows = team.read_rows(ours_csv, True)
+    our_deck = read_deck(our_deck_path, units)
+    your_rows, reactions = in_our_units(your_rows, reactions, bundle.units, units)
+    layers, your_layers = sorted({key[1] for key in ours_rows}), sorted({key[1] for key in your_rows})
+    if layers != your_layers:
+        raise OutOfScope([f"your model has plies {your_layers} and ours {layers}: not the same layup"])
+
+    result = {"bundle": bundle_facts(bundle), "units": units, "converted_from": bundle.units if bundle.units != units else None,
+              "ours": {key: meta[key] for key in ("coupon", "written_by", "element", "elements", "layers")},
+              "floor": meta["floor"], "acceptance": meta["acceptance"]}
+    tolerance = team.PAIRING * team.mean_size(team.centroids(ours_rows))
+    try:
+        mapping, how, shift = team.pair(ours_rows, your_rows)
+        same_mesh = True
+    except team.Refused as exc:
+        same_mesh, why_not = False, str(exc)
+
+    if same_mesh:
+        result["model"] = compare_models(their_deck, our_deck, shift, units, tolerance, True)
+        tables, differences, pairs = team.compare(ours_rows, your_rows, mapping, meta["floor"])
+        result["pairing"] = {"same_mesh": True, "how": how, "elements": len(mapping), "moved_by": list(shift)}
+        rf = reaction_of(reactions, meta, shift)
+        criteria = [{"criterion": c, "met": met, "evidence": evidence, "judged": True} for c, met, evidence in team.verdict(tables, rf, meta["acceptance"])]
+        if pairs_out is not None:
+            team.write_pairs(pairs_out, ours_rows, your_rows, pairs, differences)
+    else:
+        try:
+            (tx, ty, _, _), (ox, oy, _, _) = outline(their_deck), outline(our_deck)
+        except EquivalenceError as exc:
+            raise OutOfScope([f"{why_not}; and the two coupons cannot be placed on each other: {exc}"]) from None
+        shift = (from_si(ox - tx, "length", units), from_si(oy - ty, "length", units))
+        result["model"] = compare_models(their_deck, our_deck, shift, units, tolerance, False)
+        outline_item = next((i for i in result["model"]["items"] if i["item"] == "Outline"), None)
+        if outline_item is None or outline_item["same"] is not True:
+            tables, rf = {}, None
+            said = "not compared: the two coupons are not the same size" if outline_item else f"not compared: {result['model'].get('reason')}"
+            criteria = [{"criterion": c, "met": None, "evidence": said, "judged": True}
+                        for c in ("Reaction within 1 %", "Gauge: every value within 1 %")]
+            result["pairing"] = {"same_mesh": False, "how": said, "elements": 0, "moved_by": list(shift), "why_not_element_by_element": why_not}
+        else:
+            tables, differences, pairs, beside, nearest = compare_by_position(ours_rows, your_rows, meta["lines"], shift, meta["floor"])
+            result["pairing"] = {"same_mesh": False, "elements": len(nearest), "moved_by": list(shift), "why_not_element_by_element": why_not,
+                                 "how": "by position on two meshes: each of your elements in the gauge and the free length beside ours nearest its centroid"}
+            rf = reaction_of(reactions, meta, shift)
+            criteria = []
+            for c, met, evidence in team.verdict(tables, rf, meta["acceptance"]):
+                reported = c.startswith("Free length")
+                criteria.append({"criterion": c, "met": None if reported else met, "judged": not reported,
+                                 "evidence": f"reported, not judged on another mesh: {evidence}" if reported else evidence})
+            if pairs_out is not None:
+                team.write_pairs(pairs_out, beside, your_rows, pairs, differences)
+    result["reaction"], result["zones"], result["criteria"] = rf, tables, criteria
+    judged = [c["met"] for c in criteria if c["judged"]] + [result["model"]["same"]]
+    result["verdict"] = "differs" if any(v is False for v in judged) else "incomplete" if any(v is None for v in judged) else "agrees"
+    return result
+
+
+WORDS = {"agrees": "Agrees with ours", "differs": "Differs from ours", "incomplete": "Not every part could be compared"}
+
+
+def print_comparison(result: dict) -> None:
+    b, model, pairing = result["bundle"], result["model"], result["pairing"]
+    solver = f" ({b['written_by']['abaqus']})" if b["written_by"].get("abaqus") else ""
+    print(f"{WORDS[result['verdict']]}: {b['job'] or 'the model sent'}{solver} beside {result['ours']['coupon']} ({result['ours']['written_by']})")
+    if result["converted_from"]:
+        print(f"your values were written in {result['converted_from']} and are shown in {result['units']}")
+    judged = [i for i in model["items"] if i["same"] is not None]
+    different = [i for i in model["items"] if i["same"] is False]
+    if model["compared"] == "not compared":
+        print(f"\nThe model: not compared ({model['reason']})")
+    else:
+        how = model["compared"] + ("" if model["compared"] == "item by item" else f", because {model['reason']}")
+        print(f"\nThe model ({how}): " + (f"the same as ours on every one of {len(judged)} items" if not different
+                                           else f"{len(different)} of {len(judged)} items differ"))
+        for i in different:
+            print(f"  {i['item']}: yours {i['yours']}; ours {i['ours']}")
+    print(f"\nThe results: {pairing['elements']} elements paired {pairing['how']}")
+    for zone, table in result["zones"].items():
+        worst = max(team.QUANTITIES, key=lambda q: table[q]["worst"])
+        t = table[worst]
+        print(f"  {zone}: {sum(table[q]['values'] for q in team.QUANTITIES)} values, the worst {100 * t['worst']:.4g} % ({worst}, your element "
+              f"{t['your_element']} ply {t['layer']}: yours {t['yours']:.6g}, ours {t['ours']:.6g})")
+    print("\nVerdict")
+    for c in result["criteria"]:
+        state = "met" if c["met"] else "NOT MET" if c["met"] is False else "not judged"
+        print(f"  {state}: {c['criterion']} ({c['evidence']})")
+
+
+def print_check(result: dict) -> None:
+    b = result["bundle"]
+    print(f"bundle version {b['bundle_version']}, {b['units']}, written {b['created']} by {b['written_by']['connector']}"
+          + (f" under {b['written_by']['abaqus']}" if b["written_by"].get("abaqus") else ""))
+    for role, entry in b["files"].items():
+        print(f"  {role}: {entry['path']}, {entry['bytes']} bytes, SHA-256 matches")
+    deck = result["deck"]
+    if deck["read"]:
+        print(f"the deck: our reader takes it: {deck.get('elements', '?')} {deck.get('element_type') or 'elements'}, {deck.get('nodes', '?')} nodes"
+              + (f", {deck['plies']} plies [{deck['layup']}]" if "plies" in deck else ""))
+    else:
+        print(f"the deck: our reader does not take it: {deck['reason']}")
+    every = result["every_output"]
+    print(f"every output: {every['rows']} rows, {every['elements']} elements by {every['layers']} plies" if every["read"]
+          else f"every output: not read: {every['reason']}")
+    rf = result["reactions"]
+    print("the reactions: none in the bundle, so the pull force cannot be compared" if rf is None
+          else f"the reactions: {rf['nodes']} nodes" if rf["read"] else f"the reactions: not read: {rf['reason']}")
+    print("in scope: the comparison takes this bundle" if result["in_scope"] else "out of scope: the comparison does not take this bundle")
+
+
+def pack(args) -> int:
+    results, abaqus = None, None
+    if args.provenance:
+        results = json.loads(args.provenance.read_text(encoding="utf-8"))
+        abaqus = results.get("solver")
+    files = {"deck": args.deck, "every_output": args.every_output}
+    for role, path in (("reactions", args.rf), ("journal", args.journal), ("model", args.model)):
+        if path:
+            files[role] = path
+    bundle = write_bundle(args.out, files, args.units, connector=f"anisotropy-fea {__version__} (tools/abaqus_upload.py pack)", abaqus=abaqus,
+                          job=args.job or args.deck.stem, coupon=args.coupon, results=results)
+    print(f"{args.out}: bundle version {bundle.manifest['bundle_version']}, {len(bundle.files)} files, SHA-256 {bundle.sha256}")
+    return 0
+
+
+def plain(value):
+    """The result as JSON takes it: a number that is not finite (a difference from a reaction of zero) becomes null."""
+    if isinstance(value, dict):
+        return {key: plain(v) for key, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [plain(v) for v in value]
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
+def write_json(path: Path | None, result: dict) -> None:
+    if path is not None:
+        path.write_text(json.dumps(plain(result), indent=1, allow_nan=False) + "\n", encoding="utf-8", newline="\n")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    commands = parser.add_subparsers(dest="command", required=True)
+    c = commands.add_parser("check", help="what a bundle holds, and whether the comparison takes it")
+    c.add_argument("bundle", type=Path)
+    c.add_argument("--json", type=Path, default=None)
+    c = commands.add_parser("compare", help="a bundle beside a run of ours")
+    c.add_argument("bundle", type=Path)
+    c.add_argument("--ours", type=Path, required=True, help="ours-every-output.csv of the run, its .json beside it")
+    c.add_argument("--our-deck", type=Path, required=True, help="our deck of the same run (.inp)")
+    c.add_argument("--json", type=Path, default=None)
+    c.add_argument("--pairs", type=Path, default=None, help="write every pair and quantity to this CSV")
+    c = commands.add_parser("pack", help="write a bundle from a deck and the files abaqus_every_output.py wrote")
+    c.add_argument("--deck", type=Path, required=True)
+    c.add_argument("--every-output", type=Path, required=True)
+    c.add_argument("--rf", type=Path, default=None)
+    c.add_argument("--provenance", type=Path, default=None, help="<job>-every-output.json, where the results were read in the ODB")
+    c.add_argument("--journal", type=Path, default=None)
+    c.add_argument("--model", type=Path, default=None)
+    c.add_argument("--units", required=True, choices=sorted(DECK_UNIT_SYSTEMS))
+    c.add_argument("--job", default=None)
+    c.add_argument("--coupon", default=None)
+    c.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "pack":
+            return pack(args)
+        if args.command == "check":
+            result = check(args.bundle)
+            write_json(args.json, result)
+            print_check(result)
+            return 0 if result["in_scope"] else 2
+        result = compare(args.bundle, args.ours, args.our_deck, args.pairs)
+    except (BundleRefused, OutOfScope, team.Refused) as exc:
+        problems = list(exc.problems) if hasattr(exc, "problems") else [str(exc)]
+        write_json(getattr(args, "json", None), {"verdict": "refused", "problems": problems})
+        print("refused:\n" + "\n".join(f"  {p}" for p in problems), file=sys.stderr)
+        return 2
+    write_json(args.json, result)
+    print_comparison(result)
+    return 0 if result["verdict"] == "agrees" else 1
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.exit(main())
