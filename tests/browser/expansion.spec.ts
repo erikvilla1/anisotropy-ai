@@ -33,7 +33,8 @@ test("navigation routes load directly with research-focused About", async ({
   await page.getByRole("link", { name: "Development process streamlining" }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await page.reload();
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
+  // One test is offered for now (ADR-0089), so the assistant's first question is the material, as workspace.spec.ts reads it.
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material");
   expect(errors).toEqual([]);
 });
 
@@ -68,7 +69,7 @@ test("material filters, empty state, references and scope handoff", async ({
     .click();
   await page.getByRole("link", { name: "Discuss this material" }).click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/); // not a library material of the engine: the assistant asks from the start
-  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "test");
+  await expect(page.getByTestId("chat-question")).toHaveAttribute("data-step", "material"); // the start, with one test offered (ADR-0089)
   await page.goto("/workspace/fea?material=im7-8552");
   await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
 });
