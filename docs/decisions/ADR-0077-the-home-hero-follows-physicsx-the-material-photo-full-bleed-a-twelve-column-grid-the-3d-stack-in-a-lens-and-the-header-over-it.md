@@ -319,6 +319,7 @@ On phones it is one column.
 - **Type.** The site's typeface changes with it (ADR-0093), and the logo's name is set in it (ADR-0080 amendment 4).
 - **The tour's hand-over** starts from the box again (ADR-0084 amendment 3).
 - **Under 761 px** the statement breaks where it needs to and the row stacks.
+- **Sizes.** Seeing it, the lead asked to "keep the logo the same size, but make the font lil smaller": the statement is 4.1 % of the window's width (59 px at 1440 px, where the reference's proportion gave 66 px), the tagline and the two small lines a tenth smaller, and the mark in the row as it was.
 
 **Not copied.** Anduril's "©" before the name, its own words, and its typeface, which is licensed.
 
