@@ -413,3 +413,20 @@ On phones it is one column.
 
 **Evidence.** On 2026-11-13 against the dev server: screenshots at 1440 px and at 390 px were looked at; the first 390 px one showed the cohort's line running into the button's words, which the narrow-screen rule above removes. `home.spec.ts` (the row's order and words, the cohort beside the mark), `intro.spec.ts` and the overview case of `portfolio.spec.ts`: 10 of 10. UNVERIFIED: "Established 2026" is the lead's statement; the repository holds no record of when the company was established. Permission to show The Basement's mark, as before.
 
+## Amendment 29, 2026-11-13 (the five portraits, a new order, and LinkedIn's mark under the pointer)
+
+**Context.** The lead uploaded five portraits to `public/assets/brand/Headshots/` on `main` and asked, with a recording of another site's card: "put the respective headshots in here ... when hover over it, have the linkedin icon appear circularly in the bottom right. we'll route the links later", and then "put tabassum in the middle, me on the right too".
+
+**Decision.**
+- **Portraits.** Each card's frame shows the person's portrait in place of the initials. `scripts/team-photos.py` cuts each original to the frame's 4 by 5 around the person, 800 by 1000 px and 59 to 78 KB, into `public/assets/team/`, the files `lib/team.ts` names. The originals are left where the lead put them; one is 10 MB, and a deploy serves them all.
+- **Whose is whose.** Four files carry a first name. The fifth, `IMG_7003.JPG`, is taken to be the lead's own by elimination.
+- **Order.** Christopher Valerio, Erik Villa, Tabassum Zaman, Jusung Park, Kai Saucedo. The About page lists the team from the same list, so its order changes too; it does not show the portraits yet.
+- **LinkedIn's mark.** A round black badge with the "in" in white comes up in the frame's bottom right corner while the pointer is over a card or the keyboard's focus is in it. No profile address is set yet, so the badge is only drawn and is hidden from a screen reader; when a person's address is put in `lib/team.ts` it becomes the link. Where there is no pointer to hover with, only a badge that is a link is shown.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: the five portraits load at 800 px wide in the new order, and the badge's opacity is 1 on the card under the pointer and 0 on the others; screenshots of the row and of one card under the pointer were looked at. `tests/team.test.ts` (each photo is a file under `public/`): 2 passed. `npm run typecheck` clean.
+
+**UNVERIFIED.**
+- **Consent.** Each portrait is added only with that person's consent (the rule in amendment 14's "Portraits and profiles"). The lead supplied the five; whether each person agreed to their portrait on a public site and in a public repository is the lead's to confirm before this is merged.
+- That `IMG_7003.JPG` is the lead's portrait.
+- LinkedIn's rules for showing its mark; phones and tablets.
+

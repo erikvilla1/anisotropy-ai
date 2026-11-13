@@ -106,3 +106,30 @@ test("the home page fits a phone without horizontal scroll", async ({ page }) =>
   await page.locator("#mission").scrollIntoViewIfNeeded();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test("the About cards show the five portraits in the lead's order, and LinkedIn's mark comes up under the pointer (ADR-0077 amendment 29)", async ({ page }) => {
+  await page.goto("/");
+  const cards = page.locator("#working .home-face");
+  await cards.first().scrollIntoViewIfNeeded();
+  await expect(cards.locator("h3")).toHaveText(["Christopher Valerio", "Erik Villa", "Tabassum Zaman", "Jusung Park", "Kai Saucedo"]);
+  // Every frame holds a portrait that has loaded, from the site's own files, and no initials.
+  await expect.poll(() => cards.locator("img").evaluateAll((images) => images.map((image) => (image as HTMLImageElement).naturalWidth))).toEqual([800, 800, 800, 800, 800]);
+  expect(await cards.locator("img").evaluateAll((images) => images.every((image) => new URL((image as HTMLImageElement).src).pathname.startsWith("/assets/team/")))).toBe(true);
+  await expect(cards.locator(".home-face-frame > span:not(.home-face-in)")).toHaveCount(0);
+  // The mark is drawn in the frame's bottom right corner only for the card under the pointer; with no profile address yet it is not a link.
+  const badge = (index: number) => cards.nth(index).locator(".home-face-in");
+  await expect(badge(2)).toHaveCSS("opacity", "0");
+  await cards.nth(2).hover();
+  await expect(badge(2)).toHaveCSS("opacity", "1");
+  await expect(badge(0)).toHaveCSS("opacity", "0");
+  await expect(badge(2)).toHaveCSS("border-radius", "50%");
+  const corner = await cards.nth(2).evaluate((card) => {
+    const frame = card.querySelector(".home-face-frame")!.getBoundingClientRect();
+    const mark = card.querySelector(".home-face-in")!.getBoundingClientRect();
+    return [Math.round(frame.right - mark.right), Math.round(frame.bottom - mark.bottom)];
+  });
+  expect(corner[0]).toBeLessThanOrEqual(14);
+  expect(corner[1]).toBeLessThanOrEqual(14);
+  await expect(page.locator("#working a.home-face-in")).toHaveCount(0);
+});
+

@@ -685,10 +685,56 @@
   color: var(--muted);
   opacity: 0.5;
 }
+.home-face-frame {
+  position: relative;
+}
 .home-face-frame img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* LinkedIn's mark (ADR-0057 amendment 2): a round black badge in the frame's bottom right corner that comes up while the
+ * pointer is over the card, or while the keyboard's focus is in it. Where there is no pointer to hover with, a badge that
+ * is a link is always there. */
+.home-face-frame .home-face-in {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #000000;
+  color: #ffffff;
+  font-size: 0;
+  letter-spacing: 0;
+  opacity: 0;
+  transform: scale(0.85);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+.home-face-in svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+.home-face:hover .home-face-in,
+.home-face:focus-within .home-face-in {
+  opacity: 1;
+  transform: scale(1);
+}
+@media (hover: none) {
+  .home-face-frame a.home-face-in {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-face-frame .home-face-in {
+    transition: none;
+  }
 }
 .home-face h3 + p {
   margin-top: 8px;

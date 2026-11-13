@@ -41,6 +41,15 @@ const news = [
 /** The home page: the hero first (ADR-0076, ADR-0077), a scroll-driven tour of one calculation (ADR-0084), the laminate
  * calculator as the demonstration, then bands on the mission, the platform, the team and what is new, and the closing
  * band. The workflow and the roadmap live on About. */
+/** LinkedIn's "in", as letters only: the round ground is the badge's own (app/home.css, .home-face-in). */
+function LinkedInMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zM7.119 20.452H3.555V9h3.564v11.452z" />
+    </svg>
+  );
+}
+
 export default function Home() {
   return (
     <main id="main">
@@ -168,7 +177,26 @@ export default function Home() {
             <article className="home-face" key={person.name}>
               <div className="home-face-frame">
                 {person.photo ? (
-                  <img src={person.photo} alt={`Portrait of ${person.name}`} loading="lazy" decoding="async" />
+                  <>
+                    <img src={person.photo} alt={`Portrait of ${person.name}`} width={800} height={1000} loading="lazy" decoding="async" />
+                    {/* LinkedIn's mark comes up in the frame's corner under the pointer (ADR-0057 amendment 2). It is a link
+                        once the person's profile address is in lib/team.ts; until then it is only drawn. */}
+                    {person.linkedin ? (
+                      <a
+                        className="home-face-in"
+                        href={person.linkedin}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
+                      >
+                        <LinkedInMark />
+                      </a>
+                    ) : (
+                      <span className="home-face-in" aria-hidden="true">
+                        <LinkedInMark />
+                      </span>
+                    )}
+                  </>
                 ) : (
                   <span aria-hidden="true">
                     {person.name

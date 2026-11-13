@@ -17,10 +17,12 @@ export type Person = {
   linkedin?: string;
 };
 
+/** The cards' order is the lead's (2026-11-13): the two founders, then Tabassum in the middle, Jusung, and Kai at the right.
+ * The portraits are cut from the originals by scripts/team-photos.py (ADR-0057 amendment 2). */
 export const team: readonly Person[] = [
-  { name: "Christopher Valerio", role: "Co-founder and CEO", technical: "prompt engineering and AI evaluation" },
-  { name: "Erik Villa", role: "Co-founder", technical: "AI architecture and operations", company: "documentation and records" },
-  { name: "Kai Saucedo", technical: "software and UI/UX", company: "marketing and communications" },
-  { name: "Jusung Park", technical: "reference modeling and validation", company: "operations and logistics" },
-  { name: "Tabassum Zaman", technical: "fabrication, prototypes and mechanical testing", company: "partnerships and outreach" },
+  { name: "Christopher Valerio", role: "Co-founder and CEO", technical: "prompt engineering and AI evaluation", photo: "/assets/team/christopher-valerio.jpg" },
+  { name: "Erik Villa", role: "Co-founder", technical: "AI architecture and operations", company: "documentation and records", photo: "/assets/team/erik-villa.jpg" },
+  { name: "Tabassum Zaman", technical: "fabrication, prototypes and mechanical testing", company: "partnerships and outreach", photo: "/assets/team/tabassum-zaman.jpg" },
+  { name: "Jusung Park", technical: "reference modeling and validation", company: "operations and logistics", photo: "/assets/team/jusung-park.jpg" },
+  { name: "Kai Saucedo", technical: "software and UI/UX", company: "marketing and communications", photo: "/assets/team/kai-saucedo.jpg" },
 ];
