@@ -44,7 +44,7 @@ REQUIRED_KEYS = ("bundle_version", "created", "units", "written_by", "files")
 WRITTEN_BY_KEYS = ("connector", "abaqus", "python")
 # where the results were read in the ODB; no path on the user's machine is carried
 RESULTS_KEYS = ("solver", "created", "step", "frame_index", "frame", "instance")
-MAX_BYTES = 256 * 1024 * 1024  # the files of one bundle, unpacked; the size of a real job's bundle is not measured yet (ADR-0094)
+MAX_BYTES = 256 * 1024 * 1024  # the files of one bundle, unpacked; the first real job's (1488 elements, 8 plies) are 2.2 MB (ADR-0094)
 MAX_MANIFEST_BYTES = 64 * 1024
 CREATED = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")  # UTC, to the second
 NAME = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9 ._()+-]{0,119}$")  # a file's own name inside the bundle
