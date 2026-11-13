@@ -430,3 +430,11 @@ On phones it is one column.
 - That `IMG_7003.JPG` is the lead's portrait.
 - LinkedIn's rules for showing its mark; phones and tablets.
 
+## Amendment 30, 2026-11-13 (the year reads "Est. 2026")
+
+**Context.** Seeing amendment 28's row, the lead asked: "maybe just put EST. 2026 to get more symmetry here?"
+
+**Decision.** The line on the triangle's left reads "Est. 2026" in place of "Established 2026", and is set wide (0.27 em between letters) so that it is as long as the name on the other side. The space the tracking leaves after the last figure is taken back, so both sides stand as far from the triangle.
+
+**Evidence.** On 2026-11-13 against the dev server at 1440 px: "Est. 2026" alone measured 101 px beside the name's 138 px; set wide it measures 138 px, and each side stands 34 px from the triangle. A screenshot was looked at. `home.spec.ts` and `intro.spec.ts`: 10 of 10. UNVERIFIED, as before: the year is the lead's statement.
+

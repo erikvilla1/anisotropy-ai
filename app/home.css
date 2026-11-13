@@ -1093,8 +1093,11 @@
   text-transform: uppercase;
   text-align: right;
 }
+/* The year is set wide, so its line is as long as the name on the mark's other side (ADR-0077 amendment 30). The space
+ * that tracking leaves after the last figure is taken back, so the line still ends where the gap to the mark begins. */
 .home-hero-note {
-  margin: 0;
+  margin: 0 -0.27em 0 0;
+  letter-spacing: 0.27em;
 }
 /* The lens (ADR-0071): a 4:3 window over the clip, its right edge on the gutter before the copy and its foot just above the
  * headline's middle, under the words. Through it the clip is dimmed and blurred like glass, and our results play in colour on
@@ -1315,6 +1318,11 @@
   }
   .home-hero-notes {
     font-size: 13px;
+  }
+  /* Stacked and centred: the space after the last figure is balanced on the left instead. */
+  .home-hero-note {
+    margin-right: 0;
+    padding-left: 0.27em;
   }
 }
 @media (max-width: 640px) {
