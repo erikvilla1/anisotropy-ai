@@ -2,20 +2,20 @@
 # requires-python = ">=3.11"
 # dependencies = ["svgpathtools"]
 # ///
-"""Cuts the site's logo files from the designer's approved logo (ADR-0080 amendment 2).
+"""Cuts the site's triangle and tab icon from the designer's approved logo (ADR-0080 amendments 2 and 3).
 
-The approved file is the stacked logo on a 1920 by 1080 artboard: the triangle, one path, over the name, one path a letter.
-The site sets the two side by side (app/brand.css), so this writes each on its own, cropped to its ink and filled with the
+The approved file is the stacked logo on a 1920 by 1080 artboard: the triangle, one path, over the name. The site sets the
+triangle beside the name (app/brand.css), so this writes the triangle on its own, cropped to its ink and filled with the
 current colour, and the tab icon with the same triangle:
 
     public/assets/brand/anisotropy-triangle.svg
-    public/assets/brand/anisotropy-wordmark.svg
     public/assets/brand/anisotropy-icon.svg
 
     uv run scripts/brand-logo.py
 
-It prints each file's width and height in the artboard's units, which app/brand.css uses for the proportions. The outlines
-are the designer's, unchanged: only the box around them and the fill are set here.
+The name on the site is not the approved file's lettering: scripts/brand-wordmark.py draws it (amendment 3). The triangle's
+outline is the designer's, unchanged: only the box around it and the fill are set here. It prints the file's width and
+height in the artboard's units, which app/brand.css uses for the proportions.
 """
 
 import xml.etree.ElementTree as ET
@@ -57,7 +57,6 @@ def main() -> None:
     mark = [path.get("d") for path in mark_group.iter(f"{SVG}path")]
     if len(letters) != 10 or len(mark) != 1:
         raise SystemExit(f"expected ten letters and one triangle, found {len(letters)} and {len(mark)}")
-    write("anisotropy-wordmark.svg", letters)
     write("anisotropy-triangle.svg", mark)
 
     # The tab icon: the triangle in the site's light grey, 46 of 64 units wide, centred on the near-black ground.

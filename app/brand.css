@@ -1,13 +1,14 @@
-/* The logo (ADR-0080 and its amendment 2): the triangle, then the name, side by side and centred on one line. Both are the
- * designer's approved outlines, cut from the stacked logo by scripts/brand-logo.py into two vector files and drawn through CSS
- * masks, so they take the colour of the text around them: light on the dark header and footer, dark on a light ground. One
- * number sets the size, the triangle's height; the name's letters are half as tall, and the gap between the two is the same
- * half. The link still holds the word "Anisotropy" for screen readers, search engines and tests, hidden from view. */
+/* The logo (ADR-0080 and its amendments 2 and 3): the triangle, then the name, side by side and centred on one line. The
+ * triangle is the designer's approved outline, cut from the stacked logo by scripts/brand-logo.py; the name is ANISOTROPY in
+ * Archivo at weight 800, drawn as outlines by scripts/brand-wordmark.py. Both are vector files drawn through CSS masks, so
+ * they take the colour of the text around them: light on the dark header and footer, dark on a light ground. One number
+ * sets the size, the triangle's height; the name's capitals are two thirds as tall. The link still holds the word
+ * "Anisotropy" for screen readers, search engines and tests, hidden from view. */
 .wordmark {
   --brand-h: 24px;
   display: inline-flex;
   align-items: center;
-  gap: calc(var(--brand-h) * 0.5);
+  gap: calc(var(--brand-h) * 0.4);
   line-height: 1;
 }
 .wordmark .brand-mark,
@@ -25,8 +26,10 @@
 }
 .wordmark .brand-name {
   --brand-src: url("/assets/brand/anisotropy-wordmark.svg");
-  height: calc(var(--brand-h) * 0.5);
-  aspect-ratio: 563.905 / 43.604;
+  /* The file is cropped to the letters' ink: 711 units tall for capitals of 686, the round letters' overshoot split evenly
+   * above and below, so centring the file centres the capitals. */
+  height: calc(var(--brand-h) * 0.69);
+  aspect-ratio: 6861 / 711;
 }
 .wordmark .brand-text {
   position: absolute;
