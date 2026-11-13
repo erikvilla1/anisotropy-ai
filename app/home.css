@@ -1046,6 +1046,10 @@
 .home-hero-note {
   margin: 0;
 }
+/* Once the words have been taken away (components/home/hero-outro.tsx), the Explore button cannot be reached either. */
+.home-hero[data-words="gone"] .home-hero-explore {
+  visibility: hidden;
+}
 /* The lens (ADR-0071): a 4:3 window over the clip, its right edge on the gutter before the copy and its foot just above the
  * headline's middle, under the words. Through it the clip is dimmed and blurred like glass, and our results play in colour on
  * top, screen-blended so the recording's black background drops out. The lens itself makes no stacking context (no z-index,

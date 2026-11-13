@@ -97,6 +97,23 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   expect(seen[seen.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0, copies: 0, running: 0 });
 });
 
+test("five seconds after the load-in the hero's words are taken away and the clip plays alone (ADR-0077 amendment 20)", async ({ page }) => {
+  await page.goto("/");
+  const hero = page.locator("#overview");
+  await expect(page.locator(".page-transition")).toHaveClass(/is-idle/, { timeout: 10_000 });
+  await expectHeroWhole(page);
+  await expect(hero.locator("h1")).toHaveCSS("opacity", "1");
+  // They stand for five seconds, then are untyped in about a second.
+  await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 12_000 });
+  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-explore"])
+    await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");
+  await expect(hero.locator(".intro-overlay")).toHaveCount(0);
+  // The statement is still in the page for a screen reader; the button cannot be reached; the Basement's mark stays.
+  await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
+  await expect(hero.locator(".home-hero-explore")).toBeHidden();
+  await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
+});
+
 test("a header link goes to black before the next page, and Back does not (ADR-0070 amendment 1)", async ({ page }) => {
   await record(page);
   await page.goto("/");

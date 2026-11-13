@@ -72,6 +72,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Changed
 - The home page follows the arrangement of Anduril's (ADR-0077 amendment 19): the header lies on a black strip with its links in the middle of the page, the hero clip plays in a box with square corners on the page's margin, and in its middle stand one statement in large capitals and a row of the tagline "Composites. Calculated.", the mark, "Fall 2026 Launchpad cohort" and Explore. The scroll tour takes the clip from the box (ADR-0084 amendment 3).
+- Five seconds after the home hero's words have loaded in, they are taken away as Anduril's are, each line untyped from its end with its last letters scrambled, and the clip plays alone (ADR-0077 amendment 20, ADR-0070 amendment 3). The words stay in the page for a screen reader, and a visitor who asked for reduced motion keeps them.
 - The site is set in Inter (ADR-0093), self-hosted with its display cut, in place of DM Sans and Manrope.
 - The logo's triangle is the designer's approved artwork and its name is the word itself in the site's typeface, in heavy capitals set tight beside it (ADR-0080 amendments 2 and 4). The tab and phone icons use the triangle, and the four approved SVG files are in `public/assets/brand/official/`.
 - The hero clip's web copy and its poster may be committed (ADR-0069 amendment 1, the lead's decision), so the deployed site plays the clip in place of the still photo. `.gitignore` keeps every other file in `public/media/`, the original included, out of the repository.

@@ -26,6 +26,12 @@ const TYPE_CHARS_PER_S = 38; // measured: 17 to 21 characters of a line appear i
 const LINE_MAX_MS = 530; // measured: a line is all on screen about 0.53 s after its first character
 const SETTLE_MS = 110; // measured: a character is random letters for about 3 to 4 characters' time before it settles
 const SCRAMBLE_TICK_MS = 50; // Anduril redraws its random letters 20 times a second
+// The way out (prepareOutro), read from the lead's recording of Anduril's hero on 2026-11-12: every line loses its characters
+// from the end, the last few as random letters, the upper lines a little ahead, and the whole block is gone in about half a
+// second; the mark goes last.
+const LEAVE_SPEED = 0.7; // a line leaves in this share of the time it took to arrive
+const LEAVE_STAGGER_MS = 45;
+const LEAVE_FADE_MS = 160;
 
 // Random letters of about the real letter's width, so they sit in its place: narrow for narrow, and never the widest.
 const NARROW = "iljtfrIJ1";
@@ -160,8 +166,11 @@ function buildOverlay(element: HTMLElement, kind: "type" | "rise", lines: Measur
  *       two sheets of random letters, each in its character's place, shown in turn
  *
  * A window is a box as wide as the line that cuts off what overflows it and slides so its edge sits on a character boundary;
- * what it holds slides back by as much and so stays still on the page. */
-function typedLine(row: HTMLElement, text: HTMLElement, start: number): { moves: Move[]; end: number } | null {
+ * what it holds slides back by as much and so stays still on the page.
+ *
+ * With `leaving`, the same windows run backwards: the settled text's edge goes first and the random letters follow it, so the
+ * line is taken away from its end. */
+function typedLine(row: HTMLElement, text: HTMLElement, start: number, leaving = false): { moves: Move[]; end: number } | null {
   const box = row.getBoundingClientRect();
   // The row, and so each window, is a whole number of pixels wide and a little wider than the text: an edge at `full` shows
   // the whole line, and every other edge is a whole pixel too, so the text stays sharp.
@@ -214,8 +223,11 @@ function typedLine(row: HTMLElement, text: HTMLElement, start: number): { moves:
       transform: `translateX(${value(edge)}px)`,
       easing: index < count ? "steps(1, end)" : "linear",
     }));
-  const duration = Math.min((count * 1000) / TYPE_CHARS_PER_S, LINE_MAX_MS);
-  const at = (delay: number): KeyframeAnimationOptions => ({ duration, delay, fill: "both" });
+  const duration = Math.min((count * 1000) / TYPE_CHARS_PER_S, LINE_MAX_MS) * (leaving ? LEAVE_SPEED : 1);
+  const at = (delay: number): KeyframeAnimationOptions => ({ duration, delay, fill: "both", direction: leaving ? "reverse" : "normal" });
+  // Arriving, the random letters lead and the text settles behind them; leaving, the text's edge leads and the letters follow.
+  const lead = leaving ? start + SETTLE_MS : start;
+  const trail = leaving ? start : start + SETTLE_MS;
   const turn = (shown: [number, number]): Keyframe[] => [
     { offset: 0, opacity: shown[0], easing: "steps(1, end)" },
     { offset: 0.5, opacity: shown[1], easing: "steps(1, end)" },
@@ -224,12 +236,12 @@ function typedLine(row: HTMLElement, text: HTMLElement, start: number): { moves:
   const flicker: KeyframeAnimationOptions = { duration: 2 * SCRAMBLE_TICK_MS, iterations: Infinity };
   return {
     moves: [
-      { element: front, keyframes: steps((edge) => edge - full), options: at(start) },
-      { element: frontHold, keyframes: steps((edge) => full - edge), options: at(start) },
-      { element: settled, keyframes: steps((edge) => edge - full), options: at(start + SETTLE_MS) },
-      { element: text, keyframes: steps((edge) => full - edge), options: at(start + SETTLE_MS) },
-      { element: after, keyframes: steps((edge) => edge), options: at(start + SETTLE_MS) },
-      { element: afterHold, keyframes: steps((edge) => -edge), options: at(start + SETTLE_MS) },
+      { element: front, keyframes: steps((edge) => edge - full), options: at(lead) },
+      { element: frontHold, keyframes: steps((edge) => full - edge), options: at(lead) },
+      { element: settled, keyframes: steps((edge) => edge - full), options: at(trail) },
+      { element: text, keyframes: steps((edge) => full - edge), options: at(trail) },
+      { element: after, keyframes: steps((edge) => edge), options: at(trail) },
+      { element: afterHold, keyframes: steps((edge) => -edge), options: at(trail) },
       { element: sheets[0], keyframes: turn([1, 0]), options: flicker },
       { element: sheets[1], keyframes: turn([0, 1]), options: flicker },
     ],
@@ -321,6 +333,74 @@ export function prepareIntro(root: ParentNode = document): IntroRun | null {
     if (finished || animations.length) return;
     for (const move of moves) animations.push(move.element.animate(move.keyframes, move.options));
     window.addEventListener("resize", onResize);
+    timer = window.setTimeout(finish, totalMs + 60);
+  }
+
+  return { play, finish, totalMs };
+}
+
+/** The way out, for elements that carry `data-outro`:
+ *
+ *   data-outro="type"  the text is taken away line by line from the end of each line, its last characters as random letters;
+ *   data-outro="fade"  the element fades out, after the lines have gone.
+ *
+ * It uses the load-in's copies and windows, run backwards. When it ends, each element carries `data-outro-done`, which the
+ * stylesheet turns invisible; its text stays in the page for a screen reader. Null when there is nothing on screen to take
+ * away or the visitor asked for reduced motion. `play()` starts it at once. */
+export function prepareOutro(root: ParentNode = document): IntroRun | null {
+  if (typeof window === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
+  const overlays: HTMLElement[] = [];
+  const marked: HTMLElement[] = [];
+  const fading: HTMLElement[] = [];
+  const moves: Move[] = [];
+  let lines = 0;
+  let totalMs = 0;
+
+  for (const element of Array.from(root.querySelectorAll<HTMLElement>("[data-outro]"))) {
+    if (element.hasAttribute("data-intro-run") || element.hasAttribute("data-outro-done") || element.closest(".intro-overlay")) continue;
+    const box = element.getBoundingClientRect();
+    if (!(box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < window.innerHeight)) continue;
+    const measured = element.dataset.outro === "type" ? measureLines(element) : null;
+    if (!measured) {
+      fading.push(element);
+      continue;
+    }
+    const built = buildOverlay(element, "type", measured);
+    overlays.push(built.overlay);
+    marked.push(element);
+    for (const line of built.rows) {
+      const typed = typedLine(line.row, line.text, lines * LEAVE_STAGGER_MS, true);
+      if (!typed) continue;
+      moves.push(...typed.moves);
+      lines += 1;
+      totalMs = Math.max(totalMs, typed.end);
+    }
+  }
+  for (const element of fading) {
+    moves.push({ element, keyframes: [{ opacity: 1 }, { opacity: 0 }], options: { duration: LEAVE_FADE_MS, delay: totalMs, fill: "both" } });
+    marked.push(element);
+  }
+  if (!marked.length) return null;
+  totalMs += fading.length ? LEAVE_FADE_MS : 0;
+
+  const animations: Animation[] = [];
+  let timer = 0;
+  let finished = false;
+
+  function finish() {
+    if (finished) return;
+    finished = true;
+    window.clearTimeout(timer);
+    // Invisible first, so the page's own text is never seen between the copy's going and the mark's.
+    for (const element of marked) element.setAttribute("data-outro-done", "");
+    for (const element of marked) element.removeAttribute("data-intro-run");
+    for (const overlay of overlays) overlay.remove();
+    for (const animation of animations) animation.cancel();
+  }
+
+  function play() {
+    if (finished || animations.length) return;
+    for (const move of moves) animations.push(move.element.animate(move.keyframes, move.options));
     timer = window.setTimeout(finish, totalMs + 60);
   }
 

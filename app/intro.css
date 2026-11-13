@@ -44,6 +44,9 @@
  * its left edge. */
 .intro-win {
   display: block;
+  /* The padding lies outside the stated height, so a window that is "100%" tall is the line and its padding, not the line
+   * less its padding, which cut the random letters of a large, tightly set line short. */
+  box-sizing: content-box;
   overflow: hidden;
   margin: calc(-1 * var(--intro-pad, 6px)) 0 calc(-1 * var(--intro-pad, 6px)) calc(-1 * var(--intro-pad, 6px));
   padding: var(--intro-pad, 6px) 0 var(--intro-pad, 6px) var(--intro-pad, 6px);
@@ -91,4 +94,10 @@
 .intro-overlay[data-armed] .intro-win-in,
 .intro-overlay[data-armed] .intro-roll {
   will-change: transform, opacity;
+}
+/* The way out (prepareOutro in components/intro-text.ts): an element whose words were taken away stays in the page for a
+ * screen reader and takes no room from the pointer. */
+[data-outro-done] {
+  opacity: 0;
+  pointer-events: none;
 }

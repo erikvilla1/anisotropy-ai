@@ -105,3 +105,11 @@ What Anduril's code does:
 **Decision.** The next page is requested when the veil's fade reports its end (`animationend`), so the old page is fully covered first. A timer 200 ms after the fade's length is the fallback for a browser that never reports the end.
 
 **Evidence.** On 2026-11-10, against the built site: `intro.spec.ts`, `home.spec.ts` and `tour.spec.ts` repeated five times each, 100 of 100 passed.
+
+## Amendment 3, 2026-11-13 (the same moves run backwards take the hero's words away)
+
+**Decision.** `prepareOutro` in `components/intro-text.ts` takes the text of any element that carries `data-outro="type"` away line by line from the end of each line, with the typed line's windows run in reverse, and fades an element that carries `data-outro="fade"` after them. When it ends the elements carry `data-outro-done`, which the stylesheet makes invisible; their text stays in the page. The home hero uses it (ADR-0077 amendment 20).
+
+**A fault found on the way.** The window that shows the random letters was sized with its padding inside its height, so the letters of a large line set tight were cut off below. `.intro-win` now keeps its padding outside (`box-sizing: content-box`); the typed load-in's letters are whole as well.
+
+**Evidence.** Measured during the exit at 1280 px: the random letters' glyph box and the text's own were the same (top 237.1 px, 64 px tall) while the window ended 28 px above their foot; after the change a contact sheet shows the letters whole. The runs are in ADR-0077 amendment 20.

@@ -329,3 +329,16 @@ On phones it is one column.
 - **Checks:** `npm run typecheck` clean; `npm test` 248 passed, 1 skipped. `home.spec.ts`, `intro.spec.ts`, `tour.spec.ts` and `expansion.spec.ts` against the dev server: 26 passed, 1 failed. The failure is `home.spec.ts` "typing a layup", the calculator's timing case that has failed before in this container; run alone twice, it passed twice.
 - **The whole browser suite on a production build,** run after the commit: 81 passed, 3 failed, 1 skipped. One failure was this change's: `portfolio.spec.ts` "overview" still looked for "Calculated" in the heading; it now reads the statement and the tagline, and passed when run again. The other two are the workspace's open-hole cases that ADR-0089 left stale (amendment 17's evidence names them).
 - **UNVERIFIED:** real phones and tablets, Safari and Firefox, and the lead's screen.
+
+## Amendment 20, 2026-11-13 (the hero's words leave five seconds after they load in)
+
+**Context.** The lead sent a recording of Anduril's hero, where the words are taken away after a few seconds and the video plays alone, and asked: "after it loads in, keep it there for like 5 seconds and have it disappear with this style animation". In the recording every line loses its characters from the end, the last few as random letters, the upper lines a little ahead; the block is gone in about half a second and the mark goes last.
+
+**Decision.**
+- Five seconds after the load-in has ended, with the page still at its top, the statement, the tagline and the two small lines are untyped that way, then the mark in the row fades. The clip then plays alone, with The Basement's mark still in its corner.
+- The five seconds count only while the page is at its top, so a visitor who has scrolled into the tour finds the words on the way back; they leave five seconds after that.
+- The words stay in the page, invisible, so a screen reader still reads the heading. The Explore button leaves the tab order with them.
+- A visitor who asked for reduced motion keeps the words.
+- It reuses the load-in's copies and windows, run backwards (`prepareOutro` in `components/intro-text.ts`; `components/home/hero-outro.tsx` starts it; ADR-0070 amendment 3).
+
+**Evidence.** On 2026-11-13, in the browser against the dev server at 1280 by 720: the load-in ended 2.5 s after the page was asked for, the words began to leave 5.1 s later and were gone 1.0 s after that. Afterwards five elements carried `data-outro-done` at opacity 0, the heading still held its text, the Explore button was hidden and The Basement's mark was at opacity 1; no page errors. A contact sheet of the exit at ten frames a second was looked at beside the lead's recording. `npm run typecheck` clean; `npm test` 248 passed, 1 skipped; `intro.spec.ts` (with a new case for this), `home.spec.ts` and `tour.spec.ts` against the dev server: 22 of 22. UNVERIFIED: the motion on a real graphics card and on phones.

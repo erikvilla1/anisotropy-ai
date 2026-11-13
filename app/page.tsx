@@ -5,6 +5,7 @@ import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
 import { DemoTour } from "@/components/home/demo-tour";
 import { EngineAnswersProvider } from "@/components/home/engine-answers";
+import { HeroOutro } from "@/components/home/hero-outro";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { LaminateHero } from "@/components/home/laminate-hero";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
@@ -56,7 +57,7 @@ export default function Home() {
             under it a row of the tagline, the mark and two short lines. The load-in (ADR-0070 amendment 1) raises the
             statement and types the small lines (components/intro-text.ts). */}
         <div className="home-hero-stack">
-          <h1 className="home-hero-title" id="home-hero-title" data-intro="rise">
+          <h1 className="home-hero-title" id="home-hero-title" data-intro="rise" data-outro="type">
             Anisotropy
             <br />
             bringing composite theory
@@ -66,15 +67,15 @@ export default function Home() {
             one engineering platform
           </h1>
           <div className="home-hero-row">
-            <p className="home-hero-tagline" data-intro="type">
+            <p className="home-hero-tagline" data-intro="type" data-outro="type">
               Composites.
               <br />
               Calculated.
             </p>
-            <span className="home-hero-mark" aria-hidden="true" />
+            <span className="home-hero-mark" aria-hidden="true" data-outro="fade" />
             <div className="home-hero-notes">
               {/* The programme the team is part of (ADR-0081). */}
-              <p className="home-hero-note" data-intro="type">
+              <p className="home-hero-note" data-intro="type" data-outro="type">
                 Fall 2026 Launchpad cohort
               </p>
               {/* One press scrolls to the tour's first step. */}
@@ -82,6 +83,8 @@ export default function Home() {
             </div>
           </div>
         </div>
+        {/* Five seconds after the load-in the words are taken away and the clip plays alone (components/home/hero-outro.tsx). */}
+        <HeroOutro />
         {/* UC San Diego's The Basement mark, in the bottom left corner of the hero's box (ADR-0081). */}
         <p className="home-hero-backed">
           <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />

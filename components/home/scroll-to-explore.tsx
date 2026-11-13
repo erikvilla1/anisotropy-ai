@@ -58,7 +58,7 @@ export function ScrollToExplore() {
     frame = window.requestAnimationFrame(step);
   }
   return (
-    <button type="button" className="home-hero-explore" aria-label="Scroll to explore" onClick={explore}>
+    <button type="button" className="home-hero-explore" aria-label="Scroll to explore" data-outro="type" onClick={explore}>
       <ArrowDown aria-hidden="true" strokeWidth={1.5} />
       <span>Explore</span>
     </button>
