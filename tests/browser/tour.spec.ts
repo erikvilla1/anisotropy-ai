@@ -39,10 +39,11 @@ test("Scroll to explore, at the hero's bottom right, scrolls to the tour's first
   await openPinned(page);
   const button = page.locator("#overview").getByRole("button", { name: "Scroll to explore" });
   await expect(button).toBeVisible();
+  // In the bottom right corner of the box the clip plays in (ADR-0077 amendment 17).
   const box = (await button.boundingBox())!;
-  const viewport = page.viewportSize()!;
-  expect(viewport.width - (box.x + box.width)).toBeLessThanOrEqual(40);
-  expect(viewport.height - (box.y + box.height)).toBeLessThanOrEqual(40);
+  const clip = (await page.locator("#overview .home-hero-media").boundingBox())!;
+  expect(clip.x + clip.width - (box.x + box.width)).toBeLessThanOrEqual(40);
+  expect(clip.y + clip.height - (box.y + box.height)).toBeLessThanOrEqual(40);
   await button.click();
   await expect.poll(() => scrolledScreens(page), { timeout: 8000 }).toBeCloseTo(range("material").at(0.14), 2);
   await expect(step(page, "material")).toHaveAttribute("data-active", "true");
@@ -54,12 +55,18 @@ test("the bridge holds the hero in the window while its clip is carried onto the
   await playApi(page, []);
   await openPinned(page);
   const hero = page.locator("#overview");
+  const ground = () => hero.evaluate((element) => getComputedStyle(element, "::before").opacity);
   await expect(hero.locator(".home-hero-media")).toHaveCSS("transform", "none");
+  await expect(hero.locator(".home-hero-media")).toHaveCSS("border-radius", "20px");
+  expect(await ground()).toBe("1");
   await scrollToScreens(page, BRIDGE * 0.5);
   await expect(tour(page)).toHaveAttribute("data-phase", "bridge");
   await expect(hero).toHaveCSS("position", "sticky");
   expect(await hero.evaluate((element) => Math.round(element.getBoundingClientRect().top))).toBe(0);
   await expect(hero.locator(".home-hero-media")).not.toHaveCSS("transform", "none");
+  // The clip path draws the corners now, and the hero's black ground has gone so the stage shows around the clip.
+  await expect(hero.locator(".home-hero-media")).toHaveCSS("border-radius", "0px");
+  expect(await ground()).toBe("0");
   await expect(hero.getByRole("heading", { level: 1 })).not.toBeVisible();
   await scrollToScreens(page, BRIDGE + 0.3);
   await expect(tour(page)).toHaveAttribute("data-phase", "steps");
@@ -67,6 +74,8 @@ test("the bridge holds the hero in the window while its clip is carried onto the
   // Back at the top the hero is as its own stylesheet sets it.
   await scrollToScreens(page, 0);
   await expect(hero.locator(".home-hero-media")).toHaveCSS("transform", "none");
+  await expect(hero.locator(".home-hero-media")).toHaveCSS("border-radius", "20px");
+  expect(await ground()).toBe("1");
   await expect(hero.getByRole("heading", { level: 1 })).toBeVisible();
 });
 

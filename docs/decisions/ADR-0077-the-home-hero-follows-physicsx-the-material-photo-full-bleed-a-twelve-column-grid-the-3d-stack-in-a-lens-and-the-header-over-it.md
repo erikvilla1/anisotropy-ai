@@ -273,3 +273,27 @@ On phones it is one column.
 
 **Evidence.** On 2026-11-11, in the browser against the dev server at 1440 px: the page's sections are the hero, the calculator, Mission, Platform, About, What is new and the closing band; no page errors. A screenshot of Mission into Platform was looked at.
 - **Checks:** run on the same tree as ADR-0080 amendment 1 and recorded there, with the two browser tests that failed and what their re-runs showed.
+
+## Amendment 17, 2026-11-13 (a black page with the clip in a round box, after Scale)
+
+**Context.** The lead showed Scale's home page, where the hero's video plays in a box with round corners under the header, and asked: "make the homepage this style, keep same fonts and arrangements, just use the black background and rounded corners interior box for the hero vid."
+
+**Decision.**
+- **The page is black and the clip plays in a box.** The box starts under the header and stands on the page's margin at the sides and the foot, so its edges line up with the logo above and the sections below. Its corners are 20 px (16 px on phones).
+- **The header lies on the black strip above the box,** no longer over the picture. It is still placed over the hero and scrolls away with it.
+- **The words keep their arrangement inside the box:** the headline on columns 1 to 6 and the copy from the halfway line, where the header's links start; the badge bottom left and "Scroll to explore" bottom right, each as far from the box's edge as the headline is (32 px; 24 px under 1024 px; 16 px on phones).
+- **The shades are lighter and stop short of black.** The fade into the page at the foot and the shade under the header are gone, since neither is over the picture now. A 1 px hairline inside the edge marks the box where the clip is dark.
+- **The scroll tour takes the clip from the box** (ADR-0084): the hand-over starts from the box's place and corner radius, and the hero's black ground fades first so the shrinking clip uncovers the stage.
+
+**Options not chosen.**
+- Scale's 16 px frame with the logo moved to it: the logo and the box would leave the 32 px line the sections below stand on.
+- The words on the page's own columns, 16 px inside the box: too close to its round corners.
+- No hairline: where the clip is dark, the box's left and top edges were lost against the black page.
+
+**Evidence.** On 2026-11-13, in the browser against the production build with the committed clip:
+- **Measured.** At 1440 by 900 the header is 56 px tall and the box runs from x = 32 to 1408 and y = 64 to 868; the headline starts at x = 64, and the copy and the header's first link both at x = 736. At 1100 px the box starts at y = 86, at 900 px at x = 24 and y = 75, on a 390 px phone at x = 20 and y = 70 with 16 px corners. No sideways scroll and no page errors at any of the four.
+- **Looked at.** Screenshots of the hero at 1860, 1440, 1100, 900 and 390 px, and of the hand-over at five moments of the scroll: the box shrinks into the card with round corners throughout and lands on the top ply; back at the top the hero is as at rest.
+- **Checks.** `npm run typecheck` clean. `npm test`: 248 passed, 1 skipped, with a new case for the hand-over from the box. The whole browser suite against the build: 82 passed, 2 failed, 1 skipped, with a new case for the box and its margins in `home.spec.ts`.
+- **The two failures** are `portfolio.spec.ts` "the chat keeps a coupon across messages" and "mobile navigation and workspaces fit the screen". Both ask the workspace's assistant for the open-hole coupon, which ADR-0089 no longer offers; neither loads the home page, and CI does not run that file. They are left for a change to the workspace's tests.
+- **A stale test fixed on the way.** Two lines of `expansion.spec.ts` expected the workspace assistant's first question to be the test; since ADR-0089 offers one test it is the material, as `workspace.spec.ts` already reads it. Before the fix those two failed; after it the file passed 6 of 6. CI does not run this file either.
+- **UNVERIFIED:** the look on the lead's screen and on a real graphics card (the container draws WebGL in software), Safari and Firefox, and real phones and tablets.

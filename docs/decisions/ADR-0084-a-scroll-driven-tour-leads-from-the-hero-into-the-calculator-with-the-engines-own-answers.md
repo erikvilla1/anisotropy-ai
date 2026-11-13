@@ -1,6 +1,6 @@
 # ADR-0084: A scroll-driven tour leads from the hero into the calculator, with the engine's own answers
 
-- Status: Proposed
+- Status: Proposed; the bridge starts from the hero's round box (amendment 1)
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-09 and 2026-11-10 | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md) (the engine computes every number), [ADR-0059](ADR-0059-the-engine-describes-the-stack-and-evaluates-first-ply-failure-on-the-response-endpoint-for-the-home-calculator.md) (the home calculator's endpoint), [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the hero and the demo), [ADR-0083](ADR-0083-the-laminate-view-draws-carbon-plies-with-a-procedural-fibre-pattern-and-takes-four-props-for-the-scroll-tour.md) (the 3D view's props), `components/home/demo-tour.tsx`, `components/home/tour-timeline.ts`, `components/home/tour-bridge.ts`, `components/home/engine-answers.tsx`, `app/home-tour.css`, `tests/browser/tour.spec.ts`, `tests/tour-timeline.test.ts`
@@ -73,3 +73,13 @@ On 2026-11-10, in headless Chromium on the dev server:
 - The bridge or the steps stutter on a common laptop.
 - Visitors stop scrolling before the calculator.
 - A number in the tour differs from the calculator's for the same stack.
+
+## Amendment 1, 2026-11-13 (the bridge starts from the hero's round box)
+
+**Context.** The hero's clip now plays in a box with round corners on a black page (ADR-0077 amendment 17). The bridge assumed the clip filled the window and had square corners.
+
+**Decision.**
+- The bridge measures the box's place inside the hero and its corner radius, and carries the clip from there. The corners go from the box's radius to the card's 14 px, and are square when the card is a ply.
+- The hero's black ground is a layer of its own. It fades in the first 0.12 screens of scroll, so what the shrinking clip uncovers is the stage; at rest it is opaque, so nothing of the stage shows in the frame around the box.
+
+**Evidence.** `tests/tour-timeline.test.ts` has a case for a box at (32, 64) with 20 px corners: at rest the transform leaves it in place and the clip path draws its corners; landed, the kept part's corner is on the ply's corner within 0.01 px. `tour.spec.ts` reads the box's radius and the ground's opacity at rest, in the bridge and back at the top. Both passed on 2026-11-13 (ADR-0077 amendment 17 has the runs).

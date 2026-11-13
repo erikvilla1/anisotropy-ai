@@ -50,6 +50,37 @@ test("the hero's words are only the headline and the two paragraphs (ADR-0077)",
   await expect(page.locator(".site-header")).toHaveCSS("height", "56px");
 });
 
+test("the hero's clip plays in a box with round corners on the black page, under the header (ADR-0077 amendment 17)", async ({ page }) => {
+  await playApi(page, []);
+  await page.goto("/");
+  const rect = (selector: string) => page.locator(selector).first().evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return { left: Math.round(box.left), top: Math.round(box.top), right: Math.round(box.right), bottom: Math.round(box.bottom) };
+  });
+  const viewport = page.viewportSize()!;
+  const clip = await rect("#overview .home-hero-media");
+  const header = await rect(".site-header");
+  // The box stands on the page's 32 px margin at the sides and the foot, and starts under the header.
+  expect([clip.left, viewport.width - clip.right, viewport.height - clip.bottom]).toEqual([32, 32, 32]);
+  expect(clip.top).toBeGreaterThanOrEqual(header.bottom);
+  expect(clip.left).toBe((await rect(".site-header .wordmark")).left);
+  await expect(page.locator("#overview .home-hero-media")).toHaveCSS("border-radius", "20px");
+  // The page around it is the site's black, and the words sit inside the box.
+  expect(await page.locator("#overview").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(13, 13, 13)");
+  for (const selector of ["#overview h1", "#overview .home-hero-copy", "#overview .home-hero-backed", "#overview .home-hero-explore"]) {
+    const part = await rect(selector);
+    expect(part.left, selector).toBeGreaterThanOrEqual(clip.left + 16);
+    expect(part.right, selector).toBeLessThanOrEqual(clip.right - 16);
+    expect(part.top, selector).toBeGreaterThanOrEqual(clip.top + 16);
+    expect(part.bottom, selector).toBeLessThanOrEqual(clip.bottom - 16);
+  }
+  // On a phone the box follows the narrower margin.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const phone = await rect("#overview .home-hero-media");
+  expect([phone.left, 390 - phone.right]).toEqual([20, 20]);
+  expect(phone.top).toBeGreaterThanOrEqual((await rect(".site-header")).bottom);
+});
+
 test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }) => {
   await playApi(page, []);
   await page.goto("/");
