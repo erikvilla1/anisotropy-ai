@@ -20,7 +20,9 @@ user created on the site: read from the file `--token-file` names, or from the e
 the command line, where Abaqus would write it into `abaqus.rpy`. The token is not printed. The address must be https, or this machine
 itself. The upload is its owner's alone; the answer says whether it agrees with a run of ours (`--our-run`, or the owner's newest
 finished run of `--coupon`). A redirect is not followed, so the token is never passed on to another address. When the sending fails
-the bundle is still beside the ODB, and the line printed says why.
+the bundle is still beside the ODB, and the line printed says why: `sent:` or `not sent:`. Read that line and not the exit code. This
+script ends with 1 when the bundle was written and not sent, but Abaqus's own launcher on Windows (`abaqus.bat`) ends with 0 whatever a
+script returned, under `abaqus python` as under Abaqus/CAE (Abaqus 2025, the eighth trial).
 
 The connector is four files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`.
 `uv run python tools/abaqus_upload.py connector --out anisotropy-connector.zip` writes them as one zip to hand over; in the repository
@@ -585,7 +587,8 @@ def main(argv=None, read_job=None, read_model=None, poster=post) -> int:
 
 def run(argv=None, read_job=None, read_model=None, poster=post) -> int:
     """`main`, with every ending said in one place: exit 0 written (and sent, when asked), 1 written and not sent, 2 refused or
-    stopped. Abaqus/CAE writes an error of a script in `abaqus.rpy` only and ends with 0, so there nothing may leave this function unsaid."""
+    stopped. Abaqus/CAE writes an error of a script in `abaqus.rpy` only and ends with 0, and `abaqus.bat` drops the code of
+    `abaqus python` too, so nothing may leave this function unsaid: the line is the answer, the code a courtesy."""
     try:
         return main(argv, read_job, read_model, poster)
     except Refused as exc:

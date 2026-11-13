@@ -434,6 +434,7 @@ The job must ask for S and E at each ply's middle section point, and RF, as the 
 To send the bundle as well, add  --send https://<the site>/api  to either command. It goes with the upload token you
 created on the site: put the token in a file and name it with --token-file, or set ANISOTROPY_UPLOAD_TOKEN. Never put the
 token on the command line. The upload is yours alone, and the command prints whether it agrees with our run.
+Read the line it prints, "sent:" or "not sent:" with the reason: Abaqus ends with exit code 0 either way.
 """
 
 
