@@ -4,6 +4,7 @@
         [--inp <job>.inp] [--journal <model>.jnl] [--out <bundle>.zip] [--step Step-1] [--frame -1] [--instance COUPON-1] [--coupon <name>]
     abaqus cae noGUI=anisotropy_connector.py -- <job>.odb --units mm-MPa --cae <model>.cae [--model Model-1]
     ... --send https://<the site>/api [--token-file <file>] [--our-run <id of a run of ours>]
+    abaqus python anisotropy_connector.py --watch <folder> --units mm-MPa [--send ... --token-file <file>] [--every 5] [--existing] [--once]
 
 The first form needs no seat of Abaqus/CAE. It reads the job's ODB as `abaqus_every_output.py` does (every element and ply at each
 layer's middle section point, and the reactions), takes the input file Abaqus solved from beside the ODB, and writes
@@ -24,7 +25,15 @@ the bundle is still beside the ODB, and the line printed says why: `sent:` or `n
 script ends with 1 when the bundle was written and not sent, but Abaqus's own launcher on Windows (`abaqus.bat`) ends with 0 whatever a
 script returned, under `abaqus python` as under Abaqus/CAE (Abaqus 2025, the eighth trial).
 
-The connector is four files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`.
+With `--watch <folder>` (step 8) the command stays, looks at the folder every few seconds, and does the same for each job as it
+finishes there: a job is finished when its `.sta` says the analysis completed and its `.lck` is gone. Jobs that had finished before the
+watch started are left alone unless `--existing` is given. What was done for each job is kept in `anisotropy-watch.json` in the
+folder, so no ODB is sent twice; an ODB that changes (the job run again) is a new one. A job that cannot be bundled or sent is said
+and the watch goes on. It ends with Ctrl+C. The watch reads ODBs only, so it runs under `abaqus python` and takes no seat of
+Abaqus/CAE.
+
+The connector is six files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`, and
+for the menu in Abaqus/CAE `anisotropy_menu.py` and `anisotropy_plugin.py` (step 8).
 `uv run python tools/abaqus_upload.py connector --out anisotropy-connector.zip` writes them as one zip to hand over; in the repository
 they are found where they live.
 
@@ -42,6 +51,8 @@ input file has were read on Abaqus 2025, the rest (a model drawn in Abaqus/CAE: 
 from __future__ import annotations
 
 import argparse
+import copy
+import datetime
 import importlib.util
 import io
 import json
@@ -51,16 +62,18 @@ import shutil
 import sys
 import tempfile
 import os
+import time
 import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-CONNECTOR = "anisotropy-connector 0.3.0"
+CONNECTOR = "anisotropy-connector 0.4.0"
 MODEL_FORMAT = 1
 UNITS = ("mm-MPa", "m-Pa")
-FILES = ("anisotropy_connector.py", "bundle.py", "abaqus_every_output.py", "abaqus_extract_fields.py")  # what is handed over, together
+FILES = ("anisotropy_connector.py", "bundle.py", "abaqus_every_output.py", "abaqus_extract_fields.py",  # what is handed over, together
+         "anisotropy_menu.py", "anisotropy_plugin.py")  # the last two are the menu in Abaqus/CAE (step 8)
 TEXT_LIMIT = 400  # an Abaqus object printed as text is cut here: a region's repr can run to thousands of characters
 SEND_ROUTE = "/v1/connector/uploads"  # the one route of the API an upload token opens (ADR-0094 step 5)
 TOKEN_VARIABLE = "ANISOTROPY_UPLOAD_TOKEN"
@@ -69,6 +82,12 @@ SEND_TIMEOUT_S = 300.0
 THIS_MACHINE = ("localhost", "127.0.0.1", "::1")
 VERDICTS = {"agrees": "Agrees with ours", "differs": "Differs from ours", "incomplete": "Not every part could be compared",
             "refused": "The comparison does not take this bundle beside that run"}
+WATCH_RECORD = "anisotropy-watch.json"  # in the watched folder: what was done for each job's ODB, so none is sent twice
+WATCH_EVERY_S = 5.0
+COMPLETED = "THE ANALYSIS HAS COMPLETED SUCCESSFULLY"  # the last line of a job's .sta, in Abaqus's words
+NOT_COMPLETED = "THE ANALYSIS HAS NOT BEEN COMPLETED"
+STA_TAIL = 4096  # the ending of a .sta is in its last lines
+LISTENER = None  # the menu in Abaqus/CAE sets this to show every line in the window's message area (`anisotropy_menu.py`)
 
 
 class Refused(Exception):
@@ -109,7 +128,10 @@ def under_cae() -> bool:
 
 def say(text: str, error: bool = False) -> None:
     """A line for the user. Inside Abaqus/CAE without its window, print() goes to a message area nobody sees, so the terminal's own
-    stream is written instead."""
+    stream is written instead. From the menu, with the window, the message area is where the user looks: `LISTENER` takes the line."""
+    if LISTENER is not None:
+        LISTENER(text, error)
+        return
     if under_cae():
         stream = (sys.__stderr__ if error else sys.__stdout__) or (sys.stderr if error else sys.stdout)
     else:
@@ -383,9 +405,10 @@ def abaqus_python() -> str:
     return platform.python_version()
 
 
-def files_of(args, folder: Path, read_job=None, read_model=None) -> tuple[dict, dict]:
+def files_of(args, folder: Path, read_job=None, read_model=None, as_built=None) -> tuple[dict, dict]:
     """Everything the bundle holds, written or found: role -> file, and where the results were read in the ODB. `read_job` and
-    `read_model` stand in for the two readers in the tests."""
+    `read_model` stand in for the two readers in the tests. `as_built` is the model already read, from the session Abaqus/CAE has
+    open (the menu): then no `.cae` is opened at all."""
     odb = args.odb
     if odb.suffix.lower() != ".odb" or not odb.is_file():
         raise Refused(f"no ODB at {odb}")
@@ -413,11 +436,13 @@ def files_of(args, folder: Path, read_job=None, read_model=None) -> tuple[dict, 
     journal = args.journal or (args.cae.with_suffix(".jnl") if args.cae else None)
     if journal is not None and journal.is_file():
         files["journal"] = journal
+    model = as_built
     if args.cae:
-        copy = folder / "cae" / args.cae.name  # the user's own .cae is never opened: opening one changes the file
-        copy.parent.mkdir()
-        shutil.copyfile(str(args.cae), str(copy))
-        model = (read_model or read_cae)(copy, args.model)
+        copied = folder / "cae" / args.cae.name  # the user's own .cae is never opened: opening one changes the file
+        copied.parent.mkdir()
+        shutil.copyfile(str(args.cae), str(copied))
+        model = (read_model or read_cae)(copied, args.model)
+    if model is not None:
         files["model"] = folder / f"{stem}-model.json"
         with io.open(str(files["model"]), "w", encoding="utf-8", newline="\n") as handle:
             json.dump(model, handle, indent=1, sort_keys=True)
@@ -539,7 +564,7 @@ class Parser(argparse.ArgumentParser):
 
 def parse(argv: list[str]) -> argparse.Namespace:
     parser = Parser(prog="anisotropy_connector.py", description=__doc__.splitlines()[0])
-    parser.add_argument("odb", type=Path, help="the finished job's .odb")
+    parser.add_argument("odb", type=Path, nargs="?", default=None, help="the finished job's .odb")
     parser.add_argument("--units", required=True, choices=UNITS, help="the system the model is written in; an Abaqus model carries none")
     parser.add_argument("--inp", type=Path, default=None, help="the input file Abaqus solved; default <job>.inp beside the ODB")
     parser.add_argument("--cae", type=Path, default=None, help="the model's .cae, read for the model as built (needs abaqus cae noGUI=)")
@@ -554,35 +579,193 @@ def parse(argv: list[str]) -> argparse.Namespace:
                                                                        "https://<the site>/api, with your upload token")
     parser.add_argument("--token-file", type=Path, default=None, help=f"the file that holds your upload token; default the environment variable {TOKEN_VARIABLE}")
     parser.add_argument("--our-run", default=None, help="the id of the run of ours to compare beside; default your newest finished run of --coupon")
+    parser.add_argument("--watch", type=Path, default=None, metavar="FOLDER", help="stay, and do this for each job as it finishes in this folder "
+                                                                                    "(abaqus python only); end with Ctrl+C")
+    parser.add_argument("--every", type=float, default=None, metavar="SECONDS", help=f"how often the watch looks; default {WATCH_EVERY_S:g}")
+    parser.add_argument("--existing", action="store_true", help="with --watch: also take the jobs that had finished before the watch started")
+    parser.add_argument("--once", action="store_true", help="with --watch: look once and end")
     args = parser.parse_args(argv)
     if args.send is None and (args.token_file is not None or args.our_run is not None):
         parser.error("--token-file and --our-run go with --send")
+    if (args.odb is None) == (args.watch is None):
+        parser.error("give one finished job's .odb, or --watch <folder> for every job that finishes there")
+    if args.watch is None and (args.every is not None or args.existing or args.once):
+        parser.error("--every, --existing and --once go with --watch")
+    if args.watch is not None:
+        named = [name for name, value in (("--inp", args.inp), ("--cae", args.cae), ("--model", args.model), ("--journal", args.journal),
+                                          ("--out", args.out), ("--our-run", args.our_run)) if value is not None]
+        if named:
+            parser.error(f"{', '.join(named)} name{'s' if len(named) == 1 else ''} one job's files and cannot go with --watch")
+        if args.every is not None and not args.every >= 1.0:
+            parser.error("--every takes a number of seconds, 1 or more")
     return args
 
 
-def main(argv=None, read_job=None, read_model=None, poster=post) -> int:
-    args = parse(command_line(sys.argv) if argv is None else argv)
+def deliver(args, url=None, token=None, read_job=None, read_model=None, poster=post, as_built=None) -> dict:
+    """One job's bundle, written and, with `url`, sent. Every line is said here. Returns what happened: `bundle` (its path), `sha256`,
+    and with a send either `upload` (the site's answer) or `not_sent` (the reason; the bundle is on the disk). Raises `Refused`."""
     bundle = load("bundle")
     out = args.out or args.odb.with_name(f"{args.odb.stem}-anisotropy.zip")
-    # what sending needs is judged before the ODB is read, so a missing token costs no time
-    url, token = (send_address(args.send, args.our_run), token_of(args.token_file)) if args.send is not None else (None, None)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:  # Abaqus/CAE may still hold the copy of the .cae
-        files, results = files_of(args, Path(folder), read_job, read_model)
+        files, results = files_of(args, Path(folder), read_job, read_model, as_built)
         written = bundle.write_bundle(out, files, args.units, CONNECTOR, abaqus=results["solver"], python=abaqus_python(), job=args.odb.stem,
                                       coupon=args.coupon, results=results)
     say(f"{out}: bundle version {written.manifest['bundle_version']} of {args.odb.stem}, in {args.units}")
     for role, entry in written.files.items():
         say(f"  {role}: {entry.path}, {entry.bytes} bytes")
-    if "model" not in written.files:
+    if "model" not in written.files and LISTENER is None:
         say("  the model as built is not in it: add --cae <model>.cae under  abaqus cae noGUI=anisotropy_connector.py -- ...")
     say(f"SHA-256 {written.sha256}")
+    done = {"bundle": out, "sha256": written.sha256, "model": "model" in written.files}
     if url is not None:
         try:
-            say_sent(send(url, token, out, poster))
+            done["upload"] = send(url, token, out, poster)
+            say_sent(done["upload"])
         except NotSent as exc:
+            done["not_sent"] = str(exc)
             say(f"not sent: {exc}. The bundle is written: {out}", error=True)
-            return 1
-    return 0
+    return done
+
+
+# ------------------------------------------------------------------------------------------------ the watched folder (step 8)
+
+def job_state(odb: Path) -> str:
+    """Where a job stands, from the files Abaqus leaves beside its ODB: `running` (its `.lck` is there, or its `.sta` has no ending
+    yet), `completed`, `not completed` (Abaqus's own ending), or `no status file` (an ODB that was not solved here)."""
+    if odb.with_suffix(".lck").exists():
+        return "running"
+    sta = odb.with_suffix(".sta")
+    if not sta.is_file():
+        return "no status file"
+    with io.open(str(sta), "rb") as handle:
+        handle.seek(max(0, sta.stat().st_size - STA_TAIL))
+        ending = handle.read().decode("utf-8", "replace")
+    return "completed" if COMPLETED in ending else "not completed" if NOT_COMPLETED in ending else "running"
+
+
+def mark_of(odb: Path) -> list:
+    """What tells one ODB from the same job run again: its size and when it was last written."""
+    status = odb.stat()
+    return [status.st_size, status.st_mtime_ns]
+
+
+def watch_record(folder: Path) -> dict:
+    path = folder / WATCH_RECORD
+    if path.is_file():
+        try:
+            with io.open(str(path), encoding="utf-8") as handle:
+                found = json.load(handle)
+            if isinstance(found, dict) and isinstance(found.get("jobs"), dict):
+                return found
+        except (ValueError, OSError):
+            pass
+        raise Refused(f"{path} is not the watch's own record: move it away, and the watch starts a new one")
+    return {"written_by": CONNECTOR, "jobs": {}}
+
+
+def keep_record(folder: Path, record: dict) -> None:
+    """The record, written beside and then put in place, so a watch stopped in the middle leaves the old one whole."""
+    path = folder / WATCH_RECORD
+    beside = folder / (WATCH_RECORD + ".new")
+    with io.open(str(beside), "w", encoding="utf-8", newline="\n") as handle:
+        json.dump(record, handle, indent=1, sort_keys=True)
+        handle.write("\n")
+    os.replace(str(beside), str(path))
+
+
+def watch_pass(args, record: dict, first: bool, url=None, token=None, read_job=None, poster=post) -> tuple[int, int]:
+    """One look at the folder: every ODB whose job has ended and that the record does not hold yet is dealt with and written down.
+    Returns how many jobs were dealt with and how many of those were not bundled or not sent."""
+    dealt = failed = 0
+    left = []
+    for odb in sorted(args.watch.glob("*.odb")):
+        job, mark = odb.stem, mark_of(odb)
+        seen = record["jobs"].get(job)
+        if seen is not None and seen.get("odb") == mark:
+            continue
+        state = job_state(odb)
+        if state == "running":
+            continue
+        entry = {"odb": mark, "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if first and seen is None and not args.existing and state in ("completed", "not completed"):
+            entry.update(state="before the watch", said="it had finished before the watch started")
+            left.append(job)
+        elif state == "no status file":
+            entry.update(state="not taken", said=f"no {job}.sta beside the ODB, so the watch cannot tell that the job finished here; send it "
+                                                 f"with  abaqus python anisotropy_connector.py {odb.name} --units {args.units} ...")
+            say(f"{job}: {entry['said']}", error=True)
+        elif state == "not completed":
+            entry.update(state="not completed", said="Abaqus did not complete the analysis, so there is nothing to send")
+            say(f"{job}: {entry['said']}", error=True)
+            dealt, failed = dealt + 1, failed + 1
+        else:
+            one = copy.copy(args)
+            one.odb, one.watch = odb, None
+            dealt += 1
+            try:
+                done = deliver(one, url, token, read_job, None, poster)
+            except Refused as exc:
+                done = None
+                entry.update(state="refused", said=str(exc))
+            except Exception as exc:  # noqa: BLE001  one job's trouble does not end the watch
+                if type(exc).__name__ not in ("ExtractError", "BundleRefused"):
+                    say(f"{job}: the connector stopped on this job:\n" + traceback.format_exc(), error=True)
+                done = None
+                entry.update(state="refused", said=f"{type(exc).__name__}: {exc}")
+            if done is None:
+                failed += 1
+                say(f"{job}: refused: {entry['said']}", error=True)
+            else:
+                entry.update(bundle=done["bundle"].name, bundle_sha256=done["sha256"])
+                if "upload" in done:
+                    answer = done["upload"]
+                    entry.update(state="sent", upload=answer["id"], verdict=answer.get("verdict"), said=answer.get("not_compared") or "")
+                elif "not_sent" in done:
+                    entry.update(state="not sent", said=done["not_sent"])
+                    failed += 1
+                else:
+                    entry.update(state="written", said="")
+        record["jobs"][job] = entry
+        keep_record(args.watch, record)
+    if left:
+        say(f"{len(left)} job{'s' if len(left) != 1 else ''} had finished before the watch started and {'are' if len(left) != 1 else 'is'} left "
+            f"alone: {', '.join(left)}. Add --existing to take them too")
+    return dealt, failed
+
+
+def watch(args, url=None, token=None, read_job=None, poster=post, sleep=time.sleep) -> int:
+    """Stay and deal with each job as it finishes in the folder, until Ctrl+C (or after one look, with `--once`). Exit 0, or 1 when
+    `--once` found a job it could not bundle or send."""
+    if under_cae():
+        raise Refused("--watch runs under  abaqus python  (it reads ODBs only and takes no seat of Abaqus/CAE)")
+    if not args.watch.is_dir():
+        raise Refused(f"no folder at {args.watch}")
+    record = watch_record(args.watch)
+    every = args.every or WATCH_EVERY_S
+    say(f"watching {args.watch} for jobs that finish, {'once' if args.once else f'every {every:g} s'}; "
+        f"{'each bundle is sent to ' + url.split(SEND_ROUTE)[0] if url else 'each bundle is written beside its ODB and nothing is sent'}"
+        f"{'' if args.once else '. End with Ctrl+C'}")
+    first, failed = True, 0
+    try:
+        while True:
+            failed += watch_pass(args, record, first, url, token, read_job, poster)[1]
+            first = False
+            if args.once:
+                break
+            sleep(every)
+    except KeyboardInterrupt:
+        say("the watch has ended")
+        return 0
+    return 1 if failed else 0
+
+
+def main(argv=None, read_job=None, read_model=None, poster=post) -> int:
+    args = parse(command_line(sys.argv) if argv is None else argv)
+    # what sending needs is judged before the ODB is read, so a missing token costs no time
+    url, token = (send_address(args.send, args.our_run), token_of(args.token_file)) if args.send is not None else (None, None)
+    if args.watch is not None:
+        return watch(args, url, token, read_job, poster)
+    return 1 if "not_sent" in deliver(args, url, token, read_job, read_model, poster) else 0
 
 
 def run(argv=None, read_job=None, read_model=None, poster=post) -> int:
