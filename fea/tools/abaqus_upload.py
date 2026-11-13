@@ -100,7 +100,14 @@ def read_reactions(path: Path) -> list[dict]:
 
 
 MODEL_FORMAT = 1
-MODEL_GROUPS = ("parts", "materials", "sections", "steps", "boundary_conditions", "loads", "constraints", "field_output_requests")
+MODEL_GROUPS = ("parts", "materials", "sections", "steps", "boundary_conditions", "loads", "constraints", "field_output_requests",
+                "history_output_requests")
+
+
+def plies_of(layup: dict) -> int:
+    """A layup's plies through the thickness: the connector states it, a symmetric layup listing half of them."""
+    stated = layup.get("plies_through_thickness")
+    return stated if isinstance(stated, int) and not isinstance(stated, bool) else len(layup.get("plies") or [])
 
 
 def model_facts(path: Path) -> dict:
@@ -118,7 +125,7 @@ def model_facts(path: Path) -> dict:
     layups = [layup for part in parts for layup in part.get("layups") or [] if isinstance(layup, dict)]
     not_read = model.get("not_read")
     return {"read": True, "model": model.get("model"), "read_by": model.get("read_by"), "groups": groups,
-            "layups": [{"name": layup.get("name"), "plies": len(layup.get("plies") or [])} for layup in layups],
+            "layups": [{"name": layup.get("name"), "plies": plies_of(layup)} for layup in layups],
             "not_read": [str(entry) for entry in not_read] if isinstance(not_read, list) else []}
 
 
@@ -409,7 +416,9 @@ The results and the input file Abaqus solved (no seat of Abaqus/CAE is used):
 
     abaqus python anisotropy_connector.py <job>.odb --units mm-MPa
 
-The same, with the model as built read from your .cae (opened and read, never saved) and its journal:
+The same, with the model as built read from your .cae and its journal. Your .cae is not opened: a copy in a
+temporary folder is. Put the .odb first. Abaqus/CAE ends with exit code 0 whatever happened, so read the line the
+command prints: the bundle's path, or "refused:" with the reason. It also writes its own abaqus.rpy where you start it.
 
     abaqus cae noGUI=anisotropy_connector.py -- <job>.odb --units mm-MPa --cae <model>.cae
 

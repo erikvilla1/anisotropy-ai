@@ -130,25 +130,34 @@ class Unset:
 
 
 def cae_model(broken: bool = False):
-    ply = lambda name, angle: SimpleNamespace(plyName=name, material="IM7-8552", thickness=0.125, thicknessType=Constant("SPECIFY_THICKNESS"),  # noqa: E731
-                                              orientationType=Constant("SPECIFY_ORIENT"), orientationValue=angle, numIntPoints=3,
-                                              suppressed=False, region=Unset())
-    layup = SimpleNamespace(symmetric=False, elementType=Constant("SHELL"), offsetType=Constant("MIDDLE_SURFACE"),
-                            orientation=SimpleNamespace(orientationType=Constant("GLOBAL"), localCsys=None, axis=Constant("AXIS_3")),
-                            plies=[ply("Ply-1", 0.0), ply("Ply-2", 90.0), ply("Ply-3", 90.0), ply("Ply-4", 0.0)])
+    """A model shaped as Abaqus 2025 gave one on the first trial: a symmetric layup listing half its plies, each angle one of Abaqus's
+    choices, a region as a tuple, and a displacement's value on the step's states and not on the boundary condition."""
+    ply = lambda name, given, value=0.0: SimpleNamespace(plyName=name, material="IM7-8552", thickness=0.18288, numIntPoints=3,  # noqa: E731
+                                                         orientationType=Constant(given), orientationValue=value, angle=0.0,
+                                                         axis=Constant("AXIS_3"), suppressed=False, region=Unset())
+    layup = SimpleNamespace(symmetric=True, elementType=Constant("SHELL"), offsetType=Constant("MIDDLE_SURFACE"),
+                            orientation=SimpleNamespace(orientationType=Constant("SYSTEM"), localCsys=3, axis=Constant("AXIS_3")),
+                            plies=[ply("PLY-1", "ANGLE_45"), ply("PLY-2", "ANGLE_0"), ply("PLY-3", "ANGLE_NEG45"), ply("PLY-4", "ANGLE_90"),
+                                   ply("PLY-5", "SPECIFY_ORIENT", 30.0), ply("PLY-6", "CSYS")])
     part = SimpleNamespace(space=Constant("THREE_D"), type=Constant("DEFORMABLE_BODY"), faces=[1, 2, 3], edges=[0] * 10, vertices=[0] * 8,
                            nodes=Nodes(range(377)), elements=[SimpleNamespace(type=Constant("S4R"))] * 336,
                            features={"Shell planar-1": 1, "Partition face-1": 2}, sets={"Gauge": 1}, surfaces={},
-                           compositeLayups={"Layup-1": layup}, sectionAssignments=[])
+                           compositeLayups={"LAYUP-1": layup}, sectionAssignments=[])
     elastic = SimpleNamespace(type=Constant("LAMINA"), table=((161000.0, 11380.0, 0.32, 5170.0, 5170.0, 3980.0),), failStress=None)
-    step = SimpleNamespace(previous="Initial", nlgeom=Constant("OFF"), timePeriod=1.0, description="")
-    bc = SimpleNamespace(createStepName="Step-1", u1=Constant("UNSET"), u2=1.0, region=("Top",), amplitude=Constant("UNSET"))
+    pull = SimpleNamespace(u1=0.0, u2=1.0, u1State=Constant("UNSET"), u2State=Constant("SET"), amplitudeState=Constant("UNSET"))
+    asked = SimpleNamespace(variables=("S", "E", "RF"), variablesState=Constant("SET"), frequency=1)
+    step = SimpleNamespace(previous="Initial", nlgeom=Constant("OFF"), timePeriod=1.0, description="",
+                           boundaryConditionStates={"Pull": pull}, loadStates={}, fieldOutputRequestStates={"F-Output-1": asked},
+                           historyOutputRequestStates=Unset() if broken else {})
+    initial = SimpleNamespace(boundaryConditionStates={}, loadStates={}, fieldOutputRequestStates={}, historyOutputRequestStates={})
+    bc = SimpleNamespace(createStepName="Step-1", category=Constant("MECHANICAL"), region=("GRIP-TOP", "Assembly", 1, 4, 0))
     model = SimpleNamespace(
         parts={"Coupon": part}, materials={"IM7-8552": SimpleNamespace(elastic=elastic)}, sections={},
         rootAssembly=SimpleNamespace(instances={"Coupon-1": SimpleNamespace(partName="Coupon", dependent=Constant("ON"), nodes=[], elements=[])},
                                      sets={"Top": 1, "Bottom": 2}, surfaces={}, referencePoints={}),
-        steps={"Initial": SimpleNamespace(), "Step-1": step}, boundaryConditions={"Pull": bc, "Hold": SimpleNamespace(createStepName="Initial")},
-        loads={}, constraints={}, fieldOutputRequests={"F-Output-1": SimpleNamespace(createStepName="Step-1", variables=("S", "E", "RF"))})
+        steps={"Initial": initial, "Step-1": step}, boundaryConditions={"Pull": bc, "Hold": SimpleNamespace(createStepName="Initial")},
+        loads={}, constraints={}, fieldOutputRequests={"F-Output-1": SimpleNamespace(sectionPoints=(2, 5, 8), outputAtPlyMid=True)},
+        historyOutputRequests={})
     if broken:
         model.constraints = Unset()
     return model
@@ -167,7 +176,7 @@ def test_one_command_writes_a_bundle_the_format_takes_from_the_job_and_its_input
     assert bundle.files["deck"].path == "model/Job-1.inp" and bundle.read("deck") == job.deck.read_bytes()
     m = bundle.manifest
     assert m["units"] == "mm-MPa" and m["job"] == "Job-1" and m["coupon"] == "d3039-im7-8552"
-    assert m["written_by"] == {"connector": "anisotropy-connector 0.1.0", "abaqus": "Abaqus/Standard 2025", "python": connector.abaqus_python()}
+    assert m["written_by"] == {"connector": connector.CONNECTOR, "abaqus": "Abaqus/Standard 2025", "python": connector.abaqus_python()}
     assert m["results"] == {"solver": "Abaqus/Standard 2025", "created": "Thu Nov 12 10:00:00 2026", "step": "Step-1", "frame_index": 1,
                             "frame": "Increment      1: Step Time =    1.000", "instance": "COUPON-1"}
     assert str(job.folder) not in json.dumps(m)  # no path of the user's machine
@@ -200,21 +209,24 @@ def test_with_a_cae_the_model_as_built_and_its_journal_go_in_and_check_counts_th
     asked = []
 
     def read_model(path, name):
-        asked.append((path.name, name))
+        asked.append((path.name, name, path.resolve() != cae.resolve(), path.read_bytes()))
+        path.write_bytes(b"changed, as Abaqus/CAE changes a .cae it opens")
         return connector.model_as_built(cae_model(), "Model-1")
 
     out = tmp_path / "with-model.zip"
     assert connector.run([str(job.odb), "--units", "mm-MPa", "--cae", str(cae), "--out", str(out)], read_job=reader_of(job), read_model=read_model) == 0
-    assert asked == [("coupon.cae", None)] and "the model as built is not in it" not in capsys.readouterr().out
+    assert asked == [("coupon.cae", None, True, b"not a .cae: the reader is replaced")]  # a copy, under the file's own name
+    assert cae.read_bytes() == b"not a .cae: the reader is replaced"  # the user's own .cae is never opened
+    assert "the model as built is not in it" not in capsys.readouterr().out
     bundle = open_bundle(out)
     assert set(bundle.files) == {"deck", "every_output", "reactions", "model", "journal"}
     assert bundle.files["model"].path == "model/Job-1-model.json" and "never run by us" in bundle.text("journal")
     held = upload.check(out)
     assert held["in_scope"]
-    assert held["model"] == {"read": True, "model": "Model-1", "read_by": "anisotropy-connector 0.1.0",
+    assert held["model"] == {"read": True, "model": "Model-1", "read_by": connector.CONNECTOR,
                              "groups": {"parts": 1, "materials": 1, "sections": 0, "steps": 2, "boundary_conditions": 2, "loads": 0,
-                                        "constraints": 0, "field_output_requests": 1},
-                             "layups": [{"name": "Layup-1", "plies": 4}], "not_read": []}
+                                        "constraints": 0, "field_output_requests": 1, "history_output_requests": 0},
+                             "layups": [{"name": "LAYUP-1", "plies": 12}], "not_read": []}
     upload.print_check(held)
     assert "the model as built: Model-1: 1 parts, 1 materials" in capsys.readouterr().out
 
@@ -227,15 +239,26 @@ def test_the_model_reader_writes_what_abaqus_gives_as_plain_values_and_names_wha
     assert part["nodes"] == 377 and part["elements"] == 336 and part["element_types"] == ["S4R"]
     assert part["box"] == [[0.0, 0.0, 0.0], [25.0, 250.0, 0.0]] and part["features"] == ["Shell planar-1", "Partition face-1"]
     layup = part["layups"][0]
-    assert layup["name"] == "Layup-1" and layup["symmetric"] is False and layup["orientation"]["axis"] == "AXIS_3"
-    assert [(p["plyName"], p["orientationValue"], p["thickness"]) for p in layup["plies"]] == [
-        ("Ply-1", 0.0, 0.125), ("Ply-2", 90.0, 0.125), ("Ply-3", 90.0, 0.125), ("Ply-4", 0.0, 0.125)]
+    assert layup["name"] == "LAYUP-1" and layup["symmetric"] is True and layup["orientation"] == {"orientationType": "SYSTEM", "localCsys": 3, "axis": "AXIS_3"}
+    assert layup["plies_through_thickness"] == 12  # six listed, mirrored
+    # the angle whichever way Abaqus holds it; a ply turned by a coordinate system has none
+    assert [(p["plyName"], p["orientationType"], p.get("rotation_deg")) for p in layup["plies"]] == [
+        ("PLY-1", "ANGLE_45", 45.0), ("PLY-2", "ANGLE_0", 0.0), ("PLY-3", "ANGLE_NEG45", -45.0), ("PLY-4", "ANGLE_90", 90.0),
+        ("PLY-5", "SPECIFY_ORIENT", 30.0), ("PLY-6", "CSYS", None)]
+    assert layup["plies"][0]["thickness"] == 0.18288 and "region" not in layup["plies"][0]  # a member Abaqus will not give is left out
     assert model["materials"] == [{"name": "IM7-8552", "elastic": {"type": "LAMINA", "table": [[161000.0, 11380.0, 0.32, 5170.0, 5170.0, 3980.0]]}}]
-    assert model["steps"][1] == {"name": "Step-1", "kind": "SimpleNamespace", "previous": "Initial", "description": "", "nlgeom": "OFF", "timePeriod": 1.0}
-    assert model["boundary_conditions"][0] == {"name": "Pull", "kind": "SimpleNamespace", "createStepName": "Step-1", "region": ["Top"],
-                                               "u1": "UNSET", "u2": 1.0, "amplitude": "UNSET"}
+    step = model["steps"][1]
+    assert {key: step[key] for key in ("name", "previous", "nlgeom", "timePeriod")} == {"name": "Step-1", "previous": "Initial", "nlgeom": "OFF", "timePeriod": 1.0}
+    # the pull is on the step's state of the boundary condition, and what is asked for on the step's state of the request
+    assert step["boundary_conditions"] == [{"name": "Pull", "u1": 0.0, "u2": 1.0, "u1State": "UNSET", "u2State": "SET", "amplitudeState": "UNSET"}]
+    assert step["field_output_requests"] == [{"name": "F-Output-1", "variables": ["S", "E", "RF"], "variablesState": "SET", "frequency": 1}]
+    assert step["loads"] == [] and "history_output_requests" not in step
+    assert model["boundary_conditions"][0] == {"name": "Pull", "kind": "SimpleNamespace", "createStepName": "Step-1", "category": "MECHANICAL",
+                                               "region": ["GRIP-TOP", "Assembly", 1, 4, 0], "region_set": "GRIP-TOP"}
+    assert model["field_output_requests"] == [{"name": "F-Output-1", "kind": "SimpleNamespace", "sectionPoints": [2, 5, 8], "outputAtPlyMid": True}]
     assert model["assembly"]["instances"] == [{"name": "Coupon-1", "nodes": 0, "elements": 0, "partName": "Coupon", "dependent": "ON"}]
-    assert "constraints" not in model and len(model["not_read"]) == 1 and model["not_read"][0].startswith("constraints: RuntimeError")
+    assert "constraints" not in model and model["history_output_requests"] == []
+    assert [entry.split(":")[0] for entry in model["not_read"]] == ["steps/Step-1/history_output_requests", "constraints"]
     long = connector.plain(Constant("x" * 1000))
     assert len(long) == connector.TEXT_LIMIT + 4 and connector.plain(float("nan")) is None
 
@@ -269,8 +292,8 @@ def test_what_cannot_be_packed_is_refused_in_one_line_and_nothing_is_written(con
     assert "reading a .cae needs Abaqus/CAE: run  abaqus cae noGUI=anisotropy_connector.py" in capsys.readouterr().err and not out.exists()
     assert connector.run([str(job.odb), "--units", "mm-MPa", "--out", str(out)]) == 2  # no stand-in: Abaqus's own modules are not here
     assert "refused: this command runs under Abaqus's own Python" in capsys.readouterr().err and not out.exists()
-    with pytest.raises(SystemExit):  # the deck system is stated, never inferred
-        connector.run([str(job.odb), "--out", str(out)], read_job=reader_of(job))
+    assert connector.run([str(job.odb), "--out", str(out)], read_job=reader_of(job)) == 2  # the deck system is stated, never inferred
+    assert "--units" in capsys.readouterr().err and not out.exists()
 
 
 def test_the_odb_readers_own_refusal_is_said_as_a_refusal(connector, job, tmp_path, capsys):
@@ -283,16 +306,43 @@ def test_the_odb_readers_own_refusal_is_said_as_a_refusal(connector, job, tmp_pa
     assert "refused: frame 1 holds no E" in capsys.readouterr().err
 
 
-def test_our_arguments_are_those_after_the_two_dashes_when_abaqus_cae_starts_the_script(connector):
-    cae = ["ABQcaeK.exe", "-cae", "-noGUI", "anisotropy_connector.py", "-lmlog", "ON", "--", "Job-1.odb", "--units", "mm-MPa"]
-    assert connector.command_line(cae) == ["Job-1.odb", "--units", "mm-MPa"]
-    assert connector.command_line(["anisotropy_connector.py", "Job-1.odb", "--units", "m-Pa"]) == ["Job-1.odb", "--units", "m-Pa"]
+def test_our_arguments_are_found_among_abaqus_caes_own_with_the_two_dashes_or_without(connector):
+    ours = ["Job-1.odb", "--units", "mm-MPa", "--cae", "coupon.cae"]
+    flags = ["ABQcaeK.exe", "-cae", "-noGUI", "-academic", "TEACHING", "-tmpdir", "C:\\temp", "-lmlog", "ON"]
+    assert connector.command_line([*flags, "--", *ours]) == ours
+    assert connector.command_line([*flags, *ours]) == ours  # Abaqus 2025's launcher drops the two dashes: ours start at the ODB
+    assert connector.command_line(["anisotropy_connector.py", "--units", "m-Pa", "Job-1.odb"]) == ["--units", "m-Pa", "Job-1.odb"]  # abaqus python
+    with pytest.raises(connector.Refused, match="give the job's .odb first"):
+        connector.command_line([*flags, "--units", "mm-MPa"])
+
+
+def test_under_abaqus_cae_nothing_ends_unsaid_because_its_exit_code_and_its_window_say_nothing(connector, job, tmp_path, monkeypatch, capfd):
+    """Abaqus/CAE without its window writes a script's error in abaqus.rpy only and ends with 0 (the first trial): there the
+    connector says every ending on the terminal's own stream itself. Elsewhere an unexpected error is raised as it is."""
+    def read(path, step, frame, instance):
+        raise RuntimeError("an error nobody planned for")
+
+    arguments = [str(job.odb), "--units", "mm-MPa", "--out", str(tmp_path / "b.zip")]
+    with pytest.raises(RuntimeError):
+        connector.run(arguments, read_job=read)
+    monkeypatch.setitem(sys.modules, "abaqus", SimpleNamespace(mdb=object()))
+    assert connector.under_cae()
+    capfd.readouterr()
+    assert connector.run(arguments, read_job=read) == 2
+    said = capfd.readouterr().err
+    assert "the connector stopped, and no bundle was written" in said and "RuntimeError: an error nobody planned for" in said
+    assert connector.run([str(job.odb), "--out", str(tmp_path / "b.zip")], read_job=reader_of(job)) == 2
+    assert "--units" in capfd.readouterr().err
+    assert connector.run([str(tmp_path / "missing.odb"), "--units", "mm-MPa"], read_job=reader_of(job)) == 2
+    assert "refused: no ODB at" in capfd.readouterr().err
+    assert connector.run(arguments, read_job=reader_of(job)) == 0
+    assert "bundle version 1 of Job-1" in capfd.readouterr().out and (tmp_path / "b.zip").is_file()
 
 
 # --- what is handed over -----------------------------------------------------------------------------------------------------------
 
 def test_the_connectors_files_import_nothing_beyond_the_standard_library_and_abaqus(connector):
-    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "odbAccess", "abaqus_extract_fields"}
+    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "caeModules", "odbAccess", "abaqus_extract_fields"}
     folders = {"bundle.py": TOOLS.parent / "src" / "anisotropy_fea"}
     for name in connector.FILES:
         tree = ast.parse((folders.get(name, TOOLS) / name).read_text(encoding="utf-8"))

@@ -16,12 +16,17 @@ is the user's own file and goes in as it is.
 
 The connector is four files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`.
 `uv run python tools/abaqus_upload.py connector --out anisotropy-connector.zip` writes them as one zip to hand over; in the repository
-they are found where they live. The `.cae` is opened and read, never saved.
+they are found where they live.
+
+The user's `.cae` is never opened: a copy in a temporary folder is. Opening a `.cae` changes the file even when nothing is saved
+(Abaqus 2025, the first trial: another SHA-256 after `openMdb` alone). Under Abaqus/CAE the ODB comes first among our arguments,
+because Abaqus 2025's launcher drops the `--` and ours are then found from the ODB on; and the exit code says nothing there (Abaqus/CAE
+ends with 0 whatever the script did), so the line the command prints is the answer: the bundle's path, or `refused:` with the reason.
 
 The standard library and Abaqus's own modules only; `odbAccess` and `abaqus` are imported inside the two readers, so everything else
 is plain Python that the tests run without Abaqus. What the model reader could not read is listed in the file under `not_read`
-instead of stopping the bundle: its attribute names are Abaqus's scripting interface as documented, UNVERIFIED on a real `.cae`
-until the first run on the founder's machine.
+instead of stopping the bundle. Its attribute names are Abaqus's scripting interface as documented; those a model imported from an
+input file has were seen on Abaqus 2025, the rest (a model drawn in Abaqus/CAE: its sections, loads and constraints) are UNVERIFIED.
 """
 
 from __future__ import annotations
@@ -32,11 +37,13 @@ import io
 import json
 import math
 import platform
+import shutil
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 
-CONNECTOR = "anisotropy-connector 0.1.0"
+CONNECTOR = "anisotropy-connector 0.2.0"
 MODEL_FORMAT = 1
 UNITS = ("mm-MPa", "m-Pa")
 FILES = ("anisotropy_connector.py", "bundle.py", "abaqus_every_output.py", "abaqus_extract_fields.py")  # what is handed over, together
@@ -74,10 +81,15 @@ def load(name: str):
     raise Refused(f"{name}.py is not beside the connector: keep the connector's files together in one folder")
 
 
+def under_cae() -> bool:
+    """Whether Abaqus/CAE's kernel runs this."""
+    return hasattr(sys.modules.get("abaqus"), "mdb")
+
+
 def say(text: str, error: bool = False) -> None:
     """A line for the user. Inside Abaqus/CAE without its window, print() goes to a message area nobody sees, so the terminal's own
     stream is written instead."""
-    if hasattr(sys.modules.get("abaqus"), "mdb"):  # Abaqus/CAE's kernel
+    if under_cae():
         stream = (sys.__stderr__ if error else sys.__stdout__) or (sys.stderr if error else sys.stdout)
     else:
         stream = sys.stderr if error else sys.stdout
@@ -86,8 +98,17 @@ def say(text: str, error: bool = False) -> None:
 
 
 def command_line(argv: list[str]) -> list[str]:
-    """Our arguments: everything after `--` when Abaqus/CAE started the script (its own arguments come first), else all of them."""
-    return argv[argv.index("--") + 1:] if "--" in argv else argv[1:]
+    """Our arguments. Started by `abaqus python`, all of them. Started by Abaqus/CAE, its own come first (`-cae -noGUI -tmpdir ...`):
+    ours are those after `--` where the launcher keeps it, and from the ODB on where it does not (Abaqus 2025 drops it)."""
+    if "--" in argv:
+        return argv[argv.index("--") + 1:]
+    if {"-cae", "-nogui"} & {argument.lower() for argument in argv}:
+        for i, argument in enumerate(argv):
+            if argument.lower().endswith(".odb"):
+                return argv[i:]
+        raise Refused("give the job's .odb first, then the options:  abaqus cae noGUI=anisotropy_connector.py -- <job>.odb --units mm-MPa "
+                      "--cae <model>.cae")
+    return argv[1:]
 
 
 # ------------------------------------------------------------------------------------------------ the model as built, from the .cae
@@ -149,12 +170,35 @@ ORIENTATION = ("orientationType", "localCsys", "axis", "angle", "additionalRotat
 SECTION = ("symmetric", "preIntegrate", "integrationRule", "poissonDefinition", "poisson", "thicknessModulus", "idealization", "material",
            "thickness", "numIntPts")
 LAYER = ("plyName", "material", "thickness", "orientAngle", "numIntPts")
+ORIENTATION_ANGLES = {"ANGLE_0": 0.0, "ANGLE_45": 45.0, "ANGLE_90": 90.0, "ANGLE_NEG45": -45.0}  # a ply's angle given as one of Abaqus's choices
 STEP = ("previous", "description", "nlgeom", "timePeriod", "initialInc", "minInc", "maxInc", "maxNumInc", "stabilizationMethod")
 CONDITION = ("createStepName", "category", "region", "distributionType", "localCsys", "u1", "u2", "u3", "ur1", "ur2", "ur3", "cf1", "cf2", "cf3",
              "magnitude", "amplitude", "fixed", "buckleCase")
 CONSTRAINT = ("controlPoint", "surface", "influenceRadius", "couplingType", "localCsys", "u1", "u2", "u3", "ur1", "ur2", "ur3", "suppressed")
+# what a boundary condition, a load or an output request is in one step: the values live on the step, not on the object itself
+BC_STATE = ("u1", "u2", "u3", "ur1", "ur2", "ur3", "u1State", "u2State", "u3State", "ur1State", "ur2State", "ur3State", "amplitude",
+            "amplitudeState", "status")
+LOAD_STATE = ("cf1", "cf2", "cf3", "cf1State", "cf2State", "cf3State", "magnitude", "magnitudeState", "amplitude", "amplitudeState", "status")
+OUTPUT_STATE = ("variables", "variablesState", "frequency", "frequencyState", "numIntervals", "numIntervalsState", "timeInterval",
+                "timeIntervalState", "propagationState", "status")
+STATES = (("boundary_conditions", "boundaryConditionStates", BC_STATE), ("loads", "loadStates", LOAD_STATE),
+          ("field_output_requests", "fieldOutputRequestStates", OUTPUT_STATE),
+          ("history_output_requests", "historyOutputRequestStates", OUTPUT_STATE))
 OUTPUT = ("createStepName", "variables", "frequency", "numIntervals", "region", "sectionPoints", "layupNames", "layupLocationMethod",
           "outputAtPlyTop", "outputAtPlyMid", "outputAtPlyBottom", "position", "directions")
+
+
+def ply_as_built(ply) -> dict:
+    """One ply as Abaqus gives it, and `rotation_deg`: its angle in degrees whichever way it was given, as one of Abaqus's four
+    choices (ANGLE_45 with an angle of 0.0 beside it) or as a value. A ply turned by a coordinate system has none."""
+    described = attributes(ply, PLY)
+    given = described.get("orientationType")
+    value = described.get("orientationValue")
+    if given in ORIENTATION_ANGLES:
+        described["rotation_deg"] = ORIENTATION_ANGLES[given]
+    elif given == "SPECIFY_ORIENT" and isinstance(value, (int, float)) and not isinstance(value, bool):
+        described["rotation_deg"] = float(value)
+    return described
 
 
 def part_as_built(part) -> dict:
@@ -178,7 +222,9 @@ def part_as_built(part) -> dict:
         if orientation is not None:
             described["orientation"] = attributes(orientation, ORIENTATION)
         plies = layup.plies
-        described["plies"] = [attributes(plies[i], PLY) for i in range(len(plies))]
+        described["plies"] = [ply_as_built(plies[i]) for i in range(len(plies))]
+        # a symmetric layup lists half its plies: the count through the thickness is stated beside them
+        described["plies_through_thickness"] = len(plies) * (2 if described.get("symmetric") in (True, 1, "ON", "True") else 1)
         layups.append(described)
     out["layups"] = layups
     assignments = member(part, "sectionAssignments")
@@ -234,26 +280,50 @@ def model_as_built(model, name: str) -> dict:
                 "sets": [str(key) for key in root.sets.keys()], "surfaces": [str(key) for key in root.surfaces.keys()],
                 "reference_points": len(root.referencePoints)}
 
+    def described_as(entry_name, entry, names) -> dict:
+        described = dict(name=entry_name, kind=kind(entry), **attributes(entry, names))
+        region = described.get("region")
+        if isinstance(region, list) and region and isinstance(region[0], str):
+            described["region_set"] = region[0]  # Abaqus gives a region as (the set's name, where it lives, ...): the name, apart
+        return described
+
     def listed_as(repository, names):
-        return lambda: [dict(name=entry_name, kind=kind(entry), **attributes(entry, names)) for entry_name, entry in entries(repository())]
+        return lambda: [described_as(entry_name, entry, names) for entry_name, entry in entries(repository())]
+
+    def steps():
+        """Each step, and what every boundary condition, load and output request is in it: a displacement's value and an output
+        request's variables are on the step's states, not on the objects."""
+        listed = []
+        for step_name, step in entries(model.steps):
+            described = described_as(step_name, step, STEP)
+            for key, source, names in STATES:
+                try:
+                    states = getattr(step, source)
+                    described[key] = [dict(name=state_name, **attributes(state, names)) for state_name, state in entries(states)]
+                except Exception as exc:  # noqa: BLE001
+                    out["not_read"].append(f"steps/{step_name}/{key}: {type(exc).__name__}: {exc}")
+            listed.append(described)
+        return listed
 
     group("parts", lambda: [dict(name=part_name, **part_as_built(part)) for part_name, part in entries(model.parts)])
     group("materials", materials)
     group("sections", sections)
     group("assembly", assembly)
-    group("steps", listed_as(lambda: model.steps, STEP))
+    group("steps", steps)
     group("boundary_conditions", listed_as(lambda: model.boundaryConditions, CONDITION))
     group("loads", listed_as(lambda: model.loads, CONDITION))
     group("constraints", listed_as(lambda: model.constraints, CONSTRAINT))
     group("field_output_requests", listed_as(lambda: model.fieldOutputRequests, OUTPUT))
+    group("history_output_requests", listed_as(lambda: model.historyOutputRequests, OUTPUT))
     return out
 
 
 def read_cae(path: Path, model_name) -> dict:
-    """The model as built, read inside Abaqus/CAE. Only here are Abaqus/CAE's own modules imported. The file is opened and read; it
-    is never saved."""
+    """The model as built, read inside Abaqus/CAE from `path`, which is a copy of the user's file (`files_of`). Only here are
+    Abaqus/CAE's own modules imported. A model's constraints and output requests exist only once `caeModules` is loaded (Abaqus 2025)."""
     try:
         from abaqus import openMdb
+        import caeModules  # noqa: F401
     except Exception:  # noqa: BLE001  not Abaqus/CAE's kernel: abaqus python, or no Abaqus at all
         raise Refused("reading a .cae needs Abaqus/CAE: run  abaqus cae noGUI=anisotropy_connector.py -- <job>.odb --units ... --cae "
                       f"{path.name}  (abaqus python reads the ODB only)") from None
@@ -261,13 +331,20 @@ def read_cae(path: Path, model_name) -> dict:
         mdb = openMdb(pathName=str(path))
     except Exception as exc:  # noqa: BLE001  Abaqus's own error, in its words: a file of a newer release, or one it cannot open
         raise Refused(f"Abaqus/CAE could not open {path.name}: {exc}") from None
-    names = [str(key) for key in mdb.models.keys()]
-    if model_name is None and len(names) != 1:
-        raise Refused(f"{path.name} holds the models {names}; name one with --model")
-    if model_name is not None and model_name not in names:
-        raise Refused(f"{path.name} holds no model {model_name}; it holds {names}")
-    name = model_name or names[0]
-    return model_as_built(mdb.models[name], name)
+    try:
+        names = [str(key) for key in mdb.models.keys()]
+        if model_name is None and len(names) != 1:
+            raise Refused(f"{path.name} holds the models {names}; name one with --model")
+        if model_name is not None and model_name not in names:
+            raise Refused(f"{path.name} holds no model {model_name}; it holds {names}")
+        name = model_name or names[0]
+        return model_as_built(mdb.models[name], name)
+    finally:
+        try:  # an empty database in its place lets go of the copy, so its folder can be removed
+            from abaqus import Mdb
+            Mdb()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # ------------------------------------------------------------------------------------------------ the bundle
@@ -307,7 +384,10 @@ def files_of(args, folder: Path, read_job=None, read_model=None) -> tuple[dict, 
     if journal is not None and journal.is_file():
         files["journal"] = journal
     if args.cae:
-        model = (read_model or read_cae)(args.cae.resolve(), args.model)
+        copy = folder / "cae" / args.cae.name  # the user's own .cae is never opened: opening one changes the file
+        copy.parent.mkdir()
+        shutil.copyfile(str(args.cae), str(copy))
+        model = (read_model or read_cae)(copy, args.model)
         files["model"] = folder / f"{stem}-model.json"
         with io.open(str(files["model"]), "w", encoding="utf-8", newline="\n") as handle:
             json.dump(model, handle, indent=1, sort_keys=True)
@@ -315,8 +395,16 @@ def files_of(args, folder: Path, read_job=None, read_model=None) -> tuple[dict, 
     return files, results
 
 
+class Parser(argparse.ArgumentParser):
+    """argparse, saying its help and its errors where the user sees them (`say`)."""
+
+    def _print_message(self, message, file=None):
+        if message:
+            say(message.rstrip("\n"), error=file is not sys.stdout)
+
+
 def parse(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="anisotropy_connector.py", description=__doc__.splitlines()[0])
+    parser = Parser(prog="anisotropy_connector.py", description=__doc__.splitlines()[0])
     parser.add_argument("odb", type=Path, help="the finished job's .odb")
     parser.add_argument("--units", required=True, choices=UNITS, help="the system the model is written in; an Abaqus model carries none")
     parser.add_argument("--inp", type=Path, default=None, help="the input file Abaqus solved; default <job>.inp beside the ODB")
@@ -335,7 +423,7 @@ def main(argv=None, read_job=None, read_model=None) -> int:
     args = parse(command_line(sys.argv) if argv is None else argv)
     bundle = load("bundle")
     out = args.out or args.odb.with_name(f"{args.odb.stem}-anisotropy.zip")
-    with tempfile.TemporaryDirectory() as folder:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:  # Abaqus/CAE may still hold the copy of the .cae
         files, results = files_of(args, Path(folder), read_job, read_model)
         written = bundle.write_bundle(out, files, args.units, CONNECTOR, abaqus=results["solver"], python=abaqus_python(), job=args.odb.stem,
                                       coupon=args.coupon, results=results)
@@ -349,15 +437,21 @@ def main(argv=None, read_job=None, read_model=None) -> int:
 
 
 def run(argv=None, read_job=None, read_model=None) -> int:
-    """`main`, with a refusal said in one line: exit 0 written, 2 refused."""
+    """`main`, with every ending said in one place: exit 0 written, 2 refused or stopped. Abaqus/CAE writes an error of a script in
+    `abaqus.rpy` only and ends with 0, so there nothing may leave this function unsaid."""
     try:
         return main(argv, read_job, read_model)
     except Refused as exc:
         say(f"refused: {exc}", error=True)
-    except Exception as exc:  # the ODB reader's and the bundle's own refusals, by their names: both say what to do
-        if type(exc).__name__ not in ("ExtractError", "BundleRefused"):
+    except SystemExit as exc:  # argparse, which has said why
+        return exc.code if isinstance(exc.code, int) else 2
+    except Exception as exc:  # noqa: BLE001
+        if type(exc).__name__ in ("ExtractError", "BundleRefused"):  # the ODB reader's and the bundle's own refusals: both say what to do
+            say(f"refused: {exc}", error=True)
+        elif under_cae():
+            say("the connector stopped, and no bundle was written:\n" + traceback.format_exc(), error=True)
+        else:
             raise
-        say(f"refused: {exc}", error=True)
     return 2
 
 
