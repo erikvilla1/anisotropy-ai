@@ -250,7 +250,8 @@ def test_the_model_reader_writes_what_abaqus_gives_as_plain_values_and_names_wha
     step = model["steps"][1]
     assert {key: step[key] for key in ("name", "previous", "nlgeom", "timePeriod")} == {"name": "Step-1", "previous": "Initial", "nlgeom": "OFF", "timePeriod": 1.0}
     # the pull is on the step's state of the boundary condition, and what is asked for on the step's state of the request
-    assert step["boundary_conditions"] == [{"name": "Pull", "u1": 0.0, "u2": 1.0, "u1State": "UNSET", "u2State": "SET", "amplitudeState": "UNSET"}]
+    # and a direction left free is null, not the 0.0 Abaqus holds for it, which would read as held at zero
+    assert step["boundary_conditions"] == [{"name": "Pull", "u1": None, "u2": 1.0, "u1State": "UNSET", "u2State": "SET", "amplitudeState": "UNSET"}]
     assert step["field_output_requests"] == [{"name": "F-Output-1", "variables": ["S", "E", "RF"], "variablesState": "SET", "frequency": 1}]
     assert step["loads"] == [] and "history_output_requests" not in step
     assert model["boundary_conditions"][0] == {"name": "Pull", "kind": "SimpleNamespace", "createStepName": "Step-1", "category": "MECHANICAL",

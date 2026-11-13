@@ -26,7 +26,7 @@ ends with 0 whatever the script did), so the line the command prints is the answ
 The standard library and Abaqus's own modules only; `odbAccess` and `abaqus` are imported inside the two readers, so everything else
 is plain Python that the tests run without Abaqus. What the model reader could not read is listed in the file under `not_read`
 instead of stopping the bundle. Its attribute names are Abaqus's scripting interface as documented; those a model imported from an
-input file has were seen on Abaqus 2025, the rest (a model drawn in Abaqus/CAE: its sections, loads and constraints) are UNVERIFIED.
+input file has were read on Abaqus 2025, the rest (a model drawn in Abaqus/CAE: its sections, loads and constraints) are UNVERIFIED.
 """
 
 from __future__ import annotations
@@ -151,6 +151,15 @@ def count(thing, name: str):
         return len(getattr(thing, name))
     except Exception:  # noqa: BLE001
         return None
+
+
+def as_stated(described: dict) -> dict:
+    """A step's state with nothing said that Abaqus does not say: a value whose own `...State` is UNSET becomes null. Abaqus gives 0.0
+    for a degree of freedom that is left free, which would read as held at zero."""
+    for key in list(described):
+        if described.get(key + "State") == "UNSET":
+            described[key] = None
+    return described
 
 
 def entries(repository) -> list:
@@ -299,7 +308,7 @@ def model_as_built(model, name: str) -> dict:
             for key, source, names in STATES:
                 try:
                     states = getattr(step, source)
-                    described[key] = [dict(name=state_name, **attributes(state, names)) for state_name, state in entries(states)]
+                    described[key] = [as_stated(dict(name=state_name, **attributes(state, names))) for state_name, state in entries(states)]
                 except Exception as exc:  # noqa: BLE001
                     out["not_read"].append(f"steps/{step_name}/{key}: {type(exc).__name__}: {exc}")
             listed.append(described)
