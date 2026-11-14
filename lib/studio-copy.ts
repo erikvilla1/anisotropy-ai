@@ -200,20 +200,56 @@ export const RUN_STEPS: { id: RunStepId; label: string; doing: string }[] = [
 ];
 
 /** The pipeline's stage names (fea/tools/run_coupon.py STAGES) and the step each belongs to. A stage this list does not know counts as
- * solving, the step a new stage is most likely to join. */
+ * solving, the step a new stage is most likely to join. The drawings come after the result is on the page, so they are part of writing
+ * the report (ADR-0064 amendment 1). */
 const STAGE_STEP: Record<string, RunStepId> = {
   "the setup check": "meshing", "the input": "meshing", "the decks": "meshing", "the attempt": "meshing",
   "our engine": "solving", "the convergence study": "solving", "CalculiX": "solving",
-  "the CalculiX record": "post", "the result": "post", "the drawings": "post",
-  "the package": "report", "the outputs": "report",
+  "the CalculiX record": "post", "the result": "post",
+  "the drawings": "report", "the package": "report", "the outputs": "report",
 };
 export const stepOfStage = (stage: string | null | undefined): RunStepId => (stage ? STAGE_STEP[stage] ?? "solving" : "meshing");
+
+/** The solver's own phases around the tool's stages (ADR-0056 amendment 6) and the step each belongs to: fetching the coupons before
+ * the run, sending the files after it. Its waits for the naming lock and at the gate (`lock_wait_s`, `gate_s`) fall inside the tool's
+ * first stages, which are timed already, so they are not added again. */
+const PHASE_STEP: Record<string, RunStepId> = { restore_s: "meshing", upload_s: "report" };
+
+/** The seconds each step took, from a job's timings: the queue from when the job was filed to when a solver took it up, every other step
+ * the sum of its stages and of the solver's phases in it. A step with no timing is left out. */
+export function stepSeconds(job: Pick<JobStatus, "started_at" | "claimed_at" | "timings">): Partial<Record<RunStepId, number>> {
+  const out: Partial<Record<RunStepId, number>> = {};
+  if (job.claimed_at) {
+    const waited = (Date.parse(job.claimed_at) - Date.parse(job.started_at)) / 1000;
+    if (Number.isFinite(waited) && waited >= 0) out.queued = waited;
+  }
+  for (const [name, seconds] of Object.entries(job.timings ?? {})) {
+    const step = PHASE_STEP[name] ?? (name.endsWith("_s") ? null : stepOfStage(name));
+    if (step === null || !Number.isFinite(seconds)) continue;
+    out[step] = (out[step] ?? 0) + seconds;
+  }
+  return out;
+}
+
+/** Seconds as the run's steps show them: tenths under ten, whole seconds above, by the page's number rule. */
+export function secondsText(seconds: number): string {
+  const rounded = seconds < 10 ? Math.round(seconds * 10) / 10 : Math.round(seconds);
+  return `${formatNumber(rounded, { zeros: false })} s`;
+}
+
+/** How long a finished run took from the click to the last file: "Finished in 61 s."; null until it is done. */
+export function runTook(job: Pick<JobStatus, "state" | "started_at" | "finished_at">): string | null {
+  if (job.state !== "done" || !job.finished_at) return null;
+  const seconds = (Date.parse(job.finished_at) - Date.parse(job.started_at)) / 1000;
+  return Number.isFinite(seconds) && seconds >= 0 ? `Finished in ${secondsText(seconds)}.` : null;
+}
 /** The step a job is at: a job that ended before any stage (refused at the gate, or never taken up) ended in the queue. */
 const stepOfJob = (job: Pick<JobStatus, "state" | "stage">): RunStepId =>
   !job.stage && (job.state === "stopped" || job.state === "refused") ? "queued" : stepOfStage(job.stage);
-/** A finished job whose report was not written: the outcome says so, or (a job read back from its row) no package was stored. */
+/** A finished job whose report was not written: the outcome says so, or, for a job that does not say, its files hold no PDF. "Report ready"
+ * means the PDF exists, not only the package (ADR-0064 amendment 2). */
 const reportMissing = (job: Pick<JobStatus, "documents"> & { outputs?: JobStatus["outputs"] }): boolean =>
-  job.documents ? job.documents !== "written" : job.outputs !== undefined && !("package" in job.outputs);
+  job.documents ? job.documents !== "written" : job.outputs !== undefined && !("document" in job.outputs);
 const order = (id: RunStepId) => RUN_STEPS.findIndex((s) => s.id === id);
 
 export type StepState = "done" | "current" | "waiting" | "stopped";
@@ -313,6 +349,10 @@ export const DOWNLOAD_LABELS: [string, string][] = [
 export const CUSTOMER_DOWNLOADS: readonly string[] = ["document", "abaqus_deck"];
 /** The files offered, in order: the customer's, or every one with the development switch on. */
 export const downloadsFor = (all: boolean): [string, string][] => DOWNLOAD_LABELS.filter(([key]) => all || CUSTOMER_DOWNLOADS.includes(key));
+/** The files a job offers to download: none while it runs, since its files are still being written and stored and a link would fail
+ * (ADR-0064 amendment 2); once it has ended, those of `downloadsFor` it made. */
+export const downloadable = (job: Pick<JobStatus, "state" | "outputs"> | null | undefined, all: boolean): [string, string][] =>
+  job && (job.state === "done" || job.state === "stopped") ? downloadsFor(all).filter(([key]) => key in job.outputs) : [];
 /** The neutral name a file is asked for by (ADR-0091 amendment 2): what it is, not the program it is for; the API maps it back. */
 export const FILE_URL_KEY: Record<string, string> = { abaqus_deck: "solver_input", prepomax_deck: "reference_input", prepomax_results: "reference_results" };
 const DOWNLOAD_SUFFIX: Record<string, string> = {

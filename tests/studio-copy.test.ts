@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  bannedIn, checkText, CUSTOMER_DOWNLOADS, customerText, downloadName, DOWNLOAD_LABELS, downloadsFor, FILE_URL_KEY, heldWords, loadWords, queueAhead, rowProblems,
-  RUN_STEPS, runDetail, runHeadline, runProblem, runStatus, runSteps, setWords, shownSentence, verificationOf, withSymbols,
+  bannedIn, checkText, CUSTOMER_DOWNLOADS, customerText, downloadable, downloadName, DOWNLOAD_LABELS, downloadsFor, FILE_URL_KEY, heldWords, loadWords, queueAhead, rowProblems,
+  RUN_STEPS, runDetail, runHeadline, runProblem, runStatus, runSteps, runTook, secondsText, setWords, shownSentence, stepSeconds, verificationOf, withSymbols,
 } from "../lib/studio-copy";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
@@ -15,6 +15,7 @@ test("the pipeline's stages fold into five steps, and a job's state says which i
   assert.equal(states({ state: "queued", stage: null }), "current waiting waiting waiting waiting");
   assert.equal(states(fixture("job-running")), "done done current waiting waiting"); // "our engine": solving
   assert.equal(states({ state: "running", stage: "the CalculiX record" }), "done done done current waiting");
+  assert.equal(states({ state: "running", stage: "the drawings" }), "done done done done current"); // after the result: the report's (ADR-0064 am. 1)
   assert.equal(states(fixture("job-result-in")), "done done done done current"); // "the package": the report is being written
   assert.equal(states(fixture("job-done")), "done done done done done");
   assert.equal(states({ state: "done", stage: "the outputs", documents: "the package not written (Tectonic stopped)" }), "done done done done stopped");
@@ -23,7 +24,35 @@ test("the pipeline's stages fold into five steps, and a job's state says which i
   assert.equal(states({ state: "stopped", stage: null }), "stopped waiting waiting waiting waiting"); // never taken up: it ended in the queue
   const stored = (outputs: Record<string, string>) => runSteps({ state: "done", stage: "the outputs", documents: null, outputs }).map((s) => s.state).join(" ");
   assert.equal(stored({ fields: "f" }), "done done done done stopped"); // read back from its row with no package stored: no report
-  assert.equal(stored({ fields: "f", package: "p" }), "done done done done done");
+  assert.equal(stored({ fields: "f", package: "p" }), "done done done done stopped"); // a package without its PDF is no report (ADR-0064 am. 2)
+  assert.equal(stored({ fields: "f", package: "p", document: "d" }), "done done done done done");
+  const missing = { state: "done", stage: "the outputs", documents: "the package was written without its document", outputs: { package: "p" } };
+  assert.equal(runSteps(missing as Parameters<typeof runSteps>[0]).map((s) => s.state).join(" "), "done done done done stopped"); // the hosted row's word
+});
+
+test("each step shows the seconds it took, and a done run how long it took in all (ADR-0064 amendment 1)", () => {
+  // the hosted run of 2026-11-14 (job dfbb2082): its row's timings and times
+  const job = {
+    state: "done" as const, started_at: "2026-11-14T17:36:48.133+00:00", claimed_at: "2026-11-14T17:36:58.333+00:00", finished_at: "2026-11-14T17:38:33.706+00:00",
+    timings: { gate_s: 2.5, CalculiX: 5.6, upload_s: 9.7, restore_s: 14.1, "the decks": 0.5, "the input": 2.3, "our engine": 3.4, "the result": 0.3,
+      lock_wait_s: 0.3, "the attempt": 0, "the outputs": 0.2, "the package": 35.2, "the drawings": 6, "the setup check": 1.1, "the CalculiX record": 4.7,
+      "the convergence study": 7.2 },
+  };
+  const seconds = stepSeconds(job);
+  const near = (a: number | undefined, b: number) => assert.ok(a !== undefined && Math.abs(a - b) < 1e-9, `${a} is not ${b}`);
+  near(seconds.queued, 10.2); // filed to taken up
+  near(seconds.meshing, 14.1 + 1.1 + 2.3 + 0.5 + 0); // the coupons fetched, then the tool's first stages; the lock and gate waits are inside them
+  near(seconds.solving, 3.4 + 7.2 + 5.6);
+  near(seconds.post, 4.7 + 0.3);
+  near(seconds.report, 6 + 35.2 + 0.2 + 9.7); // the drawings, the package, the outputs and the upload
+  assert.deepEqual(Object.keys(stepSeconds({ started_at: job.started_at, claimed_at: null, timings: { "our engine": 1.2, some_phase_s: 3 } })), ["solving"]); // local: no queue
+  assert.deepEqual(stepSeconds({ started_at: job.started_at, claimed_at: null }), {});
+  assert.equal(secondsText(4.23), "4.2 s");
+  assert.equal(secondsText(0.04), "0 s");
+  assert.equal(secondsText(16.24), "16 s");
+  assert.equal(secondsText(105.4), "105 s");
+  assert.equal(runTook(job), "Finished in 106 s."); // 105.6 s from the click to the last file
+  assert.equal(runTook({ ...job, state: "running", finished_at: null }), null);
 });
 
 test("the run in a word, and a stopped run in plain language with what to do", () => {
@@ -62,6 +91,15 @@ test("the verification line says verified only when every value agrees, from the
   assert.deepEqual(verificationOf("52 of 57 recorded values agree with CalculiX"), { line: "Reference solver check: 52 of 57 values agree", verified: false });
   assert.equal(verificationOf(null), null);
   assert.equal(verificationOf("the package not written"), null);
+});
+
+test("files are offered once the run has ended, never while they are still being written (ADR-0064 amendment 2)", () => {
+  const outputs = { document: "d", abaqus_deck: "a", prepomax_deck: "p", package: "z" };
+  assert.deepEqual(downloadable({ state: "running", outputs }, true), []);
+  assert.deepEqual(downloadable({ state: "queued", outputs }, false), []);
+  assert.deepEqual(downloadable({ state: "done", outputs }, false).map(([key]) => key), ["document", "abaqus_deck"]);
+  assert.deepEqual(downloadable({ state: "stopped", outputs: { prepomax_deck: "p" } }, true).map(([key]) => key), ["prepomax_deck"]); // a stopped run's deck
+  assert.deepEqual(downloadable(null, true), []);
 });
 
 test("a downloaded file is named by the standard and the layup, never by an internal code", () => {

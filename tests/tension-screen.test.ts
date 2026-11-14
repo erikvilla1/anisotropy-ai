@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { blankForm, exampleForm, fieldByKey } from "../lib/studio-form";
 import { bannedIn } from "../lib/studio-copy";
 import {
-  builtLines, D3039, fixRowWords, needsPlyThickness, OWN_MATERIAL_KEYS, TENSION_HINTS, tensionLabel, tensionMissing, tensionReady, tensionValues, underD3039,
+  builtLines, D3039, fixRowWords, needsPlyThickness, OWN_MATERIAL_KEYS, TENSION_HINTS, tensionLabel, tensionMissing, tensionReady, tensionValues, underD3039, valuesInUse,
 } from "../lib/tension-screen";
 import { missingIn, nextStep } from "../lib/studio-chat";
 
@@ -61,6 +61,11 @@ test("How we built it reads the checklist's list: the row's label, the value in 
     ["control", "Loading type", "Displacement"], ["value", "Applied displacement (mm)", "1"], ["criteria", "Failure criterion", "All"],
     ["strain_device", "Strain measurement", "Extensometer"]]); // fea-run-12, fea-run-15: every text value in sentence case
   assert.deepEqual(builtLines(null), []);
+  // a blank field under Change settings shows the number in use (ADR-0090 amendment 1); text rows have no placeholder
+  assert.deepEqual(valuesInUse(checklist), { width: "25", value: "1" });
+  assert.deepEqual(valuesInUse({ ...checklist, built: [{ row: "length", value: 250.0, reason: "Table 2" }, { row: "tab_length", value: 56, reason: "ours" },
+    { row: "element_size", value: 1.5, reason: "a structured mesh" }] }), { length: "250", tab_length: "56", element_size: "1.5" });
+  assert.deepEqual(valuesInUse(null), {});
 });
 
 test("the screen's own hints and labels are the customer's words (audit fea-run-6)", () => {

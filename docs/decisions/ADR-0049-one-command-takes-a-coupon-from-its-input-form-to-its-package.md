@@ -1,6 +1,6 @@
 # ADR-0049: One command takes a coupon from its input form to its package, and the CalculiX record keeps the gauge probes
 
-- Status: Proposed
+- Status: Proposed; the steps run in the tool's own process since amendment 1 (2026-11-14)
 - Date: 2026-10-26
 - Decided by: Founder, 2026-10-26 ("i am settled with the order above": step 1 of ADR-0048, one command per job with an end-to-end test) | Drafted by: Claude Code
 - Related: [ADR-0048](ADR-0048-the-assistant-drives-tested-jobs-built-after-one-command-per-job-and-an-api-job.md), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0043](ADR-0043-coupon-audit-scored-by-a-fixed-rubric-delivered-as-one-package-folder.md), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md), `fea/tools/run_coupon.py`, `fea/tests/test_run_coupon.py`, `fea/src/anisotropy_fea/intake.py` (`gauge_probes`, `next_commands`)
@@ -51,3 +51,17 @@ Option 3, with the gauge probes and a row for every run.
 ## How we will know it was wrong
 
 If coupons the form describes are still run step by step, or the end-to-end test is skipped on CI because CalculiX is missing.
+
+## Amendment 1, 2026-11-14 (the steps run in the tool's own process; asked for by the founder: "the meshing to the solving to post processign takes wayyyy to long")
+
+**Context.** The founder's hosted run of 2026-11-14 (AS4/3501-6, [45/0/-45/90]s; its jobs row read with his leave) took 105 s from the click to the last file and showed the result at about 50 s. `script()` started a Python per step (our engine, the convergence study, CalculiX, the record, the drawings), and each imported the analysis code again: about 2 to 4 s each ([the live-solve evaluation](../evaluations/fea/2026-11-10-live-solve.md)).
+
+**Options.**
+1. *Run each script in the tool's own process with `runpy`* (chosen). The scripts do not change; the step's console, exit code and last words are what a Python of its own gave; `ANISOTROPY_STEP_PROCESS=1` keeps the old way for diagnosis.
+2. *Call each script's functions directly.* Rejected for now: the five scripts' command lines would become a second interface to keep level with the first.
+3. *A warm worker per solver, as the live preview has (ADR-0086).* Rejected for now: a solver runs one tool per job, and one process per run already removes the repeated imports.
+4. *Run our engine, the study and CalculiX at the same time.* Not built: the most it can save is the CalculiX stage (4.1 s on the founder's machine); the hosted solver has about two cores (standard-3, UNVERIFIED) and CalculiX's assembly already takes every core; the progress strip and the console follow one stage at a time.
+
+**Decision.** Option 1. A step that fails in the process fails the run at that step, as before; a crash of the Python itself, not an exception, now ends the run rather than only the step.
+
+**Evidence.** The same values on the founder's Windows machine with the PDF (2026-11-14): main showed the result at 34.6 and 29.5 s and finished at 75.2 and 60.4 s; with this amendment and ADR-0064 amendment 1, 16.7 s and 52.0 s. Our engine's fields, convergence study, explanation, summary, every-output CSV and decks are identical to main's apart from timing fields; CalculiX's `.dat` differs between two runs of main as well. `fea/tests/test_run_coupon.py`: 16 passed, a new test running a step both ways. The hosted times are UNVERIFIED until the next deploy.

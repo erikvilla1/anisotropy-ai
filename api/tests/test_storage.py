@@ -12,7 +12,7 @@ import pytest
 
 from anisotropy_api import storage
 from anisotropy_api.settings import StorageSettings
-from memory_store import MemoryStore
+from memory_store import FailingStore, MemoryStore
 
 LIVE = {name: os.environ.get(f"TEST_S3_{name}", "").strip() for name in ("ENDPOINT", "BUCKET", "ACCESS_KEY_ID", "SECRET_ACCESS_KEY")}
 needs_live_store = pytest.mark.skipif(not all(LIVE.values()), reason="TEST_S3_ENDPOINT, TEST_S3_BUCKET, TEST_S3_ACCESS_KEY_ID and TEST_S3_SECRET_ACCESS_KEY not all set")
@@ -100,6 +100,76 @@ def test_the_coupon_folder_round_trips_and_a_restore_fills_only_what_the_disk_la
     assert (fresh / "OTHER-1" / "ours" / "OTHER-1.toml").is_file()
     assert not (fresh / "escape.txt").exists() and not (tmp_path / "escape.txt").exists() and not (fresh / "a").exists()
     assert storage.restore(store, fresh) == (0, 2)  # everything there now
+
+
+def put_text(store: MemoryStore, tmp_path: Path, key: str, text: str) -> None:
+    source = tmp_path / "source.txt"
+    source.write_bytes(text.encode("utf-8"))
+    store.put(key, source, "text/plain")
+
+
+def test_a_warm_solver_fetches_only_what_changed_and_keeps_nothing_the_store_does_not_hold(tmp_path):
+    """A warm solver's start (ADR-0056 amendment 9): the disk ends as a fresh restore would leave it, the store's coupons and nothing
+    else, having fetched only the files that are missing or differ."""
+    store, root = MemoryStore(), tmp_path / "fea"
+    put_text(store, tmp_path, "coupons/A-1/folder/README.md", "# A-1\n")
+    put_text(store, tmp_path, "coupons/A-1/folder/ours/A-1.toml", "[coupon]\n")
+    put_text(store, tmp_path, "coupons/B-1/folder/ours/B-1.toml", "[coupon]\n")
+    put_text(store, tmp_path, "coupons/A-1/folder/ours/runs/attempt-01/run/A-1.frd", "left out of the folder's copy")
+    assert storage.sync(store, root, prune=True) == (3, 2)
+    assert storage.sync(store, root, prune=True) == (0, 2)  # warm: nothing changed, nothing fetched
+    assert not (root / "A-1" / "ours" / "runs").exists()  # a file the folder's copy leaves out is never fetched
+
+    # what a job on this container wrote and the store never got: a changed case page, a new attempt, a run's big file, a new coupon
+    (root / "A-1" / "README.md").write_bytes(b"# A-1\n\n| 02 | stopped |\n")
+    attempt = root / "A-1" / "ours" / "runs" / "attempt-02_2026-11-14" / "run" / "kernel"
+    attempt.mkdir(parents=True)
+    (attempt / "A-1-fields.json").write_text("{}", encoding="utf-8")
+    (root / "C-1" / "ours").mkdir(parents=True)
+    (root / "C-1" / "ours" / "C-1.toml").write_text("[coupon]\n", encoding="utf-8")
+    store.delete("coupons/B-1/folder/ours/B-1.toml")  # a coupon the store no longer holds
+    put_text(store, tmp_path, "coupons/A-1/folder/ours/A-1.toml", "[coupon]\nname = 'A-1'\n")  # changed by another solver
+    assert storage.sync(store, root, prune=True) == (2, 1)  # the case page fetched back and the changed spec; nothing else
+    assert (root / "A-1" / "README.md").read_bytes() == b"# A-1\n"
+    assert (root / "A-1" / "ours" / "A-1.toml").read_text(encoding="utf-8") == "[coupon]\nname = 'A-1'\n"
+    assert sorted(p.relative_to(root).as_posix() for p in root.rglob("*")) == [
+        storage.TAGS, "A-1", "A-1/README.md", "A-1/ours", "A-1/ours/A-1.toml"]  # no empty attempt folder is left to be counted
+
+    # without pruning, as the API's container keeps its disk level, a file the store does not hold stays
+    (root / "A-1" / "notes.txt").write_text("mine\n", encoding="utf-8")
+    assert storage.sync(store, root) == (0, 1) and (root / "A-1" / "notes.txt").is_file()
+
+
+def test_a_warm_solver_judges_an_object_put_in_parts_by_the_tag_it_kept(tmp_path):
+    """An object uploaded in parts has a tag that is not its content's MD5: the disk's copy is judged by the tag it was fetched under."""
+    store, root = MemoryStore(), tmp_path / "fea"
+    put_text(store, tmp_path, "coupons/A-1/folder/ours/decks/A-1-abaqus.inp", "*Heading\n")
+    tags = {"coupons/A-1/folder/ours/decks/A-1-abaqus.inp": '"0123456789abcdef0123456789abcdef-3"'}
+    store.tags = lambda prefix: {key: tag for key, tag in tags.items() if key.startswith(prefix)}
+    assert storage.sync(store, root, prune=True) == (1, 1)
+    assert storage.sync(store, root, prune=True) == (0, 1)
+    tags["coupons/A-1/folder/ours/decks/A-1-abaqus.inp"] = '"fedcba9876543210fedcba9876543210-3"'
+    assert storage.sync(store, root, prune=True) == (1, 1)
+
+
+def test_many_files_go_at_once_and_a_failure_still_fails_the_upload(tmp_path):
+    outputs = {}
+    for index in range(20):
+        path = tmp_path / f"file-{index:02d}.json"
+        path.write_text(str(index), encoding="utf-8")
+        outputs[f"key{index:02d}"] = path
+    store = MemoryStore()
+    stored = storage.store_job(store, "A-1", "attempt-02", outputs, None)
+    assert len(stored) == 20 and all(store.objects[key][0] == outputs[name].read_bytes() for name, key in stored.items())
+    with pytest.raises(OSError, match="AccessDenied"):
+        storage.store_job(FailingStore(), "A-1", "attempt-02", outputs, None)
+    folder = tmp_path / "fea" / "A-1"
+    folder.mkdir(parents=True)
+    for index in range(12):
+        (folder / f"f{index}.toml").write_text(str(index), encoding="utf-8")
+    assert storage.store_folder(store, folder, "A-1") == 12
+    with pytest.raises(OSError, match="AccessDenied"):
+        storage.store_folder(FailingStore(), folder, "A-1")
 
 
 def test_the_r2_client_is_built_from_the_settings_without_the_network():

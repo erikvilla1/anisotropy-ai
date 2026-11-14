@@ -25,13 +25,16 @@ any other text refuses the run with that text; the hosted tier's solver claims t
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
 import platform
+import runpy
 import subprocess
 import sys
 import time
+import traceback
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -206,9 +209,87 @@ def wait_at_gate(gate: Path | None, progress: Progress) -> None:
         raise Refused(word or "the gate refused the run")
 
 
+STEP_PROCESS = "ANISOTROPY_STEP_PROCESS"  # "1": every step in a Python of its own, as before ADR-0049 amendment 1, to tell a step's fault from the run's
+
+
+class Echo:
+    """The console of a step run in this process: every write goes on to the run's console as it comes, and the last line that is not
+    blank is kept, as the pipe of a step in its own Python was read. A script asking for UTF-8 is answered: the run's console is."""
+
+    def __init__(self, stream):
+        self.stream, self.last, self._line = stream, "", ""
+
+    def write(self, text: str) -> int:
+        self.stream.write(text)
+        self._line += text
+        *ended, self._line = self._line.split("\n")
+        for line in ended:
+            if line.strip():
+                self.last = line.strip()
+        if ended:
+            self.stream.flush()
+        return len(text)
+
+    def flush(self) -> None:
+        self.stream.flush()
+
+    def reconfigure(self, **_) -> None:
+        pass
+
+    def last_words(self) -> str:
+        return self._line.strip() or self.last
+
+    def __getattr__(self, name: str):
+        return getattr(self.stream, name)
+
+
+def exit_code(exc: SystemExit) -> int:
+    """The code a Python would end with on this SystemExit: 0 for none, the number given, or 1 with the message printed, as
+    `raise SystemExit("why")` does."""
+    if exc.code is None:
+        return 0
+    if isinstance(exc.code, int):
+        return exc.code
+    print(exc.code, file=sys.stderr)
+    return 1
+
+
 def script(step: str, args: list[str], cwd: Path) -> None:
-    """One of our scripts under this Python, its output echoed to the console line by line; a nonzero exit stops the run at `step`,
-    and the message carries the script's own last words, so the job's message says what happened, not only the exit code."""
+    """One of our scripts, its output echoed to the console as it comes; a nonzero exit stops the run at `step`, and the message
+    carries the script's own last words, so the job's message says what happened, not only the exit code. It runs in this process
+    (ADR-0049 amendment 1): the analysis code is imported once per run, where a Python per step imported it five times, 2 to 4 s each;
+    with ANISOTROPY_STEP_PROCESS=1 each step runs in a Python of its own, as before."""
+    if os.environ.get(STEP_PROCESS) == "1":
+        return script_process(step, args, cwd)
+    path = Path(args[0])
+    echo = Echo(sys.stdout)
+    argv, here, search = sys.argv, os.getcwd(), list(sys.path)
+    sys.argv = [str(path), *args[1:]]
+    sys.path.insert(0, str(path.parent))  # as `python <script>` puts the script's folder first, for the neighbours it imports
+    code = 0
+    try:
+        os.chdir(cwd)
+        with contextlib.redirect_stdout(echo), contextlib.redirect_stderr(echo):
+            try:
+                runpy.run_path(str(path), run_name="__main__")
+            except SystemExit as exc:
+                code = exit_code(exc)
+            except Exception:  # a Python of its own would print the traceback and end with 1
+                traceback.print_exc()
+                code = 1
+    finally:
+        sys.argv = argv
+        sys.path[:] = search
+        os.chdir(here)
+        echo.flush()
+    if code:
+        last = echo.last_words()
+        words = f": {last[:300]}" if last else ""
+        raise StepFailed(f"{step}: {path.name} exited with code {code}{words}")
+
+
+def script_process(step: str, args: list[str], cwd: Path) -> None:
+    """`script` with the step in a Python of its own (ANISOTROPY_STEP_PROCESS=1), its output echoed line by line."""
     process = subprocess.Popen([sys.executable, *args], cwd=cwd, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
     last = ""
@@ -223,10 +304,20 @@ def script(step: str, args: list[str], cwd: Path) -> None:
         raise StepFailed(f"{step}: {Path(args[0]).name} exited with code {process.returncode}{words}")
 
 
-def package(name: str, pdf: bool, theory: bool, attempt: str | None = None) -> Path:
+def study_of(path: Path) -> dict | None:
+    """The run's mesh convergence study as tools/convergence_study.py wrote it, for the package to print instead of solving it again
+    (ADR-0064 amendment 1); None when the run has none, and the package then solves it itself."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def package(name: str, pdf: bool, theory: bool, attempt: str | None = None, study: dict | None = None) -> Path:
     """The coupon's document and package, built in this process so that they read the coupon where this run wrote it; returns the
     package folder, which docs/models/coupon.py names by the day it is built. `attempt` is this run's, which the package names as the one
-    it delivers: its results are this run's, not the case page's accepted attempt (on a new coupon, the reading of its input)."""
+    it delivers: its results are this run's, not the case page's accepted attempt (on a new coupon, the reading of its input). `study`
+    is this run's convergence study, which the document prints as it is."""
     module = sys.modules.get(COUPON_DOCUMENT)
     if module is None:
         spec = importlib.util.spec_from_file_location(COUPON_DOCUMENT, paths.ROOT / "docs" / "models" / "coupon.py")
@@ -234,7 +325,7 @@ def package(name: str, pdf: bool, theory: bool, attempt: str | None = None) -> P
         sys.modules[COUPON_DOCUMENT] = module
         spec.loader.exec_module(module)
     try:
-        _, folder = module.build_document(module.sources(name, paths.LOCAL), pdf=pdf, theory=theory, attempt=attempt)
+        _, folder = module.build_document(module.sources(name, paths.LOCAL), pdf=pdf, theory=theory, attempt=attempt, study=study)
     except SystemExit as exc:  # the document code stops with a message, as a script does
         raise StepFailed(f"the package: {exc}") from None
     except Exception as exc:  # any other failure of the document is reported on the run, which stands (ADR-0064), and names the error
@@ -453,7 +544,7 @@ def documents_of(name: str, out: Path, spec: Path, pdf: bool, theory: bool, prog
     progress.start("the package")
     delivered = None
     try:
-        delivered = package(name, pdf, theory, attempt)
+        delivered = package(name, pdf, theory, attempt, study_of(kernel / f"{name}-convergence.json"))
         progress.made(package=delivered)
     except StepFailed as exc:
         failed.append(f"the package not written ({exc})")

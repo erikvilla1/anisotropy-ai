@@ -1,6 +1,6 @@
 # ADR-0064: A coupon job reports its result before it draws and builds the package
 
-- Status: Proposed
+- Status: Proposed; the drawings in the report's step, the run's study printed by the package and every step's seconds on the page, amendment 1 (2026-11-14); Report ready only with the PDF and files once the run has ended, amendment 2 (2026-11-14)
 - Date: 2026-11-07
 - Decided by: Erik Villa (asked for "point 2": plots, the package and the PDF out of the job's critical path) | Drafted by: Claude
 - Related: ADR-0049 (one command per coupon), ADR-0050 (coupon jobs), ADR-0051 (the studio), ADR-0056 amendment 3 (the job queue); `fea/tools/run_coupon.py`, `fea/examples/build_model.py`, `api/src/anisotropy_api/coupon_jobs.py`, `api/src/anisotropy_api/schemas.py`; tests `fea/tests/test_run_coupon.py`, `fea/tests/test_build_model_script.py`, `api/tests/test_coupon_jobs_api.py`, `api/tests/test_job_queue.py`, `tests/browser/studio.spec.ts`
@@ -71,3 +71,30 @@ second process. With the PDF the gain should be larger, since the PDF follows th
 If the hosted tier's measurements show people waiting on the per-person limit while a PDF builds (a second job refused while the
 first job's `documents` is `building`), take option 3. If the drawings' second solve grows past a few seconds on a large mesh,
 write the solution once and draw from it.
+
+## Amendment 1, 2026-11-14 (the drawings count in the report's step, the package prints the run's study, every step shows its seconds; asked for by the founder: "the meshing to the solving to post processign takes wayyyy to long")
+
+**Context.** The page showed the result while the strip still said Post-processing: `lib/studio-copy.ts` put the drawings, which come after the result, in that step. The package solved the three-mesh convergence study again, 4.3 s of its 32.1 s on the founder's machine, though the run had just written it to `<coupon>-convergence.json`. The stage timings (ADR-0056 amendment 6) stayed in the job's record, so the page could not say where a run's time went.
+
+**Options.**
+- The drawings: in the report's step (chosen); left in Post-processing (rejected: the step says the result is not ready when it is).
+- The study: the run's file passed to the package, `build_document(study=...)`, solved there only when none is given (chosen); a cache inside the convergence module (rejected: state hidden across runs).
+- The times: each finished step's seconds under it and "Finished in N s." once done (chosen); nothing (rejected: the founder asked why the run is slow and the page could not say); the pipeline's stage names (rejected: ADR-0091).
+- The Abaqus build script, written twice by the package: left as is (0.11 s, measured).
+
+**Decision.** As chosen. A step's seconds are the sum of its stages and of the solver's phases in it, the coupons' fetch in Meshing and the upload in Report; the waits for the naming lock and at the gate fall inside the first stages and are not added again; Queued runs from filed to taken up.
+
+**Evidence.** `tests/studio-copy.test.ts` reads the 2026-11-14 job's row: queued 10.2 s, meshing 18.0 s, solving 16.2 s, post-processing 5.0 s, report 51.1 s, finished in 106 s. `fea/tests/test_run_coupon.py` asserts that the package receives the run's study. The package's LaTeX of that coupon matches main's in its convergence section; it differs only in the build line and in CalculiX's numbers, which differ between two runs of main too.
+
+## Amendment 2, 2026-11-14 ("Report ready" means the PDF exists, and files are offered once the run has ended; the founder asked "once it checks report is ready where are the report where are the files?")
+
+**Context.** The report is "Report (PDF)" under Files at the foot of the left column, where the founder chose to keep it. Reading the code for his question showed two faults. A job read back from its row in the jobs table, as every hosted job is, had its documents "written" whenever the package was there (`Job.from_row`), and the page's fallback checked the package too, so a PDF that failed to compile still ticked Report ready with no Report (PDF) to download. And Files listed a running job's files: on the hosted tier they are stored only when the job ends, so a link could fail, and the package asked for by its file key before the end reached `package_archive` with no outcome and raised.
+
+**Options.**
+1. *Documents "written" only with the PDF, unless the job asked for none; files listed once the job has ended; the package by its key while the job runs answers 409* (chosen).
+2. *Keep ticking Report ready for the package and add a separate line for the PDF.* Rejected: "Report ready" with no report is the fault.
+3. *List the files that are already stored while the job runs.* Rejected: on the hosted tier that is a few of them for a few seconds, and the customer's two files come last.
+
+**Decision.** Option 1: `documents_of_row` in `api/src/anisotropy_api/coupon_jobs.py`, `reportMissing` and `downloadable` in `lib/studio-copy.ts`, `JobNotDone` mapped to 409 in `main.py`. A run whose PDF failed shows "Done, report not written", its Report ready step crossed out and the sentence asking to run it again, as a local run already did.
+
+**Evidence.** `api/tests/test_job_queue.py`: a job read back from its row with the PDF is "written" and one without it is not (both pass; the file's 15 tests passed twice). `api/tests/test_coupon_jobs_api.py`: the package asked for while the job runs is 409. `tests/studio-copy.test.ts`: a package without its PDF crosses the step out, and no file is offered while the run goes.

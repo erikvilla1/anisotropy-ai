@@ -3,6 +3,7 @@
  * what the software chose. The page computes nothing: the fea package (`anisotropy_fea.tension_input`) chooses every row the engineer was
  * not asked for and says why, in the checklist's `built` list.
  */
+import { formatNumber } from "./number-format";
 import { customerText } from "./studio-copy";
 import {
   FORM_VERSION, fieldByKey, labelFor, libraryOptions, NO_STANDARD, PLY_KEYS, shortHelp, unitLabels, unitWords, type Checklist, type FieldDefinition, type StudioForm,
@@ -123,6 +124,14 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
   control: { displacement: "Displacement", force: "Force" },
   strain_device: { extensometer: "Extensometer", "strain gauge": "Strain gauge" },
 };
+
+/** The number the software chose for each row left blank, from the latest check's `built` list, by row: what a blank field under Change
+ * settings stands for, shown as its placeholder so the size, the load and the mesh read as values in use, not as nothing (ADR-0090
+ * amendment 1). The page chooses none of them; with no check yet there are none. */
+export function valuesInUse(checklist: Checklist | null): Record<string, string> {
+  return Object.fromEntries((checklist?.built ?? []).filter((b) => typeof b.value === "number")
+    .map((b) => [b.row, formatNumber(b.value as number, { zeros: false })]));
+}
 
 /** The checklist's list of what the software chose, as lines: the row's label in the coupon's units, the value in words, and why; only the
  * engineering rows, in the order the package chose them. The value row is labelled by its loading type ("Applied displacement (mm)"). */

@@ -26,8 +26,9 @@ import hashlib
 import json
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Callable, Protocol
 
 from .settings import StorageSettings
 
@@ -227,16 +228,34 @@ def store_job(store: ObjectStore, coupon: str, attempt: str, outputs: dict[str, 
     """Upload every file the tool reported, by its key, and the package zip; returns key -> object key, what the status keeps so a
     later process can hand out links. A reported folder (the package itself) is left out: the zip stands for it."""
     stored: dict[str, str] = {}
+    puts: list[Callable[[], None]] = []
     for key, path in sorted(outputs.items()):
         if path.is_file():
             object_key = file_key(coupon, attempt, key, path.name)
-            store.put(object_key, path, content_type(path), disposition(path))
+            puts.append(lambda k=object_key, p=path: store.put(k, p, content_type(p), disposition(p)))
             stored[key] = object_key
     if package_zip is not None and package_zip.is_file():
         object_key = package_key(coupon, attempt)
-        store.put(object_key, package_zip, "application/zip", disposition(package_zip))
+        puts.append(lambda k=object_key: store.put(k, package_zip, "application/zip", disposition(package_zip)))
         stored["package"] = object_key
+    at_once(puts)
     return stored
+
+
+TRANSFERS = 8  # files sent or fetched at once: one at a time, a job's end waited on each round trip in turn (ADR-0056 amendment 9)
+
+
+def at_once(calls: list[Callable[[], None]]) -> None:
+    """Every call, up to TRANSFERS at a time; every one is waited for, and the first failure is raised after they have all ended, so
+    a failed upload still fails the job as one call at a time did."""
+    if len(calls) <= 1:
+        for call in calls:
+            call()
+        return
+    with ThreadPoolExecutor(max_workers=min(TRANSFERS, len(calls))) as pool:
+        futures = [pool.submit(call) for call in calls]
+    for future in futures:
+        future.result()
 
 
 # What the coupon folder's copy in the store leaves out (ADR-0056 amendment 6): the big files a run makes, which the job's own keys
@@ -260,16 +279,16 @@ def store_folder(store: ObjectStore, folder: Path, coupon: str) -> int:
     from a file the store holds unchanged: its tag is the content's MD5 for an object put in one piece, as these are (ADR-0056
     amendment 5, so the upload at a job's end does not grow with the coupon's attempts). Returns the number of files uploaded."""
     held = store.tags(f"{COUPONS}/{coupon}/{FOLDER}/")
-    count = 0
+    puts: list[Callable[[], None]] = []
     for path in sorted(p for p in folder.rglob("*") if p.is_file()):
         if not kept_in_folder(path.relative_to(folder).parts):
             continue
         key = folder_key(coupon, PurePosixPath(path.relative_to(folder).as_posix()))
         if held.get(key, "").strip('"') == hashlib.md5(path.read_bytes()).hexdigest():
             continue
-        store.put(key, path, content_type(path))
-        count += 1
-    return count
+        puts.append(lambda k=key, p=path: store.put(k, p, content_type(p)))
+    at_once(puts)
+    return len(puts)
 
 
 def restore(store: ObjectStore, root: Path) -> tuple[int, int]:
@@ -305,18 +324,35 @@ def _coupon_path(key: str) -> tuple[str, list[str]] | None:
     return coupon, parts
 
 
-def sync(store: ObjectStore, root: Path) -> tuple[int, int]:
+def _held_here(target: Path, key: str, tag: str, marks: dict[str, str]) -> bool:
+    """Whether the disk's copy is the store's: by its content where the store's tag is the content's MD5 (an object put in one piece,
+    as `store_folder` puts them), so a file a job changed here and never sent is fetched again; for a tag that is not an MD5 (an object
+    put in parts), by the tag this root kept when it last fetched the file."""
+    if not target.is_file():
+        return False
+    plain = tag.strip('"')
+    if "-" not in plain:
+        return hashlib.md5(target.read_bytes()).hexdigest() == plain
+    return marks.get(key) == tag
+
+
+def sync(store: ObjectStore, root: Path, prune: bool = False) -> tuple[int, int]:
     """Every coupon's folder under root/<coupon>/ brought level with the store (the job queue, ADR-0056 amendment 3): a file is fetched
-    when the disk lacks it or the store's copy changed since this root last fetched it, judged by the store's tag kept in root/{TAGS};
-    a file the store does not hold is left alone. Returns the number of files fetched and of coupons seen. Where `restore` fills a
-    fresh disk once, this keeps a long-lived container's coupons current while other containers solve them."""
+    when the disk lacks it or holds other content than the store (`_held_here`), up to TRANSFERS at a time. With `prune`, every other
+    file under root is deleted and every folder left empty, so the disk holds the store's coupons and nothing else, as a fresh restore
+    would, having fetched only what changed (a warm solver's start, ADR-0056 amendment 9); without it, a file the store does not hold is
+    left alone. Returns the number of files fetched and of coupons seen. Where `restore` fills a fresh disk once, this keeps a
+    long-lived container's coupons current while other containers solve them."""
     marks_path = root / TAGS
     try:
         marks = json.loads(marks_path.read_text(encoding="utf-8")) if marks_path.is_file() else {}
     except (OSError, json.JSONDecodeError):
         marks = {}
-    files, coupons = 0, set()
-    for key, tag in sorted(store.tags(f"{COUPONS}/").items()):
+    coupons: set[str] = set()
+    wanted: set[Path] = {marks_path}
+    fetches: list[tuple[str, str, Path]] = []
+    listed = store.tags(f"{COUPONS}/")
+    for key, tag in sorted(listed.items()):
         found = _coupon_path(key)
         if found is None:
             continue
@@ -325,11 +361,19 @@ def sync(store: ObjectStore, root: Path) -> tuple[int, int]:
         if not kept_in_folder(parts):  # a copy filed before the folder's scope was narrowed
             continue
         target = root.joinpath(coupon, *parts)
-        if target.is_file() and marks.get(key) == tag:
-            continue
-        store.get(key, target)
-        marks[key] = tag
-        files += 1
+        wanted.add(target)
+        if not _held_here(target, key, tag, marks):
+            fetches.append((key, tag, target))
+    at_once([lambda k=key, t=target: store.get(k, t) for key, _, target in fetches])
+    marks.update({key: tag for key, tag, _ in fetches})
+    if prune and root.is_dir():
+        for path in sorted(root.rglob("*"), reverse=True):  # a folder's files and folders come before it
+            if path.is_dir() and not path.is_symlink():
+                if not any(path.iterdir()):
+                    path.rmdir()
+            elif path not in wanted:
+                path.unlink()
+        marks = {key: tag for key, tag in marks.items() if key in listed}
     root.mkdir(parents=True, exist_ok=True)
     marks_path.write_text(json.dumps(marks, sort_keys=True), encoding="utf-8")
-    return files, len(coupons)
+    return len(fetches), len(coupons)

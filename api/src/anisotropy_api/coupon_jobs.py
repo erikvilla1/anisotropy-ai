@@ -88,6 +88,10 @@ class JobBusy(RuntimeError):
         self.job_id = job_id
 
 
+class JobNotDone(RuntimeError):
+    """A file that exists only once the job has ended, asked for while it runs: the package's zip (ADR-0064 amendment 2)."""
+
+
 class RecordingFailed(RuntimeError):
     """The job ended but its run record could not be written."""
 
@@ -155,6 +159,17 @@ def repository_path(text: str) -> Path:
     return path if path.is_absolute() else REPO / path
 
 
+def documents_of_row(outputs: dict, inputs: dict) -> str | None:
+    """`documents` for a job read back from its row (ADR-0064 amendment 2): "written" only when the package is there and its PDF too,
+    unless the job asked for no PDF; what is missing otherwise, so "Report ready" is never ticked without the report; None when no
+    package was made, which the page reads from the outputs."""
+    if "package" not in outputs:
+        return None
+    if "document" in outputs or inputs.get("pdf", True) is False:
+        return "written"
+    return "the package was written without its document"
+
+
 @dataclass
 class Job:
     id: uuid.UUID
@@ -209,7 +224,7 @@ class Job:
         """A job as its row in the jobs table keeps it, for a job that another process ran (ADR-0050 amendment 2)."""
         outcome = None if row.state in ("queued", "running") else {"status": row.state, "message": row.message, "coupon": row.coupon,
                                                                    "attempt": row.attempt, "outputs": dict(row.outputs),
-                                                                   "documents": "written" if "package" in row.outputs else None}
+                                                                   "documents": documents_of_row(dict(row.outputs), dict(row.inputs or {}))}
         # a running row's message is the result once its solver reported it (`_heartbeat`); the documents are still being made
         snapshot = {"stage": row.stage, "done": list(row.stages_done), "stages": list(row.stages), "outputs": dict(row.outputs), "coupon": row.coupon,
                     "attempt": row.attempt, "log_tail": list(row.log_tail), "message": row.message,
@@ -461,7 +476,10 @@ class CouponJobs:
         return stored
 
     def package_archive(self, job: Job) -> Path:
-        """The finished job's package folder as a zip in the job's folder, made once."""
+        """The finished job's package folder as a zip in the job's folder, made once; JobNotDone while the job has not ended, since its
+        package is still being written (ADR-0064 amendment 2)."""
+        if job.outcome is None:
+            raise JobNotDone(f"coupon job {job.id} is {job.state}: its package is zipped once it is done")
         package = repository_path(job.outcome["outputs"]["package"])
         if not package.is_dir():
             raise FileNotFoundError(f"the package folder {job.outcome['outputs']['package']} is no longer there")
@@ -587,8 +605,10 @@ class CouponJobs:
         if "/" in source:  # an object key: the form or the values as sent, filed by the API's container
             argument = str(job.folder / Path(source).name)
             self.store.get(source, Path(argument))
-        shutil.rmtree(self.local_root, ignore_errors=True)  # this container's coupons are the store's, nothing else
-        sync(self.store, self.local_root)  # the bulk of it outside the lock; only what changes meanwhile is fetched under it
+        # This container's coupons are the store's, nothing else: a warm solver fetches only what changed since its last job and deletes
+        # what the store no longer holds, where wiping the disk first fetched every coupon on every job (ADR-0056 amendment 9). The bulk
+        # of it outside the lock; only what changes meanwhile is fetched under it.
+        sync(self.store, self.local_root, prune=True)
         job.timings["restore_s"] = round(time.monotonic() - started, 1)
         result, gate = job.folder / "outcome.json", job.folder / GATE
         args = [*self.command, argument, *options, "--result", str(result), "--progress", str(job.folder / PROGRESS), "--gate", str(gate)]
