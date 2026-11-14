@@ -971,16 +971,16 @@
   --muted: #666666;
   --line: #e2e2e4;
 }
-/* The closing band on the home page is dark grey (amendment 54; light grey under amendment 49), a step lighter since
- * amendment 56 ("make this less dark"): a neutral grey clearly lighter than the black footer under it, so the two read as
+/* The closing band on the home page is dark grey (amendment 54; light grey under amendment 49), lighter since
+ * amendments 56 and 58 ("make this less dark", then "less dark."): a neutral grey clearly lighter than the black footer under it, so the two read as
  * two bands. It is one of the kit's dark bands, so its label,
  * statement and links are light; its rule is a faint light hairline, and its button is white with black words, the light
  * band's button the other way round (it greys a little and rises under the pointer, as the site's filled button does on
  * a dark ground). */
 section.band.closing-band.is-dark {
-  --bg: #3b3b40;
+  --bg: #5c5c61;
   --text: #ffffff;
-  --muted: #c6c6cb;
+  --muted: #dedee2;
   --line: #ffffff2e;
   --accent: #ffffff;
   border-top: 0;

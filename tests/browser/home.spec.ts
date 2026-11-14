@@ -262,13 +262,13 @@ test("after the demo the page is white, and Mission and Services are two short b
   expect(grid).toMatchObject({ content: '""', position: "absolute", under: "-1", press: "none", apart: "36px 36px, 36px 36px", own: "isolate" });
   expect(grid.lines).toMatch(/^linear-gradient\(to right, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\), linear-gradient\(to top, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\)$/);
   expect(grid.mask).toMatch(/^linear-gradient\(to top, rgb\(0, 0, 0\) 0%, rgb\(0, 0, 0\) 6%, rgba\(0, 0, 0, 0\) 50%\)$/);
-  // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey; a step lighter since
-  // amendment 56): lighter than the black footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
+  // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey; lighter since
+  // amendments 56 and 58): lighter than the black footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
   // WCAG AA's 4.5 to 1.
   const closing = page.locator(".closing-band");
   await expect(closing).toHaveClass(/\bis-dark\b/);
   await expect(closing).not.toHaveClass(/\bis-light\b/);
-  await expect(closing).toHaveCSS("background-color", "rgb(59, 59, 64)");
+  await expect(closing).toHaveCSS("background-color", "rgb(92, 92, 97)");
   await expect(closing).toHaveCSS("border-top-width", "0px");
   await expect(page.locator(".site-footer")).toHaveCSS("background-color", "rgb(0, 0, 0)");
   const tones = await closing.evaluate((band) => {

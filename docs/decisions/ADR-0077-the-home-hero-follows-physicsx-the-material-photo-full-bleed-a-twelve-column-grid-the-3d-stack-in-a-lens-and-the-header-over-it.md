@@ -737,3 +737,11 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `home.spec.ts`, 8 of 8: the button is in the page with its name, has no opacity and takes no pointer; the keyboard's focus shows it and Enter pauses the clip; a paused clip stays paused after two seconds and its button stays on it wherever the focus goes; playing again, it is off the clip. `intro.spec.ts` 15 of 15. The hero was captured at 1440 px and looked at. UNVERIFIED: how a screen reader reads the button; whether the founder accepts a control that only the keyboard reaches.
 
+## Amendment 58, 2026-11-14 (the closing band is lighter again)
+
+**Context.** The lead, with a capture of amendment 56's band: "less dark."
+
+**Decision.** The home page's closing band is `#5c5c61` (it was `#3b3b40`) and its small label `#dedee2`. The rest of amendments 54 and 56 stands. A band lighter than about `#707075` would need its small label in white to keep 4.5 to 1.
+
+**Evidence.** Contrast, computed: white on the ground 6.65 to 1, the small label 4.96 to 1, the band against the black footer 3.16 to 1 and against the light band above it 6.0 to 1. `home.spec.ts`, 8 of 8. Captured at 1440 px beside a darker and a lighter grey (`#4a4a4f`, `#707075`) for the lead to choose from, and looked at. UNVERIFIED: whether this is the shade the lead wants.
+
