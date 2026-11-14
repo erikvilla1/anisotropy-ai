@@ -103,6 +103,9 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Under each name on the home page's team cards stands one short title, the lead's, in place of the two seats in a sentence (ADR-0077 amendments 43 and 45).
 - If the hero's words still stand when the page scrolls to the demo, they fade as the clip grows and are gone before the demo's first words come up (ADR-0095 amendment 9).
 - On every marketing page the header leaves as the page scrolls down and comes back as a black bar as soon as it scrolls up; the keyboard's focus brings it in too (ADR-0077 amendment 44).
+- The home hero's words stand in the clip's lower left, set from the left, with the mark, the name and the year in one small line over the statement, so the hero no longer matches the page its arrangement came from (ADR-0077 amendment 47).
+- The home page's Mission and Services pictures have square corners, and under a mouse's pointer a small lens shows the photograph in the demo's colours; it is a picture effect, not an analysis (ADR-0077 amendment 48).
+- The changelog's words on the home page stand on a card in the demo's colours, and the closing band there is light grey (ADR-0077 amendment 49).
 - The home page's Mission and Services pictures are links to About and Services and lift under the pointer as the portraits do; the LinkedIn badge on a portrait is drawn from the lead's uploaded picture, in black and white (ADR-0077 amendment 39).
 - Each time the home hero's clip starts again, its words are typed in again, stand three seconds and leave, as at the load (ADR-0077 amendment 40).
 - The home page's Mission and Services are two short blocks set as the demo's words are, in the middle of the page: Mission links to About ("Learn more about us"), Services names the five and links to each and to all; the strip of four principles and the five status cards are removed from the home page (ADR-0077 amendment 34).

@@ -606,3 +606,29 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server: the band was captured empty and, for a look at the layout only, with Engine 0.1.0 entered and then taken out again; both were looked at. `tests/changelog.test.ts`, 2 of 2. `home.spec.ts`, 7 of 7: the band's label, heading and sentence, no list, and no "What is new" on the page. `npx tsc --noEmit` clean. UNVERIFIED: the list at phone width with an entry in it (the rules are there; no entry is).
 
+## Amendment 47, 2026-11-14 (the hero's words stand in the clip's lower left, with the mark, the name and the year in one line over them)
+
+**Context.** The lead, with recordings of this hero and of the home page its arrangement was taken from (amendments 19, 27 and 28): "our website hero page looks uncannily similar to anduril's homepage, so we need to add some tweaks to make it look not identical, its fine to look similar, but not literally an exact match which is what it is right now." Side by side the two matched in the statement set in capitals in the middle of the clip, the row under it with the mark between two short texts, the square box under the header, and the header's own arrangement.
+
+**Decision.** The statement and its row leave the clip's middle. They stand in its lower left, set from the left, over the Basement's mark: first one small line of the triangle, the name and, behind a hairline, the year; under it the statement, a little larger than before. The parts are the same elements in the same order in the page, so the load-in, the exit and the repeat of amendment 40 run as they did; the stylesheet alone places them. The clip keeps its square corners (the lead asked for square corners on the page's pictures the same day). Still to follow in this amendment's sense, held until other work on the same files has landed: the statement in sentence case, and the header's links at the right beside the Workspace button.
+
+**Evidence.** On 2026-11-14 against the dev server the hero was captured at 1873, 1440 and 390 px and looked at. `home.spec.ts`, 7 of 7: the line's order and that it lies over the statement; the statement, the line and the Basement's mark start on one edge, the clip's padding in, with the statement in the clip's lower half. `demo.spec.ts`, 13 of 13 (the hand-over reads the same elements). UNVERIFIED: whether the lead finds it different enough.
+
+## Amendment 48, 2026-11-14 (the pictures have square corners, and under the pointer a lens shows them in the demo's colours)
+
+**Context.** The lead, of the Mission and Services pictures: "first, unroundify the image corners", and, with a reference site's picture on which a small box under the pointer shows a simulation's colours: "I want this but a lil box lens that appears to show structural fea analysis with the same schema as used in the demo. overlay of the image".
+
+**Decision.** The pictures' corners are square. Under a mouse's pointer a 4:3 window follows the pointer over the picture, a little behind it and kept inside it, and shows the photograph there in the demo's colour scale with a faint mesh of lines over it (`components/home/split-picture.tsx`; the filter is `#home-fea` in `app/page.tsx`). It is not there for a finger or the keyboard. What it shows is the photograph's own light and dark, smoothed and drawn through the scale, laid as colour over the photograph. **It is a picture effect and not an analysis:** nothing was solved, and it carries no number, legend or caption. That is said in the code, here and in R-31.
+
+**Options considered.** Showing a real analysis's picture in the lens: the only recorded one is the demo's wing, which is not what the photograph shows. A caption saying the lens is illustrative: not added; the lead asked for the effect alone, and R-31 puts the question to the founder.
+
+**Evidence.** On 2026-11-14 against the dev server the lens was captured at two places on the Mission picture and looked at. `home.spec.ts`, 7 of 7: no lens away from the pointer; under it a 4:3 window with the pointer in its middle, drawn through the page's filter, inside the picture at its corner, and gone when the pointer leaves; square corners. UNVERIFIED: Safari and Firefox (the lens uses an SVG filter and a blend mode); a pen.
+
+## Amendment 49, 2026-11-14 (the changelog's words stand on a card in the demo's colours; the closing band is light grey)
+
+**Context.** The lead, with a reference site's card on a soft blue-to-red ground: "in the lets define what... box make that gray instead of the what is new box. for the what is new box, we can add a gradient and make it like the physicsx screenshot reference, but instead of that gradient style from their cfd, lets use the fea structural analysis gradient scheme."
+
+**Decision.** On the home page the closing band is light grey (`#f3f3f4`; the industries page's stays white). The changelog's band is the same grey, and its words stand in white on a card set 32 px in from the band's edges whose ground is the colours the demo gives its analysis, blue through cyan, green and yellow to red, blurred into one another. The card is a ground and shows no result. A list of releases, when there is one, stands on a white panel on the card.
+
+**Evidence.** On 2026-11-14 against the dev server the two bands were captured at 1873 px and looked at. `home.spec.ts`, 7 of 7: the card's layered gradient, its 32 px inset, the heading in white, and the closing band's grey. UNVERIFIED: the list's white panel on the card with an entry in it (none is published).
+

@@ -35,17 +35,20 @@ async function pastTheDemo(page: import("@playwright/test").Page) {
 
 const STATEMENT = /^\s*one engineering platform\s*for composite theory\s*and real test data\s*$/;
 
-test("the hero's words are one statement and a row of the year, the mark and the name (ADR-0077 amendments 19, 21, 27 and 28)", async ({ page }) => {
+test("the hero's words are one statement and a line of the mark, the name and the year (ADR-0077 amendments 19, 21, 27, 28 and 47)", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
   await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
-  // The row under it: the year, the triangle, the name (amendment 28).
+  // The line over it: the triangle, the name, the year (amendment 47; until then a row under the statement with the mark
+  // between the year and the name).
   await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
-  const row = await hero.evaluate((el) => ["note", "mark", "tagline"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
+  const row = await hero.evaluate((el) => ["mark", "tagline", "note"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
   expect(row[0]).toBeLessThan(row[1]);
   expect(row[1]).toBeLessThan(row[2]);
+  const over = await hero.evaluate((el) => [el.querySelector(".home-hero-row")!.getBoundingClientRect().bottom, el.querySelector("h1")!.getBoundingClientRect().top]);
+  expect(over[0]).toBeLessThanOrEqual(over[1]);
   // The cohort stands beside the mark of the place that runs it, in the clip's bottom left corner.
   await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
   await expect(hero.locator(".home-hero-backed .home-hero-cohort")).toHaveText("Fall 2026 Launchpad cohort");
@@ -67,7 +70,7 @@ test("the hero's words are one statement and a row of the year, the mark and the
   expect(Math.abs(nav - page.viewportSize()!.width / 2)).toBeLessThanOrEqual(1);
 });
 
-test("the hero's clip plays in a square box on the black page, under the header, with the words in its middle (ADR-0077 amendment 19)", async ({ page }) => {
+test("the hero's clip plays in a square box on the black page, under the header, with the words in its lower left (ADR-0077 amendments 19 and 47)", async ({ page }) => {
   await page.goto("/");
   const rect = (selector: string) => page.locator(selector).first().evaluate((el) => {
     const box = el.getBoundingClientRect();
@@ -90,10 +93,16 @@ test("the hero's clip plays in a square box on the black page, under the header,
     expect(part.top, selector).toBeGreaterThanOrEqual(clip.top + 16);
     expect(part.bottom, selector).toBeLessThanOrEqual(clip.bottom - 16);
   }
-  for (const selector of ["#overview h1", "#overview .home-hero-mark"]) {
-    const part = await rect(selector);
-    expect(Math.abs((part.left + part.right) / 2 - viewport.width / 2), selector).toBeLessThanOrEqual(1);
-  }
+  // The words stand in the box's lower left, set from the left (amendment 47): the statement and the line over it start on
+  // one edge, the box's own padding in, and lie in the box's lower half, over the Basement's mark.
+  const [statement, line, backed] = [await rect("#overview h1"), await rect("#overview .home-hero-row"), await rect("#overview .home-hero-backed")];
+  expect(statement.left).toBe(clip.left + 32);
+  expect(line.left).toBe(statement.left);
+  expect(backed.left).toBe(statement.left);
+  expect(statement.top).toBeGreaterThan((clip.top + clip.bottom) / 2 - 40);
+  expect(statement.bottom).toBeLessThan(backed.top);
+  expect(statement.right).toBeLessThan(viewport.width * 0.75);
+  await expect(page.locator("#overview h1")).toHaveCSS("text-align", "left");
   // On a phone the box follows the narrower margin.
   await page.setViewportSize({ width: 390, height: 844 });
   const phone = await rect("#overview .home-hero-media");
@@ -135,6 +144,14 @@ test("after the demo the page is white, and Mission and Services are two short b
   // and no list. It is not a news feed: no card, no "What is new".
   const changelog = page.locator("#changelog");
   await expect(changelog).toHaveCSS("background-color", "rgb(243, 243, 244)");
+  // Its words stand in white on a card whose ground is the demo's colours blurred into one another (amendment 49), and
+  // the closing band under it is the same light grey.
+  const card = changelog.locator(".home-feed-card");
+  expect(await card.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/radial-gradient.*radial-gradient.*linear-gradient/);
+  await expect(changelog.getByRole("heading", { level: 2 })).toHaveCSS("color", "rgb(255, 255, 255)");
+  const inset = await card.evaluate((element) => { const box = element.getBoundingClientRect(); return [box.left, document.documentElement.clientWidth - box.right]; });
+  expect(inset).toEqual([32, 32]);
+  await expect(page.locator(".closing-band")).toHaveCSS("background-color", "rgb(243, 243, 244)");
   await expect(changelog.locator(".band-label")).toHaveText("Changelog");
   await expect(changelog.getByRole("heading", { level: 2 })).toHaveText("Every release, and what changed.");
   await expect(changelog.locator(".band-statement p")).toHaveText("No releases published yet. Each version and what changed in it will be listed here.");
@@ -170,7 +187,7 @@ test("after the demo the page is white, and Mission and Services are two short b
     if (wordsFirst) expect(places.words[1], id).toBeLessThanOrEqual(places.picture[0]);
     else expect(places.picture[1], id).toBeLessThanOrEqual(places.words[0]);
     expect(places.width, id).toBeGreaterThan(400);
-    expect(places.radius, id).toBe("20px");
+    expect(places.radius, id).toBe("0px"); // square corners (amendment 48)
     // The picture is a link to where its band's own link goes, and lifts under the pointer as a portrait does (amendment
     // 39). The keyboard and a screen reader meet the worded link only.
     const picture = page.locator(`#${id} .home-split-picture`);
@@ -179,10 +196,35 @@ test("after the demo the page is white, and Mission and Services are two short b
     await expect(picture).toHaveAttribute("aria-hidden", "true");
     await picture.scrollIntoViewIfNeeded();
     expect(await picture.evaluate((element) => getComputedStyle(element).transform), id).toBe("none");
+    // Away from the pointer there is no lens over it.
+    const lens = picture.locator(".home-split-lens");
+    await expect(lens).toHaveCSS("opacity", "0");
     await picture.hover();
     await expect.poll(() => picture.evaluate((element) => getComputedStyle(element).transform), { message: id }).toBe("matrix(1.02, 0, 0, 1.02, 0, -4)");
+    // Under the pointer a small lens shows the photograph in the demo's colours (amendment 48): a 4:3 window with the
+    // pointer in its middle, inside the picture, drawn through the page's own filter, and gone when the pointer leaves.
+    await expect(picture).toHaveAttribute("data-lens", "on");
+    await expect(lens).toHaveCSS("opacity", "1");
+    const box = (await picture.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.6, { steps: 4 });
+    await expect.poll(async () => {
+      const at = (await lens.boundingBox())!;
+      return [Math.abs(at.x + at.width / 2 - (box.x + box.width * 0.3)) < 6, Math.abs(at.y + at.height / 2 - (box.y + box.height * 0.6)) < 6];
+    }, { message: `${id}: the lens under the pointer` }).toEqual([true, true]);
+    const window = (await lens.boundingBox())!;
+    expect(Math.abs(window.width / window.height - 4 / 3), id).toBeLessThan(0.02);
+    expect(window.width, id).toBeGreaterThanOrEqual(150);
+    expect(await picture.locator(".home-split-lens-view.is-field").evaluate((view) => getComputedStyle(view).filter), id).toContain("#home-fea");
+    // At the picture's corner it keeps inside the picture.
+    await page.mouse.move(box.x + 3, box.y + 3, { steps: 4 });
+    await expect.poll(async () => { const at = (await lens.boundingBox())!; return at.x >= box.x - 1 && at.y >= box.y - 1; }, { message: `${id}: the lens in the picture` }).toBe(true);
     await page.mouse.move(2, 2);
-    expect(places.image, id).toContain("/assets/images/carbon-weave.jpg");
+    await expect(picture).not.toHaveAttribute("data-lens", /.+/);
+    await expect(lens).toHaveCSS("opacity", "0");
+    // The photograph is the carbon weave for now, in black and white.
+    const photo = picture.locator(".home-split-photo");
+    expect(await photo.evaluate((element) => getComputedStyle(element).backgroundImage), id).toContain("/assets/images/carbon-weave.jpg");
+    expect(await photo.evaluate((element) => getComputedStyle(element).filter), id).toContain("grayscale(1)");
   }
   // Team and the changelog keep their heads in the middle, as the demo's words are.
   for (const id of ["working", "changelog"]) {

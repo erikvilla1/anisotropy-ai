@@ -7,6 +7,7 @@ import { HeroHandover } from "@/components/home/hero-handover";
 import { HeroOutro } from "@/components/home/hero-outro";
 import { ProductDemo } from "@/components/home/product-demo";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
+import { SplitPicture } from "@/components/home/split-picture";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { releaseDay, releases } from "@/lib/changelog";
 import { serviceHref, services } from "@/lib/services";
@@ -87,7 +88,26 @@ export default function Home() {
           and its picture at the right, Services the other way round. The picture is the hero's carbon weave for now, standing
           in for pictures still to come. Each picture goes where its band's own link goes, About and Services, and lifts
           under the pointer as a portrait does (amendment 39); the keyboard and a screen reader meet the worded link only,
-          so the same place is not offered twice. */}
+          so the same place is not offered twice. Under a mouse's pointer a small lens shows the photograph in the demo's
+          colours (amendment 48, components/home/split-picture.tsx); the filter it draws through is the one below. */}
+      <svg className="home-fea-filter" width="0" height="0" aria-hidden="true" focusable="false">
+        <filter id="home-fea" colorInterpolationFilters="sRGB">
+          {/* The photograph's light and dark alone, smoothed and stretched over the whole range, */}
+          <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0 0 0 1 0" />
+          <feGaussianBlur stdDeviation="6" />
+          <feComponentTransfer>
+            <feFuncR type="linear" slope="2.9" intercept="-0.42" />
+            <feFuncG type="linear" slope="2.9" intercept="-0.42" />
+            <feFuncB type="linear" slope="2.9" intercept="-0.42" />
+          </feComponentTransfer>
+          {/* then through the demo's scale (lib/demo-wing.ts, RAINBOW): blue, cyan, green, yellow, red. */}
+          <feComponentTransfer>
+            <feFuncR type="table" tableValues="0 0 0 1 1" />
+            <feFuncG type="table" tableValues="0 1 1 1 0" />
+            <feFuncB type="table" tableValues="1 1 0 0 0" />
+          </feComponentTransfer>
+        </filter>
+      </svg>
       <section className="band is-light home-blurb home-split home-mission" id="mission">
         <div className="band-head">
           <p className="band-label">Mission</p>
@@ -103,7 +123,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <Link className="home-split-picture" href="/about" aria-hidden="true" tabIndex={-1} />
+        <SplitPicture href="/about" />
       </section>
       {/* The step to the services (ADR-0077 amendment 34): the five by name, each a link to its page, and the way to all of them. */}
       <section className="band is-light home-blurb home-split is-flipped home-platform" id="platform">
@@ -127,7 +147,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <Link className="home-split-picture" href="/services" aria-hidden="true" tabIndex={-1} />
+        <SplitPicture href="/services" />
       </section>
       {/* About keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
           link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band's
@@ -201,6 +221,9 @@ export default function Home() {
           name and what changed in it, line by line and tagged by kind. The list is lib/changelog.ts; it is empty until a
           version is published, and the band then says so. */}
       <section className="band is-light home-blurb home-feed" id="changelog">
+        {/* The band is light grey, as the closing band under it is, and its words stand on a card in the colours the demo
+            gives its analysis, blurred into one another (amendment 49). */}
+        <div className="home-feed-card">
         <div className="band-head">
           <p className="band-label">Changelog</p>
           <div className="band-statement">
@@ -237,8 +260,10 @@ export default function Home() {
             ))}
           </ol>
         ) : null}
+        </div>
       </section>
       <ClosingBand
+        grey
         label="THE NEXT LAYER STARTS WITH A QUESTION."
         heading={["Let’s define what", "comes next."]}
         action={{ label: "Start a conversation", href: "/workspace/fea" }}
