@@ -10,14 +10,14 @@ const smooth = (x: number) => x * x * (3 - 2 * x);
 
 /** How far the page has scrolled from the hero to the demo's stage, 0 to 1, and from which share each side starts and ends. */
 export const HANDOVER = {
-  /** The hero's clip grows from its box to the whole window over this stretch, from the first pixel scrolled. */
+  /** First the hero's clip grows from its box to the whole window, from the first pixel scrolled. */
   growFrom: 0,
-  growTo: 0.5,
-  /** The hero's clip begins to dim here and has gone when the stage fills the window. */
-  heroFrom: 0.05,
+  growTo: 0.4,
+  /** Only once it is whole-window does it begin to dim; it has gone when the stage fills the window. */
+  heroFrom: 0.4,
   heroTo: 1,
-  /** The first beat's words come in over this stretch, so they stand when the stage arrives. */
-  wordsFrom: 0.1,
+  /** The first beat's words wait until the clip is well on its way to black, and stand before the stage arrives. */
+  wordsFrom: 0.6,
   wordsTo: 0.9,
 };
 

@@ -9,7 +9,7 @@ import { COMMON_MATERIALS } from "@/lib/studio-chat";
 import { legendGradient } from "@/lib/studio-colors";
 import { DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
 import { libraryOptions } from "@/lib/studio-form";
-import { ASSISTANT, BEAT_COPY, DEMO_HEAD, FIELD_LABEL, FILES_HEAD, OPEN_WORKSPACE, recordedLine, resultLines, summaryCells } from "./product-demo-copy";
+import { ASSISTANT, BEAT_COPY, DEMO_HEAD, FIELD_LABEL, FILES_HEAD, OPEN_WORKSPACE, resultLines, summaryCells } from "./product-demo-copy";
 import type { DemoSceneHandle } from "./product-demo-scene";
 import { BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, finalView, layupScript, sameView, viewAt, type BeatId, type DemoView } from "./product-demo-timeline";
 import { useTourDriver } from "./tour-driver";
@@ -39,6 +39,8 @@ const materialName = (id: string) => libraryOptions.find((option) => option.id =
  * the hero's clip and a window tall, which the hero hands over to (components/home/hero-handover.tsx). Each beat uses the workspace's own names and shapes, cut down for a first look: the assistant's
  * question and chips, the setup's summary, the run's stages with the stress field, and the files. Nothing is asked of the API:
  * the model, the field's colours and every number are one recorded run of the solver on a public example (lib/demo-run.ts).
+ * The page no longer says so under the analysis: the lead took that line out on 2026-11-14 (amendment 6); the record keeps
+ * what it is, its version and its date.
  *
  * On a desktop the stage is a window tall and holds the window while it fills it, and one scroll gesture plays one whole beat
  * (components/home/tour-driver.ts); the page scrolls to it and away from it as any page does. The centre model changes place
@@ -197,7 +199,6 @@ export function ProductDemo() {
             );
           })}
         </ol>
-        <p className="product-demo-recorded" data-testid="demo-recorded" data-shown={!pinned || view.beat >= 2 ? "true" : undefined}>{recordedLine(run)}</p>
       </div>
     </section>
   );

@@ -1103,6 +1103,15 @@
     inset: calc(var(--hero-top) * (1 - var(--hero-grow, 0))) calc(var(--hero-frame) * (1 - var(--hero-grow, 0)))
       calc(var(--hero-frame) * (1 - var(--hero-grow, 0)));
   }
+  /* "Scroll to explore" has done its work once the page scrolls: it goes as the clip grows, and is gone when the clip is
+   * whole-window, before the clip itself dims (amendment 6). Its own fade-in is switched off on the way, so it keeps to the
+   * scroll. */
+  .home-opening > .home-hero[data-words="gone"] .home-hero-explore {
+    opacity: calc(1 - var(--hero-grow, 0));
+  }
+  .home-opening[data-handover="going"] > .home-hero .home-hero-explore {
+    transition: none;
+  }
   .home-opening > .product-demo {
     margin-top: calc(-0.5 * max(640px, 100svh));
   }

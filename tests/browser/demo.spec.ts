@@ -98,16 +98,15 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
   await page.waitForTimeout(500);
   expect(await scrollY(page)).toBe(100);
   await expectStop(page, 0);
-  // The model and the line under it wait for the first beat; the first beat's words are on their way in (amendment 4), and
-  // no other beat's are up.
-  for (const part of [".product-demo-view", ".product-demo-recorded"]) await expect(box(page).locator(part), part).toHaveCSS("opacity", "0");
+  // The model waits for the first beat. The first beat's words wait too, while the hero's clip is still growing (amendments
+  // 4 and 6), and no other beat's are up.
+  await expect(box(page).locator(".product-demo-view")).toHaveCSS("opacity", "0");
+  await expect(page.getByTestId("demo-recorded")).toHaveCount(0);
   const wordsIn = () => beat(page, "describe").evaluate((element) => Number(getComputedStyle(element).opacity));
-  const first = await wordsIn();
-  expect(first).toBeGreaterThan(0);
-  expect(first).toBeLessThan(1);
+  expect(await wordsIn()).toBe(0);
   for (const id of ["model", "analysis", "report"]) await expect(beat(page, id)).toHaveCSS("opacity", "0");
   await expect(page.getByTestId("demo-layup")).toHaveText("");
-  // Notch by notch: the page keeps to the wheel, nothing plays, and the words come further in.
+  // Notch by notch: the page keeps to the wheel and nothing plays; near the stage the words are on their way in.
   for (let guard = 0; (await offLine(page)) > 100 && guard < 30; guard++) {
     const before = await scrollY(page);
     await notch(page);
@@ -115,7 +114,7 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
     await expect(box(page)).not.toHaveAttribute("data-moving", "true");
   }
   await expectStop(page, 0);
-  expect(await wordsIn()).toBeGreaterThan(first);
+  expect(await wordsIn()).toBeGreaterThan(0);
   const left = await offLine(page);
   expect(left).toBeGreaterThan(0);
   expect(left).toBeLessThanOrEqual(100);
@@ -139,7 +138,7 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
   expect(asked).toEqual([]);
 });
 
-test("on the way to the stage the hero stays in the window, its clip grows to the whole window and dims, and the first beat's words come up through it; the window is never empty (ADR-0095 amendments 4 and 5)", async ({ page }) => {
+test("on the way to the stage the hero stays in the window, its clip grows to the whole window and dims, then the first beat's words come up through it; the window is never empty (ADR-0095 amendments 4 to 6)", async ({ page }) => {
   await openPinned(page);
   const opening = page.locator(".home-opening");
   const read = () => page.evaluate(() => {
@@ -151,37 +150,50 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
     return {
       // how far the clip's edges are from the window's: top, sides, foot
       clip: [clip.top, clip.left, window.innerWidth - clip.right, window.innerHeight - clip.bottom].map((edge) => Math.round(edge)),
+      // "Scroll to explore", as the eye gets it: its own opacity times the hero's
+      button: Number(getComputedStyle(hero.querySelector(".home-hero-explore")!).opacity),
       heroTop: Math.round(hero.getBoundingClientRect().top),
       hero: style.visibility === "hidden" ? 0 : Number(style.opacity),
       words: Number(getComputedStyle(words).opacity),
       wordsInWindow: box.top < window.innerHeight && box.bottom > 0,
     };
   });
+  // The hero's words have left and "Scroll to explore" is up, as when a visitor starts to scroll.
+  await expect(page.locator("#overview")).toHaveAttribute("data-words", "gone", { timeout: 15_000 });
+  await expect(page.locator(".home-hero-explore")).toHaveCSS("opacity", "1");
   // At the top: the hero whole, the stage behind it, nothing of the demo's words yet.
   await expect(opening).toHaveAttribute("data-handover", "ready");
   expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
-  // Down in steps of a tenth of the way. The hero does not move; it only dims, and the words only come in. At every step
-  // something is on the screen: the clip, or the first beat's words, or both.
+  // Down by the wheel in steps of a tenth of the way. The hero does not move. First its clip grows to the whole window, at
+  // full strength and with nothing of the demo up (amendments 5 and 6); then it dims; and the first beat's words come in only
+  // once it is well on its way to black. At every step something is on the screen: the clip, or the words, or both.
   const way = await offLine(page);
   expect(way).toBe(page.viewportSize()!.height / 2);
   let before = await read();
-  for (let step = 1; step <= 6; step++) {
-    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), Math.round((way * step) / 10));
+  for (let step = 1; step <= 9; step++) {
+    await page.mouse.wheel(0, way / 10);
+    await expect.poll(() => scrollY(page)).toBe(Math.round((way * step) / 10));
     await expect(opening).toHaveAttribute("data-handover", "going");
     await page.waitForTimeout(80);
     const now = await read();
     expect(now.heroTop, `the hero's place at ${step}/10`).toBe(0);
     expect(now.hero, `the hero at ${step}/10`).toBeLessThanOrEqual(before.hero);
     expect(now.words, `the words at ${step}/10`).toBeGreaterThanOrEqual(before.words);
-    // The clip grows from its box to the whole window in the first half of the way (amendment 5), and stays whole.
     for (let edge = 0; edge < 4; edge++) expect(now.clip[edge], `the clip's edge ${edge} at ${step}/10`).toBeLessThanOrEqual(before.clip[edge]);
-    if (step >= 5) expect(now.clip, `the clip at ${step}/10`).toEqual([0, 0, 0, 0]);
-    else expect(now.clip[0], `the clip's top at ${step}/10`).toBeGreaterThan(0);
+    if (step < 4) expect(now.clip[0], `the clip's top at ${step}/10`).toBeGreaterThan(0);
+    else expect(now.clip, `the clip at ${step}/10`).toEqual([0, 0, 0, 0]);
+    // growing: the clip at full strength, no words yet
+    if (step <= 4) expect([now.hero, now.words], `growing at ${step}/10`).toEqual([1, 0]);
+    // "Scroll to explore" goes as the clip grows and is gone once it is whole-window
+    expect(now.button, `the button at ${step}/10`).toBeLessThan(before.button === 0 ? 0.001 : before.button);
+    if (step >= 4) expect(now.button, `the button at ${step}/10`).toBe(0);
+    // the words wait for the clip to be well on its way to black
+    if (now.words > 0) expect(now.hero, `the clip when the words begin, at ${step}/10`).toBeLessThan(0.6);
     expect(now.hero > 0.3 || (now.words > 0.3 && now.wordsInWindow), `something on the screen at ${step}/10: ${JSON.stringify(now)}`).toBe(true);
     before = now;
   }
-  expect(before.hero).toBeLessThan(0.5);
-  expect(before.words).toBeGreaterThan(0.5);
+  expect(before.hero).toBeLessThan(0.2);
+  expect(before.words).toBeGreaterThan(0.8);
   // The box is not moving yet: all of this was the scroll's.
   await expectStop(page, 0);
   // On the stage: the hero is out of the way, the words stand, and the first beat plays.
@@ -237,8 +249,6 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   await expect(result).toContainText(`First ply to fail: ply ${first.ply} (${first.angle}°), in ${first.mode} ${first.place}.`);
   await expect(result).toContainText(`${kilonewtons(run.summary.reaction)} kN`);
   await expect(result).toContainText(`${first.applied.toFixed(2)} ${first.applied_unit} (${kilonewtons(first.reaction)} kN)`);
-  await expect(page.getByTestId("demo-recorded")).toHaveText(`A recorded run of the public IM7 / 8552 tension example · version ${run.solver_version} · ${run.recorded}`);
-  await expect(page.getByTestId("demo-recorded")).toHaveCSS("opacity", "1");
   await expect(box(page).locator("canvas")).toBeVisible();
   // The last beat: the files a run writes, by the workspace's names, and the way into the workspace.
   await notch(page);
@@ -383,7 +393,6 @@ test("with reduced motion the beats lie one under another in the box, finished, 
   await expect(page.getByTestId("demo-summary").locator("[data-filled]")).toHaveCount(5);
   await expect(page.getByTestId("demo-run").locator(".demo-stages li[data-state='done']")).toHaveCount(5);
   await expect(page.getByTestId("demo-result")).toContainText("First ply to fail");
-  await expect(page.getByTestId("demo-recorded")).toBeVisible();
   // The beats follow each other down the page.
   const tops = await demo(page).locator(".product-demo-beat").evaluateAll((beats) => beats.map((b) => b.getBoundingClientRect().top));
   expect([...tops].sort((a, b) => a - b)).toEqual(tops);

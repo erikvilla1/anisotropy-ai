@@ -100,14 +100,6 @@
   line-height: 26px;
   color: var(--demo-soft);
 }
-.product-demo-recorded {
-  margin: 40px 0 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 16px;
-  letter-spacing: 0.04em;
-  color: #7a7d80;
-}
 
 /* The cards: the workspace's dark panels, small. */
 .demo-card {
@@ -350,8 +342,8 @@
   }
   /* The box comes up with the first beat's words and its empty card, which come in as the page scrolls to it (--demo-arrived,
    * written by components/home/hero-handover.tsx; ADR-0095 amendment 4), so the window is not an empty black one on the way.
-   * The model and the line under it are there once the box holds the window and the first beat starts, and go again when the
-   * demo is back at its start. */
+   * The model is there once the box holds the window and the first beat starts, and goes again when the demo is back at its
+   * start. */
   .product-demo[data-mode="pinned"] .product-demo-box > * {
     transition: opacity 0.7s ease;
   }
@@ -425,17 +417,6 @@
   .product-demo[data-mode="pinned"] .demo-legend:not([data-shown]),
   .product-demo[data-mode="pinned"] .demo-result:not([data-shown]),
   .product-demo[data-mode="pinned"] .demo-files li:not([data-shown]) {
-    opacity: 0;
-  }
-  .product-demo[data-mode="pinned"] .product-demo-recorded {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 14px;
-    margin: 0;
-    text-align: center;
-  }
-  .product-demo[data-mode="pinned"] .product-demo-recorded:not([data-shown]) {
     opacity: 0;
   }
 }

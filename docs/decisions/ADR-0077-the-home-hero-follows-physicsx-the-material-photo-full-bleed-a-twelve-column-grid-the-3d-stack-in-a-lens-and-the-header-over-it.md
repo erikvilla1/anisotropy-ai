@@ -465,3 +465,11 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-13 against the dev server: at 1440 px the year measures 138.6 px beside the name's 138.3 px, each 34.5 px from the triangle; at 1280 px, 123.3 and 123.5; at 1920 px, 181.6 and 176.8. A screenshot at 1440 px was looked at. `home.spec.ts` and `intro.spec.ts` read "Est 2026" and pass. UNVERIFIED: the year is set in the visitor's own monospace typeface, so its length on Windows and macOS was not measured; and, as before, the year is the lead's statement.
 
+## Amendment 33, 2026-11-14 (after the demo the page is white)
+
+**Context.** The lead, with screenshots of the demo's last beat and of the Mission and Platform bands under it: "the page after the final step of the demo animation should transition to a white background now."
+
+**Decision.** Mission, Platform and What is new take the kit's light ground (`is-light`), as About already had, so every band from the demo to the closing band is white; the footer stays black. The black stage meets the first white band at a plain edge as the page scrolls on from the last beat. This replaces amendment 14's alternation of dark and light bands on the home page.
+
+**Evidence.** On 2026-11-14 against the dev server: screenshots of the three bands at 1440 px were looked at; the cards, tags and rules follow the light variables with no other change. The browser suites listed in ADR-0095 amendment 6: 34 passed, 3 skipped. UNVERIFIED: whether the lead meant an animated change from black to white at the end of the demo, which this does not do.
+

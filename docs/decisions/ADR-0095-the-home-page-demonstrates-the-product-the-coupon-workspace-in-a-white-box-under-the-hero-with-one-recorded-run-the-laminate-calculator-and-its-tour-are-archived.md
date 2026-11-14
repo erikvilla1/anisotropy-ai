@@ -1,6 +1,6 @@
 # ADR-0095: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
 
-- Status: Proposed, with amendments 1 to 5
+- Status: Proposed, with amendments 1 to 6
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) and [ADR-0084](ADR-0084-a-scroll-driven-tour-leads-from-the-hero-into-the-calculator-with-the-engines-own-answers.md), which this supersedes for the home page; [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md) (the live solve the demo does not call); ADR-0001; ADR-0042; ADR-0045; ADR-0091
@@ -143,4 +143,16 @@ UNVERIFIED: a real trackpad, wheel and graphics card; Safari and Firefox; the de
 **Decision.** Over the first half of the way to the stage the clip's box grows from its place under the header (84 px from the top, 32 px from the sides and the foot at 1440 px) to the whole window, eased (`--hero-grow`, written by `components/home/hero-handover.tsx`). It is whole-window while it dims. On the way back up it returns to its box. Nothing else of amendment 4 changes.
 
 **Evidence.** On 2026-11-14 against the dev server: stills at nine points of the scroll and a recorded trackpad-style swipe at 1440 by 810 px were looked at. The hand-over case of `demo.spec.ts` now also checks that the clip's four edges only move outward, reach the window's by half way and are back in the box at the top; `demo.spec.ts`, `intro.spec.ts` and `home.spec.ts`: 21 of 21. `npx tsc --noEmit` clean. UNVERIFIED, as in amendment 4: a real trackpad, wheel and graphics card; Safari and Firefox; whether resizing the clip's box on every frame stays smooth on a slow machine (it lays out one element).
+
+## Amendment 6, 2026-11-14 (the hand-over in order: the clip grows, then dims, then the words come; the button goes; the recorded line is taken out)
+
+**Context.** The lead, on amendments 4 and 5 running on their machine, with screenshots: "wait until the hero vid becomes full screen to fade to black and have the other stuff fade in when it fades more black"; "the 'scroll to explore' button should also be fading out"; and, of the line under the analysis ("A recorded run of the public IM7 / 8552 tension example · version 0.1.0 · 2026-11-13"), "dont need this".
+
+**Decision.**
+
+- The hand-over runs in order over the same half window of scrolling: the clip grows to the whole window over the first 40 % at full strength; only then does it dim, to nothing when the stage holds; the first beat's words come in between 60 % and 90 %, when the clip is at less than 0.6 of its strength.
+- "Scroll to explore" fades as the clip grows and is gone when the clip is whole-window.
+- The line under the analysis is removed from the page. The record (`lib/demo-run.json`) still says what it is, by which version and when, and a unit test reads that. The page therefore shows the analysis's numbers without saying they are a recorded example: the lead's choice, for the founder to weigh with the pull request.
+
+**Evidence.** On 2026-11-14 against the dev server: stills at nine points of a wheel scroll were looked at. The hand-over case of `demo.spec.ts` now scrolls by the wheel in tenths and checks the order (growing at full strength with no words; the button gone by 40 %; the words only once the clip is under 0.6). `demo.spec.ts`, `intro.spec.ts`, `home.spec.ts`, `shell.spec.ts`, `expansion.spec.ts` and the overview case of `portfolio.spec.ts`: 34 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 299 tests, 298 passed, 1 skipped. A run that failed first: the case for the way to the box still expected the words after the first wheel notch, which is now while the clip grows; it expects none there. UNVERIFIED, as before: a real trackpad, Safari, Firefox.
 

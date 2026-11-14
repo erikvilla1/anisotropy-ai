@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BEAT_COPY, everyLine, recordedLine, resultLines, summaryCells } from "../components/home/product-demo-copy";
+import { BEAT_COPY, everyLine, resultLines, summaryCells } from "../components/home/product-demo-copy";
 import { BEATS, BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, MOVE, POSES, finalView, layupScript, poseAt, sceneAt, viewAt } from "../components/home/product-demo-timeline";
 import { decide } from "../components/home/tour-stepper";
 import { demoRun, demoScale, runProblems, standardName } from "../lib/demo-run";
@@ -95,7 +95,8 @@ test("every word the demo shows is fit for the product's view, and its numbers a
   assert.equal(result.when.startsWith("It holds"), !first.fails);
   assert.deepEqual(summaryCells(demoRun, "IM7 / 8552").map(([name]) => name), ["TEST", "MATERIAL", "LAYUP", "SIZE", "MESH"]);
   assert.ok(summaryCells(demoRun, "IM7 / 8552")[4][1].startsWith(String(demoRun.summary.elements)));
-  assert.equal(recordedLine(demoRun), `A recorded run of the public IM7 / 8552 tension example · version ${demoRun.solver_version} · ${demoRun.recorded}`);
+  // The page does not print what the record is (the lead's choice, ADR-0095 amendment 6); the record still says it.
+  assert.equal(demoRun.what, "A recorded run of the public IM7 / 8552 tension example");
 });
 
 test("the stepper plays a caller's own stops: past the demo's fourth the page scrolls on", () => {

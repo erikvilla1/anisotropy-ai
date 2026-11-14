@@ -59,9 +59,6 @@ export function resultLines(run: DemoRun): { first: string; when: string } {
   };
 }
 
-/** What the demo is, under the analysis: a recorded run, by which version, when. */
-export const recordedLine = (run: DemoRun): string => `${run.what} · version ${run.solver_version} · ${run.recorded}`;
-
 /** Every fixed sentence the demo shows, for the banned-term check. */
 export function everyLine(run: DemoRun, material: string): string[] {
   const result = resultLines(run);
@@ -69,6 +66,6 @@ export function everyLine(run: DemoRun, material: string): string[] {
     DEMO_HEAD.label, DEMO_HEAD.title,
     ...Object.values(BEAT_COPY).flatMap((beat) => [beat.label, beat.title, beat.text]),
     ...Object.values(ASSISTANT), FILES_HEAD, OPEN_WORKSPACE, FIELD_LABEL,
-    ...summaryCells(run, material).flat(), result.first, result.when, recordedLine(run),
+    ...summaryCells(run, material).flat(), result.first, result.when,
   ];
 }

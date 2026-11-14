@@ -107,10 +107,10 @@ export default function Home() {
       <ProductDemo />
       <HeroHandover />
       </div>
-      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31):
-          Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
-          close the Mission band as a strip. */}
-      <section className="band home-blurb home-mission" id="mission">
+      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31), all
+          on the light ground since amendment 33: after the demo's last beat the page is white. Each band opens with the kit's
+          head. The four principles close the Mission band as a strip. */}
+      <section className="band is-light home-blurb home-mission" id="mission">
         <div className="band-head">
           <p className="band-label">01 / MISSION</p>
           <div className="band-statement">
@@ -136,7 +136,7 @@ export default function Home() {
           </li>
         </ul>
       </section>
-      <section className="band home-blurb home-platform" id="platform">
+      <section className="band is-light home-blurb home-platform" id="platform">
         <div className="band-head">
           <p className="band-label">02 / PLATFORM</p>
           <div className="band-statement">
@@ -240,7 +240,7 @@ export default function Home() {
           The team on the About page <ArrowUpRight size={16} />
         </Link>
       </section>
-      <section className="band home-blurb" id="news">
+      <section className="band is-light home-blurb" id="news">
         <div className="band-head">
           <p className="band-label">04 / WHAT IS NEW</p>
           <div className="band-statement">
