@@ -3,116 +3,114 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { demoRun, demoScale } from "@/lib/demo-run";
-import { angleSlots, colorAt, hexToRgb } from "@/lib/studio-colors";
-import { clamp01, poseAt, sceneAt, type LayupScript } from "./product-demo-timeline";
+import { demoWing, wingScale } from "@/lib/demo-wing";
+import { colorAt } from "@/lib/studio-colors";
+import { clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
 export type DemoSceneHandle = { clock: number; redraw: (() => void) | null };
 
-/** The product demo's centre model (ADR-0095): the recorded run's coupon, one slab a ply, on the black box. Its place and
- * orientation, how far its plies stand apart, the mesh and the stress field's colours are all read from the demo's clock on
- * each frame (components/home/product-demo-timeline.ts) and written to transforms and uniforms; nothing is computed here but
- * where things are drawn. The coupon is drawn in millimetres, its thickness enlarged so the plies can be told apart. */
+/** The product demo's centre model (ADR-0098): the example wing, drawn from the very mesh that was solved, one surface a part,
+ * on the black stage. Its place and orientation, how far its parts stand apart, the mesh's lines and the analysis's colours
+ * are all read from the demo's clock on each frame (components/home/product-demo-timeline.ts) and written to transforms and
+ * uniforms; nothing is computed here but where things are drawn. The wing is drawn in millimetres: its span along the view's
+ * x, its chord along y with the leading edge towards the viewer, and its depth along z. */
 
-const PLY_THICK = 2.2; // mm as drawn: the real ply is 0.18 mm
-const PLY_GAP = 15; // mm between plies when they stand fully apart
-const PLY_DROP = 30; // mm above its place a ply starts when it is laid
-const CARBON: [number, number, number] = [0.15, 0.154, 0.163]; // a dark grey that still reads on the black ground
+/** How far each part moves when the wing stands fully apart, in millimetres, as [along the span, along the chord, up]: the
+ * skins lift off, the spars step out fore and aft, and the ribs stay where they are, in the middle. */
+const APART: Record<string, [number, number, number]> = {
+  "upper-skin": [0, 0, 150],
+  "lower-skin": [0, 0, -150],
+  "front-spar": [0, -70, 0],
+  "rear-spar": [0, 70, 0],
+  ribs: [0, 0, 0],
+};
+/** The carbon's tone a part, so the parts can be told apart before the analysis colours them. */
+const TONE: Record<string, number> = { "upper-skin": 1, "lower-skin": 0.86, "front-spar": 1.28, "rear-spar": 1.28, ribs: 1.5 };
+const CARBON: [number, number, number] = [0.25, 0.256, 0.27];
 const CAMERA_Z = 12;
 const CAMERA_FOV = 20;
 
-const SKIN_VERTEX = /* glsl */ `
-  attribute vec3 carbon;
+const PART_VERTEX = /* glsl */ `
   attribute vec3 field;
+  uniform vec3 uCarbon;
   uniform float uField;
   varying vec3 vColor;
+  varying vec3 vView;
   void main() {
-    vColor = mix( carbon, field, uField );
-    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    vColor = mix( uCarbon, field, uField );
+    vec4 view = modelViewMatrix * vec4( position, 1.0 );
+    vView = view.xyz;
+    gl_Position = projectionMatrix * view;
   }`;
-const SKIN_FRAGMENT = /* glsl */ `
+/** Each face is lit by where it faces, read from the surface itself, so the aerofoil's curve and the parts' edges show without
+ * a light in the scene; the analysis's colours are lit less, so a colour means the same on every face. */
+const PART_FRAGMENT = /* glsl */ `
   uniform float uOpacity;
+  uniform float uField;
   varying vec3 vColor;
+  varying vec3 vView;
   void main() {
-    gl_FragColor = vec4( vColor, uOpacity );
+    vec3 normal = normalize( cross( dFdx( vView ), dFdy( vView ) ) );
+    float facing = abs( dot( normal, normalize( vec3( 0.25, 0.55, 0.8 ) ) ) );
+    float lit = mix( 0.45 + 0.75 * facing, 0.8 + 0.25 * facing, uField );
+    gl_FragColor = vec4( vColor * lit, uOpacity );
   }`;
 
-type Ply = { group: THREE.Group; skin: THREE.ShaderMaterial; slab: THREE.MeshBasicMaterial; rim: THREE.LineBasicMaterial; mesh: THREE.LineBasicMaterial };
+type Part = { id: string; group: THREE.Group; skin: THREE.ShaderMaterial; mesh: THREE.LineBasicMaterial; apart: [number, number, number] };
 
-/** The coupon's parts, built once from the recorded run. Its length lies along x and its width along y, centred; z is through
- * the thickness, the bottom ply lowest. */
+/** The wing's parts, built once from the record, centred on the wing's middle. */
 function buildModel() {
-  const { mesh, field, coupon } = demoRun;
-  const scale = demoScale(demoRun);
-  const slots = angleSlots(coupon.angles);
-  const half = { x: coupon.length / 2, y: coupon.width / 2 };
-  const at = (node: number): [number, number] => [mesh.nodes[node][1] - half.x, mesh.nodes[node][0] - half.y];
-  // The faces: two triangles an element, each vertex carrying the carbon's tone and the element's colour on the field's scale.
-  const positions: number[] = [];
-  for (const quad of mesh.quads) for (const corner of [0, 1, 2, 0, 2, 3]) positions.push(...at(quad[corner]), 0);
-  // The mesh's lines, each edge once.
-  const seen = new Set<string>();
-  const lines: number[] = [];
-  for (const quad of mesh.quads) {
-    for (let side = 0; side < 4; side++) {
-      const a = quad[side], b = quad[(side + 1) % 4];
-      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      lines.push(...at(a), 0, ...at(b), 0);
-    }
-  }
-  const lineGeometry = new THREE.BufferGeometry();
-  lineGeometry.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3));
-  const rimGeometry = new THREE.BufferGeometry();
-  rimGeometry.setAttribute("position", new THREE.Float32BufferAttribute([
-    -half.x, -half.y, 0, half.x, -half.y, 0, half.x, -half.y, 0, half.x, half.y, 0, half.x, half.y, 0, -half.x, half.y, 0, -half.x, half.y, 0, -half.x, -half.y, 0,
-  ], 3));
-  const slabGeometry = new THREE.BoxGeometry(coupon.length, coupon.width, PLY_THICK);
-
+  const { mesh, parts, wing, field } = demoWing;
+  const scale = field ? wingScale(field) : null;
+  const middle = { span: wing.span / 2, chord: wing.chord / 2 };
+  const at = (node: number): [number, number, number] => [mesh.nodes[node][1] - middle.span, mesh.nodes[node][0] - middle.chord, mesh.nodes[node][2]];
+  const disposables: { dispose: () => void }[] = [];
   const root = new THREE.Group();
-  const plies: Ply[] = coupon.angles.map((angle, index) => {
-    const group = new THREE.Group();
-    const carbon: number[] = [];
+  const built: Part[] = parts.map((part) => {
+    const positions: number[] = [];
     const colours: number[] = [];
-    // A ply's fibres run at its angle: a faint stripe of tone along them tells the plies apart before the field colours them.
-    const tone = 1 + 0.22 * Math.cos(THREE.MathUtils.degToRad(angle) * 2);
-    for (const value of field.plies[index]) {
-      const colour = colorAt(scale, value);
-      for (let vertex = 0; vertex < 6; vertex++) {
-        carbon.push(CARBON[0] * tone, CARBON[1] * tone, CARBON[2] * tone);
+    const lines: number[] = [];
+    const seen = new Set<string>();
+    for (let face = part.first; face < part.first + part.count; face++) {
+      const quad = mesh.quads[face];
+      const colour = scale && field ? colorAt(scale, field.values[face]) : CARBON;
+      for (const corner of [0, 1, 2, 0, 2, 3]) {
+        positions.push(...at(quad[corner]));
         colours.push(...colour);
+      }
+      for (let side = 0; side < 4; side++) {
+        const a = quad[side], b = quad[(side + 1) % 4];
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        lines.push(...at(a), ...at(b));
       }
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute("carbon", new THREE.Float32BufferAttribute(carbon, 3));
     geometry.setAttribute("field", new THREE.Float32BufferAttribute(colours, 3));
+    const tone = TONE[part.id] ?? 1;
     const skin = new THREE.ShaderMaterial({
-      vertexShader: SKIN_VERTEX, fragmentShader: SKIN_FRAGMENT, uniforms: { uField: { value: 0 }, uOpacity: { value: 1 } },
+      vertexShader: PART_VERTEX, fragmentShader: PART_FRAGMENT,
+      uniforms: { uCarbon: { value: new THREE.Vector3(CARBON[0] * tone, CARBON[1] * tone, CARBON[2] * tone) }, uField: { value: 0 }, uOpacity: { value: 1 } },
       transparent: true, side: THREE.DoubleSide, toneMapped: false,
+      // The faces sit a little back in depth, so the mesh's lines drawn on them never flicker.
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     });
-    const face = new THREE.Mesh(geometry, skin);
-    face.position.z = PLY_THICK / 2 + 0.12;
-    // The slab is pushed back in depth a little, so its top never shows through the face that lies on it.
-    const slab = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(0.085, 0.088, 0.094), transparent: true, toneMapped: false, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2,
-    });
-    const rim = new THREE.LineBasicMaterial({ color: new THREE.Color(...hexToRgb(slots.get(angle) ?? "#888888")), transparent: true, toneMapped: false });
-    const edge = new THREE.LineSegments(rimGeometry, rim);
-    edge.position.z = PLY_THICK / 2 + 0.3;
+    const lineGeometry = new THREE.BufferGeometry();
+    lineGeometry.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3));
     const wire = new THREE.LineBasicMaterial({ color: new THREE.Color(0.86, 0.88, 0.9), transparent: true, opacity: 0, toneMapped: false });
-    const net = new THREE.LineSegments(lineGeometry, wire);
-    net.position.z = PLY_THICK / 2 + 0.22;
-    group.add(new THREE.Mesh(slabGeometry, slab), face, net, edge);
+    const group = new THREE.Group();
+    group.add(new THREE.Mesh(geometry, skin), new THREE.LineSegments(lineGeometry, wire));
     root.add(group);
-    return { group, skin, slab, rim, mesh: wire };
+    disposables.push(geometry, lineGeometry, skin, wire);
+    return { id: part.id, group, skin, mesh: wire, apart: APART[part.id] ?? [0, 0, 0] };
   });
-  return { root, plies, dispose: () => { lineGeometry.dispose(); rimGeometry.dispose(); slabGeometry.dispose(); } };
+  return { root, parts: built, hasField: Boolean(field), dispose: () => disposables.forEach((item) => item.dispose()) };
 }
 
-function shadowTexture(): THREE.CanvasTexture {
+function glowTexture(): THREE.CanvasTexture {
   const size = 128;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
@@ -126,10 +124,10 @@ function shadowTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-function Coupon({ handle, script }: { handle: DemoSceneHandle; script: LayupScript }) {
+function Wing({ handle }: { handle: DemoSceneHandle }) {
   const model = useMemo(buildModel, []);
-  const shadow = useMemo(() => {
-    const texture = shadowTexture();
+  const glow = useMemo(() => {
+    const texture = glowTexture();
     const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false });
     return { mesh: new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material), material, texture };
   }, []);
@@ -142,53 +140,47 @@ function Coupon({ handle, script }: { handle: DemoSceneHandle; script: LayupScri
   }, [handle, invalidate]);
   useEffect(() => () => {
     model.dispose();
-    shadow.texture.dispose();
-    shadow.material.dispose();
-  }, [model, shadow]);
+    glow.texture.dispose();
+    glow.material.dispose();
+    glow.mesh.geometry.dispose();
+  }, [model, glow]);
 
   useFrame((state) => {
     const group = turn.current;
     if (!group) return;
     const clock = handle.clock;
     const pose = poseAt(clock);
-    const scene = sceneAt(clock, script);
+    const scene = sceneAt(clock);
     const { width, height } = state.viewport; // the world's size at the model's distance
-    const unit = (pose.size * width) / demoRun.coupon.length; // world units a millimetre
+    const { span, chord } = demoWing.wing;
+    const unit = (pose.size * width) / span; // world units a millimetre
     const x = (pose.x - 0.5) * width;
     const y = (0.5 - pose.y) * height;
     group.position.set(x, y, 0);
     group.scale.setScalar(unit);
     group.rotation.set(-pose.pitch, pose.yaw, 0, "YXZ");
-    const count = model.plies.length;
-    const step = PLY_THICK + clamp01(pose.explode) * PLY_GAP;
-    model.plies.forEach((ply, index) => {
-      const laid = clamp01(scene.laid - index);
-      const eased = laid * laid * (3 - 2 * laid);
-      ply.group.visible = laid > 0 && scene.presence > 0;
-      ply.group.position.z = (index - (count - 1) / 2) * step + (1 - eased) * PLY_DROP;
-      const opacity = eased * scene.presence;
-      ply.skin.uniforms.uField.value = scene.field;
-      ply.skin.uniforms.uOpacity.value = opacity;
-      ply.slab.opacity = opacity;
-      ply.rim.opacity = opacity * (1 - 0.75 * scene.field);
-      // The mesh: light lines on the carbon, darker and fainter once the field colours the ply.
-      ply.mesh.opacity = opacity * scene.mesh * (0.5 - 0.3 * scene.field);
-      ply.mesh.color.setScalar(0.88 - 0.8 * scene.field);
-    });
-    // A faint pool of light on the black ground, just under the model (a shadow, when the ground was white): as wide as the coupon is long on the screen, and deeper the
-    // further the plies stand apart.
-    const laidShare = clamp01(scene.laid / count);
-    const stack = ((count - 1) * step + PLY_THICK) * unit; // the stack's height in the world
-    const reach = (demoRun.coupon.width * Math.cos(pose.pitch) + stack * Math.sin(pose.pitch)) / 2; // half its height on the screen
-    const long = demoRun.coupon.length * unit * Math.cos(pose.yaw);
-    shadow.mesh.position.set(x, y - reach - 0.03 * height, -1);
-    shadow.mesh.scale.set(long * 1.15, 0.09 * height + 0.5 * reach, 1);
-    shadow.material.opacity = 0.16 * scene.presence * laidShare;
+    group.visible = scene.presence > 0;
+    const apart = clamp01(pose.explode);
+    const field = model.hasField ? scene.field : 0;
+    for (const part of model.parts) {
+      part.group.position.set(part.apart[0] * apart, part.apart[1] * apart, part.apart[2] * apart);
+      part.skin.uniforms.uField.value = field;
+      part.skin.uniforms.uOpacity.value = scene.presence;
+      // The mesh: light lines on the carbon, darker and fainter once the analysis colours the part.
+      part.mesh.opacity = scene.presence * scene.mesh * (0.34 - 0.2 * field);
+      part.mesh.color.setScalar(0.88 - 0.8 * field);
+    }
+    // A faint pool of light on the black ground, just under the wing: as wide as the span on the screen, and deeper the
+    // further the parts stand apart.
+    const reach = ((chord * Math.cos(pose.pitch) + (40 + 300 * apart) * Math.sin(pose.pitch)) * unit) / 2; // half the model's height on the screen
+    glow.mesh.position.set(x, y - reach - 0.03 * height, -1);
+    glow.mesh.scale.set(span * unit * Math.cos(pose.yaw) * 1.15, 0.09 * height + 0.5 * reach, 1);
+    glow.material.opacity = 0.16 * scene.presence;
   });
 
   return (
     <>
-      <primitive object={shadow.mesh} />
+      <primitive object={glow.mesh} />
       <group ref={turn}>
         <primitive object={model.root} />
       </group>
@@ -205,9 +197,9 @@ function webglAvailable(): boolean {
   }
 }
 
-/** The view fills its box and has no ground of its own: the black box shows through. A browser without WebGL draws nothing here;
- * the words and the cards still tell the run. */
-export function ProductDemoSceneCanvas({ handle, script }: { handle: DemoSceneHandle; script: LayupScript }) {
+/** The view fills its box and has no ground of its own: the black stage shows through. A browser without WebGL draws nothing
+ * here; the words and the cards still tell the analysis. */
+export function ProductDemoSceneCanvas({ handle }: { handle: DemoSceneHandle }) {
   const available = useMemo(() => (typeof document === "undefined" ? false : webglAvailable()), []);
   if (!available) return null;
   return (
@@ -216,7 +208,7 @@ export function ProductDemoSceneCanvas({ handle, script }: { handle: DemoSceneHa
       camera={{ position: [0, 0, CAMERA_Z], fov: CAMERA_FOV, near: 4, far: 30 }}
       style={{ pointerEvents: "none" }} aria-hidden="true"
     >
-      <Coupon handle={handle} script={script} />
+      <Wing handle={handle} />
     </Canvas>
   );
 }

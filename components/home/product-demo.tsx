@@ -3,15 +3,14 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowUpRight, Check, FileText, Layers3 } from "lucide-react";
-import { demoRun, demoScale, standardName } from "@/lib/demo-run";
-import { COMMON_MATERIALS } from "@/lib/studio-chat";
+import { ArrowUpRight, Check, FileText } from "lucide-react";
+import { demoWing, wingScale } from "@/lib/demo-wing";
 import { legendGradient } from "@/lib/studio-colors";
 import { DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
 import { libraryOptions } from "@/lib/studio-form";
-import { ASSISTANT, BEAT_COPY, DEMO_HEAD, FIELD_LABEL, FILES_HEAD, OPEN_WORKSPACE, resultLines, summaryCells } from "./product-demo-copy";
+import { BEAT_COPY, DEMO_HEAD, FILES_HEAD, OPEN_WORKSPACE, resultLines, wingFacts, wingParts } from "./product-demo-copy";
 import type { DemoSceneHandle } from "./product-demo-scene";
-import { BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, finalView, layupScript, sameView, viewAt, type BeatId, type DemoView } from "./product-demo-timeline";
+import { BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, finalView, sameView, viewAt, type BeatId, type DemoView } from "./product-demo-timeline";
 import { useTourDriver } from "./tour-driver";
 import "@/app/home-demo.css";
 
@@ -34,28 +33,30 @@ const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", mo
 /** The three files the workspace lists first for a run. */
 const FILES = DOWNLOAD_LABELS.slice(0, 3).map(([, label]) => label);
 const materialName = (id: string) => libraryOptions.find((option) => option.id === id)?.name ?? id;
+/** An end of the legend: a share as a percentage when the field has no unit, the rounded value otherwise. */
+const legendEnd = (value: number, unit: string) => (unit ? String(Math.round(value)) : `${Math.round(value * 100)} %`);
 
-/** The home page's demonstration of the product (ADR-0095): the coupon workspace in four beats, on a black stage as wide as
- * the hero's clip and a window tall, which the hero hands over to (components/home/hero-handover.tsx). Each beat uses the workspace's own names and shapes, cut down for a first look: the assistant's
- * question and chips, the setup's summary, the run's stages with the stress field, and the files. Nothing is asked of the API:
- * the model, the field's colours and every number are one recorded run of the solver on a public example (lib/demo-run.ts).
- * The page no longer says so under the analysis: the lead took that line out on 2026-11-14 (amendment 6); the record keeps
- * what it is, its version and its date.
+/** The home page's demonstration of the product (ADR-0095, ADR-0098): one composite wing in four beats, on a black stage as
+ * wide as the hero's clip and a window tall, which the hero hands over to (components/home/hero-handover.tsx). The wing stands
+ * whole, comes apart into its parts, takes the analysis's colours part by part, and closes again. The cards beside it are the
+ * workspace's shapes cut down for a first look: a summary strip, the run's stages with the legend, and the files. Nothing is
+ * asked of the API: the mesh, the colours and every number are one recorded analysis of an example wing (lib/demo-wing.ts).
+ * The wing is ahead of the product, which analyses coupons today: the lead's choice of 2026-11-14.
  *
- * On a desktop the stage is a window tall and holds the window while it fills it, and one scroll gesture plays one whole beat
- * (components/home/tour-driver.ts); the page scrolls to it and away from it as any page does. The centre model changes place
- * and orientation between beats in one eased move, and the words change sides (product-demo-timeline.ts). With reduced motion
+ * On a desktop the stage holds the window while it fills it, and one scroll gesture plays one whole beat
+ * (components/home/tour-driver.ts); the page scrolls to it and away from it as any page does. The model changes place and
+ * orientation between beats in one eased move, and the words change sides (product-demo-timeline.ts). With reduced motion
  * or a small window the beats lie one under another and no gesture is taken. */
 export function ProductDemo() {
   const box = useRef<HTMLDivElement>(null);
   const pinned = useMediaQuery(PINNED_QUERY);
-  const run = demoRun;
-  const script = useMemo(() => layupScript(run.coupon.layup, run.coupon.angles.length), [run]);
-  const material = materialName(run.coupon.library);
-  const cells = useMemo(() => summaryCells(run, material), [run, material]);
-  const counts = useMemo(() => ({ cells: cells.length, stages: RUN_STEPS.length, files: FILES.length }), [cells]);
-  const start = useMemo(() => viewAt(0, script, counts), [script, counts]);
-  const whole = useMemo(() => finalView(script, counts), [script, counts]);
+  const wing = demoWing;
+  const material = materialName(wing.wing.library);
+  const facts = useMemo(() => wingFacts(wing, material), [wing, material]);
+  const parts = useMemo(() => wingParts(wing), [wing]);
+  const counts = useMemo(() => ({ facts: facts.length, parts: parts.length, stages: RUN_STEPS.length, files: FILES.length }), [facts, parts]);
+  const start = useMemo(() => viewAt(0, counts), [counts]);
+  const whole = useMemo(() => finalView(counts), [counts]);
   const [played, setPlayed] = useState<DemoView | null>(null);
   const [viewWanted, setViewWanted] = useState(false);
   const handle = useMemo<DemoSceneHandle>(() => ({ clock: 0, redraw: null }), []);
@@ -65,7 +66,7 @@ export function ProductDemo() {
   useTourDriver(box, pinned, ({ clock }) => {
     handle.clock = clock;
     handle.redraw?.();
-    const next = viewAt(clock, script, counts);
+    const next = viewAt(clock, counts);
     setPlayed((current) => (current && sameView(current, next) ? current : next));
   }, {
     stops: DEMO_STOPS,
@@ -110,37 +111,22 @@ export function ProductDemo() {
     return () => observer.disconnect();
   }, [pinned, viewWanted]);
 
-  const scale = useMemo(() => demoScale(run), [run]);
-  const result = useMemo(() => resultLines(run), [run]);
-  const typed = run.coupon.layup.slice(0, view.layupChars);
-  const cards: Record<BeatId, React.ReactNode> = {
-    describe: (
-      <div className="demo-card demo-assistant" data-testid="demo-assistant">
-        <p className="demo-card-head"><span className="demo-dot" aria-hidden="true" />{ASSISTANT.name}</p>
-        <p className="demo-question">{ASSISTANT.question}</p>
-        <ul className="demo-chips" aria-label="Materials">
-          {COMMON_MATERIALS.map((id) => (
-            <li key={id} data-picked={view.picked && id === run.coupon.library ? "true" : undefined}>
-              {view.picked && id === run.coupon.library ? <Check size={14} aria-hidden="true" /> : <Layers3 size={14} aria-hidden="true" />} {materialName(id)}
-            </li>
-          ))}
-        </ul>
-        <div className="demo-fields">
-          <p className="demo-field"><span>{ASSISTANT.standard}</span><strong data-picked={view.standard ? "true" : undefined}>{view.standard ? standardName(run) : "–"}</strong></p>
-          <p className="demo-field"><span>{ASSISTANT.layup}</span><strong className="demo-typed" data-testid="demo-layup">{typed}{pinned && view.layupChars < run.coupon.layup.length ? <i aria-hidden="true" /> : null}</strong></p>
+  const field = wing.field;
+  const scale = useMemo(() => (field ? wingScale(field) : null), [field]);
+  const result = useMemo(() => resultLines(wing), [wing]);
+  const strip = (rows: [string, string][], filled: number, testId: string) => (
+    <dl className="demo-card demo-summary" data-testid={testId}>
+      {rows.map(([name, value], index) => (
+        <div key={name} data-filled={index < filled ? "true" : undefined}>
+          <dt>{name}</dt>
+          <dd>{index < filled ? value : "–"}</dd>
         </div>
-      </div>
-    ),
-    model: (
-      <dl className="demo-card demo-summary" data-testid="demo-summary">
-        {cells.map(([name, value], index) => (
-          <div key={name} data-filled={index < view.cells ? "true" : undefined}>
-            <dt>{name}</dt>
-            <dd>{index < view.cells ? value : "–"}</dd>
-          </div>
-        ))}
-      </dl>
-    ),
+      ))}
+    </dl>
+  );
+  const cards: Record<BeatId, React.ReactNode> = {
+    describe: strip(facts, view.facts, "demo-facts"),
+    model: strip(parts, view.parts, "demo-parts"),
     analysis: (
       <div className="demo-card demo-run" data-testid="demo-run">
         <ol className="demo-stages" aria-label="The run">
@@ -150,15 +136,19 @@ export function ProductDemo() {
             </li>
           ))}
         </ol>
-        <div className="demo-legend" data-shown={view.legend ? "true" : undefined} data-testid="demo-legend">
-          <p>{FIELD_LABEL}, {run.field.unit}</p>
-          <span className="demo-legend-bar" style={{ background: legendGradient(scale, 0) }} aria-hidden="true" />
-          <p className="demo-legend-ends"><span>{Math.round(scale.min)}</span><span>0</span><span>{Math.round(scale.max)}</span></p>
-        </div>
-        <div className="demo-result" data-shown={view.result ? "true" : undefined} data-testid="demo-result">
-          <p><strong>{result.first}</strong></p>
-          <p>{result.when}</p>
-        </div>
+        {field && scale ? (
+          <div className="demo-legend" data-shown={view.legend ? "true" : undefined} data-testid="demo-legend">
+            <p>{field.label}{field.unit ? `, ${field.unit}` : ""}</p>
+            <span className="demo-legend-bar" style={{ background: legendGradient(scale, 0) }} aria-hidden="true" />
+            <p className="demo-legend-ends"><span>{legendEnd(field.min, field.unit)}</span><span>{legendEnd(field.max, field.unit)}</span></p>
+          </div>
+        ) : null}
+        {result ? (
+          <div className="demo-result" data-shown={view.result ? "true" : undefined} data-testid="demo-result">
+            <p><strong>{result.first}</strong></p>
+            <p>{result.when}</p>
+          </div>
+        ) : null}
       </div>
     ),
     report: (
@@ -181,7 +171,7 @@ export function ProductDemo() {
           <p className="demo-label">{DEMO_HEAD.label}</p>
           <h2 id="demo-title">{DEMO_HEAD.title}</h2>
         </div>
-        <div className="product-demo-view">{viewWanted ? <ProductDemoScene handle={handle} script={script} /> : null}</div>
+        <div className="product-demo-view">{viewWanted ? <ProductDemoScene handle={handle} /> : null}</div>
         <ol className="product-demo-beats">
           {BEAT_IDS.map((id, index) => {
             const active = !pinned || view.beat === index;

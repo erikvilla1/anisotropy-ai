@@ -1,13 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
-import run from "../../lib/demo-run.json";
+import { demoWing } from "../../lib/demo-wing";
 import { bannedIn } from "../../lib/studio-copy";
 
-// The product demo under the hero (ADR-0095): a box the size of the hero's clip, black as the page is (amendment 2), in which the coupon workspace is shown in
-// four beats from one recorded run of the solver. The page scrolls to the box as any page does; once the box stands in the
+// The product demo under the hero (ADR-0095): a box the size of the hero's clip, black as the page is (amendment 2), in which one composite wing is shown in
+// four beats from one recorded analysis (ADR-0098): whole, apart into its parts, analysed part by part, whole again. The page scrolls to the box as any page does; once the box stands in the
 // window one scroll gesture plays one whole beat. `data-stop` on the box says where the demo's clock stands (0 while
 // the box is empty, 1 to 4 at the end of each beat) and `data-moving` is there while a beat plays.
 
-// The four beats take 4.4, 3.2, 5.6 and 2.8 s, and several cases play all of them.
+// The four beats take 3.2, 3.6, 4.8 and 3.2 s, and several cases play all of them.
 test.describe.configure({ timeout: 120_000 });
 
 const demo = (page: Page) => page.locator("#demo");
@@ -61,7 +61,11 @@ async function openPinned(page: Page) {
   const viewport = page.viewportSize()!;
   await page.mouse.move(viewport.width / 2, viewport.height / 2);
 }
-const kilonewtons = (newtons: number) => (newtons / 1000).toFixed(1);
+// The record's analysis (scripts/demo-wing.py --solve). Without it the cases that read it fail, as they should.
+const wing = { ...demoWing, field: demoWing.field!, solve: demoWing.solve!, load: demoWing.load! };
+/** An end of the legend as the page prints it: a share as a percentage when the field has no unit. */
+const legendEnd = (value: number) => (wing.field.unit ? String(Math.round(value)) : `${Math.round(value * 100)} %`);
+const PARTS = ["UPPER SKIN", "LOWER SKIN", "FRONT SPAR", "REAR SPAR", "RIBS"];
 
 test("the demo is a black stage as wide as the clip and a window tall, which starts half a window up behind the hero", async ({ page }) => {
   await openPinned(page);
@@ -105,7 +109,7 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
   const wordsIn = () => beat(page, "describe").evaluate((element) => Number(getComputedStyle(element).opacity));
   expect(await wordsIn()).toBe(0);
   for (const id of ["model", "analysis", "report"]) await expect(beat(page, id)).toHaveCSS("opacity", "0");
-  await expect(page.getByTestId("demo-layup")).toHaveText("");
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(0);
   // Notch by notch: the page keeps to the wheel and nothing plays; near the stage the words are on their way in.
   for (let guard = 0; (await offLine(page)) > 100 && guard < 30; guard++) {
     const before = await scrollY(page);
@@ -126,15 +130,16 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
   const placed = await box(page).evaluate((element) => { const r = element.getBoundingClientRect(); return [Math.round(r.top), Math.round(window.innerHeight - r.bottom)]; });
   expect(placed[0]).toBe(placed[1]);
   for (const part of [".product-demo-view", ".product-demo-beats"]) await expect(box(page).locator(part), part).toHaveCSS("opacity", "1");
-  // The first beat: the assistant's question, the material picked, the standard, and the layup typed.
+  // The first beat: the wing whole, and what it is filled in beside it.
   await expect(beat(page, "describe")).toHaveAttribute("data-active", "true");
-  await expect(beat(page, "describe").getByRole("heading", { level: 3 })).toHaveText("Describe the coupon.");
-  const assistant = page.getByTestId("demo-assistant");
-  await expect(assistant).toContainText("Which material?");
-  await expect(assistant.locator(".demo-chips li")).toHaveCount(4);
-  await expect(assistant.locator(".demo-chips li[data-picked]")).toHaveText("IM7 / 8552");
-  await expect(assistant).toContainText("ASTM D3039");
-  await expect(page.getByTestId("demo-layup")).toHaveText(run.coupon.layup);
+  await expect(beat(page, "describe").getByRole("heading", { level: 3 })).toHaveText("Start from the part.");
+  const facts = page.getByTestId("demo-facts");
+  await expect(facts.locator("[data-filled]")).toHaveCount(5);
+  await expect(facts.locator("dt")).toHaveText(["PART", "SPAN", "CHORD", "MATERIAL", "STRUCTURE"]);
+  await expect(facts).toContainText("2.13 m");
+  await expect(facts).toContainText("IM7 / 8552");
+  await expect(facts).toContainText("2 skins, 2 spars, 7 ribs");
+  await expect(box(page).locator("canvas")).toBeVisible();
   expect(asked).toEqual([]);
 });
 
@@ -218,11 +223,11 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   expect(await swipe(page)).toBe(28);
   await expectStop(page, 2);
   await expect(beat(page, "model")).toHaveAttribute("data-active", "true");
-  const summary = page.getByTestId("demo-summary");
-  await expect(summary.locator("[data-filled]")).toHaveCount(5);
-  await expect(summary).toContainText("unnotched tension");
-  await expect(summary).toContainText(`${run.coupon.length} × ${run.coupon.width} mm, per D3039`);
-  await expect(summary).toContainText(`${run.summary.elements} elements`);
+  // The second beat: the wing apart, and its five parts named with their layups.
+  const parts = page.getByTestId("demo-parts");
+  await expect(parts.locator("[data-filled]")).toHaveCount(5);
+  await expect(parts.locator("dt")).toHaveText(PARTS);
+  await expect(parts.locator("dd")).toHaveText(wing.parts.map((part) => part.layup));
   await page.waitForTimeout(700);
   await expectStop(page, 2);
   expect(await scrollY(page)).toBe(held);
@@ -234,21 +239,20 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   await expectStop(page, 3);
   await page.waitForTimeout(700);
   await expectStop(page, 3);
-  // The analysis: the run's five stages done, the field's legend in its unit, the first ply to fail, and what the demo is.
+  // The analysis: the run's five stages done, the legend over the recorded range, and what the analysis found.
   const analysis = page.getByTestId("demo-run");
   await expect(analysis.locator(".demo-stages li")).toHaveText(["Queued", "Meshing", "Solving", "Post-processing", "Report ready"]);
   await expect(analysis.locator(".demo-stages li[data-state='done']")).toHaveCount(5);
   const legend = page.getByTestId("demo-legend");
   await expect(legend).toHaveCSS("opacity", "1");
-  await expect(legend).toContainText(`Stress along the fibres, ${run.field.unit}`);
-  const bound = Math.round(Math.max(-run.field.min, run.field.max));
-  await expect(legend.locator(".demo-legend-ends span")).toHaveText([String(-bound), "0", String(bound)]);
-  const first = run.summary.first_failure;
+  await expect(legend).toContainText(wing.field.unit ? `${wing.field.label}, ${wing.field.unit}` : wing.field.label);
+  await expect(legend.locator(".demo-legend-ends span")).toHaveText([legendEnd(wing.field.min), legendEnd(wing.field.max)]);
   const result = page.getByTestId("demo-result");
   await expect(result).toHaveCSS("opacity", "1");
-  await expect(result).toContainText(`First ply to fail: ply ${first.ply} (${first.angle}°), in ${first.mode} ${first.place}.`);
-  await expect(result).toContainText(`${kilonewtons(run.summary.reaction)} kN`);
-  await expect(result).toContainText(`${first.applied.toFixed(2)} ${first.applied_unit} (${kilonewtons(first.reaction)} kN)`);
+  const governing = wing.parts.find((part) => part.id === wing.solve.governing.part)!;
+  await expect(result).toContainText(`Most loaded: the ${governing.name.toLowerCase()}`);
+  await expect(result).toContainText(`${wing.load.total} ${wing.load.unit} pushed up at the ribs`);
+  await expect(result).toContainText(`the tip rises ${Math.round(wing.solve.tip_deflection)} mm`);
   await expect(box(page).locator("canvas")).toBeVisible();
   // The last beat: the files a run writes, by the workspace's names, and the way into the workspace.
   await notch(page);
@@ -272,7 +276,7 @@ test("nothing the demo shows is a word the product's view bans", async ({ page }
   expect(bannedIn(text)).toEqual([]);
 });
 
-test("a beat takes its own time: the second about 3.2 s, measured in the page", async ({ page }) => {
+test("a beat takes its own time: the second about 3.6 s, measured in the page", async ({ page }) => {
   await openPinned(page);
   await playTo(page, 1);
   await page.evaluate(() => {
@@ -287,8 +291,8 @@ test("a beat takes its own time: the second about 3.2 s, measured in the page", 
   await notch(page);
   await expectStop(page, 2);
   const marks = await page.evaluate(() => (window as unknown as { __beat: { start: number; end: number } }).__beat);
-  expect(marks.end - marks.start).toBeGreaterThan(3000);
-  expect(marks.end - marks.start).toBeLessThan(4400);
+  expect(marks.end - marks.start).toBeGreaterThan(3400);
+  expect(marks.end - marks.start).toBeLessThan(4800);
 });
 
 test("up from the first beat and down from the last the page scrolls as any page does, and on the way back up the box is passed", async ({ page }) => {
@@ -387,12 +391,12 @@ test("with reduced motion the beats lie one under another in the box, finished, 
   await page.mouse.wheel(0, 240);
   await expect.poll(() => scrollY(page)).toBe(240);
   await expect(page.locator("#overview")).toHaveCSS("opacity", "1");
-  await expect(demo(page).getByRole("heading", { level: 2 })).toHaveText("A coupon analysis, set up for you.");
-  for (const title of ["Describe the coupon.", "The model builds itself.", "Run the analysis.", "It comes with the report."]) await expect(demo(page).getByRole("heading", { name: title })).toBeVisible();
-  await expect(page.getByTestId("demo-layup")).toHaveText(run.coupon.layup);
-  await expect(page.getByTestId("demo-summary").locator("[data-filled]")).toHaveCount(5);
+  await expect(demo(page).getByRole("heading", { level: 2 })).toHaveText("A wing, analysed part by part.");
+  for (const title of ["Start from the part.", "It comes apart into its parts.", "Every part is analysed.", "Back together, with the report."]) await expect(demo(page).getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(5);
+  await expect(page.getByTestId("demo-parts").locator("[data-filled]")).toHaveCount(5);
   await expect(page.getByTestId("demo-run").locator(".demo-stages li[data-state='done']")).toHaveCount(5);
-  await expect(page.getByTestId("demo-result")).toContainText("First ply to fail");
+  await expect(page.getByTestId("demo-result")).toContainText("Most loaded");
   // The beats follow each other down the page.
   const tops = await demo(page).locator(".product-demo-beat").evaluateAll((beats) => beats.map((b) => b.getBoundingClientRect().top));
   expect([...tops].sort((a, b) => a - b)).toEqual(tops);
