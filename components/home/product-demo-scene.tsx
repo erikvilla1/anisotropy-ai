@@ -204,9 +204,10 @@ function buildModel() {
   return { root, parts: built, nodes, turned: new Float32Array(nodes * 3), hasField: Boolean(field), dispose: () => disposables.forEach((item) => item.dispose()) };
 }
 
-/** The wing's own axes, as analysis programs draw them in a corner: x along the chord from nose to tail, y along the span from
- * root to tip, z up (the record's coordinates). Shown only while the wing is being turned by hand (ADR-0098 amendment 2). In
- * the view the span lies along the group's x and the chord along its y, so the letters follow the wing, not the screen. */
+/** The wing's own axes: x along the chord from nose to tail, y along the span from root to tip, z up (the record's
+ * coordinates), all in white, beside the wing. Shown only while the wing is being turned by hand (ADR-0098 amendments 2 and
+ * 5). In the view the span lies along the group's x and the chord along its y, so the letters follow the wing, not the
+ * screen. */
 function buildAxes() {
   const group = new THREE.Group();
   const materials: (THREE.MeshBasicMaterial | THREE.SpriteMaterial)[] = [];
@@ -214,10 +215,11 @@ function buildAxes() {
   const shaft = new THREE.CylinderGeometry(0.022, 0.022, 0.8, 12);
   const head = new THREE.ConeGeometry(0.07, 0.22, 16);
   disposables.push(shaft, head);
+  const WHITE = "#ffffff";
   const axes: { letter: string; colour: string; along: [number, number, number] }[] = [
-    { letter: "X", colour: "#ff5a52", along: [0, 1, 0] }, // the chord
-    { letter: "Y", colour: "#3fd47a", along: [1, 0, 0] }, // the span
-    { letter: "Z", colour: "#4f8fff", along: [0, 0, 1] }, // up
+    { letter: "X", colour: WHITE, along: [0, 1, 0] }, // the chord
+    { letter: "Y", colour: WHITE, along: [1, 0, 0] }, // the span
+    { letter: "Z", colour: WHITE, along: [0, 0, 1] }, // up
   ];
   const upright = new THREE.Vector3(0, 1, 0);
   for (const axis of axes) {
@@ -355,8 +357,8 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     glow.mesh.position.set((drawn.left + drawn.right) / 2, drawn.bottom - 0.03 * height, -1);
     glow.mesh.scale.set(0.85 * (drawn.right - drawn.left), 0.09 * height + 0.25 * (drawn.top - drawn.bottom), 1);
     glow.material.opacity = 0.16 * scene.presence;
-    // The axes: in the stage's lower left corner, turned as the wing is, coming in while the pointer holds the wing and
-    // going when it lets go. The view asks for frames itself while they fade.
+    // The axes: just beside the wing's left end as the pose stands it, level with its middle, turned as the wing is; they
+    // come in while the pointer holds the wing and go when it lets go. The view asks for frames itself while they fade.
     const wanted = handle.turning ? 1 : 0;
     if (axes.shown !== wanted) {
       const step = Math.min(0.05, delta); // the frame before may be long ago: the view draws on demand
@@ -365,8 +367,10 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     }
     axes.group.visible = axes.shown > 0;
     if (axes.group.visible) {
-      const reachOf = Math.min(0.075 * height, 0.06 * width);
-      axes.group.position.set(-width / 2 + 2.4 * reachOf, -height / 2 + 2.2 * reachOf, 2);
+      const reachOf = Math.min(0.06 * height, 0.05 * width);
+      // An arm with its letter reaches 1.5 times `reachOf` from the middle of the axes: they stand that far and a little
+      // more to the left of the wing's box, and never off the stage.
+      axes.group.position.set(Math.max(-width / 2 + 1.7 * reachOf, drawn.left - 1.9 * reachOf), (drawn.bottom + drawn.top) / 2, 2);
       axes.group.scale.setScalar(reachOf);
       axes.group.rotation.copy(group.rotation);
       for (const material of axes.materials) material.opacity = axes.shown;

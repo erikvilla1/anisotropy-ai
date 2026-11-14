@@ -295,18 +295,20 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   await expect(words).toHaveCSS("opacity", "1");
   await page.mouse.move(300, 200);
   await page.mouse.down();
-  // While the pointer holds the wing (amendment 2): its axes are drawn, before it has moved at all, and the line and the
-  // beat's words step back.
+  // While the pointer holds the wing (amendments 2 and 5): its axes are drawn, before it has moved at all, and the line
+  // that says it can be turned steps back. The beat's words and its card stay.
   await expect(box(page)).toHaveAttribute("data-turning", "true");
   await expect(hint).toHaveCSS("opacity", "0");
-  await expect(words).toHaveCSS("opacity", "0");
+  await page.waitForTimeout(300);
+  await expect(words).toHaveCSS("opacity", "1");
+  await expect(beat(page, "report")).toHaveCSS("opacity", "1");
   await page.waitForTimeout(350);
   const holding = await canvas.screenshot();
   expect(Buffer.compare(drawn, holding)).not.toBe(0);
   await page.mouse.move(520, 260, { steps: 8 });
   await page.mouse.up();
   await expect(box(page)).toHaveAttribute("data-turned", "true");
-  // Let go: the words and the line come back, the axes go, and the wing stays turned.
+  // Let go: the line comes back, the axes go, and the wing stays turned.
   await expect(box(page)).not.toHaveAttribute("data-turning", /.+/);
   await expect(words).toHaveCSS("opacity", "1");
   await expect(hint).not.toHaveCSS("opacity", "0");

@@ -89,9 +89,17 @@ A visitor or a reviewer takes the wing for something the workspace does today; a
 
 ## Amendment 4, 2026-11-14 (the wing is fitted into a room in every beat, over the words as well as beside them)
 
-**Context.** Amendment 3 fitted the wing into the room beside the words in the two side beats and left the two beats with the words under the wing on amendment 1's fixed sizes. The lead then asked for a winglet at the tip (amendment 5, in work): a wing that also rises at its tip would leave the window at a fixed size and place.
+**Context.** Amendment 3 fitted the wing into the room beside the words in the two side beats and left the two beats with the words under the wing on amendment 1's fixed sizes. The lead then asked for a winglet at the tip (in work, a later amendment): a wing that also rises at its tip would leave the window at a fixed size and place.
 
 **Decision.** A pose no longer carries a size or a place. It names its room: `under`, how far the room is the one over words that stand under the wing, and `beside`, where the room beside words at one side stands, which slides across the stage between the two sides. The view fits the wing's box on the screen into the room on each frame and eases from one room's fit to the next between beats. The room over the words is in the stage's middle, 0.6 of the stage wide (of 1.6 times its height on a wider stage), from a tenth down to a little above where the words begin, which the page measures from the words' blocks themselves. Where no words stand on the stage (reduced motion, a small window) the room is the stage, less a margin, so the wing is larger there than it was.
 
 **Evidence.** On 2026-11-14 against the dev server the four beats were captured at 1873 by 866, 1796 by 710, 1440 by 900 and 1100 by 640, and the stage with reduced motion and at 390 px, and looked at: in each the wing is whole in the window, clear of the words, and about the size it was in the two middle beats. `tests/product-demo-fit.test.ts`, 4 of 4; `tests/product-demo.test.ts` checks which room each pose names and that the pose never jumps. `npm test`: 304 tests, 303 passed, 1 skipped. `demo.spec.ts`, 11 of 11. `npx tsc --noEmit` clean. UNVERIFIED: a real graphics card, Safari and Firefox; a phone in the hand.
+
+## Amendment 5, 2026-11-14 (held: the axes stand beside the wing in white, and only the line that says it can be turned goes)
+
+**Context.** The lead, of amendment 2 running on their machine: "why does the xyz appear so far away I want it near the wing. also, why does the report text and box disappear upon hold? that should stay. also make the xyz all white." Amendment 2 had read "the text" of the first request as the line, the beat's words and its card together; the lead meant the line.
+
+**Decision.** While the wing is held, the three axes are white and stand just to the left of the wing's box on the screen, level with its middle, in place of the stage's corner; they are a little smaller. Only the line "Drag the wing to turn it" fades for the hold. The beat's words and its card stay as they are. This replaces amendment 2's second point and its colours.
+
+**Evidence.** On 2026-11-14 against the dev server at 1873 by 866, the lead's window: the held stage was captured and looked at: the white axes are beside the wing's root end, the report's words and card are there, the line is gone. `demo.spec.ts`: the case that holds and turns the wing now checks that the words and the report's block stay at full strength while held; it passes. `npx tsc --noEmit` clean. UNVERIFIED: a real graphics card, Safari and Firefox.
 
