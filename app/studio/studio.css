@@ -110,6 +110,7 @@
 .studio-stepper li[data-state=current] .studio-step-mark { border-color: var(--accent); box-shadow: inset 0 0 0 4px var(--panel); background: var(--accent); animation: studio-pulse 1.6s ease-in-out infinite; }
 .studio-stepper li[data-state=stopped] { color: #f6bba9; }
 .studio-stepper li[data-state=stopped] .studio-step-mark { border-color: #785347; color: #f6bba9; }
+.studio-step-time { margin-top: -3px; color: var(--muted); font-variant-numeric: tabular-nums; }
 @keyframes studio-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .studio-stepper li[data-state=current] .studio-step-mark { animation: none; } }
 .studio-run .studio-muted, .studio-run .studio-ok, .studio-run .studio-problem { margin: 6px 0 0; }

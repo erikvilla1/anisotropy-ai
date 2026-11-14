@@ -200,6 +200,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
   await expect(page.getByTestId("job-message")).toContainText("Verified against reference solver: 57 of 57 values agree");
   await expect(page.getByTestId("job-progress").locator("li[data-state=done]")).toHaveCount(5); // the five steps of a finished job (ADR-0091)
+  await expect(page.getByTestId("job-took")).toHaveText("Finished in 80 s."); // from the click to the last file, the job's own times (ADR-0064 amendment 1)
   const outputs = page.getByTestId("panel-outputs"); // the files in the left column, named by the standard and the layup (ADR-0091)
   await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("href", /\/v1\/coupon-jobs\/0f3a2c9e[^/]*\/files\/package\?name=UnnotchedTension_%5B45%2C0%2C-45%2C90%5Ds_package\.zip$/);
   await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("download", "UnnotchedTension_[45,0,-45,90]s_package.zip"); // commas (fea-run-39)
