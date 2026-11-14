@@ -2,7 +2,6 @@
  * written by scripts/demo-wing.py into lib/demo-wing.json. Nothing here computes a result: the mesh and the numbers are the
  * record's, picked out and worded. The wing is an example made for the demo, not a design of ours or of anyone's. */
 import record from "./demo-wing.json";
-import { scaleFor, type Scale } from "./studio-colors";
 
 export type WingPart = { id: string; name: string; layup: string; angles: number[]; first: number; count: number };
 export type WingField = { key: string; label: string; unit: string; min: number; max: number; values: number[] };
@@ -64,8 +63,20 @@ export function wingProblems(wing: DemoWing): string[] {
   return problems;
 }
 
-/** The scale the parts are coloured on: the workspace's own (lib/studio-colors.ts), over the recorded field's range. */
-export const wingScale = (field: WingField): Scale => scaleFor([], false, [field.min, field.max]);
+/** The colours the parts take, at the lead's word of 2026-11-14 ("make the FEA analysis colors like that"): the rainbow most
+ * analysis programs draw, blue at the field's smallest value through cyan, green and yellow to red at its largest. The
+ * workspace itself keeps its own scale (lib/studio-colors.ts); this one is the demo's only. */
+export const RAINBOW: [number, number, number][] = [[0, 0, 1], [0, 1, 1], [0, 1, 0], [1, 1, 0], [1, 0, 0]];
+/** A value's colour on the rainbow, as red, green and blue from 0 to 1. */
+export function wingColour(field: WingField, value: number): [number, number, number] {
+  const share = field.max > field.min ? Math.min(1, Math.max(0, (value - field.min) / (field.max - field.min))) : 0;
+  const place = share * (RAINBOW.length - 1);
+  const from = Math.min(RAINBOW.length - 2, Math.floor(place));
+  const mix = place - from;
+  return [0, 1, 2].map((channel) => RAINBOW[from][channel] + (RAINBOW[from + 1][channel] - RAINBOW[from][channel]) * mix) as [number, number, number];
+}
+/** The legend's bar: the same rainbow, left to right. */
+export const RAINBOW_GRADIENT = `linear-gradient(to right, ${RAINBOW.map((stop) => `rgb(${stop.map((channel) => Math.round(channel * 255)).join(" ")})`).join(", ")})`;
 
 /** A length in metres, to two places: 2.13 m. */
 export const metres = (millimetres: number): string => `${(millimetres / 1000).toFixed(2)} m`;

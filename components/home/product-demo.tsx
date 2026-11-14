@@ -4,8 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { ArrowUpRight, Check, FileText } from "lucide-react";
-import { demoWing, wingScale } from "@/lib/demo-wing";
-import { legendGradient } from "@/lib/studio-colors";
+import { demoWing, RAINBOW_GRADIENT } from "@/lib/demo-wing";
 import { DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
 import { libraryOptions } from "@/lib/studio-form";
 import { BEAT_COPY, DEMO_HEAD, FILES_HEAD, OPEN_WORKSPACE, resultLines, wingFacts, wingParts } from "./product-demo-copy";
@@ -59,6 +58,7 @@ export function ProductDemo() {
   const whole = useMemo(() => finalView(counts), [counts]);
   const [played, setPlayed] = useState<DemoView | null>(null);
   const [viewWanted, setViewWanted] = useState(false);
+  const [gated, setGated] = useState(true);
   const handle = useMemo<DemoSceneHandle>(() => ({ clock: 0, redraw: null }), []);
   const view = pinned ? played ?? start : whole;
 
@@ -66,6 +66,7 @@ export function ProductDemo() {
   useTourDriver(box, pinned, ({ clock }) => {
     handle.clock = clock;
     handle.redraw?.();
+    if (clock >= DEMO_TOTAL) setGated(false); // played through: the rest of the page is there from now on
     const next = viewAt(clock, counts);
     setPlayed((current) => (current && sameView(current, next) ? current : next));
   }, {
@@ -73,6 +74,8 @@ export function ProductDemo() {
     clockPerSecond: DEMO_CLOCK_PER_SECOND,
     // The stage is a window tall and holds the window with its top edge on the window's (the driver's own line).
     settleWithin: 160,
+    // Played once: after the last beat the stage is an ordinary section, and nothing plays again in this visit.
+    once: true,
     // With the page at its top the stage lies behind the hero (ADR-0095 amendment 4): that is where it is out of sight.
     hiddenFrom: () => {
       const stage = box.current;
@@ -80,6 +83,45 @@ export function ProductDemo() {
       return stage && opening ? stage.getBoundingClientRect().top - opening.getBoundingClientRect().top : window.innerHeight;
     },
   });
+  // The gate (ADR-0095 amendment 7). Until the demo has played through, the page ends at the stage: what follows it is taken
+  // out of the page's height (app/home-demo.css), so the browser itself has nowhere to scroll past the stage and stops hard
+  // on it, coasting included. What follows is still in the page for a screen reader and the keyboard, and the gate opens at
+  // once for anyone who goes there another way: focus moving past the demo, a link to a section below it, or a page that
+  // is already scrolled past the stage when this starts.
+  useEffect(() => {
+    if (!pinned || !gated) return;
+    const root = document.documentElement;
+    const stage = box.current;
+    const below = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest("main, .site-footer")) && !target.closest(".home-opening");
+    const linked = () => {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      const target = id ? document.getElementById(id) : null;
+      return target && below(target) ? target : null;
+    };
+    const open = () => setGated(false);
+    const target = linked();
+    if (target || (stage && stage.getBoundingClientRect().top < -1)) {
+      open();
+      if (target) window.requestAnimationFrame(() => target.scrollIntoView());
+      return;
+    }
+    const onFocus = (event: FocusEvent) => { if (below(event.target)) open(); };
+    const onHash = () => {
+      const to = linked();
+      if (!to) return;
+      open();
+      window.requestAnimationFrame(() => to.scrollIntoView());
+    };
+    root.dataset.demoGate = "true";
+    document.addEventListener("focusin", onFocus);
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      delete root.dataset.demoGate;
+      document.removeEventListener("focusin", onFocus);
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, [pinned, gated]);
+
   // Not stepped: every beat is finished, and the view shows the run's end.
   useEffect(() => {
     if (pinned) return;
@@ -112,7 +154,6 @@ export function ProductDemo() {
   }, [pinned, viewWanted]);
 
   const field = wing.field;
-  const scale = useMemo(() => (field ? wingScale(field) : null), [field]);
   const result = useMemo(() => resultLines(wing), [wing]);
   const strip = (rows: [string, string][], filled: number, testId: string) => (
     <dl className="demo-card demo-summary" data-testid={testId}>
@@ -136,10 +177,10 @@ export function ProductDemo() {
             </li>
           ))}
         </ol>
-        {field && scale ? (
+        {field ? (
           <div className="demo-legend" data-shown={view.legend ? "true" : undefined} data-testid="demo-legend">
             <p>{field.label}{field.unit ? `, ${field.unit}` : ""}</p>
-            <span className="demo-legend-bar" style={{ background: legendGradient(scale, 0) }} aria-hidden="true" />
+            <span className="demo-legend-bar" style={{ background: RAINBOW_GRADIENT }} aria-hidden="true" />
             <p className="demo-legend-ends"><span>{legendEnd(field.min, field.unit)}</span><span>{legendEnd(field.max, field.unit)}</span></p>
           </div>
         ) : null}

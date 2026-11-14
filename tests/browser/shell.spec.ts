@@ -114,6 +114,7 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
   await expect(services).toHaveAttribute("aria-current", "page");
   const footer = page.getByRole("navigation", { name: "Footer" });
   for (const name of five) await expect(footer.getByRole("link", { name, exact: true })).toBeVisible();
+  await footer.getByRole("link", { name: "Test plans", exact: true }).focus(); // on the home page focus opens what follows the demo
   await footer.getByRole("link", { name: "Test plans", exact: true }).click();
   await expect(page).toHaveURL(/\/services\/test-plans\/?$/);
   await expect(services).toHaveAttribute("aria-current", "true");

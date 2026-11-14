@@ -1,6 +1,6 @@
 # ADR-0095: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
 
-- Status: Proposed, with amendments 1 to 6
+- Status: Proposed, with amendments 1 to 7
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) and [ADR-0084](ADR-0084-a-scroll-driven-tour-leads-from-the-hero-into-the-calculator-with-the-engines-own-answers.md), which this supersedes for the home page; [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md) (the live solve the demo does not call); ADR-0001; ADR-0042; ADR-0045; ADR-0091
@@ -155,4 +155,29 @@ UNVERIFIED: a real trackpad, wheel and graphics card; Safari and Firefox; the de
 - The line under the analysis is removed from the page. The record (`lib/demo-run.json`) still says what it is, by which version and when, and a unit test reads that. The page therefore shows the analysis's numbers without saying they are a recorded example: the lead's choice, for the founder to weigh with the pull request.
 
 **Evidence.** On 2026-11-14 against the dev server: stills at nine points of a wheel scroll were looked at. The hand-over case of `demo.spec.ts` now scrolls by the wheel in tenths and checks the order (growing at full strength with no words; the button gone by 40 %; the words only once the clip is under 0.6). `demo.spec.ts`, `intro.spec.ts`, `home.spec.ts`, `shell.spec.ts`, `expansion.spec.ts` and the overview case of `portfolio.spec.ts`: 34 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 299 tests, 298 passed, 1 skipped. A run that failed first: the case for the way to the box still expected the words after the first wheel notch, which is now while the clip grows; it expects none there. UNVERIFIED, as before: a real trackpad, Safari, Firefox.
+
+## Amendment 7, 2026-11-14 (a hard stop on the stage, and the demo plays once)
+
+**Context.** The lead, with a screenshot of the first beat and a white strip of the next section at the window's foot: "when I scroll down shouldnt have that clipping thing going on when I can pull up into the white zone, should approach a hard stop." And, with a recording of the demo starting again after it had been played, left and come back to: "once the demo animation runthru is complete and u scroll down and then back up, dont retrigger any animations, just back to the home screen."
+
+**What was wrong.** The scroll that brings the page to the stage is the browser's own, so the browser does not let a script cancel what is left of it, a trackpad's coasting above all. The page was scrolled past the stage and put back frame by frame. On a black page that did not show; since ADR-0077 amendment 33 the next section is white.
+
+**Options considered.** (1) End the page at the stage until the demo has played through, so the browser itself has nowhere to scroll: chosen. (2) Only undo the scroll faster, or lock the page once it has been stopped: rejected alone, the first frames past the stage are drawn before any script runs. (3) Take the wheel over from the hero down and move the page by script: rejected, a wheel's own smooth step would be lost on the way. (4) CSS scroll snapping with a forced stop: not chosen, it also pulls a resting page to the stage, which the lead ruled out on 2026-11-13, and its forced stop could not be tried in Safari or Firefox here.
+
+**Decision.**
+
+- **The gate.** Where the demo is a stepped stage, until it has played through, everything after it (the bands, the closing band, the footer) is taken out of the page's height, as visually hidden text is, so the page ends with the stage on the window. It stays in the page for a screen reader and the keyboard. The gate opens for good when the last beat ends, and at once when focus moves past the demo, when a link names a section below it, or when the page is already scrolled past the stage as its script starts.
+- **The lock.** While a beat plays on a held stage, and for a moment after the page has been stopped on it, the page's overflow is hidden, so no scroll that was already on its way moves it; the scroll bar's room is kept as padding.
+- **Once.** When the last beat has ended the stage is an ordinary section for the rest of the visit: no gesture is taken, the page is never stopped on it again, and it keeps its last beat. A reload starts over.
+
+**Consequences.** Until the demo has played through, the scroll bar and the End key reach no further than the stage; this is stated in R-27. A visitor who wants what is below has four gestures to make, or the keyboard's Tab.
+
+**Evidence.** On 2026-11-14 against the dev server:
+
+- One long synthesized wheel gesture from the hero (1600 px at 2400 px a second): before, the page's scroll position reached 676 to 699 px for a stage at 450; with the gate it never passes 450.
+- `demo.spec.ts`, `home.spec.ts`, `intro.spec.ts`, `shell.spec.ts`, `expansion.spec.ts` and the overview case of `portfolio.spec.ts`: 35 passed, 3 skipped (ADR-0058 amendment 4). The cases now check that the page ends at the stage until the last beat, that the next band follows the stage once it has, that a swipe after the end is not taken, and that going down, back to the hero and down again plays nothing.
+- A run that failed first: reserving the scroll bar's room with `scrollbar-gutter` moved the layout 15 px in the test browser, whose bars take no room; the room is now measured when the lock goes on.
+- `npm test`: 300 tests, 299 passed, 1 skipped. `npx tsc --noEmit` clean.
+
+UNVERIFIED: a real trackpad's coasting, which the synthesized gesture only stands for; Safari and Firefox; a phone's fling, which keeps its earlier handling.
 

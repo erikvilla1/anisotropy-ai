@@ -78,7 +78,11 @@ test("the demo is a black stage as wide as the clip and a window tall, which sta
   expect([rects.box.left, rects.box.right]).toEqual([rects.clip.left, rects.clip.right]);
   expect(rects.box.height).toBe(page.viewportSize()!.height);
   expect(rects.box.top).toBe(page.viewportSize()!.height / 2);
-  expect(rects.next.top).toBe(rects.box.bottom);
+  // Until the demo has played through, the page ends at the stage (amendment 7): what follows is out of its height.
+  await expect(page.locator("html")).toHaveAttribute("data-demo-gate", "true");
+  const ends = await page.evaluate(() => [document.documentElement.scrollHeight, Math.round(window.scrollY + document.querySelector("#demo .product-demo-box")!.getBoundingClientRect().bottom)]);
+  expect(ends[0]).toBe(ends[1]);
+  expect(rects.next.height).toBeLessThanOrEqual(1);
   await expect(page.locator("#overview")).toHaveCSS("position", "sticky");
   const layers = await page.evaluate(() => ["#overview", "#demo"].map((selector) => Number(getComputedStyle(document.querySelector(selector)!).zIndex)));
   expect(layers[0]).toBeGreaterThan(layers[1]);
@@ -254,16 +258,29 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   await expect(result).toContainText(`${wing.load.total} ${wing.load.unit} pushed up at the ribs`);
   await expect(result).toContainText(`the tip rises ${Math.round(wing.solve.tip_deflection)} mm`);
   await expect(box(page).locator("canvas")).toBeVisible();
+  // A swipe up plays a beat backwards, and a swipe down plays it again.
+  expect(await swipe(page, -1)).toBe(28);
+  await expectStop(page, 2);
+  expect(await scrollY(page)).toBe(held);
+  await page.waitForTimeout(400);
+  expect(await swipe(page)).toBe(28);
+  await expectStop(page, 3);
+  await page.waitForTimeout(400);
   // The last beat: the files a run writes, by the workspace's names, and the way into the workspace.
   await notch(page);
   await expectStop(page, 4);
   const report = page.getByTestId("demo-report");
   await expect(report.locator(".demo-files li[data-shown]")).toHaveText(["Report (PDF)", "Full package (ZIP)", "Solver input (.inp)"]);
   await expect(report.getByRole("link", { name: "Open the workspace" })).toHaveAttribute("href", /\/workspace\/fea\/?$/);
-  // A swipe up plays a beat backwards.
-  expect(await swipe(page, -1)).toBe(28);
-  await expectStop(page, 3);
-  expect(await scrollY(page)).toBe(held);
+  // Played through, once (amendment 7): the stage is an ordinary section now, the rest of the page is there, and a swipe
+  // is the browser's again.
+  await expect(box(page)).toHaveAttribute("data-done", "true");
+  await expect(page.locator("html")).not.toHaveAttribute("data-demo-gate", /.+/);
+  const after = await page.evaluate(() => [document.getElementById("mission")!.getBoundingClientRect().top, document.querySelector("#demo .product-demo-box")!.getBoundingClientRect().bottom]);
+  expect(after[0]).toBe(after[1]);
+  await page.waitForTimeout(400);
+  expect(await swipe(page, -1)).toBe(0);
+  await expectStop(page, 4);
   expect(errors).toEqual([]);
 });
 
@@ -295,7 +312,7 @@ test("a beat takes its own time: the second about 3.6 s, measured in the page", 
   expect(marks.end - marks.start).toBeLessThan(4800);
 });
 
-test("up from the first beat and down from the last the page scrolls as any page does, and on the way back up the box is passed", async ({ page }) => {
+test("up from the first beat the page scrolls; once played through, the demo never plays again: down, back up to the hero and down again the stage is passed", async ({ page }) => {
   await openPinned(page);
   await playTo(page, 1);
   const held = await scrollY(page);
@@ -304,12 +321,14 @@ test("up from the first beat and down from the last the page scrolls as any page
   await expect.poll(() => scrollY(page)).toBe(held - 100);
   await page.waitForTimeout(400);
   await expectStop(page, 1);
-  // Down again: the box holds the window, and the first beat is not played twice.
+  // Down again: the box holds the window, and the first beat is not played twice. The page ends there: it cannot go on.
   await notch(page);
   await expect.poll(() => offLine(page)).toBe(0);
   await page.waitForTimeout(400);
   await expectStop(page, 1);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBe(held);
   await playTo(page, 4);
+  await expect(box(page)).toHaveAttribute("data-done", "true");
   // Past the last beat nothing takes the scroll over.
   await page.waitForTimeout(350);
   await page.mouse.wheel(0, 240);
@@ -318,17 +337,25 @@ test("up from the first beat and down from the last the page scrolls as any page
   await page.mouse.wheel(0, 240);
   await expect.poll(() => scrollY(page)).toBe(held + 480);
   await expectStop(page, 4);
-  // Back up: the page keeps to the wheel across the box's line and on, and the demo stays at its end.
+  // Back up, all the way to the hero: the page keeps to the wheel, and the demo stays at its end.
   await page.waitForTimeout(300);
   await page.mouse.wheel(0, -720);
   await expect.poll(() => scrollY(page)).toBe(held - 240);
   await page.waitForTimeout(500);
   expect(await scrollY(page)).toBe(held - 240);
-  await expectStop(page, 4);
-  // All the way up, out of sight: the demo is at its start again.
   await page.mouse.wheel(0, -(held - 240));
   await expect.poll(() => scrollY(page)).toBe(0);
-  await expectStop(page, 0);
+  await page.waitForTimeout(500);
+  await expectStop(page, 4);
+  // Down again: the stage does not stop the page and nothing plays. The wheel is the browser's all the way.
+  await page.mouse.wheel(0, held - 20);
+  await expect.poll(() => scrollY(page)).toBe(held - 20);
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => scrollY(page)).toBe(held + 280);
+  await page.waitForTimeout(600);
+  expect(await scrollY(page)).toBe(held + 280);
+  await expectStop(page, 4);
+  await expect(beat(page, "report")).toHaveAttribute("data-active", "true");
 });
 
 test("Scroll to explore brings the stage to fill the window, and the first beat plays", async ({ page }) => {

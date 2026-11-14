@@ -3,8 +3,7 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { demoWing, wingScale } from "@/lib/demo-wing";
-import { colorAt } from "@/lib/studio-colors";
+import { demoWing, wingColour } from "@/lib/demo-wing";
 import { clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
@@ -62,7 +61,6 @@ type Part = { id: string; group: THREE.Group; skin: THREE.ShaderMaterial; mesh: 
 /** The wing's parts, built once from the record, centred on the wing's middle. */
 function buildModel() {
   const { mesh, parts, wing, field } = demoWing;
-  const scale = field ? wingScale(field) : null;
   const middle = { span: wing.span / 2, chord: wing.chord / 2 };
   const at = (node: number): [number, number, number] => [mesh.nodes[node][1] - middle.span, mesh.nodes[node][0] - middle.chord, mesh.nodes[node][2]];
   const disposables: { dispose: () => void }[] = [];
@@ -74,7 +72,7 @@ function buildModel() {
     const seen = new Set<string>();
     for (let face = part.first; face < part.first + part.count; face++) {
       const quad = mesh.quads[face];
-      const colour = scale && field ? colorAt(scale, field.values[face]) : CARBON;
+      const colour = field ? wingColour(field, field.values[face]) : CARBON;
       for (const corner of [0, 1, 2, 0, 2, 3]) {
         positions.push(...at(quad[corner]));
         colours.push(...colour);

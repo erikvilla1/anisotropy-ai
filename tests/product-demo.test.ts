@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { BEAT_COPY, everyLine, resultLines, wingFacts, wingParts } from "../components/home/product-demo-copy";
 import { BEATS, BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, MOVE, POSES, finalView, poseAt, sceneAt, viewAt } from "../components/home/product-demo-timeline";
 import { decide } from "../components/home/tour-stepper";
-import { demoWing, wingProblems, wingScale, type DemoWing } from "../lib/demo-wing";
+import { demoWing, wingColour, wingProblems, type DemoWing } from "../lib/demo-wing";
 import { bannedIn, DOWNLOAD_LABELS, RUN_STEPS } from "../lib/studio-copy";
 
 // The product demo of the home page (ADR-0095, ADR-0098): the example wing it shows, its clock and its words.
@@ -35,8 +35,10 @@ test("the wing's analysis is recorded whole: one value a face from a named solve
   assert.ok(solve.tip_deflection > 0 && solve.tip_deflection < 0.15 * demoWing.wing.span, `the tip rises ${solve.tip_deflection} mm`);
   assert.match(solve.recorded, /^\d{4}-\d{2}-\d{2}$/);
   assert.ok(solve.solver.length > 0);
-  // The page's colours are the workspace's scale over the recorded range.
-  assert.deepEqual(wingScale(field).ends, [field.min, field.max]);
+  // The page's colours: the rainbow over the recorded range, blue at its smallest value and red at its largest.
+  assert.deepEqual(wingColour(field, field.min), [0, 0, 1]);
+  assert.deepEqual(wingColour(field, field.max), [1, 0, 0]);
+  assert.deepEqual(wingColour(field, (field.min + field.max) / 2), [0, 1, 0]);
   // A record whose stated range is not its values' is noticed.
   assert.ok(wingProblems({ ...demoWing, field: { ...field, max: field.max * 2 } }).length > 0);
 });

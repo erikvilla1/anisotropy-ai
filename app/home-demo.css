@@ -426,3 +426,18 @@
     display: none;
   }
 }
+
+/* The gate (components/home/product-demo.tsx, ADR-0095 amendment 7): until the demo has played through, what follows it is out
+ * of the page's height, so the page ends at the stage and the browser stops there by itself. It stays in the page for a
+ * screen reader and the keyboard, as any visually hidden text does. */
+html[data-demo-gate] main > .home-opening ~ *,
+html[data-demo-gate] .site-footer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

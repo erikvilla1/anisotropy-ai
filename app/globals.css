@@ -1894,6 +1894,13 @@ main[tabindex="-1"]:focus {
  * no version label. */
 /* The site's pages stand on pure black, as Anduril's do (ADR-0077 amendment 23). The workspace, an app with its own header,
  * keeps the near-black its panels were drawn for. */
+/* While the home page's demo plays a beat on its stage the page cannot be scrolled (components/home/tour-driver.ts, ADR-0095
+ * amendment 7). The scroll bar goes with the overflow; the room it took is kept as padding, measured when the lock goes on,
+ * so nothing moves sideways. */
+html[data-tour-lock] {
+  overflow: hidden;
+  padding-right: var(--tour-lock-bar, 0px);
+}
 html:has(.site-header:not(.chat-site-header)) {
   --bg: #000000;
   scroll-padding-top: 0;

@@ -26,6 +26,16 @@ test("the hero opens the page, and the laminate calculator and its tour are not 
   expect(asked).toEqual([]);
 });
 
+/** Until the demo has played through, what follows it is out of the page's height (ADR-0095 amendment 7). Focus moving past
+ * the demo opens the page, as it does for a keyboard: the cases about the sections below go there that way. */
+async function pastTheDemo(page: import("@playwright/test").Page) {
+  await expect(page.locator("#demo")).toHaveAttribute("data-mode", /^(pinned|static)$/); // the page's script has started
+  await expect(async () => {
+    await page.locator("#mission a").first().focus();
+    await expect(page.locator("html")).not.toHaveAttribute("data-demo-gate", /.+/, { timeout: 500 });
+  }).toPass({ timeout: 10_000 });
+}
+
 const STATEMENT = /^\s*one engineering platform\s*for composite theory\s*and real test data\s*$/;
 
 test("the hero's words are one statement and a row of the year, the mark and the name (ADR-0077 amendments 19, 21, 27 and 28)", async ({ page }) => {
@@ -96,6 +106,7 @@ test("the hero's clip plays in a square box on the black page, under the header,
 
 test("after the demo the page is white, and Mission and Services are two short blocks that lead on (ADR-0077 amendments 33 and 34)", async ({ page }) => {
   await page.goto("/");
+  await pastTheDemo(page);
   for (const id of ["mission", "platform", "working", "news"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
   // Mission: the label, the statement and one link, to About; the strip of four principles is gone.
   const mission = page.locator("#mission");
@@ -137,6 +148,7 @@ test("the home page fits a phone without horizontal scroll", async ({ page }) =>
 
 test("the About cards show the five portraits in the lead's order, and LinkedIn's mark comes up under the pointer (ADR-0077 amendment 29)", async ({ page }) => {
   await page.goto("/");
+  await pastTheDemo(page);
   const cards = page.locator("#working .home-face");
   await cards.first().scrollIntoViewIfNeeded();
   await expect(cards.locator("h3")).toHaveText(["Christopher Valerio", "Erik Villa", "Tabassum Zaman", "Jusung Park", "Kai Saucedo"]);
