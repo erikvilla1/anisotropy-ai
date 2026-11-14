@@ -7,7 +7,7 @@ import { ArrowUpRight, Check, FileText } from "lucide-react";
 import { demoWing, RAINBOW_GRADIENT } from "@/lib/demo-wing";
 import { DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
 import { libraryOptions } from "@/lib/studio-form";
-import { BEAT_COPY, DEMO_HEAD, FILES_HEAD, OPEN_WORKSPACE, resultLines, wingFacts, wingParts } from "./product-demo-copy";
+import { BEAT_COPY, BEND_NOTE, DEMO_HEAD, FILES_HEAD, OPEN_WORKSPACE, resultLines, wingFacts, wingParts } from "./product-demo-copy";
 import type { DemoSceneHandle } from "./product-demo-scene";
 import { BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, finalView, sameView, viewAt, type BeatId, type DemoView } from "./product-demo-timeline";
 import { useTourDriver } from "./tour-driver";
@@ -188,6 +188,7 @@ export function ProductDemo() {
           <div className="demo-result" data-shown={view.result ? "true" : undefined} data-testid="demo-result">
             <p><strong>{result.first}</strong></p>
             <p>{result.when}</p>
+            {wing.displacement ? <p className="demo-result-note">{BEND_NOTE}</p> : null}
           </div>
         ) : null}
       </div>

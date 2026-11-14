@@ -88,6 +88,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 
 ### Changed
 - The home page's hero hands over to the demo: on a desktop the clip stays in the window, grows from its box to the whole window, then dims as the page scrolls, and the first beat's words come up through it once it is well on its way to black; "Scroll to explore" goes as the clip grows, and the stage is half as far away, so the window is never an empty black one on the way (ADR-0095 amendments 4 to 6).
+- The home page's demo shows an example wing in place of the coupon: a tapered, swept wing whole, apart into its skins, spars and ribs, coloured part by part from one recorded analysis of the mesh it draws, and whole again (ADR-0098). The product itself still analyses coupons.
 - The demo's stage is a hard stop and the demo plays once: until it has played through, the page ends at the stage, so a scroll cannot coast past it into the next section; after the last beat the stage is an ordinary section and nothing plays again in that visit (ADR-0095 amendment 7).
 - After the demo the home page is white: Mission, Platform and What is new take the light ground About already had (ADR-0077 amendment 33).
 - The home page's Mission and Services are two short blocks set as the demo's words are, in the middle of the page: Mission links to About ("Learn more about us"), Services names the five and links to each and to all; the strip of four principles and the five status cards are removed from the home page (ADR-0077 amendment 34).

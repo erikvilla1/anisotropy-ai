@@ -1,40 +1,49 @@
 #!/usr/bin/env python3
 """Builds the example wing the home page's product demo shows (ADR-0098) and records its analysis.
 
-    python3 scripts/demo-wing.py            # the geometry and the mesh only
+    python3 scripts/demo-wing.py            # the geometry and the mesh only; a recorded analysis of the same wing is kept
     python3 scripts/demo-wing.py --solve    # and the analysis (needs CalculiX's `ccx` on the path, and `uv` for the engine)
 
-The wing is an example made for the demo, not a design of ours or of anyone's: a straight half wing with one aerofoil along
-its span, two skins over two spar webs and seven ribs between them. Its only borrowed number is the span, 7 ft, which a public
-news story gives for the wings of a student design class (UC San Diego Today, "Structural Engineering Students Design, Build
-and Test Unmanned Aerial Vehicle Wings"); the aerofoil is the public NACA 2412 formula, laid off vertically from the chord.
+The wing is an example made for the demo, not a design of ours or of anyone's: a tapered, swept half wing with one aerofoil
+along its span, two skins over two spar webs and nine ribs, each rib the aerofoil's shape but for its two tips, with the spars
+running through it. Its only borrowed number is the span, 7 ft, which a public news story gives for the wings of a student
+design class (UC San Diego Today, "Structural Engineering Students Design, Build and Test Unmanned Aerial Vehicle Wings"); the
+chords and the sweep are round numbers chosen for the picture, and the aerofoil is the public NACA 2412 formula, scaled by the
+local chord and laid off vertically from it. The leading and the trailing edge are straight, the spars lie at fixed shares of
+the local chord, and the ribs stand in planes of constant y.
 
-What it writes, in lib/demo-wing.json: the parts, the mesh the page draws (corner nodes and four-node faces, the very mesh
-that is solved) and, with --solve, one value an element from the solver's answer. Lengths are mm, forces N, stresses MPa, as
-in the fea package's coupon files.
+What it writes, in lib/demo-wing.json: the parts, the mesh the page draws (corner nodes and four-node faces, the very mesh that
+is solved) and, with --solve, one value an element and the displacement of every stored node from the solver's answer. Lengths
+are mm, forces N, stresses MPa, as in the fea package's coupon files.
 
 The analysis (--solve) is one linear static step of CalculiX on the stored faces, written as the fea package writes a laminate
 (fea/src/anisotropy_fea/write_calculix.py): every face an eight-node composite shell (S8R) with a node added in the middle of
 each edge, one shared by the faces on that edge; the ply as *ELASTIC, TYPE=ENGINEERING CONSTANTS; one *ORIENTATION for each ply
-angle. CalculiX's orientation is a fixed frame in space, not one that follows a curved shell, so a part has one section, with its
-own orientations, for each direction its faces look in: twenty along the chord for each skin, one for each spar and for the ribs,
-all with the part's one layup. The root's nodes are held in all six freedoms and LOAD is shared between the points where the
-spars meet the upper skin at the ribs outboard of the root. It is an example load, not a flight load.
+angle. CalculiX's orientation is a fixed frame in space, not one that follows a shell, so a part has one section, with its own
+orientations, for each direction its faces look in, all with the part's one layup. The lines of one chord share all meet in one
+point beyond the tip, so the strip of skin between two of them is flat, and so is each spar web: a fixed frame is exact for a
+strip but for the rounding of the stored corners, which turns a face at most SAME_WAY (0.03 degrees) from its section's axes
+(the solve prints the largest turn). The root's nodes are held in all six freedoms and LOAD is shared between the points where
+the spars meet the upper skin at the ribs outboard of the root. It is an example load, not a flight load.
 
-A part's ply angles turn counterclockwise about its faces' normal from the axis ANGLES_FROM names, seen from the side the normal
-points to, and its plies are listed from the face behind the normal to the face it points out of (ADR-0004). The skins' normals
-point out of the wing, so each skin's layup reads as the skin is seen from outside the wing, its first ply the innermost: a +45
-degree ply runs outboard and towards the nose in the upper skin, outboard and towards the tail in the lower. The spars' normals
-point aft (+x), so their +45 runs outboard and up; the ribs' point to the root (-y), so theirs runs aft and up.
+A part's ply angles turn counterclockwise about its faces' normal, seen from the side the normal points to, from the axis
+ANGLES_FROM names laid on the face (its projection onto the face), and its plies are listed from the face behind the normal to
+the face it points out of (ADR-0004). So 0 degrees in a skin runs straight out along the span, within 1 degree of y in plan aft
+of the first 6 % of the chord and up to 8 degrees from it on the steep faces of the nose, and crosses the swept spars at about
+9 and 7 degrees; 0 degrees in a spar web runs along the spar. The skins' normals point out of the wing, so each skin's layup
+reads as the skin is seen from outside the wing, its first ply the innermost: a +45 degree ply runs outboard and towards the
+nose in the upper skin, outboard and towards the tail in the lower. The spars' normals point aft, so their +45 runs outboard
+and up; the ribs' point to the root (-y), so theirs runs aft and up.
 
 The value kept for a face is the strength used: the largest maximum-stress index over its plies and their integration points,
 each ply's stress in its own axes against the library's strengths (0 unloaded, 1 the first ply fails). The reaction kept is the
-vertical force the span cell beside the root carries to it, summed from the solver's stresses: the total CalculiX prints for the
-root's nodes is not the whole reaction once their rotations are held (printed with the checks, and not used).
+vertical force the span cell beside the root carries to it, summed from the solver's stresses: the total CalculiX prints for
+the root's nodes is not the whole reaction once their rotations are held (printed with the checks, and not used).
 
 What the step does not see: buckling, the bonds between the parts, damage after the first ply fails, or large deflections. The
-same deck with *BUCKLE in place of *STATIC puts the upper skin's first buckle, between the spars beside the root, at 0.90 of LOAD
-(CalculiX 2.21, 2026-11-14, on this mesh; run by hand and not recorded), so at LOAD the compressed skin is already past it.
+same deck with *BUCKLE in place of *STATIC puts the upper skin's first buckling, between the spars in the bay beside the root,
+at 1099 N (CalculiX 2.21, 2026-11-14, on this mesh, which was not refined for it; run by hand and not recorded). LOAD is the
+largest of 250, 500, 750 and 1000 N that is no more than 0.6 of that.
 """
 
 from __future__ import annotations
@@ -55,18 +64,20 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "lib" / "demo-wing.json"
 
 SPAN = 2133.6  # mm: 7 ft, the one number taken from the public story
-CHORD = 300.0  # mm
+ROOT_CHORD, TIP_CHORD = 450.0, 225.0  # mm: the chord narrows evenly from the root to the tip
+SWEEP = 400.0  # mm: how far aft of the root's leading edge the tip's lies; both edges are straight
+SWEEP_MEASURES = "how far aft of the root's leading edge the tip's leading edge lies, along x"
 AEROFOIL = "NACA 2412"
 CAMBER, CAMBER_AT, THICKNESS = 0.02, 0.4, 0.12
-# Stations along the chord, as shares of it: closer at the nose, with one on each spar.
+# Stations along the chord, as shares of the local chord: closer at the nose, with one on each spar.
 CHORD_STATIONS = [0.0, 0.0125, 0.03, 0.06, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.72, 0.79, 0.86, 0.93, 1.0]
-SPARS = {"front-spar": 0.25, "rear-spar": 0.65}
-SPAN_CELLS = 42  # 50.8 mm (2 in) each
-RIB_EVERY = 7  # a rib every seventh station: seven ribs, the root's and the tip's among them
+SPARS = {"front-spar": 0.25, "rear-spar": 0.65}  # as shares of the local chord: straight lines in plan
+SPAN_CELLS = 40  # 53.34 mm (2.1 in) each
+RIB_EVERY = 5  # a rib every fifth station, in a plane of constant y: nine ribs, the root's and the tip's among them
 DEPTH_CELLS = 2  # cells through the depth of a spar web or a rib
 
-# The parts, in the order the page lists them. Angles are counted from the span (y) for the skins and the spars, and from the
-# chord (x) for the ribs; the layups are examples in the library's IM7 / 8552 tape.
+# The parts, in the order the page lists them. Angles are counted from the span (y), laid on the face, for the skins and the
+# spars, and from the chord (x) for the ribs; the layups are examples in the library's IM7 / 8552 tape.
 PARTS = [
     {"id": "upper-skin", "name": "Upper skin", "layup": "[45/0/-45/90]s", "angles": [45, 0, -45, 90, 90, -45, 0, 45]},
     {"id": "lower-skin", "name": "Lower skin", "layup": "[45/0/-45/90]s", "angles": [45, 0, -45, 90, 90, -45, 0, 45]},
@@ -79,30 +90,43 @@ LIBRARY = "im7-8552"
 # The analysis.
 SPANWISE, CHORDWISE = (0.0, 1.0, 0.0), (1.0, 0.0, 0.0)
 ANGLES_FROM = {"upper-skin": SPANWISE, "lower-skin": SPANWISE, "front-spar": SPANWISE, "rear-spar": SPANWISE, "ribs": CHORDWISE}
-LOAD = 500  # N upward in all: an example of a test that loads a wing at its ribs, not a flight load. Chosen below the upper
-# skin's first buckling load, which one linear buckling step on this mesh put near 900 N (not refined, so not a checked number):
-# a linear static step cannot see buckling, so the example stays well under it.
+LOAD = 500  # N upward in all: an example of a test that loads a wing at its ribs, not a flight load. A linear static step cannot
+# see buckling, so the load is the largest of 250, 500, 750 and 1000 N that is no more than 0.6 of the upper skin's first buckling
+# load: one linear buckling step on this mesh gave the factor 1.0985 under 1000 N, so 1099 N and 0.6 of it 659 N. The mesh was
+# not refined for buckling, so the factor is not a checked number.
 COUPON = ROOT / "tests" / "fixtures" / "studio-standards" / "values.json"  # the public coupon example of the same material: its G13 and G23
 MATERIAL = "IM7-8552-Lamina"
 REFERENCE_TEMPERATURE = 293.0  # K, as the fea package's decks state it; CalculiX needs a value on the constants' second line
+FLAT = 1e-3  # a face's corners may leave its plane by this share of its size: the corners are stored rounded
+SAME_WAY = math.radians(0.03)  # faces whose normals are this close share a section and its ply axes
 POINTS_A_PLY = 8  # an S8R composite shell's integration points in one ply, numbered from the first ply up (fea/checks/calculix-conventions.toml)
 MODES = ("fibre tension", "fibre compression", "transverse tension", "transverse compression", "shear")
+RECORDED = ("load", "field", "displacement", "solve")  # what --solve adds to the record; kept together or not at all
 
 
 def surface(share: float) -> tuple[float, float]:
-    """The aerofoil's upper and lower height at a share of the chord, in mm: NACA's four-digit camber line and thickness, the
-    closed trailing edge, laid off vertically."""
+    """The aerofoil's upper and lower height at a share of the chord, as shares of the chord: NACA's four-digit camber line and
+    thickness, the closed trailing edge, laid off vertically."""
     x = share
     half = 5 * THICKNESS * (0.2969 * math.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4)
     if x < CAMBER_AT:
         camber = CAMBER / CAMBER_AT**2 * (2 * CAMBER_AT * x - x**2)
     else:
         camber = CAMBER / (1 - CAMBER_AT) ** 2 * ((1 - 2 * CAMBER_AT) + 2 * CAMBER_AT * x - x**2)
-    return (camber + half) * CHORD, (camber - half) * CHORD
+    return camber + half, camber - half
+
+
+def plan(wing: dict, y: float) -> tuple[float, float]:
+    """Where the leading edge lies along x and how long the chord is, y out from the root, for a record's `wing` block."""
+    out = y / wing["span"]
+    return wing["sweep"] * out, wing["root_chord"] + (wing["tip_chord"] - wing["root_chord"]) * out
 
 
 def build() -> dict:
-    """The mesh: nodes as [x along the chord, y along the span, z up] in mm, four-node faces, and each face's part."""
+    """The mesh: nodes as [x along the chord from the root's leading edge, y along the span, z up] in mm, four-node faces, and
+    each face's part. Every station along the span is a plane of constant y holding the aerofoil at the local chord, so the lines
+    of one chord share are straight and every face of the skins and the webs is flat but for the rounding of its corners."""
+    wing = {"span": SPAN, "root_chord": ROOT_CHORD, "tip_chord": TIP_CHORD, "sweep": SWEEP}
     nodes: list[list[float]] = []
     index: dict[tuple[int, int, int], int] = {}
     last_chord = len(CHORD_STATIONS) - 1
@@ -113,10 +137,12 @@ def build() -> dict:
             k = 0  # the two skins meet on the leading and the trailing edge
         key = (i, j, k)
         if key not in index:
+            y = SPAN * j / SPAN_CELLS
+            nose, chord = plan(wing, y)
             upper, lower = surface(CHORD_STATIONS[i])
-            z = lower + (upper - lower) * k / DEPTH_CELLS
+            z = (lower + (upper - lower) * k / DEPTH_CELLS) * chord
             index[key] = len(nodes)
-            nodes.append([round(CHORD_STATIONS[i] * CHORD, 2), round(SPAN * j / SPAN_CELLS, 2), round(z, 3)])
+            nodes.append([round(nose + CHORD_STATIONS[i] * chord, 2), round(y, 2), round(z, 3)])
         return index[key]
 
     quads: list[list[int]] = []
@@ -140,11 +166,11 @@ def build() -> dict:
         for j in range(SPAN_CELLS):
             for k in range(DEPTH_CELLS):
                 face(name, [node(i, j, k), node(i, j + 1, k), node(i, j + 1, k + 1), node(i, j, k + 1)])
-    # The ribs, between the spars.
-    front, rear = (CHORD_STATIONS.index(share) for share in SPARS.values())
+    # The ribs: whole aerofoils through the spars, from the first chord station behind the leading edge to the last before the
+    # trailing edge, where the skins are still apart.
     rib_stations = list(range(0, SPAN_CELLS + 1, RIB_EVERY))
     for j in rib_stations:
-        for i in range(front, rear):
+        for i in range(1, last_chord - 1):
             for k in range(DEPTH_CELLS):
                 face("ribs", [node(i, j, k), node(i + 1, j, k), node(i + 1, j, k + 1), node(i, j, k + 1)])
 
@@ -156,12 +182,16 @@ def build() -> dict:
     upper_max = max(surface(share)[0] for share in CHORD_STATIONS)
     lower_min = min(surface(share)[1] for share in CHORD_STATIONS)
     return {
-        "what": "An example wing made for the demo: a straight half wing, two skins over two spar webs and seven ribs",
+        "what": "An example wing made for the demo: a tapered, swept half wing, two skins over two spar webs and nine ribs",
         "units": {"length": "mm", "force": "N", "stress": "MPa"},
         "wing": {
             "span": SPAN,
-            "chord": CHORD,
-            "depth": round(upper_max - lower_min, 2),
+            "root_chord": ROOT_CHORD,
+            "tip_chord": TIP_CHORD,
+            "chord": ROOT_CHORD,  # the root's again, under its old name, until the page's checker reads root_chord
+            "sweep": SWEEP,
+            "sweep_measures": SWEEP_MEASURES,
+            "depth": round((upper_max - lower_min) * ROOT_CHORD, 2),  # the largest, at the root
             "aerofoil": AEROFOIL,
             "spars": list(SPARS.values()),
             "ribs": [round(SPAN * j / SPAN_CELLS, 2) for j in rib_stations],
@@ -231,8 +261,10 @@ def lamina() -> dict:
 def shell_model(record: dict) -> dict:
     """The stored faces as the model that is solved: a node in the middle of every edge, one shared by the faces on that edge (the
     corners keep their numbers); the faces by section, one for each direction a part's faces look in, with the axes of each of its
-    ply angles (1 along the fibres: the part's axis turned by the angle about the normal; 2 across them, in the face); the root's
-    nodes; and the loaded ones, where the upper skin, a spar and a rib outboard of the root meet."""
+    ply angles (1 along the fibres: the part's axis, laid on the face, turned by the angle about the normal; 2 across them, in the
+    face); the root's nodes; and the loaded ones, where the upper skin, a spar and a rib outboard of the root meet. A face joins
+    the first section of its part whose normal is within SAME_WAY of its own: the corners are stored rounded, so the faces of one
+    flat strip look in directions a little apart, and `off_axes` is the most any face is turned from its section's axes."""
     mesh, parts = record["mesh"], record["parts"]
     nodes: list[Vector] = [tuple(node) for node in mesh["nodes"]]
     middle: dict[tuple[int, int], int] = {}
@@ -248,34 +280,40 @@ def shell_model(record: dict) -> dict:
         elements.append(corners + mids)
 
     sections: list[dict] = []
-    found: dict[tuple, int] = {}
     section_of: list[int] = []
     areas: list[float] = []
+    off_axes = warp = 0.0
     for element, corners in enumerate(mesh["quads"]):
         p = [nodes[n] for n in corners]
         normal = cross(tuple(p[2][i] - p[0][i] for i in range(3)), tuple(p[3][i] - p[1][i] for i in range(3)))
         size = math.sqrt(dot(normal, normal))
         normal = tuple(value / size for value in normal)
         areas.append(size / 2)  # a flat four-sided face: half the cross product of its diagonals
-        if any(abs(dot(normal, tuple(q[i] - p[0][i] for i in range(3)))) > 1e-9 * CHORD for q in p):
-            raise SystemExit(f"face {element} is not flat: its plies' axes would not lie in it")
+        bend = abs(dot(normal, tuple(p[1][i] - p[0][i] for i in range(3)))) / math.sqrt(size / 2)  # how far a corner leaves the plane of the diagonals, over the face's size
+        if bend > FLAT:
+            raise SystemExit(f"face {element} is not flat ({bend:.2g} of its size out of plane): its plies' axes would not lie in it")
+        warp = max(warp, bend)
         entry = parts[mesh["part"][element]]
-        key = (entry["id"], tuple(round(value, 6) for value in normal))
-        if key not in found:
-            axis = ANGLES_FROM[entry["id"]]
-            if abs(dot(axis, normal)) > 1e-6:
-                raise SystemExit(f"face {element} of {entry['name']} does not hold the axis its angles are counted from")
+        home = next((number for number, other in enumerate(sections) if other["part"] == entry["id"] and dot(normal, other["normal"]) >= math.cos(SAME_WAY)), None)
+        if home is None:
+            named = ANGLES_FROM[entry["id"]]
+            lean = dot(named, normal)
+            if abs(lean) > 0.5:
+                raise SystemExit(f"face {element} of {entry['name']} is too far from the axis its angles are counted from to lay it on the face")
+            axis = tuple((named[i] - lean * normal[i]) / math.sqrt(1 - lean * lean) for i in range(3))  # the named axis laid on the face
             across = cross(normal, axis)
             frames = {}
             for angle in sorted(set(entry["angles"])):
                 c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
                 along = tuple(c * axis[i] + s * across[i] for i in range(3))
                 frames[angle] = (along, cross(normal, along))
-            found[key] = len(sections)
+            home = len(sections)
             sections.append({"name": f"{entry['id']}-{sum(1 for other in sections if other['part'] == entry['id']) + 1:02d}", "part": entry["id"],
-                             "angles": entry["angles"], "normal": normal, "frames": frames, "elements": []})
-        sections[found[key]]["elements"].append(element)
-        section_of.append(found[key])
+                             "angles": entry["angles"], "normal": normal, "axis": axis, "frames": frames, "elements": []})
+        sections[home]["elements"].append(element)
+        section_of.append(home)
+        turn = cross(normal, sections[home]["normal"])
+        off_axes = max(off_axes, math.atan2(math.sqrt(dot(turn, turn)), dot(normal, sections[home]["normal"])))
 
     owners: dict[int, set[str]] = {}
     for element, corners in enumerate(mesh["quads"]):
@@ -285,7 +323,7 @@ def shell_model(record: dict) -> dict:
     stations = len(record["wing"]["ribs"]) - 1
     if len(loaded) != len(SPARS) * stations:
         raise SystemExit(f"{len(loaded)} points where a spar, a rib outboard of the root and the upper skin meet, not {len(SPARS) * stations}")
-    return {"nodes": nodes, "elements": elements, "sections": sections, "section_of": section_of, "areas": areas,
+    return {"nodes": nodes, "elements": elements, "sections": sections, "section_of": section_of, "areas": areas, "off_axes": off_axes, "warp": warp,
             "root": [n for n, place in enumerate(nodes) if place[1] == 0.0], "loaded": loaded}
 
 
@@ -373,7 +411,8 @@ def strength_used(stress: Vector, ply: dict) -> tuple[float, str]:
 
 
 def solve(record: dict, keep: Path | None) -> dict:
-    """Solves the wing and returns what is recorded of the answer: the load, the field and the solve's numbers. Prints the checks."""
+    """Solves the wing and returns what is recorded of the answer: the load, the field, the stored nodes' displacements and the
+    solve's numbers. Prints the checks."""
     ply = lamina()
     model = shell_model(record)
     with tempfile.TemporaryDirectory() as scratch:
@@ -428,10 +467,12 @@ def solve(record: dict, keep: Path | None) -> dict:
     governs = max(largest, key=values.__getitem__)
     entry = parts[mesh["part"][governs]]
     _, mode, layer = worst[governs]
-    rise = max(row[3] for row in blocks["displacements"])
+    moved = {int(row[0]) - 1: row[1:4] for row in blocks["displacements"]}
+    rise = max(move[2] for move in moved.values())
     answer = {
         "load": load_of(record),
         "field": {"key": "strength_used", "label": "Strength used", "unit": "", "min": min(values), "max": max(values), "values": values},
+        "displacement": {"unit": "mm", "values": [[round(value, 2) + 0.0 for value in moved[n]] for n in range(len(mesh["nodes"]))]},  # the stored nodes, in their order; + 0.0 so no -0.0
         "solve": {
             "solver": f"CalculiX {version}",
             "recorded": datetime.date.today().isoformat(),
@@ -446,7 +487,8 @@ def solve(record: dict, keep: Path | None) -> dict:
     }
 
     # The checks, printed with every solve.
-    print(f"solved by CalculiX {version} in {seconds:.1f} s: {len(model['nodes'])} nodes, {count} elements, {len(sections)} sections")
+    print(f"solved by CalculiX {version} in {seconds:.1f} s: {len(model['nodes'])} nodes, {count} elements, {len(sections)} sections; a face is turned at most "
+          f"{math.degrees(model['off_axes']):.4f} degrees from its section's ply axes and leaves its own plane by at most {model['warp']:.1g} of its size")
     print("  the ply: " + ", ".join(f"{name} {ply[name]:.6g}" for name in ("E1", "E2", "E3", "G12", "G13", "G23", "F1t", "F1c", "F2t", "F2c", "F6")) + " MPa; "
           + ", ".join(f"{name} {ply[name]:g}" for name in ("nu12", "nu13", "nu23")) + f"; ply thickness {ply['thickness']:.5g} mm")
     for source in ply["sources"]:
@@ -457,9 +499,10 @@ def solve(record: dict, keep: Path | None) -> dict:
           f"{carried[off]:.3f} N against {outboard[off]:.3f} N")
     print(f"    CalculiX's own total of the reactions printed for the root's nodes is {-blocks['total'][0][2]:.3f} N and is not used: on shell nodes whose rotations "
           f"are held it is not the whole reaction (fea/checks/calculix-conventions.toml, shell_set_totals)")
-    # Near the root, clear of the held edge: the skins' faces between the spars in the second span cell.
-    front, rear = (chord_share * record["wing"]["chord"] for chord_share in record["wing"]["spars"])
+    # Near the root, clear of the held edge: the skins' faces between the spars in the second span cell, at the local chord.
     near = sorted(carried)[1]
+    nose, chord = plan(record["wing"], near)
+    front, rear = (nose + chord_share * chord for chord_share in record["wing"]["spars"])
     sample = {name: [element for element in range(count) if parts[mesh["part"][element]]["id"] == name and abs(centre[element] - near) < 1e-6
                      and front < sum(mesh["nodes"][n][0] for n in mesh["quads"][element]) / 4 < rear] for name in ("upper-skin", "lower-skin")}
     mean = {name: sum(spanwise[element] for element in faces) / len(faces) for name, faces in sample.items()}
@@ -470,9 +513,9 @@ def solve(record: dict, keep: Path | None) -> dict:
     depth = height["upper-skin"] - height["lower-skin"]
     area = (rear - front) * ply["thickness"] * len(parts[0]["angles"])
     estimate, solved = moment / (depth * area), (mean["lower-skin"] - mean["upper-skin"]) / 2
-    print(f"  3 by hand: the bending moment there is {moment:.0f} N mm ({sum(share * model['nodes'][n][1] for n in model['loaded']):.0f} at the root); as a box of two skins "
-          f"{depth:.2f} mm apart, each {area:.1f} mm2 between the spars, that is {estimate:.1f} MPa; the solver's two skins average {solved:.1f} MPa, {solved / estimate:.2f} of it "
-          f"(the estimate leaves out the skin outside the spars and the webs, which carry the rest)")
+    print(f"  3 by hand: the bending moment there is {moment:.0f} N mm ({sum(share * model['nodes'][n][1] for n in model['loaded']):.0f} at the root) and the chord "
+          f"{chord:.1f} mm; as a box of two skins {depth:.2f} mm apart, each {area:.1f} mm2 between the spars, that is {estimate:.1f} MPa; the solver's two skins average "
+          f"{solved:.1f} MPa, {solved / estimate:.2f} of it (the estimate leaves out the skin outside the spars and the webs, which carry the rest)")
     print(f"  4 deflection: the tip rises {rise:.2f} mm, {100 * rise / record['wing']['span']:.2f} % of the span")
     for part, element in zip(parts, largest):
         print(f"  {part['name']}: strength used at most {values[element]:.4g}, {centre[element]:.1f} mm from the root")
@@ -492,9 +535,9 @@ def main() -> None:
     elif OUT.exists():
         # The analysis already recorded stays only while it is the analysis of this wing and this load.
         old = json.loads(OUT.read_text(encoding="utf-8"))
-        recorded = {key: old[key] for key in ("load", "field", "solve") if key in old}
+        recorded = {key: old[key] for key in RECORDED if key in old}
         same = all(old.get(key) == record[key] for key in ("wing", "parts", "mesh")) and old.get("load") == load_of(record)
-        if len(recorded) == 3 and same:
+        if len(recorded) == len(RECORDED) and same:
             record.update(recorded)
             print(f"the analysis recorded on {old['solve']['recorded']} is kept: the wing and its load are unchanged")
         elif recorded:

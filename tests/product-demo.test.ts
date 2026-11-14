@@ -13,11 +13,12 @@ const at = (t: number) => viewAt(t, counts);
 
 test("the wing's record is whole and agrees with itself", () => {
   assert.deepEqual(wingProblems(demoWing), []);
-  // The example: one side of a straight wing, 7 ft long, two skins over two spars and seven ribs, in the library's IM7 / 8552.
+  // The example: one side of a tapered, swept wing, 7 ft long, two skins over two spars and nine ribs, in the library's IM7 / 8552.
   assert.equal(demoWing.wing.span, 2133.6);
   assert.equal(demoWing.wing.library, "im7-8552");
   assert.deepEqual(demoWing.parts.map((part) => part.id), ["upper-skin", "lower-skin", "front-spar", "rear-spar", "ribs"]);
-  assert.equal(demoWing.wing.ribs.length, 7);
+  assert.equal(demoWing.wing.ribs.length, 9);
+  assert.deepEqual([demoWing.wing.root_chord, demoWing.wing.tip_chord, demoWing.wing.sweep], [450, 225, 400]);
   // Every layup is symmetric about its middle.
   for (const part of demoWing.parts) assert.deepEqual([...part.angles].reverse(), part.angles, part.name);
   // A broken record is noticed.
@@ -104,6 +105,8 @@ test("every word the demo shows is fit for the product's view, and its numbers a
   assert.equal(BEAT_COPY.report.text, "Less time on repetitive setup and documentation, more time optimizing the structure.");
   assert.deepEqual(wingFacts(demoWing, "IM7 / 8552").map(([name]) => name), ["PART", "SPAN", "CHORD", "MATERIAL", "STRUCTURE"]);
   assert.deepEqual(wingFacts(demoWing, "IM7 / 8552")[1], ["SPAN", "2.13 m"]);
+  assert.deepEqual(wingFacts(demoWing, "IM7 / 8552")[2], ["CHORD", "0.45 m at the root, 0.23 m at the tip"]);
+  assert.deepEqual(wingFacts(demoWing, "IM7 / 8552")[4], ["STRUCTURE", "2 skins, 2 spars, 9 ribs"]);
   assert.deepEqual(wingParts(demoWing)[0], ["UPPER SKIN", "[45/0/-45/90]s"]);
   const result = resultLines(demoWing);
   assert.ok(result, "the analysis is not recorded");
@@ -111,7 +114,7 @@ test("every word the demo shows is fit for the product's view, and its numbers a
   assert.ok(result.first.includes(governing.name.toLowerCase()), result.first);
   assert.ok(result.when.includes(`${demoWing.load!.total} ${demoWing.load!.unit}`) && result.when.includes(`${Math.round(demoWing.solve!.tip_deflection)} mm`), result.when);
   // A wing without its analysis says nothing about one.
-  assert.equal(resultLines({ ...demoWing, field: undefined, solve: undefined, load: undefined }), null);
+  assert.equal(resultLines({ ...demoWing, field: undefined, displacement: undefined, solve: undefined, load: undefined }), null);
 });
 
 test("the stepper plays a caller's own stops: past the demo's fourth the page scrolls on", () => {

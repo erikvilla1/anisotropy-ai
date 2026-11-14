@@ -14,11 +14,14 @@ export type DemoWing = {
   what: string;
   built: string;
   units: { length: string; force: string; stress: string };
-  wing: { span: number; chord: number; depth: number; aerofoil: string; spars: number[]; ribs: number[]; library: string };
+  /** A straight-edged, tapered and swept half wing. `sweep` is how far aft of the root's leading edge the tip's is. */
+  wing: { span: number; root_chord: number; tip_chord: number; sweep: number; depth: number; aerofoil: string; spars: number[]; ribs: number[]; library: string };
   parts: WingPart[];
   mesh: { nodes: number[][]; quads: number[][]; part: number[] };
   load?: { total: number; unit: string; how: string };
   field?: WingField;
+  /** How far each stored node moves under the load, in node order. */
+  displacement?: { unit: string; values: number[][] };
   solve?: WingSolve;
 };
 
@@ -42,8 +45,10 @@ export function wingProblems(wing: DemoWing): string[] {
   });
   if (next !== mesh.quads.length) problems.push("the parts do not cover the mesh");
   const xs = mesh.nodes.map((node) => node[0]), ys = mesh.nodes.map((node) => node[1]);
-  if (Math.abs(Math.max(...xs) - Math.min(...xs) - wing.wing.chord) > 1e-6 || Math.abs(Math.max(...ys) - Math.min(...ys) - wing.wing.span) > 1e-6) problems.push("the mesh is not the wing's chord by its span");
-  if (Boolean(field) !== Boolean(solve) || Boolean(field) !== Boolean(wing.load)) problems.push("the analysis is recorded in part: the field, the solve and the load go together");
+  if (Math.abs(Math.max(...xs) - Math.min(...xs) - wingExtent(wing)) > 1e-6 || Math.abs(Math.max(...ys) - Math.min(...ys) - wing.wing.span) > 1e-6) problems.push("the mesh is not the wing's plan: its chords and sweep by its span");
+  if (Boolean(field) !== Boolean(solve) || Boolean(field) !== Boolean(wing.load) || Boolean(field) !== Boolean(wing.displacement)) problems.push("the analysis is recorded in part: the field, the displacement, the solve and the load go together");
+  if (wing.displacement && (wing.displacement.values.length !== mesh.nodes.length || wing.displacement.values.some((row) => row.length !== 3 || row.some((value) => !Number.isFinite(value))))) problems.push("the displacement is not three numbers a node");
+  if (wing.displacement && solve && Math.abs(Math.max(...wing.displacement.values.map((row) => row[2])) - solve.tip_deflection) > 0.011) problems.push("the stated tip deflection is not the largest upward displacement stored");
   if (field && solve) {
     if (field.values.length !== mesh.quads.length) problems.push(`${field.values.length} values for ${mesh.quads.length} faces`);
     if (field.values.some((value) => !Number.isFinite(value))) problems.push("the field holds a value that is not a number");
@@ -77,6 +82,13 @@ export function wingColour(field: WingField, value: number): [number, number, nu
 }
 /** The legend's bar: the same rainbow, left to right. */
 export const RAINBOW_GRADIENT = `linear-gradient(to right, ${RAINBOW.map((stop) => `rgb(${stop.map((channel) => Math.round(channel * 255)).join(" ")})`).join(", ")})`;
+
+/** How far the wing reaches from nose to tail in plan: the root's chord, or the swept tip's trailing edge if that is further aft. */
+export const wingExtent = (wing: DemoWing): number => Math.max(wing.wing.root_chord, wing.wing.sweep + wing.wing.tip_chord);
+
+/** How many times its size the page draws the wing's deflection, so a bend of a few centimetres on a two-metre wing can be
+ * seen. A drawing choice only: the stated deflection is the recorded one. */
+export const BEND_DRAWN = 5;
 
 /** A length in metres, to two places: 2.13 m. */
 export const metres = (millimetres: number): string => `${(millimetres / 1000).toFixed(2)} m`;

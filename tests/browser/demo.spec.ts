@@ -142,7 +142,8 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
   await expect(facts.locator("dt")).toHaveText(["PART", "SPAN", "CHORD", "MATERIAL", "STRUCTURE"]);
   await expect(facts).toContainText("2.13 m");
   await expect(facts).toContainText("IM7 / 8552");
-  await expect(facts).toContainText("2 skins, 2 spars, 7 ribs");
+  await expect(facts).toContainText("0.45 m at the root, 0.23 m at the tip");
+  await expect(facts).toContainText("2 skins, 2 spars, 9 ribs");
   await expect(box(page).locator("canvas")).toBeVisible();
   expect(asked).toEqual([]);
 });
