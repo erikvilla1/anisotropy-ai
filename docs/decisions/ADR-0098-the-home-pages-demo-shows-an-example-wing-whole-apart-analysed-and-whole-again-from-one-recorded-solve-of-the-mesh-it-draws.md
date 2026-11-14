@@ -153,3 +153,11 @@ UNVERIFIED: the buckling factor (the mesh was not refined for it, and it is run 
 
 **Evidence.** On 2026-11-14 against the dev server at 1873 by 866 the held wing was captured at five turns and looked at: the axes are clear of the wing in each. The case of `demo.spec.ts` that holds and turns the wing passes. `npx tsc --noEmit` clean. UNVERIFIED: a turn that brings the wing's left edge to the stage's own edge, where the axes are at their smallest and could still meet it.
 
+## Amendment 10, 2026-11-14 (the winglet is taken off)
+
+**Context.** The co-founder's word, passed on by the lead on 2026-11-14: "get rid of the wing tip. just make how was before".
+
+**Decision.** Amendment 7's winglet is removed. The wing, its script, its mesh and its recorded analysis are the ones from before that amendment: two skins over two spars and nine ribs, 2084 faces; under 500 N the tip rises 33 mm and the lower skin at the root is the most loaded part, at 0.056 of its strength. The view amendment 7 chose for the analysis stays, and so do the wing's rooms on the stage (amendments 3, 4 and 6) and the strip of facts, now five again.
+
+**Evidence.** `python3 scripts/demo-wing.py` on 2026-11-14 rebuilt the mesh and kept the analysis already in the record ("the wing and its load are unchanged"); the rebuilt record equals the restored one but for its build date. `npm test`: 333 tests, 332 passed, 1 skipped. `npx tsc --noEmit` clean. `demo.spec.ts` against the dev server: 13 of 13. UNVERIFIED: how the wing sits in its rooms without the winglet was not looked at again in this change; the next amendment redraws it.
+
