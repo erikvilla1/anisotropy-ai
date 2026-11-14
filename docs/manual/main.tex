@@ -1,4 +1,4 @@
-% Anisotropy AI laminate engine manual.
+% Anisotropy laminate engine manual.
 % Build with:  uv run --project fea python docs/manual/build.py
 % The files in generated/ are written by build.py from the repository's documents, code and
 % engine results. Edit those sources, not the generated files.
@@ -16,6 +16,9 @@
 \usepackage{listings}
 \usepackage{fancyhdr}
 \usepackage{parskip}
+\usepackage[titles]{tocloft}
+\usepackage{needspace}
+\usepackage{xurl}  % a long URL breaks at any character instead of running past the margin
 \usepackage{hyperref}
 
 \definecolor{accent}{HTML}{9A5A00}
@@ -25,7 +28,10 @@
 \definecolor{passgreen}{HTML}{2F6B3F}
 
 \hypersetup{colorlinks=true, linkcolor=ink, urlcolor=accent, citecolor=ink,
-  pdftitle={Anisotropy AI Laminate Engine Manual}, pdfauthor={Anisotropy AI}}
+  pdftitle={Anisotropy Laminate Engine Manual}, pdfauthor={Anisotropy}}
+% the contents: room for numbers such as 5.13.10 and a right margin, so a long title wraps before its page number
+\setlength{\cftsecnumwidth}{2em}\setlength{\cftsubsecnumwidth}{3.2em}\setlength{\cftsubsubsecnumwidth}{4.2em}
+\cftsetpnumwidth{2.4em}\cftsetrmarg{3.4em}
 
 \titleformat{\section}{\sffamily\Large\bfseries\color{ink}}{\color{accent}\thesection}{0.7em}{}
 \titleformat{\subsection}{\sffamily\large\bfseries\color{ink}}{\color{accent}\thesubsection}{0.6em}{}
@@ -46,6 +52,12 @@
   keywordstyle=\color{accent}\bfseries, commentstyle=\color{muted}\itshape,
   stringstyle=\color{passgreen}, showstringspaces=false, breaklines=true}
 \lstnewenvironment{enginecode}[1][]{\lstset{style=engine,#1}}{}
+% Plain text and fenced code blocks: the same box without Python highlighting, its long lines broken inside the margin.
+\lstdefinestyle{plain}{
+  language={}, basicstyle=\ttfamily\footnotesize, columns=fullflexible, keepspaces=true,
+  numbers=none, backgroundcolor=\color{codebg}, frame=leftline, framerule=2pt, rulecolor=\color{muted},
+  xleftmargin=1.2em, framexleftmargin=0.8em, aboveskip=0.4ex, belowskip=1.2ex, breaklines=true}
+\lstnewenvironment{plainfile}[1][]{\lstset{style=plain,#1}}{}
 
 % \codefrom{function}{file}{lines}: caption above a code listing.
 \newcommand{\codefrom}[3]{\par\smallskip\noindent{\sffamily\footnotesize\color{muted}%
@@ -59,7 +71,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \renewcommand{\headrulewidth}{0pt}
-\fancyhead[L]{\sffamily\footnotesize\color{muted}Anisotropy AI \textperiodcentered{} Laminate Engine Manual \textperiodcentered{} engine \EngineVersion}
+\fancyhead[L]{\sffamily\footnotesize\color{muted}Anisotropy \textperiodcentered{} Laminate Engine Manual \textperiodcentered{} engine \EngineVersion}
 \fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}
 \fancyfoot[C]{\sffamily\scriptsize\color{muted}Internal use. Not for design decisions until coupon tests are compared with predictions.}
 
@@ -68,7 +80,7 @@
 \hypersetup{pageanchor=false}
 \begin{titlepage}
   \sffamily
-  {\color{accent}\bfseries\small ANISOTROPY AI}\par
+  {\color{accent}\bfseries\small ANISOTROPY}\par
   \vspace*{3cm}
   {\fontsize{30}{36}\selectfont\bfseries\color{ink} Laminate Engine Manual}\par
   \vspace{0.6cm}
@@ -130,18 +142,20 @@ the code it describes.
 \input{generated/verification}
 
 \section{Finite element layer}\label{sec:fea}
-The finite element layer reads the Abaqus input decks the team builds for coupon models and solves them with our
-own laminate membrane kernel on the engine's stiffness, so the two can be compared number for number
-(decision record ADR-0029 in Section~\ref{sec:decisions}). Its equations follow, each with the code that computes
-it, under the same rule as the engine's: every function the text names is listed from the source with its real line
-numbers. The validation tables after the theory were produced by running the kernel while this manual was built;
+The finite element layer reads the Abaqus input decks the team builds for coupon models and solves them on the
+engine's laminate stiffness with our own kernels, a membrane element in the plane and an MITC4 flat shell for
+bending, pressure and transverse shear, so the two can be compared number for number (decision records ADR-0029
+and ADR-0053 in Section~\ref{sec:decisions}). Every function the text below names is listed from the source with
+its real line numbers, under the same rule as the engine's. The validation tables after the theory were produced by running the kernel while this manual was built;
 agreement with the team's Abaqus runs is recorded separately once their results exist.
 \input{generated/fea_theory}
 \input{generated/fea_verification}
 
 \section{Why it was built this way}\label{sec:decisions}
-These are the project's decision records: the context, the options considered, the choice, its evidence, and what
-would make us revisit it. The full records, including consequences, are in \texttt{docs/decisions}.
+These are the decision records of the engine and the finite element layer (those whose Area line names engine or
+fea): the context, the options considered, the choice, its evidence, and what would make us revisit it. The full
+records, including consequences, and the records of the website, the API and the project itself are in
+\texttt{docs/decisions}.
 \input{generated/decisions}
 
 \section{Limits and risks}\label{sec:limits}
@@ -162,6 +176,11 @@ would make us revisit it. The full records, including consequences, are in \text
     properties, Chapter 7; first-ply failure, Chapter 9.
   \item K.-J. Bathe, \emph{Finite Element Procedures}, 2nd edition. Watertown, MA: K.-J. Bathe, 2014. Isoparametric
     element formulation and numerical integration, Chapter 5 (finite element layer, Section~\ref{sec:fea}).
+  \item J. M. Whitney, \emph{Structural Analysis of Laminated Anisotropic Plates}. Technomic, 1987. Plate theory with
+    transverse shear, Chapters 5 and 10 (the flat shell of the finite element layer).
+  \item A. T. Nettles, \emph{Basic Mechanics of Laminated Composite Plates}, NASA Reference Publication 1351. NASA, 1994.
+    Section III.D, equations 48 to 51 (prescribed curvature). \url{https://ntrs.nasa.gov/citations/19950009349}
+\input{generated/standards}
   \item S. P. Timoshenko and J. N. Goodier, \emph{Theory of Elasticity}, 3rd edition. McGraw-Hill, 1970. Plane stress,
     Chapter 2 (isotropic validation cases of the finite element layer).
   \item NASA-STD-7009A, \emph{Standard for Models and Simulations}. NASA, 2016.

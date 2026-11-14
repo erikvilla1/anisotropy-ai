@@ -119,7 +119,7 @@
      "key": "units",
      "label": "Units",
      "kind": "list",
-     "help": "the unit system every number on this form is in: mm-MPa (mm, MPa and N), m-Pa (m, Pa and N), in-psi (in, psi and lbf) or in-ksi (in, ksi and lbf); the row labels are written for mm-MPa, so with another system read each unit as that system's. Results come back in the units you pick; our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick",
+     "help": "the unit system every number on this form is in: mm-MPa (mm, MPa and N), m-Pa (m, Pa and N), in-psi (in, psi and lbf) or in-ksi (in, ksi and lbf); left blank, it is mm-MPa; the row labels are written for mm-MPa, so with another system read each unit as that system's. Results come back in the units you pick; our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick",
      "required": false,
      "default": "mm-MPa",
      "words": [
@@ -136,7 +136,7 @@
      "key": "test",
      "label": "Test",
      "kind": "list",
-     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines), plate (a laminate held and loaded on regions you name, stated from the studio) or fibre tow tension (a resin-impregnated carbon fibre tow under ASTM D4018, stated and calculated from the studio, with no model); see Definitions, Tests",
+     "help": "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines), plate (a laminate held and loaded on regions you name, stated from the workspace) or fibre tow tension (a resin-impregnated carbon fibre tow under ASTM D4018, stated and calculated from the workspace, with no model); see Definitions, Tests",
      "required": true,
      "default": null,
      "words": [
@@ -1390,7 +1390,7 @@
   "Material: either pick one from the sheet Library materials, or give your own constants with their source. Not both. G13 and G23 are needed in both cases, for the shell section of the Abaqus model; take them from your Abaqus material, or estimate them as the sheet Definitions says and write in the notes that they are estimates. If the library material has no strength in a column, we predict no failure; if it has no ply thickness, give one. A plastic, or any material alike in every direction, is Material kind = isotropic: give its thickness, E and nu, and its name and source on the Own material rows, and leave the plies, the ply material, G13 and G23 blank.",
   "Failure criterion: all reports every criterion the material's strengths allow, maximum stress and Tsai-Hill, and Tsai-Wu too when you give its interaction term f12*; or pick one criterion, or none.",
   "Mesh: give an element size and we divide the coupon so that a row of nodes sits on each tab line; or, when you already have an Abaqus model, give its mesh (elements across the width, the partition lines from the bottom, and the rows per segment) so that ours matches it node for node.",
-  "Dog-bone: for a dumbbell specimen, such as ASTM D638's, give the narrow section's width and length and the fillet radius (and Type IV's outer radius); Width and Length are then the overall sizes at the ends. Unnotched tension only; leave the rows blank for a straight strip. Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
+  "Dog-bone: for a dumbbell specimen, such as ASTM D638's, give the narrow section's width and length and the fillet radius (and Type IV's outer radius); Width and Length are then the overall sizes at the ends. Unnotched tension only; leave the rows blank for a straight strip. Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the workspace.",
   "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway to the tab. You do not enter these points: we place them from the geometry.",
   "Standard: pick the test standard the specimen follows from the list, or none for your own design. With a standard picked we check the coupon against each of its clauses a model can meet, list every deviation with its clause, and list the clauses of the procedure (specimens, conditioning, speed, alignment, failure mode) as the laboratory's. ASTM D3039 also needs the strain measurement; ASTM C1869 needs its specimen, A, B or other; ASTM D638 needs its type, I to V. A deviation never stops the run, and we never say a model conforms to a test standard.",
   "Names: if you give the names of your Abaqus part, instance, material, layup and section set, our deck opens in Abaqus/CAE with them.",
@@ -1452,7 +1452,7 @@
     },
     {
      "term": "Plate",
-     "meaning": "A flat laminate held and loaded on regions you name: an edge, a tab, the ring of a hole, the whole face, or a box you draw on it. Each support says which directions it holds (and a travel, if it moves); each load is a force along a direction spread over its region, or a pressure on an area. Stated from the studio, which draws the regions; the Excel form has no rows for them.",
+     "meaning": "A flat laminate held and loaded on regions you name: an edge, a tab, the ring of a hole, the whole face, or a box you draw on it. Each support says which directions it holds (and a travel, if it moves); each load is a force along a direction spread over its region, or a pressure on an area. Stated from the workspace, which draws the regions; the Excel form has no rows for them.",
      "example": "A square plate simply supported on its four edges under a pressure."
     },
     {
@@ -1643,7 +1643,7 @@
     {
      "term": "Mesh, element, node",
      "meaning": "For the calculation the coupon is divided into small four-sided pieces called elements; their corners are the nodes. The stress is worked out in every element. The whole set of elements is the mesh.",
-     "example": "A 250 x 20 mm coupon with 2 mm elements has 10 across and 125 along: 1,250 elements."
+     "example": "A 250 x 25 mm coupon with 2.5 mm elements has 10 across and 100 along: 1,000 elements."
     },
     {
      "term": "Element size",
@@ -1713,7 +1713,7 @@
    "plies"
   ],
   "dogbone": false,
-  "not_available": "not available yet: the studio offers the unnotched tension coupon, under ASTM D3039 or no standard, until its comparison with Abaqus is validated",
+  "not_available": "not available yet: the workspace offers the unnotched tension coupon, under ASTM D3039 or no standard, until its comparison with Abaqus is validated",
   "symmetric_only": true,
   "unsymmetric": "an unsymmetric layup is not available yet: it bends as it is pulled, which the comparison with Abaqus does not cover yet; use a layup that reads the same from both faces, such as [0/45/-45/90]s",
   "switch": "ANISOTROPY_ALL_TESTS"

@@ -4,6 +4,7 @@
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07; Founder, 2026-11-12 ("accept": "Composites. Calculated." and "Closed beta", amendment 16) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) (the hero first; this is its option 3 in part), [ADR-0001](ADR-0001-deterministic-engine.md), the CEO's website audit of 2026-10-31 (item 7), `app/page.tsx`, `app/home.css`, `components/home/hero-lens.tsx`, `components/site-shell.tsx`, `tests/browser/home.spec.ts`
+- Area: website
 
 ## Context
 

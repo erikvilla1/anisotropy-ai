@@ -4,6 +4,7 @@
 - Date: 2026-11-07
 - Decided by: Erik Villa (asked for "point 2": plots, the package and the PDF out of the job's critical path) | Drafted by: Claude
 - Related: ADR-0049 (one command per coupon), ADR-0050 (coupon jobs), ADR-0051 (the studio), ADR-0056 amendment 3 (the job queue); `fea/tools/run_coupon.py`, `fea/examples/build_model.py`, `api/src/anisotropy_api/coupon_jobs.py`, `api/src/anisotropy_api/schemas.py`; tests `fea/tests/test_run_coupon.py`, `fea/tests/test_build_model_script.py`, `api/tests/test_coupon_jobs_api.py`, `api/tests/test_job_queue.py`, `tests/browser/studio.spec.ts`
+- Area: fea
 
 ## Context
 

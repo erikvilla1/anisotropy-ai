@@ -40,7 +40,7 @@ library = "im7-8552"
 dataset = "ncamp-im7-8552-2019-rtd-measured-v1"
 [material.transverse]
 G13 = 4688.43       # set equal to G12: a stated choice, the dataset gives no G13
-G23 = 2987.73       # E2 / 3, the form's estimate for a tape (ADR-0090): what the studio's tension screen writes; a pull in the plane does not load it
+G23 = 2987.73       # E2 / 3, the form's estimate for a tape (ADR-0090): what the workspace's tension screen writes; a pull in the plane does not load it
 plane_stress = true  # nu13 = nu23 = 0 for CalculiX, the plane stress our engine assumes (the form's convention)
 transverse_isotropy = true
 
@@ -54,7 +54,7 @@ value = 1.0
 
 [probes]
 nodes = { centre = [12.5, 125.0], extensometer_bottom = [12.5, 112.5], extensometer_top = [12.5, 137.5] }
-elements = { centre = [12.5, 125.0], near_grip = [12.5, 57.0] }  # as the studio places them (ADR-0090): the centre and the row beside the bottom tab
+elements = { centre = [12.5, 125.0], near_grip = [12.5, 57.0] }  # as the workspace places them (ADR-0090): the centre and the row beside the bottom tab
 
 [strain]
 device = "extensometer"

@@ -1,8 +1,8 @@
 """Take a coupon from its input form, its values file or its folder, to its package with one command (ADR-0049, ADR-0051).
 
-    uv run python tools/run_coupon.py <filled form>.xlsx --run-by "Erik Villa"   # a new coupon: its form is read first
-    uv run python tools/run_coupon.py <values>.json --run-by "Erik Villa"        # the same rows as the studio sends them
-    uv run python tools/run_coupon.py <coupon> --run-by "Erik Villa"             # a coupon that has its specs, after an edit
+    uv run python tools/run_coupon.py <filled form>.xlsx --run-by "<role>"   # a new coupon: its form is read first
+    uv run python tools/run_coupon.py <values>.json --run-by "<role>"        # the same rows as the workspace sends them
+    uv run python tools/run_coupon.py <coupon> --run-by "<role>"             # a coupon that has its specs, after an edit
 
 Runs the steps of the case page's Rebuild section in order, with its placeholders filled: reads the input (as coupon_from_form.py),
 writes the decks (as regenerate_decks.py --ccx), starts the next attempt (as new_attempt.py), solves the coupon with our engine
@@ -55,7 +55,7 @@ from regenerate_decks import regenerate  # noqa: E402  (tools share a folder)
 TOLERANCE, FLOOR = 0.03, 0.02  # the CalculiX record's, as the case page's Rebuild section gives them (intake.next_commands)
 LEFT_OUT = {  # why the record keeps the gauge probes only, in the words the coupons' records use
     "open_hole_tension": "gauge node and far element only: beside the hole the bilinear kernel element and S8R differ in the small components",
-    None: "centre probe only: the near-grip element was left out because the two element types differ most beside a tab line, in the small components",
+    None: "centre probe only: the near-grip element sits beside a tab line, where the two element types are not expected to agree in the small components",
 }
 COUPON_DOCUMENT = "anisotropy_models_coupon"  # docs/models/coupon.py, loaded under the name its tests use
 INPUT_SUFFIXES = (".xlsx", VALUES_SUFFIX)

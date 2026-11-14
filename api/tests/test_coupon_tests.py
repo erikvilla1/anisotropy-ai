@@ -45,7 +45,7 @@ from anisotropy_api.main import job_recorder
 HIDDEN_STAND_IN = '''import sys
 name = sys.argv[sys.argv.index("values") + 1]
 if name == "IM7-OHT-L1":
-    sys.exit(f"studio_tool: {name}: its test, open-hole tension, is not available yet: the studio offers the unnotched tension coupon, "
+    sys.exit(f"studio_tool: {name}: its test, open-hole tension, is not available yet: the workspace offers the unnotched tension coupon, "
              "under ASTM D3039 or no standard, until its comparison with Abaqus is validated; the coupon is kept")
 sys.exit("studio_tool: something else went wrong")
 '''

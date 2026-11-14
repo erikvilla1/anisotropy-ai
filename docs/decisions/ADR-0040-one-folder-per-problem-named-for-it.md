@@ -4,6 +4,7 @@
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (coupon names for the folders, in the repository and locally; four plain-named folders inside; no share folder; benchmark documents under `.local/benchmarks/<name>/`) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/paths.py`, `docs/models/build.py`, `docs/models/team.py`, `docs/models/share.py`, [ADR-0036](ADR-0036-one-folder-per-fea-test.md), [ADR-0038](ADR-0038-coupon-identity-card-and-designation.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-coupon-folders.md` (ADR-0042)
+- Area: process
 
 ## Context
 

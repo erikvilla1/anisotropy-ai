@@ -4,6 +4,7 @@
 - Date: 2026-11-09
 - Decided by: Founder, 2026-11-09 (direction: the decision card's "Speed up the kernel first") | Drafted by: Claude Code
 - Related: [ADR-0068](ADR-0068-every-coupon-result-carries-a-mesh-convergence-study-by-the-kernel-on-two-refinements-of-its-mesh.md) (the study this speeds up), [ADR-0064](ADR-0064-a-coupon-job-reports-its-result-before-it-draws-and-builds-the-package.md) (the result before the package), [ADR-0001](ADR-0001-deterministic-engine.md) (the engine computes every number), [ADR-0029](ADR-0029-finite-elements-own-membrane-kernel-validated-against-abaqus.md) (the membrane kernel), [ADR-0067](ADR-0067-we-build-on-open-source-solvers-our-kernel-stays-the-fast-path-for-flat-linear-laminates-and-new-physics-comes-from-calculix-under-our-composite-layer.md) (the kernel stays the fast path); `engine/src/anisotropy_engine/failure.py`, `engine/src/anisotropy_engine/response.py`, `fea/src/anisotropy_fea/membrane.py`, `fea/src/anisotropy_fea/recovery.py`, `fea/src/anisotropy_fea/mesh.py`, `engine/tests/test_failure_arrays.py`, `fea/tests/test_kernel_arrays.py`
+- Area: fea
 
 ## Context
 

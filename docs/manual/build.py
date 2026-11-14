@@ -19,7 +19,7 @@ import subprocess
 import sys
 import textwrap
 import tomllib
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 from anisotropy_engine.cases import compare, load_case
@@ -37,7 +37,8 @@ ROOT = HERE.parents[1]
 GENERATED = HERE / "generated"
 BUILD = HERE / "build"
 REPO_URL = "https://github.com/erikvilla1/anisotropy-ai/blob/main/"
-ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library", "micromechanics", "summary", "tow")
+ENGINE_MODULES = ("lamina", "rotation", "laminate", "response", "failure", "engineering", "thermal", "mixed", "buckling", "library", "micromechanics", "summary", "tow",
+                  "cases")  # the case runner last: its listing is printed once, in the verification section
 FEA_MODULES = ("mesh", "membrane", "shell", "kernel", "recovery", "results", "cases", "model", "abaqus_reader", "units", "test_quantities", "fields")
 # Each package with its theory document and the modules a code marker may name.
 PACKAGES = {"anisotropy_engine": ("engine/docs/theory.md", ENGINE_MODULES), "anisotropy_fea": ("fea/docs/theory.md", FEA_MODULES)}
@@ -88,8 +89,9 @@ def code(text: str) -> str:
     return r"\texttt{" + breakable + "}"
 
 
+# An italic's stars stand outside a word: a product such as 0.27*10.3/147 or N*m is a formula, printed with its operators, not emphasis.
 INLINE = re.compile(r"\$`(?P<math>.+?)`\$|`(?P<code>[^`]+)`|\[(?P<label>[^\]]+)\]\((?P<url>[^)]+)\)"
-                    r"|\*\*(?P<bold>.+?)\*\*|\*(?P<italic>[^*\s][^*]*)\*")
+                    r"|\*\*(?P<bold>.+?)\*\*|(?<![\w*])\*(?P<italic>[^*\s][^*]*?)\*(?![\w*])")
 
 
 def inline(text: str) -> str:
@@ -115,12 +117,30 @@ def inline(text: str) -> str:
 
 def heading(level: int, title: str) -> str:
     command = {1: "subsection", 2: "subsubsection"}.get(level, "paragraph")
-    title = re.sub(r"^\d+\.\s*", "", title)
+    title = re.sub(r"^\d+(\.\d+)*[A-Z]?\.?\s+", "", title)  # "8.", "8.1" and "13.10A" alike: the document numbers its own headings
     plain = escape(re.sub(r"[`*]", "", title))
     return rf"\{command}{{\texorpdfstring{{{inline(title)}}}{{{plain}}}}}"
 
 
 CODE_MARKER = re.compile(r"<!--\s*code:\s*(.+?)\s*-->")
+LIST_ITEM = re.compile(r"^( *)(- |\d+\. )(.*)$")  # a list item, its indent, its marker and its text
+
+
+def list_tex(items: list[tuple[int, bool, str]]) -> str:
+    """Markdown list items, each (indent, ordered, text), as itemize and enumerate environments nested by their indent."""
+    out: list[str] = []
+    stack: list[tuple[int, str]] = []
+    for indent, ordered, text in items:
+        environment = "enumerate" if ordered else "itemize"
+        while stack and indent < stack[-1][0]:
+            out.append(rf"\end{{{stack.pop()[1]}}}")
+        if not stack or indent > stack[-1][0]:
+            stack.append((indent, environment))
+            out.append(rf"\begin{{{environment}}}")
+        out.append(r"\item " + inline(text))
+    while stack:
+        out.append(rf"\end{{{stack.pop()[1]}}}")
+    return "\n".join(out)
 
 
 def blocks(md: str):
@@ -160,9 +180,9 @@ def blocks(md: str):
             i = j
         elif re.match(r"- |\d+\. ", line):
             kind = "list" if line.startswith("- ") else "enum"
-            items = []
-            while i < len(lines) and re.match(r"- |\d+\. ", lines[i]):
-                items.append(re.sub(r"^(- |\d+\. )", "", lines[i]))
+            items = []  # (indent, ordered, text): an indented item is a list inside the one above
+            while i < len(lines) and (item := LIST_ITEM.match(lines[i])):
+                items.append((len(item[1]), not item[2].startswith("-"), item[3]))
                 i += 1
             yield kind, items
         else:
@@ -180,9 +200,12 @@ def table(header: list[str], rows: list[list[str]], keep: list[str] | None = Non
     rows = [[row[c] for c in columns] for row in rows]
     if spec is None:
         widths = [max(len(cell) for cell in column) for column in zip(header, *rows)]
-        spec = "".join("Y" if width > 16 else "l" for width in widths)
+        wide = sum(widths) > 90  # too wide for the page as fixed columns: every column longer than a short word wraps
+        spec = "".join("Y" if width > 16 or (wide and width > 8) else "l" for width in widths)
         if "Y" not in spec:
             spec = spec[:-1] + "Y"
+        if len(header) > 5:
+            size = r"\footnotesize"
     head = " & ".join(r"\textbf{" + inline(cell) + "}" for cell in header) + r" \\"
     body = [" & ".join(inline(cell) for cell in row) + r" \\" for row in rows]
     return "\n".join(["{" + size, rf"\begin{{xltabular}}{{\linewidth}}{{{spec}}}", r"\toprule", head,
@@ -200,16 +223,19 @@ def convert(md: str) -> str:
         elif kind == "paragraph":
             out.append(inline(payload))
         elif kind in ("list", "enum"):
-            environment = "itemize" if kind == "list" else "enumerate"
-            items = "\n".join(r"\item " + inline(item) for item in payload)
-            out.append(rf"\begin{{{environment}}}" + "\n" + items + "\n" + rf"\end{{{environment}}}")
+            out.append(list_tex(payload))
         elif kind == "table":
             out.append(table(*payload))
         elif kind == "math":
             out.append(r"\begin{equation*}" + "\n" + payload + "\n" + r"\end{equation*}")
         elif kind == "code":
-            out.append(r"\begin{verbatim}" + "\n" + payload + "\n" + r"\end{verbatim}")
+            out.append(code_block(payload))
     return "\n\n".join(out)
+
+
+def code_block(payload: str) -> str:
+    """A fenced block as a listing that breaks its long lines inside the margin (the plainfile environment every preamble defines)."""
+    return r"\begin{plainfile}" + "\n" + payload + "\n" + r"\end{plainfile}"
 
 
 def sections(md: str) -> dict[str, str]:
@@ -253,12 +279,21 @@ def listing(name: str, package: str = "anisotropy_engine") -> str:
             + rf"\begin{{enginecode}}[firstnumber={start}]" + "\n" + source + "\n" + r"\end{enginecode}")
 
 
+def broken_math_spans(md: str) -> list[int]:
+    """The lines where an inline math span $`...`$ opens and does not close: a span the converter cannot read, which the documents would
+    print as raw LaTeX and monospace (a line break where \\nu should be, for one)."""
+    return [n for n, line in enumerate(md.splitlines(), 1) if line.count("$`") != line.count("`$")]
+
+
 def theory(package: str = "anisotropy_engine", only: tuple[str, ...] | None = None) -> str:
     """A package's theory document, with each function's source where its `<!-- code: ... -->` marker is. With `only`, just
     the numbered top-level sections named (for example ("1", "2")), each with its subsections; the code markers are still
     checked over the whole file."""
     relative = PACKAGES[package][0]
     md = read(relative)
+    broken = broken_math_spans(md)
+    if broken:
+        raise SystemExit(f"{relative}: a $`...`$ span runs past the end of line {', '.join(map(str, broken))}; write each span on one line")
     named = {name for match in FUNCTION_REFERENCE.finditer(md) for name in re.findall(r"`([\w.]+)`", match.group(1))}
     marked = {name for marker in CODE_MARKER.finditer(md) for name in map(str.strip, marker.group(1).split(","))}
     if named != marked:
@@ -292,18 +327,17 @@ def convert_block(kind: str, payload) -> str:
     if kind == "math":
         return r"\begin{equation*}" + "\n" + payload + "\n" + r"\end{equation*}"
     if kind in ("list", "enum"):
-        environment = "itemize" if kind == "list" else "enumerate"
-        return rf"\begin{{{environment}}}" + "\n" + "\n".join(r"\item " + inline(item) for item in payload) + "\n" + rf"\end{{{environment}}}"
+        return list_tex(payload)
     if kind == "table":
         return table(*payload)
-    return r"\begin{verbatim}" + "\n" + payload + "\n" + r"\end{verbatim}"
+    return code_block(payload)
 
 
 # ------------------------------------------------------------------- numbers
 
 def unit_label(text: str) -> str:
-    """Unit labels such as '10^6 lb/in' or 'N*m' as typeset text."""
-    text = text.replace("*", "·")
+    """Unit labels such as '10^6 lb/in' or 'N*m' as typeset text; degC and degF as °C and °F."""
+    text = text.replace("*", "·").replace("degC", "°C").replace("degF", "°F")
     power = re.match(r"10\^(\d+) (.*)", text)
     return rf"$10^{{{power[1]}}}$ " + escape(power[2]) if power else escape(text)
 
@@ -348,13 +382,14 @@ def validation() -> str:
         agreeing += ok
         verdict = rf"\textcolor{{passgreen}}{{{ok}}}" if ok == count else rf"\textcolor{{red}}{{\textbf{{{ok}}}}}"
         # a title that starts with "[" would be read as the optional argument of the previous row's \\, so every row opens with {}
-        rows.append(rf"{{}}{inline(case['title'])} & {inline(case['source'].rstrip('.'))} & {count} & {verdict} & {code(path.stem)} \\")
+        # escaped, not read as Markdown: a source's product written with asterisks (0.27*10.3) is a formula, not emphasis
+        rows.append(rf"{{}}{escape(case['title'])} & {escape(case['source'].rstrip('.'))} & {count} & {verdict} & {code(path.stem)} \\")
     summary = (rf"The engine was run on every validation case while this manual was built. "
                rf"{agreeing} of {total} values from {len(paths)} cases agree with their sources within each case's tolerance. "
                rf"Cases are stored in {code('engine/validation/cases')}; see {code('engine/validation/README.md')} to add one. "
                rf"Each problem has its own generated document with every step, intermediate number and the source's answers "
                rf"({code('docs/problems/build.py')}, ADR-0033); this table is the index of what has been solved.")
-    table_tex = (r"{\scriptsize\begin{xltabular}{\linewidth}{YYrrl}\toprule" + "\n"
+    table_tex = (r"{\scriptsize\begin{xltabular}{\linewidth}{>{\hsize=0.7\hsize}Y>{\hsize=1.3\hsize}Yrr>{\raggedright\arraybackslash}p{2.6cm}}\toprule" + "\n"
                  + r"\textbf{Problem} & \textbf{Source} & \textbf{Values} & \textbf{Agree} & \textbf{Case} \\\midrule\endhead" + "\n"
                  + "\n".join(rows) + "\n" + r"\bottomrule\end{xltabular}}")
     return summary + "\n\n" + table_tex
@@ -456,10 +491,28 @@ def units_table() -> str:
              "d": r"Inverse ABD block $\mathbf{d}$"}
     rows = [rf"{label} & " + " & ".join(unit_label(UNIT_SYSTEMS[s][kind][1]) for s in ("SI", "US", "psi")) + r" \\"
             for kind, label in names.items()]
+    from anisotropy_fea.units import UNIT_LABEL  # the coupon's systems (ADR-0061), in the fea environment the manual is built in
+
+    coupon = list(UNIT_LABEL)
+    coupon_rows = [rf"{label} & " + " & ".join(escape(UNIT_LABEL[s][kind]) for s in coupon) + r" \\"
+                   for kind, label in (("length", "Length"), ("stress", "Stress and modulus"), ("force", "Force"),
+                                       ("force_per_length", "Force per width $N$"))]
     return (r"The engine works in SI. These systems convert values where they enter and leave "
             + "(" + code("engine/src/anisotropy_engine/units.py") + "; ADR-0002)." + "\n\n"
             + r"\begin{xltabular}{\linewidth}{Ylll}\toprule\textbf{Quantity} & \textbf{SI} & \textbf{US} & \textbf{psi} \\\midrule"
-            + "\n" + "\n".join(rows) + "\n" + r"\bottomrule\end{xltabular}")
+            + "\n" + "\n".join(rows) + "\n" + r"\bottomrule\end{xltabular}" + "\n\n"
+            + r"A coupon is stated in one of these systems, and its results and documents come back in it; the decks are written in mm, MPa "
+            + r"and N whatever the coupon's system (" + code("fea/src/anisotropy_fea/units.py") + "; ADR-0061)." + "\n\n"
+            + r"\begin{xltabular}{\linewidth}{Y" + "l" * len(coupon) + r"}\toprule\textbf{Quantity} & "
+            + " & ".join(rf"\textbf{{{escape(s)}}}" for s in coupon) + r" \\\midrule"
+            + "\n" + "\n".join(coupon_rows) + "\n" + r"\bottomrule\end{xltabular}")
+
+
+def references() -> str:
+    """The standards the coupon checks cite, from the profiles themselves (anisotropy_fea.standards), so the list holds what the text cites."""
+    from anisotropy_fea.standards import PROFILES
+
+    return "\n".join(rf"  \item {escape(p.designation)}, \emph{{{escape(p.title)}}}. ASTM International." for p in PROFILES.values())
 
 
 # ------------------------------------------------------------------- documents
@@ -477,21 +530,42 @@ def verification() -> str:
     title = re.search(r"^# (.+)$", report, re.M).group(1)
     intro = convert(parts[""].split("\n", 1)[1])
     body = "\n\n".join(heading(2, name) + "\n\n" + convert(text) for name, text in parts.items() if name)
+    runner = "\n\n".join(listing(name) for name in ("load_case", "solve_case", "engine_results", "compare"))  # printed here once; each problem document points to it
     return (heading(1, "Validation cases") + "\n\n" + validation() + "\n\n"
-            + heading(1, title) + "\n\n" + rf"{{\small\color{{muted}}Recorded report: {code(report_path.relative_to(ROOT).as_posix())}}}"
+            + heading(2, "The case runner") + "\n\n" + r"Every case, in the table above and in each problem's own document, is read, solved and judged by "
+            + r"these functions, the ones the test suite runs on every change." + "\n\n" + runner + "\n\n"
+            + heading(1, "The newest recorded evaluation") + "\n\n"
+            + r"The engine's tests ran while this manual was built, and the manual is not built when they fail (\TestSummary). What follows is "
+            + r"the newest evaluation recorded with a change to the engine, as it was written then: a run it lists as failed is named in it, "
+            + r"with its cause." + "\n\n"
+            + heading(2, title) + "\n\n" + rf"{{\small\color{{muted}}Recorded report: {code(report_path.relative_to(ROOT).as_posix())}}}"
             + "\n\n" + intro + "\n\n" + body)
 
 
+MANUAL_AREAS = ("engine", "fea")  # the decision records this manual prints: the engine's and the finite element layer's
+
+
+def areas(text: str) -> tuple[str, ...]:
+    """A decision record's areas, from its `- Area:` line (engine, fea, website, api, assistant, data, docs, process, hosting); none
+    without the line."""
+    found = re.search(r"^- Area: (.+)$", text, re.M)
+    return tuple(a.strip() for a in found.group(1).split(",")) if found else ()
+
+
 def decisions() -> str:
+    """The decision records of the engine and the finite element layer (an Area line naming engine or fea); the website's, the API's
+    and the project's own records stay in docs/decisions."""
     out = []
     for path in sorted((ROOT / "docs/decisions").glob("ADR-*.md")):
         text = path.read_text(encoding="utf-8")
+        if not set(areas(text)) & set(MANUAL_AREAS):
+            continue
         parts = sections(text)
         title = re.search(r"^# (.+)$", text, re.M).group(1)
         status = re.search(r"^- Status: (.+)$", text, re.M).group(1)
         dated = re.search(r"^- Date: (.+)$", text, re.M).group(1)
         url = REPO_URL + path.relative_to(ROOT).as_posix()
-        out.append(heading(1, title) + "\n" + rf"\adrmeta{{{escape(status)}}}{{{escape(dated)}}}{{{url}}}")
+        out.append(heading(1, title) + "\n" + rf"\adrmeta{{{inline(status)}}}{{{escape(dated)}}}{{{url}}}")
         for name, label in (("Context", "Context"), ("Options considered", "Options considered"), ("Decision", "Decision"),
                             ("Why (evidence)", "Evidence"), ("How we will know it was wrong", "Revisit when")):
             out.append(rf"\adrpart{{{label}}}" + "\n" + convert(parts[name]))
@@ -504,15 +578,34 @@ def limits() -> str:
     risk_table = next(payload for kind, payload in blocks(risk_parts[""]) if kind == "table")
     return (heading(1, "Known limitations") + "\n\n" + convert(overview_parts["Known limitations"]) + "\n\n"
             + heading(1, "Risk register") + "\n\n"
-            + r"{\small\color{muted}From \texttt{docs/risks/risk\_register.md}. Owners, areas and NIST functions are in the source file.}"
-            + "\n\n" + table(*risk_table, keep=["ID", "Risk", "Likelihood", "Impact", "Mitigation", "Status"],
-                             size=r"\footnotesize", spec=r"l>{\hsize=0.95\hsize}Y>{\hsize=0.6\hsize}Yl>{\hsize=1.45\hsize}Yl"))
+            + r"{\small\color{muted}From \texttt{docs/risks/risk\_register.md}, in its order. Owners, areas and NIST functions are in the source file.}"
+            + "\n\n" + risk_blocks(*risk_table))
+
+
+def risk_blocks(header: list[str], rows: list[list[str]]) -> str:
+    """The register as one block per risk, in the source's order: its id and risk as a heading, its likelihood, impact and status on one
+    line, and its mitigation as a paragraph. A six-column table cannot hold the prose at a readable width."""
+    col = {name: header.index(name) for name in ("ID", "Risk", "Likelihood", "Impact", "Mitigation", "Status")}
+    out = []
+    for row in rows:
+        cell = lambda name: row[col[name]]  # noqa: E731
+        out.append(r"\needspace{5\baselineskip}" + rf"\paragraph{{{escape(cell('ID'))}: {inline(cell('Risk'))}}}" + "\n"
+                   + rf"{{\small\color{{muted}}Likelihood: {inline(cell('Likelihood'))}; impact: {inline(cell('Impact'))}; status: {inline(cell('Status'))}.}}\par" + "\n"
+                   + inline(cell("Mitigation")))
+    return "\n\n".join(out)
 
 
 # ------------------------------------------------------------------- build
 
 def run(*command: str) -> str:
     return subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def build_date() -> str:
+    """The day a document is built, in UTC and saying so: a document built in CI and one built on a laptop from the same commit carry
+    the same date, whatever the laptop's time zone. Every builder stamps its documents with it (the manual, the model, problem and coupon
+    documents, the package's README and audit form)."""
+    return datetime.now(timezone.utc).date().isoformat() + " UTC"
 
 
 def test_summary(tests_dir: str, what: str) -> str:
@@ -534,7 +627,7 @@ def metadata() -> str:
     return "\n".join([rf"\newcommand{{\EngineVersion}}{{{escape(version)}}}",
                       rf"\newcommand{{\FeaVersion}}{{{escape(fea_version)}}}",
                       rf"\newcommand{{\GitCommit}}{{{escape(commit)}}}",
-                      rf"\newcommand{{\BuildDate}}{{{date.today().isoformat()}}}",
+                      rf"\newcommand{{\BuildDate}}{{{build_date()}}}",
                       rf"\newcommand{{\TestSummary}}{{{escape(test_summary('engine/tests', 'Engine'))}}}",
                       rf"\newcommand{{\FeaTestSummary}}{{{escape(test_summary('fea/tests', 'Finite element'))}}}"])
 
@@ -550,7 +643,7 @@ def main() -> None:
     GENERATED.mkdir(exist_ok=True)
     fragments = {"meta": metadata(), "overview": overview(), "theory": theory(), "verification": verification(),
                  "fea_theory": theory("anisotropy_fea"), "fea_verification": fea_verification(),
-                 "decisions": decisions(), "limits": limits(), "example": coupon_example(), "units": units_table()}
+                 "decisions": decisions(), "limits": limits(), "example": coupon_example(), "units": units_table(), "standards": references()}
     for name, text in fragments.items():
         (GENERATED / f"{name}.tex").write_text(text + "\n", encoding="utf-8")
     if UNMAPPED:

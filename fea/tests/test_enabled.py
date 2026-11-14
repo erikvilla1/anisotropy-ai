@@ -97,7 +97,7 @@ from anisotropy_fea.tow_test import tow_answer
 from test_checks import TOOLS, by_id
 from test_intake import OHT_FILL, PUBLIC_FILL
 
-NOT_AVAILABLE = "is not available yet: the studio offers the unnotched tension coupon"
+NOT_AVAILABLE = "is not available yet: the workspace offers the unnotched tension coupon"
 
 
 @pytest.fixture(autouse=True)
@@ -222,3 +222,14 @@ def test_a_library_material_without_a_ply_thickness_asks_for_it_on_its_row(tmp_p
     given = checked(tmp_path / "given", PUBLIC_FILL, library="as4-8552", ply_thickness=0.19)
     assert not any("Ply thickness" in p for p in given.problems)
     assert not any("Ply thickness" in p for p in checked(tmp_path / "im7", PUBLIC_FILL).problems)  # IM7/8552's record gives one
+
+
+def test_the_test_rows_help_names_only_the_tests_offered():
+    from anisotropy_fea.intake import FIELDS
+
+    assert enabled.offered_help("test", FIELDS["test"].help, False) == "the kind of test: unnotched tension, a plain strip pulled; other tests come later"
+    assert enabled.offered_help("test", FIELDS["test"].help, True) == FIELDS["test"].help  # the switch on: every test, as before
+    # the default is said on its row, after what the row is: the workspace shows a row's first clause under it
+    units = FIELDS["units"].help
+    assert "studio" not in enabled.NOT_AVAILABLE and units.startswith("the unit system every number") and "; left blank, it is mm-MPa;" in units
+

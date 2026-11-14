@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Codex
 - Related: AGENTS.md data rules; risk R-05; `tests/textbook-materials.test.ts`
+- Area: data
 
 ## Context
 

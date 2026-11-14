@@ -4,6 +4,7 @@
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: v1 technical specification and v2 architecture (Celery and Redis workers)
+- Area: api
 
 ## Context
 

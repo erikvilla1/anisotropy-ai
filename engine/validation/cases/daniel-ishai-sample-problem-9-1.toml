@@ -1,5 +1,6 @@
 title = "Axial strength of an AS4/3501-6 [+45/-45]s angle-ply laminate"
-source = "Daniel & Ishai (2006), Sample Problem 9.1: axial strength is about 2 F6 (exact under maximum stress); strengths from Table A.4"
+# Sample Problem 9.1: the axial strength is about 2 F6, exactly so under maximum stress.
+source = "Daniel & Ishai, Engineering Mechanics of Composite Materials, 2nd ed. (2006), Sample Problem 9.1 (page not recorded); strengths from Table A.4, p. 377"
 units = "SI"
 
 [material]

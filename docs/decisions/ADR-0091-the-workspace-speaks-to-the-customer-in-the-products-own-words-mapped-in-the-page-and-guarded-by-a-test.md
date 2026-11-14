@@ -4,6 +4,7 @@
 - Date: 2026-11-11
 - Decided by: Founder, 2026-11-11 (a brief pasted into the session: "Every screen should read like Ansys or Abaqus/CAE: clear, short and confident, with no trace of how we build it internally"); Founder, 2026-11-12 ("accept", audit decision D22: a neutral assistant avatar) | Drafted by: Claude Code
 - Related: [ADR-0052](ADR-0052-the-assistant-explains-from-a-fact-sheet-through-one-provider-interface-with-a-number-guard.md) (the writer is no longer shown), [ADR-0066](ADR-0066-solver-results-are-compared-as-one-set-of-quantities-in-the-ply-axes-at-stated-places-and-peaks-are-reported-apart.md) (the columns' names), [ADR-0089](ADR-0089-only-unnotched-tension-under-d3039-or-no-standard-is-offered-until-its-abaqus-comparison-is-validated.md) and [ADR-0090](ADR-0090-a-tension-coupon-is-built-from-its-material-and-layup-and-the-standard-and-the-software-choose-the-rest-and-say-so.md) (the tension screen), [the copy style guide](../copy-style-guide.md), `lib/studio-copy.ts`, `tests/studio-copy.test.ts`, `tests/browser/studio.spec.ts`, `lib/number-format.ts`, `tests/number-format.test.ts`
+- Area: website
 
 ## Context
 

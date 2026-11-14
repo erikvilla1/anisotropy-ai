@@ -4,6 +4,7 @@
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/units.py`, `engine/examples/laminate_calculator.py`
+- Area: engine
 
 ## Context
 

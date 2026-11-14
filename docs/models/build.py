@@ -25,7 +25,6 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -144,11 +143,20 @@ def listing_text(text: str) -> str:
     return "".join(ch if ord(ch) < 256 else {"—": "--", "–": "-", "’": "'"}.get(ch, "?") for ch in text)
 
 
+LONG_LINE = 1000  # characters: a listed line longer than this is broken at its inline tables, one per line, as TOML allows inside an array
+
+
+def unfolded(line: str) -> str:
+    """A very long line of an array of inline tables (a record's per-ply peaks) as one table per line: TeX cannot measure a line of
+    several thousand characters, and the array means the same written either way."""
+    return line.replace("}, {", "},\n    {") if len(line) > LONG_LINE else line
+
+
 def file_listing(path: Path, caption: str | None = None, first: int | None = None, last: int | None = None, python: bool = False) -> str:
     lines = path.read_text(encoding="utf-8").splitlines()
     first = first or 1
     last = min(last or len(lines), len(lines))
-    body = listing_text("\n".join(lines[first - 1:last]))
+    body = listing_text("\n".join(unfolded(line) for line in lines[first - 1:last]))
     env = "enginecode" if python else "plainfile"
     options = f"[firstnumber={first}]" if python else ""
     where = f", lines {first}--{last}" if (first, last) != (1, len(lines)) else ""
@@ -311,10 +319,10 @@ def title_page(record: dict, record_path: Path, rows: list[ComparisonRow], probl
         verdict = (rf"\textbf{{The comparison could not be completed.}} {len(problems)} problem(s): " + "; ".join(escape(p) for p in problems))
     elif disagreeing:
         verdict = (rf"\textbf{{The kernel does not reproduce this record.}} {disagreeing} of {len(rows)} numbers lie outside the allowed "
-                   rf"difference; the largest is {key_code(worst.key)} at {number(worst.of_allowed, 3)} times what is allowed.")
+                   rf"difference; the largest is {key_text(worst)} at {number(worst.of_allowed, 3)} times what is allowed.")
     else:
         verdict = (rf"\textbf{{The kernel reproduces every number of this record.}} {len(rows)} of {len(rows)} compared values agree within the "
-                   rf"record's tolerance; the one closest to the limit is {key_code(worst.key)} at {number(worst.of_allowed, 3)} of what is allowed "
+                   rf"record's tolerance; the one closest to the limit is {key_text(worst)} at {number(worst.of_allowed, 3)} of what is allowed "
                    rf"(reference {number(worst.reference)}, kernel {number(worst.kernel)}).")
     facts = [
         ("Record", code(rel(record_path))),
@@ -325,7 +333,7 @@ def title_page(record: dict, record_path: Path, rows: list[ComparisonRow], probl
         ("Compared", escape(f"{len(rows)} numbers, tolerance {100 * record['expected']['tolerance']:g} %, floor {100 * record['expected'].get('floor', 0.0):g} %"
                             + (f"; {not_reported(record)} components not reported by the solver and skipped" if not_reported(record) else ""))),
         ("Source commit", code(git_commit())),
-        ("Built", escape(date.today().isoformat())),
+        ("Built", escape(manual.build_date())),
     ]
     if card:  # the coupon's name is the title; the record's own title, after the name, is the subtitle
         facts = [(label, escape(value)) for label, value in card.items() if label not in ("Coupon", "Test")] + facts
@@ -336,16 +344,12 @@ def title_page(record: dict, record_path: Path, rows: list[ComparisonRow], probl
         heading = [rf"{{\fontsize{{22}}{{28}}\selectfont\bfseries\color{{ink}} {inline(record['title'])}}}\par", r"\vspace{0.6cm}"]
     return "\n".join([
         r"\hypersetup{pageanchor=false}", r"\begin{titlepage}", r"\sffamily",
-        r"{\color{accent}\bfseries\small ANISOTROPY AI \textperiodcentered{} MODEL COMPARISON}\par", r"\vspace*{2.5cm}",
+        r"{\color{accent}\bfseries\small ANISOTROPY \textperiodcentered{} MODEL COMPARISON}\par", r"\vspace*{1.6cm}",
         *heading,
         r"{\large\color{muted} The model, its mathematics and code, the reference solver, every compared number with its error, and the reading}\par",
         r"\vspace{1cm}" if card else r"\vspace{2cm}", r"{\small\begin{tabular}{@{}p{3cm}p{\dimexpr\linewidth-3.5cm}@{}}",
         *[rf"{label} & {value} \\[0.3ex]" for label, value in facts], r"\end{tabular}}\par", r"\vfill",
-        rf"\verdict{{{verdict}}}\par", r"\vspace{0.8cm}",
-        r"{\small\color{muted} This document is generated from the repository by \texttt{docs/models/build.py}: its equations and prose come from "
-        r"\texttt{fea/docs/theory.md}, its code listings from the \texttt{fea} source with real line numbers, the reference numbers from the "
-        r"record, and every kernel and laminate-theory number from running the code while it was built. To change it, change those sources "
-        r"and rebuild.}", r"\end{titlepage}", r"\hypersetup{pageanchor=true}",
+        rf"\verdict{{{verdict}}}\par", r"\end{titlepage}", r"\hypersetup{pageanchor=true}",
     ])
 
 
@@ -363,6 +367,10 @@ def about_section(reading_exists: bool) -> str:
     ]
     body = "\n".join(rf"{a} & {b} & {c} \\" for a, b, c in rows)
     return ("\n".join([
+        r"This document is generated from the repository by \texttt{docs/models/build.py}: its equations and prose come from "
+        r"\texttt{fea/docs/theory.md}, its code listings from the \texttt{fea} source with real line numbers, the reference numbers from the "
+        r"record, and every kernel and laminate-theory number from running the code while it was built. To change it, change those sources "
+        r"and rebuild.",
         "Every comparison of one of our finite element models with an independent solver has a document like this one, separate from the "
         "engine manual, so that the argument for a model can be read on its own: what was modelled, what mathematics and code produced our "
         "numbers, what the other solver produced, how far apart the two are and why. Values marked as the kernel's or the engine's were "
@@ -384,7 +392,7 @@ def summary_section(record: dict, rows: list[ComparisonRow], problems: list[str]
                           rf"{percent(s.mean_relative_to_scale)} & {percent(s.max_relative_to_scale)} & {key_text(s.worst)} & {number(s.worst.of_allowed, 3)} \\")
     out = [
         rf"The record allows a difference of {number(100 * tolerance, 3)}\% of each reference value, but never less than "
-        rf"{number(100 * tolerance, 3)}\% of {number(100 * floor, 3)}\% of the group's largest magnitude (the floor rule: a roundoff-sized shear "
+        rf"{number(100 * tolerance, 3)}\% of a floor, the floor being {number(100 * floor, 3)}\% of the group's largest magnitude (the floor rule: a roundoff-sized shear "
         rf"stress beside a large axial stress is judged against the group, not against itself; {method_ref}). "
         rf"Errors below are the size of the kernel's value minus the reference solver's, as a fraction of the group's largest magnitude, so "
         r"that every component of a group is on one scale; ``Of allowed'' is a difference divided by what the rule allows that number, so below "
@@ -518,7 +526,7 @@ def rebuild_section(record: dict, record_path: Path, deck, solution, units: str)
                               reference_deck=(base / record["deck_reference"]).resolve(), kernel_sha256=record["deck_kernel_sha256"],
                               reference_sha256=record["deck_reference_sha256"], solver_name=record["solver"]["name"], spec_path=spec_path,
                               spec_material_lines=material_lines, spec_material_source=material_source, spec_transverse=transverse,
-                              record_title=record["title"], report_date=date.today().isoformat(), hole=hole, outline=outline)
+                              record_title=record["title"], report_date=manual.build_date(), hole=hole, outline=outline)
     return rebuild.render(context, helpers)
 
 
@@ -691,7 +699,7 @@ def reference_section(record: dict, record_path: Path, where=rel) -> str:
             out.append(rf"The mapping from the solver's output to our per-ply quantities depends on its layer order, integration-point order, axes and shear-strain "
                        rf"convention. They were detected by running the solver and are recorded in {code(where(conventions_path))}; the record tool refuses a run on another "
                        r"major version until the detection is repeated (ADR-0030, risk R-18). The file, with the evidence for each item in its comments:")
-            out.append(file_listing(conventions_path))
+            out.append(file_listing(conventions_path, last=printed_part(conventions_path)))
     reference_deck = (base / record["deck_reference"]).resolve()
     out.append(heading(1, "The deck the reference solver ran"))
     if record["deck_reference"] == record["deck_kernel"]:
@@ -726,7 +734,12 @@ def method_section(record: dict) -> str:
         out.append(listing("parse_dat"))
         out.append(listing("layer_values"))
         out.append(listing("reference_quantities"))
-        out.append(file_listing(ROOT / "fea/tools/record_from_dat.py", python=True))
+        tool = ROOT / "fea/tools/record_from_dat.py"
+        out.append(rf"The record itself is written by {code('fea/tools/record_from_dat.py')}. Its command-line options are left out here; these "
+                   r"are the lines that read the gauge rows and build the record:")
+        for first, last in (lines_between(tool, "def gauge_rows", "return from_si(low + margin"),
+                            lines_between(tool, "    spec = load_spec(args.spec)", "**({\"frd\": frd} if frd else {}),", extra=1)):
+            out.append(file_listing(tool, first=first, last=last, python=True))
     elif solver["source"] == "csv":
         out.append(heading(1, "From the Abaqus/CAE field report to our quantities"))
         out.append(r"Abaqus/CAE writes one row per element and section point (Report, Field Output). The reader requires the integration point to be 1, so the "
@@ -737,6 +750,29 @@ def method_section(record: dict) -> str:
         out.append(listing("ply_mises"))
         out.append(file_listing(ROOT / "fea/tools/record_from_report.py", python=True))
     return "\n\n".join(out)
+
+
+FOR_OUR_TOOLS = "# ---- Notes for our tools"  # a line in a printed file below which its notes are for us, not for the document's reader
+
+
+def printed_part(path: Path) -> int | None:
+    """The last line a document prints of a file: the one before its FOR_OUR_TOOLS line, or the whole file (None)."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    marker = next((i for i, line in enumerate(lines) if line.startswith(FOR_OUR_TOOLS)), None)
+    if marker is None:
+        return None
+    while marker > 0 and not lines[marker - 1].strip():
+        marker -= 1
+    return marker
+
+
+def lines_between(path: Path, start: str, end: str, extra: int = 0) -> tuple[int, int]:
+    """The first and last line numbers (1-based) of the stretch of a file from the line holding `start` to the next line holding `end`,
+    `extra` lines more: a listing of part of a tool, found by its text so it follows the file as it changes."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    first = next(i for i, line in enumerate(lines, 1) if start in line)
+    last = next(i for i, line in enumerate(lines, 1) if i >= first and end in line)
+    return first, last + extra
 
 
 def comparison_table(rows: list[ComparisonRow], units: str, size: str = r"\scriptsize") -> str:
@@ -835,7 +871,7 @@ def build(record_path: Path, out: Path | None, pdf: bool, full_tables: bool, the
         r"\documentclass[11pt,letterpaper]{article}", PREAMBLE,
         rf"\hypersetup{{pdftitle={{{escape(record['title'])}}}}}",
         r"\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0pt}",
-        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy AI \textperiodcentered{{}} Model comparison \textperiodcentered{{}} {inline(short)}}}",
+        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy \textperiodcentered{{}} Model comparison \textperiodcentered{{}} {inline(short)}}}",
         r"\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}",
         r"\fancyfoot[C]{\sffamily\scriptsize\color{muted}Internal use. A solver-to-solver comparison is verification, not validation against a coupon test.}",
         r"\begin{document}",

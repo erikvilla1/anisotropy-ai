@@ -7,7 +7,7 @@ with an example, a read-only sheet of the library materials the team may pick, a
 generated, never kept as a file in the repository.
 
 `read_form` reads a filled-in form back by its labels, and `read_values` reads the same rows from one JSON object, the values file
-the studio sends (ADR-0046 amendment 2); `read_input` takes either. `check_form` turns the cells into typed values and names every
+the workspace sends (ADR-0046 amendment 2); `read_input` takes either. `check_form` turns the cells into typed values and names every
 problem at once (ADR-0003); `designation_for` gives the coupon its name by the rules of the coupon tests (one code, one meaning);
 `spec_data` builds the spec as a plain dict with our defaults filled in; `render_toml` writes it as the commented TOML the rest of
 the tools read; `build_specs` does all of that for the team's build and its CalculiX twin and lets `spec.parse_spec` judge the
@@ -50,7 +50,7 @@ INPUT, HOWTO, DEFINITIONS, LIBRARY, RECORD = "Coupon", "How to fill it in", "Def
 UNITS = "mm-MPa"  # the system the rows are in unless the Units row says another, the one the labels are written in, and the library sheet's
 TEST_ORDER = ("unnotched_tension", "compression", "open_hole_tension", "shear_pm45", "three_point_bending", "four_point_bending", "plate")  # as the form lists them
 assert set(TEST_ORDER) == set(IN_PLANE_KINDS) | set(BENDING_KINDS) | set(PLATE_KINDS)
-PLATE_LISTS = ("supports", "loads", "regions")  # the lists a plate carries beside the rows, sent by the studio only (ADR-0054)
+PLATE_LISTS = ("supports", "loads", "regions")  # the lists a plate carries beside the rows, sent by the workspace only (ADR-0054)
 TESTS = {TEST_CODES[kind][1]: kind for kind in TEST_ORDER}  # the test's name on the form -> the spec's kind
 YES_NO = ("yes", "no")
 CONTROLS = ("displacement", "force")
@@ -68,7 +68,7 @@ FPF_CRITERIA = ("max_stress", "tsai_hill")  # what "all" reports when the materi
 CRITERION_WORDS = ("all", "maximum stress", "tsai-hill", "tsai-wu", "none")  # the Failure criterion row
 CRITERION_OF_WORD = {"maximum stress": "max_stress", "tsai-hill": "tsai_hill", "tsai-wu": "tsai_wu"}
 WORD_OF_CRITERION = {criterion: word for word, criterion in CRITERION_OF_WORD.items()}
-VALUES_SUFFIX = ".json"  # a values file: the form's rows as one JSON object, what the studio sends (ADR-0046 amendment 2)
+VALUES_SUFFIX = ".json"  # a values file: the form's rows as one JSON object, what the workspace sends (ADR-0046 amendment 2)
 MATERIAL_CODE = re.compile(r"^[A-Z][A-Z0-9]*$")
 LAYUP_CODE = re.compile(r"^L[1-9][0-9]*$")
 LIBRARY_HELP = ("pick a material by its id; the sheet Library materials lists each one with its constants and source, and once you pick one "
@@ -121,14 +121,15 @@ BLOCKS: tuple[tuple[str, tuple[Field, ...]], ...] = (
     )),
     ("The coupon", (
         Field("units", "Units", "list", "the unit system every number on this form is in: mm-MPa (mm, MPa and N), m-Pa (m, Pa and N), in-psi "
-              "(in, psi and lbf) or in-ksi (in, ksi and lbf); the row labels are written for mm-MPa, so with another system read each unit as that "
+              "(in, psi and lbf) or in-ksi (in, ksi and lbf); left blank, it is mm-MPa; the row labels are written for mm-MPa, so with another "
+              "system read each unit as that "
               "system's. Results come back in the units you pick; our Abaqus and CalculiX decks are written in mm, MPa and N whatever you pick",
               default=UNITS, words=tuple(UNIT_SYSTEMS)),
         Field("test", "Test", "list", "the kind of test: unnotched tension (a plain strip pulled), unnotched compression (a plain strip pushed), "
               "open-hole tension (a strip with a hole at its centre, pulled), in-plane shear (a strip of +45 and -45 plies only, pulled), "
               "three-point bending (a strip on two supports pushed down at midspan), four-point bending (pushed down at two lines), plate "
-              "(a laminate held and loaded on regions you name, stated from the studio) or fibre tow tension (a resin-impregnated carbon fibre tow "
-              "under ASTM D4018, stated and calculated from the studio, with no model); see Definitions, Tests", required=True,
+              "(a laminate held and loaded on regions you name, stated from the workspace) or fibre tow tension (a resin-impregnated carbon fibre tow "
+              "under ASTM D4018, stated and calculated from the workspace, with no model); see Definitions, Tests", required=True,
               words=(*TESTS, TOW_TEST)),
         Field("material_code", "Material code", "text", "optional: a short code for the material in the coupon's name, capital letters and digits, "
               "X840PW in X840PW-UNT-L1; left blank, the code this material already has is reused, or a new one is derived from the library "
@@ -322,7 +323,7 @@ HOW_TO = (
     "radius); Width and Length are then the overall sizes at the ends. Unnotched tension only; leave the rows blank for a straight strip. "
     "Open hole: the hole rows are read only for open-hole tension and for a plate with a hole. Bending: the span, overhang and loading span rows are read "
     "only for the two bending tests, which rest on two support lines instead of grips. Loading: give the amount; for compression we apply it as a push, "
-    "and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the studio.",
+    "and in bending the nose pushes down by it. A plate lists its supports and loads over named regions instead; it is stated from the workspace.",
     "Where we read results: at the centre of the coupon and just past the bottom tab; on an open-hole coupon, beside and above the hole and halfway "
     "to the tab. You do not enter these points: we place them from the geometry.",
     "Standard: pick the test standard the specimen follows from the list, or none for your own design. With a standard picked we check the "
@@ -360,7 +361,7 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
          "strength.", "ASTM D3518 (not in our Standard list yet). Every ply +45 or -45, as many of each."),
         ("Plate", "A flat laminate held and loaded on regions you name: an edge, a tab, the ring of a hole, the whole face, or a box you draw on it. "
          "Each support says which directions it holds (and a travel, if it moves); each load is a force along a direction spread over its region, or a "
-         "pressure on an area. Stated from the studio, which draws the regions; the Excel form has no rows for them.",
+         "pressure on an area. Stated from the workspace, which draws the regions; the Excel form has no rows for them.",
          "A square plate simply supported on its four edges under a pressure."),
         ("Three-point bending", "A strip resting on two support lines, pushed down at midspan by a loading nose that moves by the value you give. It "
          "gives the flexural stiffness and strength; the outer plies carry most of the stress, the bottom ones in tension.",
@@ -441,7 +442,7 @@ GLOSSARY: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
     ("Mesh", (
         ("Mesh, element, node", "For the calculation the coupon is divided into small four-sided pieces called elements; their corners are the "
          "nodes. The stress is worked out in every element. The whole set of elements is the mesh.",
-         "A 250 x 20 mm coupon with 2 mm elements has 10 across and 125 along: 1,250 elements."),
+         "A 250 x 25 mm coupon with 2.5 mm elements has 10 across and 100 along: 1,000 elements."),
         ("Element size", "About how long an element's side is. We divide the width, and each part of the length, into whole numbers of elements "
          "of about this size, with a row of nodes exactly on each tab line.", "2 mm, our default; 1 mm for a finer check."),
         ("Finer mesh", "Smaller elements. They show more detail where the stress changes quickly (at the end of a tab, around a hole) and take "
@@ -502,7 +503,7 @@ def write_blank_form(path: Path | str) -> Path:
     records = library_records()
     offer_all = enabled.all_tests()
     book = Workbook()
-    book.properties.creator = "Anisotropy AI"
+    book.properties.creator = "Anisotropy"
     book.properties.title = "Coupon input form"
     sheet = book.active
     sheet.title = INPUT
@@ -526,16 +527,16 @@ def write_blank_form(path: Path | str) -> Path:
             forms.open_cell(cell)
             if f.kind == "date":
                 cell.number_format = "yyyy-mm-dd"
-            help_text = ("required" + ("; " if f.help else "") if f.required else "") + f.help
+            help_text = ("required" + ("; " if f.help else "") if f.required else "") + (enabled.offered_help(f.key, f.help, offer_all) if f.key == "test" else f.help)
             sheet.cell(row, 3, help_text or None).font = forms.font(muted=True)
             sheet.cell(row, 3).alignment = forms.wrap()
-            words = enabled.offered_words(f.key, f.words, offer_all)  # the tests the studio offers until the first is validated (ADR-0089)
+            words = enabled.offered_words(f.key, f.words, offer_all)  # the tests the workspace offers until the first is validated (ADR-0089)
             if f.kind == "list" and words:
                 forms.listing(sheet, words, [cell.coordinate])
             elif f.key == "library":
                 library_cell = cell
             elif f.kind in ("number", "whole", "angle"):
-                forms.number_rule(sheet, [cell.coordinate], whole=f.kind == "whole", at_least=f.at_least, above=f.above)
+                forms.number_rule(sheet, [cell.coordinate], whole=f.kind == "whole", at_least=f.at_least, above=f.above, label=f.label)
             row += 1
         row += 1
     last = row - 1
@@ -725,7 +726,7 @@ def read_form(path: Path | str) -> FormInput:
 
 
 def read_values(path: Path | str) -> FormInput:
-    """The form's rows read from a values file: one JSON object whose keys are the rows' field keys, as the studio sends them.
+    """The form's rows read from a values file: one JSON object whose keys are the rows' field keys, as the workspace sends them.
 
     `form_version` is required and must be the current form's; `angles` may stand in for the ply rows; a mesh row may hold a list
     where the form holds comma-separated text; a yes-or-no row may hold a boolean; an absent key is a blank cell; an unknown key is
@@ -955,6 +956,7 @@ class Values:
     strain_length: float | None = None
     isotropic: dict[str, Any] | None = None  # one isotropic material with no plies (ADR-0075): thickness, E, nu, name, source
     dogbone: dict[str, float] | None = None  # a dumbbell outline: narrow_width, narrow_length, radius, and outer_radius when given
+    chosen: tuple[tuple[str, str], ...] = ()  # the rows the tension screen chose, each with why (ADR-0090): the spec's comments say so
 
     @property
     def test_code(self) -> str:
@@ -1287,7 +1289,8 @@ def check_form(form: FormInput) -> Values:
                   mesh_nx, partitions, seeds, grips, region, names or None, criteria, f12_star,
                   span=span if bending else None, overhang=overhang if bending else None, load_span=load_span if bending else None,
                   supports=supports, loads=loads, regions=regions, units=units, specimen=specimen, tab_thickness=tab_thickness, tab_bevel=tab_bevel,
-                  tab_material=tab_material, strain_device=strain_device, strain_length=strain_length, isotropic=isotropic, dogbone=dogbone)
+                  tab_material=tab_material, strain_device=strain_device, strain_length=strain_length, isotropic=isotropic, dogbone=dogbone,
+                  chosen=tuple((b.row, b.reason) for b in form.built))
 
 
 def plate_regions_of(tab_length: float | None, hole_diameter: float | None, regions: list[dict]) -> list[str]:
@@ -1637,7 +1640,10 @@ def material_data(values: Values) -> tuple[dict, dict[str, str], str, bool]:
                  "material.source": "the team's own constants, as given on the form; they stay in this folder"}, iso["name"], False)
     comments = {"material.transverse.plane_stress": "nu13 = nu23 = 0 for CalculiX, the plane stress Abaqus LAMINA and our engine assume",
                 "material.transverse.transverse_isotropy": "E3 = E2: a stated choice, used only by CalculiX",
-                "material.transverse.G13": "as given on the form", "material.transverse.G23": "as given on the form"}
+                **{f"material.transverse.{key}": "as given on the form" for key in ("G13", "G23")}}
+    for key, reason in values.chosen:  # a value the tension screen chose says so, with why, as the package's How we built it does
+        if key in ("G13", "G23"):
+            comments[f"material.transverse.{key}"] = f"chosen by the software: {reason}"
     transverse = {"G13": values.G13, "G23": values.G23, "plane_stress": True, "transverse_isotropy": True}
     if values.library:
         lib = library_material(values.library)
