@@ -1097,6 +1097,12 @@
   .home-opening[data-handover="done"] > .home-hero {
     visibility: hidden;
   }
+  /* As the scroll starts, the clip grows from its box to the whole window, over the black strip the header leaves and the
+   * black at the sides and the foot (--hero-grow; amendment 5), and it is whole-window while it dims. */
+  .home-opening > .home-hero > .home-hero-media {
+    inset: calc(var(--hero-top) * (1 - var(--hero-grow, 0))) calc(var(--hero-frame) * (1 - var(--hero-grow, 0)))
+      calc(var(--hero-frame) * (1 - var(--hero-grow, 0)));
+  }
   .home-opening > .product-demo {
     margin-top: calc(-0.5 * max(640px, 100svh));
   }

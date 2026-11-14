@@ -139,7 +139,7 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
   expect(asked).toEqual([]);
 });
 
-test("on the way to the stage the hero stays in the window and dims while the first beat's words come up through it; the window is never empty (ADR-0095 amendment 4)", async ({ page }) => {
+test("on the way to the stage the hero stays in the window, its clip grows to the whole window and dims, and the first beat's words come up through it; the window is never empty (ADR-0095 amendments 4 and 5)", async ({ page }) => {
   await openPinned(page);
   const opening = page.locator(".home-opening");
   const read = () => page.evaluate(() => {
@@ -147,7 +147,10 @@ test("on the way to the stage the hero stays in the window and dims while the fi
     const words = document.querySelector<HTMLElement>('.product-demo-beat[data-beat="describe"]')!;
     const style = getComputedStyle(hero);
     const box = words.getBoundingClientRect();
+    const clip = hero.querySelector(".home-hero-media")!.getBoundingClientRect();
     return {
+      // how far the clip's edges are from the window's: top, sides, foot
+      clip: [clip.top, clip.left, window.innerWidth - clip.right, window.innerHeight - clip.bottom].map((edge) => Math.round(edge)),
       heroTop: Math.round(hero.getBoundingClientRect().top),
       hero: style.visibility === "hidden" ? 0 : Number(style.opacity),
       words: Number(getComputedStyle(words).opacity),
@@ -156,7 +159,7 @@ test("on the way to the stage the hero stays in the window and dims while the fi
   });
   // At the top: the hero whole, the stage behind it, nothing of the demo's words yet.
   await expect(opening).toHaveAttribute("data-handover", "ready");
-  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0 });
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
   // Down in steps of a tenth of the way. The hero does not move; it only dims, and the words only come in. At every step
   // something is on the screen: the clip, or the first beat's words, or both.
   const way = await offLine(page);
@@ -170,6 +173,10 @@ test("on the way to the stage the hero stays in the window and dims while the fi
     expect(now.heroTop, `the hero's place at ${step}/10`).toBe(0);
     expect(now.hero, `the hero at ${step}/10`).toBeLessThanOrEqual(before.hero);
     expect(now.words, `the words at ${step}/10`).toBeGreaterThanOrEqual(before.words);
+    // The clip grows from its box to the whole window in the first half of the way (amendment 5), and stays whole.
+    for (let edge = 0; edge < 4; edge++) expect(now.clip[edge], `the clip's edge ${edge} at ${step}/10`).toBeLessThanOrEqual(before.clip[edge]);
+    if (step >= 5) expect(now.clip, `the clip at ${step}/10`).toEqual([0, 0, 0, 0]);
+    else expect(now.clip[0], `the clip's top at ${step}/10`).toBeGreaterThan(0);
     expect(now.hero > 0.3 || (now.words > 0.3 && now.wordsInWindow), `something on the screen at ${step}/10: ${JSON.stringify(now)}`).toBe(true);
     before = now;
   }
@@ -185,7 +192,7 @@ test("on the way to the stage the hero stays in the window and dims while the fi
   // Back at the top the hero is whole again and the demo is at its start.
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await expect(opening).toHaveAttribute("data-handover", "ready");
-  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0 });
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
   await expectStop(page, 0);
 });
 

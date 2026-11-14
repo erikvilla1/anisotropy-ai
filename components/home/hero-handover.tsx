@@ -10,6 +10,9 @@ const smooth = (x: number) => x * x * (3 - 2 * x);
 
 /** How far the page has scrolled from the hero to the demo's stage, 0 to 1, and from which share each side starts and ends. */
 export const HANDOVER = {
+  /** The hero's clip grows from its box to the whole window over this stretch, from the first pixel scrolled. */
+  growFrom: 0,
+  growTo: 0.5,
   /** The hero's clip begins to dim here and has gone when the stage fills the window. */
   heroFrom: 0.05,
   heroTo: 1,
@@ -20,10 +23,11 @@ export const HANDOVER = {
 
 /** The hand-over from the hero to the product demo (ADR-0095 amendment 4). Where the demo is a stepped stage, the hero stays
  * where it is while the page scrolls to the stage, which starts half a window up behind it: the hero dims away as the scroll
- * goes, and the first beat's words come up through it, so the window is never an empty black one. The stylesheets lay the
- * two sections out (app/home.css, app/home-demo.css); this writes how far the scroll has gone on their wrapper:
- * `data-handover` is "ready" at the top, "going" on the way and "done" once the stage fills the window, `--hero-left` is how
- * far the hero has gone and `--demo-arrived` how far the first beat's words are in. With reduced motion or on a small window
+ * goes, its clip growing from its box to the whole window first (amendment 5), and the first beat's words come up through
+ * it, so the window is never an empty black one. The stylesheets lay the two sections out (app/home.css, app/home-demo.css);
+ * this writes how far the scroll has gone on their wrapper: `data-handover` is "ready" at the top, "going" on the way and
+ * "done" once the stage fills the window, `--hero-grow` is how far the clip has grown, `--hero-left` how far the hero has
+ * gone and `--demo-arrived` how far the first beat's words are in. With reduced motion or on a small window
  * the two sections are ordinary ones, one under the other, and this writes nothing. Renders nothing. */
 export function HeroHandover() {
   useEffect(() => {
@@ -34,6 +38,7 @@ export function HeroHandover() {
     let frame = 0;
     const clear = () => {
       delete opening.dataset.handover;
+      opening.style.removeProperty("--hero-grow");
       opening.style.removeProperty("--hero-left");
       opening.style.removeProperty("--demo-arrived");
     };
@@ -48,6 +53,7 @@ export function HeroHandover() {
       const travel = Math.max(1, demo.getBoundingClientRect().top - start);
       const share = clamp01(-start / travel);
       opening.dataset.handover = share >= 1 ? "done" : share > 0 ? "going" : "ready";
+      opening.style.setProperty("--hero-grow", smooth(span(share, HANDOVER.growFrom, HANDOVER.growTo)).toFixed(3));
       opening.style.setProperty("--hero-left", smooth(span(share, HANDOVER.heroFrom, HANDOVER.heroTo)).toFixed(3));
       opening.style.setProperty("--demo-arrived", smooth(span(share, HANDOVER.wordsFrom, HANDOVER.wordsTo)).toFixed(3));
     };

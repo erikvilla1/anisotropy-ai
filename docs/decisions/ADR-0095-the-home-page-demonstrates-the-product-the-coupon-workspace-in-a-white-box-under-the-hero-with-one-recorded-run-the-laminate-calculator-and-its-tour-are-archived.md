@@ -1,6 +1,6 @@
 # ADR-0095: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
 
-- Status: Proposed, with amendments 1 to 4
+- Status: Proposed, with amendments 1 to 5
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) and [ADR-0084](ADR-0084-a-scroll-driven-tour-leads-from-the-hero-into-the-calculator-with-the-engines-own-answers.md), which this supersedes for the home page; [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md) (the live solve the demo does not call); ADR-0001; ADR-0042; ADR-0045; ADR-0091
@@ -133,4 +133,14 @@ This replaces two statements of amendment 2 and of amendment 1: the stage no lon
 - `npm test`: 299 tests, 298 passed, 1 skipped. `npx tsc --noEmit` clean.
 
 UNVERIFIED: a real trackpad, wheel and graphics card; Safari and Firefox; the deployed site. The hero's place is the browser's own (sticky), and only its opacity is written by script, once a frame.
+
+## Amendment 5, 2026-11-14 (the clip grows to the whole window as the scroll starts)
+
+**Context.** The lead, with a recording of amendment 4 on their own machine: "I like the fade in for the below, but can we also have the hero vid expand to full as it scrolls down, instead of staying around a black box".
+
+**Options considered.** (1) The clip's box grows: its edges move out to the window's as the scroll starts, and the picture with them: chosen. (2) Lay the clip out whole-window from the start and uncover its edges with a clip path: not chosen, it would change how the clip is cropped while the page is at its top. (3) Move the hero's words and corner items out with the edges too: not chosen; the words have usually left by then, and the mark and "Scroll to explore" stand 64 px inside the window, an ordinary margin for a whole-window picture.
+
+**Decision.** Over the first half of the way to the stage the clip's box grows from its place under the header (84 px from the top, 32 px from the sides and the foot at 1440 px) to the whole window, eased (`--hero-grow`, written by `components/home/hero-handover.tsx`). It is whole-window while it dims. On the way back up it returns to its box. Nothing else of amendment 4 changes.
+
+**Evidence.** On 2026-11-14 against the dev server: stills at nine points of the scroll and a recorded trackpad-style swipe at 1440 by 810 px were looked at. The hand-over case of `demo.spec.ts` now also checks that the clip's four edges only move outward, reach the window's by half way and are back in the box at the top; `demo.spec.ts`, `intro.spec.ts` and `home.spec.ts`: 21 of 21. `npx tsc --noEmit` clean. UNVERIFIED, as in amendment 4: a real trackpad, wheel and graphics card; Safari and Firefox; whether resizing the clip's box on every frame stays smooth on a slow machine (it lays out one element).
 
