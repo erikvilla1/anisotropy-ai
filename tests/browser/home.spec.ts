@@ -261,19 +261,26 @@ test("after the demo the page is white, and Mission and Services are two short b
     else expect(places.picture[1], id).toBeLessThanOrEqual(places.words[0]);
     expect(places.width, id).toBeGreaterThan(400);
     expect(places.radius, id).toBe("0px"); // square corners (amendment 48)
-    // The picture is a link to where its band's own link goes, and lifts under the pointer as a portrait does (amendment
-    // 39). The keyboard and a screen reader meet the worded link only.
+    // The picture is a picture, not a link (amendment 53, which ended amendment 39's): no address, no role, no place in the
+    // keyboard's order, and nothing in it is a link. The keyboard and a screen reader meet the band's worded link only.
     const picture = page.locator(`#${id} .home-split-picture`);
-    await expect(picture).toHaveAttribute("href", id === "mission" ? /\/about\/?$/ : /\/services\/?$/);
-    await expect(picture).toHaveAttribute("tabindex", "-1");
+    expect(await picture.evaluate((element) => [element.tagName, element.hasAttribute("href"), element.hasAttribute("role"), element.hasAttribute("tabindex"), element.querySelectorAll("a, button").length]), id).toEqual(["DIV", false, false, false, 0]);
+    await expect(page.locator(`#${id} a.home-split-picture, #${id} .home-split-picture a`)).toHaveCount(0);
     await expect(picture).toHaveAttribute("aria-hidden", "true");
+    // The pointer over it is a crosshair, the lens's own.
+    await expect(picture).toHaveCSS("cursor", "crosshair");
     await picture.scrollIntoViewIfNeeded();
-    expect(await picture.evaluate((element) => getComputedStyle(element).transform), id).toBe("none");
+    const still = () => picture.evaluate((element) => { const style = getComputedStyle(element); return [style.transform, style.boxShadow, style.transitionDuration]; });
+    expect(await still(), id).toEqual(["none", "none", "0s"]);
     // Away from the pointer there is no lens over it.
     const lens = picture.locator(".home-split-lens");
     await expect(lens).toHaveCSS("opacity", "0");
+    const before = (await picture.boundingBox())!;
     await picture.hover();
-    await expect.poll(() => picture.evaluate((element) => getComputedStyle(element).transform), { message: id }).toBe("matrix(1.02, 0, 0, 1.02, 0, -4)");
+    // Under the pointer the picture itself does not lift, grow or take a shadow: only the lens comes.
+    await page.waitForTimeout(350); // longer than the lift took
+    expect(await still(), id).toEqual(["none", "none", "0s"]);
+    expect(await picture.boundingBox(), id).toEqual(before);
     // Under the pointer a small lens shows the photograph in the demo's colours (amendment 48): a 4:3 window with the
     // pointer in its middle, inside the picture, drawn through the page's own filter, and gone when the pointer leaves.
     await expect(picture).toHaveAttribute("data-lens", "on");
@@ -291,6 +298,11 @@ test("after the demo the page is white, and Mission and Services are two short b
     // At the picture's corner it keeps inside the picture.
     await page.mouse.move(box.x + 3, box.y + 3, { steps: 4 });
     await expect.poll(async () => { const at = (await lens.boundingBox())!; return at.x >= box.x - 1 && at.y >= box.y - 1; }, { message: `${id}: the lens in the picture` }).toBe(true);
+    // A press on the picture leads nowhere.
+    const address = page.url();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(250);
+    expect(page.url(), id).toBe(address);
     await page.mouse.move(2, 2);
     await expect(picture).not.toHaveAttribute("data-lens", /.+/);
     await expect(lens).toHaveCSS("opacity", "0");

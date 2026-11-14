@@ -581,15 +581,9 @@
   aspect-ratio: 4 / 3;
   overflow: hidden;
   background: var(--panel);
-  /* The picture is a link to its band's page and lifts under the pointer as a portrait does (amendment 39). Its corners
-   * are square (amendment 48). */
-  transition:
-    transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
-    box-shadow 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-.home-split-picture:hover {
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.2);
+  /* A picture, not a link (amendment 53): it stays where it is under the pointer, which is a crosshair over it, the lens's
+   * own. Its corners are square (amendment 48). */
+  cursor: crosshair;
 }
 /* The photograph, in black and white, and the same photograph again inside the lens, drawn through the demo's colours. */
 .home-split-photo,
@@ -660,13 +654,9 @@
   position: absolute;
 }
 @media (prefers-reduced-motion: reduce) {
-  .home-split-picture,
   .home-split-lens,
   .home-split-lens-view {
     transition: none;
-  }
-  .home-split-picture:hover {
-    transform: none;
   }
 }
 .home-split.is-flipped .home-split-picture {

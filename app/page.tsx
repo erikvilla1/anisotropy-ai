@@ -93,10 +93,10 @@ export default function Home() {
           set as the demo's words are, in the middle (amendment 34, app/home.css). */}
       {/* Mission and Services are set side by side with a picture each (ADR-0077 amendment 37): Mission's words at the left
           and its picture at the right, Services the other way round. The picture is the hero's carbon weave for now, standing
-          in for pictures still to come. Each picture goes where its band's own link goes, About and Services, and lifts
-          under the pointer as a portrait does (amendment 39); the keyboard and a screen reader meet the worded link only,
-          so the same place is not offered twice. Under a mouse's pointer a small lens shows the photograph in the demo's
-          colours (amendment 48, components/home/split-picture.tsx); the filter it draws through is the one below. */}
+          in for pictures still to come. A picture is a picture and no longer a link (amendment 53, which ended amendment
+          39's): the band's worded link is the one way to its page. Under a mouse's pointer, a crosshair over the picture,
+          a small lens shows the photograph in the demo's colours (amendment 48, components/home/split-picture.tsx); the
+          filter it draws through is the one below. */}
       <svg className="home-fea-filter" width="0" height="0" aria-hidden="true" focusable="false">
         <filter id="home-fea" colorInterpolationFilters="sRGB">
           {/* The photograph's light and dark alone, smoothed and stretched over the whole range, */}
@@ -130,7 +130,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <SplitPicture href="/about" />
+        <SplitPicture />
       </section>
       {/* The step to the services (ADR-0077 amendment 34): the five by name, each a link to its page, and the way to all of them. */}
       <section className="band is-light home-blurb home-split is-flipped home-platform" id="platform">
@@ -154,7 +154,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <SplitPicture href="/services" />
+        <SplitPicture />
       </section>
       {/* The team keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
           link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band's
