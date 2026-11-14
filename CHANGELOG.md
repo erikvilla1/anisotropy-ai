@@ -102,6 +102,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - The home page's team band has its head on light grey from edge to edge and its portraits on white, with the band's label over the portraits at their left edge (ADR-0077 amendments 41 and 42).
 - Under each name on the home page's team cards stands one short title, the lead's, in place of the two seats in a sentence (ADR-0077 amendments 43 and 45).
 - If the hero's words still stand when the page scrolls to the demo, they fade as the clip grows and are gone before the demo's first words come up (ADR-0095 amendment 9).
+- Every page of the site comes out of black when it is landed on, by a link, a load, Back or Forward, with no delay before a link is followed; the home page's first load is as it was (ADR-0070 amendment 12, which reverses part of amendment 3 and awaits the founder's word).
 - On every marketing page the header leaves as the page scrolls down and comes back as a black bar as soon as it scrolls up; the keyboard's focus brings it in too (ADR-0077 amendment 44).
 - The home hero's words stand in the clip's lower left, set from the left, with the mark, the name and the year in one small line over the statement, so the hero no longer matches the page its arrangement came from (ADR-0077 amendment 47).
 - The home page's Mission and Services pictures have square corners, and under a mouse's pointer a small lens shows the photograph in the demo's colours; it is a picture effect, not an analysis (ADR-0077 amendment 48).

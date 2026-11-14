@@ -4,13 +4,19 @@ import { test, expect, type Page } from "@playwright/test";
 // and the statement and the small lines are typed in by a copy laid over the page's own text, a text cursor riding the
 // statement's last line. The veil and the copies are read on every frame from the first paint, because they are gone again
 // within a few seconds.
+//
+// Every page of the site comes out of black when a visitor lands on it, by a load or by a link, and no link waits for it:
+// the cases from "a link goes to its page at once" on read the same frames for the address, the page's heading and the veil.
 
 type Frame = {
+  at: number; // ms since the document started
   path: string;
+  title: string; // the text of the page's main heading
   phase: string;
   shown: boolean; // the veil is displayed at all
   opacity: number;
   colour: string;
+  ring: boolean; // the keyboard's focus is shown on something other than the skip link
   copies: number; // the copies that play the moves
   riders: number; // the copies' own text cursors
   markFrom: string; // where the hero's triangle starts its fade from, while it fades in
@@ -22,19 +28,26 @@ type Frame = {
 async function record(page: Page) {
   await page.addInitScript(() => {
     const frames: unknown[] = [];
-    (window as unknown as { __intro: unknown[] }).__intro = frames;
+    const store = window as unknown as { __intro: unknown[]; __pressed: number };
+    store.__intro = frames;
+    // When a press last reached the page, before anything in the page has acted on it.
+    document.addEventListener("click", () => (store.__pressed = performance.now()), true);
     const tick = () => {
       const veil = document.querySelector(".page-transition");
       if (veil) {
         const style = getComputedStyle(veil);
         const headline = document.querySelector("#overview h1");
         const copies = Array.from(document.querySelectorAll(".intro-overlay"));
+        const focused = document.activeElement;
         frames.push({
+          at: performance.now(),
           path: location.pathname,
+          title: document.querySelector("main h1")?.textContent?.trim() ?? "",
           phase: veil.className.replace("page-transition ", ""),
           shown: style.display !== "none",
           opacity: Number(style.opacity),
           colour: style.backgroundColor,
+          ring: !!focused && focused !== document.body && focused.matches(":focus-visible") && !focused.classList.contains("skip-link"),
           copies: copies.length,
           riders: document.querySelectorAll(".intro-overlay .intro-caret").length,
           markFrom: String((document.querySelector("#overview .home-hero-mark")?.getAnimations()[0]?.effect as KeyframeEffect | undefined)?.getKeyframes()[0]?.transform ?? ""),
@@ -298,32 +311,330 @@ test("each time the clip starts again the hero's words are typed in again, stand
   await expect(hero).toHaveAttribute("data-words-round", "3");
 });
 
-test("a header link goes to its page at once, Back too, and only the home page's first load is veiled (ADR-0070 amendment 3)", async ({ page }) => {
+/** When a press last reached the page, in ms since the document started. */
+const pressedAt = (page: Page) => page.evaluate(() => (window as unknown as { __pressed: number }).__pressed);
+
+/** What the frames say of a page that came in without a reload. While the page being left is still there nothing fades: the
+ * black belongs to the page that comes in. That page's first frame has its address, its heading and the black together, at
+ * most one frame into the lift; the black only ever lifts from there, and the veil is out of the way within a second. Returns
+ * when the page's first frame was read and when the veil was first out of the way. */
+function expectLanding(seen: Frame[], path: string, title: string) {
+  const first = seen.findIndex((frame) => frame.path === path);
+  expect(first, `a frame of ${path}`).toBeGreaterThanOrEqual(0);
+  expect(seen.slice(0, first).every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
+  expect(seen[first]).toMatchObject({ phase: "is-lift", shown: true, colour: "rgb(1, 1, 1)" });
+  expect(seen[first].opacity).toBeGreaterThanOrEqual(0.9);
+  expect(seen[first].title).toContain(title);
+  const here = seen.slice(first);
+  expect(here.every((frame) => frame.path === path)).toBe(true);
+  expect(here.every((frame, index) => index === 0 || frame.opacity <= here[index - 1].opacity)).toBe(true);
+  const idle = here.find((frame) => frame.phase === "is-idle");
+  expect(idle, "the veil out of the way").toBeTruthy();
+  expect(idle!.opacity).toBe(0);
+  expect(idle!.at - here[0].at).toBeLessThanOrEqual(1000);
+  expect(here[here.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0 });
+  return { at: here[0].at, clear: idle!.at };
+}
+
+const ABOUT = "Engineering built";
+const INDUSTRIES = "Built for research.";
+
+test("a link goes to its page at once, and the page comes out of black; Back and Forward too (ADR-0070)", async ({ page }) => {
   await record(page);
   await page.goto("/");
   const veil = page.locator(".page-transition");
   await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
+  // From the home page to About, then to Industries, as the lead's recording goes, and round once more.
+  const waits: { toPage: number; toClear: number }[] = [];
+  for (const [path, title] of [
+    ["/about", ABOUT],
+    ["/industries", INDUSTRIES],
+    ["/about", ABOUT],
+    ["/industries", INDUSTRIES],
+  ]) {
+    await frames(page);
+    await page.locator(`.site-header a[href='${path}']`).first().click();
+    await expect(page).toHaveURL(new RegExp(`${path}/?$`));
+    await expect(veil).toHaveClass(/is-idle/);
+    const landing = expectLanding(await frames(page), path, title);
+    const pressed = await pressedAt(page);
+    waits.push({ toPage: landing.at - pressed, toClear: landing.clear - pressed });
+    // No load-in moves on these pages: nothing of theirs is tagged for them.
+    await expect(page.locator(".intro-overlay, [data-intro-run]")).toHaveCount(0);
+  }
+  // A link is not held back. The delay that amendment 3 took away kept every link for 350 to 550 ms before its page was even
+  // asked for; the fastest of the four presses here has the new page on screen in less than that, and clear of the black
+  // within the 600 ms lift after it. The fastest is taken because one slow answer from the server is not a delay of ours.
+  expect(Math.min(...waits.map((wait) => wait.toPage))).toBeLessThan(350);
+  expect(Math.min(...waits.map((wait) => wait.toClear))).toBeLessThan(350 + 1000);
+  // Back and Forward bring their pages out of black as well.
+  await page.goBack();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/about");
+  await expect(veil).toHaveClass(/is-idle/);
+  expectLanding(await frames(page), "/about", ABOUT);
+  await page.goForward();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/industries");
+  await expect(veil).toHaveClass(/is-idle/);
+  expectLanding(await frames(page), "/industries", INDUSTRIES);
+});
+
+test("the home page reached by a link comes out of black with its words typed in; brought back by Back, with its words whole", async ({ page }) => {
+  await record(page);
+  await page.goto("/about");
+  const veil = page.locator(".page-transition");
+  await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
   await frames(page);
+  await page.locator(".site-header .wordmark").click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await expect(veil).toHaveClass(/is-idle/);
+  await expectHeroWhole(page);
+  const seen = await frames(page);
+  // As on its first load: the copies are ready in the page's first frame, under the black, and play as it lifts.
+  const first = seen.findIndex((frame) => frame.path === "/");
+  expect(seen.slice(0, first).every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
+  expect(seen[first]).toMatchObject({ phase: "is-lift", shown: true, copies: 3, hiddenCopies: 3, riders: 1, running: 5, ownHeadline: STATEMENT });
+  expect(seen[first].opacity).toBeGreaterThanOrEqual(0.9);
+  const gone = seen.findIndex((frame, index) => index > first && frame.copies === 0);
+  expect(gone).toBeGreaterThan(first);
+  expect(seen.slice(first, gone).every((frame) => frame.ownHeadline === STATEMENT)).toBe(true);
+  expect(seen[seen.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0, copies: 0, running: 0 });
+  // On to About and back with the browser's button: out of black again, and the words are there whole, not typed.
   await page.locator(".site-header a[href='/about']").first().click();
   await expect(page).toHaveURL(/\/about\/?$/);
-  await page.waitForTimeout(600);
-  const forward = await frames(page);
-  // No fade to black before the next page and none after it: every frame from the click on shows the page.
-  expect(forward.some((frame) => frame.path.startsWith("/about"))).toBe(true);
-  expect(forward.every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
+  await expect(veil).toHaveClass(/is-idle/);
+  await frames(page);
   await page.goBack();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/");
   await expect(page.locator("#overview h1")).toBeVisible();
-  await page.waitForTimeout(600);
+  await expect(veil).toHaveClass(/is-idle/);
   const back = await frames(page);
-  expect(back.every((frame) => frame.phase === "is-idle" && frame.opacity === 0 && frame.copies === 0)).toBe(true);
+  expectLanding(back, "/", "one engineering platform");
+  expect(back.every((frame) => frame.copies === 0 && frame.running === 0)).toBe(true);
   await expectHeroWhole(page);
-  // Another page loaded on its own starts without the veil, from its first frame.
-  await page.goto("/about");
+});
+
+test("a page loaded on its own starts black and is clear of it within about a second; the 404 page too", async ({ page }) => {
+  await record(page);
+  const veil = page.locator(".page-transition");
+  for (const [path, title] of [
+    ["/about", ABOUT],
+    ["/industries", INDUSTRIES],
+    ["/no-such-page", "Page not found"],
+  ]) {
+    await page.goto(path);
+    await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(title);
+    const seen = await frames(page);
+    // The first paint is black, #010101, as the page was served.
+    expect(seen[0], path).toMatchObject({ phase: "is-hold", shown: true, opacity: 1, colour: "rgb(1, 1, 1)", copies: 0 });
+    // The black holds for the fonts, 600 ms at the most (the stylesheet lifts it by itself then), and lifts in 600 ms: it
+    // has begun to lift within 0.8 s of the first frame and the veil is out of the way within 1.5 s, on a busy machine too.
+    const lifting = seen.find((frame) => frame.opacity < 1)!;
+    const idle = seen.find((frame) => frame.phase === "is-idle")!;
+    expect(lifting.at - seen[0].at, path).toBeLessThanOrEqual(800);
+    expect(idle.at - seen[0].at, path).toBeLessThanOrEqual(1500);
+    expect(seen.every((frame, index) => index === 0 || frame.opacity <= seen[index - 1].opacity)).toBe(true);
+    expect(seen[seen.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0, copies: 0, running: 0 });
+  }
+});
+
+test("the workspace has no veil, and an old address shows none on its way there", async ({ page }) => {
+  await record(page);
+  for (const [path, lands] of [
+    ["/workspace", "/workspace"],
+    ["/studio", "/workspace/fea"],
+    ["/chat/view", "/workspace/fea/view"],
+    ["/studio/view", "/workspace/fea/view"],
+  ]) {
+    await page.goto(path);
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: 15_000 }).toBe(lands);
+    await page.waitForTimeout(400);
+    const seen = await frames(page);
+    expect(seen.length, path).toBeGreaterThan(0);
+    expect(seen.every((frame) => frame.phase === "is-idle" && frame.opacity === 0), path).toBe(true);
+  }
+  // From the workspace back to the site by its link: that page comes out of black like any other.
+  await page.goto("/workspace");
+  await expect(page.locator(".site-header .is-website")).toBeVisible();
+  await frames(page);
+  await page.locator(".site-header .is-website").click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await expect(page.locator(".page-transition")).toHaveClass(/is-idle/);
+  const home = await frames(page);
+  const first = home.findIndex((frame) => frame.path === "/");
+  expect(home[first]).toMatchObject({ phase: "is-lift", shown: true });
+  expect(home[first].opacity).toBeGreaterThanOrEqual(0.9);
+});
+
+test("the veil hides no focus: the skip link lies over the black, and it takes no press and is hidden from assistive technology", async ({ page }) => {
+  // Without the page's scripts the veil is the stylesheet's alone, and the keyboard's focus is live from the first paint. Its
+  // lift is held at its start here, so the black stays while the page is read.
+  await page.route(/\/_next\/.*\.js(\?.*)?$/, (route) => route.abort());
+  await page.goto("/about", { waitUntil: "domcontentloaded" });
+  const veil = page.locator(".page-transition");
+  await veil.evaluate((layer) => {
+    for (const lift of layer.getAnimations()) {
+      lift.pause();
+      lift.currentTime = 0;
+    }
+  });
+  await expect(veil).toHaveClass("page-transition is-hold");
+  await expect(veil).toHaveCSS("opacity", "1");
+  await expect(veil).toHaveCSS("pointer-events", "none");
+  await expect(veil).toHaveAttribute("aria-hidden", "true");
+  // The window's top left corner is as black as its middle: the veil covers the header.
+  const corner = { x: 0, y: 0, width: 260, height: 70 };
+  const black = await page.screenshot({ clip: corner });
+  expect(black.equals(await page.screenshot({ clip: { ...corner, x: 600, y: 400 } }))).toBe(true);
+  // Tab: the skip link takes the focus and is drawn in that corner, over the black, which has not moved.
+  await page.keyboard.press("Tab");
+  const skip = page.locator(".skip-link");
+  await expect(skip).toBeFocused();
+  await expect(skip).toBeInViewport({ ratio: 1 });
+  await expect(veil).toHaveCSS("opacity", "1");
+  const layers = await page.evaluate(() => ({
+    skip: Number(getComputedStyle(document.querySelector(".skip-link")!).zIndex),
+    veil: Number(getComputedStyle(document.querySelector(".page-transition")!).zIndex),
+    siblings: document.querySelector(".skip-link")!.parentElement === document.querySelector(".page-transition")!.parentElement,
+  }));
+  expect(layers.skip).toBeGreaterThan(layers.veil);
+  expect(layers.siblings).toBe(true);
+  const lit = await page.screenshot({ clip: corner });
+  expect(lit.equals(black)).toBe(false);
+  expect(black.equals(await page.screenshot({ clip: { ...corner, x: 600, y: 400 } }))).toBe(true);
+});
+
+test("where the page's scripts never run the stylesheet lifts the black by itself: after 600 ms on a page of the site, after 2 s on the home page", async ({ page }) => {
+  await record(page);
+  await page.route(/\/_next\/.*\.js(\?.*)?$/, (route) => route.abort());
+  for (const [path, phase, holds] of [
+    ["/about", "is-hold", 600],
+    ["/", "is-enter", 2000],
+  ] as const) {
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".page-transition")).toHaveCSS("opacity", "0", { timeout: 10_000 });
+    const seen = await frames(page);
+    // No script took the veil over: it keeps the class it was served with, and nobody is left under the black.
+    expect(seen.every((frame) => frame.phase === phase), path).toBe(true);
+    expect(seen[0], path).toMatchObject({ shown: true, opacity: 1, colour: "rgb(1, 1, 1)" });
+    // The hold is counted from the veil's first style, a little before the first frame read here; then 600 ms out of black.
+    const lifting = seen.find((frame) => frame.opacity < 1)!;
+    const clear = seen.find((frame) => frame.opacity === 0)!;
+    expect(lifting.at - seen[0].at, path).toBeGreaterThan(holds - 250);
+    expect(lifting.at - seen[0].at, path).toBeLessThanOrEqual(holds + 200);
+    expect(clear.at - seen[0].at, path).toBeLessThanOrEqual(holds + 600 + 300);
+  }
+});
+
+test.describe("in a browser with scripting off", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("the stylesheet lifts the black at once, on the home page and on any other", async ({ page }) => {
+    for (const [path, phase] of [
+      ["/about", "is-hold"],
+      ["/", "is-enter"],
+    ]) {
+      await page.goto(path, { waitUntil: "commit" });
+      const veil = page.locator(".page-transition");
+      await expect(veil).toHaveCount(1);
+      // From the moment the veil is in the page it is clear 600 ms later: nothing holds the black.
+      const began = Date.now();
+      await expect.poll(() => veil.evaluate((layer) => getComputedStyle(layer).opacity), { intervals: [50], timeout: 5_000 }).toBe("0");
+      expect(Date.now() - began, path).toBeLessThan(1000);
+      await expect(veil).toHaveClass(`page-transition ${phase}`);
+    }
+  });
+});
+
+test("no focus ring is ever under the black: a link pressed from the keyboard brings its page in without it, and Tab ends it", async ({ page }) => {
+  await record(page);
+  await page.goto("/industries");
+  const veil = page.locator(".page-transition");
+  await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
+  // Tab to the header's About link and press Enter: the link keeps the focus and its ring, so the page comes in unveiled.
+  const about = page.locator(".site-header a[href='/about']").first();
+  for (let presses = 0; presses < 12 && !(await about.evaluate((link) => link === document.activeElement)); presses++) await page.keyboard.press("Tab");
+  await expect(about).toBeFocused();
+  await frames(page);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/about\/?$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(ABOUT);
   await page.waitForTimeout(300);
-  const direct = await frames(page);
-  expect(direct.length).toBeGreaterThan(0);
-  expect(direct.every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
+  const byKeyboard = await frames(page);
+  expect(byKeyboard.some((frame) => frame.path === "/about" && frame.ring)).toBe(true);
+  expect(byKeyboard.every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
+  // A press with the pointer brings the next page out of black; Tab while it lifts moves the focus on, and the black goes
+  // in that frame. Whenever the Tab lands, no frame has a ring under a veil that is not out of the way.
+  await page.locator(".site-header a[href='/industries']").first().click();
+  await expect(page).toHaveURL(/\/industries\/?$/);
+  await page.keyboard.press("Tab");
+  await expect(veil).toHaveClass(/is-idle/);
+  await page.waitForTimeout(300);
+  const byPointer = await frames(page);
+  expect(byPointer.some((frame) => frame.path === "/industries" && frame.ring)).toBe(true);
+  expect(byPointer.every((frame) => !frame.ring || (frame.phase === "is-idle" && frame.opacity === 0))).toBe(true);
+});
+
+test("links pressed one after the other end on the last page, whole, with the veil out of the way and nothing left of the moves", async ({ page }) => {
+  await record(page);
+  await page.goto("/about");
+  const veil = page.locator(".page-transition");
+  await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
+  await frames(page);
+  // To the home page, whose words begin to be typed in, and on to Industries while its black is still lifting.
+  await page.locator(".site-header .wordmark").click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await page.locator(".site-header a[href='/industries']").first().click();
+  await expect(page).toHaveURL(/\/industries\/?$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(INDUSTRIES);
+  await expect(veil).toHaveClass(/is-idle/);
+  const seen = await frames(page);
+  // The second page starts from black again, wherever the first one's lift had got to, and ends clear.
+  const second = seen.findIndex((frame) => frame.path === "/industries");
+  expect(seen[second]).toMatchObject({ phase: "is-lift", shown: true, copies: 0, running: 0 });
+  expect(seen[second].opacity).toBeGreaterThanOrEqual(0.9);
+  expect(seen[seen.length - 1]).toMatchObject({ path: "/industries", phase: "is-idle", opacity: 0, copies: 0, running: 0 });
+  await expect(veil).toHaveCount(1);
+  await expect(page.locator(".intro-overlay, [data-intro-run]")).toHaveCount(0);
+  // Three in a row, ending on the home page: its words are typed in and stand whole, and the veil is out of the way.
+  await page.locator(".site-header a[href='/about']").first().click();
+  await expect(page).toHaveURL(/\/about\/?$/);
+  await page.locator(".site-header .wordmark").click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await page.locator(".site-header a[href='/industries']").first().click();
+  await expect(page).toHaveURL(/\/industries\/?$/);
+  await page.locator(".site-header .wordmark").click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await expect(veil).toHaveClass(/is-idle/);
+  await expectHeroWhole(page);
+  await expect(veil).toHaveCSS("opacity", "0");
+  await expect(veil).toHaveCount(1);
+  await expect(page.locator(".intro-overlay, [data-intro-run]")).toHaveCount(0);
+});
+
+test("a page the browser brings back as it was left is shown at once, never left black", async ({ page }) => {
+  await page.goto("/about");
+  await expect(page.locator(".page-transition")).toHaveClass(/is-idle/, { timeout: 10_000 });
+  // The test's browser keeps no page whole, so the browser's word that it brought one back is given for it: in the first
+  // frame of a page that has just come in by a link, while its black is at its fullest.
+  const restored = await page.evaluate(
+    () =>
+      new Promise<{ before: string; after: string; opacity: string }>((resolve) => {
+        document.querySelector<HTMLElement>(".site-header a[href='/industries']")!.click();
+        const tick = () => {
+          if (location.pathname !== "/industries") return void requestAnimationFrame(tick);
+          const veil = document.querySelector(".page-transition")!;
+          const before = veil.className;
+          window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+          resolve({ before, after: veil.className, opacity: getComputedStyle(veil).opacity });
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+  expect(restored).toEqual({ before: "page-transition is-lift", after: "page-transition is-idle", opacity: "0" });
+  await page.waitForTimeout(400);
+  await expect(page.locator(".page-transition")).toHaveClass("page-transition is-idle");
+  await expect(page.locator(".page-transition")).toHaveCSS("opacity", "0");
 });
 
 test.describe("for a visitor who asks for reduced motion", () => {
@@ -341,5 +652,30 @@ test.describe("for a visitor who asks for reduced motion", () => {
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.every((frame) => !frame.shown && frame.copies === 0 && frame.running === 0)).toBe(true);
     await expectHeroWhole(page, "none");
+  });
+
+  test("no page is veiled: not on its own load, not after a link, not after Back", async ({ page }) => {
+    await record(page);
+    await page.goto("/about");
+    const veil = page.locator(".page-transition");
+    await expect(veil).toBeHidden();
+    await expect(veil).toHaveClass(/is-idle/);
+    await page.waitForTimeout(700);
+    await page.locator(".site-header a[href='/industries']").first().click();
+    await expect(page).toHaveURL(/\/industries\/?$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(INDUSTRIES);
+    await page.waitForTimeout(700);
+    await page.locator(".site-header .wordmark").click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+    await expectHeroWhole(page, "none");
+    await page.goBack();
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/industries");
+    await page.waitForTimeout(700);
+    const seen = await frames(page);
+    for (const path of ["/about", "/industries", "/"]) expect(seen.some((frame) => frame.path === path), path).toBe(true);
+    expect(seen.every((frame) => !frame.shown && frame.copies === 0 && frame.running === 0)).toBe(true);
+    // A page that came in by a link or by Back never had the veil's class for black at all.
+    expect(seen.filter((frame) => frame.path !== "/about").every((frame) => frame.phase === "is-idle")).toBe(true);
+    await expect(veil).toHaveClass(/is-idle/);
   });
 });

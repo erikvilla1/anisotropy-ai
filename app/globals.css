@@ -1840,11 +1840,14 @@ main[tabindex="-1"]:focus {
   color: var(--muted);
 }
 
-/* The page veil (ADR-0070 amendments 1 and 3), after Anduril: its colour, #010101; 600 ms out of black on the home page's first
- * load (Anduril's 300 ms was a little quick for the lead, amendment 8), eased as Anduril's "easeOutCubic", and nowhere else:
- * since amendment 3 no page fades around navigation. It never takes a click. The first paint is black until
- * components/page-transition.tsx has the page's text ready and lifts it; if no script runs it lifts alone, at once where the
- * browser reports scripting is off and after 2 s otherwise. */
+/* The page veil (ADR-0070): a black layer, #010101, that every page of the site comes out of when a visitor lands on it,
+ * in 600 ms (amendment 8) with an ease-out cubic. It never takes a click, and no link waits for it: there is no fade to
+ * black before a page is left, only the lift on the page that comes in (components/page-transition.tsx).
+ *
+ * A page that was loaded is black at its first paint (`is-enter` on the home page, `is-hold` on any other) until the
+ * script lifts it (`is-lift`). If no script takes over, the stylesheet lifts it alone: after 2 s on the home page, whose
+ * words are made ready under the black; after 600 ms on any other page; and at once where the browser reports scripting
+ * is off. A page that comes in by a link starts in `is-lift`, so it is black for its first frame and lifts from there. */
 .page-transition {
   position: fixed;
   inset: 0;
@@ -1853,9 +1856,13 @@ main[tabindex="-1"]:focus {
   opacity: 0;
   pointer-events: none;
 }
-.page-transition.is-enter {
+.page-transition.is-enter,
+.page-transition.is-hold {
   opacity: 1;
   animation: page-veil-out 600ms cubic-bezier(0.215, 0.61, 0.355, 1) 2000ms forwards;
+}
+.page-transition.is-hold {
+  animation-delay: 600ms;
 }
 .page-transition.is-lift {
   animation: page-veil-lift 600ms cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
@@ -1878,7 +1885,8 @@ main[tabindex="-1"]:focus {
   }
 }
 @media (scripting: none) {
-  .page-transition.is-enter {
+  .page-transition.is-enter,
+  .page-transition.is-hold {
     animation-delay: 0s;
   }
 }

@@ -197,3 +197,29 @@ Numbered 3 on its branch; renumbered when the branch took in main, where an amen
 **Decision.** The whole line is held over the last thousandth of a typed line's keyframes (`WHOLE_HOLD` in `components/intro-text.ts`), so the end a waiting line is read from is the whole line whichever side it is read from. The load-in uses the same keyframes and ends as before.
 
 **Evidence.** On 2026-11-13 against the dev server: `intro.spec.ts` holds a copy of each line's own animation at its first moment and reads how far the line is drawn back; with the old keyframes the case failed with the seven widths above, with the change every line reads 0. `intro.spec.ts` and `home.spec.ts`: 14 of 14. A contact sheet of a new recording at 25 frames a second was looked at: the lines are whole while the triangle starts to turn, and the first characters go about 0.35 s later. UNVERIFIED: Safari and Firefox, which may read a waiting stepped keyframe differently; the change is safe either way.
+
+## Amendment 12, 2026-11-14 (every page of the site comes out of black on arrival; no link is delayed)
+
+**Context.** The lead, with a recording of the site in which the home page opens out of black and About and Industries appear at once: "need the black fade transition when landing on any page". Amendment 3, which the founder confirmed on 2026-11-12 after the site audit (finding shell-12, decision D10), had kept the veil for the home page's first load only and removed the fade around navigation, because links were held back 350 to 550 ms, the veil waited on fonts up to 800 ms plus 300 ms, its no-script fallback took 2 s, and the skip link and focus rings lay under it. This amendment brings the black back in a form meant to keep each of those objections answered. **It reverses part of a decision the founder confirmed, and is for the founder to accept or refuse with the pull request (R-32).**
+
+**Decision.**
+
+- **No link is delayed.** There is no click handler, no leaving phase and no fade before a page is left. A link goes to its page at once, as since amendment 3.
+- **The arriving page comes out of black.** On every page of the site (every path that is not the workspace's): by a link, the new page's first frame is black and the black lifts in 600 ms; loaded on its own, the page is black at its first paint and lifts as soon as its fonts are in, 600 ms after the first paint at the latest; Back and Forward bring their page out of black too, without the typed words. The home page's own first load is unchanged (amendments 1 and 8), and the home page reached by a link types its words in as on a first load.
+- **No one is left under black.** With no script the stylesheet lifts the black by itself after 600 ms on every page but the home page (which keeps its 2 s, so its typed load-in is not skipped on a slow start) and at once where scripting is off. A page the browser restores as it was left is shown at once. A lift whose end is never heard is ended by a timer.
+- **Focus is never under it.** The focused skip link lies over the black on every page; a link pressed from the keyboard brings its page in with no veil; the veil goes in the same frame the keyboard's focus lands anywhere else. It takes no press and is hidden from assistive technology.
+- **None with reduced motion**, on any page and any way of landing. None on the workspace or on the old addresses that redirect.
+
+**Options considered.** Setting the black in an effect after the route has changed: rejected, one frame of the new page shows first. A hold of fixed length in the stylesheet alone: rejected, it cannot follow the fonts. Replaying the black on a page restored from the browser's back-forward cache: rejected, the page would be seen first.
+
+**What it reverses of amendment 3.** "The home page's first load only" becomes every page of the site, the 404 page among them. "No fade around navigation" becomes a fade on arrival only. Back and Forward now come out of black, which they never did. "Drop the 350 ms navigation delay" stands.
+
+**Evidence.** From the work's report of 2026-11-14 and this record's drafter's own run the same day.
+
+- Times read in the page on a production build served locally: home to About by a link, About's first frame 54 to 106 ms after the press and fully visible 726 to 744 ms after it; `/about` loaded on its own fully visible at 810 ms; with scripts blocked the lift starts at 668 ms on `/about` and at 2118 ms on the home page.
+- `tests/browser/intro.spec.ts`, 15 of 15 against the dev server (run again by the drafter) and against a production build (the work's own run): the fastest of four link presses shows the new page in under 350 ms, the smallest delay that was removed; the arriving page's first frame is black and the veil is out of the way within a second; direct loads of About, Industries and the 404 page; Back and Forward; reduced motion on every way of landing; the skip link over the black and the two focus rules; two and four links pressed in a row end clean; the workspace and the old addresses unveiled; scripts blocked; scripting off; a simulated restore. Eight of these behaviours were broken on purpose in a scratch build and each was caught by its case.
+- The built HTML carries `is-enter` on the home page, `is-hold` on the site's other pages and the 404 page, and `is-idle` on the workspace's and the old addresses' pages.
+- `shell.spec.ts` 18 passed and 1 skipped, `expansion.spec.ts` 5 passed and 2 skipped; `npm test` 319 tests, 318 passed, 1 skipped; `npx tsc --noEmit` clean.
+
+UNVERIFIED: a real restore from the back-forward cache (the test browser keeps no page; only a simulated one is tested); Safari, Firefox and phones; a slow network, where fonts later than 600 ms would change the text's type after the lift; a real screen reader; the hosted site. Known and left: where no script runs, a focus ring other than the skip link's can lie under the black for up to 0.6 s and the lift.
+
