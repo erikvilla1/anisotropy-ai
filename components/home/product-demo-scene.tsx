@@ -7,7 +7,7 @@ import { BEND_DRAWN, demoWing, wingColour, wingExtent } from "@/lib/demo-wing";
 import { clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
-export type DemoSceneHandle = { clock: number; redraw: (() => void) | null; /** How far a visitor has turned the wing by hand, in radians, once the demo has played. */ turn?: { yaw: number; pitch: number } };
+export type DemoSceneHandle = { clock: number; redraw: (() => void) | null; /** How far a visitor has turned the wing by hand, in radians, once the demo has played. */ turn?: { yaw: number; pitch: number }; /** The pointer is down on the stage, turning the wing. */ turning?: boolean };
 
 /** The product demo's centre model (ADR-0098): the example wing, drawn from the very mesh that was solved, one surface a part,
  * on the black stage. Its place and orientation, how far its parts stand apart, the mesh's lines, the analysis's colours and
@@ -197,6 +197,54 @@ function buildModel() {
   return { root, parts: built, hasField: Boolean(field), dispose: () => disposables.forEach((item) => item.dispose()) };
 }
 
+/** The wing's own axes, as analysis programs draw them in a corner: x along the chord from nose to tail, y along the span from
+ * root to tip, z up (the record's coordinates). Shown only while the wing is being turned by hand (ADR-0098 amendment 2). In
+ * the view the span lies along the group's x and the chord along its y, so the letters follow the wing, not the screen. */
+function buildAxes() {
+  const group = new THREE.Group();
+  const materials: (THREE.MeshBasicMaterial | THREE.SpriteMaterial)[] = [];
+  const disposables: { dispose: () => void }[] = [];
+  const shaft = new THREE.CylinderGeometry(0.022, 0.022, 0.8, 12);
+  const head = new THREE.ConeGeometry(0.07, 0.22, 16);
+  disposables.push(shaft, head);
+  const axes: { letter: string; colour: string; along: [number, number, number] }[] = [
+    { letter: "X", colour: "#ff5a52", along: [0, 1, 0] }, // the chord
+    { letter: "Y", colour: "#3fd47a", along: [1, 0, 0] }, // the span
+    { letter: "Z", colour: "#4f8fff", along: [0, 0, 1] }, // up
+  ];
+  const upright = new THREE.Vector3(0, 1, 0);
+  for (const axis of axes) {
+    const direction = new THREE.Vector3(...axis.along);
+    const material = new THREE.MeshBasicMaterial({ color: axis.colour, transparent: true, opacity: 0, depthTest: false, toneMapped: false });
+    const arm = new THREE.Group();
+    const stick = new THREE.Mesh(shaft, material);
+    stick.position.y = 0.4;
+    const tip = new THREE.Mesh(head, material);
+    tip.position.y = 0.9;
+    arm.add(stick, tip);
+    arm.quaternion.setFromUnitVectors(upright, direction);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    const context = canvas.getContext("2d")!;
+    context.font = "600 44px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillStyle = axis.colour;
+    context.fillText(axis.letter, 32, 34);
+    const texture = new THREE.CanvasTexture(canvas);
+    const label = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0, depthTest: false, toneMapped: false });
+    const letter = new THREE.Sprite(label);
+    letter.position.copy(direction).multiplyScalar(1.32);
+    letter.scale.setScalar(0.42);
+    for (const object of [stick, tip, letter]) object.renderOrder = 10;
+    group.add(arm, letter);
+    materials.push(material, label);
+    disposables.push(material, label, texture);
+  }
+  group.visible = false;
+  return { group, materials, shown: 0, dispose: () => disposables.forEach((item) => item.dispose()) };
+}
+
 function glowTexture(): THREE.CanvasTexture {
   const size = 128;
   const canvas = document.createElement("canvas");
@@ -218,6 +266,7 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false });
     return { mesh: new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material), material, texture };
   }, []);
+  const axes = useMemo(buildAxes, []);
   const turn = useRef<THREE.Group>(null);
   const invalidate = useThree((state) => state.invalidate);
   useEffect(() => {
@@ -227,12 +276,13 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
   }, [handle, invalidate]);
   useEffect(() => () => {
     model.dispose();
+    axes.dispose();
     glow.texture.dispose();
     glow.material.dispose();
     glow.mesh.geometry.dispose();
-  }, [model, glow]);
+  }, [model, glow, axes]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const group = turn.current;
     if (!group) return;
     const clock = handle.clock;
@@ -271,11 +321,28 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     glow.mesh.position.set(x, y - reach - 0.03 * height, -1);
     glow.mesh.scale.set(span * unit * Math.cos(pose.yaw) * 1.15, 0.09 * height + 0.5 * reach, 1);
     glow.material.opacity = 0.16 * scene.presence;
+    // The axes: in the stage's lower left corner, turned as the wing is, coming in while the pointer holds the wing and
+    // going when it lets go. The view asks for frames itself while they fade.
+    const wanted = handle.turning ? 1 : 0;
+    if (axes.shown !== wanted) {
+      const step = Math.min(0.05, delta); // the frame before may be long ago: the view draws on demand
+      axes.shown = wanted > axes.shown ? Math.min(1, axes.shown + step / 0.18) : Math.max(0, axes.shown - step / 0.26);
+      state.invalidate();
+    }
+    axes.group.visible = axes.shown > 0;
+    if (axes.group.visible) {
+      const reachOf = Math.min(0.075 * height, 0.06 * width);
+      axes.group.position.set(-width / 2 + 2.4 * reachOf, -height / 2 + 2.2 * reachOf, 2);
+      axes.group.scale.setScalar(reachOf);
+      axes.group.rotation.copy(group.rotation);
+      for (const material of axes.materials) material.opacity = axes.shown;
+    }
   });
 
   return (
     <>
       <primitive object={glow.mesh} />
+      <primitive object={axes.group} />
       <group ref={turn}>
         <primitive object={model.root} />
       </group>

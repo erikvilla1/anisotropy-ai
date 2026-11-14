@@ -64,3 +64,16 @@ A visitor or a reviewer takes the wing for something the workspace does today; a
 
 **Evidence.** On 2026-11-14 against the dev server: the four beats were captured at 1440 by 900 and at 1894 by 831, the shape of the lead's window, and looked at: the wing is whole in the window in each, and no face's edge shows under the colours. `demo.spec.ts`, 11 of 11: its analysis case now drags on the finished stage and checks that the drawing changes and that the stage cannot be turned before the last beat. `npm test`: 300 tests, 299 passed, 1 skipped. `npx tsc --noEmit` clean. UNVERIFIED: a real graphics card (the container draws in software), Safari and Firefox; whether the lead finds it realistic enough.
 
+## Amendment 2, 2026-11-14 (while the wing is held, its axes show and the words step back)
+
+**Context.** The lead, of the finished stage: "when I click and drag this, have a x-y-z coord fade in for the duration of the hold, and fade out upon release. also when holding, have the text fade out and disappear for the duration of the hold, have it refade back in when let go of click."
+
+**Decision.**
+
+- **Axes while held.** From the press to the release a small triad stands in the stage's lower left corner and turns with the wing: x along the chord, y along the span, z up, the record's own axes (`scripts/demo-wing.py`). It comes in over about 0.2 s and leaves over about 0.3 s. It is a drawing aid only and states no number.
+- **The words step back.** For the same time the line that says the wing can be turned, the beat's words and its card fade out, and they come back on release. "The text" was read as all three; the head above the stage stays. Where the demo does not play (reduced motion, a small window) only the line fades, as the beats there lie under the stage, not over the wing.
+
+**Options considered.** Axes that always show once the demo has played: rejected, the lead asked for the hold only. Axes at the wing's root: rejected, they would cover the most loaded place.
+
+**Evidence.** On 2026-11-14 against the dev server: the stage was captured at 1600 by 1000 while held and after release and looked at: held, the triad is in the corner and the words, the card and the line are gone; released, the triad is gone and they are back. `demo.spec.ts`, 11 of 11: its analysis case now holds the stage and checks that the line and the words are hidden while held and shown again after. `npx tsc --noEmit` clean. UNVERIFIED: a real graphics card, Safari and Firefox.
+

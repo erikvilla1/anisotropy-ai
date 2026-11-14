@@ -457,6 +457,20 @@
 .product-demo-hint:not([data-shown]) {
   display: none;
 }
+/* While the pointer holds the wing (ADR-0098 amendment 2) the line goes, and on the stage the beat's words and card go with
+ * it, so nothing lies over the wing as it turns; they come back when the pointer lets go. */
+.product-demo-hint {
+  transition: opacity 0.22s ease;
+}
+.product-demo-box[data-turning] .product-demo-hint {
+  opacity: 0;
+}
+.product-demo[data-mode="pinned"] .product-demo-box[data-turnable] > .product-demo-beats {
+  transition: opacity 0.22s ease;
+}
+.product-demo[data-mode="pinned"] .product-demo-box[data-turning] > .product-demo-beats {
+  opacity: 0;
+}
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
   .product-demo[data-mode="pinned"] .product-demo-box > .product-demo-hint {
     position: absolute;
@@ -464,6 +478,9 @@
     right: 32px;
     margin: 0;
     opacity: 0.85;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-box[data-turning] > .product-demo-hint {
+    opacity: 0;
   }
 }
 

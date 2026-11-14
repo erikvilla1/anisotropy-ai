@@ -179,6 +179,9 @@ export function ProductDemo() {
     drag.current = { x: event.clientX, y: event.clientY, yaw: turn.yaw, pitch: turn.pitch };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.currentTarget.dataset.turning = "true";
+    // While the pointer holds the wing its axes are drawn, and the words step back (app/home-demo.css).
+    handle.turning = true;
+    handle.redraw?.();
   };
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const from = drag.current;
@@ -192,6 +195,8 @@ export function ProductDemo() {
     if (!drag.current) return;
     drag.current = null;
     delete event.currentTarget.dataset.turning;
+    handle.turning = false;
+    handle.redraw?.();
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
