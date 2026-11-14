@@ -131,14 +131,16 @@ test("after the demo the page is white, and Mission and Services are two short b
   expect(label.left).toBe(label.frameLeft);
   expect(label.top).toBeGreaterThan(label.headBottom);
   expect(label.bottom).toBeLessThan(label.frameTop);
-  // What is new is a band on light grey (amendment 36) that is empty for now: its head alone, saying so, and no card
-  // (amendment 41).
-  await expect(page.locator("#news")).toHaveCSS("background-color", "rgb(243, 243, 244)");
-  await expect(page.locator("#news").getByRole("heading", { level: 2 })).toHaveText("Lately.");
-  await expect(page.locator("#news .band-statement p")).toHaveText("Nothing posted yet. News from the team will appear here.");
-  await expect(page.locator("#news article")).toHaveCount(0);
-  await expect(page.locator("#news .home-news")).toHaveCount(0);
-  await expect(page.locator("#news")).not.toContainText(/coming soon|closed beta|CalculiX|studio/i);
+  // The changelog is a band on light grey (amendments 36 and 46) with nothing published yet: its head alone, saying so,
+  // and no list. It is not a news feed: no card, no "What is new".
+  const changelog = page.locator("#changelog");
+  await expect(changelog).toHaveCSS("background-color", "rgb(243, 243, 244)");
+  await expect(changelog.locator(".band-label")).toHaveText("Changelog");
+  await expect(changelog.getByRole("heading", { level: 2 })).toHaveText("Every release, and what changed.");
+  await expect(changelog.locator(".band-statement p")).toHaveText("No releases published yet. Each version and what changed in it will be listed here.");
+  await expect(changelog.locator(".home-changelog, article")).toHaveCount(0);
+  await expect(page.locator("#news")).toHaveCount(0);
+  await expect(page.locator("main")).not.toContainText(/what is new|coming soon|closed beta/i);
   // Mission: the label, the statement and one link, to About; the strip of four principles is gone.
   const mission = page.locator("#mission");
   await expect(mission.locator(".band-label")).toHaveText("Mission");
@@ -182,8 +184,8 @@ test("after the demo the page is white, and Mission and Services are two short b
     await page.mouse.move(2, 2);
     expect(places.image, id).toContain("/assets/images/carbon-weave.jpg");
   }
-  // Team and What is new keep their heads in the middle, as the demo's words are.
-  for (const id of ["working", "news"]) {
+  // Team and the changelog keep their heads in the middle, as the demo's words are.
+  for (const id of ["working", "changelog"]) {
     const off = await page.locator(`#${id} .band-statement h2`).evaluate((h) => { const r = h.getBoundingClientRect(); return (r.left + r.right) / 2 - window.innerWidth / 2; });
     expect(Math.abs(off), id).toBeLessThanOrEqual(2);
   }

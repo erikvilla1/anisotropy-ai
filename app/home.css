@@ -499,7 +499,7 @@
 /* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31), all on the light
  * ground (amendment 33). On this page a band's head is not the kit's label column and ruled statement: it is set as the demo's
  * words are (amendment 34), a small monospace label, the heading and a paragraph in the middle of the page, and under them
- * what the band leads to. The news dates keep the kit's columns, and About's five face cards take the whole width. Every
+ * what the band leads to. About's five face cards take the whole width, and the changelog a narrow column. Every
  * colour here is one of the band's variables. */
 .home-blurb .band-head {
   display: block;
@@ -665,16 +665,14 @@
   text-transform: uppercase;
   color: var(--muted);
 }
-.home-face h3,
-.home-news h3 {
+.home-face h3 {
   font-family: var(--font);
   font-size: 22px;
   font-weight: 400;
   line-height: 28px;
   letter-spacing: -0.01em;
 }
-.home-face p,
-.home-news p {
+.home-face p {
   font-size: 16px;
   line-height: 24px;
   color: var(--muted);
@@ -879,66 +877,122 @@
 .home-face h3 a:hover {
   opacity: 0.6;
 }
-/* What is new, as a feed (ADR-0077 amendment 36): the band on light grey, and each item a white card with its month and what
- * it is about on one line, then its title and two lines of what changed. Three to a row; one under another on a narrow
- * screen. */
+/* The changelog (ADR-0077 amendment 46; the band on light grey since amendment 36): one release under another in a narrow
+ * column, each with its day and its version at the left and, beside them, its title and its changes, every change tagged
+ * with its kind in words. One rule between releases. On a phone the day and the version stand over the release. */
 .band.is-light.home-feed {
   --bg: #f3f3f4;
   --panel: #ffffff;
   --line: #e2e2e4;
 }
-/* With nothing posted the band is its head alone (amendment 41). */
+/* With nothing published the band is its head alone. */
 .home-feed .band-head:last-child {
   margin-bottom: 0;
 }
-.home-news {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
-  max-width: 1240px;
+.home-changelog {
+  max-width: 780px;
   margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  text-align: left;
 }
-.home-news article {
+.home-changelog > li {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  column-gap: 32px;
+}
+.home-changelog > li + li {
+  margin-top: 40px;
+  padding-top: 40px;
+  border-top: 1px solid var(--line);
+}
+.home-changelog-when {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 24px 24px 28px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--panel);
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 4px;
 }
-.home-news-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 0 8px;
-}
-.home-news .home-news-meta,
-.home-news .home-news-meta time,
-.home-news .home-news-meta span {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 18px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.home-changelog time {
+  font-size: 14px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
-.home-news .home-news-meta span {
+.home-changelog-version {
   padding: 2px 10px;
   border: 1px solid var(--line);
   border-radius: 999px;
+  background: var(--panel);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text);
+}
+.home-changelog h3 {
+  font-family: var(--font);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+.home-changelog dl {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+.home-changelog dl > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.home-changelog dt {
+  flex: 0 0 5.5rem;
+}
+.home-changelog dd {
+  margin: 0;
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--muted);
+}
+/* The kind of a change: the word in a small pill. The three differ in weight of ink, not in hue, and each says what it is. */
+.home-changelog-kind {
+  display: inline-block;
+  padding: 1px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 20px;
+}
+.home-changelog-kind[data-kind="Added"] {
+  background: #111111;
+  color: #ffffff;
+}
+.home-changelog-kind[data-kind="Improved"] {
+  background: #e3e3e6;
+  color: #111111;
+}
+.home-changelog-kind[data-kind="Fixed"] {
+  border-color: #c9c9ce;
+  background: var(--panel);
+  color: #444444;
+}
+@media (max-width: 640px) {
+  .home-changelog > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .home-changelog-when {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-top: 0;
+  }
 }
 /* Narrower than 1280 px the faces go three to a row, and on a phone two. */
 @media (max-width: 1279px) {
   .home-faces {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-@media (max-width: 1023px) {
-  .home-news {
-    grid-template-columns: minmax(0, 1fr);
-    max-width: 640px;
   }
 }
 @media (max-width: 760px) {
@@ -952,9 +1006,6 @@
   .home-face h3 {
     font-size: 18px;
     line-height: 24px;
-  }
-  .home-news article {
-    padding: 20px 20px 24px;
   }
 }
 

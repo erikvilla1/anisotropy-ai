@@ -596,3 +596,13 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** `tests/team.test.ts`, 2 of 2; `home.spec.ts`, 7 of 7 (the five lines, one line of text each). UNVERIFIED: that each person agrees to their title; the shared brain's people note does not carry these titles.
 
+## Amendment 46, 2026-11-14 (the band under the team is a changelog, not a news feed)
+
+**Context.** The lead, of the empty feed of amendment 41: "This is what I want this to be: Change Log, not a News feed", "like where we would publish software update versions and changes", with a changelog component from a component library as the example: a column of releases, each with its date and version at the left and beside them a title and its changes, every change tagged Added, Improved or Fixed. The example was written for Tailwind and a component kit this site does not use.
+
+**Decision.** The band is the changelog: label "Changelog", heading "Every release, and what changed.", and under it one release under another in a narrow column, each with its day and its version in a small pill at the left and its title and its changes beside them, every change tagged with its kind in words. The list is `lib/changelog.ts`. It is empty, as the lead said of the feed ("we have no published updates"), and the band then says "No releases published yet. Each version and what changed in it will be listed here." A release listed there must be a released version of `CHANGELOG.md` with the same day (`tests/changelog.test.ts`), so the site announces nothing the repository does not record. The band's id is `changelog`; the feed's cards and their styles are gone.
+
+**Options considered.** Installing Tailwind and the component kit to paste the example in: rejected, two new styling systems for one band, on a site whose every other part is written in its own stylesheets; the example's layout is some sixty lines of those. Listing `CHANGELOG.md`'s one released version (Engine 0.1.0, 2026-10-02) now: not done, the lead has said twice that nothing is to be shown as published yet; it is one entry in `lib/changelog.ts` when the lead says so.
+
+**Evidence.** On 2026-11-14 against the dev server: the band was captured empty and, for a look at the layout only, with Engine 0.1.0 entered and then taken out again; both were looked at. `tests/changelog.test.ts`, 2 of 2. `home.spec.ts`, 7 of 7: the band's label, heading and sentence, no list, and no "What is new" on the page. `npx tsc --noEmit` clean. UNVERIFIED: the list at phone width with an entry in it (the rules are there; no entry is).
+

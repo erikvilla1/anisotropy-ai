@@ -98,7 +98,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - The demo's stage is a hard stop and the demo plays once: until it has played through, the page ends at the stage, so a scroll cannot coast past it into the next section; after the last beat the stage is an ordinary section and nothing plays again in that visit (ADR-0095 amendment 7). From then on the hero is an ordinary section straight above the stage: scrolling back up brings it down whole, with no fade (amendment 8).
 - After the demo the home page is white: Mission, Platform and What is new take the light ground About already had (ADR-0077 amendment 33).
 - The home page's team cards lift under the pointer, and LinkedIn's round badge and each name link to that person's profile (ADR-0077 amendment 35).
-- What is new on the home page is a feed on light grey (ADR-0077 amendment 36). It is empty for now, at the lead's word: the band says nothing is posted yet and holds no card (amendment 41).
+- The band under the team on the home page is a changelog, where published versions will be listed with what changed in each; it replaces the news feed and is empty until a version is published (ADR-0077 amendments 36, 41 and 46).
 - The home page's team band has its head on light grey from edge to edge and its portraits on white, with the band's label over the portraits at their left edge (ADR-0077 amendments 41 and 42).
 - Under each name on the home page's team cards stands one short title, the lead's, in place of the two seats in a sentence (ADR-0077 amendments 43 and 45).
 - If the hero's words still stand when the page scrolls to the demo, they fade as the clip grows and are gone before the demo's first words come up (ADR-0095 amendment 9).

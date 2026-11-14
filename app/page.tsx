@@ -8,6 +8,7 @@ import { HeroOutro } from "@/components/home/hero-outro";
 import { ProductDemo } from "@/components/home/product-demo";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
+import { releaseDay, releases } from "@/lib/changelog";
 import { serviceHref, services } from "@/lib/services";
 import { team } from "@/lib/team";
 import "./home.css";
@@ -21,13 +22,8 @@ const heroVideoHtml =
   '<video autoplay muted loop playsinline preload="auto" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
   '<source src="/media/hero.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)"></video>';
 
-/** What the feed shows: one card an item. It is empty for now, at the lead's word of 2026-11-14 ("this needs to be empty as
- * of right now; we have no published updates for the newsfeed", ADR-0077 amendment 41). An item added here gets a card. */
-type NewsItem = { when: string; about: string; title: string; text: string };
-const news: NewsItem[] = [];
-
 /** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
- * platform, the team and what is new, and the closing band. The workflow and the roadmap live on About. */
+ * platform, the team and the changelog, and the closing band. The workflow and the roadmap live on About. */
 export default function Home() {
   return (
     <main id="main">
@@ -201,27 +197,45 @@ export default function Home() {
           ))}
         </div>
       </section>
-      <section className="band is-light home-blurb home-feed" id="news">
+      {/* The changelog (ADR-0077 amendment 46): where the versions the team publishes are listed, each with its day, its
+          name and what changed in it, line by line and tagged by kind. The list is lib/changelog.ts; it is empty until a
+          version is published, and the band then says so. */}
+      <section className="band is-light home-blurb home-feed" id="changelog">
         <div className="band-head">
-          <p className="band-label">What is new</p>
+          <p className="band-label">Changelog</p>
           <div className="band-statement">
-            <h2>Lately.</h2>
-            <p>{news.length ? "News from the team, as it happens." : "Nothing posted yet. News from the team will appear here."}</p>
+            <h2>Every release, and what changed.</h2>
+            <p>{releases.length ? "Each published version, newest first." : "No releases published yet. Each version and what changed in it will be listed here."}</p>
           </div>
         </div>
-        {news.length ? (
-          <div className="home-news">
-            {news.map((item) => (
-              <article key={item.title}>
-                <p className="home-news-meta">
-                  <time>{item.when}</time>
-                  <span>{item.about}</span>
-                </p>
-                <h3>{item.title}</h3>
-                <p>{item.text}</p>
-              </article>
+        {releases.length ? (
+          <ol className="home-changelog">
+            {releases.map((release) => (
+              <li key={release.version}>
+                <div className="home-changelog-when">
+                  <time dateTime={release.date}>{releaseDay(release.date)}</time>
+                  <span className="home-changelog-version">{release.version}</span>
+                </div>
+                <div className="home-changelog-what">
+                  <h3>{release.title}</h3>
+                  {/* A kind and the change under it: a definition list. The kind's column is fixed, so every change
+                      starts on one line down the list. */}
+                  <dl>
+                    {release.changes.map((change) => (
+                      <div key={change.text}>
+                        <dt>
+                          <span className="home-changelog-kind" data-kind={change.kind}>
+                            {change.kind}
+                          </span>
+                        </dt>
+                        <dd>{change.text}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </li>
             ))}
-          </div>
+          </ol>
         ) : null}
       </section>
       <ClosingBand
