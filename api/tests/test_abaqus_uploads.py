@@ -280,7 +280,8 @@ def test_the_connector_is_handed_out_as_one_zip_the_same_each_time(local):
     assert 'filename="anisotropy-connector.zip"' in answer.headers["content-disposition"]
     with zipfile.ZipFile(io.BytesIO(answer.content)) as archive:
         assert sorted(archive.namelist()) == [f"anisotropy-connector/{name}" for name in (
-            "README.txt", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py", "bundle.py")]
+            "README.txt", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py", "anisotropy_menu.py",
+            "anisotropy_plugin.py", "bundle.py")]  # the last three with the menu in Abaqus/CAE (step 8)
         assert archive.read("anisotropy-connector/anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes()
     assert client.get(CONNECTOR_ZIP).content == answer.content and (kept.scratch / "connector" / "anisotropy-connector.zip").is_file()
     kept.command = None  # no uv: the zip already written is still handed out; a fresh process without uv says why not

@@ -1894,21 +1894,98 @@ main[tabindex="-1"]:focus {
  * no version label. */
 /* The site's pages stand on pure black, as Anduril's do (ADR-0077 amendment 23). The workspace, an app with its own header,
  * keeps the near-black its panels were drawn for. */
+/* While the home page's demo plays a beat on its stage the page cannot be scrolled (components/home/tour-driver.ts, ADR-0095
+ * amendment 7). The scroll bar goes with the overflow; the room it took is kept as padding, measured when the lock goes on,
+ * so nothing moves sideways. */
+html[data-tour-lock] {
+  overflow: hidden;
+  padding-right: var(--tour-lock-bar, 0px);
+}
 html:has(.site-header:not(.chat-site-header)) {
   --bg: #000000;
-  scroll-padding-top: 0;
+  /* The header's height on these pages, at each width it is set for (above, and 84 px from 1201 px below). Two things
+   * follow it now that the header can come back over the page (below): the room kept for it in the page while it is fixed
+   * to the window, and where the browser stops a scroll it makes itself, to a link's target or to the focus, so that the
+   * bar does not lie over what the scroll was for; 12 px more keeps the focus ring clear of it too. */
+  --site-header: 86px;
+  scroll-padding-top: calc(var(--site-header) + 12px);
+}
+@media (min-width: 1201px) {
+  html:has(.site-header:not(.chat-site-header)) {
+    --site-header: 84px;
+  }
+}
+@media (width <= 900px) {
+  html:has(.site-header:not(.chat-site-header)) {
+    --site-header: 75px;
+  }
+}
+@media (max-width: 640px) {
+  html:has(.site-header:not(.chat-site-header)) {
+    --site-header: 70px;
+  }
 }
 .site-header:not(.chat-site-header) {
   position: relative;
   background: transparent;
   border-bottom-color: transparent;
   backdrop-filter: none;
+  /* Back at the page's top the bar's black goes over the page's own, without a flash. */
+  transition: background-color 0.2s;
 }
 .site-header.is-home {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
+}
+/* The header on scroll: it leaves as the page goes down and comes back as soon as the page goes up, wherever the page is
+ * (components/header-scroll.ts decides; components/site-shell.tsx writes the answer here as `data-scroll`). At the page's
+ * top there is no `data-scroll` and nothing here applies: the header is in the page's flow and scrolls away with it. Once
+ * it has left the window it is fixed above the window's top edge, on black; a scroll up slides it down into the window as
+ * a bar over the page, and a scroll down slides it out again. "away" is put above the window without a move, since nobody
+ * saw it go; "shown" and "hidden" slide, in 240 ms on the site's ease. A visitor who asks for reduced motion gets no slide
+ * (the rule for every transition, above): the bar is there or it is not. Back at the page's top the fixed bar and the
+ * header in the flow are the same place, so nothing jumps.
+ * The bar has no filter, and no transform once it has come to rest: either would make it the frame of the Services
+ * panel's layer over the page (components/services-menu.css), which is the window's. */
+.site-header[data-scroll] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #000000;
+}
+.site-header[data-scroll="away"],
+.site-header[data-scroll="hidden"] {
+  transform: translateY(-100%);
+}
+.site-header[data-scroll="shown"],
+.site-header[data-scroll="hidden"] {
+  transition: transform 0.24s cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+/* Fixed, the header takes no room in the page. On the home page it never did, lying over the hero; on the other pages
+ * the room is kept, so nothing in the page moves when the header leaves the flow or comes back to it. */
+body:has(> .site-header[data-scroll]:not(.is-home)) {
+  padding-top: var(--site-header);
+}
+/* What stays in view near the window's top keeps clear of where the bar comes in. The Resources page's list of physics
+ * topics stood 32 px under the window's top, where the bar would lie over its first rows; it now stands where the list of
+ * materials beside it already does (app/research.css). */
+html:has(.site-header:not(.chat-site-header)) .topic-list {
+  top: calc(var(--site-header) + 12px);
+}
+/* While a stage locks the page, the scroll bar's room is padding (above), and the bar keeps clear of it. */
+html[data-tour-lock] .site-header[data-scroll] {
+  right: var(--tour-lock-bar, 0px);
+}
+/* The folded navigation hangs from the bar. The page cannot bring its last rows up under a bar that is fixed, so on a
+ * low window it scrolls inside itself. */
+@media (width <= 900px) {
+  .site-header[data-scroll] .main-nav.open {
+    max-height: calc(100dvh - 100% + 1px);
+    overflow-y: auto;
+  }
 }
 .site-header:not(.chat-site-header) .main-nav {
   color: #f4f4f4;

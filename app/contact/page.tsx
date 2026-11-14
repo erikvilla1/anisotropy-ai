@@ -32,7 +32,7 @@ function seatOf(name: string): string {
   return seat.charAt(0).toLowerCase() + seat.slice(1);
 }
 
-/** The contact page (audit of 2026-10-31, item 15; ADR-0058 amendment 4). The site is a static export, so there is no form; each
+/** The contact page (audit of 2026-10-31, item 15; ADR-0058 amendment 5). The site is a static export, so there is no form; each
  * address is plain text inside a mailto link, so it can be copied as well as clicked. */
 export default function Contact() {
   return (

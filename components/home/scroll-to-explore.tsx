@@ -3,7 +3,7 @@
 import type { MouseEvent } from "react";
 import { ArrowDown } from "lucide-react";
 
-/** "Scroll to explore" (ADR-0077 amendments 22, 24 and 32; Kai's words, kept by the founder on 2026-11-13): a small link in the
+/** "Scroll to explore" (ADR-0077 amendments 22, 24 and 50; Kai's words, kept by the founder on 2026-11-13): a small link in the
  * bottom right corner of the hero's clip, the words and then a down arrow in a square outline. It is hidden while the hero's
  * words stand and comes up once they have left (components/home/hero-outro.tsx marks the hero `data-words="gone"`; app/home.css
  * shows it then). A visitor who asked for reduced motion keeps the words and sees the link from the start. It is a link to the

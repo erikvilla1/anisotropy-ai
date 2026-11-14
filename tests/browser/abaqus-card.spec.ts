@@ -27,6 +27,7 @@ test("a finished run offers the way to Abaqus and back; a file sent is compared 
   await expect(build).toHaveAttribute("download", "UnnotchedTension_[45-0--45-90]s_build.py");
   expect(await build.getAttribute("href")).toContain(`/v1/coupon-jobs/${JOB}/files/abaqus_build?name=`);
   expect(await card(page).getByTestId("abaqus-connector").getAttribute("href")).toMatch(/\/v1\/abaqus-connector$/);
+  await expect(card(page).getByTestId("abaqus-connector-more")).toHaveText("Its README also shows how to add an Anisotropy menu to Abaqus/CAE and how to send every job as it finishes."); // step 8
   await expect(card(page)).toContainText("abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa");
   await expect(card(page)).toContainText("only you and the Anisotropy team can see it");
   await expect(card(page).getByTestId("abaqus-keys")).toHaveCount(0); // the connector's own route is closed here, so no upload key is offered

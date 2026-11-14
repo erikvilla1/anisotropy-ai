@@ -429,7 +429,7 @@ def pack(args) -> int:
 
 
 CONNECTOR_FILES = {"anisotropy_connector.py": TOOLS, "abaqus_every_output.py": TOOLS, "abaqus_extract_fields.py": TOOLS,
-                   "bundle.py": TOOLS.parent / "src" / "anisotropy_fea"}
+                   "bundle.py": TOOLS.parent / "src" / "anisotropy_fea", "anisotropy_menu.py": TOOLS, "anisotropy_plugin.py": TOOLS}
 CONNECTOR_README = """The Anisotropy connector: one command under your own Abaqus that turns a finished job into one file to send.
 
 Keep these files together in one folder. Nothing is sent anywhere unless you ask: the command writes <job>-anisotropy.zip beside your ODB.
@@ -451,6 +451,26 @@ To send the bundle as well, add  --send https://<the site>/api  to either comman
 created on the site: put the token in a file and name it with --token-file, or set ANISOTROPY_UPLOAD_TOKEN. Never put the
 token on the command line. The upload is yours alone, and the command prints whether it agrees with our run.
 Read the line it prints, "sent:" or "not sent:" with the reason: Abaqus ends with exit code 0 either way.
+
+To send every job as it finishes, leave this running in a terminal; it ends with Ctrl+C:
+
+    abaqus python anisotropy_connector.py --watch <the folder your jobs run in> --units mm-MPa --send https://<the site>/api --token-file <file>
+
+It takes a job when its .sta says the analysis completed. Jobs that had finished before it started are left alone
+(add --existing to take them too). What it did for each job is in anisotropy-watch.json in that folder, so no ODB is
+sent twice. Without --send it writes each <job>-anisotropy.zip and sends nothing. It can be ended at any moment, also by
+closing the terminal: the record is written whole each time.
+
+A menu in Abaqus/CAE (Abaqus 2024 or later): copy this whole folder into a folder named abaqus_plugins in your home
+directory (create it if it is not there) and start Abaqus/CAE again. Under Plug-ins > Anisotropy you then have
+
+    Open from Anisotropy...   builds the coupon from the build script you downloaded from a run's page
+    Send to Anisotropy...     writes the file from a finished job, with the model open in the session, and sends it
+
+A model that Open from Anisotropy built knows which coupon it is, so a file sent from the menu is compared beside your
+newest finished run of that coupon with nothing more to type.
+
+Each asks in a small box and answers in the message area under the viewport. Your .cae and your ODB are not changed.
 """
 
 
