@@ -400,6 +400,14 @@ def test_a_completed_job_of_a_model_opened_from_the_site_goes_back_to_its_run_an
     menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
     assert "no longer says the units it was built in" in capsys.readouterr().out and len(there_site.requests) == 2
 
-    monkeypatch.setattr(menu, "completed", lambda *a, **k: 1 / 0)  # whatever goes wrong is said and never raised into Abaqus
+    # whatever goes wrong is said and never raised into Abaqus, which would report the job itself as aborted (the tenth trial)
+    def stops(error):
+        def stop(*a, **k):
+            raise error
+        return stop
+    for error in (ZeroDivisionError("x"), SystemExit(2), KeyboardInterrupt()):
+        monkeypatch.setattr(menu, "completed", stops(error))
+        menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
+        assert "sending the results stopped. The job itself completed" in capsys.readouterr().out
+    monkeypatch.setattr(menu, "show", stops(OSError("no message area")))
     menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
-    assert "sending the results stopped" in capsys.readouterr().out

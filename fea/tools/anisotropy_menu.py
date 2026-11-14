@@ -383,13 +383,18 @@ def completed(job: str, mdb, folder: Path | None = None, read_job=None, poster=N
     return done
 
 
-def job_completed(jobName, messageType, data, userData) -> None:
-    """What Abaqus/CAE calls when a job completes. Nothing leaves it unsaid, and nothing it raises reaches Abaqus."""
+def job_completed(jobName, messageType, data, userData) -> None:  # noqa: N803  Abaqus's own names
+    """What Abaqus/CAE calls when a job completes. Nothing it raises may reach Abaqus: under Abaqus 2025 an exception that leaves a
+    job-message callback makes Abaqus/CAE report the job itself as aborted, though the solver completed, and the exception's text
+    is written nowhere (the tenth trial). So everything is caught here, a stop of the interpreter's own included, and said."""
     try:
         from abaqus import mdb
         completed(str(jobName), mdb)
-    except Exception:  # noqa: BLE001
-        show("Anisotropy: sending the results stopped:\n" + traceback.format_exc(), error=True)
+    except BaseException:  # noqa: BLE001
+        try:
+            show("Anisotropy: sending the results stopped. The job itself completed:\n" + traceback.format_exc(), error=True)
+        except BaseException:  # noqa: BLE001  not even the saying may reach Abaqus
+            pass
 
 
 def opened_from_the_site(facts: dict) -> None:
