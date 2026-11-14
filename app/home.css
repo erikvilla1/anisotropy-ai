@@ -726,7 +726,7 @@
 }
 .home-blurb.home-about .band-head {
   max-width: none;
-  margin: 0 0 64px;
+  margin: 0 0 28px;
   padding: 88px 32px 80px;
   background: #f3f3f4;
 }
@@ -734,6 +734,16 @@
   max-width: 880px;
   margin-left: auto;
   margin-right: auto;
+}
+.home-blurb.home-about .band-statement {
+  margin-top: 0;
+}
+/* The band's label is not in the head: it stands on the white under it, over the portraits, at their left edge
+ * (amendment 42). */
+.home-about .home-faces-label {
+  margin: 0 0 22px;
+  padding: 0 32px;
+  text-align: left;
 }
 .home-about .home-faces {
   padding: 0 32px;
@@ -743,8 +753,12 @@
     padding-bottom: 64px;
   }
   .home-blurb.home-about .band-head {
-    margin-bottom: 40px;
+    margin-bottom: 24px;
     padding: 64px 20px 56px;
+  }
+  .home-about .home-faces-label {
+    margin-bottom: 16px;
+    padding: 0 20px;
   }
   .home-about .home-faces {
     padding: 0 20px;

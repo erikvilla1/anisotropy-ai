@@ -138,7 +138,6 @@ export default function Home() {
           head stands on light grey from edge to edge and the portraits on white (ADR-0077 amendment 41, app/home.css). */}
       <section className="band is-light home-blurb home-about" id="working">
         <div className="band-head">
-          <p className="band-label">Team</p>
           <div className="band-statement">
             <h2>Five people, two seats each.</h2>
             <p>
@@ -149,6 +148,8 @@ export default function Home() {
             <p className="home-about-cohort">Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego</p>
           </div>
         </div>
+        {/* The band's label stands over the portraits, at their left edge, on the white (amendment 42). */}
+        <p className="band-label home-faces-label">Team</p>
         <div className="home-faces">
           {team.map((person) => (
             <article className="home-face" key={person.name}>

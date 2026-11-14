@@ -119,6 +119,21 @@ test("after the demo the page is white, and Mission and Services are two short b
   expect([team.left, team.right]).toEqual([0, team.wide]);
   expect(team.top).toBeLessThanOrEqual(1);
   expect(team.facesBelow).toBe(true);
+  // The band's label is not in the head: it stands on the white under it, over the portraits and at their left edge
+  // (amendment 42).
+  await expect(page.locator("#working .band-head .band-label")).toHaveCount(0);
+  await expect(page.locator("#working .home-faces-label")).toHaveText("Team");
+  const label = await page.locator("#working").evaluate((band) => {
+    const box = (selector: string) => band.querySelector(selector)!.getBoundingClientRect();
+    const mark = band.querySelector(".home-faces-label")!;
+    const range = document.createRange();
+    range.selectNodeContents(mark);
+    const words = range.getBoundingClientRect();
+    return { left: Math.round(words.left), top: words.top, bottom: words.bottom, headBottom: box(".band-head").bottom, frameTop: box(".home-face-frame").top, frameLeft: Math.round(box(".home-face-frame").left) };
+  });
+  expect(label.left).toBe(label.frameLeft);
+  expect(label.top).toBeGreaterThan(label.headBottom);
+  expect(label.bottom).toBeLessThan(label.frameTop);
   // What is new is a band on light grey (amendment 36) that is empty for now: its head alone, saying so, and no card
   // (amendment 41).
   await expect(page.locator("#news")).toHaveCSS("background-color", "rgb(243, 243, 244)");

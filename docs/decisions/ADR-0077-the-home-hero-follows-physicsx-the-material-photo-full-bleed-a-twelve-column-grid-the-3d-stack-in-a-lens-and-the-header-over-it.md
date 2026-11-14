@@ -560,3 +560,11 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server the two bands were captured at 1873 px and at 390 px and looked at. `home.spec.ts`, 7 of 7: it checks the head's grey and that it reaches both edges of the window, that the portraits lie under it on the white band, and that the feed holds no card and says nothing is posted. `npm test`: 304 tests, 303 passed, 1 skipped. UNVERIFIED: whether the one sentence in the empty band is wanted, or the band should say nothing at all.
 
+## Amendment 42, 2026-11-14 (the team band's label stands over the portraits)
+
+**Context.** The lead, with a red circle on the white strip between the grey head of amendment 41 and the first portrait, at the left: "move TEAM to where the red circle is."
+
+**Decision.** The label "Team" leaves the band's grey head and stands on the white under it, over the portraits, at their left edge. The head keeps the heading, the paragraph and the cohort's line.
+
+**Evidence.** On 2026-11-14 against the dev server the band was captured at 1873 px and looked at. `home.spec.ts`, 7 of 7: it checks that the head holds no label, and that "Team" starts at the first portrait's left edge, below the head and above the portraits. `npx tsc --noEmit` clean.
+
