@@ -113,9 +113,11 @@ test("after the demo the page is white, and Mission and Services are two short b
   const feed = page.locator("#news .home-news article");
   await expect(feed).toHaveCount(3);
   await expect(feed.first()).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  await expect(feed.locator(".home-news-meta time")).toHaveText(["November 2026", "October 2026", "October 2026"]);
-  await expect(feed.locator(".home-news-meta span")).toHaveText(["Release", "Analysis", "Workspace"]);
-  await expect(feed.locator("h3")).toHaveText(["The hosted closed beta", "Bending coupons and plates", "The studio opens on a chat"]);
+  // The cards are stand-ins for now and announce nothing (amendment 38).
+  await expect(feed.locator(".home-news-meta time")).toHaveText(["Coming soon", "Coming soon", "Coming soon"]);
+  await expect(feed.locator(".home-news-meta span")).toHaveText(["Company", "Product", "Research"]);
+  await expect(feed.locator("h3")).toHaveText(["Company news", "Product updates", "Research notes"]);
+  await expect(page.locator("#news")).not.toContainText(/closed beta|CalculiX|studio/i);
   // Mission: the label, the statement and one link, to About; the strip of four principles is gone.
   const mission = page.locator("#mission");
   await expect(mission.locator(".band-label")).toHaveText("Mission");

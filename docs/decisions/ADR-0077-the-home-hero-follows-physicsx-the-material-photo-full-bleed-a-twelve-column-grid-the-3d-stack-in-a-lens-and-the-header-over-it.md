@@ -519,3 +519,11 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server: screenshots at 1440 px and 390 px were looked at. `home.spec.ts` checks which side the words and the picture stand on, the corners and the picture's file, and that the names carry no arrow and no link to About follows the cards. `home.spec.ts`, `shell.spec.ts`, `expansion.spec.ts`, `intro.spec.ts`, `demo.spec.ts` and the overview case of `portfolio.spec.ts`: 35 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 300 tests, 299 passed, 1 skipped. UNVERIFIED: which pictures will replace the stand-ins.
 
+
+## Amendment 38, 2026-11-14 (the feed's cards are stand-ins: no official items)
+
+**Context.** The lead, on the feed of amendment 36: "there shouldnt be any official items in the what is new newsletter here".
+
+**Decision.** The three items that reported the closed beta, the bending coupons and the chat are taken out of the home page. In their place stand three cards that announce nothing: "Company news", "Product updates" and "Research notes", each marked "Coming soon" with one line saying what will be posted there. The band's sentence reads "News from the team, as it happens." The changelog still records the three changes.
+
+**Evidence.** `home.spec.ts` checks the three stand-ins and that the band names none of the three earlier items; with the overview case of `portfolio.spec.ts`: 8 of 8 against the dev server on 2026-11-14. `npm test`: 300 tests, 299 passed, 1 skipped. UNVERIFIED: whether the lead wanted stand-ins or an empty band; who will decide what is posted there.

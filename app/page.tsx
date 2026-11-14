@@ -21,26 +21,13 @@ const heroVideoHtml =
   '<video autoplay muted loop playsinline preload="auto" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
   '<source src="/media/hero.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)"></video>';
 
-/** What shipped lately, in words a visitor can check against the changelog; no number without a record behind it. */
+/** The feed's cards. They are stand-ins for now, at the lead's word of 2026-11-14 ("there shouldnt be any official items in the
+ * what is new newsletter here", ADR-0077 amendment 38): nothing in them announces anything. Real items replace them when the
+ * team has some to post. */
 const news = [
-  {
-    when: "November 2026",
-    about: "Release",
-    title: "The hosted closed beta",
-    text: "The studio runs at anisotropy.dev for an invite list, with its outputs kept and every run recorded. Accounts for everyone else are not open yet.",
-  },
-  {
-    when: "October 2026",
-    about: "Analysis",
-    title: "Bending coupons and plates",
-    text: "Three- and four-point bending in our own shell element, checked against CalculiX, and a plate kind held and loaded on regions you name.",
-  },
-  {
-    when: "October 2026",
-    about: "Workspace",
-    title: "The studio opens on a chat",
-    text: "Describe a coupon test in a sentence; the chat fills the same rows the form holds, checks the setup and runs it.",
-  },
+  { when: "Coming soon", about: "Company", title: "Company news", text: "News from the team will be posted here." },
+  { when: "Coming soon", about: "Product", title: "Product updates", text: "What changes in the product will be posted here." },
+  { when: "Coming soon", about: "Research", title: "Research notes", text: "Notes on methods and test data will be posted here." },
 ];
 
 /** LinkedIn's "in", as letters only: the round ground is the badge's own (app/home.css, .home-face-in). */
@@ -234,10 +221,7 @@ export default function Home() {
           <p className="band-label">What is new</p>
           <div className="band-statement">
             <h2>Lately.</h2>
-            <p>
-              Three recent changes, as the changelog records them. What was validated against what, and what is still
-              planned, is written there too.
-            </p>
+            <p>News from the team, as it happens.</p>
           </div>
         </div>
         <div className="home-news">
