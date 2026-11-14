@@ -116,7 +116,8 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
       if (checkedKey.current !== key && checks.current === checksBefore) { setChecked(answer); checkedKey.current = key; }
     } catch (error) {
       if (controller.signal.aborted) return;
-      setProblem(error instanceof StudioError ? `The live preview failed: ${error.message}` : "The live preview failed.");
+      // the message says what happened and what to do already; no prefix doubles it (audit fea-run-48)
+      setProblem(error instanceof StudioError ? error.message : "The live preview is not available right now. Your inputs are kept; try again.");
     } finally {
       if (liveAbort.current === controller) { liveAbort.current = null; setLiving(false); }
     }
@@ -148,7 +149,7 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
     if (!job || !apiBaseUrl || !isActive(job.state)) return;
     const timer = window.setTimeout(async () => {
       try { setJob(await getJob(apiBaseUrl, job.job_id)); setProblem(""); }
-      catch (error) { setProblem(error instanceof StudioError ? error.message : "The job's status could not be read."); retry(); }
+      catch (error) { setProblem(error instanceof StudioError ? error.message : "The analysis's progress could not be read. Reload the page to try again."); retry(); }
     }, POLL_MS);
     return () => window.clearTimeout(timer);
   }, [job, apiBaseUrl, tick, retry]);
@@ -169,7 +170,7 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
         if (readFor.current !== job.job_id) { readFor.current = job.job_id; setLoadedJob(job.job_id); } // once per job, after a read that succeeded
       } catch (error) {
         if (controller.signal.aborted) return;
-        setProblem(error instanceof StudioError ? error.message : "The results could not be read.");
+        setProblem(error instanceof StudioError ? error.message : "The results could not be read. Reload the page; if it happens again, contact us.");
         fieldsLoaded.current = null; // not read: the next tick tries again
         retry();
       }

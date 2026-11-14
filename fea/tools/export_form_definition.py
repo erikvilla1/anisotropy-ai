@@ -22,7 +22,7 @@ import json
 import sys
 from pathlib import Path
 
-from anisotropy_fea import __version__, enabled, paths
+from anisotropy_fea import __version__, enabled, paths, tension_input
 from anisotropy_fea.intake import (BLOCKS, CRITERION_WORDS, FORM_VERSION, GLOSSARY, HOW_TO, LIBRARY_COLUMNS, TESTS, UNITS, in_stated, library_records,
                                    library_row)
 from anisotropy_fea.spec import AREA_REGIONS, EDGE_REGIONS, TOW_TEST, test_name
@@ -107,6 +107,8 @@ def definition() -> dict:
                      for group, terms in GLOSSARY],
         "tests": dict(TESTS),
         "enabled": enabled.definition(),  # the tests the studio offers until the first workflow is validated (ADR-0089)
+        # the load the tension screen's coupon is given when the engineer gives none (ADR-0090), shown before the check (ADR-0091 amendment 2)
+        "tension": {"control": "displacement", "value": tension_input.PULL_MM, "units": tension_input.UNITS},
         "criteria": list(CRITERION_WORDS),
         "library": library,
         "library_constants": library_constants(),

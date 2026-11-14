@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FolderOpen, Plus } from "lucide-react";
 import { mergeProjects, newLaminateProject, newProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
@@ -27,7 +26,7 @@ function about(project: Project, allTests: boolean): string {
   if (project.kind === "fea") {
     const test = project.form.test;
     if (!test) return "–";
-    return isTestEnabled(test, allTests) ? testTitle(test) : `${testTitle(test)}: not available yet`;
+    return isTestEnabled(test, allTests) ? testTitle(test) : `${testTitle(test)}: not offered yet`;
   }
   const layup = problemLines(project.draft).find(([k]) => k === "Layup")?.[1];
   return layup || "–";
@@ -38,14 +37,18 @@ function materialOf(project: Project): string {
   return problemLines(project.draft).find(([k]) => k === "Material")?.[1] || "–";
 }
 
-const KIND_WORD: Record<Project["kind"], string> = { fea: "Coupon FEA", laminate: "Laminate response" };
 const ROUTE: Record<Project["kind"], WorkspaceId> = { fea: "fea", laminate: "laminate" };
+/** A project's kind is its workspace's one name (audit fea-screens-10). */
+const kindWord = (kind: Project["kind"]): string => workspace(ROUTE[kind]).title;
 
-type Source = "checking" | "server" | "browser";
+/** Where the list comes from: loading, the account and this browser, this browser alone (the service keeps no projects), or this browser
+ * because the saved projects could not be loaded (an outage, audit fea-screens-3). */
+type Source = "checking" | "server" | "browser" | "down";
 const SOURCE_WORDS: Record<Source, string> = {
-  checking: "Reading the projects kept on the server…",
-  server: "Kept on the server under your sign-in, and in this browser; a project from another machine appears here too.",
-  browser: "Kept in this browser only: this API keeps no projects (run records are off), so clearing the site's data loses them.",
+  checking: "Loading your projects…",
+  server: "Saved to your account and in this browser.",
+  browser: "Projects are saved in this browser only; clearing its site data removes them.",
+  down: "Saved projects could not be loaded. Showing the ones in this browser. Reload to try again.",
 };
 
 /** `/workspace` (ADR-0062): the projects of both kinds, the last changed first, and one tile per kind of work. The list is this browser's
@@ -66,7 +69,12 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
       writeProjects(merged, browserStorage());
       setProjects(merged);
       setSource("server");
-    }).catch((error) => { if (!controller.signal.aborted) setSource("browser"); if (!noProjectStore(error)) console.warn("the projects on the server could not be read", error); });
+    }).catch((error) => {
+      if (controller.signal.aborted) return;
+      const keepsNone = noProjectStore(error);
+      setSource(keepsNone ? "browser" : "down");
+      if (!keepsNone) console.warn("the projects on the server could not be read", error);
+    });
     return () => controller.abort("replaced");
   }, [apiBaseUrl]);
 
@@ -84,29 +92,23 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
     <div className="ws-chooser">
       <div className="studio-heading">
         <span className="eyebrow">WORKSPACE</span>
-        <h1>What are we working out?</h1>
-        <p>A coupon test by finite elements, a laminate under loads, or, later, geometry from a CAD file. Every number comes from the engine; the pages only ask and show.</p>
+        <h1>Start a project</h1>
+        <p>Set up and solve a coupon test, or work out a laminate&apos;s response to loads.</p>
       </div>
       <div className="ws-tiles" data-testid="workspace-tiles">
         {WORKSPACES.map((w) => (
-          w.status === "built" ? (
-            <button type="button" key={w.id} className="ws-tile" data-workspace={w.id} data-status={w.status} onClick={() => create(w.id)}>
-              <span className="eyebrow">{w.eyebrow}</span>
-              <h3><Plus size={15} /> New {w.title.toLowerCase()} project</h3>
-              <p>{w.detail}</p>
-            </button>
-          ) : (
-            <Link key={w.id} className="ws-tile" href={w.href} data-workspace={w.id} data-status={w.status}>
-              <span className="eyebrow">{w.eyebrow} · PLANNED</span>
-              <h3>{w.title}</h3>
-              <p>{w.detail}</p>
-            </Link>
-          )
+          <button type="button" key={w.id} className="ws-tile" data-workspace={w.id} onClick={() => create(w.id)}>
+            <span className="eyebrow">{w.eyebrow}</span>
+            <h3><Plus size={15} /> New {w.title} project</h3>
+            <p>{w.detail}</p>
+          </button>
         ))}
       </div>
       <section className="studio-panel ws-projects" data-testid="workspace-projects" data-source={source}>
         <h3><FolderOpen size={15} /> Your projects</h3>
-        <p className="studio-muted" data-testid="projects-source">{SOURCE_WORDS[source]}</p>
+        {source === "down"
+          ? <p className="studio-alert" role="status" data-testid="projects-source">{SOURCE_WORDS.down}</p>
+          : <p className="studio-muted" data-testid="projects-source">{SOURCE_WORDS[source]}</p>}
         {projects.length ? (
           <table className="studio-table">
             <thead><tr><th>Project</th><th>Kind</th><th>About</th><th>Material</th><th>Last change</th><th></th></tr></thead>
@@ -114,7 +116,7 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
               {projects.map((p) => (
                 <tr key={p.id} data-project={p.id} data-kind={p.kind}>
                   <td>{projectTitle(p)}</td>
-                  <td>{KIND_WORD[p.kind]}</td>
+                  <td>{kindWord(p.kind)}</td>
                   <td>{about(p, allTests)}</td>
                   <td>{materialOf(p)}</td>
                   <td>{when(p.updated)}</td>

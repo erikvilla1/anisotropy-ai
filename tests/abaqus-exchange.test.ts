@@ -148,5 +148,5 @@ test("the command that sends from Abaqus names the key's file and never the key"
   assert.doesNotMatch(command, /anisotropy_upload_/);
   const odd = connectorCommand({ apiAddress: "http://localhost:8000", jobId: "j", coupon: "a coupon; rm -rf", units: "in-psi" });
   assert.equal(odd, "abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa --send http://localhost:8000 --token-file anisotropy-key.txt --our-run j"); // a name that is not plain is left out; a deck of ours is in mm-MPa or m-Pa
-  assert.equal(downloadName("abaqus_build", { standard: "ASTM D3039/D3039M-17", layup: "[45/0/-45/90]s" }), "D3039_[45-0--45-90]s_build.py");
+  assert.equal(downloadName("abaqus_build", { standard: "ASTM D3039/D3039M-17", layup: "[45/0/-45/90]s" }), "D3039_[45,0,-45,90]s_build.py"); // plies parted by commas (audit fea-run-39)
 });

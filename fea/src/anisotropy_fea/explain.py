@@ -159,19 +159,22 @@ def _face(face: str | None) -> str:
 
 
 def result_sentences(facts: dict[str, Any]) -> list[str]:
-    """What the result says, one sentence at a time, every number quoted from the facts."""
-    out = [f"{facts['designation']}, {facts['test']}, under a {facts['control']} of {number(facts['applied'])} {facts['applied_unit']} "
-           f"{facts['applied_direction']}: {facts['reaction_set']} carries {number(facts['reaction'])} {facts['force_unit']}, {facts['sense']}.",
-           f"The largest displacement is {number(facts['max_displacement'])} {facts['length_unit']} at node {facts['max_displacement_node']} "
-           f"({number(facts['max_displacement_x'])}, {number(facts['max_displacement_y'])} {facts['length_unit']}), mostly "
-           f"{AXIS_WORDS.get(facts['max_displacement_axis'], facts['max_displacement_axis'])}.",
-           ply_stress_sentence(facts)]
+    """What the result says, one sentence at a time, every number quoted from the facts. The verdict comes first, by each criterion where
+    the laminate fails; the load, the largest displacement and the ply stresses, which the page's summary already shows, follow. The
+    coupon is named in the engineer's words, its test and layup, never its record's name (ADR-0091 amendment 2)."""
+    test = facts["test"]
+    named = ", ".join(word for word in (test[:1].upper() + test[1:], facts["layup"]) if word)
+    context = [f"{named + ', under' if named else 'Under'} a {facts['control']} of {number(facts['applied'])} {facts['applied_unit']} "
+               f"{facts['applied_direction']}: {facts['reaction_set']} carries {number(facts['reaction'])} {facts['force_unit']}, {facts['sense']}.",
+               f"The largest displacement is {number(facts['max_displacement'])} {facts['length_unit']} at node {facts['max_displacement_node']} "
+               f"({number(facts['max_displacement_x'])}, {number(facts['max_displacement_y'])} {facts['length_unit']}), mostly "
+               f"{AXIS_WORDS.get(facts['max_displacement_axis'], facts['max_displacement_axis'])}.",
+               ply_stress_sentence(facts)]
     if facts["isotropic"]:
-        out.append("The material is isotropic: its yield and failure are not modelled yet, so no failure is reported.")
-        return out + method_sentences(facts)
+        return ["The material is isotropic: its yield and failure are not modelled yet, so no failure is reported.", *context, *method_sentences(facts)]
     if not facts["criteria"]:
-        out.append("No failure criterion was asked for, so first-ply failure is not reported.")
-        return out + method_sentences(facts)
+        return ["No failure criterion was asked for, so first-ply failure is not reported.", *context, *method_sentences(facts)]
+    out: list[str] = []
     ordered = sorted(facts["criteria"], key=lambda c: facts[f"{c}_factor"])
     L = facts["length_unit"]
     loads = "every applied load" if facts.get("every_load") else "the applied loading"
@@ -207,7 +210,7 @@ def result_sentences(facts: dict[str, Any]) -> list[str]:
                    f"{number(facts['outside_factor'])} times {loads}, at element {facts['outside_element']}, {facts['outside_place']}"
                    + (": the clamped edge of a grip, where the stress grows as the mesh is refined, so it is reported apart from the answer."
                       if facts["outside_touches_grip"] else "."))
-    return out + method_sentences(facts)
+    return out + context + method_sentences(facts)
 
 
 def ply_stress_sentence(facts: dict[str, Any]) -> str:

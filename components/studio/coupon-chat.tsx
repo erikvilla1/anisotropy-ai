@@ -22,9 +22,9 @@ import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
 import { TOW_TEST } from "@/lib/studio-tow";
-import { hiddenReason, isTestEnabled, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
+import { ENABLED, hiddenReason, isTestEnabled, isUnsymmetricLayup, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
 import { tensionValues } from "@/lib/tension-screen";
-import { checkText, runHeadline, runProblem, verificationOf } from "@/lib/studio-copy";
+import { ANALYSIS_UNAVAILABLE, checkText, runHeadline, runProblem, setWords, stepOfStage, verificationOf } from "@/lib/studio-copy";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
@@ -206,7 +206,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     void allCouponTests(apiBaseUrl).then((all) => {
       if (all) { proceedWith(next); return; }
       setActive(null);
-      add({ role: "assistant", kind: "text", tone: "problem", title: "Not available yet",
+      add({ role: "assistant", kind: "text", tone: "problem", title: "Not offered yet",
         body: <><p data-testid="chat-not-available">{hidden} Your inputs are kept.</p>
           <Chips><button type="button" onClick={loadExample}><FlaskConical size={14} /> Start from the IM7/8552 tension example</button>
             <button type="button" onClick={() => ask("test")}>Pick the test</button></Chips></> });
@@ -398,7 +398,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const understood = understoodWithout(read.understood, dropped);
     const note = read.note;
     if (hiddenNotes.length) {
-      add(...you, { role: "assistant", kind: "text", tone: "problem", title: "Not available yet",
+      add(...you, { role: "assistant", kind: "text", tone: "problem", title: "Not offered yet",
         body: <ul className="chat-understood" data-testid="chat-not-available">{hiddenNotes.map((n) => <li key={n}>{n}</li>)}</ul> });
       if (!understood.length) return;
       you.length = 0;
@@ -459,7 +459,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
               </button>
             ) : (
               <button type="button" key={c.name} disabled data-testid="coupon-not-available">
-                <strong>{c.name}</strong><span>{c.test}: not available yet</span>
+                <strong>{c.name}</strong><span>{c.test}: not offered yet</span>
               </button>
             ))}
           </div>
@@ -508,7 +508,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
                   <Layers3 size={14} /> {c.title} <code>{c.notation}</code></button>;
               })}
             </Chips>
-            <LayupInput needThickness={needThickness} form={form} onApply={(notation, rows) => answer(notation, rows)} />
+            <LayupInput needThickness={needThickness} form={form} allTests={allTests} onApply={(notation, rows) => answer(notation, rows)} />
             {!needThickness ? <p className="chat-note">Ply thickness {printed(libraryThickness(form))} {lab.length} (library).</p> : null}
             <Chips><PanelLink id="layup">Ply by ply, under Layup and material</PanelLink></Chips>
           </>
@@ -556,7 +556,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const stepsFor = (rows: string[]) => [...new Set(rows.map((label) => stepOfKey(fieldByLabel[label]?.key ?? "")))];
     return (
       <div data-testid="chat-check" data-state={result.state}>
-        <h4>{result.state === "ready" ? <>Ready to run{result.designation ? <> <code>{result.designation}</code></> : null}</> : `${blocking.length} thing${blocking.length === 1 ? "" : "s"} to fix before running`}</h4>
+        <h4>{result.state === "ready" ? "Ready to run" : `${blocking.length} thing${blocking.length === 1 ? "" : "s"} to fix before running`}</h4>
         <p>{passed} of {items.length} checks passed.</p>
         {blocking.length ? (
           // each item takes its rows in place on the latest check (ADR-0062 amendment 2); its link still opens the panel that holds them
@@ -596,7 +596,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       <div data-testid="chat-result">
         <h4>Results</h4>
         <div className="chat-stats">
-          <div><span>Reaction</span><strong data-testid="chat-reaction">{printed(Math.abs(s.reaction.value))} {lab.force}</strong><small>{s.reaction.sense}, {s.reaction.set}</small></div>
+          <div><span>Reaction</span><strong data-testid="chat-reaction">{printed(Math.abs(s.reaction.value))} {lab.force}</strong><small>{s.reaction.sense}, {setWords(s.reaction.set)}</small></div>
           <div><span>Largest displacement</span><strong>{printed(s.max_displacement.value)} {lab.length}</strong><small>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}</small></div>
           {earliest ? (
             <div className={earliest.factor < 1 ? "chat-stat-bad" : undefined}><span>First-ply failure</span><strong>R = {printed(earliest.factor)}</strong>
@@ -605,7 +605,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         </div>
         {earliest?.touches_grip ? <p className="chat-note">The first failure is at a grip edge.</p> : null}
         {check ? <p className={check.verified ? "chat-ok" : "chat-note"} data-testid="chat-result-line">{check.verified ? <Check size={13} /> : null} {check.line}</p> : null}
-        {job && job.state !== "done" ? <p className="chat-note">{runHeadline(job)}{job.state === "running" && job.result ? ". The report follows." : "."}</p> : null}
+        {job && job.state !== "done" ? <p className="chat-note">{runHeadline(job)}{job.state !== "running" ? "."
+          : stepOfStage(job.stage) === "report" ? "…" : job.result ? ". The report follows." : "…"}</p> : null}
         <Chips>
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("loading")}>Change the load</button>
@@ -654,7 +655,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {entries.map((e) => render(e, latestCheck))}
         {reading ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
         {checking ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing">Checking the setup…</p></div></div> : null}
-        {problem ? <p className="studio-alert" role="alert">{problem}</p> : null}
+        {/* on the tension screen the rail says an outage, once (audit fea-run-48); every other problem is said here */}
+        {problem && (allTests || problem !== ANALYSIS_UNAVAILABLE) ? <p className="studio-alert" role="alert">{problem}</p> : null}
       </div>
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
@@ -690,7 +692,7 @@ export function CouponSpec({ form, fallback = {} }: { form: StudioForm; fallback
   );
 }
 
-function LayupInput({ needThickness, form, onApply }: { needThickness: boolean; form: StudioForm; onApply: (notation: string, rows: StudioForm) => void }) {
+function LayupInput({ needThickness, form, allTests, onApply }: { needThickness: boolean; form: StudioForm; allTests: boolean; onApply: (notation: string, rows: StudioForm) => void }) {
   const length = unitLabels(unitsOf(form)).length;
   const [text, setText] = useState(() => layupNotation(form));
   const [thickness, setThickness] = useState(form.ply_thickness ?? "");
@@ -700,6 +702,8 @@ function LayupInput({ needThickness, form, onApply }: { needThickness: boolean; 
       e.preventDefault();
       const layup = parseLayup(text);
       if (!layup) { setError("Use the form [45/0/-45/90]s, [0/90]2s or [±45]2s (up to 16 plies)."); return; }
+      // a layup that bends as it is pulled waits while the list is closed, in the setup check's words (ADR-0089 amendment 4, audit repository-2)
+      if (!allTests && isUnsymmetricLayup(layup)) { setError(ENABLED.unsymmetric ?? "Use a layup that reads the same from both faces."); return; }
       if (needThickness && !thickness.trim()) { setError("Enter the cured ply thickness too."); return; }
       onApply(text.replace(/\s+/g, ""), { ...layupRows(layup), ...(needThickness ? { ply_thickness: thickness.trim() } : { ply_thickness: "" }) });
     }}>

@@ -144,13 +144,18 @@ def test_every_number_in_a_sentence_is_a_fact(data):
     for sentence in sentences:
         for token in numbers_in(sentence):
             assert token in printed or token.lstrip("-+") in printed, (token, sentence)
-    assert sentences[0].startswith("IM7-UNT-L1, unnotched tension, under a displacement of 1 mm along the coupon: the top grip carries")
-    assert "The largest displacement is" in sentences[1]
+    # the verdict leads; the load, the displacement and the ply stresses, which the page's summary shows, follow (ADR-0091 amendment 2)
+    assert sentences[0].startswith("By the ") and " criterion the laminate " in sentences[0]
+    loading = next(i for i, s in enumerate(sentences) if "under a displacement of 1 mm along the coupon: the top grip carries" in s)
+    assert sentences[loading].startswith("Unnotched tension, under a displacement") or sentences[loading].startswith("Unnotched tension, [")
+    assert not any("IM7-UNT-L1" in s for s in sentences)  # the record's name stays out of the words
+    assert "The largest displacement is" in sentences[loading + 1]
     # the ply stresses are said with their symbols, not the CAE names a viewer's global S11 collides with (ADR-0066), and no ply von Mises;
     # in the gauge section, tension and compression apart (ADR-0085)
-    assert sentences[2].startswith("In the gauge section, each ply in its own fibre axes: the largest tension along the fibres (sigma_1) is")
-    assert "the largest compression along the fibres (sigma_1)" in sentences[2] and "the largest in-plane shear (tau_12)" in sentences[2]
-    assert "in the ply's axes" in sentences[2] and "S11 =" not in sentences[2] and "von Mises" not in sentences[2] and "max_mises" not in facts
+    ply = sentences[loading + 2]
+    assert ply.startswith("In the gauge section, each ply in its own fibre axes: the largest tension along the fibres (sigma_1) is")
+    assert "the largest compression along the fibres (sigma_1)" in ply and "the largest in-plane shear (tau_12)" in ply
+    assert "in the ply's axes" in ply and "S11 =" not in ply and "von Mises" not in ply and "max_mises" not in facts
     assert any("criterion the laminate" in s and "at the applied loading, in the gauge section" in s for s in sentences)
     assert any(s.startswith("The earliest of the criteria is") for s in sentences)
     assert any(MODE_WORDS[facts[f"{c}_mode"]] in s for c in facts["criteria"] for s in sentences)
@@ -193,7 +198,8 @@ def test_without_criteria_the_explanation_says_so(solved):
     deck, solution = solved
     none = field_data(deck, solution, UNITS, criteria=())
     out = explanation(none["summary"], {}, UNITS, none["labels"])
-    assert out["writer"] == "template" and out["sentences"][-1] == "No failure criterion was asked for, so first-ply failure is not reported."
+    assert out["writer"] == "template" and out["sentences"][0] == "No failure criterion was asked for, so first-ply failure is not reported."
+    assert out["sentences"][1].startswith("Under a displacement")  # no test or layup named: the sentence opens on the load
     assert out["facts"]["designation"] == "the coupon" and out["setup_sentences"] == []
 
 

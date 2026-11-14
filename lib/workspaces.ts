@@ -1,10 +1,10 @@
 /** The workspaces (ADR-0062): one per kind of work, each a tile on `/workspace` and a page of its own with the panels and the API endpoint it
- * needs. The chat's tool list (`chat-tools.ts`) names the same two built kinds; a new capability is one entry here. Nothing on a tile claims
- * more than the repository backs (ADR-0058): CAD is a placeholder until geometry from a file exists. */
+ * needs. The chat's tool list (`chat-tools.ts`) names the same two kinds; a new capability is one entry here. Each title is the workspace's
+ * one name, written the same on its tile, its header, its project rows and the assistant (audit fea-screens-10). CAD is not a workspace
+ * until geometry from a file exists (decision D5, ADR-0091 amendment 2). */
 import { chatTool } from "./chat-tools";
 
-export type WorkspaceId = "fea" | "laminate" | "cad";
-export type WorkspaceStatus = "built" | "planned";
+export type WorkspaceId = "fea" | "laminate";
 
 export type Workspace = {
   id: WorkspaceId;
@@ -13,18 +13,13 @@ export type Workspace = {
   /** One line under the title: what goes in and what comes out. */
   detail: string;
   href: string;
-  status: WorkspaceStatus;
 };
 
 export const WORKSPACE_ROOT = "/workspace";
 
 export const WORKSPACES: readonly Workspace[] = [
-  { id: "fea", title: "Coupon FEA", eyebrow: "FINITE ELEMENTS", detail: chatTool("coupon").detail, href: `${WORKSPACE_ROOT}/fea`, status: "built" },
-  { id: "laminate", title: chatTool("laminate").title, eyebrow: "LAMINATE", detail: chatTool("laminate").detail, href: `${WORKSPACE_ROOT}/laminate`, status: "built" },
-  {
-    id: "cad", title: "CAD", eyebrow: "GEOMETRY", status: "planned", href: `${WORKSPACE_ROOT}/cad`,
-    detail: "geometry from a CAD file (STEP, IGES or STL) viewed and meshed here; today a coupon's geometry is the few rows of the FEA workspace, and a CAD file to take elsewhere is planned",
-  },
+  { id: "fea", title: chatTool("coupon").title, eyebrow: "FINITE ELEMENTS", detail: chatTool("coupon").detail, href: `${WORKSPACE_ROOT}/fea` },
+  { id: "laminate", title: chatTool("laminate").title, eyebrow: "LAMINATE", detail: chatTool("laminate").detail, href: `${WORKSPACE_ROOT}/laminate` },
 ];
 
 export function workspace(id: WorkspaceId): Workspace {
