@@ -212,6 +212,31 @@ export async function cancelUploadKey(apiBase: string, id: string): Promise<Uplo
   return readUploadKey(await ask(`${base(apiBase)}${KEYS}/${encodeURIComponent(id)}`, { method: "DELETE", headers: actor }, "cancelling the upload key"));
 }
 
+// ----------------------------------------------------------------------------------------------------------------------- this PC
+
+const PAIR_CODE = /^anisotropy_pair_[A-Za-z0-9_-]{43}$/;
+const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** A one-time code that connects the user's PC to their account (ADR-0094 amendment 1): good for a few minutes and one use. The page
+ * never shows it: it goes into the link the PC's helper opens. */
+export async function createPairingCode(apiBase: string): Promise<{ code: string; minutes: number }> {
+  const payload = await ask(`${base(apiBase)}/v1/pairing-codes`, { method: "POST", headers: actor }, "connecting this PC");
+  if (!isObject(payload) || !isText(payload.code) || !PAIR_CODE.test(payload.code) || !finite(payload.minutes)) throw new StudioError("The code to connect this PC has an unexpected shape.");
+  return { code: payload.code, minutes: payload.minutes };
+}
+
+/** The link that connects this PC: the code and the address the PC will send to, which its helper shows before anything is connected. */
+export const pairLink = (code: string, apiAddress: string): string => `anisotropy://pair?code=${code}&site=${encodeURIComponent(base(apiAddress))}`;
+
+/** The link that opens a run in Abaqus/CAE on this PC; null for an id that is not a run's. The link carries the run and nothing else. */
+export const openLink = (jobId: string): string | null => (RUN_ID.test(jobId) ? `anisotropy://open?run=${jobId}` : null);
+
+/** Hand a link of ours to the PC: the browser asks its user, then starts the helper the setup registered. A PC without the setup does
+ * nothing, and the page cannot tell, so the card says what to do when nothing starts. */
+export function openOnThisPc(link: string): void {
+  if (link.startsWith("anisotropy://")) window.open(link, "_self");
+}
+
 // ----------------------------------------------------------------------------------------------------------------------- the words
 
 /** A text of the fea package or the API, shown on the card when it names nothing the card may not (the card may name the user's own
