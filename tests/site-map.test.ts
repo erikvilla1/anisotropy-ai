@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { findService, serviceHref, services, statusLabel } from "../lib/services";
-import { SERVICES_IN_HEADER, primaryNav, servicesNav, siteNav } from "../lib/site-nav";
+import { SERVICES_PANEL_IN_HEADER, primaryNav, servicesNav, siteNav } from "../lib/site-nav";
 
 // The site map of ADR-0058: five services, each with a page, and a header without Calculator or Studio.
 
@@ -44,10 +44,7 @@ test("the site's navigation is About, Industries, Resources, Services and Contac
   for (const item of siteNav) assert.ok(existsSync(join(process.cwd(), "app", item.href.slice(1), "page.tsx")), `${item.href} has no page`);
 });
 
-test("the header shows the same items, without Services while it is hidden (ADR-0058 amendment 4)", () => {
-  assert.deepEqual(
-    primaryNav.map((item) => item.label),
-    SERVICES_IN_HEADER ? ["About", "Industries", "Resources", "Services", "Contact us"] : ["About", "Industries", "Resources", "Contact us"],
-  );
-  assert.equal(primaryNav.some((item) => item.children), SERVICES_IN_HEADER);
+test("the header shows the same items, Services as a plain link while its panel is hidden (ADR-0058 amendment 4)", () => {
+  assert.deepEqual(primaryNav.map((item) => [item.label, item.href]), siteNav.map((item) => [item.label, item.href]));
+  assert.equal(primaryNav.some((item) => item.children), SERVICES_PANEL_IN_HEADER);
 });

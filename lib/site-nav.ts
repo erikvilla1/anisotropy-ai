@@ -26,12 +26,15 @@ export const siteNav: readonly NavItem[] = [
   { label: "Contact us", href: "/contact" },
 ];
 
-/** Whether the header shows Services and its panel. Off for now, at the lead's request of 2026-11-13 (ADR-0058 amendment 4):
- * the pages, the footer's list and the panel's code stay, and `true` brings the item back at every width. */
-export const SERVICES_IN_HEADER: boolean = false;
+/** Whether the header's Services item opens a panel of its five pages: the plus beside it, and under 1201 px the five links
+ * under it in the folded menu. Off for now, at the lead's request of 2026-11-13 (ADR-0058 amendment 4): Services is a plain
+ * link to its page. The pages, the footer's list and the panel's code stay, and `true` brings the panel back at every width. */
+export const SERVICES_PANEL_IN_HEADER: boolean = false;
 
-/** The header's items: the site's pages, without Services while it is hidden. */
-export const primaryNav: readonly NavItem[] = siteNav.filter((item) => SERVICES_IN_HEADER || item !== servicesNav);
+/** The header's items: the site's pages, Services without its children while its panel is hidden. */
+export const primaryNav: readonly NavItem[] = siteNav.map((item) =>
+  item.children && !SERVICES_PANEL_IN_HEADER ? { label: item.label, href: item.href } : item,
+);
 
 /** The old addresses that move to the workspace (ADR-0058 amendments 1 and 2), the same four as `MOVED_PAGES` in worker/routing.ts. */
 export const MOVED_ADDRESSES: readonly string[] = ["/chat", "/chat/view", "/studio", "/studio/view"];

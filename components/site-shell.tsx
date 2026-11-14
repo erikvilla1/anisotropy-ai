@@ -102,7 +102,8 @@ export function SiteHeader() {
             <Link
               href={item.href}
               key={item.href}
-              aria-current={pathname === item.href ? "page" : undefined}
+              // On a page under the link's own, such as a service's, the link marks the section, as the Services panel's link does.
+              aria-current={pathname === item.href ? "page" : pathname.startsWith(`${item.href}/`) ? "true" : undefined}
               onClick={close}
             >
               {item.label}
@@ -131,7 +132,7 @@ function backToTop(event: MouseEvent<HTMLAnchorElement>) {
 }
 
 /** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and the tagline in the left half, and the site's
- * navigation (`siteNav` in `lib/site-nav.ts`, Services included while the header hides it) as columns of links from the halfway line: the plain pages and the workspace in the first
+ * navigation (`siteNav` in `lib/site-nav.ts`, Services with its five pages, also while the header hides its panel) as columns of links from the halfway line: the plain pages and the workspace in the first
  * column, then each item with children as a column of its own under its landing page. Under a rule, the copyright line, the
  * release stage and the way back to the top, on the same columns. Absent in the workspace, which is an app. The tagline and the
  * stage are the founder's choice of 2026-11-12 (ADR-0077 amendment 16). */
