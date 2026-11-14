@@ -1,9 +1,12 @@
 /** The example wing the home page's product demo shows (ADR-0098): its parts, the mesh that was solved and the solver's answer,
  * written by scripts/demo-wing.py into lib/demo-wing.json. Nothing here computes a result: the mesh and the numbers are the
- * record's, picked out and worded. The wing is an example made for the demo, not a design of ours or of anyone's. */
+ * record's, picked out and worded. The wing is an example made for the demo, not a design of ours or of anyone's. Its skeleton,
+ * two spars with caps and a row of ribs, is laminate and is what was analysed; over it lies a clear film that is drawn only
+ * (amendment 11). */
 import record from "./demo-wing.json";
 
-export type WingPart = { id: string; name: string; layup: string; angles: number[]; first: number; count: number };
+/** A part of the wing. A `cover` is the film: it has no plies, `layup` says what it is, and it is not analysed. */
+export type WingPart = { id: string; name: string; layup: string; angles: number[]; first: number; count: number; cover?: boolean };
 export type WingField = { key: string; label: string; unit: string; min: number; max: number; values: number[] };
 export type WingSolve = {
   solver: string; recorded: string; nodes: number; elements: number; seconds: number; reaction: number; tip_deflection: number;
@@ -14,14 +17,21 @@ export type DemoWing = {
   what: string;
   built: string;
   units: { length: string; force: string; stress: string };
-  /** A straight-edged, tapered and swept half wing. `sweep` is how far aft of the root's leading edge the tip's is. */
-  wing: { span: number; root_chord: number; tip_chord: number; sweep: number; depth: number; aerofoil: string; spars: number[]; ribs: number[]; library: string };
+  /** A straight-edged, tapered and swept half wing. `sweep` is how far aft of the root's leading edge the tip's is; `spars`
+   * are where the two webs stand, as shares of the local chord, and `caps` the share each spar's caps reach fore and aft of
+   * its web; `cover` says what the film is. */
+  wing: { span: number; root_chord: number; tip_chord: number; sweep: number; depth: number; aerofoil: string; spars: number[]; caps: number; ribs: number[]; library: string; cover: string };
+  /** The skeleton's parts first, then the cover's. */
   parts: WingPart[];
-  mesh: { nodes: number[][]; quads: number[][]; part: number[] };
+  /** `analysed` counts the skeleton's nodes and faces, which are stored first and are the model that was solved; the rest
+   * are the cover's alone. */
+  mesh: { nodes: number[][]; quads: number[][]; part: number[]; analysed: { nodes: number; faces: number } };
   load?: { total: number; unit: string; how: string };
+  /** One value for each analysed face, in face order. */
   field?: WingField;
-  /** How far each stored node moves under the load, in node order. */
-  displacement?: { unit: string; values: number[][] };
+  /** How far each stored node moves under the load, in node order: the solver's answer for the skeleton's nodes; for the
+   * cover's own nodes a drawn movement that rides on the skeleton, as `drawn` says. */
+  displacement?: { unit: string; values: number[][]; drawn?: string };
   solve?: WingSolve;
 };
 
@@ -40,17 +50,25 @@ export function wingProblems(wing: DemoWing): string[] {
   parts.forEach((part, index) => {
     if (part.first !== next) problems.push(`${part.name} does not start where the part before it ends`);
     for (let face = part.first; face < part.first + part.count; face++) if (mesh.part[face] !== index) { problems.push(`a face of ${part.name} is marked for another part`); break; }
-    if (!part.angles.length) problems.push(`${part.name} has no plies`);
+    if (part.cover ? part.angles.length > 0 : !part.angles.length) problems.push(part.cover ? `${part.name} is a cover and has plies` : `${part.name} has no plies`);
+    if (!part.cover && index > 0 && parts[index - 1].cover) problems.push(`${part.name} is analysed and is stored after a cover`);
     next = part.first + part.count;
   });
   if (next !== mesh.quads.length) problems.push("the parts do not cover the mesh");
+  // The skeleton is stored first: its faces are the analysed parts', and its nodes are the ones those faces use.
+  const analysed = mesh.analysed ?? { nodes: -1, faces: -1 };
+  if (analysed.faces !== analysedParts(wing).reduce((sum, part) => sum + part.count, 0)) problems.push("the analysed faces are not the analysed parts' faces");
+  const skeleton = new Set(mesh.quads.slice(0, Math.max(0, analysed.faces)).flat());
+  if (skeleton.size !== analysed.nodes || [...skeleton].some((node) => node >= analysed.nodes)) problems.push("the analysed nodes are not the first stored nodes");
+  if (!analysedParts(wing).length || analysedParts(wing).length === parts.length) problems.push("the wing is a skeleton under a cover: it has both");
   const xs = mesh.nodes.map((node) => node[0]), ys = mesh.nodes.map((node) => node[1]);
   if (Math.abs(Math.max(...xs) - Math.min(...xs) - wingExtent(wing)) > 1e-6 || Math.abs(Math.max(...ys) - Math.min(...ys) - wing.wing.span) > 1e-6) problems.push("the mesh is not the wing's plan: its chords and sweep by its span");
   if (Boolean(field) !== Boolean(solve) || Boolean(field) !== Boolean(wing.load) || Boolean(field) !== Boolean(wing.displacement)) problems.push("the analysis is recorded in part: the field, the displacement, the solve and the load go together");
   if (wing.displacement && (wing.displacement.values.length !== mesh.nodes.length || wing.displacement.values.some((row) => row.length !== 3 || row.some((value) => !Number.isFinite(value))))) problems.push("the displacement is not three numbers a node");
-  if (wing.displacement && solve && Math.abs(Math.max(...wing.displacement.values.map((row) => row[2])) - solve.tip_deflection) > 0.011) problems.push("the stated tip deflection is not the largest upward displacement stored");
+  if (wing.displacement && solve && Math.abs(Math.max(...wing.displacement.values.slice(0, Math.max(0, analysed.nodes)).map((row) => row[2])) - solve.tip_deflection) > 0.011) problems.push("the stated tip deflection is not the skeleton's largest upward displacement stored");
+  if (wing.displacement && !wing.displacement.drawn) problems.push("the displacement does not say how the cover's own nodes are drawn");
   if (field && solve) {
-    if (field.values.length !== mesh.quads.length) problems.push(`${field.values.length} values for ${mesh.quads.length} faces`);
+    if (field.values.length !== analysed.faces) problems.push(`${field.values.length} values for ${analysed.faces} analysed faces`);
     if (field.values.some((value) => !Number.isFinite(value))) problems.push("the field holds a value that is not a number");
     if (Math.min(...field.values) !== field.min || Math.max(...field.values) !== field.max) problems.push("the field's stated range is not its values' range");
     for (const entry of solve.parts) {
@@ -59,8 +77,9 @@ export function wingProblems(wing: DemoWing): string[] {
       const largest = Math.max(...field.values.slice(part.first, part.first + part.count));
       if (Math.abs(largest - entry.max) > 1e-9 * Math.max(1, Math.abs(largest))) problems.push(`${part.name}'s stated largest value is not its faces' largest`);
     }
-    if (solve.parts.length !== parts.length) problems.push("the solve does not speak of every part");
-    if (!parts.some((part) => part.id === solve.governing.part)) problems.push("the governing part is not a part of the wing");
+    if (solve.parts.some((entry) => parts.find((part) => part.id === entry.id)?.cover)) problems.push("the solve speaks of a cover, which is not analysed");
+    if (solve.parts.length !== analysedParts(wing).length) problems.push("the solve does not speak of every analysed part");
+    if (!analysedParts(wing).some((part) => part.id === solve.governing.part)) problems.push("the governing part is not an analysed part of the wing");
     if (Math.abs(solve.governing.value - field.max) > 1e-9 * Math.max(1, Math.abs(field.max))) problems.push("the governing value is not the field's largest");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(solve.recorded) || !solve.solver) problems.push("the solve does not say when it was made or by what");
     if (wing.load && Math.abs(solve.reaction - wing.load.total) > 0.01 * wing.load.total) problems.push(`the root holds ${solve.reaction} ${wing.load.unit} against ${wing.load.total} applied`);
@@ -86,9 +105,15 @@ export const RAINBOW_GRADIENT = `linear-gradient(to right, ${RAINBOW.map((stop) 
 /** How far the wing reaches from nose to tail in plan: the root's chord, or the swept tip's trailing edge if that is further aft. */
 export const wingExtent = (wing: DemoWing): number => Math.max(wing.wing.root_chord, wing.wing.sweep + wing.wing.tip_chord);
 
+/** The parts that are laminate and were analysed: the skeleton. */
+export const analysedParts = (wing: DemoWing): WingPart[] => wing.parts.filter((part) => !part.cover);
+/** The parts that are the film over the skeleton: drawn, not analysed. */
+export const coverParts = (wing: DemoWing): WingPart[] => wing.parts.filter((part) => part.cover);
+
 /** How many times its size the page draws the wing's deflection, so a bend of a few centimetres on a two-metre wing can be
- * seen. A drawing choice only: the stated deflection is the recorded one. */
-export const BEND_DRAWN = 5;
+ * seen. A drawing choice only: the stated deflection is the recorded one. It was 5 while the skins carried load and the tip
+ * rose 33 mm; the skeleton alone rises 80 mm, so twice is about as much on the screen. */
+export const BEND_DRAWN = 2;
 
 /** A length in metres, to two places: 2.13 m. */
 export const metres = (millimetres: number): string => `${(millimetres / 1000).toFixed(2)} m`;

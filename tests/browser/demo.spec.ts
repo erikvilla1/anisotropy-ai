@@ -69,7 +69,9 @@ async function openPinned(page: Page) {
 const wing = { ...demoWing, field: demoWing.field!, solve: demoWing.solve!, load: demoWing.load! };
 /** An end of the legend as the page prints it: a share as a percentage when the field has no unit. */
 const legendEnd = (value: number) => (wing.field.unit ? String(Math.round(value)) : `${Math.round(value * 100)} %`);
-const PARTS = ["UPPER SKIN", "LOWER SKIN", "FRONT SPAR", "REAR SPAR", "RIBS"];
+// The skeleton's parts, each with its layup, then the film in one row that says it is not analysed (ADR-0098 amendment 11).
+const PARTS = ["FRONT SPAR", "REAR SPAR", "RIBS", "SKIN"];
+const LAYUPS = [...wing.parts.filter((part) => !part.cover).map((part) => part.layup), "Clear film, not analysed"];
 
 test("the demo is a black stage as wide as the clip and a window tall, which starts half a window up behind the hero and stays in the window through its section", async ({ page }) => {
   await openPinned(page);
@@ -153,7 +155,7 @@ test("the page scrolls to the stage as any page does; the first beat's words com
   await expect(facts).toContainText("2.13 m");
   await expect(facts).toContainText("IM7 / 8552");
   await expect(facts).toContainText("0.45 m at the root, 0.23 m at the tip");
-  await expect(facts).toContainText("2 skins, 2 spars, 9 ribs");
+  await expect(facts).toContainText("2 spars and 9 ribs under a clear film skin");
   await expect(box(page).locator("canvas")).toBeVisible();
   expect(asked).toEqual([]);
 });
@@ -278,16 +280,16 @@ test("each zone of scroll plays its beat and the page is never held; the analysi
   const step = await zone(page);
   // The wheel is the browser's: none of a swipe's events is taken, on the stage or off it, and it plays nothing by itself.
   expect(await swipe(page)).toBe(0);
-  // A zone further down, the second beat: the wing apart, and its five parts named with their layups. The page is where
-  // the wheel put it.
+  // A zone further down, the second beat: the wing apart, its three laminates named with their layups and the film beside
+  // them. The page is where the wheel put it.
   await wheelTo(page, start + step);
   await expect(box(page)).toHaveAttribute("data-moving", "true");
   await expectStop(page, 2);
   await expect(beat(page, "model")).toHaveAttribute("data-active", "true");
   const parts = page.getByTestId("demo-parts");
-  await expect(parts.locator("[data-filled]")).toHaveCount(5);
+  await expect(parts.locator("[data-filled]")).toHaveCount(PARTS.length);
   await expect(parts.locator("dt")).toHaveText(PARTS);
-  await expect(parts.locator("dd")).toHaveText(wing.parts.map((part) => part.layup));
+  await expect(parts.locator("dd")).toHaveText(LAYUPS);
   expect(await scrollY(page)).toBe(start + step);
   expect(await offLine(page)).toBe(0);
   // A notch inside the same zone moves the page and plays nothing.
@@ -436,7 +438,7 @@ test("on the way back up the beats are unplayed one by one, down to the hero, an
   await playTo(page, 4);
   await expect(box(page)).toHaveAttribute("data-turnable", "true");
   // Up a zone at a time: the clock runs back to the beat before, and its words and card stand again.
-  const titles = ["Start from the part.", "It comes apart into its parts.", "Every part is analysed.", "Back together, with the report."];
+  const titles = ["Start from the part.", "It comes apart into its parts.", "The skeleton is analysed.", "Back together, with the report."];
   const ids = ["describe", "model", "analysis", "report"];
   for (let stop = 3; stop >= 1; stop--) {
     await wheelTo(page, start + Math.round((stop - 0.5) * step));
@@ -526,9 +528,9 @@ test("with reduced motion the beats lie one under another in the box, finished, 
   await expect.poll(() => scrollY(page)).toBe(240);
   await expect(page.locator("#overview")).toHaveCSS("opacity", "1");
   await expect(demo(page).getByRole("heading", { level: 2 })).toHaveText("A wing, analysed part by part.");
-  for (const title of ["Start from the part.", "It comes apart into its parts.", "Every part is analysed.", "Back together, with the report."]) await expect(demo(page).getByRole("heading", { name: title })).toBeVisible();
+  for (const title of ["Start from the part.", "It comes apart into its parts.", "The skeleton is analysed.", "Back together, with the report."]) await expect(demo(page).getByRole("heading", { name: title })).toBeVisible();
   await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(5);
-  await expect(page.getByTestId("demo-parts").locator("[data-filled]")).toHaveCount(5);
+  await expect(page.getByTestId("demo-parts").locator("[data-filled]")).toHaveCount(PARTS.length);
   await expect(page.getByTestId("demo-run").locator(".demo-stages li[data-state='done']")).toHaveCount(5);
   await expect(page.getByTestId("demo-result")).toContainText("Most loaded");
   // The beats follow each other down the page.

@@ -3,35 +3,63 @@ import assert from "node:assert/strict";
 import { BEAT_COPY, everyLine, resultLines, wingFacts, wingParts } from "../components/home/product-demo-copy";
 import { BEATS, BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, MOVE, POSES, finalView, poseAt, sceneAt, viewAt } from "../components/home/product-demo-timeline";
 import { decide } from "../components/home/tour-stepper";
-import { demoWing, wingColour, wingProblems, type DemoWing } from "../lib/demo-wing";
+import { analysedParts, coverParts, demoWing, wingColour, wingProblems, type DemoWing } from "../lib/demo-wing";
 import { bannedIn, DOWNLOAD_LABELS, RUN_STEPS } from "../lib/studio-copy";
 
 // The product demo of the home page (ADR-0095, ADR-0098): the example wing it shows, its clock and its words.
 
-const counts = { facts: 5, parts: demoWing.parts.length, stages: RUN_STEPS.length, files: 3 };
+const counts = { facts: 5, parts: wingParts(demoWing).length, stages: RUN_STEPS.length, files: 3 };
 const at = (t: number) => viewAt(t, counts);
 
 test("the wing's record is whole and agrees with itself", () => {
   assert.deepEqual(wingProblems(demoWing), []);
-  // The example: one side of a tapered, swept wing, 7 ft long, two skins over two spars and nine ribs, in the library's IM7 / 8552.
+  // The example: one side of a tapered, swept wing, 7 ft long, whose skeleton, two spars with caps and nine ribs, is the
+  // library's IM7 / 8552 under a clear film (ADR-0098 amendment 11).
   assert.equal(demoWing.wing.span, 2133.6);
   assert.equal(demoWing.wing.library, "im7-8552");
-  assert.deepEqual(demoWing.parts.map((part) => part.id), ["upper-skin", "lower-skin", "front-spar", "rear-spar", "ribs"]);
+  assert.deepEqual(analysedParts(demoWing).map((part) => part.id), ["front-spar", "rear-spar", "ribs"]);
+  assert.deepEqual(coverParts(demoWing).map((part) => part.id), ["upper-skin", "lower-skin"]);
+  assert.deepEqual(demoWing.parts.map((part) => part.id), ["front-spar", "rear-spar", "ribs", "upper-skin", "lower-skin"]);
   assert.equal(demoWing.wing.ribs.length, 9);
-  assert.deepEqual([demoWing.wing.root_chord, demoWing.wing.tip_chord, demoWing.wing.sweep], [450, 225, 400]);
-  // Every layup is symmetric about its middle.
-  for (const part of demoWing.parts) assert.deepEqual([...part.angles].reverse(), part.angles, part.name);
+  assert.deepEqual([demoWing.wing.root_chord, demoWing.wing.tip_chord, demoWing.wing.sweep, demoWing.wing.caps], [450, 225, 400, 0.05]);
+  // Every layup is symmetric about its middle; the film has no plies and says what it is.
+  for (const part of analysedParts(demoWing)) {
+    assert.ok(part.angles.length > 0, part.name);
+    assert.deepEqual([...part.angles].reverse(), part.angles, part.name);
+  }
+  for (const part of coverParts(demoWing)) assert.deepEqual([part.angles, part.layup], [[], "Clear film"], part.name);
+  assert.ok(demoWing.wing.cover.includes("not in the model that is solved"), demoWing.wing.cover);
+  // The skeleton is stored first, and it is a part of the mesh, not all of it.
+  const { analysed } = demoWing.mesh;
+  assert.ok(analysed.faces > 0 && analysed.faces < demoWing.mesh.quads.length && analysed.nodes > 0 && analysed.nodes < demoWing.mesh.nodes.length);
+  assert.equal(analysed.faces, analysedParts(demoWing).reduce((sum, part) => sum + part.count, 0));
   // A broken record is noticed.
   const torn: DemoWing = { ...demoWing, mesh: { ...demoWing.mesh, part: demoWing.mesh.part.slice(1) } };
   assert.ok(wingProblems(torn).length > 0);
   const moved: DemoWing = { ...demoWing, parts: demoWing.parts.map((part, index) => (index === 1 ? { ...part, first: part.first + 1 } : part)) };
   assert.ok(wingProblems(moved).length > 0);
+  // So is a film that is given plies, a laminate that is called a cover, and a skeleton that is not the first of the mesh.
+  const plied: DemoWing = { ...demoWing, parts: demoWing.parts.map((part) => (part.cover ? { ...part, angles: [0] } : part)) };
+  assert.ok(wingProblems(plied).some((problem) => problem.includes("is a cover and has plies")));
+  const bare: DemoWing = { ...demoWing, parts: demoWing.parts.map((part) => ({ ...part, cover: false, angles: part.angles.length ? part.angles : [0] })) };
+  assert.ok(wingProblems(bare).length > 0);
+  const short: DemoWing = { ...demoWing, mesh: { ...demoWing.mesh, analysed: { ...analysed, nodes: analysed.nodes - 1 } } };
+  assert.ok(wingProblems(short).some((problem) => problem.includes("analysed nodes")));
 });
 
-test("the wing's analysis is recorded whole: one value a face from a named solver, and the root holds what was applied", () => {
-  const { field, solve, load } = demoWing;
-  assert.ok(field && solve && load, "the analysis is not recorded: run scripts/demo-wing.py --solve");
-  assert.equal(field.values.length, demoWing.mesh.quads.length);
+test("the wing's analysis is recorded whole: one value for each face of the skeleton from a named solver, none for the film, and the root holds what was applied", () => {
+  const { field, solve, load, displacement } = demoWing;
+  assert.ok(field && solve && load && displacement, "the analysis is not recorded: run scripts/demo-wing.py --solve");
+  assert.equal(field.values.length, demoWing.mesh.analysed.faces);
+  // The solve speaks of the skeleton's parts only, and the most loaded part is one of them.
+  assert.deepEqual(solve.parts.map((part) => part.id), analysedParts(demoWing).map((part) => part.id));
+  assert.ok(analysedParts(demoWing).some((part) => part.id === solve.governing.part), solve.governing.part);
+  // Every stored node has a movement to be drawn with, and the record says the film's own are drawn, not solved.
+  assert.equal(displacement.values.length, demoWing.mesh.nodes.length);
+  assert.ok(displacement.drawn && displacement.drawn.includes("not the solver's"), displacement.drawn);
+  assert.ok(wingProblems({ ...demoWing, displacement: { ...displacement, drawn: undefined } }).length > 0);
+  // A value for a face of the film would be a result nobody computed.
+  assert.ok(wingProblems({ ...demoWing, field: { ...field, values: [...field.values, 0] } }).length > 0);
   assert.ok(Math.abs(solve.reaction - load.total) <= 0.01 * load.total, `${solve.reaction} N at the root for ${load.total} N applied`);
   assert.ok(solve.tip_deflection > 0 && solve.tip_deflection < 0.15 * demoWing.wing.span, `the tip rises ${solve.tip_deflection} mm`);
   assert.match(solve.recorded, /^\d{4}-\d{2}-\d{2}$/);
@@ -107,8 +135,10 @@ test("every word the demo shows is fit for the product's view, and its numbers a
   assert.deepEqual(wingFacts(demoWing, "IM7 / 8552").map(([name]) => name), ["PART", "SPAN", "CHORD", "MATERIAL", "STRUCTURE"]);
   assert.deepEqual(wingFacts(demoWing, "IM7 / 8552")[1], ["SPAN", "2.13 m"]);
   assert.deepEqual(wingFacts(demoWing, "IM7 / 8552")[2], ["CHORD", "0.45 m at the root, 0.23 m at the tip"]);
-  assert.deepEqual(wingFacts(demoWing, "IM7 / 8552")[4], ["STRUCTURE", "2 skins, 2 spars, 9 ribs"]);
-  assert.deepEqual(wingParts(demoWing)[0], ["UPPER SKIN", "[45/0/-45/90]s"]);
+  assert.deepEqual(wingFacts(demoWing, "IM7 / 8552")[4], ["STRUCTURE", "2 spars and 9 ribs under a clear film skin"]);
+  // The parts as listed: the skeleton's, each with its layup, then the film in one row that says it is not analysed.
+  assert.deepEqual(wingParts(demoWing), [["FRONT SPAR", "[45/-45/0/0/0]s"], ["REAR SPAR", "[45/-45/0/0/0]s"], ["RIBS", "[45/-45]s"], ["SKIN", "Clear film, not analysed"]]);
+  assert.ok(BEAT_COPY.analysis.text.includes("The film carries no load here."), BEAT_COPY.analysis.text);
   const result = resultLines(demoWing);
   assert.ok(result, "the analysis is not recorded");
   const governing = demoWing.parts.find((part) => part.id === demoWing.solve!.governing.part)!;
