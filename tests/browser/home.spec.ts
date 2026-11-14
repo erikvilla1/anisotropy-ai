@@ -15,7 +15,9 @@ function apiRequests(page: Page): string[] {
 test("the hero opens the page, and the laminate calculator and its tour are not on it (ADR-0095)", async ({ page }) => {
   const asked = apiRequests(page);
   await page.goto("/");
-  expect(await page.locator("main > *").first().getAttribute("id")).toBe("overview");
+  // The hero and the demo share a wrapper (ADR-0095 amendment 4); the hero is the first section in it.
+  expect(await page.locator("main > .home-opening > *").first().getAttribute("id")).toBe("overview");
+  expect(await page.locator("main > *").first().getAttribute("class")).toBe("home-opening");
   await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/one engineering platform\s*for composite theory/);
   await expect(page.locator("#laminate, #tour")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Your layup, calculated." })).toHaveCount(0);
@@ -24,19 +26,29 @@ test("the hero opens the page, and the laminate calculator and its tour are not 
   expect(asked).toEqual([]);
 });
 
+/** The cases about the sections below the demo wait for the page's script to have started; what follows the demo is always
+ * in the page (ADR-0095 amendment 10 ended amendment 7's gate). */
+async function pastTheDemo(page: import("@playwright/test").Page) {
+  await expect(page.locator("#demo")).toHaveAttribute("data-mode", /^(pinned|static)$/);
+  await expect(page.locator("html")).not.toHaveAttribute("data-demo-gate", /.+/);
+}
+
 const STATEMENT = /^\s*one engineering platform\s*for composite theory\s*and real test data\s*$/;
 
-test("the hero's words are one statement and a row of the year, the mark and the name (ADR-0077 amendments 19, 21, 27 and 28)", async ({ page }) => {
+test("the hero's words are one statement and a line of the mark, the name and the year (ADR-0077 amendments 19, 21, 27, 28 and 47)", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
   await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
-  // The row under it: the year, the triangle, the name (amendment 28).
-  await expect(hero.locator(".home-hero-note")).toHaveText("Est. 2026");
+  // The line over it: the triangle, the name, the year (amendment 47; until then a row under the statement with the mark
+  // between the year and the name).
+  await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
-  const row = await hero.evaluate((el) => ["note", "mark", "tagline"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
+  const row = await hero.evaluate((el) => ["mark", "tagline", "note"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
   expect(row[0]).toBeLessThan(row[1]);
   expect(row[1]).toBeLessThan(row[2]);
+  const over = await hero.evaluate((el) => [el.querySelector(".home-hero-row")!.getBoundingClientRect().bottom, el.querySelector("h1")!.getBoundingClientRect().top]);
+  expect(over[0]).toBeLessThanOrEqual(over[1]);
   // The cohort stands beside the mark of the place that runs it, in the clip's bottom left corner.
   await expect(hero.getByAltText("UC San Diego, The Basement")).toBeVisible();
   await expect(hero.locator(".home-hero-backed .home-hero-cohort")).toHaveText("Fall 2026 Launchpad cohort");
@@ -58,7 +70,7 @@ test("the hero's words are one statement and a row of the year, the mark and the
   expect(Math.abs(nav - page.viewportSize()!.width / 2)).toBeLessThanOrEqual(1);
 });
 
-test("the hero's clip plays in a square box on the black page, under the header, with the words in its middle (ADR-0077 amendment 19)", async ({ page }) => {
+test("the hero's clip plays in a square box on the black page, under the header, with the words in its lower left (ADR-0077 amendments 19 and 47)", async ({ page }) => {
   await page.goto("/");
   const rect = (selector: string) => page.locator(selector).first().evaluate((el) => {
     const box = el.getBoundingClientRect();
@@ -81,15 +93,147 @@ test("the hero's clip plays in a square box on the black page, under the header,
     expect(part.top, selector).toBeGreaterThanOrEqual(clip.top + 16);
     expect(part.bottom, selector).toBeLessThanOrEqual(clip.bottom - 16);
   }
-  for (const selector of ["#overview h1", "#overview .home-hero-mark"]) {
-    const part = await rect(selector);
-    expect(Math.abs((part.left + part.right) / 2 - viewport.width / 2), selector).toBeLessThanOrEqual(1);
-  }
+  // The words stand in the box's lower left, set from the left (amendment 47): the statement and the line over it start on
+  // one edge, the box's own padding in, and lie in the box's lower half, over the Basement's mark.
+  const [statement, line, backed] = [await rect("#overview h1"), await rect("#overview .home-hero-row"), await rect("#overview .home-hero-backed")];
+  expect(statement.left).toBe(clip.left + 32);
+  expect(line.left).toBe(statement.left);
+  expect(backed.left).toBe(statement.left);
+  expect(statement.top).toBeGreaterThan((clip.top + clip.bottom) / 2 - 40);
+  expect(statement.bottom).toBeLessThan(backed.top);
+  expect(statement.right).toBeLessThan(viewport.width * 0.75);
+  await expect(page.locator("#overview h1")).toHaveCSS("text-align", "left");
   // On a phone the box follows the narrower margin.
   await page.setViewportSize({ width: 390, height: 844 });
   const phone = await rect("#overview .home-hero-media");
   expect([phone.left, 390 - phone.right]).toEqual([20, 20]);
   expect(phone.top).toBeGreaterThanOrEqual((await rect(".site-header")).bottom);
+});
+
+test("after the demo the page is white, and Mission and Services are two short blocks that lead on (ADR-0077 amendments 33 and 34)", async ({ page }) => {
+  await page.goto("/");
+  await pastTheDemo(page);
+  for (const id of ["mission", "platform", "working"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  // The team band's head stands on the feed's light grey from edge to edge, and the portraits under it on white (amendment 41).
+  const team = await page.locator("#working").evaluate((band) => {
+    const head = band.querySelector(".band-head")!;
+    const frame = band.querySelector(".home-face-frame")!;
+    const box = head.getBoundingClientRect();
+    return { head: getComputedStyle(head).backgroundColor, left: box.left, right: box.right, wide: document.documentElement.clientWidth, top: box.top - band.getBoundingClientRect().top, facesBelow: frame.getBoundingClientRect().top >= box.bottom };
+  });
+  expect(team.head).toBe("rgb(243, 243, 244)");
+  expect([team.left, team.right]).toEqual([0, team.wide]);
+  expect(team.top).toBeLessThanOrEqual(1);
+  expect(team.facesBelow).toBe(true);
+  // The band's label is not in the head: it stands on the white under it, over the portraits and at their left edge
+  // (amendment 42).
+  await expect(page.locator("#working .band-head .band-label")).toHaveCount(0);
+  await expect(page.locator("#working .home-faces-label")).toHaveText("Team");
+  const label = await page.locator("#working").evaluate((band) => {
+    const box = (selector: string) => band.querySelector(selector)!.getBoundingClientRect();
+    const mark = band.querySelector(".home-faces-label")!;
+    const range = document.createRange();
+    range.selectNodeContents(mark);
+    const words = range.getBoundingClientRect();
+    return { left: Math.round(words.left), top: words.top, bottom: words.bottom, headBottom: box(".band-head").bottom, frameTop: box(".home-face-frame").top, frameLeft: Math.round(box(".home-face-frame").left) };
+  });
+  expect(label.left).toBe(label.frameLeft);
+  expect(label.top).toBeGreaterThan(label.headBottom);
+  expect(label.bottom).toBeLessThan(label.frameTop);
+  // The changelog is a band on light grey (amendments 36 and 46) with nothing published yet: its head alone, saying so,
+  // and no list. It is not a news feed: no card, no "What is new".
+  const changelog = page.locator("#changelog");
+  await expect(changelog).toHaveCSS("background-color", "rgb(243, 243, 244)");
+  // Its words stand in white on a card whose ground is the demo's colours blurred into one another (amendment 49), and
+  // the closing band under it is the same light grey.
+  const card = changelog.locator(".home-feed-card");
+  expect(await card.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/radial-gradient.*radial-gradient.*linear-gradient/);
+  await expect(changelog.getByRole("heading", { level: 2 })).toHaveCSS("color", "rgb(255, 255, 255)");
+  const inset = await card.evaluate((element) => { const box = element.getBoundingClientRect(); return [box.left, document.documentElement.clientWidth - box.right]; });
+  expect(inset).toEqual([32, 32]);
+  await expect(page.locator(".closing-band")).toHaveCSS("background-color", "rgb(243, 243, 244)");
+  await expect(changelog.locator(".band-label")).toHaveText("Changelog");
+  await expect(changelog.getByRole("heading", { level: 2 })).toHaveText("Every release, and what changed.");
+  await expect(changelog.locator(".band-statement p")).toHaveText("No releases published yet. Each version and what changed in it will be listed here.");
+  await expect(changelog.locator(".home-changelog, article")).toHaveCount(0);
+  await expect(page.locator("#news")).toHaveCount(0);
+  await expect(page.locator("main")).not.toContainText(/what is new|coming soon|closed beta/i);
+  // Mission: the label, the statement and one link, to About; the strip of four principles is gone.
+  const mission = page.locator("#mission");
+  await expect(mission.locator(".band-label")).toHaveText("Mission");
+  await expect(mission.getByRole("heading", { level: 2 })).toHaveText("One record, from the layup to the test.");
+  await expect(mission.getByRole("link")).toHaveCount(1);
+  await expect(mission.getByRole("link", { name: "Learn more about us" })).toHaveAttribute("href", /\/about\/?$/);
+  await expect(page.locator(".home-principles")).toHaveCount(0);
+  await expect(page.getByText("Physics at the core", { exact: false })).toHaveCount(0);
+  // Services: the five by name, each to its page, and the way to all of them; no cards and no status marks.
+  const services = page.locator("#platform");
+  await expect(services.locator(".band-label")).toHaveText("Services");
+  const five = services.getByRole("list", { name: "Services" }).getByRole("link");
+  await expect(five).toHaveText(["Computer-aided design", "Finite element modeling", "Test plans", "Documentation", "Manufacturing plans"]);
+  await expect(five.nth(1)).toHaveAttribute("href", /\/services\/finite-element-modeling\/?$/);
+  await expect(services.getByRole("link", { name: "Explore the services" })).toHaveAttribute("href", /\/services\/?$/);
+  await expect(services.locator(".band-card, .home-status")).toHaveCount(0);
+  // Mission and Services stand side by side with a picture each (amendment 37): Mission's words at the left of its picture,
+  // Services' at the right of theirs; the picture has round corners and is the carbon weave for now.
+  for (const [id, wordsFirst] of [["mission", true], ["platform", false]] as const) {
+    const places = await page.locator(`#${id}`).evaluate((band) => {
+      const words = band.querySelector(".band-head")!.getBoundingClientRect();
+      const picture = band.querySelector(".home-split-picture")!;
+      const box = picture.getBoundingClientRect();
+      const style = getComputedStyle(picture);
+      return { words: [words.left, words.right], picture: [box.left, box.right], width: box.width, radius: style.borderTopLeftRadius, image: style.backgroundImage };
+    });
+    if (wordsFirst) expect(places.words[1], id).toBeLessThanOrEqual(places.picture[0]);
+    else expect(places.picture[1], id).toBeLessThanOrEqual(places.words[0]);
+    expect(places.width, id).toBeGreaterThan(400);
+    expect(places.radius, id).toBe("0px"); // square corners (amendment 48)
+    // The picture is a link to where its band's own link goes, and lifts under the pointer as a portrait does (amendment
+    // 39). The keyboard and a screen reader meet the worded link only.
+    const picture = page.locator(`#${id} .home-split-picture`);
+    await expect(picture).toHaveAttribute("href", id === "mission" ? /\/about\/?$/ : /\/services\/?$/);
+    await expect(picture).toHaveAttribute("tabindex", "-1");
+    await expect(picture).toHaveAttribute("aria-hidden", "true");
+    await picture.scrollIntoViewIfNeeded();
+    expect(await picture.evaluate((element) => getComputedStyle(element).transform), id).toBe("none");
+    // Away from the pointer there is no lens over it.
+    const lens = picture.locator(".home-split-lens");
+    await expect(lens).toHaveCSS("opacity", "0");
+    await picture.hover();
+    await expect.poll(() => picture.evaluate((element) => getComputedStyle(element).transform), { message: id }).toBe("matrix(1.02, 0, 0, 1.02, 0, -4)");
+    // Under the pointer a small lens shows the photograph in the demo's colours (amendment 48): a 4:3 window with the
+    // pointer in its middle, inside the picture, drawn through the page's own filter, and gone when the pointer leaves.
+    await expect(picture).toHaveAttribute("data-lens", "on");
+    await expect(lens).toHaveCSS("opacity", "1");
+    const box = (await picture.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.6, { steps: 4 });
+    await expect.poll(async () => {
+      const at = (await lens.boundingBox())!;
+      return [Math.abs(at.x + at.width / 2 - (box.x + box.width * 0.3)) < 6, Math.abs(at.y + at.height / 2 - (box.y + box.height * 0.6)) < 6];
+    }, { message: `${id}: the lens under the pointer` }).toEqual([true, true]);
+    const window = (await lens.boundingBox())!;
+    expect(Math.abs(window.width / window.height - 4 / 3), id).toBeLessThan(0.02);
+    expect(window.width, id).toBeGreaterThanOrEqual(150);
+    expect(await picture.locator(".home-split-lens-view.is-field").evaluate((view) => getComputedStyle(view).filter), id).toContain("#home-fea");
+    // At the picture's corner it keeps inside the picture.
+    await page.mouse.move(box.x + 3, box.y + 3, { steps: 4 });
+    await expect.poll(async () => { const at = (await lens.boundingBox())!; return at.x >= box.x - 1 && at.y >= box.y - 1; }, { message: `${id}: the lens in the picture` }).toBe(true);
+    await page.mouse.move(2, 2);
+    await expect(picture).not.toHaveAttribute("data-lens", /.+/);
+    await expect(lens).toHaveCSS("opacity", "0");
+    // The photograph is the carbon weave for now, in black and white.
+    const photo = picture.locator(".home-split-photo");
+    expect(await photo.evaluate((element) => getComputedStyle(element).backgroundImage), id).toContain("/assets/images/carbon-weave.jpg");
+    expect(await photo.evaluate((element) => getComputedStyle(element).filter), id).toContain("grayscale(1)");
+  }
+  // Team and the changelog keep their heads in the middle, as the demo's words are.
+  for (const id of ["working", "changelog"]) {
+    const off = await page.locator(`#${id} .band-statement h2`).evaluate((h) => { const r = h.getBoundingClientRect(); return (r.left + r.right) / 2 - window.innerWidth / 2; });
+    expect(Math.abs(off), id).toBeLessThanOrEqual(2);
+  }
+  // The team's names carry no arrow, and there is no link to the About page under the cards (amendment 37).
+  await expect(page.locator("#working .home-face h3 svg")).toHaveCount(0);
+  await expect(page.locator("#working").getByRole("link", { name: /About page/ })).toHaveCount(0);
 });
 
 test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }) => {
@@ -107,22 +251,29 @@ test("the home page fits a phone without horizontal scroll", async ({ page }) =>
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test("the About cards show the five portraits in the lead's order, and LinkedIn's mark comes up under the pointer (ADR-0077 amendment 29)", async ({ page }) => {
+test("the About cards show the five portraits in the lead's order, and under the pointer the portrait lifts and LinkedIn's mark comes up as a link (ADR-0077 amendments 29 and 35)", async ({ page }) => {
   await page.goto("/");
+  await pastTheDemo(page);
   const cards = page.locator("#working .home-face");
   await cards.first().scrollIntoViewIfNeeded();
   await expect(cards.locator("h3")).toHaveText(["Christopher Valerio", "Erik Villa", "Tabassum Zaman", "Jusung Park", "Kai Saucedo"]);
+  // Under each name, one short line (amendment 43).
+  await expect(cards.locator("h3 + p")).toHaveText(["Co-Founder, CEO", "Co-Founder, AI Lead", "Fabrication & Test Lead", "Simulation & Validation Lead", "Software & Growth Engineer"]);
+  expect(await cards.locator("h3 + p").evaluateAll((lines) => lines.map((line) => Math.round(line.getBoundingClientRect().height)))).toEqual([24, 24, 24, 24, 24]);
   // Every frame holds a portrait that has loaded, from the site's own files, and no initials.
   await expect.poll(() => cards.locator("img").evaluateAll((images) => images.map((image) => (image as HTMLImageElement).naturalWidth))).toEqual([800, 800, 800, 800, 800]);
   expect(await cards.locator("img").evaluateAll((images) => images.every((image) => new URL((image as HTMLImageElement).src).pathname.startsWith("/assets/team/")))).toBe(true);
   await expect(cards.locator(".home-face-frame > span:not(.home-face-in)")).toHaveCount(0);
-  // The mark is drawn in the frame's bottom right corner only for the card under the pointer; with no profile address yet it is not a link.
+  // The mark is drawn in the frame's bottom right corner only for the card under the pointer, where the portrait also lifts.
   const badge = (index: number) => cards.nth(index).locator(".home-face-in");
   await expect(badge(2)).toHaveCSS("opacity", "0");
   await cards.nth(2).hover();
   await expect(badge(2)).toHaveCSS("opacity", "1");
   await expect(badge(0)).toHaveCSS("opacity", "0");
   await expect(badge(2)).toHaveCSS("border-radius", "50%");
+  // The mark is the picture the lead uploaded, drawn in black and white (amendment 39).
+  expect(await badge(2).evaluate((mark) => getComputedStyle(mark).backgroundImage)).toContain("/assets/brand/round-linkedin-logo");
+  expect(await badge(2).evaluate((mark) => getComputedStyle(mark).filter)).toContain("grayscale(1)");
   const corner = await cards.nth(2).evaluate((card) => {
     const frame = card.querySelector(".home-face-frame")!.getBoundingClientRect();
     const mark = card.querySelector(".home-face-in")!.getBoundingClientRect();
@@ -130,6 +281,20 @@ test("the About cards show the five portraits in the lead's order, and LinkedIn'
   });
   expect(corner[0]).toBeLessThanOrEqual(14);
   expect(corner[1]).toBeLessThanOrEqual(14);
-  await expect(page.locator("#working a.home-face-in")).toHaveCount(0);
+  expect(await cards.nth(2).locator(".home-face-frame").evaluate((frame) => getComputedStyle(frame).transform)).not.toBe("none");
+  expect(await cards.nth(0).locator(".home-face-frame").evaluate((frame) => getComputedStyle(frame).transform)).toBe("none");
+  // The badge and the name both go to that person's LinkedIn profile, in a new tab (amendment 35).
+  const profiles = ["christopher-valerio-916116225", "erik-villa-4b329b261", "tabassum-zaman-51659a264", "jusung-park-a46b43226", "kaisaucedo"];
+  for (let index = 0; index < profiles.length; index++) {
+    const address = new RegExp(`^https://www\\.linkedin\\.com/in/${profiles[index]}/$`);
+    await expect(cards.nth(index).locator("a.home-face-in")).toHaveAttribute("href", address);
+    await expect(cards.nth(index).locator("a.home-face-in")).toHaveAttribute("target", "_blank");
+    await expect(cards.nth(index).locator("a.home-face-in")).toHaveAttribute("rel", /noopener/);
+    await expect(cards.nth(index).locator("h3 a")).toHaveAttribute("href", address);
+  }
+  // Black with the mark in white; white with the mark in black under the pointer itself.
+  expect(await badge(2).evaluate((mark) => getComputedStyle(mark).filter)).not.toContain("invert");
+  await badge(2).hover();
+  await expect.poll(() => badge(2).evaluate((mark) => getComputedStyle(mark).filter)).toContain("invert(1)");
 });
 

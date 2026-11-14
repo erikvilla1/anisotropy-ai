@@ -11,6 +11,9 @@ export type Person = {
   technical: string;
   /** The seat for the company, as people.md words it; the CEO's is the role itself. */
   company?: string;
+  /** The one line under the name on the home page's card (ADR-0077 amendments 43 and 45): a title of a few words, as the
+   * lead gave them on 2026-11-14. The seats beside it stay as people.md words them; the title is the site's own line. */
+  title: string;
   /** A portrait, as a path under public/ (for example "/assets/team/name.jpg"); the home page's card shows it in place of the initials. */
   photo?: string;
   /** The person's LinkedIn profile address; the name on the home page's card becomes a link to it. */
@@ -18,11 +21,12 @@ export type Person = {
 };
 
 /** The cards' order is the lead's (2026-11-13): the two founders, then Tabassum in the middle, Jusung, and Kai at the right.
- * The portraits are cut from the originals by scripts/team-photos.py (ADR-0057 amendment 2). */
+ * The portraits are cut from the originals by scripts/team-photos.py (ADR-0057 amendment 2). The profile addresses are the
+ * lead's of 2026-11-14 (ADR-0077 amendment 35); that each person agreed to theirs is the lead's to confirm. */
 export const team: readonly Person[] = [
-  { name: "Christopher Valerio", role: "Co-founder and CEO", technical: "prompt engineering and AI evaluation", photo: "/assets/team/christopher-valerio.jpg" },
-  { name: "Erik Villa", role: "Co-founder", technical: "AI architecture and operations", company: "documentation and records", photo: "/assets/team/erik-villa.jpg" },
-  { name: "Tabassum Zaman", technical: "fabrication, prototypes and mechanical testing", company: "partnerships and outreach", photo: "/assets/team/tabassum-zaman.jpg" },
-  { name: "Jusung Park", technical: "reference modeling and validation", company: "operations and logistics", photo: "/assets/team/jusung-park.jpg" },
-  { name: "Kai Saucedo", technical: "software and UI/UX", company: "marketing and communications", photo: "/assets/team/kai-saucedo.jpg" },
+  { name: "Christopher Valerio", title: "Co-Founder, CEO", role: "Co-founder and CEO", technical: "prompt engineering and AI evaluation", photo: "/assets/team/christopher-valerio.jpg", linkedin: "https://www.linkedin.com/in/christopher-valerio-916116225/" },
+  { name: "Erik Villa", title: "Co-Founder, AI Lead", role: "Co-founder", technical: "AI architecture and operations", company: "documentation and records", photo: "/assets/team/erik-villa.jpg", linkedin: "https://www.linkedin.com/in/erik-villa-4b329b261/" },
+  { name: "Tabassum Zaman", title: "Fabrication & Test Lead", technical: "fabrication, prototypes and mechanical testing", company: "partnerships and outreach", photo: "/assets/team/tabassum-zaman.jpg", linkedin: "https://www.linkedin.com/in/tabassum-zaman-51659a264/" },
+  { name: "Jusung Park", title: "Simulation & Validation Lead", technical: "reference modeling and validation", company: "operations and logistics", photo: "/assets/team/jusung-park.jpg", linkedin: "https://www.linkedin.com/in/jusung-park-a46b43226/" },
+  { name: "Kai Saucedo", title: "Software & Growth Engineer", technical: "software and UI/UX", company: "marketing and communications", photo: "/assets/team/kai-saucedo.jpg", linkedin: "https://www.linkedin.com/in/kaisaucedo/" },
 ];

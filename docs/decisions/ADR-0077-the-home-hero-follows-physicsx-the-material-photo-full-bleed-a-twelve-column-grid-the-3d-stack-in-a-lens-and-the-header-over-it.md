@@ -456,3 +456,179 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 **Decision.** The line on the triangle's left reads "Est. 2026" in place of "Established 2026", and is set wide (0.27 em between letters) so that it is as long as the name on the other side. The space the tracking leaves after the last figure is taken back, so both sides stand as far from the triangle.
 
 **Evidence.** On 2026-11-13 against the dev server at 1440 px: "Est. 2026" alone measured 101 px beside the name's 138 px; set wide it measures 138 px, and each side stands 34 px from the triangle. A screenshot was looked at. `home.spec.ts` and `intro.spec.ts`: 10 of 10. UNVERIFIED, as before: the year is the lead's statement.
+
+## Amendment 32, 2026-11-13 (the year reads "Est 2026")
+
+**Context.** The lead: "lets try change from est. 2026 to est 2026".
+
+**Decision.** The full stop goes. The space between letters grows from 0.27 em to 0.44 em, so the shorter line is still as long as the name on the triangle's other side (amendment 30).
+
+**Evidence.** On 2026-11-13 against the dev server: at 1440 px the year measures 138.6 px beside the name's 138.3 px, each 34.5 px from the triangle; at 1280 px, 123.3 and 123.5; at 1920 px, 181.6 and 176.8. A screenshot at 1440 px was looked at. `home.spec.ts` and `intro.spec.ts` read "Est 2026" and pass. UNVERIFIED: the year is set in the visitor's own monospace typeface, so its length on Windows and macOS was not measured; and, as before, the year is the lead's statement.
+
+## Amendment 33, 2026-11-14 (after the demo the page is white)
+
+**Context.** The lead, with screenshots of the demo's last beat and of the Mission and Platform bands under it: "the page after the final step of the demo animation should transition to a white background now."
+
+**Decision.** Mission, Platform and What is new take the kit's light ground (`is-light`), as About already had, so every band from the demo to the closing band is white; the footer stays black. The black stage meets the first white band at a plain edge as the page scrolls on from the last beat. This replaces amendment 14's alternation of dark and light bands on the home page.
+
+**Evidence.** On 2026-11-14 against the dev server: screenshots of the three bands at 1440 px were looked at; the cards, tags and rules follow the light variables with no other change. The browser suites listed in ADR-0095 amendment 6: 34 passed, 3 skipped. UNVERIFIED: whether the lead meant an animated change from black to white at the end of the demo, which this does not do.
+
+## Amendment 34, 2026-11-14 (Mission and Services are two short blocks set as the demo's words are; the principles' strip goes)
+
+**Context.** The lead, on the bands under the demo: "I also dont like the layout we're using here. it seems like out of place in terms of theme, font, layout, arrangement type from the previous two pages. I like the blocks: mission, and then the link from there going to the about. 'Learn more about us' instead of what we are building. I dont really know what purpose that | physics at the core... etc... banner is serving, so... the second should be like a stepping stone to the services."
+
+**Decision.**
+
+- On the home page a band's head is no longer the kit's label column and ruled statement. It is set as the demo's words are: a small monospace label, the heading in the demo's weight and tracking, a paragraph, all in the middle of the page. The numbers before the labels go ("Mission", "Services", "Team", "What is new"). The kit itself and the other pages are unchanged.
+- Mission keeps its statement; its link reads "Learn more about us" and goes to About. The strip of four principles is removed.
+- The second block is the step to the services: the five by name, each a link to its page, and "Explore the services". The five cards with their status marks are removed from the home page; the sentence that says how many are built stays, and each service's page still says which.
+- Team and What is new keep their content under the same kind of head.
+
+**Evidence.** On 2026-11-14 against the dev server: screenshots at 1440 px and 390 px were looked at. `home.spec.ts` has a new case for the white ground, the two blocks' links and the heads' place; with `shell.spec.ts`, `expansion.spec.ts`, `intro.spec.ts` and the overview case of `portfolio.spec.ts`: 24 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 299 tests, 298 passed, 1 skipped. UNVERIFIED: whether the lead wants Team and What is new kept on the home page at all; they were not mentioned.
+
+## Amendment 35, 2026-11-14 (the team's cards lift under the pointer, and the badge and the name go to each person's LinkedIn profile)
+
+**Context.** The lead, with a recording of another site's portrait card and an image of LinkedIn's round logo: "see how it animates like that when hovering over it and also how the linkedin logo appears, use this image and make b&w like that", and gave a profile address for each of the five.
+
+**Decision.**
+
+- Under the pointer, or with the keyboard's focus in the card, the portrait lifts 4 px, grows by a fiftieth and takes a soft shadow, in 0.28 s. Reduced motion keeps it still.
+- The round badge of amendment 29 stays black with the mark in white, and is now a link to that person's profile, in a new tab; under the pointer itself it turns white with the mark in black. The name links to the same address.
+- The image the lead supplied is not added to the repository: its file name is a stock library's, and the same round mark is drawn from the letters the page already had. LinkedIn's mark is LinkedIn's; it is used only to point at a LinkedIn profile.
+- The five addresses are in `lib/team.ts`. The repository's rule is that a profile link is added only with that person's consent (ADR-0057 amendment 1); the lead supplied them, and whether each person agreed is the lead's to confirm before the merge.
+
+**Evidence.** On 2026-11-14 against the dev server: a screenshot of the card under the pointer was looked at. `home.spec.ts` checks the lift, the badge's place, its two states and the five addresses on the badge and the name: 7 of 7. A run that failed first: the name's link covers the whole card and lay over the badge, so the pointer could not reach it; the frame now lies over that link and lets the pointer through everywhere but on the badge. `tests/team.test.ts` checks each address is a LinkedIn profile address. UNVERIFIED: each person's consent; that the five addresses are the right people's (they were not opened).
+
+## Amendment 36, 2026-11-14 (What is new is a feed on light grey)
+
+**Context.** The lead, on the What is new band: "lets make the what is new, feel more like a news feed type of thing. make this section light gray too."
+
+**Decision.** The band's ground is light grey (#f3f3f4). Its three items are white cards, three to a row and one under another below 1024 px, each with its month and what it is about ("Release", "Analysis", "Workspace") on one line, then its title and text. The words of the items are unchanged.
+
+**Evidence.** On 2026-11-14 against the dev server: a screenshot at 1440 px was looked at; `home.spec.ts` checks the ground, the three cards and their lines. `home.spec.ts`: 7 of 7. The other suites of the home page (`demo.spec.ts`, `intro.spec.ts`, `shell.spec.ts`, `expansion.spec.ts`, the overview case of `portfolio.spec.ts`) passed on the run before the badge's last change: 28 passed, 3 skipped (ADR-0058 amendment 4); they were not run again after it. `npm test`: 300 tests, 299 passed, 1 skipped; `npm run build`: exit 0.
+
+## Amendment 37, 2026-11-14 (Mission and Services side by side with a picture each; the team's names without an arrow)
+
+**Context.** The lead, on the two blocks of amendment 34: "lets move the mission to the left and add a placeholder space for an image on the right (rounded corners) and lets also add services to the right and add a placeholder image to the left of it", then "for the placeholder images I was talking about just use the carbon fiber pic for now." On the team's cards: "lets also get rid of the arrow by names; get rid of the 'The team on the About page' button".
+
+**Decision.**
+
+- Mission and Services are each two halves: the words, set from the left edge of their half, and a picture with 20 px corners, 4 to 3. Mission's words are at the left and its picture at the right; Services the other way round. Under 1024 px the picture goes under the words.
+- Both pictures are the carbon weave the site already holds (`public/assets/images/carbon-weave.jpg`), in grey, standing in for pictures still to come.
+- The team's names keep their links to the profiles and lose the arrow. The link to the About page under the cards is removed; Mission's "Learn more about us" goes there.
+
+**Evidence.** On 2026-11-14 against the dev server: screenshots at 1440 px and 390 px were looked at. `home.spec.ts` checks which side the words and the picture stand on, the corners and the picture's file, and that the names carry no arrow and no link to About follows the cards. `home.spec.ts`, `shell.spec.ts`, `expansion.spec.ts`, `intro.spec.ts`, `demo.spec.ts` and the overview case of `portfolio.spec.ts`: 35 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 300 tests, 299 passed, 1 skipped. UNVERIFIED: which pictures will replace the stand-ins.
+
+
+## Amendment 38, 2026-11-14 (the feed's cards are stand-ins: no official items)
+
+**Context.** The lead, on the feed of amendment 36: "there shouldnt be any official items in the what is new newsletter here".
+
+**Decision.** The three items that reported the closed beta, the bending coupons and the chat are taken out of the home page. In their place stand three cards that announce nothing: "Company news", "Product updates" and "Research notes", each marked "Coming soon" with one line saying what will be posted there. The band's sentence reads "News from the team, as it happens." The changelog still records the three changes.
+
+**Evidence.** `home.spec.ts` checks the three stand-ins and that the band names none of the three earlier items; with the overview case of `portfolio.spec.ts`: 8 of 8 against the dev server on 2026-11-14. `npm test`: 300 tests, 299 passed, 1 skipped. UNVERIFIED: whether the lead wanted stand-ins or an empty band; who will decide what is posted there.
+
+## Amendment 39, 2026-11-14 (the two pictures are links and lift as the portraits do; LinkedIn's mark is the lead's picture, in black and white)
+
+**Context.** The lead, of the pictures of amendment 37: "have these images be clickable as well and send to the respective link: about us and services. make this images animate just like our headshots when hovering over them". And of the badge of amendment 35, naming a picture they had uploaded to `public/assets/brand/`: "use this for the linkedin logo (in repo) but make it b&w like how it is in the screenshot".
+
+**Decision.**
+
+- **The pictures are links.** Mission's picture goes to About and Services' to Services, where each band's worded link goes. Under the pointer a picture lifts 4 px, grows by 2 % and takes a shadow, the portraits' own movement; with reduced motion it stays still. The keyboard and a screen reader meet the worded link only (the picture's link is out of the tab order and hidden from assistive technology), so the same place is not offered twice.
+- **The badge is the uploaded picture.** The round badge on a portrait is drawn from `round-linkedin-logo-isolated-white-background_469489-985.png`, a blue disc with the white letters on a white square: a little larger than the badge, so the badge's round edge cuts the white away, and through a greyscale and contrast filter, so the disc is black and the letters white. Under the pointer itself it is inverted, white with black letters, as before. The letters drawn by the page until now are removed.
+
+**Evidence.** On 2026-11-14 against the dev server: the hovered picture, the badge and the badge under the pointer were captured and looked at; a press on Mission's picture arrived at `/about`. `home.spec.ts` checks each picture's address, that it is out of the tab order, that it lifts under the pointer, and that the badge is drawn from the uploaded file in greyscale and inverts under the pointer; `home.spec.ts` and `demo.spec.ts`: 18 of 18. UNVERIFIED: where the uploaded picture comes from and under what licence it may be used and kept in a public repository (its name is the kind a stock library gives its files; R-30); whether LinkedIn's brand rules allow its mark to be redrawn in black and white, which was not looked up. The picture reached `main` as commit 1fe1034, uploaded by the lead outside a pull request.
+
+## Amendment 40, 2026-11-14 (each time the clip starts again, the hero's words come in again)
+
+**Context.** The lead, with a recording of the hero's clip playing alone and starting again: "when the hero vid restarts, bring in the text animation sequence again." Since amendment 20 the words were typed in once, at the load, stood and were taken away for good.
+
+**Decision.** Each time the clip starts again (its time is reported earlier than it last was; the clip is 21.5 s long), the words come back the way they first came: typed in by the load-in's copies, the mark rising, the Basement's mark fading in. They stand three seconds and are untyped again, as at the load. This happens only while the words are away, the page is at its top and the tab is showing; a round the visitor was not at the top for is left out, and the next one plays. "Scroll to explore" stays up through the later rounds: the hero keeps `data-words="gone"` from the first time the words leave, and counts the rounds in `data-words-round`. A visitor who asked for reduced motion keeps the words standing, as before.
+
+**Options considered.** Hiding "Scroll to explore" again for each round, as at the load: rejected, the page's one prompt to scroll would come and go every 21 s. Timing the rounds by a clock in place of the clip: rejected, the words would drift from the clip's start when the clip stalls or the tab is away.
+
+**Evidence.** On 2026-11-14 against the dev server: the clip was moved to 1 s before its end and left to start again by itself; the words came back within a frame of its start (the clip at 0.03 s), and the round was captured coming in, standing and gone and looked at. `intro.spec.ts`, 5 of 5: its new case checks that a start of the clip away from the page's top brings nothing, that at the top the words are typed in, stand about three seconds with "Scroll to explore" still up and leave, and that the next start brings them again. `npx tsc --noEmit` clean. UNVERIFIED: Safari and Firefox, and a phone that pauses the clip to save power.
+
+## Amendment 41, 2026-11-14 (the team's head stands on grey and its portraits on white; the feed is empty)
+
+**Context.** The lead, of the page under the demo: "its too much white after mission and services, something needs to change at team. Maybe can just make the screenshotted section gray and the background behind the headshots still white?", with the team band's head in the picture. And of the feed's stand-in cards of amendment 38: "I already asked, this needs to be empty as of right now; we have no published updates for the newsfeed."
+
+**Decision.**
+
+- **The team band.** Its head (the label, the heading, the paragraph and the cohort's line) stands on the feed's light grey, `#f3f3f4`, from one edge of the window to the other; the five portraits under it stay on white. So after two white bands the page goes grey, white, grey.
+- **The feed is empty.** The three stand-in cards are removed. The band keeps its label and heading and says "Nothing posted yet. News from the team will appear here."; it holds no card. The list the cards are drawn from is still in `app/page.tsx`, empty: an item added there gets a card and the sentence goes back to "News from the team, as it happens." Amendment 38 had read "no official items" as stand-ins; the lead meant none.
+
+**Evidence.** On 2026-11-14 against the dev server the two bands were captured at 1873 px and at 390 px and looked at. `home.spec.ts`, 7 of 7: it checks the head's grey and that it reaches both edges of the window, that the portraits lie under it on the white band, and that the feed holds no card and says nothing is posted. `npm test`: 304 tests, 303 passed, 1 skipped. UNVERIFIED: whether the one sentence in the empty band is wanted, or the band should say nothing at all.
+
+## Amendment 42, 2026-11-14 (the team band's label stands over the portraits)
+
+**Context.** The lead, with a red circle on the white strip between the grey head of amendment 41 and the first portrait, at the left: "move TEAM to where the red circle is."
+
+**Decision.** The label "Team" leaves the band's grey head and stands on the white under it, over the portraits, at their left edge. The head keeps the heading, the paragraph and the cohort's line.
+
+**Evidence.** On 2026-11-14 against the dev server the band was captured at 1873 px and looked at. `home.spec.ts`, 7 of 7: it checks that the head holds no label, and that "Team" starts at the first portrait's left edge, below the head and above the portraits. `npx tsc --noEmit` clean.
+
+## Amendment 43, 2026-11-14 (one short line under each name)
+
+**Context.** The lead, of the two-seat sentences under the names, with a company's officers page as the reference (a name and a title of a few words): "these descriptions are bad, we just need quick one liners like the reference bios here".
+
+**Decision.** Under each name the home page's card shows one short line: "Co-founder and CEO", "Co-founder, AI architecture", "Fabrication and testing", "Modeling and validation", "Software and UI/UX". Each is the person's role or their technical seat cut short; none is a new title. `lib/team.ts` holds the line (`title`), and `tests/team.test.ts` checks that every word of it is one of the role's or the technical seat's as `docs/brain/people.md` words them. The About page still states both seats in full.
+
+**Evidence.** On 2026-11-14 against the dev server the cards were captured at 1873 px and looked at. `tests/team.test.ts`, 2 of 2. `home.spec.ts`, 7 of 7: it checks the five lines and that each takes one line of text. `npx tsc --noEmit` clean. UNVERIFIED: whether each person is content with their line; they are the drafter's cuts of the recorded seats, for the lead and each person to change.
+
+## Amendment 44, 2026-11-14 (the header leaves on the way down and comes back as a black bar on the way up)
+
+**Context.** The lead, with a recording of a reference site whose black header bar returns as soon as the page is scrolled up: "see how the top header ... black bar, reappears when rescrolling up. make ours behave like this." Until now the header lay in the page's flow on every marketing page (over the hero on the home page) and was seen again only at the page's top.
+
+**Decision.** On every marketing page, at the page's top the header is as it was. Once the whole of it has left the window it is fixed above the window's top edge, out of sight. A scroll up of 8 px or more brings it down as a black bar in 240 ms; a scroll down of 8 px or more sends it away; at the top it is the page's own header again, with no jump. While a menu of the header is open nothing changes. The keyboard's focus coming into the header shows it without moving the page, and it stays while the focus is in it. With reduced motion it comes and goes without a slide. The workspace's header is untouched. The rule is a pure function (`components/header-scroll.ts`); `components/site-shell.tsx` reads the page and writes `data-scroll` on the header; `app/globals.css` draws it.
+
+**Options considered.** `position: sticky` in place of fixed with the page padded by the header's height: rejected, the browser scrolled the page some 445 px when the focus came into a sticky, transformed header. Pinning an open menu to the window: rejected, on a short window its last rows would be cut off. One state for "out of sight": rejected, the bar would be seen sliding out at the moment it leaves the page's flow, so "away" (put there) and "hidden" (seen going) are two.
+
+**Consequences.** The header's four heights are repeated in `--site-header`, which the page's padding and `scroll-padding-top` (the header and 12 px, so what takes the focus further up is not left under the bar) read; a test fails if they drift. The Resources page's physics list sticks under the bar's height. A link to a section, such as `/#working`, now stops that far below the window's top. The rule still honours the old stepped stage's page lock, which nothing mounted sets since ADR-0095 amendment 10.
+
+**Evidence.** On 2026-11-14 against the dev server: `tests/header-scroll.test.ts`, 9 of 9; `shell.spec.ts`, 17 passed and 1 skipped (the Services panel, hidden for now) on a tree that also holds amendment 10's stage, its home-page case far down the page among them (one phone case failed once in the full run and passed alone); `npm test` 314 tests, 313 passed, 1 skipped; `npx tsc --noEmit` clean. Screenshots of the bar on the home page, on About and on a phone were taken and looked at by the work's author. UNVERIFIED: the Services panel hanging from the fixed bar (the panel is switched off); a phone's rubber-band scroll at the page's foot; Firefox and Safari; the header over the stage while a beat plays, by eye.
+
+## Amendment 45, 2026-11-14 (the cards' one-liners are the lead's titles)
+
+**Context.** The lead, of amendment 43's lines: "Co-Founder, CEO / Co-Founder, AI Lead / Test & Fabrication Engineer (? something better...) / Modeling & Validation Lead (? something better...) / Software & Growth Engineer".
+
+**Decision.** The lines are titles, as the lead gave them: "Co-Founder, CEO", "Co-Founder, AI Lead", "Software & Growth Engineer", and for the two the lead asked to be bettered, "Fabrication & Test Lead" and "Simulation & Validation Lead", the drafter's wording for the lead to change. They are the site's own lines and no longer cut from the seats' words; `tests/team.test.ts` checks only that each is a short title. The seats in `lib/team.ts` and on About stay as `docs/brain/people.md` words them.
+
+**Evidence.** `tests/team.test.ts`, 2 of 2; `home.spec.ts`, 7 of 7 (the five lines, one line of text each). UNVERIFIED: that each person agrees to their title; the shared brain's people note does not carry these titles.
+
+## Amendment 46, 2026-11-14 (the band under the team is a changelog, not a news feed)
+
+**Context.** The lead, of the empty feed of amendment 41: "This is what I want this to be: Change Log, not a News feed", "like where we would publish software update versions and changes", with a changelog component from a component library as the example: a column of releases, each with its date and version at the left and beside them a title and its changes, every change tagged Added, Improved or Fixed. The example was written for Tailwind and a component kit this site does not use.
+
+**Decision.** The band is the changelog: label "Changelog", heading "Every release, and what changed.", and under it one release under another in a narrow column, each with its day and its version in a small pill at the left and its title and its changes beside them, every change tagged with its kind in words. The list is `lib/changelog.ts`. It is empty, as the lead said of the feed ("we have no published updates"), and the band then says "No releases published yet. Each version and what changed in it will be listed here." A release listed there must be a released version of `CHANGELOG.md` with the same day (`tests/changelog.test.ts`), so the site announces nothing the repository does not record. The band's id is `changelog`; the feed's cards and their styles are gone.
+
+**Options considered.** Installing Tailwind and the component kit to paste the example in: rejected, two new styling systems for one band, on a site whose every other part is written in its own stylesheets; the example's layout is some sixty lines of those. Listing `CHANGELOG.md`'s one released version (Engine 0.1.0, 2026-10-02) now: not done, the lead has said twice that nothing is to be shown as published yet; it is one entry in `lib/changelog.ts` when the lead says so.
+
+**Evidence.** On 2026-11-14 against the dev server: the band was captured empty and, for a look at the layout only, with Engine 0.1.0 entered and then taken out again; both were looked at. `tests/changelog.test.ts`, 2 of 2. `home.spec.ts`, 7 of 7: the band's label, heading and sentence, no list, and no "What is new" on the page. `npx tsc --noEmit` clean. UNVERIFIED: the list at phone width with an entry in it (the rules are there; no entry is).
+
+## Amendment 47, 2026-11-14 (the hero's words stand in the clip's lower left, with the mark, the name and the year in one line over them)
+
+**Context.** The lead, with recordings of this hero and of the home page its arrangement was taken from (amendments 19, 27 and 28): "our website hero page looks uncannily similar to anduril's homepage, so we need to add some tweaks to make it look not identical, its fine to look similar, but not literally an exact match which is what it is right now." Side by side the two matched in the statement set in capitals in the middle of the clip, the row under it with the mark between two short texts, the square box under the header, and the header's own arrangement.
+
+**Decision.** The statement and its row leave the clip's middle. They stand in its lower left, set from the left, over the Basement's mark: first one small line of the triangle, the name and, behind a hairline, the year; under it the statement, a little larger than before. The parts are the same elements in the same order in the page, so the load-in, the exit and the repeat of amendment 40 run as they did; the stylesheet alone places them. The clip keeps its square corners (the lead asked for square corners on the page's pictures the same day). Still to follow in this amendment's sense, held until other work on the same files has landed: the statement in sentence case, and the header's links at the right beside the Workspace button.
+
+**Evidence.** On 2026-11-14 against the dev server the hero was captured at 1873, 1440 and 390 px and looked at. `home.spec.ts`, 7 of 7: the line's order and that it lies over the statement; the statement, the line and the Basement's mark start on one edge, the clip's padding in, with the statement in the clip's lower half. `demo.spec.ts`, 13 of 13 (the hand-over reads the same elements). UNVERIFIED: whether the lead finds it different enough.
+
+## Amendment 48, 2026-11-14 (the pictures have square corners, and under the pointer a lens shows them in the demo's colours)
+
+**Context.** The lead, of the Mission and Services pictures: "first, unroundify the image corners", and, with a reference site's picture on which a small box under the pointer shows a simulation's colours: "I want this but a lil box lens that appears to show structural fea analysis with the same schema as used in the demo. overlay of the image".
+
+**Decision.** The pictures' corners are square. Under a mouse's pointer a 4:3 window follows the pointer over the picture, a little behind it and kept inside it, and shows the photograph there in the demo's colour scale with a faint mesh of lines over it (`components/home/split-picture.tsx`; the filter is `#home-fea` in `app/page.tsx`). It is not there for a finger or the keyboard. What it shows is the photograph's own light and dark, smoothed and drawn through the scale, laid as colour over the photograph. **It is a picture effect and not an analysis:** nothing was solved, and it carries no number, legend or caption. That is said in the code, here and in R-31.
+
+**Options considered.** Showing a real analysis's picture in the lens: the only recorded one is the demo's wing, which is not what the photograph shows. A caption saying the lens is illustrative: not added; the lead asked for the effect alone, and R-31 puts the question to the founder.
+
+**Evidence.** On 2026-11-14 against the dev server the lens was captured at two places on the Mission picture and looked at. `home.spec.ts`, 7 of 7: no lens away from the pointer; under it a 4:3 window with the pointer in its middle, drawn through the page's filter, inside the picture at its corner, and gone when the pointer leaves; square corners. UNVERIFIED: Safari and Firefox (the lens uses an SVG filter and a blend mode); a pen.
+
+## Amendment 49, 2026-11-14 (the changelog's words stand on a card in the demo's colours; the closing band is light grey)
+
+**Context.** The lead, with a reference site's card on a soft blue-to-red ground: "in the lets define what... box make that gray instead of the what is new box. for the what is new box, we can add a gradient and make it like the physicsx screenshot reference, but instead of that gradient style from their cfd, lets use the fea structural analysis gradient scheme."
+
+**Decision.** On the home page the closing band is light grey (`#f3f3f4`; the industries page's stays white). The changelog's band is the same grey, and its words stand in white on a card set 32 px in from the band's edges whose ground is the colours the demo gives its analysis, blue through cyan, green and yellow to red, blurred into one another. The card is a ground and shows no result. A list of releases, when there is one, stands on a white panel on the card.
+
+**Evidence.** On 2026-11-14 against the dev server the two bands were captured at 1873 px and looked at. `home.spec.ts`, 7 of 7: the card's layered gradient, its 32 px inset, the heading in white, and the closing band's grey. UNVERIFIED: the list's white panel on the card with an entry in it (none is published).
+

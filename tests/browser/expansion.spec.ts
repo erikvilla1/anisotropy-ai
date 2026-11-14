@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { SERVICES_PANEL_IN_HEADER } from "../../lib/site-nav";
 
 test("a negative load stays negative so the setup check can refuse it (ADR-0003)", async ({ page }) => {
   await page.goto("/workspace/fea");
@@ -77,9 +78,8 @@ test("material filters, empty state, references and scope handoff", async ({
   await expect(page.getByTestId("chat-spec")).toContainText("IM7 / 8552");
 });
 
-test("the Services disclosure lists the five service pages and the contact page has an address (ADR-0058)", async ({
-  page,
-}) => {
+test("the Services disclosure lists the five service pages (ADR-0058)", async ({ page }) => {
+  test.skip(!SERVICES_PANEL_IN_HEADER, "the Services panel is hidden from the header for now (ADR-0058 amendment 4)");
   await page.goto("/");
   const button = page.getByRole("button", { name: "Show services" });
   // The footer lists the service pages too (ADR-0077 amendment 13); the disclosure's links are the header's.
@@ -110,6 +110,10 @@ test("the Services disclosure lists the five service pages and the contact page 
   await expect(nav.getByRole("link", { name: "Computer-aided design", exact: true })).toBeFocused();
   await fem.click();
   await expect(page).toHaveURL(/\/services\/finite-element-modeling\/?$/);
+});
+
+test("a service page leads to the workspace and the contact page has an address (ADR-0058)", async ({ page }) => {
+  await page.goto("/services/finite-element-modeling");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("ply by ply");
   await expect(page.getByRole("link", { name: "Open the workspace", exact: true })).toHaveAttribute("href", /\/workspace\/fea$/);
   await page.getByRole("link", { name: "Contact us", exact: true }).first().click();
@@ -121,6 +125,7 @@ test("the Services disclosure lists the five service pages and the contact page 
 });
 
 test("the mobile menu lists the five services under Services", async ({ page }) => {
+  test.skip(!SERVICES_PANEL_IN_HEADER, "the Services panel is hidden from the header for now (ADR-0058 amendment 4)");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByRole("button", { name: "Open menu" }).click();

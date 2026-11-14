@@ -1,6 +1,6 @@
 # ADR-0095: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
 
-- Status: Proposed, with amendments 1 to 3
+- Status: Proposed, with amendments 1 to 8
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) and [ADR-0084](ADR-0084-a-scroll-driven-tour-leads-from-the-hero-into-the-calculator-with-the-engines-own-answers.md), which this supersedes for the home page; [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md) (the live solve the demo does not call); ADR-0001; ADR-0042; ADR-0045; ADR-0091
@@ -109,4 +109,111 @@ Where it stands:
 **Decision.** The case is removed with the view it tested, as the others were. Nothing replaces it in the browser: the view is not mounted on any page.
 
 **Evidence.** CI run 43491534208, job `calculator-browser`, on `fd462a0`: 1 failed, 8 passed, "page.waitForResponse: Test timeout of 30000ms exceeded" at `calculator.spec.ts:21`. The same failure in a cloud container on a production build. The engine's description of that stack is still tested without a browser: `engine/tests/test_summary.py` and `api/tests/test_laminate_summary.py` (found by search; not run locally, CI's `engine` and `api` jobs passed on the same commit). The calculator's eight other browser cases after the removal: see the pull request.
+
+## Amendment 4, 2026-11-14 (the hero hands over to the demo: it stays and dims while the first beat's words come up through it)
+
+**Context.** The lead, with a recording of the deployed page: "I dont like how when u scroll down its all black. it feels too empty, and like a bulky transition. the animations and movements and demo is good rn tho". In the recording the clip scrolls off the top, the window is black for about a second, and then the first beat's words fade in.
+
+**Options considered.** (1) The hero stays in the window and dims as the page scrolls, the first beat's words come up through it, and the stage starts half a window up so the way to it is half as long: chosen. (2) Keep the layout and only show the first beat's words in the stage as it scrolls in: rejected, the stage's top half, where the model goes, enters the window first and is empty, so the black slab stays. (3) A curtain, the black stage sliding up over a hero that stays: rejected, the same slab. (4) Play the hand-over on the first gesture with no scrolling: rejected, the lead asked on 2026-11-13 that a scroll from the hero should not snap into the first animation.
+
+**Decision.** Where the demo is a stepped stage (a window at least 1024 px wide and 600 px tall, no reduced motion):
+
+- The hero and the demo share a wrapper. The hero is sticky at the window's top and lies over the stage, which starts half a window up behind it; half a window of scrolling brings the stage's top edge onto the window's, where it holds as before.
+- `components/home/hero-handover.tsx` writes how far that scroll has gone. The hero's opacity falls with it and is zero when the stage holds, where the hero is hidden altogether. The first beat's words and its empty card come in over the same stretch, while the demo is at its start; the model and the line under it still wait for the first beat.
+- The driver learns where the stage counts as out of sight (`hiddenFrom`), so the demo is back at its start when the hero covers it again.
+- The demo's beats, clock and moves are not changed. Phones, small windows and reduced motion keep two ordinary sections, one under the other.
+
+This replaces two statements of amendment 2 and of amendment 1: the stage no longer starts straight after the hero, and it no longer comes up empty.
+
+**Evidence.** On 2026-11-14 against the dev server:
+
+- A trackpad-style swipe at 1440 by 810 px was recorded and cut at 8 frames a second: every frame shows the clip, the first beat's words, or both.
+- `demo.spec.ts`, `intro.spec.ts` and `home.spec.ts`: 21 of 21. One case is new: on the way to the stage the hero does not move, only dims, the words only come in, and at each tenth of the way one of the two is at more than 0.3 opacity. `shell.spec.ts`, `expansion.spec.ts` and the overview case of `portfolio.spec.ts`: 13 passed, 3 skipped (ADR-0058 amendment 4).
+- A run that failed first: with the stage behind the hero the demo did not go back to its start at the top of the page, because the driver read "out of sight" from the window's foot; `hiddenFrom` corrects it and the case passes.
+- `npm test`: 299 tests, 298 passed, 1 skipped. `npx tsc --noEmit` clean.
+
+UNVERIFIED: a real trackpad, wheel and graphics card; Safari and Firefox; the deployed site. The hero's place is the browser's own (sticky), and only its opacity is written by script, once a frame.
+
+## Amendment 5, 2026-11-14 (the clip grows to the whole window as the scroll starts)
+
+**Context.** The lead, with a recording of amendment 4 on their own machine: "I like the fade in for the below, but can we also have the hero vid expand to full as it scrolls down, instead of staying around a black box".
+
+**Options considered.** (1) The clip's box grows: its edges move out to the window's as the scroll starts, and the picture with them: chosen. (2) Lay the clip out whole-window from the start and uncover its edges with a clip path: not chosen, it would change how the clip is cropped while the page is at its top. (3) Move the hero's words and corner items out with the edges too: not chosen; the words have usually left by then, and the mark and "Scroll to explore" stand 64 px inside the window, an ordinary margin for a whole-window picture.
+
+**Decision.** Over the first half of the way to the stage the clip's box grows from its place under the header (84 px from the top, 32 px from the sides and the foot at 1440 px) to the whole window, eased (`--hero-grow`, written by `components/home/hero-handover.tsx`). It is whole-window while it dims. On the way back up it returns to its box. Nothing else of amendment 4 changes.
+
+**Evidence.** On 2026-11-14 against the dev server: stills at nine points of the scroll and a recorded trackpad-style swipe at 1440 by 810 px were looked at. The hand-over case of `demo.spec.ts` now also checks that the clip's four edges only move outward, reach the window's by half way and are back in the box at the top; `demo.spec.ts`, `intro.spec.ts` and `home.spec.ts`: 21 of 21. `npx tsc --noEmit` clean. UNVERIFIED, as in amendment 4: a real trackpad, wheel and graphics card; Safari and Firefox; whether resizing the clip's box on every frame stays smooth on a slow machine (it lays out one element).
+
+## Amendment 6, 2026-11-14 (the hand-over in order: the clip grows, then dims, then the words come; the button goes; the recorded line is taken out)
+
+**Context.** The lead, on amendments 4 and 5 running on their machine, with screenshots: "wait until the hero vid becomes full screen to fade to black and have the other stuff fade in when it fades more black"; "the 'scroll to explore' button should also be fading out"; and, of the line under the analysis ("A recorded run of the public IM7 / 8552 tension example · version 0.1.0 · 2026-11-13"), "dont need this".
+
+**Decision.**
+
+- The hand-over runs in order over the same half window of scrolling: the clip grows to the whole window over the first 40 % at full strength; only then does it dim, to nothing when the stage holds; the first beat's words come in between 60 % and 90 %, when the clip is at less than 0.6 of its strength.
+- "Scroll to explore" fades as the clip grows and is gone when the clip is whole-window.
+- The line under the analysis is removed from the page. The record (`lib/demo-run.json`) still says what it is, by which version and when, and a unit test reads that. The page therefore shows the analysis's numbers without saying they are a recorded example: the lead's choice, for the founder to weigh with the pull request.
+
+**Evidence.** On 2026-11-14 against the dev server: stills at nine points of a wheel scroll were looked at. The hand-over case of `demo.spec.ts` now scrolls by the wheel in tenths and checks the order (growing at full strength with no words; the button gone by 40 %; the words only once the clip is under 0.6). `demo.spec.ts`, `intro.spec.ts`, `home.spec.ts`, `shell.spec.ts`, `expansion.spec.ts` and the overview case of `portfolio.spec.ts`: 34 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 299 tests, 298 passed, 1 skipped. A run that failed first: the case for the way to the box still expected the words after the first wheel notch, which is now while the clip grows; it expects none there. UNVERIFIED, as before: a real trackpad, Safari, Firefox.
+
+## Amendment 7, 2026-11-14 (a hard stop on the stage, and the demo plays once)
+
+**Context.** The lead, with a screenshot of the first beat and a white strip of the next section at the window's foot: "when I scroll down shouldnt have that clipping thing going on when I can pull up into the white zone, should approach a hard stop." And, with a recording of the demo starting again after it had been played, left and come back to: "once the demo animation runthru is complete and u scroll down and then back up, dont retrigger any animations, just back to the home screen."
+
+**What was wrong.** The scroll that brings the page to the stage is the browser's own, so the browser does not let a script cancel what is left of it, a trackpad's coasting above all. The page was scrolled past the stage and put back frame by frame. On a black page that did not show; since ADR-0077 amendment 33 the next section is white.
+
+**Options considered.** (1) End the page at the stage until the demo has played through, so the browser itself has nowhere to scroll: chosen. (2) Only undo the scroll faster, or lock the page once it has been stopped: rejected alone, the first frames past the stage are drawn before any script runs. (3) Take the wheel over from the hero down and move the page by script: rejected, a wheel's own smooth step would be lost on the way. (4) CSS scroll snapping with a forced stop: not chosen, it also pulls a resting page to the stage, which the lead ruled out on 2026-11-13, and its forced stop could not be tried in Safari or Firefox here.
+
+**Decision.**
+
+- **The gate.** Where the demo is a stepped stage, until it has played through, everything after it (the bands, the closing band, the footer) is taken out of the page's height, as visually hidden text is, so the page ends with the stage on the window. It stays in the page for a screen reader and the keyboard. The gate opens for good when the last beat ends, and at once when focus moves past the demo, when a link names a section below it, or when the page is already scrolled past the stage as its script starts.
+- **The lock.** While a beat plays on a held stage, and for a moment after the page has been stopped on it, the page's overflow is hidden, so no scroll that was already on its way moves it; the scroll bar's room is kept as padding.
+- **Once.** When the last beat has ended the stage is an ordinary section for the rest of the visit: no gesture is taken, the page is never stopped on it again, and it keeps its last beat. A reload starts over.
+
+**Consequences.** Until the demo has played through, the scroll bar and the End key reach no further than the stage; this is stated in R-27. A visitor who wants what is below has four gestures to make, or the keyboard's Tab.
+
+**Evidence.** On 2026-11-14 against the dev server:
+
+- One long synthesized wheel gesture from the hero (1600 px at 2400 px a second): before, the page's scroll position reached 676 to 699 px for a stage at 450; with the gate it never passes 450.
+- `demo.spec.ts`, `home.spec.ts`, `intro.spec.ts`, `shell.spec.ts`, `expansion.spec.ts` and the overview case of `portfolio.spec.ts`: 35 passed, 3 skipped (ADR-0058 amendment 4). The cases now check that the page ends at the stage until the last beat, that the next band follows the stage once it has, that a swipe after the end is not taken, and that going down, back to the hero and down again plays nothing.
+- A run that failed first: reserving the scroll bar's room with `scrollbar-gutter` moved the layout 15 px in the test browser, whose bars take no room; the room is now measured when the lock goes on.
+- `npm test`: 300 tests, 299 passed, 1 skipped. `npx tsc --noEmit` clean.
+
+UNVERIFIED: a real trackpad's coasting, which the synthesized gesture only stands for; Safari and Firefox; a phone's fling, which keeps its earlier handling.
+
+## Amendment 8, 2026-11-14 (once the demo has played, the hero is an ordinary section above it)
+
+**Context.** The lead, with a recording of scrolling up from the finished demo: "when it finishes and scrolling up, dont do the whole re-fade transition back to hero. just have it be directly block above it."
+
+**Decision.** When the last beat ends the hand-over of amendments 4 to 6 is switched off for the rest of the visit (`data-played` on the two sections' wrapper): the hero is no longer sticky, dimmed or grown, and the stage no longer starts behind it. The hero stands whole, straight above the stage, and scrolling up brings it down as any section. Taking the overlap away moves the stage half a window down the page; the page is scrolled by the same amount in the same frame, so the stage does not move in the window. On the first way down the hand-over is as before.
+
+**Evidence.** On 2026-11-14 against the dev server: `demo.spec.ts`, `home.spec.ts` and `intro.spec.ts`, 22 of 22. The play-once case now checks that at the end the stage is still on the window's top edge with the hero's foot on it, that the hero is in the page's flow at full strength, and that 300 px up from there the hero's foot is 300 px into the window with its clip in its box and nothing fading. `npx tsc --noEmit` clean. UNVERIFIED: a real trackpad; Safari and Firefox.
+
+## Amendment 9, 2026-11-14 (if the hero's words stand when the page scrolls, they go as the clip grows)
+
+**Context.** The lead, with two pictures of the hand-over: "fix this. this shouldnt happen when rescrolling, it looks poorly done." In the first the hero's statement stands over the dimming clip with the demo's first words and the wing's outline showing through it; in the second the statement is still faintly there behind the stage's first beat. The hand-over of amendments 4 to 6 was set for a hero whose words had already left; they still stand when the page is scrolled within a few seconds of the load, and since ADR-0077 amendment 40 they stand again for a few seconds each time the clip starts again.
+
+**Decision.** Where the hand-over applies, the hero's statement, its row and the Basement's mark fade with the clip's growth (`--hero-grow`), as "Scroll to explore" does: half gone when the clip is half grown, and gone when the clip is whole-window, two fifths of the way. The demo's first words begin at three fifths, so the two never show together. Scrolling back to the top brings the words back. It is done with a `filter`, so the load-in's and the exit's own handling of the words' opacity is untouched.
+
+**Evidence.** `demo.spec.ts`: a new case scrolls while the words stand and checks that they are half gone a fifth of the way, gone from two fifths on while the demo's words come in, and whole again at the top; it and the earlier hand-over case pass (2 of 2, 2026-11-14, dev server). UNVERIFIED: the five later cases of `demo.spec.ts` could not be run to the end in this session's last run, because the home page was briefly not rendering while the wing's record was being re-made by other work in the same folder; they are to be run again when that lands. Safari and Firefox.
+
+## Amendment 10, 2026-11-14 (the stage follows the page's scroll: nothing is held, beats play as the scroll reaches them, and backwards on the way up)
+
+**Context.** The lead, with a recording of a reference site whose stage animation can be scrolled through at any speed and runs again on the way back up: "see how you can scroll quickly thru the animation or slowly and let it fully load, I want ours to be like this that way your scroll isnt throttled to the point where it's really noticeable to stop your scrolling thru the website. also then reactivate the animation on the way back up". Until now the stage took the wheel, swipes and keys while it held the window, one gesture playing one whole beat (amendment 1), stopped the page hard on itself and played once (amendment 7), and left the hero an ordinary section above it once it had played (amendment 8). Those three were the lead's own earlier requests; this replaces them.
+
+**Decision.**
+
+- **The page scrolls freely.** The stage is `position: sticky` in a section that is the stage and half a stage of scroll for each of the four beats tall, so it stays at the window's top for two windows of scrolling and then leaves with its section. Nothing takes the wheel, a touch or a key; nothing moves, stops or locks the page; what follows the demo is always in the page (the gate is gone).
+- **Where the scroll stands says which beat plays.** The first beat starts as the stage comes within 0.08 of its height of the window's top; each further half stage of scroll asks for the next. The beat the scroll stands in plays on the clock at its own pace, so a visitor who stays sees it whole; a beat the scroll has already left behind is run through in about a second.
+- **Back up, the beats are unplayed**, at 2.5 times their pace or faster, one zone at a time, and above the stage the hand-over runs backwards too: the hero comes back as it went. Down again, everything plays again.
+- **Out of the window the clock goes straight to where the scroll asks**, so nothing is played for no one, and a page opened further down starts with the demo finished.
+- The wing can be turned by hand only while the demo stands finished; scrolled back into an earlier beat the turn eases away.
+
+The rule is a pure module with unit tests (`components/home/scroll-steps.ts`); `components/home/scroll-stage.ts` reads the page and plays; `components/home/tour-driver.ts` and `tour-stepper.ts`, the stepped stage's driver, are kept for the archived calculator tour and are no longer used by the demo.
+
+**Options considered.** Tying the clock to the scroll's position pixel for pixel: rejected, the beats' own sequences (the facts filling in, the run's stages ticking over) would stand still whenever the scroll did, and the lead asked to be able to "let it fully load". Keeping the stepped stage with a shorter hold: rejected, any hold is the throttling the lead named.
+
+**Consequences.** The home page is two windows longer. A visitor who flings past sees little of the demo; that is their choice now, where before the page made them stay (R-27). The header's rule (ADR-0077 amendment 44) no longer needs to know about the stage.
+
+**Evidence.** On 2026-11-14 against the dev server. `tests/scroll-steps.test.ts`, 3 of 3. `demo.spec.ts`, 13 of 13, rewritten for this: the page is exactly where the wheel put it at every step and none of a swipe's events is taken; each zone plays its beat; a beat still takes its own time (the second about 3.6 s); one wheel event through everything is not held and leaves the demo finished; quick steps through the stage run the beats through; up again the beats are unplayed one by one, the hero comes back, and down again the first beat plays; a finger scrolls through the stage as through any page; reduced motion and a phone are as before. `home.spec.ts` 7 of 7, `shell.spec.ts` 18 passed and 1 skipped, `expansion.spec.ts` passed with its 2 skipped; `npm test` 317 tests, 316 passed, 1 skipped; `npx tsc --noEmit` clean. A scripted trial at 1873 by 866 was read: the scroll positions were exactly the wheel's throughout. UNVERIFIED: a real trackpad, wheel and phone; Safari and Firefox; whether half a stage a beat is the right length of scroll.
 
