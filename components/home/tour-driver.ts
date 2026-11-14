@@ -50,6 +50,10 @@ export type TourPlay = {
   /** A page that comes to rest within this many pixels of where the element holds the window, by a link, the scroll bar or a
    * restored position (no wheel, key or finger just before), is put there. Default 0: only a page already there counts. */
   settleWithin?: number;
+  /** How far down the window the element's top edge is when nothing of it can be seen from above, in pixels. Default: the
+   * window's height, its foot. The product demo's stage starts half a window up, behind the hero, which covers it until the
+   * page scrolls (ADR-0095 amendment 4). */
+  hiddenFrom?: () => number;
 };
 
 export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: boolean, onFrame: (frame: TourFrame) => void, play?: TourPlay) {
@@ -276,7 +280,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
         // Out of sight, the tour is where a visitor coming back to it expects it: at its start from above, at its end from below.
         // (Read from the element's own edges: where it holds the window need not be the window's top.)
         const edges = element.getBoundingClientRect();
-        if (edges.top >= viewport && stop !== 0) jump(0);
+        if (edges.top >= (options.current?.hiddenFrom?.() ?? viewport) - 0.5 && stop !== 0) jump(0);
         else if (edges.bottom <= 0 && stop !== LAST_STOP) jump(LAST_STOP);
       }
       if (Math.abs(top) < viewport / 2 !== onStage) tell();

@@ -1,6 +1,6 @@
 # ADR-0095: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
 
-- Status: Proposed, with amendments 1 to 3
+- Status: Proposed, with amendments 1 to 4
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) and [ADR-0084](ADR-0084-a-scroll-driven-tour-leads-from-the-hero-into-the-calculator-with-the-engines-own-answers.md), which this supersedes for the home page; [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md) (the live solve the demo does not call); ADR-0001; ADR-0042; ADR-0045; ADR-0091
@@ -109,4 +109,28 @@ Where it stands:
 **Decision.** The case is removed with the view it tested, as the others were. Nothing replaces it in the browser: the view is not mounted on any page.
 
 **Evidence.** CI run 43491534208, job `calculator-browser`, on `fd462a0`: 1 failed, 8 passed, "page.waitForResponse: Test timeout of 30000ms exceeded" at `calculator.spec.ts:21`. The same failure in a cloud container on a production build. The engine's description of that stack is still tested without a browser: `engine/tests/test_summary.py` and `api/tests/test_laminate_summary.py` (found by search; not run locally, CI's `engine` and `api` jobs passed on the same commit). The calculator's eight other browser cases after the removal: see the pull request.
+
+## Amendment 4, 2026-11-14 (the hero hands over to the demo: it stays and dims while the first beat's words come up through it)
+
+**Context.** The lead, with a recording of the deployed page: "I dont like how when u scroll down its all black. it feels too empty, and like a bulky transition. the animations and movements and demo is good rn tho". In the recording the clip scrolls off the top, the window is black for about a second, and then the first beat's words fade in.
+
+**Options considered.** (1) The hero stays in the window and dims as the page scrolls, the first beat's words come up through it, and the stage starts half a window up so the way to it is half as long: chosen. (2) Keep the layout and only show the first beat's words in the stage as it scrolls in: rejected, the stage's top half, where the model goes, enters the window first and is empty, so the black slab stays. (3) A curtain, the black stage sliding up over a hero that stays: rejected, the same slab. (4) Play the hand-over on the first gesture with no scrolling: rejected, the lead asked on 2026-11-13 that a scroll from the hero should not snap into the first animation.
+
+**Decision.** Where the demo is a stepped stage (a window at least 1024 px wide and 600 px tall, no reduced motion):
+
+- The hero and the demo share a wrapper. The hero is sticky at the window's top and lies over the stage, which starts half a window up behind it; half a window of scrolling brings the stage's top edge onto the window's, where it holds as before.
+- `components/home/hero-handover.tsx` writes how far that scroll has gone. The hero's opacity falls with it and is zero when the stage holds, where the hero is hidden altogether. The first beat's words and its empty card come in over the same stretch, while the demo is at its start; the model and the line under it still wait for the first beat.
+- The driver learns where the stage counts as out of sight (`hiddenFrom`), so the demo is back at its start when the hero covers it again.
+- The demo's beats, clock and moves are not changed. Phones, small windows and reduced motion keep two ordinary sections, one under the other.
+
+This replaces two statements of amendment 2 and of amendment 1: the stage no longer starts straight after the hero, and it no longer comes up empty.
+
+**Evidence.** On 2026-11-14 against the dev server:
+
+- A trackpad-style swipe at 1440 by 810 px was recorded and cut at 8 frames a second: every frame shows the clip, the first beat's words, or both.
+- `demo.spec.ts`, `intro.spec.ts` and `home.spec.ts`: 21 of 21. One case is new: on the way to the stage the hero does not move, only dims, the words only come in, and at each tenth of the way one of the two is at more than 0.3 opacity. `shell.spec.ts`, `expansion.spec.ts` and the overview case of `portfolio.spec.ts`: 13 passed, 3 skipped (ADR-0058 amendment 4).
+- A run that failed first: with the stage behind the hero the demo did not go back to its start at the top of the page, because the driver read "out of sight" from the window's foot; `hiddenFrom` corrects it and the case passes.
+- `npm test`: 299 tests, 298 passed, 1 skipped. `npx tsc --noEmit` clean.
+
+UNVERIFIED: a real trackpad, wheel and graphics card; Safari and Firefox; the deployed site. The hero's place is the browser's own (sticky), and only its opacity is written by script, once a frame.
 

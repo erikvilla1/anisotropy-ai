@@ -1,4 +1,5 @@
-/* The product demo (components/home/product-demo.tsx, ADR-0095): a black stage under the hero, as wide as the hero's clip and
+/* The product demo (components/home/product-demo.tsx, ADR-0095): a black stage after the hero (on a desktop it starts half a
+ * window up, behind it: amendment 4, app/home.css), as wide as the hero's clip and
  * one window tall, in which the coupon workspace is shown in four beats (amendment 2; in amendment 1 it was a white box the
  * size of the clip). It has no edge on the black page; the small cards in it are the workspace's dark panels, behind a hairline. Two layouts share one markup: by
  * default an ordinary section, the beats one under another; on a desktop-sized window whose visitor has not asked for reduced
@@ -347,13 +348,15 @@
   .product-demo:not([data-mode="pinned"]) .product-demo-box > * {
     visibility: hidden;
   }
-  /* The box comes up empty: its parts are there once it holds the window and the first beat starts, and go again when the
+  /* The box comes up with the first beat's words and its empty card, which come in as the page scrolls to it (--demo-arrived,
+   * written by components/home/hero-handover.tsx; ADR-0095 amendment 4), so the window is not an empty black one on the way.
+   * The model and the line under it are there once the box holds the window and the first beat starts, and go again when the
    * demo is back at its start. */
   .product-demo[data-mode="pinned"] .product-demo-box > * {
     transition: opacity 0.7s ease;
   }
   .product-demo[data-mode="pinned"] .product-demo-box:not([data-stop]) > *,
-  .product-demo[data-mode="pinned"] .product-demo-box[data-stop="0"]:not([data-moving]) > * {
+  .product-demo[data-mode="pinned"] .product-demo-box[data-stop="0"]:not([data-moving]) > :not(.product-demo-beats) {
     opacity: 0;
     transition: none;
   }
@@ -389,6 +392,12 @@
   }
   .product-demo[data-mode="pinned"] .product-demo-beat[data-active="true"] {
     pointer-events: auto;
+  }
+  /* While the demo is at its start, the first beat's words stand once the page has scrolled to the stage, before the clock
+   * has brought them in. (`data-stop` is still 0 while the first beat plays, so they do not blink as it starts.) */
+  .product-demo[data-mode="pinned"] .product-demo-box[data-stop="0"] .product-demo-beat[data-beat="describe"] {
+    opacity: max(var(--shown, 0), var(--demo-arrived, 0));
+    translate: 0 calc((1 - max(var(--shown, 0), var(--demo-arrived, 0))) * 16px);
   }
   .product-demo[data-mode="pinned"] .product-demo-beat[data-side="under"] {
     left: 50%;

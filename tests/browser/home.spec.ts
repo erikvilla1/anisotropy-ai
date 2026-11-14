@@ -15,7 +15,9 @@ function apiRequests(page: Page): string[] {
 test("the hero opens the page, and the laminate calculator and its tour are not on it (ADR-0095)", async ({ page }) => {
   const asked = apiRequests(page);
   await page.goto("/");
-  expect(await page.locator("main > *").first().getAttribute("id")).toBe("overview");
+  // The hero and the demo share a wrapper (ADR-0095 amendment 4); the hero is the first section in it.
+  expect(await page.locator("main > .home-opening > *").first().getAttribute("id")).toBe("overview");
+  expect(await page.locator("main > *").first().getAttribute("class")).toBe("home-opening");
   await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/one engineering platform\s*for composite theory/);
   await expect(page.locator("#laminate, #tour")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Your layup, calculated." })).toHaveCount(0);

@@ -63,28 +63,32 @@ async function openPinned(page: Page) {
 }
 const kilonewtons = (newtons: number) => (newtons / 1000).toFixed(1);
 
-test("the demo is a black stage under the hero, as wide as the clip and a window tall", async ({ page }) => {
+test("the demo is a black stage as wide as the clip and a window tall, which starts half a window up behind the hero", async ({ page }) => {
   await openPinned(page);
   const rects = await page.evaluate(() => {
     const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
     return { clip: rect("#overview .home-hero-media"), box: rect("#demo .product-demo-box"), section: rect("#demo"), next: rect("#mission") };
   });
-  // As wide as the clip, a window tall, straight after the hero (whose own foot is the 32 px of black under the clip), and
-  // followed at once by the next band.
+  // As wide as the clip, a window tall, and followed at once by the next band. With the page at its top it starts half a
+  // window up, behind the hero, which lies over it (ADR-0095 amendment 4): half a window of scrolling brings it up.
   expect([rects.box.left, rects.box.right]).toEqual([rects.clip.left, rects.clip.right]);
   expect(rects.box.height).toBe(page.viewportSize()!.height);
-  expect(rects.box.top - rects.clip.bottom).toBe(32);
+  expect(rects.box.top).toBe(page.viewportSize()!.height / 2);
   expect(rects.next.top).toBe(rects.box.bottom);
+  await expect(page.locator("#overview")).toHaveCSS("position", "sticky");
+  const layers = await page.evaluate(() => ["#overview", "#demo"].map((selector) => Number(getComputedStyle(document.querySelector(selector)!).zIndex)));
+  expect(layers[0]).toBeGreaterThan(layers[1]);
+  await expect(page.locator("#overview")).toHaveCSS("background-color", "rgb(0, 0, 0)");
   await expect(box(page)).toHaveCSS("background-color", "rgb(0, 0, 0)");
   await expect(demo(page)).toHaveCSS("background-color", "rgb(0, 0, 0)");
   // The order of the page: the hero, the demo, then the bands.
-  const order = await page.locator("main > *").evaluateAll((elements) => elements.map((element) => element.id).filter(Boolean));
+  const order = await page.locator("main > .home-opening > *, main > *").evaluateAll((elements) => elements.map((element) => element.id).filter(Boolean));
   expect(order.slice(0, 3)).toEqual(["overview", "demo", "mission"]);
   // There is no timeline in it, and it asks nothing of the API.
   await expect(box(page).locator("[class*='rail'], [class*='tick']")).toHaveCount(0);
 });
 
-test("the page scrolls to the box as any page does; the box comes up empty and the first beat plays once it fills the window", async ({ page }) => {
+test("the page scrolls to the box as any page does; the box comes up with the first beat's words alone, and the first beat plays once it fills the window", async ({ page }) => {
   const asked: string[] = [];
   page.on("request", (request) => { if (request.url().includes("/v1/")) asked.push(request.url()); });
   await openPinned(page);
@@ -94,8 +98,16 @@ test("the page scrolls to the box as any page does; the box comes up empty and t
   await page.waitForTimeout(500);
   expect(await scrollY(page)).toBe(100);
   await expectStop(page, 0);
-  for (const part of [".product-demo-view", ".product-demo-beats", ".product-demo-recorded"]) await expect(box(page).locator(part), part).toHaveCSS("opacity", "0");
-  // Notch by notch: the page keeps to the wheel and the box stays empty.
+  // The model and the line under it wait for the first beat; the first beat's words are on their way in (amendment 4), and
+  // no other beat's are up.
+  for (const part of [".product-demo-view", ".product-demo-recorded"]) await expect(box(page).locator(part), part).toHaveCSS("opacity", "0");
+  const wordsIn = () => beat(page, "describe").evaluate((element) => Number(getComputedStyle(element).opacity));
+  const first = await wordsIn();
+  expect(first).toBeGreaterThan(0);
+  expect(first).toBeLessThan(1);
+  for (const id of ["model", "analysis", "report"]) await expect(beat(page, id)).toHaveCSS("opacity", "0");
+  await expect(page.getByTestId("demo-layup")).toHaveText("");
+  // Notch by notch: the page keeps to the wheel, nothing plays, and the words come further in.
   for (let guard = 0; (await offLine(page)) > 100 && guard < 30; guard++) {
     const before = await scrollY(page);
     await notch(page);
@@ -103,6 +115,7 @@ test("the page scrolls to the box as any page does; the box comes up empty and t
     await expect(box(page)).not.toHaveAttribute("data-moving", "true");
   }
   await expectStop(page, 0);
+  expect(await wordsIn()).toBeGreaterThan(first);
   const left = await offLine(page);
   expect(left).toBeGreaterThan(0);
   expect(left).toBeLessThanOrEqual(100);
@@ -124,6 +137,56 @@ test("the page scrolls to the box as any page does; the box comes up empty and t
   await expect(assistant).toContainText("ASTM D3039");
   await expect(page.getByTestId("demo-layup")).toHaveText(run.coupon.layup);
   expect(asked).toEqual([]);
+});
+
+test("on the way to the stage the hero stays in the window and dims while the first beat's words come up through it; the window is never empty (ADR-0095 amendment 4)", async ({ page }) => {
+  await openPinned(page);
+  const opening = page.locator(".home-opening");
+  const read = () => page.evaluate(() => {
+    const hero = document.getElementById("overview")!;
+    const words = document.querySelector<HTMLElement>('.product-demo-beat[data-beat="describe"]')!;
+    const style = getComputedStyle(hero);
+    const box = words.getBoundingClientRect();
+    return {
+      heroTop: Math.round(hero.getBoundingClientRect().top),
+      hero: style.visibility === "hidden" ? 0 : Number(style.opacity),
+      words: Number(getComputedStyle(words).opacity),
+      wordsInWindow: box.top < window.innerHeight && box.bottom > 0,
+    };
+  });
+  // At the top: the hero whole, the stage behind it, nothing of the demo's words yet.
+  await expect(opening).toHaveAttribute("data-handover", "ready");
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0 });
+  // Down in steps of a tenth of the way. The hero does not move; it only dims, and the words only come in. At every step
+  // something is on the screen: the clip, or the first beat's words, or both.
+  const way = await offLine(page);
+  expect(way).toBe(page.viewportSize()!.height / 2);
+  let before = await read();
+  for (let step = 1; step <= 6; step++) {
+    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), Math.round((way * step) / 10));
+    await expect(opening).toHaveAttribute("data-handover", "going");
+    await page.waitForTimeout(80);
+    const now = await read();
+    expect(now.heroTop, `the hero's place at ${step}/10`).toBe(0);
+    expect(now.hero, `the hero at ${step}/10`).toBeLessThanOrEqual(before.hero);
+    expect(now.words, `the words at ${step}/10`).toBeGreaterThanOrEqual(before.words);
+    expect(now.hero > 0.3 || (now.words > 0.3 && now.wordsInWindow), `something on the screen at ${step}/10: ${JSON.stringify(now)}`).toBe(true);
+    before = now;
+  }
+  expect(before.hero).toBeLessThan(0.5);
+  expect(before.words).toBeGreaterThan(0.5);
+  // The box is not moving yet: all of this was the scroll's.
+  await expectStop(page, 0);
+  // On the stage: the hero is out of the way, the words stand, and the first beat plays.
+  await reachBox(page);
+  await expect(opening).toHaveAttribute("data-handover", "done");
+  await expect(page.locator("#overview")).toHaveCSS("visibility", "hidden");
+  expect((await read()).words).toBe(1);
+  // Back at the top the hero is whole again and the demo is at its start.
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await expect(opening).toHaveAttribute("data-handover", "ready");
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0 });
+  await expectStop(page, 0);
 });
 
 test("each gesture plays one whole beat, a swipe's burst plays one, and the analysis shows the recorded field with its legend and what it found", async ({ page }) => {
@@ -298,9 +361,15 @@ test("with reduced motion the beats lie one under another in the box, finished, 
   await expect(demo(page)).toHaveAttribute("data-mode", "static");
   expect(await box(page).getAttribute("data-stop")).toBeNull();
   await expect(box(page)).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  // No hand-over: the hero is an ordinary section and the demo starts where the hero ends.
+  await expect(page.locator(".home-opening")).not.toHaveAttribute("data-handover", /.+/);
+  await expect(page.locator("#overview")).toHaveCSS("position", "relative");
+  const seam = await page.evaluate(() => [document.getElementById("overview")!.getBoundingClientRect().bottom, document.getElementById("demo")!.getBoundingClientRect().top]);
+  expect(seam[1]).toBe(seam[0]);
   await page.mouse.move(700, 500);
   await page.mouse.wheel(0, 240);
   await expect.poll(() => scrollY(page)).toBe(240);
+  await expect(page.locator("#overview")).toHaveCSS("opacity", "1");
   await expect(demo(page).getByRole("heading", { level: 2 })).toHaveText("A coupon analysis, set up for you.");
   for (const title of ["Describe the coupon.", "The model builds itself.", "Run the analysis.", "It comes with the report."]) await expect(demo(page).getByRole("heading", { name: title })).toBeVisible();
   await expect(page.getByTestId("demo-layup")).toHaveText(run.coupon.layup);

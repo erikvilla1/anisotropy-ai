@@ -3,6 +3,7 @@ import { join } from "node:path";
 import Link from "next/link";
 import { ArrowUpRight, MoveUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
+import { HeroHandover } from "@/components/home/hero-handover";
 import { HeroOutro } from "@/components/home/hero-outro";
 import { ProductDemo } from "@/components/home/product-demo";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
@@ -53,6 +54,9 @@ function LinkedInMark() {
 export default function Home() {
   return (
     <main id="main">
+      {/* The hero and the demo share one wrapper, so the hero can stay in the window while the page scrolls to the demo's stage
+          and dim away as the first beat comes up through it (ADR-0095 amendment 4, components/home/hero-handover.tsx). */}
+      <div className="home-opening">
       <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
         <div className={heroVideo ? "home-hero-media has-video" : "home-hero-media"} aria-hidden="true">
           {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
@@ -101,6 +105,8 @@ export default function Home() {
           /calculator and in the workspace. */}
       {/* The product demo (ADR-0095 amendment 2): the coupon workspace in four beats, on black, a window tall, under the hero. */}
       <ProductDemo />
+      <HeroHandover />
+      </div>
       {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31):
           Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
           close the Mission band as a strip. */}

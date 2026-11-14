@@ -35,8 +35,8 @@ const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", mo
 const FILES = DOWNLOAD_LABELS.slice(0, 3).map(([, label]) => label);
 const materialName = (id: string) => libraryOptions.find((option) => option.id === id)?.name ?? id;
 
-/** The home page's demonstration of the product (ADR-0095): the coupon workspace in four beats, in a black box the size of the
- * hero's clip, directly under it. Each beat uses the workspace's own names and shapes, cut down for a first look: the assistant's
+/** The home page's demonstration of the product (ADR-0095): the coupon workspace in four beats, on a black stage as wide as
+ * the hero's clip and a window tall, which the hero hands over to (components/home/hero-handover.tsx). Each beat uses the workspace's own names and shapes, cut down for a first look: the assistant's
  * question and chips, the setup's summary, the run's stages with the stress field, and the files. Nothing is asked of the API:
  * the model, the field's colours and every number are one recorded run of the solver on a public example (lib/demo-run.ts).
  *
@@ -70,6 +70,12 @@ export function ProductDemo() {
     clockPerSecond: DEMO_CLOCK_PER_SECOND,
     // The stage is a window tall and holds the window with its top edge on the window's (the driver's own line).
     settleWithin: 160,
+    // With the page at its top the stage lies behind the hero (ADR-0095 amendment 4): that is where it is out of sight.
+    hiddenFrom: () => {
+      const stage = box.current;
+      const opening = stage?.closest(".home-opening");
+      return stage && opening ? stage.getBoundingClientRect().top - opening.getBoundingClientRect().top : window.innerHeight;
+    },
   });
   // Not stepped: every beat is finished, and the view shows the run's end.
   useEffect(() => {

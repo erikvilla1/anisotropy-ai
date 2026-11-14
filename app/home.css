@@ -1080,6 +1080,27 @@
   -webkit-mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
   mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
 }
+/* The hand-over to the demo (ADR-0095 amendment 4). Where the demo is a stepped stage, the hero stays in the window while the
+ * page scrolls to the stage, lying over it, and dims away as the scroll goes (--hero-left, written by
+ * components/home/hero-handover.tsx), while the first beat's words come up through it: the window is never an empty black
+ * one. The stage starts half a window up, behind the hero, so half a window of scrolling brings it to the window's top. Once
+ * it is there the hero is out of the way altogether. The layout is the stylesheet's own, so nothing moves when the script
+ * starts; without the script the hero simply stays opaque for that half window. */
+@media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  .home-opening > .home-hero {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #000000;
+    opacity: calc(1 - var(--hero-left, 0));
+  }
+  .home-opening[data-handover="done"] > .home-hero {
+    visibility: hidden;
+  }
+  .home-opening > .product-demo {
+    margin-top: calc(-0.5 * max(640px, 100svh));
+  }
+}
 /* The year, on the mark's left. */
 .home-hero-notes {
   justify-self: end;
