@@ -540,10 +540,61 @@
   justify-self: center;
   margin-top: 28px;
 }
-/* A band whose head is all it holds ends there. */
-.home-mission .band-head,
-.home-platform .band-head {
-  margin-bottom: 0;
+/* Mission and Services (amendment 37): the words in one half and a picture with round corners in the other, Mission's words
+ * at the left and Services' at the right. The words are set from the left edge of their half. Under 1024 px the picture goes
+ * under the words. */
+.home-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(32px, 6vw, 96px);
+  padding-inline: max(32px, calc((100% - 1280px) / 2));
+}
+.home-split .band-head {
+  max-width: 560px;
+  margin: 0;
+  text-align: left;
+}
+.home-split.is-flipped .band-head {
+  justify-self: end;
+  width: 100%;
+}
+.home-split .band-statement {
+  justify-items: start;
+}
+.home-split .band-statement > .home-link {
+  justify-self: start;
+}
+.home-split .home-services {
+  justify-content: flex-start;
+}
+.home-split-picture {
+  aspect-ratio: 4 / 3;
+  border-radius: 20px;
+  background: var(--panel) url("/assets/images/carbon-weave.jpg") center / cover;
+  filter: grayscale(1);
+}
+.home-split.is-flipped .home-split-picture {
+  order: -1;
+}
+@media (max-width: 1023px) {
+  .home-split {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 32px;
+  }
+  .home-split .band-head,
+  .home-split.is-flipped .band-head {
+    justify-self: start;
+    max-width: 640px;
+  }
+  .home-split.is-flipped .home-split-picture {
+    order: 0;
+  }
+}
+@media (max-width: 640px) {
+  .home-split {
+    padding-inline: 20px;
+  }
 }
 /* The five services by name, as the demo's chips are drawn: each goes to its page. */
 .home-services {
@@ -773,15 +824,6 @@
 .home-face h3 a:hover {
   opacity: 0.6;
 }
-.home-face h3 svg {
-  margin-left: 2px;
-  vertical-align: -1px;
-}
-.home-about-link {
-  display: flex;
-  width: fit-content;
-  margin: 48px auto 0;
-}
 /* What is new, as a feed (ADR-0077 amendment 36): the band on light grey, and each item a white card with its month and what
  * it is about on one line, then its title and two lines of what changed. Three to a row; one under another on a narrow
  * screen. */
@@ -851,9 +893,6 @@
   .home-face h3 {
     font-size: 18px;
     line-height: 24px;
-  }
-  .home-about-link {
-    margin-top: 32px;
   }
   .home-news article {
     padding: 20px 20px 24px;

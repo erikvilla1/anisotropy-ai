@@ -132,11 +132,30 @@ test("after the demo the page is white, and Mission and Services are two short b
   await expect(five.nth(1)).toHaveAttribute("href", /\/services\/finite-element-modeling\/?$/);
   await expect(services.getByRole("link", { name: "Explore the services" })).toHaveAttribute("href", /\/services\/?$/);
   await expect(services.locator(".band-card, .home-status")).toHaveCount(0);
-  // The heads are set in the middle, as the demo's words are.
-  for (const id of ["mission", "platform", "working", "news"]) {
+  // Mission and Services stand side by side with a picture each (amendment 37): Mission's words at the left of its picture,
+  // Services' at the right of theirs; the picture has round corners and is the carbon weave for now.
+  for (const [id, wordsFirst] of [["mission", true], ["platform", false]] as const) {
+    const places = await page.locator(`#${id}`).evaluate((band) => {
+      const words = band.querySelector(".band-head")!.getBoundingClientRect();
+      const picture = band.querySelector(".home-split-picture")!;
+      const box = picture.getBoundingClientRect();
+      const style = getComputedStyle(picture);
+      return { words: [words.left, words.right], picture: [box.left, box.right], width: box.width, radius: style.borderTopLeftRadius, image: style.backgroundImage };
+    });
+    if (wordsFirst) expect(places.words[1], id).toBeLessThanOrEqual(places.picture[0]);
+    else expect(places.picture[1], id).toBeLessThanOrEqual(places.words[0]);
+    expect(places.width, id).toBeGreaterThan(400);
+    expect(places.radius, id).toBe("20px");
+    expect(places.image, id).toContain("/assets/images/carbon-weave.jpg");
+  }
+  // Team and What is new keep their heads in the middle, as the demo's words are.
+  for (const id of ["working", "news"]) {
     const off = await page.locator(`#${id} .band-statement h2`).evaluate((h) => { const r = h.getBoundingClientRect(); return (r.left + r.right) / 2 - window.innerWidth / 2; });
     expect(Math.abs(off), id).toBeLessThanOrEqual(2);
   }
+  // The team's names carry no arrow, and there is no link to the About page under the cards (amendment 37).
+  await expect(page.locator("#working .home-face h3 svg")).toHaveCount(0);
+  await expect(page.locator("#working").getByRole("link", { name: /About page/ })).toHaveCount(0);
 });
 
 test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }) => {

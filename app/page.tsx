@@ -113,7 +113,10 @@ export default function Home() {
       {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31), all
           on the light ground since amendment 33: after the demo's last beat the page is white. On this page a band's head is
           set as the demo's words are, in the middle (amendment 34, app/home.css). */}
-      <section className="band is-light home-blurb home-mission" id="mission">
+      {/* Mission and Services are set side by side with a picture each (ADR-0077 amendment 37): Mission's words at the left
+          and its picture at the right, Services the other way round. The picture is the hero's carbon weave for now, standing
+          in for pictures still to come. */}
+      <section className="band is-light home-blurb home-split home-mission" id="mission">
         <div className="band-head">
           <p className="band-label">Mission</p>
           <div className="band-statement">
@@ -128,9 +131,10 @@ export default function Home() {
             </Link>
           </div>
         </div>
+        <div className="home-split-picture" aria-hidden="true" />
       </section>
       {/* The step to the services (ADR-0077 amendment 34): the five by name, each a link to its page, and the way to all of them. */}
-      <section className="band is-light home-blurb home-platform" id="platform">
+      <section className="band is-light home-blurb home-split is-flipped home-platform" id="platform">
         <div className="band-head">
           <p className="band-label">Services</p>
           <div className="band-statement">
@@ -151,6 +155,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
+        <div className="home-split-picture" aria-hidden="true" />
       </section>
       {/* About keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
           link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. */}
@@ -209,7 +214,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                     aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
                   >
-                    {person.name} <ArrowUpRight size={16} />
+                    {person.name}
                   </a>
                 ) : (
                   person.name
@@ -223,9 +228,6 @@ export default function Home() {
             </article>
           ))}
         </div>
-        <Link className="home-link home-about-link" href="/about#team">
-          The team on the About page <ArrowUpRight size={16} />
-        </Link>
       </section>
       <section className="band is-light home-blurb home-feed" id="news">
         <div className="band-head">

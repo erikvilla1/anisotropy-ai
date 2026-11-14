@@ -507,3 +507,15 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server: a screenshot at 1440 px was looked at; `home.spec.ts` checks the ground, the three cards and their lines. `home.spec.ts`: 7 of 7. The other suites of the home page (`demo.spec.ts`, `intro.spec.ts`, `shell.spec.ts`, `expansion.spec.ts`, the overview case of `portfolio.spec.ts`) passed on the run before the badge's last change: 28 passed, 3 skipped (ADR-0058 amendment 4); they were not run again after it. `npm test`: 300 tests, 299 passed, 1 skipped; `npm run build`: exit 0.
 
+## Amendment 37, 2026-11-14 (Mission and Services side by side with a picture each; the team's names without an arrow)
+
+**Context.** The lead, on the two blocks of amendment 34: "lets move the mission to the left and add a placeholder space for an image on the right (rounded corners) and lets also add services to the right and add a placeholder image to the left of it", then "for the placeholder images I was talking about just use the carbon fiber pic for now." On the team's cards: "lets also get rid of the arrow by names; get rid of the 'The team on the About page' button".
+
+**Decision.**
+
+- Mission and Services are each two halves: the words, set from the left edge of their half, and a picture with 20 px corners, 4 to 3. Mission's words are at the left and its picture at the right; Services the other way round. Under 1024 px the picture goes under the words.
+- Both pictures are the carbon weave the site already holds (`public/assets/images/carbon-weave.jpg`), in grey, standing in for pictures still to come.
+- The team's names keep their links to the profiles and lose the arrow. The link to the About page under the cards is removed; Mission's "Learn more about us" goes there.
+
+**Evidence.** On 2026-11-14 against the dev server: screenshots at 1440 px and 390 px were looked at. `home.spec.ts` checks which side the words and the picture stand on, the corners and the picture's file, and that the names carry no arrow and no link to About follows the cards. `home.spec.ts`, `shell.spec.ts`, `expansion.spec.ts`, `intro.spec.ts`, `demo.spec.ts` and the overview case of `portfolio.spec.ts`: 35 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 300 tests, 299 passed, 1 skipped. UNVERIFIED: which pictures will replace the stand-ins.
+
