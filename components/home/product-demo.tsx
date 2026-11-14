@@ -137,6 +137,27 @@ export function ProductDemo() {
     };
   }, [pinned, gated]);
 
+  // Where the words that stand under the wing begin, for the view to keep the wing over them (ADR-0098 amendment 4): the
+  // highest of those beats' blocks, measured again whenever the stage or a block changes size.
+  useEffect(() => {
+    const stage = box.current;
+    if (!stage || !pinned || typeof ResizeObserver === "undefined") {
+      handle.under = undefined;
+      handle.redraw?.();
+      return;
+    }
+    const blocks = [...stage.querySelectorAll<HTMLElement>('.product-demo-beat[data-side="under"]')];
+    const measure = () => {
+      handle.under = blocks.length ? Math.min(...blocks.map((block) => block.offsetTop)) : undefined;
+      handle.redraw?.();
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    blocks.forEach((block) => observer.observe(block));
+    return () => observer.disconnect();
+  }, [pinned, handle]);
+
   // Not stepped: every beat is finished, and the view shows the run's end.
   useEffect(() => {
     if (pinned) return;

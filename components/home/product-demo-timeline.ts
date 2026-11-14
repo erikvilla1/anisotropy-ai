@@ -35,25 +35,25 @@ export const DEMO_TOTAL = BEATS[BEATS.length - 1].end;
 export const DEMO_STOPS: number[] = [0, ...BEATS.map((beat) => beat.end)];
 const [DESCRIBE, MODEL, ANALYSIS, REPORT] = BEATS;
 
-/** Where the model is and how it is turned. `x` and `y` are shares of the box, from its left and its top; the angles are
- * radians: `pitch` leans the wing's upper face back from the viewer, `yaw` turns it about the upright axis; `explode` is how
- * far its parts stand apart, 0 to 1; `size` is the wing's span as a share of the box's width. `beside` is how far the wing
- * has taken the room beside the beat's words in place of `x`, `y` and `size`: 1 fills the room to the right of words set at
- * the left, -1 the room to the left of words set at the right, 0 not at all (ADR-0098 amendment 3). */
-export type Pose = { x: number; y: number; pitch: number; yaw: number; explode: number; size: number; beside: number };
-const START: Pose = { x: 0.5, y: 0.32, pitch: 0.62, yaw: -0.7, explode: 0, size: 0.56, beside: 0 };
+/** How the model is turned and where it stands. The angles are radians: `pitch` leans the wing's upper face back from the
+ * viewer, `yaw` turns it about the upright axis; `explode` is how far its parts stand apart, 0 to 1. Its size and place are
+ * not numbers of the pose: the view fits the wing into a room on the stage (components/home/product-demo-fit.ts, ADR-0098
+ * amendments 3 and 4), and the pose says which. `under` is how far the room is the one over words that stand under the wing,
+ * 0 to 1; the rest of it is the room beside words at one side, which `beside` slides across the stage: 1 to the right of
+ * words at the left, -1 to the left of words at the right. */
+export type Pose = { pitch: number; yaw: number; explode: number; beside: number; under: number };
+const START: Pose = { pitch: 0.62, yaw: -0.7, explode: 0, beside: 0, under: 1 };
 /** The pose at the end of each beat, Scale's way: whole in the middle, seen from above and from its tip so the aerofoil shows;
  * then apart at one side; then at the other, turned to show the parts' other ends; then whole in the middle again. */
 export const POSES: Record<BeatId, Pose> = {
-  describe: { x: 0.5, y: 0.31, pitch: 0.72, yaw: -0.88, explode: 0, size: 0.66, beside: 0 },
-  model: { x: 0.68, y: 0.5, pitch: 0.82, yaw: -1.0, explode: 1, size: 0.54, beside: 1 },
-  analysis: { x: 0.32, y: 0.5, pitch: 0.82, yaw: 0.98, explode: 1, size: 0.54, beside: -1 },
-  report: { x: 0.5, y: 0.31, pitch: 0.7, yaw: -0.8, explode: 0, size: 0.66, beside: 0 },
+  describe: { pitch: 0.72, yaw: -0.88, explode: 0, beside: 0, under: 1 },
+  model: { pitch: 0.82, yaw: -1.0, explode: 1, beside: 1, under: 0 },
+  analysis: { pitch: 0.82, yaw: 0.98, explode: 1, beside: -1, under: 0 },
+  report: { pitch: 0.7, yaw: -0.8, explode: 0, beside: 0, under: 1 },
 };
 const mix = (a: number, b: number, u: number) => a + (b - a) * u;
 const between = (a: Pose, b: Pose, u: number): Pose => ({
-  x: mix(a.x, b.x, u), y: mix(a.y, b.y, u), pitch: mix(a.pitch, b.pitch, u), yaw: mix(a.yaw, b.yaw, u), explode: mix(a.explode, b.explode, u), size: mix(a.size, b.size, u),
-  beside: mix(a.beside, b.beside, u),
+  pitch: mix(a.pitch, b.pitch, u), yaw: mix(a.yaw, b.yaw, u), explode: mix(a.explode, b.explode, u), beside: mix(a.beside, b.beside, u), under: mix(a.under, b.under, u),
 });
 
 /** The model's pose at one moment: each beat begins with one eased move from the pose before to its own. */

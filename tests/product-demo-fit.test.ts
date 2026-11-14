@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { boxOf, fitInto, roomBeside } from "../components/home/product-demo-fit";
+import { boxOf, fitInto, roomAbove, roomBeside } from "../components/home/product-demo-fit";
 
-// Where the demo's wing stands beside a beat's words (ADR-0098 amendment 3): the room the words leave and the fit into it.
+// Where the demo's wing stands (ADR-0098 amendments 3 and 4): the room a beat's words leave, beside them or over them, and
+// the fit into it.
 
 const EYE = 12;
 /** A slab's eight corners, 2000 by 600 by 300 mm about its middle, turned a little so that its ends differ in depth. */
@@ -15,15 +16,30 @@ const slab = (() => {
 
 test("the room beside the words starts a gap past their column and ends near the stage's far edge", () => {
   // At 1873 px the column is 80 px in and 430 px wide (app/home-demo.css), so the room starts 64 px past 510.
-  assert.deepEqual(roomBeside(true, 1873, 866), { left: 574, right: 1873 - 48, top: 0.12 * 866, bottom: 0.9 * 866 });
-  // The other side mirrors it.
-  const left = roomBeside(false, 1873, 866);
-  assert.equal(left.left, 48);
-  assert.equal(left.right, 1873 - 574);
+  assert.deepEqual(roomBeside(1, 1873, 866), { left: 574, right: 1873 - 48, top: 0.12 * 866, bottom: 0.9 * 866 });
+  // The other side mirrors it, and between the two the room slides across the stage, as wide as ever.
+  const left = roomBeside(-1, 1873, 866);
+  assert.deepEqual([left.left, left.right], [48, 1873 - 574]);
+  const middle = roomBeside(0, 1873, 866);
+  assert.ok(Math.abs(middle.left + middle.right - 1873) < 1e-9);
+  assert.ok(Math.abs(middle.right - middle.left - (left.right - left.left)) < 1e-9);
   // On the narrowest stage that plays, the column is a share of the stage and the room is still wider than the column.
-  const narrow = roomBeside(true, 1024, 600);
+  const narrow = roomBeside(1, 1024, 600);
   assert.ok(Math.abs(narrow.left - (51.2 + 0.34 * 1024 + 36)) < 1e-9);
   assert.ok(narrow.right - narrow.left > 0.34 * 1024);
+});
+
+test("the room over the words is in the stage's middle and ends above where the words begin", () => {
+  const room = roomAbove(1440, 900, 500);
+  assert.ok(Math.abs(room.left + room.right - 1440) < 1e-9);
+  assert.ok(Math.abs(room.right - room.left - 0.6 * 1440) < 1e-9);
+  assert.deepEqual([room.top, room.bottom], [90, 500 - 72]);
+  // On a wide, low stage its width follows the height, so the wing does not outgrow the window.
+  const low = roomAbove(1873, 600, 380);
+  assert.ok(Math.abs(low.right - low.left - 0.6 * 1.6 * 600) < 1e-9);
+  // With no words on the stage the room is the stage itself, less a margin; and the room over words never closes up.
+  assert.deepEqual(roomAbove(1000, 500), { left: 80, right: 920, top: 50, bottom: 420 });
+  assert.ok(roomAbove(1440, 900, 120).bottom - roomAbove(1440, 900, 120).top >= 0.2 * 900 - 1e-9);
 });
 
 test("the wing is sized to just fill its room, standing in the room's middle and nowhere outside it", () => {

@@ -4,11 +4,11 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { BEND_DRAWN, demoWing, wingColour, wingExtent } from "@/lib/demo-wing";
-import { boxOf, fitInto, roomBeside } from "./product-demo-fit";
+import { boxOf, fitInto, roomAbove, roomBeside, type Room } from "./product-demo-fit";
 import { clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
-export type DemoSceneHandle = { clock: number; redraw: (() => void) | null; /** How far a visitor has turned the wing by hand, in radians, once the demo has played. */ turn?: { yaw: number; pitch: number }; /** The pointer is down on the stage, turning the wing. */ turning?: boolean };
+export type DemoSceneHandle = { clock: number; redraw: (() => void) | null; /** How far a visitor has turned the wing by hand, in radians, once the demo has played. */ turn?: { yaw: number; pitch: number }; /** The pointer is down on the stage, turning the wing. */ turning?: boolean; /** How far down the stage the words under the wing begin, in pixels, where a beat's words stand under it. */ under?: number };
 
 /** The product demo's centre model (ADR-0098): the example wing, drawn from the very mesh that was solved, one surface a part,
  * on the black stage. Its place and orientation, how far its parts stand apart, the mesh's lines, the analysis's colours and
@@ -34,8 +34,6 @@ const TONE: Record<string, number> = { "upper-skin": 1, "lower-skin": 0.92, "fro
 const CARBON: [number, number, number] = [0.16, 0.165, 0.178];
 const CAMERA_Z = 12;
 const CAMERA_FOV = 27;
-/** The window's shape the poses were set for: on a wider window the wing is sized by the window's height, so it stays in it. */
-const POSED_FOR = 1.6;
 
 /** `bend` is how far the node moves under the load, as drawn; `uBend` brings it in with the analysis. A node's normal and its
  * colour are the averages of the faces of its part that meet there, so a curved skin is lit as one surface and the colours
@@ -300,7 +298,6 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     const pose = poseAt(clock);
     const scene = sceneAt(clock);
     const { width, height } = state.viewport; // the world's size at the model's distance
-    const span = demoWing.wing.span;
     const apart = clamp01(pose.explode);
     const field = model.hasField ? scene.field : 0;
     // Every node as the pose turns it, apart and bent as it is drawn, in millimetres about the wing's middle: what the
@@ -318,22 +315,20 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
         model.turned[filled++] = turnedBy[2] * along + turnedBy[6] * fore + turnedBy[10] * high;
       }
     }
-    // In the middle the pose's own size and place hold. Beside a beat's words the wing fills the room the words leave
-    // (ADR-0098 amendment 3), whatever the window's shape; between the two the one eases into the other.
-    let unit = (pose.size * Math.min(width, POSED_FOR * height)) / span; // world units a millimetre
-    let x = (pose.x - 0.5) * width;
-    let y = (0.5 - pose.y) * height;
-    const beside = Math.min(1, Math.abs(pose.beside));
-    if (beside > 0) {
-      const pixel = width / state.size.width; // world units a pixel of the stage
-      const room = roomBeside(pose.beside > 0, state.size.width, state.size.height);
-      const fitted = fitInto(model.turned, model.nodes, {
-        left: (room.left - state.size.width / 2) * pixel, right: (room.right - state.size.width / 2) * pixel,
-        bottom: (state.size.height / 2 - room.bottom) * pixel, top: (state.size.height / 2 - room.top) * pixel,
-      }, CAMERA_Z);
-      unit += (fitted.unit - unit) * beside;
-      x += (fitted.x - x) * beside;
-      y += (fitted.y - y) * beside;
+    // The wing's size and place: it fills the room the beat's words leave, over them or beside them (ADR-0098 amendments 3
+    // and 4), whatever the window's shape; between two beats the one room's fit eases into the other's.
+    const wide = state.size.width, tall = state.size.height;
+    const pixel = width / wide; // world units a pixel of the stage
+    const fitted = (room: Room) => fitInto(model.turned, model.nodes, {
+      left: (room.left - wide / 2) * pixel, right: (room.right - wide / 2) * pixel, bottom: (tall / 2 - room.bottom) * pixel, top: (tall / 2 - room.top) * pixel,
+    }, CAMERA_Z);
+    const under = clamp01(pose.under);
+    let { unit, x, y } = under < 1 ? fitted(roomBeside(pose.beside, wide, tall)) : { unit: 0, x: 0, y: 0 };
+    if (under > 0) {
+      const above = fitted(roomAbove(wide, tall, handle.under));
+      unit += (above.unit - unit) * under;
+      x += (above.x - x) * under;
+      y += (above.y - y) * under;
     }
     group.position.set(x, y, 0);
     group.scale.setScalar(unit);

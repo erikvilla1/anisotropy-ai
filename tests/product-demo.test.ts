@@ -92,11 +92,12 @@ test("the wing: whole, then apart and meshed, then coloured, then whole again wi
   let last = poseAt(0);
   for (let t = 0; t <= DEMO_TOTAL; t += 0.002) {
     const now = poseAt(t);
-    assert.ok(Math.abs(now.x - last.x) < 0.01 && Math.abs(now.yaw - last.yaw) < 0.04 && Math.abs(now.explode - last.explode) < 0.03, `a jump at ${t}`);
+    assert.ok(Math.abs(now.beside - last.beside) < 0.06 && Math.abs(now.under - last.under) < 0.03 && Math.abs(now.yaw - last.yaw) < 0.04 && Math.abs(now.explode - last.explode) < 0.03, `a jump at ${t}`);
     last = now;
   }
-  // Scale's arrangement: in the middle first, then at one side, then at the other, then in the middle again.
-  assert.deepEqual(BEAT_IDS.map((id) => Math.sign(Math.round((POSES[id].x - 0.5) * 10))), [0, 1, -1, 0]);
+  // Scale's arrangement: in the middle over its words first, then beside the words at one side, then at the other, then in
+  // the middle again. The view fits the wing into the room the pose names (ADR-0098 amendments 3 and 4).
+  assert.deepEqual(BEAT_IDS.map((id) => [POSES[id].beside, POSES[id].under]), [[0, 1], [1, 0], [-1, 0], [0, 1]]);
 });
 
 test("every word the demo shows is fit for the product's view, and its numbers are the record's", () => {
