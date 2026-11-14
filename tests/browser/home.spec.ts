@@ -217,14 +217,55 @@ test("after the demo the page is white, and Mission and Services are two short b
   // and no list. It is not a news feed: no card, no "What is new".
   const changelog = page.locator("#changelog");
   await expect(changelog).toHaveCSS("background-color", "rgb(243, 243, 244)");
-  // Its words stand in white on a card whose ground is the demo's colours blurred into one another (amendment 49), and
-  // the closing band under it is the same light grey.
+  // Its words stand in white on a card whose ground is the demo's colours blurred into one another (amendment 49).
   const card = changelog.locator(".home-feed-card");
   expect(await card.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/radial-gradient.*radial-gradient.*linear-gradient/);
   await expect(changelog.getByRole("heading", { level: 2 })).toHaveCSS("color", "rgb(255, 255, 255)");
   const inset = await card.evaluate((element) => { const box = element.getBoundingClientRect(); return [box.left, document.documentElement.clientWidth - box.right]; });
   expect(inset).toEqual([32, 32]);
-  await expect(page.locator(".closing-band")).toHaveCSS("background-color", "rgb(243, 243, 244)");
+  // Over the colours lies a thin grid (amendment 54): a layer of its own under the card's words, two sets of hairlines
+  // 36 px apart, masked so it is whole at the card's foot and gone half way up, and it takes no press.
+  const grid = await card.evaluate((element) => {
+    const layer = getComputedStyle(element, "::before");
+    return { content: layer.content, position: layer.position, under: layer.zIndex, press: layer.pointerEvents, lines: layer.backgroundImage, apart: layer.backgroundSize, mask: layer.maskImage || layer.webkitMaskImage, own: getComputedStyle(element).isolation };
+  });
+  expect(grid).toMatchObject({ content: '""', position: "absolute", under: "-1", press: "none", apart: "36px 36px, 36px 36px", own: "isolate" });
+  expect(grid.lines).toMatch(/^linear-gradient\(to right, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\), linear-gradient\(to top, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\)$/);
+  expect(grid.mask).toMatch(/^linear-gradient\(to top, rgb\(0, 0, 0\) 0%, rgb\(0, 0, 0\) 6%, rgba\(0, 0, 0, 0\) 50%\)$/);
+  // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey): lighter than the black
+  // footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
+  // WCAG AA's 4.5 to 1.
+  const closing = page.locator(".closing-band");
+  await expect(closing).toHaveClass(/\bis-dark\b/);
+  await expect(closing).not.toHaveClass(/\bis-light\b/);
+  await expect(closing).toHaveCSS("background-color", "rgb(34, 34, 37)");
+  await expect(closing).toHaveCSS("border-top-width", "0px");
+  await expect(page.locator(".site-footer")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  const tones = await closing.evaluate((band) => {
+    const of = (selector: string, property: "color" | "backgroundColor" | "borderTopColor") => getComputedStyle(band.querySelector(selector)!)[property];
+    return {
+      ground: getComputedStyle(band).backgroundColor,
+      label: of(".band-label", "color"), statement: of(".closing-band-statement", "color"), aside: of(".closing-band-links > span", "color"), link: of(".closing-band-links a", "color"),
+      rule: of(".closing-band-links", "borderTopColor"), button: of(".closing-band-action", "backgroundColor"), buttonWords: of(".closing-band-action", "color"),
+    };
+  });
+  expect(tones).toMatchObject({ label: "rgb(255, 255, 255)", statement: "rgb(255, 255, 255)", link: "rgb(255, 255, 255)", rule: "rgba(255, 255, 255, 0.18)", button: "rgb(255, 255, 255)", buttonWords: "rgb(0, 0, 0)" });
+  const light = (colour: string) => {
+    const [red, green, blue] = colour.match(/[\d.]+/g)!.slice(0, 3).map((value) => { const share = Number(value) / 255; return share <= 0.04045 ? share / 12.92 : ((share + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  const contrast = (a: string, b: string) => { const [high, low] = [light(a), light(b)].sort((x, y) => y - x); return (high + 0.05) / (low + 0.05); };
+  for (const [name, words, ground] of [["label", tones.label, tones.ground], ["statement", tones.statement, tones.ground], ["aside", tones.aside, tones.ground], ["link", tones.link, tones.ground], ["button", tones.buttonWords, tones.button]] as const)
+    expect(contrast(words, ground), name).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(tones.ground, "rgb(0, 0, 0)")).toBeGreaterThan(1.2); // the band can be told from the footer
+  // Only the home page's: the industries and the services pages keep their light closing band.
+  const elsewhere = await page.context().newPage();
+  for (const address of ["/industries", "/services"]) {
+    await elsewhere.goto(address);
+    await expect(elsewhere.locator(".closing-band"), address).toHaveClass(/\bis-light\b/);
+    await expect(elsewhere.locator(".closing-band"), address).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  }
+  await elsewhere.close();
   await expect(changelog.locator(".band-label")).toHaveText("Changelog");
   await expect(changelog.getByRole("heading", { level: 2 })).toHaveText("Every release, and what changed.");
   await expect(changelog.locator(".band-statement p")).toHaveText("No releases published yet. Each version and what changed in it will be listed here.");

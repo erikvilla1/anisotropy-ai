@@ -4,12 +4,13 @@ import { ArrowRight } from "lucide-react";
 
 type BandLink = { label: string; href: string };
 
-/** The closing section of a page (ADR-0077): a light band of the section kit (`app/sections.css`) with a monospace label, the
+/** The closing section of a page (ADR-0077): a band of the section kit (`app/sections.css`), light but for the home page's
+ * (`dark`), with a monospace label, the
  * statement as a large heading in the left half, the page's one action from the halfway line (column 7, where the footer's
  * columns start), and an optional quiet row of links under a 1 px rule on the same columns. The home
  * page, the industries page and the services page use it, so they cannot drift. Its rules are `.closing-band` in
  * `app/globals.css`. Its links stay on the site, so their arrow points right; ↗ is kept for a link that opens a new tab. */
-export function ClosingBand({ label, heading, action, links, grey }: {
+export function ClosingBand({ label, heading, action, links, dark }: {
   /** The small line above the statement. */
   label: string;
   /** The statement, one entry per line. */
@@ -18,11 +19,13 @@ export function ClosingBand({ label, heading, action, links, grey }: {
   action: BandLink;
   /** The row under the rule: its label and its links. */
   links?: { label: string; items: readonly BandLink[] };
-  /** On light grey in place of white (the home page's, ADR-0077 amendment 49; the rule is in app/home.css). */
-  grey?: boolean;
+  /** On dark grey with light words and a white button, in place of white with dark ones (the home page's, ADR-0077
+   * amendment 54, which ended amendment 49's light grey; the rule is in app/home.css). The band is then one of the kit's
+   * dark bands, so everything in it reads the dark values. */
+  dark?: boolean;
 }) {
   return (
-    <section className={`band is-light closing-band${links ? " has-links" : ""}${grey ? " is-grey" : ""}`}>
+    <section className={`band ${dark ? "is-dark" : "is-light"} closing-band${links ? " has-links" : ""}`}>
       <p className="band-label">{label}</p>
       <div className="band-grid closing-band-main">
         <h2 className="closing-band-statement">

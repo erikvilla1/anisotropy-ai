@@ -227,8 +227,8 @@ export default function Home() {
           name and what changed in it, line by line and tagged by kind. The list is lib/changelog.ts; it is empty until a
           version is published, and the band then says so. */}
       <section className="band is-light home-blurb home-feed" id="changelog">
-        {/* The band is light grey, as the closing band under it is, and its words stand on a card in the colours the demo
-            gives its analysis, blurred into one another (amendment 49). */}
+        {/* The band is light grey, and its words stand on a card in the colours the demo gives its analysis, blurred into one
+            another (amendment 49), with a thin grid over the colours that fades out half way up the card (amendment 54). */}
         <div className="home-feed-card">
         <div className="band-head">
           <p className="band-label">Changelog</p>
@@ -268,8 +268,9 @@ export default function Home() {
         ) : null}
         </div>
       </section>
+      {/* The home page's closing band is dark grey, between the changelog's light band and the black footer (amendment 54). */}
       <ClosingBand
-        grey
+        dark
         label="THE NEXT LAYER STARTS WITH A QUESTION."
         heading={["Let’s define what", "comes next."]}
         action={{ label: "Contact us", href: "/contact" }}

@@ -925,6 +925,9 @@
  * red, each blurred into the next, with the band's words on it in white. It is a ground and nothing more: it shows no
  * result. A list of releases, when there is one, stands on a white panel on it. */
 .home-feed-card {
+  /* The grid below lies on the card's ground and under everything in the card. */
+  position: relative;
+  isolation: isolate;
   --text: #ffffff;
   --muted: #ffffffd9;
   --line: #ffffff59;
@@ -939,6 +942,23 @@
     radial-gradient(54% 82% at 22% 104%, #00c8ffb8 0%, #00c8ff00 64%),
     linear-gradient(168deg, #060b3a 0%, #0b1f9c 46%, #1448f0 100%);
 }
+/* A thin grid over the colours (amendment 54): hairlines of white, 36 px apart, strongest at the card's foot, where the
+ * colours are, and faded to nothing half way up, so the words at the top stand on a clean ground. A picture effect, as the
+ * colours are: it is no mesh of any analysis. It takes no press, and the words and a list's panel lie over it. */
+.home-feed-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, #ffffff47 1px, transparent 1px),
+    linear-gradient(to top, #ffffff47 1px, transparent 1px);
+  background-size: 36px 36px;
+  background-position: center bottom;
+  -webkit-mask-image: linear-gradient(to top, #000000 0%, #000000 6%, transparent 50%);
+  mask-image: linear-gradient(to top, #000000 0%, #000000 6%, transparent 50%);
+}
 /* With nothing published the card holds the band's head alone. */
 .home-feed-card .band-head:last-child {
   margin-bottom: 0;
@@ -951,12 +971,21 @@
   --muted: #666666;
   --line: #e2e2e4;
 }
-/* The closing band on the home page is light grey (amendment 49), so the page ends on one ground from the changelog's
- * band down. */
-.band.is-light.closing-band.is-grey {
-  --bg: #f3f3f4;
-  --line: #dcdce0;
+/* The closing band on the home page is dark grey (amendment 54; light grey under amendment 49): a neutral grey clearly
+ * lighter than the black footer under it, so the two read as two bands. It is one of the kit's dark bands, so its label,
+ * statement and links are light; its rule is a faint light hairline, and its button is white with black words, the light
+ * band's button the other way round (it greys a little and rises under the pointer, as the site's filled button does on
+ * a dark ground). */
+section.band.closing-band.is-dark {
+  --bg: #222225;
+  --text: #ffffff;
+  --muted: #b9b9be;
+  --line: #ffffff2e;
+  --accent: #ffffff;
   border-top: 0;
+}
+section.band.closing-band.is-dark .button.primary {
+  color: #000000;
 }
 .home-changelog {
   max-width: 780px;
@@ -1047,6 +1076,11 @@
   color: #444444;
 }
 @media (max-width: 640px) {
+  /* On a phone the words fill more of the card, so the grid has gone a little lower down it. */
+  .home-feed-card::before {
+    -webkit-mask-image: linear-gradient(to top, #000000 0%, #000000 6%, transparent 40%);
+    mask-image: linear-gradient(to top, #000000 0%, #000000 6%, transparent 40%);
+  }
   .home-changelog > li {
     grid-template-columns: minmax(0, 1fr);
   }
