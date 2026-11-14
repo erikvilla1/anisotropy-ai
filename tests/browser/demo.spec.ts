@@ -267,6 +267,7 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   expect(await swipe(page)).toBe(28);
   await expectStop(page, 3);
   await page.waitForTimeout(400);
+  await expect(box(page)).not.toHaveAttribute("data-turnable", /.+/); // not while the demo still plays
   // The last beat: the files a run writes, by the workspace's names, and the way into the workspace.
   await notch(page);
   await expectStop(page, 4);
@@ -282,6 +283,21 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   await page.waitForTimeout(400);
   expect(await swipe(page, -1)).toBe(0);
   await expectStop(page, 4);
+  // The finished wing can be turned by hand (ADR-0098 amendment 1): the stage shows a hand and says so, and a drag on it
+  // draws the wing from another side.
+  await expect(box(page)).toHaveAttribute("data-turnable", "true");
+  await expect(box(page).locator(".product-demo-hint")).toHaveText("Drag the wing to turn it");
+  await expect(box(page)).toHaveCSS("cursor", "grab");
+  const canvas = box(page).locator("canvas");
+  const drawn = await canvas.screenshot();
+  await page.mouse.move(300, 200);
+  await page.mouse.down();
+  await page.mouse.move(520, 260, { steps: 8 });
+  await page.mouse.up();
+  await expect(box(page)).toHaveAttribute("data-turned", "true");
+  await page.waitForTimeout(250);
+  expect(Buffer.compare(drawn, await canvas.screenshot())).not.toBe(0);
+  expect(await scrollY(page)).toBe(await page.evaluate(() => Math.round(window.scrollY)));
   expect(errors).toEqual([]);
 });
 

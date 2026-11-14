@@ -427,6 +427,46 @@
   }
 }
 
+/* Turning the wing by hand, once the demo has played (ADR-0098 amendment 1): the stage shows a hand, the cards and the
+ * words keep the pointer they had, and a small line says it can be done. */
+.product-demo-box[data-turnable] {
+  cursor: grab;
+}
+.product-demo-box[data-turning] {
+  cursor: grabbing;
+  user-select: none;
+}
+.product-demo-box[data-turnable] .demo-card,
+.product-demo-box[data-turnable] .product-demo-words {
+  cursor: auto;
+}
+.product-demo-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 18px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--demo-soft);
+  pointer-events: none;
+}
+.product-demo-hint:not([data-shown]) {
+  display: none;
+}
+@media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  .product-demo[data-mode="pinned"] .product-demo-box > .product-demo-hint {
+    position: absolute;
+    top: 26px;
+    right: 32px;
+    margin: 0;
+    opacity: 0.85;
+  }
+}
+
 .demo-result .demo-result-note {
   font-size: 12px;
   line-height: 18px;

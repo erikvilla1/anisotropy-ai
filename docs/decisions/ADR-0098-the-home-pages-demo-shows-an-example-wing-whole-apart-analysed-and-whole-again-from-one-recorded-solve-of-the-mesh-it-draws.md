@@ -1,6 +1,6 @@
 # ADR-0098: The home page's demo shows an example wing, whole, apart, analysed and whole again, from one recorded solve of the mesh it draws
 
-- Status: Proposed
+- Status: Proposed, with amendment 1
 - Date: 2026-11-14
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-14 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0095](ADR-0095-the-home-page-demonstrates-the-product-the-coupon-workspace-in-a-white-box-under-the-hero-with-one-recorded-run-the-laminate-calculator-and-its-tour-are-archived.md), whose stage, beats, hand-over and scroll rules stay and whose centre model and cards this replaces; ADR-0001 (the engine computes every number in a result); ADR-0067 (new physics comes from CalculiX under our composite layer); ADR-0091 (the product view's words)
@@ -50,3 +50,17 @@ UNVERIFIED: the buckling factor (the mesh was not refined for it); mesh converge
 ## How we will know it was wrong
 
 A visitor or a reviewer takes the wing for something the workspace does today; an engineer finds a number on the page that the recorded analysis does not support; or the founder prefers the product's own coupon.
+
+## Amendment 1, 2026-11-14 (the wing is drawn as a part, it stays in the window, and once the demo has played it can be turned by hand)
+
+**Context.** The lead, on the demo running on their machine: "this part needs to look more realistic and less cartoon-y / low quality"; "It is frequently out of the frame"; "also why the grid boxes?", of the faces each drawn in one colour with the mesh's lines over them; and "when on this final step after animation demo complete, can we make the part rotate-able by clicking and rotating."
+
+**Decision.**
+
+- **Drawn as one surface.** A node's normal and its colour are the averages of the faces of its part that meet there, so a skin is lit as a curved surface and the colours run smoothly from face to face, as analysis programs draw an averaged field. The record itself still holds one value a face, and the stated numbers are unchanged. The mesh's lines show only while the wing is apart and bare.
+- **Lit as a part.** A key light, a soft fill, a highlight and a sheen at glancing angles, all in the shader; the bare carbon dark and glossy, the colours matt. The view's angle is 27° in place of 20°, so the near end is larger than the far one.
+- **In the window.** The wing's size follows the window's width up to a window 1.6 times as wide as tall, and its height beyond that; the poses are a little smaller and lower.
+- **Turned by hand.** Once the demo has played through (and where it does not play, with reduced motion or on a small window), a drag that starts on the stage, not on a card or the words, turns the wing about its upright axis and tips it. A small line says so. A finger's drag scrolls the page as before.
+
+**Evidence.** On 2026-11-14 against the dev server: the four beats were captured at 1440 by 900 and at 1894 by 831, the shape of the lead's window, and looked at: the wing is whole in the window in each, and no face's edge shows under the colours. `demo.spec.ts`, 11 of 11: its analysis case now drags on the finished stage and checks that the drawing changes and that the stage cannot be turned before the last beat. `npm test`: 300 tests, 299 passed, 1 skipped. `npx tsc --noEmit` clean. UNVERIFIED: a real graphics card (the container draws in software), Safari and Firefox; whether the lead finds it realistic enough.
+

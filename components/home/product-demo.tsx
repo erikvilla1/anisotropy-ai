@@ -2,12 +2,12 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowUpRight, Check, FileText } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { ArrowUpRight, Check, FileText, Rotate3d } from "lucide-react";
 import { demoWing, RAINBOW_GRADIENT } from "@/lib/demo-wing";
 import { DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
 import { libraryOptions } from "@/lib/studio-form";
-import { BEAT_COPY, BEND_NOTE, DEMO_HEAD, FILES_HEAD, OPEN_WORKSPACE, resultLines, wingFacts, wingParts } from "./product-demo-copy";
+import { BEAT_COPY, BEND_NOTE, DEMO_HEAD, FILES_HEAD, OPEN_WORKSPACE, TURN_HINT, resultLines, wingFacts, wingParts } from "./product-demo-copy";
 import type { DemoSceneHandle } from "./product-demo-scene";
 import { BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, finalView, sameView, viewAt, type BeatId, type DemoView } from "./product-demo-timeline";
 import { useTourDriver } from "./tour-driver";
@@ -59,6 +59,7 @@ export function ProductDemo() {
   const [played, setPlayed] = useState<DemoView | null>(null);
   const [viewWanted, setViewWanted] = useState(false);
   const [gated, setGated] = useState(true);
+  const [through, setThrough] = useState(false); // the demo has played through once
   const handle = useMemo<DemoSceneHandle>(() => ({ clock: 0, redraw: null }), []);
   const view = pinned ? played ?? start : whole;
 
@@ -67,6 +68,7 @@ export function ProductDemo() {
     handle.clock = clock;
     handle.redraw?.();
     if (clock >= DEMO_TOTAL) {
+      setThrough(true);
       setGated(false); // played through: the rest of the page is there from now on
       // And the hand-over is over (amendment 8): the hero becomes an ordinary section straight above the stage, so
       // scrolling back up brings it down whole, with no fade. That moves the stage down the page by what it overlapped the
@@ -166,6 +168,33 @@ export function ProductDemo() {
     return () => observer.disconnect();
   }, [pinned, viewWanted]);
 
+  // Once the demo has played through (or where it does not play at all), the wing can be turned by hand (ADR-0098 amendment
+  // 1): a drag that starts on the stage itself, not on a card or the words, turns it about its upright axis and tips it.
+  const turnable = !pinned || through;
+  const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!turnable || event.button !== 0 || !viewWanted) return;
+    if (event.target instanceof Element && event.target.closest("a, button, .demo-card, .product-demo-words, .product-demo-head")) return;
+    const turn = handle.turn ?? (handle.turn = { yaw: 0, pitch: 0 });
+    drag.current = { x: event.clientX, y: event.clientY, yaw: turn.yaw, pitch: turn.pitch };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.dataset.turning = "true";
+  };
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const from = drag.current;
+    if (!from || !handle.turn) return;
+    handle.turn.yaw = from.yaw + (event.clientX - from.x) * 0.006;
+    handle.turn.pitch = Math.max(-1.2, Math.min(1.2, from.pitch - (event.clientY - from.y) * 0.005));
+    event.currentTarget.dataset.turned = "true";
+    handle.redraw?.();
+  };
+  const onPointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    drag.current = null;
+    delete event.currentTarget.dataset.turning;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   const field = wing.field;
   const result = useMemo(() => resultLines(wing), [wing]);
   const strip = (rows: [string, string][], filled: number, testId: string) => (
@@ -221,12 +250,14 @@ export function ProductDemo() {
 
   return (
     <section className="product-demo" id="demo" aria-labelledby="demo-title" data-mode={pinned ? "pinned" : "static"}>
-      <div className="product-demo-box" ref={box}>
+      <div className="product-demo-box" ref={box} data-turnable={turnable ? "true" : undefined}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
         <div className="product-demo-head">
           <p className="demo-label">{DEMO_HEAD.label}</p>
           <h2 id="demo-title">{DEMO_HEAD.title}</h2>
         </div>
         <div className="product-demo-view">{viewWanted ? <ProductDemoScene handle={handle} /> : null}</div>
+        <p className="product-demo-hint" data-shown={turnable ? "true" : undefined}><Rotate3d size={14} aria-hidden="true" /> {TURN_HINT}</p>
         <ol className="product-demo-beats">
           {BEAT_IDS.map((id, index) => {
             const active = !pinned || view.beat === index;

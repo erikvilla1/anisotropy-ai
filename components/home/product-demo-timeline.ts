@@ -39,14 +39,14 @@ const [DESCRIBE, MODEL, ANALYSIS, REPORT] = BEATS;
  * radians: `pitch` leans the wing's upper face back from the viewer, `yaw` turns it about the upright axis; `explode` is how
  * far its parts stand apart, 0 to 1; `size` is the wing's span as a share of the box's width. */
 export type Pose = { x: number; y: number; pitch: number; yaw: number; explode: number; size: number };
-const START: Pose = { x: 0.5, y: 0.3, pitch: 0.62, yaw: -0.7, explode: 0, size: 0.6 };
+const START: Pose = { x: 0.5, y: 0.32, pitch: 0.62, yaw: -0.7, explode: 0, size: 0.56 };
 /** The pose at the end of each beat, Scale's way: whole in the middle, seen from above and from its tip so the aerofoil shows;
  * then apart at one side; then at the other, turned to show the parts' other ends; then whole in the middle again. */
 export const POSES: Record<BeatId, Pose> = {
-  describe: { x: 0.5, y: 0.27, pitch: 0.72, yaw: -0.88, explode: 0, size: 0.74 },
-  model: { x: 0.69, y: 0.5, pitch: 0.82, yaw: -1.0, explode: 1, size: 0.62 },
-  analysis: { x: 0.31, y: 0.5, pitch: 0.82, yaw: 0.98, explode: 1, size: 0.62 },
-  report: { x: 0.5, y: 0.27, pitch: 0.7, yaw: -0.8, explode: 0, size: 0.74 },
+  describe: { x: 0.5, y: 0.31, pitch: 0.72, yaw: -0.88, explode: 0, size: 0.66 },
+  model: { x: 0.68, y: 0.5, pitch: 0.82, yaw: -1.0, explode: 1, size: 0.54 },
+  analysis: { x: 0.32, y: 0.5, pitch: 0.82, yaw: 0.98, explode: 1, size: 0.54 },
+  report: { x: 0.5, y: 0.31, pitch: 0.7, yaw: -0.8, explode: 0, size: 0.66 },
 };
 const mix = (a: number, b: number, u: number) => a + (b - a) * u;
 const between = (a: Pose, b: Pose, u: number): Pose => ({

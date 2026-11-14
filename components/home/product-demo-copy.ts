@@ -31,6 +31,8 @@ export const BEAT_COPY: Record<BeatId, { label: string; title: string; text: str
 };
 
 export const FILES_HEAD = "A full run writes";
+/** Once the demo has played: the wing can be turned by hand. */
+export const TURN_HINT = "Drag the wing to turn it";
 /** Under the result: the bend is drawn larger than it is. */
 export const BEND_NOTE = `The bend is drawn ${BEND_DRAWN} times its size.`;
 export const OPEN_WORKSPACE = "Open the workspace";
@@ -73,7 +75,7 @@ export function everyLine(wing: DemoWing, material: string): string[] {
   return [
     DEMO_HEAD.label, DEMO_HEAD.title,
     ...Object.values(BEAT_COPY).flatMap((beat) => [beat.label, beat.title, beat.text]),
-    FILES_HEAD, OPEN_WORKSPACE, BEND_NOTE, wing.field?.label ?? "",
+    FILES_HEAD, OPEN_WORKSPACE, BEND_NOTE, TURN_HINT, wing.field?.label ?? "",
     ...wingFacts(wing, material).flat(), ...wingParts(wing).flat(), ...(result ? [result.first, result.when] : []),
   ];
 }

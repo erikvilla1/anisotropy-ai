@@ -7,7 +7,7 @@ import { BEND_DRAWN, demoWing, wingColour, wingExtent } from "@/lib/demo-wing";
 import { clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
-export type DemoSceneHandle = { clock: number; redraw: (() => void) | null };
+export type DemoSceneHandle = { clock: number; redraw: (() => void) | null; /** How far a visitor has turned the wing by hand, in radians, once the demo has played. */ turn?: { yaw: number; pitch: number } };
 
 /** The product demo's centre model (ADR-0098): the example wing, drawn from the very mesh that was solved, one surface a part,
  * on the black stage. Its place and orientation, how far its parts stand apart, the mesh's lines, the analysis's colours and
@@ -27,40 +27,54 @@ const APART: Record<string, [number, number, number]> = {
 };
 const SKINS = new Set(["upper-skin", "lower-skin"]);
 /** How much of a skin is there while the wing is whole: the rest is seen through. */
-const SKIN_WHOLE = 0.34;
+const SKIN_WHOLE = 0.4;
 /** The carbon's tone a part, so the parts can be told apart before the analysis colours them. */
-const TONE: Record<string, number> = { "upper-skin": 1, "lower-skin": 0.9, "front-spar": 1.5, "rear-spar": 1.5, ribs: 1.9 };
-const CARBON: [number, number, number] = [0.27, 0.276, 0.29];
+const TONE: Record<string, number> = { "upper-skin": 1, "lower-skin": 0.92, "front-spar": 1.7, "rear-spar": 1.7, ribs: 2.2 };
+const CARBON: [number, number, number] = [0.16, 0.165, 0.178];
 const CAMERA_Z = 12;
-const CAMERA_FOV = 20;
+const CAMERA_FOV = 27;
+/** The window's shape the poses were set for: on a wider window the wing is sized by the window's height, so it stays in it. */
+const POSED_FOR = 1.6;
 
-/** `bend` is how far the node moves under the load, as drawn; `uBend` brings it in with the analysis. */
+/** `bend` is how far the node moves under the load, as drawn; `uBend` brings it in with the analysis. A node's normal and its
+ * colour are the averages of the faces of its part that meet there, so a curved skin is lit as one surface and the colours
+ * run smoothly from face to face, as analysis programs draw an averaged field. */
 const PART_VERTEX = /* glsl */ `
   attribute vec3 field;
   attribute vec3 bend;
-  uniform vec3 uCarbon;
-  uniform float uField;
   uniform float uBend;
-  varying vec3 vColor;
+  varying vec3 vField;
+  varying vec3 vNormal;
   varying vec3 vView;
   void main() {
-    vColor = mix( uCarbon, field, uField );
+    vField = field;
+    vNormal = normalMatrix * normal;
     vec4 view = modelViewMatrix * vec4( position + bend * uBend, 1.0 );
     vView = view.xyz;
     gl_Position = projectionMatrix * view;
   }`;
-/** Each face is lit by where it faces, read from the surface itself, so the aerofoil's curve and the parts' edges show without
- * a light in the scene; the analysis's colours are lit less, so a colour means the same on every face. */
+/** Lit as a part under a studio's lights, with no light in the scene: a key light from the upper right, a soft fill from the
+ * left, a highlight where the surface mirrors the key and a sheen where it turns away from the eye. The bare carbon is dark
+ * and glossy; the analysis's colours are matt, so a colour means the same wherever it lies. */
 const PART_FRAGMENT = /* glsl */ `
+  uniform vec3 uCarbon;
   uniform float uOpacity;
   uniform float uField;
-  varying vec3 vColor;
+  varying vec3 vField;
+  varying vec3 vNormal;
   varying vec3 vView;
   void main() {
-    vec3 normal = normalize( cross( dFdx( vView ), dFdy( vView ) ) );
-    float facing = abs( dot( normal, normalize( vec3( 0.25, 0.55, 0.8 ) ) ) );
-    float lit = mix( 0.5 + 0.75 * facing, 0.82 + 0.22 * facing, uField );
-    gl_FragColor = vec4( vColor * lit, uOpacity );
+    vec3 eye = normalize( -vView );
+    vec3 normal = normalize( vNormal );
+    if ( dot( normal, eye ) < 0.0 ) normal = -normal;
+    vec3 key = normalize( vec3( 0.35, 0.8, 0.55 ) );
+    float lit = max( dot( normal, key ), 0.0 );
+    float fill = max( dot( normal, normalize( vec3( -0.65, 0.25, 0.5 ) ) ), 0.0 );
+    float shine = pow( max( dot( normal, normalize( key + eye ) ), 0.0 ), 42.0 );
+    float sheen = pow( 1.0 - max( dot( normal, eye ), 0.0 ), 3.0 );
+    vec3 carbon = uCarbon * ( 0.4 + 0.85 * lit + 0.3 * fill ) + vec3( 0.5 ) * shine + vec3( 0.16, 0.18, 0.22 ) * sheen;
+    vec3 painted = vField * ( 0.6 + 0.5 * lit + 0.18 * fill ) + vec3( 0.2 ) * shine;
+    gl_FragColor = vec4( mix( carbon, painted, uField ), uOpacity );
   }`;
 const LINE_VERTEX = /* glsl */ `
   attribute vec3 bend;
@@ -95,16 +109,38 @@ function buildModel() {
   const disposables: { dispose: () => void }[] = [];
   const root = new THREE.Group();
   const built: Part[] = parts.map((part) => {
-    const positions: number[] = [], bends: number[] = [], colours: number[] = [];
+    // What meets at each node of this part: the sum of its faces' normals, and the sum and count of their values.
+    const normals = new Map<number, THREE.Vector3>();
+    const values = new Map<number, { sum: number; count: number }>();
+    const corner = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    const across = [new THREE.Vector3(), new THREE.Vector3()];
+    for (let face = part.first; face < part.first + part.count; face++) {
+      const quad = mesh.quads[face];
+      quad.forEach((node, index) => corner[index].set(...at(node)));
+      const normal = new THREE.Vector3().crossVectors(across[0].subVectors(corner[2], corner[0]), across[1].subVectors(corner[3], corner[1]));
+      for (const node of quad) {
+        const sum = normals.get(node);
+        if (sum) sum.add(normal);
+        else normals.set(node, normal.clone());
+        const value = values.get(node) ?? { sum: 0, count: 0 };
+        value.sum += field ? field.values[face] : 0;
+        value.count += 1;
+        values.set(node, value);
+      }
+    }
+    for (const normal of normals.values()) normal.normalize();
+    const positions: number[] = [], bends: number[] = [], colours: number[] = [], facing: number[] = [];
     // Every edge of the part once, with how many of its faces share it: an edge of one face is the part's outline.
     const edges = new Map<string, { a: number; b: number; faces: number }>();
     for (let face = part.first; face < part.first + part.count; face++) {
       const quad = mesh.quads[face];
-      const colour = field ? wingColour(field, field.values[face]) : CARBON;
-      for (const corner of [0, 1, 2, 0, 2, 3]) {
-        positions.push(...at(quad[corner]));
-        bends.push(...moved(quad[corner]));
-        colours.push(...colour);
+      for (const index of [0, 1, 2, 0, 2, 3]) {
+        const node = quad[index];
+        const value = values.get(node)!;
+        positions.push(...at(node));
+        bends.push(...moved(node));
+        colours.push(...(field ? wingColour(field, value.sum / value.count) : CARBON));
+        facing.push(...normals.get(node)!.toArray());
       }
       for (let side = 0; side < 4; side++) {
         const a = quad[side], b = quad[(side + 1) % 4];
@@ -131,6 +167,7 @@ function buildModel() {
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute("bend", new THREE.Float32BufferAttribute(bends, 3));
     geometry.setAttribute("field", new THREE.Float32BufferAttribute(colours, 3));
+    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(facing, 3));
     const tone = TONE[part.id] ?? 1;
     const skin = SKINS.has(part.id);
     const face = new THREE.ShaderMaterial({
@@ -204,26 +241,28 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     const { width, height } = state.viewport; // the world's size at the model's distance
     const span = demoWing.wing.span;
     const chord = wingExtent(demoWing);
-    const unit = (pose.size * width) / span; // world units a millimetre
+    const unit = (pose.size * Math.min(width, POSED_FOR * height)) / span; // world units a millimetre
     const x = (pose.x - 0.5) * width;
     const y = (0.5 - pose.y) * height;
     group.position.set(x, y, 0);
     group.scale.setScalar(unit);
-    group.rotation.set(-pose.pitch, pose.yaw, 0, "YXZ");
+    const hand = handle.turn ?? { yaw: 0, pitch: 0 };
+    group.rotation.set(-(pose.pitch + hand.pitch), pose.yaw + hand.yaw, 0, "YXZ");
     group.visible = scene.presence > 0;
     const apart = clamp01(pose.explode);
     const field = model.hasField ? scene.field : 0;
     for (const part of model.parts) {
       part.group.position.set(part.apart[0] * apart, part.apart[1] * apart, part.apart[2] * apart);
       // Whole, a skin is seen through; apart, it is solid.
-      const there = part.skin ? SKIN_WHOLE + (1 - SKIN_WHOLE) * apart : 1;
+      const there = part.skin ? Math.min(1, SKIN_WHOLE + (1 - SKIN_WHOLE) * apart + 0.3 * field * (1 - apart)) : 1;
       part.face.uniforms.uField.value = field;
       part.face.uniforms.uOpacity.value = scene.presence * there;
       // The mesh: light lines on the carbon, darker and fainter once the analysis colours the part.
-      part.mesh.uniforms.uOpacity.value = scene.presence * scene.mesh * (0.3 - 0.18 * field) * (part.skin ? 0.5 + 0.5 * apart : 1);
+      // The mesh's lines show only while the wing is apart and bare: under the colours, and whole, they would cut it into boxes.
+      part.mesh.uniforms.uOpacity.value = scene.presence * scene.mesh * apart * 0.26 * (1 - field);
       part.mesh.uniforms.uColor.value.setScalar(0.88 - 0.8 * field);
       // The outline: always there, so the plan and the aerofoil read at once.
-      part.rim.uniforms.uOpacity.value = scene.presence * (0.75 - 0.35 * field);
+      part.rim.uniforms.uOpacity.value = scene.presence * (0.5 - 0.3 * field);
       for (const material of [part.face, part.mesh, part.rim]) material.uniforms.uBend.value = field;
     }
     // A faint pool of light on the black ground, just under the wing: as wide as the span on the screen, and deeper the
