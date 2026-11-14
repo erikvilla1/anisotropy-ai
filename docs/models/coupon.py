@@ -1253,10 +1253,11 @@ def fill(folder: Path, src: Sources, spec, text: str, card: dict[str, str], c, d
 # --------------------------------------------------------------------------------------------- the document
 
 def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = False, write_summary: bool = True,
-                   attempt: str | None = None) -> tuple[Path, Path]:
+                   attempt: str | None = None, study: dict | None = None) -> tuple[Path, Path]:
     """The coupon document (its PDF when Tectonic is installed and `pdf` is set, else the LaTeX) and the package folder; with
     `write_summary`, the team comparison's figures for the case page too (beside the model, so off for a scratch build). `attempt` is
-    the attempt the package delivers, as `tools/run_coupon.py` names the run that built it; without it, the case page's accepted one."""
+    the attempt the package delivers, as `tools/run_coupon.py` names the run that built it; without it, the case page's accepted one.
+    `study` is the mesh convergence study that run made of this spec, printed as it is (ADR-0064 amendment 1); without it, solved here."""
     spec = load_spec(src.spec)
     card = dict(coupon_card(spec))
     if not card:
@@ -1289,7 +1290,7 @@ def build_document(src: Sources, pdf: bool, theory: bool, full_tables: bool = Fa
         c.package = package
     documents.difference_figure(rows, figures / "differences.png")
     map_drawn = documents.element_map(rows, summaries, element_centroids(rec_solution, deck_units), rec_solution, deck_units, figures / "element-map.png")
-    study = convergence_study(spec)  # once: the results, the cover and the verification chapter cite the same study (ADR-0068)
+    study = study if study is not None else convergence_study(spec)  # once: the results, the cover and the verification chapter cite the same study (ADR-0068)
     results, summary = results_chapter(spec, deck, solution, units, figures, calculix_method(src, record, rows, units), study)
     abaqus = abaqus_chapter(src, spec, deck, solution, deck_units, committed, c, figures)
 

@@ -6,10 +6,11 @@ import { fieldByKey, labelFor, libraryOptions, PLY_KEYS, sectionsFor, shortHelp,
 type Props = { form: StudioForm; errors: Record<string, string>; disabled: boolean; onChange: (key: string, value: string) => void };
 
 /** One row: its label (in the coupon's units), its input or list, and its error or a hint: the screen's own (`hint`), else the first sentence
- * of its help, shown only when it is fit for a customer (ADR-0091). The tow's rows use it too. */
-export function Field({ field, value, units, error, disabled, onChange, words = field.words, hint, labelText }: {
+ * of its help, shown only when it is fit for a customer (ADR-0091). The tow's rows use it too. `placeholder` is what a blank input stands for:
+ * the value the software chose for it (the tension screen, ADR-0090 amendment 1). */
+export function Field({ field, value, units, error, disabled, onChange, words = field.words, hint, labelText, placeholder }: {
   field: FieldDefinition; value: string; units: string; error?: string; disabled: boolean; onChange: (value: string) => void; words?: string[];
-  hint?: string; labelText?: string;
+  hint?: string; labelText?: string; placeholder?: string;
 }) {
   const id = `studio-${field.key}`;
   const describedBy = error ? `${id}-error` : `${id}-hint`;
@@ -34,7 +35,7 @@ export function Field({ field, value, units, error, disabled, onChange, words = 
   } else {
     const numeric = field.kind === "number" || field.kind === "whole" || field.kind === "angle";
     control = (
-      <input id={id} name={field.key} type="text" inputMode={numeric ? "decimal" : undefined} value={value} disabled={disabled}
+      <input id={id} name={field.key} type="text" inputMode={numeric ? "decimal" : undefined} value={value} disabled={disabled} placeholder={placeholder}
         aria-invalid={Boolean(error)} aria-describedby={describedBy} onChange={(e) => onChange(e.target.value)} autoComplete="off" />
     );
   }
@@ -66,8 +67,10 @@ export function PlyGrid({ form, errors, disabled, onChange }: Props) {
 }
 
 /** Any subset of rows as a grid, in the given order, only those the test shows (a bending coupon has no tab length); nothing when none. A
- * screen may give its own hints and labels by key (the tension screen, audit fea-run-6). */
-export function FieldGrid({ form, keys, errors, disabled, onChange, hints, labels }: Props & { keys: string[]; hints?: Record<string, string>; labels?: Record<string, string> }) {
+ * screen may give its own hints, labels and placeholders by key (the tension screen, audit fea-run-6, ADR-0090 amendment 1). */
+export function FieldGrid({ form, keys, errors, disabled, onChange, hints, labels, placeholders }: Props & {
+  keys: string[]; hints?: Record<string, string>; labels?: Record<string, string>; placeholders?: Record<string, string>;
+}) {
   const units = unitsOf(form); // the Units row relabels every row with a unit as it changes (ADR-0061)
   const visible = new Set(sectionsFor(form).flatMap((section) => section.fields.map((field) => field.key)));
   const shown = keys.filter((key) => visible.has(key) && fieldByKey[key]).map((key) => fieldByKey[key]);
@@ -75,7 +78,8 @@ export function FieldGrid({ form, keys, errors, disabled, onChange, hints, label
   return (
     <div className="studio-field-grid">
       {shown.map((field) => <Field key={field.key} field={field} value={form[field.key] ?? ""} units={units} error={errors[field.key]} disabled={disabled}
-        words={wordsFor(field, form)} hint={hints?.[field.key]} labelText={labels?.[field.key]} onChange={(value) => onChange(field.key, value)} />)}
+        words={wordsFor(field, form)} hint={hints?.[field.key]} labelText={labels?.[field.key]} placeholder={placeholders?.[field.key]}
+        onChange={(value) => onChange(field.key, value)} />)}
     </div>
   );
 }

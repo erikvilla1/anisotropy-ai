@@ -286,6 +286,16 @@ def test_the_result_shows_while_the_package_is_still_being_built(jobs):
     assert running["state"] == "running" and running["stage"] == "the package" and running["documents"] == "building"
     assert running["result"] == running["message"] == "57 of 57 recorded values agree with CalculiX"
     assert client.get(f"/v1/coupon-jobs/{job_id}/files/fields").status_code == 200
+    # the package's zip exists once the job has ended: asked for while it runs, the answer is 409, never a crash (ADR-0064 amendment 2)
+    with pytest.raises(coupon_jobs.JobNotDone):
+        jobs.package_archive(jobs.jobs[uuid.UUID(job_id)])
+    real_output_file = jobs.output_file
+    jobs.output_file = lambda job, key: jobs.package_archive(job) if key == "package" else real_output_file(job, key)
+    try:
+        early = client.get(f"/v1/coupon-jobs/{job_id}/files/package")
+    finally:
+        jobs.output_file = real_output_file
+    assert early.status_code == 409 and "zipped once it is done" in early.json()["detail"]
     (jobs.root / "release").touch()
     done = ended(job_id)
     assert done["state"] == "done" and done["result"] == "57 of 57 recorded values agree with CalculiX"

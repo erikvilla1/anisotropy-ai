@@ -1,6 +1,6 @@
 # ADR-0090: A tension coupon is built from its material and layup; the standard and the software choose the rest, and say so
 
-- Status: Proposed
+- Status: Proposed; each size row left blank chosen on its own and a blank field showing the value in use, amendment 1 (2026-11-14)
 - Date: 2026-11-11
 - Decided by: Founder, 2026-11-11 (on the first plan: "another confusing non user friendly is the inputting for abaqus for abaqus deck it doesn't make sense why the user has to do all of that, it shouldn't be there, all we need is more simpler input for the user ... what we are trying to do is recreate the model with our AI/software gives us the output files boom"; then, asked: the screen is "Two choices + chat", and what may be changed is "Own material constants, Pull or force, Coupon size and tabs, Mesh size") | Drafted by: Claude Code
 - Related: [ADR-0089](ADR-0089-only-unnotched-tension-under-d3039-or-no-standard-is-offered-until-its-abaqus-comparison-is-validated.md) (one test first), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (the form's rows), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (the workspace's panels), [ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md) (D3039's Table 2), [ADR-0003](ADR-0003-reject-invalid-input.md) (no silent defaults); `fea/src/anisotropy_fea/tension_input.py`, `lib/tension-screen.ts`, `components/workspace/tension-screen.tsx`, `fea/checks/d3039-im7-8552/`
@@ -64,3 +64,16 @@ The full panels stay, unchanged, for the hidden tests in development (`ANISOTROP
 
 - An engineer cannot state a coupon they need with the two inputs and the four changes (for example a tabbed coupon of a fabric under D3039 that falls in no class, or a coupon that needs coupling grips).
 - A choice listed under How we built it differs from what the deck holds (a test of the reference pick fails).
+
+## Amendment 1, 2026-11-14 (each size row left blank is chosen on its own, and a blank field shows the value in use; the founder asked "why is the geometry fixed")
+
+**Context.** The founder saw 250 × 25 mm with 56 mm tabs for AS4/3501-6 [45/0/-45/90]s and asked why the geometry is fixed. It is not: D3039 Table 2 gives 25 × 250 mm for a balanced and symmetric layup and no grip length, and 56 mm is the software's choice; all three can be changed under Change settings. Two things made it look fixed. Under D3039 that panel starts folded and its fields stay blank, so nothing on it says what is in use. And `complete_tension` dropped Table 2 for all three rows as soon as one was typed (`size_given = any(...)`), so a width alone left the length and the tab length empty and the check refused the run.
+
+**Options.**
+1. *Each blank size row from Table 2 on its own; a blank field shows, as its placeholder, the number the latest check chose* (chosen). The check still reports a deviation from Table 2 and never refuses it (ADR-0072).
+2. *Keep all or nothing and say so on the screen.* Rejected: typing one dimension is the common change.
+3. *Fill the fields with the chosen values.* Rejected: the rows would then be the engineer's, and a later change of layup class would keep the old size.
+
+**Decision.** Option 1. `size_from` says which rows were typed and that the rest come from Table 2, for example "the width as you gave, the rest from ASTM D3039/D3039M-17, Table 2, ...". The placeholders come from the check's `built` list (`valuesInUse` in `lib/tension-screen.ts`); the page chooses none of them, and the live preview's check refreshes them after each edit.
+
+**Evidence.** `fea/tests/test_tension_input.py`: a width of 30 mm alone gives 30 × 250 mm with 56 mm tabs and a ready setup check, and so does a typed length with a typed tab length (13 passed). `tests/tension-screen.test.ts`: the placeholders are the built numbers only. No browser check of the placeholders yet.

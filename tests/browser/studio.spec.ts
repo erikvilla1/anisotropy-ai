@@ -200,6 +200,7 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
   await expect(page.getByTestId("job-message")).toContainText("Verified against reference solver: 57 of 57 values agree");
   await expect(page.getByTestId("job-progress").locator("li[data-state=done]")).toHaveCount(5); // the five steps of a finished job (ADR-0091)
+  await expect(page.getByTestId("job-took")).toHaveText("Finished in 80 s."); // from the click to the last file, the job's own times (ADR-0064 amendment 1)
   const outputs = page.getByTestId("panel-outputs"); // the files in the left column, named by the standard and the layup (ADR-0091)
   await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("href", /\/v1\/coupon-jobs\/0f3a2c9e[^/]*\/files\/package\?name=UnnotchedTension_%5B45%2C0%2C-45%2C90%5Ds_package\.zip$/);
   await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("download", "UnnotchedTension_[45,0,-45,90]s_package.zip"); // commas (fea-run-39)
@@ -462,6 +463,11 @@ test("the tension screen takes the material and the layup, builds the model, say
   const built = page.getByTestId("tension-built");
   await expect(built.locator("tr[data-row=width]")).toContainText("ASTM D3039/D3039M-17, Table 2, balanced and symmetric");
   await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm is the software's choice");
+  // a blank field under Change settings shows the value in use, not nothing (ADR-0090 amendment 1)
+  await expect(page.locator("#studio-width")).toHaveAttribute("placeholder", "25");
+  await expect(page.locator("#studio-length")).toHaveAttribute("placeholder", "250");
+  await expect(page.locator("#studio-tab_length")).toHaveAttribute("placeholder", "56");
+  await expect(page.locator("#studio-width")).toHaveValue("");
   await expect(built.locator("tr[data-row=value] th")).toHaveText("Applied displacement (mm)"); // the label alone in the row header (uiux-fea-run-29)
   await expect(built.locator("tr[data-row=value] td").last()).toHaveText("The model is linear, so R, the loading at first-ply failure, does not depend on it.");
   await expect(page.getByTestId("tension-files")).toContainText("Abaqus input file (.inp)", { timeout: 45_000 }); // the job ends at the eighth poll, slower on CI
