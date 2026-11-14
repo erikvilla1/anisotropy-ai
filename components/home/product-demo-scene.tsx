@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { BEND_DRAWN, demoWing, wingBox, wingColour } from "@/lib/demo-wing";
 import { boxOf, fitInto, roomAbove, roomBeside, type Room } from "./product-demo-fit";
-import { clamp01, poseAt, sceneAt } from "./product-demo-timeline";
+import { DEMO_TOTAL, clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
 export type DemoSceneHandle = { clock: number; redraw: (() => void) | null; /** How far a visitor has turned the wing by hand, in radians, once the demo has played. */ turn?: { yaw: number; pitch: number }; /** The pointer is down on the stage, turning the wing. */ turning?: boolean; /** How far down the stage the words under the wing begin, in pixels, where a beat's words stand under it. */ under?: number };
@@ -33,6 +33,7 @@ const SKIN_WHOLE = 0.4;
 const TONE: Record<string, number> = { "upper-skin": 1, "lower-skin": 0.92, "front-spar": 1.7, "rear-spar": 1.7, ribs: 2.2 };
 const CARBON: [number, number, number] = [0.16, 0.165, 0.178];
 const CAMERA_Z = 12;
+const smoothstep = (x: number) => x * x * (3 - 2 * x);
 const CAMERA_FOV = 27;
 
 /** `bend` is how far the node moves under the load, as drawn; `uBend` brings it in with the analysis. A node's normal and its
@@ -337,7 +338,11 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     }
     group.position.set(x, y, 0);
     group.scale.setScalar(unit);
-    const hand = handle.turn ?? { yaw: 0, pitch: 0 };
+    // A visitor's own turn of the wing holds only while the demo stands finished: as the clock leaves its end, scrolled
+    // back into an earlier beat, the turn eases away and the wing is the pose's again.
+    const own = handle.turn ?? { yaw: 0, pitch: 0 };
+    const held = smoothstep(clamp01((clock - (DEMO_TOTAL - 0.2)) / 0.2));
+    const hand = { yaw: own.yaw * held, pitch: own.pitch * held };
     group.rotation.set(-(pose.pitch + hand.pitch), pose.yaw + hand.yaw, 0, "YXZ");
     group.visible = scene.presence > 0;
     for (const part of model.parts) {

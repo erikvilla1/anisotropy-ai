@@ -157,7 +157,12 @@ test.describe("on a phone", () => {
 
   test("a menu opened at the page's top scrolls away with the page, as before", async ({ page }) => {
     await page.goto("/about");
-    await page.getByRole("button", { name: "Open menu" }).click();
+    // A press that comes before the page's script has taken the button over opens nothing: press until it has.
+    const toggle = page.locator(".menu-toggle");
+    await expect(async () => {
+      if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-expanded", "true", { timeout: 500 });
+    }).toPass({ timeout: 10_000 });
     const nav = page.getByRole("navigation", { name: "Main navigation" });
     await expect(nav).toBeVisible();
     await page.mouse.move(195, 700);

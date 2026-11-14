@@ -1193,43 +1193,43 @@
  * one. The stage starts half a window up, behind the hero, so half a window of scrolling brings it to the window's top. Once
  * it is there the hero is out of the way altogether. The layout is the stylesheet's own, so nothing moves when the script
  * starts; without the script the hero simply stays opaque for that half window.
- * Once the demo has played through (`data-played`, set by components/home/product-demo.tsx; amendment 8) none of this
- * applies: the hero is an ordinary section straight above the stage, and scrolling back up brings it down whole. */
+ * It follows the scroll both ways: scrolling back up from the stage brings the hero back as it went (amendment 10, which
+ * ends amendment 8's ordinary section above a demo that had played). */
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
-  .home-opening:not([data-played]) > .home-hero {
+  .home-opening > .home-hero {
     position: sticky;
     top: 0;
     z-index: 2;
     background: #000000;
     opacity: calc(1 - var(--hero-left, 0));
   }
-  .home-opening:not([data-played])[data-handover="done"] > .home-hero {
+  .home-opening[data-handover="done"] > .home-hero {
     visibility: hidden;
   }
   /* As the scroll starts, the clip grows from its box to the whole window, over the black strip the header leaves and the
    * black at the sides and the foot (--hero-grow; amendment 5), and it is whole-window while it dims. */
-  .home-opening:not([data-played]) > .home-hero > .home-hero-media {
+  .home-opening > .home-hero > .home-hero-media {
     inset: calc(var(--hero-top) * (1 - var(--hero-grow, 0))) calc(var(--hero-frame) * (1 - var(--hero-grow, 0)))
       calc(var(--hero-frame) * (1 - var(--hero-grow, 0)));
   }
   /* "Scroll to explore" has done its work once the page scrolls: it goes as the clip grows, and is gone when the clip is
    * whole-window, before the clip itself dims (amendment 6). Its own fade-in is switched off on the way, so it keeps to the
    * scroll. */
-  .home-opening:not([data-played]) > .home-hero[data-words="gone"] .home-hero-explore {
+  .home-opening > .home-hero[data-words="gone"] .home-hero-explore {
     opacity: calc(1 - var(--hero-grow, 0));
   }
-  .home-opening:not([data-played])[data-handover="going"] > .home-hero .home-hero-explore {
+  .home-opening[data-handover="going"] > .home-hero .home-hero-explore {
     transition: none;
   }
   /* The hero's own words, if they stand when the page scrolls (it was scrolled before they left, or the clip had just
    * started again and brought them back; ADR-0077 amendment 40), go as the clip grows, as "Scroll to explore" does, and are
    * gone when the clip is whole-window: they never lie over the demo's first words, which come up only after that
    * (ADR-0095 amendment 9). `filter`, not `opacity`, so the load-in's and the exit's own opacity is left as it is. */
-  .home-opening:not([data-played]) > .home-hero > .home-hero-stack,
-  .home-opening:not([data-played]) > .home-hero > .home-hero-backed {
+  .home-opening > .home-hero > .home-hero-stack,
+  .home-opening > .home-hero > .home-hero-backed {
     filter: opacity(calc(1 - var(--hero-grow, 0)));
   }
-  .home-opening:not([data-played]) > .product-demo {
+  .home-opening > .product-demo {
     margin-top: calc(-0.5 * max(640px, 100svh));
   }
 }

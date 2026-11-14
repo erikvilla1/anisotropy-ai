@@ -28,7 +28,8 @@ export const HANDOVER = {
  * this writes how far the scroll has gone on their wrapper: `data-handover` is "ready" at the top, "going" on the way and
  * "done" once the stage fills the window, `--hero-grow` is how far the clip has grown, `--hero-left` how far the hero has
  * gone and `--demo-arrived` how far the first beat's words are in. With reduced motion or on a small window
- * the two sections are ordinary ones, one under the other, and this writes nothing. Renders nothing. */
+ * the two sections are ordinary ones, one under the other, and this writes nothing. It follows the scroll both ways: back
+ * up from the stage the hero comes back as it went (ADR-0095 amendment 10). Renders nothing. */
 export function HeroHandover() {
   useEffect(() => {
     const opening = document.querySelector<HTMLElement>(".home-opening");
@@ -44,8 +45,8 @@ export function HeroHandover() {
     };
     const write = () => {
       frame = 0;
-      // Not on a small window or with reduced motion, and not once the demo has played through (amendment 8).
-      if (!media.matches || opening.dataset.played) {
+      // Not on a small window or with reduced motion.
+      if (!media.matches) {
         clear();
         return;
       }

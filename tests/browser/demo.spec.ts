@@ -2,10 +2,12 @@ import { test, expect, type Page } from "@playwright/test";
 import { demoWing } from "../../lib/demo-wing";
 import { bannedIn } from "../../lib/studio-copy";
 
-// The product demo under the hero (ADR-0095): a box the size of the hero's clip, black as the page is (amendment 2), in which one composite wing is shown in
-// four beats from one recorded analysis (ADR-0098): whole, apart into its parts, analysed part by part, whole again. The page scrolls to the box as any page does; once the box stands in the
-// window one scroll gesture plays one whole beat. `data-stop` on the box says where the demo's clock stands (0 while
-// the box is empty, 1 to 4 at the end of each beat) and `data-moving` is there while a beat plays.
+// The product demo under the hero (ADR-0095): a stage the size of the window, black as the page is (amendment 2), on which one
+// composite wing is shown in four beats from one recorded analysis (ADR-0098): whole, apart into its parts, analysed part by
+// part, whole again. The stage follows the page's scroll (amendment 10): it stays in the window while the page scrolls
+// past it, freely, and where the scroll stands says which beat plays; nothing takes the wheel or holds the page.
+// `data-stop` on the stage says where the demo's clock stands (0 at its start, 1 to 4 at the end of each beat) and
+// `data-moving` is there while the clock runs.
 
 // The four beats take 3.2, 3.6, 4.8 and 3.2 s, and several cases play all of them.
 test.describe.configure({ timeout: 120_000 });
@@ -25,25 +27,27 @@ async function expectStop(page: Page, stop: number) {
   await expect(box(page)).not.toHaveAttribute("data-moving", "true");
 }
 const notch = (page: Page, direction: 1 | -1 = 1) => page.mouse.wheel(0, 100 * direction);
-/** Scrolls the page down onto the box's line with the one wheel event that asks for all that is left, and waits for the first beat. */
+/** The scroll a beat takes: half the stage's height (ZONE in components/home/product-demo.tsx). */
+const zone = (page: Page) => box(page).evaluate((element) => Math.round(element.getBoundingClientRect().height / 2));
+/** Where the page stands when the stage's top edge first lies on the window's: the start of the first beat's zone. */
+const stageAt = (page: Page) => demo(page).evaluate((section) => Math.round(window.scrollY + section.getBoundingClientRect().top));
+/** Wheels the page to a place and checks it went exactly there: nothing holds it, nothing carries it on. */
+async function wheelTo(page: Page, y: number) {
+  await page.mouse.wheel(0, y - (await scrollY(page)));
+  await expect.poll(() => scrollY(page)).toBe(y);
+}
+/** Wheels the page onto the stage's line with the one wheel event that asks for all that is left, and waits for the first beat. */
 async function reachBox(page: Page) {
-  await page.mouse.wheel(0, await offLine(page));
+  await wheelTo(page, await stageAt(page));
   await expectStop(page, 1);
   expect(await offLine(page)).toBe(0);
-  await page.waitForTimeout(350);
 }
+/** Wheels the page into the middle of a beat's zone (1 to 4) and waits for the clock to stand at that beat's end. */
 async function playTo(page: Page, stop: number) {
-  let at = Number(await box(page).getAttribute("data-stop"));
-  if (at === 0 && stop > 0) {
-    await reachBox(page);
-    at = 1;
-  }
-  for (; at < stop; at++) {
-    await notch(page);
-    await expectStop(page, at + 1);
-  }
+  await wheelTo(page, (await stageAt(page)) + Math.round((stop - 0.5) * (await zone(page))));
+  await expectStop(page, stop);
 }
-/** A trackpad swipe as the page gets it, sent in one go; returns how many of its wheel events the demo took from the browser. */
+/** A trackpad swipe as the page gets it, sent in one go; returns how many of its wheel events were taken from the browser. */
 const swipe = (page: Page, direction: 1 | -1 = 1) =>
   page.evaluate((sign) => {
     let taken = 0;
@@ -67,7 +71,7 @@ const wing = { ...demoWing, field: demoWing.field!, solve: demoWing.solve!, load
 const legendEnd = (value: number) => (wing.field.unit ? String(Math.round(value)) : `${Math.round(value * 100)} %`);
 const PARTS = ["UPPER SKIN", "LOWER SKIN", "FRONT SPAR", "REAR SPAR", "RIBS"];
 
-test("the demo is a black stage as wide as the clip and a window tall, which starts half a window up behind the hero", async ({ page }) => {
+test("the demo is a black stage as wide as the clip and a window tall, which starts half a window up behind the hero and stays in the window through its section", async ({ page }) => {
   await openPinned(page);
   const rects = await page.evaluate(() => {
     const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
@@ -78,11 +82,13 @@ test("the demo is a black stage as wide as the clip and a window tall, which sta
   expect([rects.box.left, rects.box.right]).toEqual([rects.clip.left, rects.clip.right]);
   expect(rects.box.height).toBe(page.viewportSize()!.height);
   expect(rects.box.top).toBe(page.viewportSize()!.height / 2);
-  // Until the demo has played through, the page ends at the stage (amendment 7): what follows is out of its height.
-  await expect(page.locator("html")).toHaveAttribute("data-demo-gate", "true");
-  const ends = await page.evaluate(() => [document.documentElement.scrollHeight, Math.round(window.scrollY + document.querySelector("#demo .product-demo-box")!.getBoundingClientRect().bottom)]);
-  expect(ends[0]).toBe(ends[1]);
-  expect(rects.next.height).toBeLessThanOrEqual(1);
+  // The stage stays in the window while the page scrolls through its section, which is the stage and half a stage of
+  // scroll for each of the four beats tall (amendment 10). The page goes on under it: the next band follows the section.
+  await expect(box(page)).toHaveCSS("position", "sticky");
+  expect(rects.section.height).toBe(3 * page.viewportSize()!.height);
+  expect(rects.next.top).toBe(rects.section.bottom);
+  expect(rects.next.height).toBeGreaterThan(200);
+  await expect(page.locator("html")).not.toHaveAttribute("data-demo-gate", /.+/);
   await expect(page.locator("#overview")).toHaveCSS("position", "sticky");
   const layers = await page.evaluate(() => ["#overview", "#demo"].map((selector) => Number(getComputedStyle(document.querySelector(selector)!).zIndex)));
   expect(layers[0]).toBeGreaterThan(layers[1]);
@@ -96,7 +102,7 @@ test("the demo is a black stage as wide as the clip and a window tall, which sta
   await expect(box(page).locator("[class*='rail'], [class*='tick']")).toHaveCount(0);
 });
 
-test("the page scrolls to the box as any page does; the box comes up with the first beat's words alone, and the first beat plays once it fills the window", async ({ page }) => {
+test("the page scrolls to the stage as any page does; the first beat's words come up alone on the way, and the first beat plays as the stage arrives", async ({ page }) => {
   const asked: string[] = [];
   page.on("request", (request) => { if (request.url().includes("/v1/")) asked.push(request.url()); });
   await openPinned(page);
@@ -114,25 +120,29 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
   expect(await wordsIn()).toBe(0);
   for (const id of ["model", "analysis", "report"]) await expect(beat(page, id)).toHaveCSS("opacity", "0");
   await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(0);
-  // Notch by notch: the page keeps to the wheel and nothing plays; near the stage the words are on their way in.
-  for (let guard = 0; (await offLine(page)) > 100 && guard < 30; guard++) {
+  // Notch by notch: the page keeps to the wheel, and nothing plays while the stage is still more than a notch and its
+  // lead (0.08 of its height) from the window's top.
+  const lead = 0.08 * page.viewportSize()!.height;
+  for (let guard = 0; (await offLine(page)) > lead + 100 && guard < 30; guard++) {
     const before = await scrollY(page);
     await notch(page);
     await expect.poll(() => scrollY(page)).toBe(before + 100);
     await expect(box(page)).not.toHaveAttribute("data-moving", "true");
   }
   await expectStop(page, 0);
-  expect(await wordsIn()).toBeGreaterThan(0);
-  const left = await offLine(page);
-  expect(left).toBeGreaterThan(0);
-  expect(left).toBeLessThanOrEqual(100);
-  // The notch that would pass the line is stopped on it: the stage fills the window, and the first beat plays.
+  // The notch that brings the stage within its lead starts the first beat. The page is where the wheel put it: it is not
+  // carried onto the stage's line, and not stopped there.
+  const before = await scrollY(page);
   await notch(page);
+  await expect.poll(() => scrollY(page)).toBe(before + 100);
   await expect(box(page)).toHaveAttribute("data-moving", "true");
+  expect(await wordsIn()).toBeGreaterThan(0);
   await expectStop(page, 1);
-  expect(await offLine(page)).toBe(0);
+  expect(await scrollY(page)).toBe(before + 100);
+  // On to the line: from there the stage stays at the window's top.
+  await reachBox(page);
   const placed = await box(page).evaluate((element) => { const r = element.getBoundingClientRect(); return [Math.round(r.top), Math.round(window.innerHeight - r.bottom)]; });
-  expect(placed[0]).toBe(placed[1]);
+  expect(placed).toEqual([0, 0]);
   for (const part of [".product-demo-view", ".product-demo-beats"]) await expect(box(page).locator(part), part).toHaveCSS("opacity", "1");
   // The first beat: the wing whole, and what it is filled in beside it.
   await expect(beat(page, "describe")).toHaveAttribute("data-active", "true");
@@ -205,18 +215,17 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
   }
   expect(before.hero).toBeLessThan(0.2);
   expect(before.words).toBeGreaterThan(0.8);
-  // The box is not moving yet: all of this was the scroll's.
-  await expectStop(page, 0);
-  // On the stage: the hero is out of the way, the words stand, and the first beat plays.
+  // On the stage: the hero is out of the way, the words stand, and the first beat plays (it began as the stage came within
+  // its lead).
   await reachBox(page);
   await expect(opening).toHaveAttribute("data-handover", "done");
   await expect(page.locator("#overview")).toHaveCSS("visibility", "hidden");
   expect((await read()).words).toBe(1);
-  // Back at the top the hero is whole again and the demo is at its start.
+  // Back at the top the hero is whole again and the demo has run back to its start.
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await expect(opening).toHaveAttribute("data-handover", "ready");
-  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
   await expectStop(page, 0);
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
 });
 
 test("if the hero's words still stand when the page scrolls, they go as the clip grows and never lie over the demo's first words (ADR-0095 amendment 9)", async ({ page }) => {
@@ -261,31 +270,34 @@ test("if the hero's words still stand when the page scrolls, they go as the clip
   await expect.poll(async () => (await read()).statement).toBe(1);
 });
 
-test("each gesture plays one whole beat, a swipe's burst plays one, and the analysis shows the recorded field with its legend and what it found", async ({ page }) => {
+test("each zone of scroll plays its beat and the page is never held; the analysis shows the recorded field with its legend and what it found", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await openPinned(page);
-  await playTo(page, 1);
-  const held = await scrollY(page);
-  // A swipe is one gesture: every one of its events is taken, and one beat plays.
-  expect(await swipe(page)).toBe(28);
+  await reachBox(page);
+  const start = await scrollY(page);
+  const step = await zone(page);
+  // The wheel is the browser's: none of a swipe's events is taken, on the stage or off it, and it plays nothing by itself.
+  expect(await swipe(page)).toBe(0);
+  // A zone further down, the second beat: the wing apart, and its five parts named with their layups. The page is where
+  // the wheel put it.
+  await wheelTo(page, start + step);
+  await expect(box(page)).toHaveAttribute("data-moving", "true");
   await expectStop(page, 2);
   await expect(beat(page, "model")).toHaveAttribute("data-active", "true");
-  // The second beat: the wing apart, and its five parts named with their layups.
   const parts = page.getByTestId("demo-parts");
   await expect(parts.locator("[data-filled]")).toHaveCount(5);
   await expect(parts.locator("dt")).toHaveText(PARTS);
   await expect(parts.locator("dd")).toHaveText(wing.parts.map((part) => part.layup));
-  await page.waitForTimeout(700);
+  expect(await scrollY(page)).toBe(start + step);
+  expect(await offLine(page)).toBe(0);
+  // A notch inside the same zone moves the page and plays nothing.
+  await notch(page);
+  await expect.poll(() => scrollY(page)).toBe(start + step + 100);
+  await page.waitForTimeout(500);
   await expectStop(page, 2);
-  expect(await scrollY(page)).toBe(held);
-  // Three notches, two of them while the beat plays: one beat.
-  await notch(page);
-  await expect(box(page)).toHaveAttribute("data-moving", "true");
-  await notch(page);
-  await notch(page);
-  await expectStop(page, 3);
-  await page.waitForTimeout(700);
+  // The third zone.
+  await wheelTo(page, start + 2 * step);
   await expectStop(page, 3);
   // The analysis: the run's five stages done, the legend over the recorded range, and what the analysis found.
   const analysis = page.getByTestId("demo-run");
@@ -302,30 +314,21 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   await expect(result).toContainText(`${wing.load.total} ${wing.load.unit} pushed up at the wing's ribs`);
   await expect(result).toContainText(`the winglet's tip rises ${Math.round(wing.solve.tip_deflection)} mm`);
   await expect(box(page).locator("canvas")).toBeVisible();
-  // A swipe up plays a beat backwards, and a swipe down plays it again.
-  expect(await swipe(page, -1)).toBe(28);
+  // Back up a zone the third beat is unplayed, faster than it played, and down again it plays again.
+  await wheelTo(page, start + step);
+  await expect(box(page)).toHaveAttribute("data-moving", "true");
   await expectStop(page, 2);
-  expect(await scrollY(page)).toBe(held);
-  await page.waitForTimeout(400);
-  expect(await swipe(page)).toBe(28);
+  await expect(legend).toHaveCSS("opacity", "0");
+  await wheelTo(page, start + 2 * step);
   await expectStop(page, 3);
-  await page.waitForTimeout(400);
   await expect(box(page)).not.toHaveAttribute("data-turnable", /.+/); // not while the demo still plays
-  // The last beat: the files a run writes, by the workspace's names, and the way into the workspace.
-  await notch(page);
+  // The last zone: the files a run writes, by the workspace's names, and the way into the workspace.
+  await wheelTo(page, start + 3 * step);
   await expectStop(page, 4);
   const report = page.getByTestId("demo-report");
   await expect(report.locator(".demo-files li[data-shown]")).toHaveText(["Report (PDF)", "Full package (ZIP)", "Solver input (.inp)"]);
   await expect(report.getByRole("link", { name: "Open the workspace" })).toHaveAttribute("href", /\/workspace\/fea\/?$/);
-  // Played through, once (amendment 7): the stage is an ordinary section now, the rest of the page is there, and a swipe
-  // is the browser's again.
-  await expect(box(page)).toHaveAttribute("data-done", "true");
-  await expect(page.locator("html")).not.toHaveAttribute("data-demo-gate", /.+/);
-  const after = await page.evaluate(() => [document.getElementById("mission")!.getBoundingClientRect().top, document.querySelector("#demo .product-demo-box")!.getBoundingClientRect().bottom]);
-  expect(after[0]).toBe(after[1]);
-  await page.waitForTimeout(400);
-  expect(await swipe(page, -1)).toBe(0);
-  await expectStop(page, 4);
+  expect(await offLine(page)).toBe(0);
   // The finished wing can be turned by hand (ADR-0098 amendment 1): the stage shows a hand and says so, and a drag on it
   // draws the wing from another side.
   await expect(box(page)).toHaveAttribute("data-turnable", "true");
@@ -359,7 +362,11 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   const turned = await canvas.screenshot();
   expect(Buffer.compare(drawn, turned)).not.toBe(0);
   expect(Buffer.compare(holding, turned)).not.toBe(0);
-  expect(await scrollY(page)).toBe(await page.evaluate(() => Math.round(window.scrollY)));
+  // Scrolled back into the third beat the wing is the demo's again: it cannot be turned, and the line goes.
+  await wheelTo(page, start + 2 * step);
+  await expectStop(page, 3);
+  await expect(box(page)).not.toHaveAttribute("data-turnable", /.+/);
+  await expect(hint).toBeHidden();
   expect(errors).toEqual([]);
 });
 
@@ -384,77 +391,81 @@ test("a beat takes its own time: the second about 3.6 s, measured in the page", 
       if (!stage.dataset.moving && marks.start && !marks.end) marks.end = performance.now();
     }).observe(stage, { attributes: true, attributeFilter: ["data-moving"] });
   });
-  await notch(page);
+  await wheelTo(page, (await scrollY(page)) + (await zone(page)));
   await expectStop(page, 2);
   const marks = await page.evaluate(() => (window as unknown as { __beat: { start: number; end: number } }).__beat);
   expect(marks.end - marks.start).toBeGreaterThan(3400);
   expect(marks.end - marks.start).toBeLessThan(4800);
 });
 
-test("up from the first beat the page scrolls; once played through, the demo never plays again: down, back up to the hero and down again the stage is passed", async ({ page }) => {
+test("a fast scroll goes straight through the stage: the page is not held, what follows is there at once, and the demo stands finished", async ({ page }) => {
   await openPinned(page);
-  await playTo(page, 1);
-  const held = await scrollY(page);
-  // Up from the first beat: the page moves, and the box keeps its first beat while part of it shows.
-  await notch(page, -1);
-  await expect.poll(() => scrollY(page)).toBe(held - 100);
-  await page.waitForTimeout(400);
-  await expectStop(page, 1);
-  // Down again: the box holds the window, and the first beat is not played twice. The page ends there: it cannot go on.
-  await notch(page);
-  await expect.poll(() => offLine(page)).toBe(0);
-  await page.waitForTimeout(400);
-  await expectStop(page, 1);
-  expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBe(held);
-  await playTo(page, 4);
-  await expect(box(page)).toHaveAttribute("data-done", "true");
-  // The hand-over is over with the demo (amendment 8): the hero is an ordinary section straight above the stage, whole, and
-  // the stage has not moved in the window.
-  await expect(page.locator(".home-opening")).toHaveAttribute("data-played", "true");
+  const start = await stageAt(page);
+  const step = await zone(page);
+  // One wheel event for the whole way: past the hero, through the four zones and on until the stage is out of the window.
+  const far = start + 4 * step + page.viewportSize()!.height + 120;
+  await wheelTo(page, far);
+  await page.waitForTimeout(300);
+  expect(await scrollY(page)).toBe(far);
+  // The stage has gone up out of the window with its section, and the next band follows it.
+  const seen = await page.evaluate(() => ({ stage: Math.round(document.querySelector("#demo .product-demo-box")!.getBoundingClientRect().bottom), next: Math.round(document.getElementById("mission")!.getBoundingClientRect().top) }));
+  expect(seen.stage).toBe(seen.next);
+  expect(seen.stage).toBeLessThan(0);
+  // Out of sight the clock went straight to its end: nothing is played for no one.
+  await expect(box(page)).toHaveAttribute("data-stop", "4", { timeout: 2_000 });
+  await expect(box(page)).not.toHaveAttribute("data-moving", "true");
+  // Through the stage in a few quick steps, a visitor still sees it run: each beat left behind is run through, and the
+  // clock is at the last beat's end soon after the page is.
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await expectStop(page, 0);
+  const began = Date.now();
+  for (let part = 1; part <= 4; part++) {
+    await wheelTo(page, start + Math.round((part - 0.5) * step));
+    await page.waitForTimeout(120);
+  }
+  await expectStop(page, 4);
+  // Four beats take 14.8 s at their own pace; run through, the first three take about a second each at most.
+  expect(Date.now() - began).toBeLessThan(9_000);
   expect(await offLine(page)).toBe(0);
-  await expect(page.locator("#overview")).toHaveCSS("position", "relative");
+  await expect(beat(page, "report")).toHaveAttribute("data-active", "true");
+});
+
+test("on the way back up the beats are unplayed one by one, down to the hero, and on the way down they play again", async ({ page }) => {
+  await openPinned(page);
+  const start = await stageAt(page);
+  const step = await zone(page);
+  await playTo(page, 4);
+  await expect(box(page)).toHaveAttribute("data-turnable", "true");
+  // Up a zone at a time: the clock runs back to the beat before, and its words and card stand again.
+  const titles = ["Start from the part.", "It comes apart into its parts.", "Every part is analysed.", "Back together, with the report."];
+  const ids = ["describe", "model", "analysis", "report"];
+  for (let stop = 3; stop >= 1; stop--) {
+    await wheelTo(page, start + Math.round((stop - 0.5) * step));
+    await expect(box(page)).toHaveAttribute("data-moving", "true");
+    await expectStop(page, stop);
+    await expect(beat(page, ids[stop - 1])).toHaveAttribute("data-active", "true");
+    await expect(beat(page, ids[stop - 1]).getByRole("heading", { level: 3 })).toHaveText(titles[stop - 1]);
+    await expect(beat(page, ids[stop - 1])).toHaveCSS("opacity", "1");
+    expect(await offLine(page)).toBe(0);
+  }
+  await expect(page.getByTestId("demo-parts").locator("[data-filled]")).toHaveCount(0);
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(6);
+  // Up off the stage: the hero comes back as it went (the hand-over, backwards), and the demo runs back to its start.
+  const opening = page.locator(".home-opening");
+  await wheelTo(page, start - Math.round(step / 2));
+  await expect(opening).toHaveAttribute("data-handover", "going");
+  await expectStop(page, 0);
+  await wheelTo(page, 0);
+  await expect(opening).toHaveAttribute("data-handover", "ready");
   await expect(page.locator("#overview")).toHaveCSS("opacity", "1");
   await expect(page.locator("#overview")).toHaveCSS("visibility", "visible");
-  const seam = await page.evaluate(() => [document.getElementById("overview")!.getBoundingClientRect().bottom, document.querySelector("#demo .product-demo-box")!.getBoundingClientRect().top]);
-  expect(seam).toEqual([0, 0]);
-  const done = await scrollY(page);
-  expect(done).toBe(page.viewportSize()!.height);
-  // Past the last beat nothing takes the scroll over.
-  await page.waitForTimeout(350);
-  await page.mouse.wheel(0, 240);
-  await expect.poll(() => scrollY(page)).toBe(done + 240);
-  await page.waitForTimeout(300);
-  await page.mouse.wheel(0, 240);
-  await expect.poll(() => scrollY(page)).toBe(done + 480);
-  await expectStop(page, 4);
-  // Back up past the stage: the hero comes down as a block, in its box and at full strength, with no fade and nothing held.
-  await page.waitForTimeout(300);
-  await page.mouse.wheel(0, -780);
-  await expect.poll(() => scrollY(page)).toBe(done - 300);
-  await page.waitForTimeout(500);
-  expect(await scrollY(page)).toBe(done - 300);
-  const up = await page.evaluate(() => {
-    const hero = document.getElementById("overview")!;
-    const clip = hero.querySelector(".home-hero-media")!.getBoundingClientRect();
-    const box = hero.getBoundingClientRect();
-    return { bottom: Math.round(box.bottom), opacity: getComputedStyle(hero).opacity, clipInBox: [Math.round(clip.left - box.left), Math.round(box.right - clip.right), Math.round(box.bottom - clip.bottom)] };
-  });
-  expect(up).toEqual({ bottom: 300, opacity: "1", clipInBox: [32, 32, 32] });
-  await expect(page.locator(".home-opening")).not.toHaveAttribute("data-handover", /.+/);
-  // All the way to the top, and the demo stays at its end.
-  await page.mouse.wheel(0, -(done - 300));
-  await expect.poll(() => scrollY(page)).toBe(0);
-  await page.waitForTimeout(500);
-  await expectStop(page, 4);
-  // Down again: the stage does not stop the page and nothing plays. The wheel is the browser's all the way.
-  await page.mouse.wheel(0, done - 20);
-  await expect.poll(() => scrollY(page)).toBe(done - 20);
-  await page.mouse.wheel(0, 300);
-  await expect.poll(() => scrollY(page)).toBe(done + 280);
-  await page.waitForTimeout(600);
-  expect(await scrollY(page)).toBe(done + 280);
-  await expectStop(page, 4);
-  await expect(beat(page, "report")).toHaveAttribute("data-active", "true");
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(0);
+  await expect(box(page).locator(".product-demo-view")).toHaveCSS("opacity", "0");
+  // And down again it plays again, from its first beat.
+  await wheelTo(page, start);
+  await expect(box(page)).toHaveAttribute("data-moving", "true");
+  await expectStop(page, 1);
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(6);
 });
 
 test("Scroll to explore brings the stage to fill the window, and the first beat plays", async ({ page }) => {
@@ -470,7 +481,7 @@ test("Scroll to explore brings the stage to fill the window, and the first beat 
 test.describe("on a touch screen", () => {
   test.use({ hasTouch: true });
 
-  test("a finger scrolls the page to the box, which then holds; a swipe plays one beat, and at the last it scrolls the page on", async ({ page }) => {
+  test("a finger scrolls the page through the stage as it scrolls any page, and the beats play as it goes", async ({ page }) => {
     await openPinned(page);
     const client = await page.context().newCDPSession(page);
     const drag = async (x: number, from: number, to: number) => {
@@ -481,23 +492,21 @@ test.describe("on a touch screen", () => {
       }
       await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     };
-    await drag(300, 700, 400);
-    await expect.poll(() => scrollY(page)).toBeGreaterThan(150);
-    await expectStop(page, 0);
-    for (let guard = 0; (await offLine(page)) > 1 && guard < 10; guard++) await drag(300, 700, 400);
-    await expectStop(page, 1);
-    // On its line to the pixel the driver holds to: a finger leaves the page between two whole pixels.
-    expect(Math.abs(await offLine(page))).toBeLessThanOrEqual(1);
-    await page.waitForTimeout(350);
-    const held = await scrollY(page);
-    await drag(700, 600, 300);
-    await expectStop(page, 2);
-    await drag(300, 300, 600);
-    await expectStop(page, 1);
-    expect(await scrollY(page)).toBe(held);
-    await playTo(page, 4);
-    await drag(700, 600, 300);
-    await expect.poll(() => scrollY(page)).toBeGreaterThan(held + 100);
+    const start = await stageAt(page);
+    const step = await zone(page);
+    // Every drag moves the page: on the way to the stage, on it, and off it again.
+    let before = await scrollY(page);
+    for (let guard = 0; before < start + 4 * step + 100 && guard < 40; guard++) {
+      await drag(300, 600, 300);
+      await expect.poll(() => scrollY(page), { message: `a drag from ${before}` }).toBeGreaterThan(before + 100);
+      await page.waitForTimeout(250);
+      before = await scrollY(page);
+    }
+    expect(before).toBeGreaterThanOrEqual(start + 4 * step + 100);
+    await expectStop(page, 4);
+    // And back up onto the stage, where the last beat stands.
+    await drag(300, 300, 620);
+    await expect.poll(() => scrollY(page)).toBeLessThan(before - 100);
     await expectStop(page, 4);
   });
 });

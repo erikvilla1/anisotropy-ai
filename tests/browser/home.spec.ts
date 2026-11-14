@@ -26,14 +26,11 @@ test("the hero opens the page, and the laminate calculator and its tour are not 
   expect(asked).toEqual([]);
 });
 
-/** Until the demo has played through, what follows it is out of the page's height (ADR-0095 amendment 7). Focus moving past
- * the demo opens the page, as it does for a keyboard: the cases about the sections below go there that way. */
+/** The cases about the sections below the demo wait for the page's script to have started; what follows the demo is always
+ * in the page (ADR-0095 amendment 10 ended amendment 7's gate). */
 async function pastTheDemo(page: import("@playwright/test").Page) {
-  await expect(page.locator("#demo")).toHaveAttribute("data-mode", /^(pinned|static)$/); // the page's script has started
-  await expect(async () => {
-    await page.locator("#mission a").first().focus();
-    await expect(page.locator("html")).not.toHaveAttribute("data-demo-gate", /.+/, { timeout: 500 });
-  }).toPass({ timeout: 10_000 });
+  await expect(page.locator("#demo")).toHaveAttribute("data-mode", /^(pinned|static)$/);
+  await expect(page.locator("html")).not.toHaveAttribute("data-demo-gate", /.+/);
 }
 
 const STATEMENT = /^\s*one engineering platform\s*for composite theory\s*and real test data\s*$/;
@@ -217,7 +214,7 @@ test("the About cards show the five portraits in the lead's order, and under the
   await cards.first().scrollIntoViewIfNeeded();
   await expect(cards.locator("h3")).toHaveText(["Christopher Valerio", "Erik Villa", "Tabassum Zaman", "Jusung Park", "Kai Saucedo"]);
   // Under each name, one short line (amendment 43).
-  await expect(cards.locator("h3 + p")).toHaveText(["Co-founder and CEO", "Co-founder, AI architecture", "Fabrication and testing", "Modeling and validation", "Software and UI/UX"]);
+  await expect(cards.locator("h3 + p")).toHaveText(["Co-Founder, CEO", "Co-Founder, AI Lead", "Fabrication & Test Lead", "Simulation & Validation Lead", "Software & Growth Engineer"]);
   expect(await cards.locator("h3 + p").evaluateAll((lines) => lines.map((line) => Math.round(line.getBoundingClientRect().height)))).toEqual([24, 24, 24, 24, 24]);
   // Every frame holds a portrait that has loaded, from the site's own files, and no initials.
   await expect.poll(() => cards.locator("img").evaluateAll((images) => images.map((image) => (image as HTMLImageElement).naturalWidth))).toEqual([800, 800, 800, 800, 800]);

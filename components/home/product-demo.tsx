@@ -10,7 +10,7 @@ import { libraryOptions } from "@/lib/studio-form";
 import { BEAT_COPY, BEND_NOTE, DEMO_HEAD, FILES_HEAD, OPEN_WORKSPACE, TURN_HINT, resultLines, wingFacts, wingParts } from "./product-demo-copy";
 import type { DemoSceneHandle } from "./product-demo-scene";
 import { BEAT_IDS, DEMO_CLOCK_PER_SECOND, DEMO_STOPS, DEMO_TOTAL, finalView, sameView, viewAt, type BeatId, type DemoView } from "./product-demo-timeline";
-import { useTourDriver } from "./tour-driver";
+import { useScrollStage } from "./scroll-stage";
 import "@/app/home-demo.css";
 
 /** The view loads only in the browser: three.js needs a WebGL context (the pattern of components/home/scene.tsx). */
@@ -27,6 +27,12 @@ function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches, () => false);
 }
 
+/** The scroll a beat takes, as a share of the stage's height, and how far before the stage holds the window the first beat
+ * starts (ADR-0095 amendment 10). The section is the stage and a zone for every beat tall: app/home-demo.css reads the
+ * product of the two as `--demo-track`, written on the section below. */
+const ZONE = 0.5;
+const LEAD = 0.08;
+
 /** Where each beat's words stand: under the model, or in a block at one side with the model at the other (Scale's arrangement). */
 const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", model: "left", analysis: "right", report: "under" };
 /** The three files the workspace lists first for a run. */
@@ -42,10 +48,11 @@ const legendEnd = (value: number, unit: string) => (unit ? String(Math.round(val
  * asked of the API: the mesh, the colours and every number are one recorded analysis of an example wing (lib/demo-wing.ts).
  * The wing is ahead of the product, which analyses coupons today: the lead's choice of 2026-11-14.
  *
- * On a desktop the stage holds the window while it fills it, and one scroll gesture plays one whole beat
- * (components/home/tour-driver.ts); the page scrolls to it and away from it as any page does. The model changes place and
- * orientation between beats in one eased move, and the words change sides (product-demo-timeline.ts). With reduced motion
- * or a small window the beats lie one under another and no gesture is taken. */
+ * On a desktop the stage stays in the window while the page scrolls past it, freely, and where the scroll stands says
+ * which beat plays (components/home/scroll-stage.ts, ADR-0095 amendment 10): a beat starts as the scroll reaches its zone
+ * and plays on its own, a fast scroll runs through the beats it leaves behind, and scrolling back up unplays them, down to
+ * the hero. The model changes place and orientation between beats in one eased move, and the words change sides
+ * (product-demo-timeline.ts). With reduced motion or a small window the beats lie one under another, finished. */
 export function ProductDemo() {
   const box = useRef<HTMLDivElement>(null);
   const pinned = useMediaQuery(PINNED_QUERY);
@@ -58,84 +65,19 @@ export function ProductDemo() {
   const whole = useMemo(() => finalView(counts), [counts]);
   const [played, setPlayed] = useState<DemoView | null>(null);
   const [viewWanted, setViewWanted] = useState(false);
-  const [gated, setGated] = useState(true);
-  const [through, setThrough] = useState(false); // the demo has played through once
+  const [finished, setFinished] = useState(false); // the clock stands at the last beat's end
   const handle = useMemo<DemoSceneHandle>(() => ({ clock: 0, redraw: null }), []);
   const view = pinned ? played ?? start : whole;
 
-  // The clock: the driver plays it one beat a gesture and reports each frame. The 3D view reads it from the handle.
-  useTourDriver(box, pinned, ({ clock }) => {
+  // The clock: the stage plays it to the beat the scroll asks for and reports each frame. The 3D view reads it from the
+  // handle.
+  useScrollStage(box, pinned, ({ clock }) => {
     handle.clock = clock;
     handle.redraw?.();
-    if (clock >= DEMO_TOTAL) {
-      setThrough(true);
-      setGated(false); // played through: the rest of the page is there from now on
-      // And the hand-over is over (amendment 8): the hero becomes an ordinary section straight above the stage, so
-      // scrolling back up brings it down whole, with no fade. That moves the stage down the page by what it overlapped the
-      // hero; the page is scrolled by the same amount in the same frame, so the stage stays where it is in the window.
-      const stage = box.current;
-      const opening = stage?.closest<HTMLElement>(".home-opening");
-      if (stage && opening && !opening.dataset.played) {
-        const before = stage.getBoundingClientRect().top;
-        opening.dataset.played = "true";
-        const moved = stage.getBoundingClientRect().top - before;
-        if (moved) window.scrollBy({ top: moved, behavior: "instant" });
-      }
-    }
+    setFinished(clock >= DEMO_TOTAL);
     const next = viewAt(clock, counts);
     setPlayed((current) => (current && sameView(current, next) ? current : next));
-  }, {
-    stops: DEMO_STOPS,
-    clockPerSecond: DEMO_CLOCK_PER_SECOND,
-    // The stage is a window tall and holds the window with its top edge on the window's (the driver's own line).
-    settleWithin: 160,
-    // Played once: after the last beat the stage is an ordinary section, and nothing plays again in this visit.
-    once: true,
-    // With the page at its top the stage lies behind the hero (ADR-0095 amendment 4): that is where it is out of sight.
-    hiddenFrom: () => {
-      const stage = box.current;
-      const opening = stage?.closest(".home-opening");
-      return stage && opening ? stage.getBoundingClientRect().top - opening.getBoundingClientRect().top : window.innerHeight;
-    },
-  });
-  // The gate (ADR-0095 amendment 7). Until the demo has played through, the page ends at the stage: what follows it is taken
-  // out of the page's height (app/home-demo.css), so the browser itself has nowhere to scroll past the stage and stops hard
-  // on it, coasting included. What follows is still in the page for a screen reader and the keyboard, and the gate opens at
-  // once for anyone who goes there another way: focus moving past the demo, a link to a section below it, or a page that
-  // is already scrolled past the stage when this starts.
-  useEffect(() => {
-    if (!pinned || !gated) return;
-    const root = document.documentElement;
-    const stage = box.current;
-    const below = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest("main, .site-footer")) && !target.closest(".home-opening");
-    const linked = () => {
-      const id = decodeURIComponent(window.location.hash.slice(1));
-      const target = id ? document.getElementById(id) : null;
-      return target && below(target) ? target : null;
-    };
-    const open = () => setGated(false);
-    const target = linked();
-    if (target || (stage && stage.getBoundingClientRect().top < -1)) {
-      open();
-      if (target) window.requestAnimationFrame(() => target.scrollIntoView());
-      return;
-    }
-    const onFocus = (event: FocusEvent) => { if (below(event.target)) open(); };
-    const onHash = () => {
-      const to = linked();
-      if (!to) return;
-      open();
-      window.requestAnimationFrame(() => to.scrollIntoView());
-    };
-    root.dataset.demoGate = "true";
-    document.addEventListener("focusin", onFocus);
-    window.addEventListener("hashchange", onHash);
-    return () => {
-      delete root.dataset.demoGate;
-      document.removeEventListener("focusin", onFocus);
-      window.removeEventListener("hashchange", onHash);
-    };
-  }, [pinned, gated]);
+  }, { stops: DEMO_STOPS, clockPerSecond: DEMO_CLOCK_PER_SECOND, zone: ZONE, lead: LEAD });
 
   // Where the words that stand under the wing begin, for the view to keep the wing over them (ADR-0098 amendment 4): the
   // highest of those beats' blocks, measured again whenever the stage or a block changes size.
@@ -189,9 +131,10 @@ export function ProductDemo() {
     return () => observer.disconnect();
   }, [pinned, viewWanted]);
 
-  // Once the demo has played through (or where it does not play at all), the wing can be turned by hand (ADR-0098 amendment
+  // While the demo stands finished (or where it does not play at all), the wing can be turned by hand (ADR-0098 amendment
   // 1): a drag that starts on the stage itself, not on a card or the words, turns it about its upright axis and tips it.
-  const turnable = !pinned || through;
+  // Scrolled back into an earlier beat it is the demo's again; the view lets the turn go as the clock leaves the end.
+  const turnable = !pinned || finished;
   const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!turnable || event.button !== 0 || !viewWanted) return;
@@ -275,7 +218,8 @@ export function ProductDemo() {
   };
 
   return (
-    <section className="product-demo" id="demo" aria-labelledby="demo-title" data-mode={pinned ? "pinned" : "static"}>
+    <section className="product-demo" id="demo" aria-labelledby="demo-title" data-mode={pinned ? "pinned" : "static"}
+      style={{ "--demo-track": BEAT_IDS.length * ZONE } as CSSProperties}>
       <div className="product-demo-box" ref={box} data-turnable={turnable ? "true" : undefined}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
         <div className="product-demo-head">

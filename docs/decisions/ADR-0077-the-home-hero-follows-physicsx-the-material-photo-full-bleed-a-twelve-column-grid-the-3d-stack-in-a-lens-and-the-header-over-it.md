@@ -588,3 +588,11 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server: `tests/header-scroll.test.ts`, 9 of 9; `shell.spec.ts`, 17 passed and 1 skipped (the Services panel, hidden for now) on a tree that also holds amendment 10's stage, its home-page case far down the page among them (one phone case failed once in the full run and passed alone); `npm test` 314 tests, 313 passed, 1 skipped; `npx tsc --noEmit` clean. Screenshots of the bar on the home page, on About and on a phone were taken and looked at by the work's author. UNVERIFIED: the Services panel hanging from the fixed bar (the panel is switched off); a phone's rubber-band scroll at the page's foot; Firefox and Safari; the header over the stage while a beat plays, by eye.
 
+## Amendment 45, 2026-11-14 (the cards' one-liners are the lead's titles)
+
+**Context.** The lead, of amendment 43's lines: "Co-Founder, CEO / Co-Founder, AI Lead / Test & Fabrication Engineer (? something better...) / Modeling & Validation Lead (? something better...) / Software & Growth Engineer".
+
+**Decision.** The lines are titles, as the lead gave them: "Co-Founder, CEO", "Co-Founder, AI Lead", "Software & Growth Engineer", and for the two the lead asked to be bettered, "Fabrication & Test Lead" and "Simulation & Validation Lead", the drafter's wording for the lead to change. They are the site's own lines and no longer cut from the seats' words; `tests/team.test.ts` checks only that each is a short title. The seats in `lib/team.ts` and on About stay as `docs/brain/people.md` words them.
+
+**Evidence.** `tests/team.test.ts`, 2 of 2; `home.spec.ts`, 7 of 7 (the five lines, one line of text each). UNVERIFIED: that each person agrees to their title; the shared brain's people note does not carry these titles.
+

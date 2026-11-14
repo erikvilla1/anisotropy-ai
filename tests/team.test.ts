@@ -20,12 +20,9 @@ test("every name and seat on the site is in docs/brain/people.md, and nothing be
     for (const value of [person.name, person.title, person.role, person.technical, person.company])
       assert.ok(!/@|\+?\d{3}[\s-]?\d{3}/.test(String(value ?? "")), `${person.name}: a contact detail`);
     assert.deepEqual(Object.keys(person).filter((key) => !["name", "title", "role", "technical", "company", "photo", "linkedin"].includes(key)), []);
-    // The card's one line says nothing of its own: it is short, and every word of it is one of the role's or the technical
-    // seat's, as people.md words them.
-    const known = new Set(`${person.role ?? ""} ${person.technical}`.toLowerCase().split(/[^a-z/-]+/).filter(Boolean));
-    const words = person.title.toLowerCase().split(/[^a-z/-]+/).filter(Boolean);
-    assert.ok(words.length > 0 && person.title.length <= 32, `${person.name}: the one line "${person.title}"`);
-    for (const word of words) assert.ok(known.has(word), `${person.name}: "${word}" in the one line is not in the role or the technical seat`);
+    // The card's one line is a title of a few words, the lead's (ADR-0077 amendment 45): short, and a title only.
+    assert.ok(person.title.trim().length > 0 && person.title.length <= 34, `${person.name}: the one line "${person.title}"`);
+    assert.ok(!/[.!?]/.test(person.title), `${person.name}: the one line is a title, not a sentence`);
   }
   assert.equal(new Set(team.map((person) => person.name)).size, team.length);
 });

@@ -363,7 +363,15 @@
 /* The stage. From the first paint the box is a window tall, so nothing moves when the page's script sets the mode; until
  * it has, nothing in the box is shown, because the markup is still the ordinary section's with every beat up. */
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  /* The stage follows the page's scroll (ADR-0095 amendment 10): its section is the stage and a zone of scroll for every
+   * beat tall (`--demo-track`, in stage heights, written by components/home/product-demo.tsx), and the stage stays at the
+   * window's top while the page scrolls through it, freely. */
+  .product-demo {
+    height: calc(max(640px, 100svh) * (1 + var(--demo-track, 2)));
+  }
   .product-demo-box {
+    position: sticky;
+    top: 0;
     height: max(640px, 100svh);
     padding: 0;
   }
@@ -512,19 +520,4 @@
   font-size: 12px;
   line-height: 18px;
   opacity: 0.7;
-}
-
-/* The gate (components/home/product-demo.tsx, ADR-0095 amendment 7): until the demo has played through, what follows it is out
- * of the page's height, so the page ends at the stage and the browser stops there by itself. It stays in the page for a
- * screen reader and the keyboard, as any visually hidden text does. */
-html[data-demo-gate] main > .home-opening ~ *,
-html[data-demo-gate] .site-footer {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
 }
