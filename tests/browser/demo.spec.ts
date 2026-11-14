@@ -330,31 +330,51 @@ test("up from the first beat the page scrolls; once played through, the demo nev
   expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBe(held);
   await playTo(page, 4);
   await expect(box(page)).toHaveAttribute("data-done", "true");
+  // The hand-over is over with the demo (amendment 8): the hero is an ordinary section straight above the stage, whole, and
+  // the stage has not moved in the window.
+  await expect(page.locator(".home-opening")).toHaveAttribute("data-played", "true");
+  expect(await offLine(page)).toBe(0);
+  await expect(page.locator("#overview")).toHaveCSS("position", "relative");
+  await expect(page.locator("#overview")).toHaveCSS("opacity", "1");
+  await expect(page.locator("#overview")).toHaveCSS("visibility", "visible");
+  const seam = await page.evaluate(() => [document.getElementById("overview")!.getBoundingClientRect().bottom, document.querySelector("#demo .product-demo-box")!.getBoundingClientRect().top]);
+  expect(seam).toEqual([0, 0]);
+  const done = await scrollY(page);
+  expect(done).toBe(page.viewportSize()!.height);
   // Past the last beat nothing takes the scroll over.
   await page.waitForTimeout(350);
   await page.mouse.wheel(0, 240);
-  await expect.poll(() => scrollY(page)).toBe(held + 240);
+  await expect.poll(() => scrollY(page)).toBe(done + 240);
   await page.waitForTimeout(300);
   await page.mouse.wheel(0, 240);
-  await expect.poll(() => scrollY(page)).toBe(held + 480);
+  await expect.poll(() => scrollY(page)).toBe(done + 480);
   await expectStop(page, 4);
-  // Back up, all the way to the hero: the page keeps to the wheel, and the demo stays at its end.
+  // Back up past the stage: the hero comes down as a block, in its box and at full strength, with no fade and nothing held.
   await page.waitForTimeout(300);
-  await page.mouse.wheel(0, -720);
-  await expect.poll(() => scrollY(page)).toBe(held - 240);
+  await page.mouse.wheel(0, -780);
+  await expect.poll(() => scrollY(page)).toBe(done - 300);
   await page.waitForTimeout(500);
-  expect(await scrollY(page)).toBe(held - 240);
-  await page.mouse.wheel(0, -(held - 240));
+  expect(await scrollY(page)).toBe(done - 300);
+  const up = await page.evaluate(() => {
+    const hero = document.getElementById("overview")!;
+    const clip = hero.querySelector(".home-hero-media")!.getBoundingClientRect();
+    const box = hero.getBoundingClientRect();
+    return { bottom: Math.round(box.bottom), opacity: getComputedStyle(hero).opacity, clipInBox: [Math.round(clip.left - box.left), Math.round(box.right - clip.right), Math.round(box.bottom - clip.bottom)] };
+  });
+  expect(up).toEqual({ bottom: 300, opacity: "1", clipInBox: [32, 32, 32] });
+  await expect(page.locator(".home-opening")).not.toHaveAttribute("data-handover", /.+/);
+  // All the way to the top, and the demo stays at its end.
+  await page.mouse.wheel(0, -(done - 300));
   await expect.poll(() => scrollY(page)).toBe(0);
   await page.waitForTimeout(500);
   await expectStop(page, 4);
   // Down again: the stage does not stop the page and nothing plays. The wheel is the browser's all the way.
-  await page.mouse.wheel(0, held - 20);
-  await expect.poll(() => scrollY(page)).toBe(held - 20);
+  await page.mouse.wheel(0, done - 20);
+  await expect.poll(() => scrollY(page)).toBe(done - 20);
   await page.mouse.wheel(0, 300);
-  await expect.poll(() => scrollY(page)).toBe(held + 280);
+  await expect.poll(() => scrollY(page)).toBe(done + 280);
   await page.waitForTimeout(600);
-  expect(await scrollY(page)).toBe(held + 280);
+  expect(await scrollY(page)).toBe(done + 280);
   await expectStop(page, 4);
   await expect(beat(page, "report")).toHaveAttribute("data-active", "true");
 });

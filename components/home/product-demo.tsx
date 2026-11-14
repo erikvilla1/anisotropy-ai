@@ -66,7 +66,20 @@ export function ProductDemo() {
   useTourDriver(box, pinned, ({ clock }) => {
     handle.clock = clock;
     handle.redraw?.();
-    if (clock >= DEMO_TOTAL) setGated(false); // played through: the rest of the page is there from now on
+    if (clock >= DEMO_TOTAL) {
+      setGated(false); // played through: the rest of the page is there from now on
+      // And the hand-over is over (amendment 8): the hero becomes an ordinary section straight above the stage, so
+      // scrolling back up brings it down whole, with no fade. That moves the stage down the page by what it overlapped the
+      // hero; the page is scrolled by the same amount in the same frame, so the stage stays where it is in the window.
+      const stage = box.current;
+      const opening = stage?.closest<HTMLElement>(".home-opening");
+      if (stage && opening && !opening.dataset.played) {
+        const before = stage.getBoundingClientRect().top;
+        opening.dataset.played = "true";
+        const moved = stage.getBoundingClientRect().top - before;
+        if (moved) window.scrollBy({ top: moved, behavior: "instant" });
+      }
+    }
     const next = viewAt(clock, counts);
     setPlayed((current) => (current && sameView(current, next) ? current : next));
   }, {

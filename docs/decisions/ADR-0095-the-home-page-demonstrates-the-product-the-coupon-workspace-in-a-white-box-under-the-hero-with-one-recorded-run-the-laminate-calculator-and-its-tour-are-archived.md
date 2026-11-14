@@ -1,6 +1,6 @@
 # ADR-0095: The home page demonstrates the product, the coupon workspace, in a white box under the hero with one recorded run; the laminate calculator and its tour are archived
 
-- Status: Proposed, with amendments 1 to 7
+- Status: Proposed, with amendments 1 to 8
 - Date: 2026-11-13
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-13 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) and [ADR-0084](ADR-0084-a-scroll-driven-tour-leads-from-the-hero-into-the-calculator-with-the-engines-own-answers.md), which this supersedes for the home page; [ADR-0086](ADR-0086-every-edit-is-answered-by-our-kernel-as-a-labelled-preview-from-warm-workers-and-calculix-the-mesh-study-and-the-package-stay-on-the-full-run.md) (the live solve the demo does not call); ADR-0001; ADR-0042; ADR-0045; ADR-0091
@@ -180,4 +180,12 @@ UNVERIFIED: a real trackpad, wheel and graphics card; Safari and Firefox; the de
 - `npm test`: 300 tests, 299 passed, 1 skipped. `npx tsc --noEmit` clean.
 
 UNVERIFIED: a real trackpad's coasting, which the synthesized gesture only stands for; Safari and Firefox; a phone's fling, which keeps its earlier handling.
+
+## Amendment 8, 2026-11-14 (once the demo has played, the hero is an ordinary section above it)
+
+**Context.** The lead, with a recording of scrolling up from the finished demo: "when it finishes and scrolling up, dont do the whole re-fade transition back to hero. just have it be directly block above it."
+
+**Decision.** When the last beat ends the hand-over of amendments 4 to 6 is switched off for the rest of the visit (`data-played` on the two sections' wrapper): the hero is no longer sticky, dimmed or grown, and the stage no longer starts behind it. The hero stands whole, straight above the stage, and scrolling up brings it down as any section. Taking the overlap away moves the stage half a window down the page; the page is scrolled by the same amount in the same frame, so the stage does not move in the window. On the first way down the hand-over is as before.
+
+**Evidence.** On 2026-11-14 against the dev server: `demo.spec.ts`, `home.spec.ts` and `intro.spec.ts`, 22 of 22. The play-once case now checks that at the end the stage is still on the window's top edge with the hero's foot on it, that the hero is in the page's flow at full strength, and that 300 px up from there the hero's foot is 300 px into the window with its clip in its box and nothing fading. `npx tsc --noEmit` clean. UNVERIFIED: a real trackpad; Safari and Firefox.
 

@@ -44,7 +44,8 @@ export function HeroHandover() {
     };
     const write = () => {
       frame = 0;
-      if (!media.matches) {
+      // Not on a small window or with reduced motion, and not once the demo has played through (amendment 8).
+      if (!media.matches || opening.dataset.played) {
         clear();
         return;
       }

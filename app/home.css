@@ -1094,34 +1094,36 @@
  * components/home/hero-handover.tsx), while the first beat's words come up through it: the window is never an empty black
  * one. The stage starts half a window up, behind the hero, so half a window of scrolling brings it to the window's top. Once
  * it is there the hero is out of the way altogether. The layout is the stylesheet's own, so nothing moves when the script
- * starts; without the script the hero simply stays opaque for that half window. */
+ * starts; without the script the hero simply stays opaque for that half window.
+ * Once the demo has played through (`data-played`, set by components/home/product-demo.tsx; amendment 8) none of this
+ * applies: the hero is an ordinary section straight above the stage, and scrolling back up brings it down whole. */
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
-  .home-opening > .home-hero {
+  .home-opening:not([data-played]) > .home-hero {
     position: sticky;
     top: 0;
     z-index: 2;
     background: #000000;
     opacity: calc(1 - var(--hero-left, 0));
   }
-  .home-opening[data-handover="done"] > .home-hero {
+  .home-opening:not([data-played])[data-handover="done"] > .home-hero {
     visibility: hidden;
   }
   /* As the scroll starts, the clip grows from its box to the whole window, over the black strip the header leaves and the
    * black at the sides and the foot (--hero-grow; amendment 5), and it is whole-window while it dims. */
-  .home-opening > .home-hero > .home-hero-media {
+  .home-opening:not([data-played]) > .home-hero > .home-hero-media {
     inset: calc(var(--hero-top) * (1 - var(--hero-grow, 0))) calc(var(--hero-frame) * (1 - var(--hero-grow, 0)))
       calc(var(--hero-frame) * (1 - var(--hero-grow, 0)));
   }
   /* "Scroll to explore" has done its work once the page scrolls: it goes as the clip grows, and is gone when the clip is
    * whole-window, before the clip itself dims (amendment 6). Its own fade-in is switched off on the way, so it keeps to the
    * scroll. */
-  .home-opening > .home-hero[data-words="gone"] .home-hero-explore {
+  .home-opening:not([data-played]) > .home-hero[data-words="gone"] .home-hero-explore {
     opacity: calc(1 - var(--hero-grow, 0));
   }
-  .home-opening[data-handover="going"] > .home-hero .home-hero-explore {
+  .home-opening:not([data-played])[data-handover="going"] > .home-hero .home-hero-explore {
     transition: none;
   }
-  .home-opening > .product-demo {
+  .home-opening:not([data-played]) > .product-demo {
     margin-top: calc(-0.5 * max(640px, 100svh));
   }
 }
