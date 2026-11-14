@@ -24,6 +24,10 @@ export type ProjectContextValue = {
   towAnswer: TowAnswer | null;
   /** True when the project came back from this browser's storage rather than starting blank. */
   restored: boolean;
+  /** The tension screen refuses the layup typed on its rail (unreadable, or one that bends as it is pulled): Run analysis waits for it, so
+   * the empty stage does not say "Ready to run" (round-2 review N6). Set by the screen while it shows that refusal. */
+  layupRefused: boolean;
+  setLayupRefused(refused: boolean): void;
   setForm(next: StudioForm | ((form: StudioForm) => StudioForm)): void;
   setPlate(next: PlateLists): void;
   setSpecimens(next: TowSpecimenRow[]): void;
@@ -69,6 +73,7 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
   const setPlate = useCallback((next: PlateLists) => dispatch({ type: "plate", plate: next }), []);
   const setSpecimens = useCallback((next: TowSpecimenRow[]) => dispatch({ type: "specimens", specimens: next }), []);
   const [towAnswer, setTowAnswer] = useState<TowAnswer | null>(null);
+  const [layupRefused, setLayupRefused] = useState(false);
   const rename = useCallback((name: string) => dispatch({ type: "rename", name }), []);
   const replace = useCallback((next: CouponProject) => dispatch({ type: "replace", project: next }), []);
   useProjectSync(apiBaseUrl, project); // the server's copy follows this browser's (ADR-0062 part 6)
@@ -78,8 +83,8 @@ export function ProjectProvider({ apiBaseUrl, children }: { apiBaseUrl: string; 
 
   const value = useMemo<ProjectContextValue>(() => ({
     apiBaseUrl, allTests, project, form: project.form, plate: project.plate, specimens: project.specimens, towAnswer, restored: start.current?.restored ?? false,
-    setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run,
-  }), [apiBaseUrl, allTests, project, towAnswer, setForm, setPlate, setSpecimens, rename, replace, run]);
+    layupRefused, setLayupRefused, setForm, setPlate, setSpecimens, setTowAnswer, rename, replace, run,
+  }), [apiBaseUrl, allTests, project, towAnswer, layupRefused, setForm, setPlate, setSpecimens, rename, replace, run]);
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 

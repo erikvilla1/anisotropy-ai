@@ -6,7 +6,8 @@ import { ArrowLeft, MessagesSquare, PanelRightClose } from "lucide-react";
 import { WORKSPACE_ROOT } from "@/lib/workspaces";
 
 /** The three columns of a workspace (ADR-0062): the setup panels on the left, the model and the results in the centre, the assistant on the
- * right, which folds away. Below 1280 px the assistant drops under the other two; below 1100 px everything stacks. */
+ * right, which folds away. Below 1280 px the assistant drops under the other two; below 1100 px everything stacks. The page's heading is the
+ * workspace's kind, and each column opens on a heading of its own for a screen reader's outline (WCAG 1.3.1, audit fea-run-46). */
 export function WorkspaceShell({ title, kind, rail, stage, assistant }: {
   title: ReactNode; kind: string; rail: ReactNode; stage: ReactNode; assistant: ReactNode;
 }) {
@@ -15,16 +16,16 @@ export function WorkspaceShell({ title, kind, rail, stage, assistant }: {
     <div className="ws-shell" data-assistant={open ? "open" : "closed"} data-testid="workspace-shell">
       <header className="ws-topbar">
         <Link className="chat-link" href={WORKSPACE_ROOT}><ArrowLeft size={13} /> All projects</Link>
-        <div className="ws-title">{title}<span>{kind}</span></div>
+        <div className="ws-title">{title}<h1 className="ws-kind">{kind}</h1></div>
         {/* a disclosure, not a toggle: its label says what a press does, aria-expanded says the state (WCAG 4.1.2) */}
         <button type="button" className="chat-link" aria-expanded={open} aria-controls={open ? "ws-assistant" : undefined} onClick={() => setOpen((o) => !o)} data-testid="assistant-toggle">
           {open ? <><PanelRightClose size={13} /> Hide assistant</> : <><MessagesSquare size={13} /> Show assistant</>}
         </button>
       </header>
       <div className="ws-columns">
-        <aside className="ws-rail" aria-label="Setup" data-testid="ws-rail">{rail}</aside>
-        <section className="ws-stage" aria-label="Model and results" data-testid="ws-stage">{stage}</section>
-        {open ? <aside className="ws-assistant" id="ws-assistant" aria-label="Assistant" data-testid="ws-assistant">{assistant}</aside> : null}
+        <aside className="ws-rail" aria-label="Setup" data-testid="ws-rail"><h2 className="sr-only">Setup</h2>{rail}</aside>
+        <section className="ws-stage" aria-label="Model and results" data-testid="ws-stage"><h2 className="sr-only">Model and results</h2>{stage}</section>
+        {open ? <aside className="ws-assistant" id="ws-assistant" aria-label="Assistant" data-testid="ws-assistant"><h2 className="sr-only">Assistant</h2>{assistant}</aside> : null}
       </div>
     </div>
   );

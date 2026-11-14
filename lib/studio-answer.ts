@@ -50,6 +50,22 @@ export function answerOf(fields: Fields): Answer | null {
   };
 }
 
+/** The first-ply failure in one line, as the assistant gives it beside the centre (audit fea-run-2): the answer's, the gauge section's earliest
+ * criterion, with an earlier failure outside that section as a note; the whole model's on a job solved before the package wrote the answer,
+ * with `atGrip` when it sits at a grip edge. Null with no criterion. */
+export type FirstPly = { factor: number; name: string; ply: number; angle: number; basis: string; outside: Answer["outside"]; atGrip: boolean };
+export function firstPlyOf(fields: Fields): FirstPly | null {
+  const answer = answerOf(fields);
+  if (answer) {
+    const e = answer.earliest;
+    return { factor: e.factor, name: e.name, ply: e.ply, angle: e.angle, basis: answer.basisWords, outside: answer.outside, atGrip: false };
+  }
+  const s = fields.summary;
+  const whole = s.earliest ? s.fpf[s.earliest] : null;
+  return whole ? { factor: whole.factor, name: CRITERION_NAMES[s.earliest ?? ""] ?? s.earliest ?? "", ply: whole.ply, angle: whole.angle, basis: BASIS_WORDS.whole,
+    outside: null, atGrip: whole.touches_grip } : null;
+}
+
 /** The largest ply stresses on the answer's basis, one row per component and sign, in the order an engineer reads them; a sign never reached
  * is left out. Each row names its ply, as the package found it over every ply. */
 export type ExtremeRow = { key: string; words: string; extreme: NonNullable<PlyExtreme> };

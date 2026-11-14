@@ -14,7 +14,7 @@ export const SEQUENTIAL = ["#10170f", "#1f3a1c", "#376330", "#5d8f52", "#8fbb80"
 export const DIVERGING = ["#2a78d6", "#5d95dd", "#8eb0e0", "#9ba29b", "#e0a07c", "#df7a4c", "#d95926"];
 /** Fixed categorical slots for the ply angles, in order of first appearance (the reference palette's first slots, dark steps). */
 export const CATEGORICAL = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"];
-export const CRITICAL = "#e66767"; // the status colour for the critical element's outline, with its label beside it
+export const CRITICAL = "#e66767"; // the status colour for the critical element's outline, over a wide dark band
 export const HELD = "#9085e9"; // a held set's frame
 export const LOADED = "#c98500"; // the loaded set's frame and the arrow
 

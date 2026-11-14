@@ -12,6 +12,7 @@ import { fileUrl, type Fields, type JobStatus } from "@/lib/studio-api";
 import { printed } from "@/lib/studio-colors";
 import { downloadName } from "@/lib/studio-copy";
 import { namingOf } from "./job-files";
+import { TableScroll } from "./table-scroll";
 
 const WAIT_MS = 5000; // how often the card looks for a file sent straight from Abaqus, while its instructions are open
 const ZONE_WORDS: Record<string, string> = { gauge: "Gauge section", "free length": "Between gauge and tabs", band: "Within one width of a tab", "tab line": "At a tab line",
@@ -261,18 +262,18 @@ function Compared({ comparison, upload, fields, onShow }: { comparison: Comparis
       {differs.length ? (
         <>
           <h4>What differs</h4>
-          <div className="studio-table-scroll">
+          <TableScroll label="What differs">
             <table className="studio-table" data-testid="abaqus-differences">
               <thead><tr><th scope="col">Item</th><th scope="col">Yours</th><th scope="col">Ours</th><th scope="col">Where</th></tr></thead>
               <tbody>{differs.map((d) => <tr key={d.what}><th scope="row" className="studio-wrap">{d.what}</th><td className="studio-wrap">{d.yours}</td><td className="studio-wrap">{d.ours}</td><td>{d.where ?? "–"}</td></tr>)}</tbody>
             </table>
-          </div>
+          </TableScroll>
         </>
       ) : null}
       <details className="studio-details" data-testid="abaqus-details">
         <summary><h4>Details</h4></summary>
         <h4>The model, item by item</h4>
-        <div className="studio-table-scroll">
+        <TableScroll label="The model, item by item">
           <table className="studio-table" data-testid="abaqus-model">
             <thead><tr><th scope="col">Item</th><th scope="col">Yours</th><th scope="col">Ours</th><th scope="col"><span className="sr-only">State</span></th></tr></thead>
             <tbody>{comparison.model.items.map((i) => (
@@ -280,11 +281,11 @@ function Compared({ comparison, upload, fields, onShow }: { comparison: Comparis
                 <td>{i.same === null ? "shown, not judged" : i.same ? "same" : "differs"}</td></tr>
             ))}</tbody>
           </table>
-        </div>
+        </TableScroll>
         {Object.keys(comparison.summary.zones).length ? (
           <>
             <h4>The results, zone by zone</h4>
-            <div className="studio-table-scroll">
+            <TableScroll label="The results, zone by zone">
               <table className="studio-table studio-table-num" data-testid="abaqus-zones">
                 <thead><tr><th scope="col">Zone</th><th scope="col">Values</th><th scope="col">Largest difference</th><th scope="col">Where</th><th scope="col">Yours</th><th scope="col">Ours</th></tr></thead>
                 <tbody>{Object.entries(comparison.summary.zones).map(([zone, z]) => (
@@ -294,7 +295,7 @@ function Compared({ comparison, upload, fields, onShow }: { comparison: Comparis
                     <td>{printed(z.yours)}{unitOf(z.quantity)}</td><td>{printed(z.ours)}{unitOf(z.quantity)}</td></tr>
                 ))}</tbody>
               </table>
-            </div>
+            </TableScroll>
             <p className="studio-muted">Twelve values of every ply of every element: three stresses and three strains in the fibre axes, Mises, Tresca, the pressure and the principal stresses.
               The gauge section and the length between gauge and tabs are judged; the zones at the tabs are shown.</p>
           </>

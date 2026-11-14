@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import type { PanelState } from "@/lib/workspace-panels";
 
-const WORD: Record<PanelState, string> = { pass: "checked", warn: "warning", fail: "failed", missing: "needs input", pending: "not judged", none: "" };
+const WORD: Record<PanelState, string> = { pass: "checked", warn: "warning", fail: "failed", missing: "needs input", pending: "not checked", none: "" };
 
 /** One step of the setup (ADR-0062): a panel that folds, with the worst state of the checklist items that judge its rows as its badge.
  * A panel no checklist judges names its passed state itself (`word`: a laminate step is "complete" once stated, Solve "solved"), so
@@ -25,10 +25,14 @@ export function StepPanel({ id, title, step, state = "none", word, open = true, 
   );
 }
 
-/** Opens a panel and brings it into view: what a failed checklist item's link and the assistant's suggestions do. */
-export function showPanel(id: string) {
+/** Opens a panel and brings it into view: what a failed checklist item's link and the assistant's suggestions do. `focus` also moves the
+ * focus there (audit fea-run-3), to the field with that id or, with `true`, to the panel's own heading, so a keyboard or screen reader user
+ * lands where the suggestion pointed. False when no such panel is on the page. */
+export function showPanel(id: string, focus?: true | string): boolean {
   const element = document.getElementById(`panel-${id}`);
-  if (!element) return;
+  if (!element) return false;
   (element as HTMLDetailsElement).open = true;
   element.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (focus) ((typeof focus === "string" ? document.getElementById(focus) : null) ?? element.querySelector("summary"))?.focus({ preventScroll: true });
+  return true;
 }

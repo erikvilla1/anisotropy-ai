@@ -37,7 +37,7 @@ test("the workspace opens on two tiles and the projects, the server's among them
   await expect(tiles.locator("[data-workspace]")).toHaveCount(2); // the CAD tile is gone (decision D5)
   await expect(tiles.locator("[data-workspace=cad]")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Start a project");
-  await expect(tiles.locator("[data-workspace=fea] h3")).toHaveText("New Coupon FEA project"); // the workspace's one name, as written
+  await expect(tiles.locator("[data-workspace=fea] h2")).toHaveText("New Coupon FEA project"); // the workspace's one name, as written; a heading per tile (fea-run-46)
   await expect(page.getByTestId("projects-source")).toHaveText("Saved to your account and in this browser.");
   await expect(page.getByTestId("workspace-projects")).toHaveAttribute("data-source", "server"); // the list is the browser's merged with the server's (part 6)
   await expect(page.getByTestId("workspace-projects")).toContainText("From the server"); // a project this browser never held
@@ -45,6 +45,7 @@ test("the workspace opens on two tiles and the projects, the server's among them
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   const shell = page.getByTestId("workspace-shell");
   await expect(shell).toHaveAttribute("data-assistant", "open");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Coupon FEA"); // the page's heading is the workspace's kind (fea-run-46)
   await expect(page.getByTestId("ws-rail").getByTestId("tension-screen")).toBeVisible(); // the product's view: the material and the layup (ADR-0090)
   await expect(page.getByTestId("ws-stage").getByTestId("empty-scene")).toBeVisible();
   await expect(page.getByTestId("ws-assistant").getByTestId("chat-question")).toHaveAttribute("data-step", "material");
@@ -62,6 +63,7 @@ test("the workspace opens on two tiles and the projects, the server's among them
   await page.getByRole("link", { name: "All projects" }).click(); // the project is kept in this browser, under its name
   await expect(page).toHaveURL(/\/workspace\/?$/);
   await expect(page.getByTestId("workspace-projects")).toContainText("OHT study");
+  await expect(page.getByTestId("workspace-projects").getByRole("button", { name: "Open OHT study" })).toBeVisible(); // each Open names its project (fea-screens-11)
   await page.getByTestId("workspace-projects").getByRole("button", { name: "Open" }).first().click();
   await expect(page).toHaveURL(/\/workspace\/fea\/?$/);
   await expect(page.getByTestId("project-name")).toHaveValue("OHT study");

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   boundaryEdges, boundaryOwners, bounds, centroid, deformedHeights, deformedPositions, elementEdges, elementLoop, elementOfTriangle, nodeMeans, plateMesh, quadsToTriangles,
-  fieldAttribute, meanHeight, setBox, suggestedScale, vertexColors,
+  fieldAttribute, fitDistance, meanHeight, setBox, suggestedScale, vertexColors,
 } from "../lib/studio-geometry";
 
 const preview = JSON.parse(readFileSync("tests/fixtures/studio/preview.json", "utf8"));
@@ -112,4 +112,31 @@ test("one float per vertex for the results material, smooth by node or flat by e
   assert.deepEqual([...smooth.slice(0, 4)], [1, 2, -9, 4]);
   const flat = fieldAttribute(unit, "element", [7], -9);
   assert.ok(flat.every((v) => v === 7));
+});
+
+test("the camera stands where the whole coupon fits the canvas's shape, farther on a tall phone canvas than on a wide one (audit fea-run-45)", () => {
+  // a 25 x 250 mm coupon, 1.5 mm thick, seen from the viewer's direction (0.9, -1.1, 0.9) with z up and a 32 degree vertical field of view
+  const corners: number[][] = [];
+  for (const x of [0, 25]) for (const y of [0, 250]) for (const z of [-0.75, 0.75]) corners.push([x, y, z]);
+  const target = [12.5, 125, 0], view = [0.9, -1.1, 0.9], up = [0, 0, 1];
+  const wide = fitDistance(corners, target, view, up, 32, 1.4), square = fitDistance(corners, target, view, up, 32, 1), tall = fitDistance(corners, target, view, up, 32, 0.8);
+  assert.ok(tall > square && square >= wide, `${tall} > ${square} >= ${wide}`);
+  // every corner is inside the view at that distance, and one sits on its edge, inside the margin
+  const norm = (v: number[]) => { const l = Math.hypot(...v); return v.map((c) => c / l); };
+  const cross = (a: number[], b: number[]) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const z = norm(view), x = norm(cross(up, z)), y = cross(z, x);
+  for (const aspect of [0.8, 1, 1.4]) {
+    const d = fitDistance(corners, target, view, up, 32, aspect, 1);
+    const tanV = Math.tan((32 * Math.PI) / 360), tanH = tanV * aspect;
+    let tightest = Infinity;
+    for (const c of corners) {
+      const p = c.map((v, i) => v - target[i]);
+      const depth = d - dot(p, z);
+      assert.ok(Math.abs(dot(p, x)) <= depth * tanH + 1e-9 && Math.abs(dot(p, y)) <= depth * tanV + 1e-9, `corner ${c} at aspect ${aspect}`);
+      tightest = Math.min(tightest, depth * tanH - Math.abs(dot(p, x)), depth * tanV - Math.abs(dot(p, y)));
+    }
+    assert.ok(Math.abs(tightest) < 1e-9, `one corner on the edge at aspect ${aspect}`);
+  }
+  assert.ok(Math.abs(fitDistance(corners, target, view, up, 32, 1, 1.1) / fitDistance(corners, target, view, up, 32, 1, 1) - 1) < 0.1);
 });

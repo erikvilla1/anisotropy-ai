@@ -11,6 +11,9 @@ export const POLL_MS = 2000;
 export type JobState = "queued" | "running" | "done" | "stopped" | "refused";
 /** Still going: queued for a solver or running; the page keeps polling. */
 export const isActive = (state: JobState | undefined | null): boolean => state === "queued" || state === "running";
+/** When a job's fields are read again: a new job, its explanation written, its result line arrived (the reference solver's values are in the
+ * fields from then, audit fea-run-10) or its state changed. The workspace and the viewer read the fields once per stamp. */
+export const fieldsStamp = (job: JobStatus): string => `${job.job_id}:${"explanation" in job.outputs}:${Boolean(job.result)}:${job.state}`;
 export type JobStatus = {
   job_id: string; state: JobState; actor: string; started_at: string; finished_at: string | null; coupon: string | null; attempt: string | null;
   message: string | null; stage: string | null; stages_done: string[]; stages: string[]; outputs: Record<string, string>; run_id: string | null;

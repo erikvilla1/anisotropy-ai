@@ -171,6 +171,24 @@ export function bounds(nodes: number[][]): { min: Vec2; max: Vec2; size: Vec2 } 
   return { min, max, size: [max[0] - min[0], max[1] - min[1]] };
 }
 
+/** How far the camera stands from `target`, along `toCamera` (the direction from the target to the camera), for every point to fit in a
+ * view of vertical field of view `fovDeg` at the canvas's `aspect` (width over height), with `margin` around them (audit fea-run-45): a tall
+ * phone canvas moves the camera back, a wide desk one brings it closer. Each point is placed in the camera's frame (x right, y up, as
+ * three.js's `lookAt` builds it with `up`), and the distance is the least that keeps it inside both half-angles. Display geometry only. */
+export function fitDistance(points: number[][], target: number[], toCamera: number[], up: number[], fovDeg: number, aspect: number, margin = 1.1): number {
+  const norm = (v: number[]) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return v.map((c) => c / l); };
+  const cross = (a: number[], b: number[]) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const z = norm(toCamera), x = norm(cross(up, z)), y = cross(z, x);
+  const tanV = Math.tan((fovDeg * Math.PI) / 360), tanH = tanV * Math.max(aspect, 1e-6);
+  let distance = 0;
+  for (const point of points) {
+    const p = [point[0] - target[0], point[1] - target[1], (point[2] ?? 0) - target[2]];
+    distance = Math.max(distance, dot(p, z) + (margin * Math.abs(dot(p, x))) / tanH, dot(p, z) + (margin * Math.abs(dot(p, y))) / tanV);
+  }
+  return distance;
+}
+
 /** The outline of a node set as the bounding box of its nodes: how a held or loaded tab is framed. */
 export function setBox(nodes: number[][], indices: number[]): { min: Vec2; max: Vec2 } | null {
   if (!indices.length) return null;
