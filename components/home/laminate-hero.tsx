@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Layers3 } from "lucide-react";
+import { ArrowRight, Layers3 } from "lucide-react";
 import { LaminateScene } from "./scene";
-import { AbdGrid, FailurePanel, PropertyRow, SpecsList, StackList } from "./laminate-panels";
+import { AbdGrid, FailurePanel, PropertyRow, SpecsList, StackList, summaryLine, trim } from "./laminate-panels";
 import { useEngineAnswers } from "./engine-answers";
 import {
-  buildAnalysisRequest, CalculationError, loadNames, requestAnalysis, type AnalysisResult, type FieldErrors, type LoadName,
+  buildAnalysisRequest, CalculationError, loadNames, requestAnalysis, shownCitation, type AnalysisResult, type FieldErrors, type LoadName,
 } from "@/lib/laminate-api";
+import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
 import { calculatorHandoffKey, defaultHeroState, heroForm, loadsEntered, zeroLoads, type HeroState } from "@/lib/home-calculator";
 import { expandLayup } from "@/lib/layup";
 import { findLibraryOption, libraryOptions } from "@/lib/material-library-options";
@@ -36,6 +37,11 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [message, setMessage] = useState("");
   const [hovered, setHovered] = useState<number | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
+  // A touch screen cannot hover or drag the view (components/home/laminate-scene.tsx), so the caption says what it can do.
+  const [coarse, setCoarse] = useState(false);
+  // Bumped by Retry, to send the same request again; Retry shows only for a failure that sending it again may change.
+  const [attempt, setAttempt] = useState(0);
+  const [retryable, setRetryable] = useState(false);
   const lastSent = useRef<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const sequence = useRef(0);
@@ -47,6 +53,7 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
     setReducedMotion(media.matches);
     const onChange = () => setReducedMotion(media.matches);
     media.addEventListener("change", onChange);
+    setCoarse(window.matchMedia("(pointer: coarse)").matches);
     return () => media.removeEventListener("change", onChange);
   }, []);
   useEffect(() => () => controller.current?.abort("unmount"), []);
@@ -61,8 +68,10 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
   const colors = useMemo(() => angleSlots(angles), [angles]);
   const thickness = Number(state.thickness_mm) > 0 ? Number(state.thickness_mm) : 1;
   const plies = useMemo(() => angles.map((angle) => ({ angle_deg: angle, thickness_mm: thickness, color: colors.get(angle) ?? "#5d8f52" })), [angles, thickness, colors]);
-  // The result is fresh when the engine answered these very inputs; otherwise it is the last answer, shown dimmed while the next one is on its way.
+  // The result is fresh when the engine answered these very inputs; otherwise it is the last answer, shown dimmed while the next one
+  // is on its way. Only an older answer on the screen is dimmed: an error is never faded.
   const fresh = result !== null && requestJson !== null && JSON.stringify(result.inputs) === requestJson;
+  const stale = result !== null && !fresh;
   const showLoads = loadsEntered(state.loads);
 
   useEffect(() => {
@@ -90,9 +99,12 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
         setResult(null);
         lastSent.current = null;
         const text = mine.signal.aborted
-          ? "The calculation timed out. Edit the layup to try again."
-          : error instanceof CalculationError ? error.message : "Cannot reach the calculation service. The view still draws your stack.";
+          ? "The calculation timed out."
+          : error instanceof CalculationError ? error.message : ANALYSIS_UNAVAILABLE;
         setMessage(text);
+        // A timeout or an outage (lib/laminate-api.ts says ANALYSIS_UNAVAILABLE for no answer and for the service's own failure)
+        // may go another way; an answer that turns the request down stands until the inputs change.
+        setRetryable(mine.signal.aborted || !(error instanceof CalculationError) || error.message === ANALYSIS_UNAVAILABLE);
         shared?.report(requestJson, { state: "failed", message: text });
       } finally {
         window.clearTimeout(timeout);
@@ -100,7 +112,7 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
       }
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [apiBaseUrl, requestJson, shared]);
+  }, [apiBaseUrl, requestJson, shared, attempt]);
 
   function update(next: Partial<HeroState>) {
     setState((current) => ({ ...current, ...next }));
@@ -114,6 +126,13 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
   }
 
   const hoveredPly = hovered !== null && hovered < angles.length ? angles[hovered] : null;
+  const plyThickness = Number(state.thickness_mm) > 0 ? trim(Number(state.thickness_mm)) : state.thickness_mm;
+  // The results' state in a few words; nothing while an input or the request has failed, which the alert says.
+  const head = !apiBaseUrl ? "Calculations are unavailable on this site."
+    : pending ? "Calculating…"
+    : inputError || message ? ""
+    : result && fresh ? `Up to date: ${result.summary ? summaryLine(result.summary) : "the stack below"}`
+    : "Results appear as you type.";
   return (
     <section className="hero-laminate" id="laminate" aria-labelledby="laminate-title">
       <div className="hero-laminate-inner">
@@ -122,8 +141,8 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
           <div className="hero-laminate-statement">
             <h2 id="laminate-title">Your layup, calculated.</h2>
             <p>
-              Pick a material from the library, type the stacking, and the engine returns what your laminate is and how
-              stiff it is as you type. Add loads to see the first ply to fail.
+              Pick a material, type the layup and see the laminate&apos;s stiffness as you type. Add loads to find the first ply
+              to fail.
             </p>
           </div>
         </div>
@@ -140,7 +159,7 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
               }}>
                 {libraryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
-              <span className="calc-hint">{option ? option.citation : "Choose a cited dataset."}</span>
+              <span className="calc-hint">{option ? shownCitation(option.citation) : "Choose a cited dataset."}</span>
             </div>
             <PropertyRow option={option} provenance={fresh ? result?.material_provenance : undefined} />
             <div className="hero-field-row">
@@ -178,13 +197,13 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
             </details>
           </form>
           <div className="hero-laminate-stack">
-            <p className="hero-stack-head" aria-hidden="true">Plies, top face first</p>
-            <StackList angles={angles} thickness_mm={state.thickness_mm} colors={colors} hovered={hovered} onHover={setHovered} />
+            <p className="hero-stack-head" aria-hidden="true">Plies, top face first <span>(mm)</span></p>
+            <StackList angles={angles} thickness_mm={state.thickness_mm} colors={colors} hovered={hovered} onHover={setHovered} focusable />
             <div className="hero-laminate-caption">
               <p className="hero-laminate-hover" role="status" data-testid="hover-label">
                 {hoveredPly !== null
-                  ? `Ply ${hovered! + 1} of ${angles.length} · ${hoveredPly > 0 ? `+${hoveredPly}` : hoveredPly}° · ${state.thickness_mm} mm`
-                  : "Hover a ply to read its angle. Drag to turn the stack."}
+                  ? `Ply ${hovered! + 1} of ${angles.length} · ${hoveredPly > 0 ? `+${hoveredPly}` : hoveredPly}° · ${plyThickness} mm`
+                  : coarse ? "The list gives each ply's angle." : "Drag to turn the stack; each ply's angle is listed."}
               </p>
               <div className="hero-laminate-legend">
                 <span><i style={{ background: "#d4d4d4" }} /> x, along the 0° fiber</span>
@@ -193,15 +212,22 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
               </div>
             </div>
           </div>
-          <div className={`hero-laminate-results ${fresh ? "" : "is-stale"}`} aria-busy={pending} aria-live="polite">
+          <div className={`hero-laminate-results ${stale ? "is-stale" : ""}`} aria-busy={pending}>
             <div className="hero-results-side">
               <div className="hero-results-head">
-                <span className="eyebrow">THE ENGINE SAYS</span>
-                <span className="calc-hint" title={result?.run_id ?? undefined}>
-                  {!apiBaseUrl ? "Calculations are unavailable on this site." : pending ? "Calculating…" : result && fresh ? `Engine ${result.engine_version}${result.run_id ? ` · run ${result.run_id.slice(0, 8)}` : ""}` : inputError ? "" : "Waiting for the engine."}
+                <span className="eyebrow">RESULTS</span>
+                {/* The version and the run that answered stay in data attributes, for support, not on the screen. */}
+                <span className="calc-hint" role="status" data-engine-version={result && fresh ? result.engine_version : undefined}
+                  data-run-id={result && fresh ? result.run_id ?? undefined : undefined}>
+                  {head}
                 </span>
               </div>
-              {inputError ? <p className="calc-alert" role="alert">{inputError}</p> : message ? <p className="calc-alert" role="alert">{message}</p> : null}
+              {inputError ? <p className="calc-alert" role="alert">{inputError}</p> : message ? (
+                <div className="hero-retry">
+                  <p className="calc-alert" role="alert">{message}</p>
+                  {retryable ? <button type="button" className="calc-text-button" onClick={() => setAttempt((n) => n + 1)}>Retry</button> : null}
+                </div>
+              ) : null}
               {result && !inputError && result.summary ? <SpecsList summary={result.summary} /> : null}
             </div>
             <div className="hero-results-main">
@@ -213,14 +239,14 @@ export function LaminateHero({ apiBaseUrl }: { apiBaseUrl: string }) {
               ) : !inputError ? (
                 <div className="calc-empty hero-empty">
                   <Layers3 size={30} strokeWidth={1} />
-                  <p>{apiBaseUrl ? "The description, the matrices and the failure check appear here." : "Without a calculation service the view still draws your stack; the numbers need the engine."}</p>
+                  <p>{apiBaseUrl ? "The description, the matrices and the failure check appear here." : "Without a calculation service the view still draws your stack; the numbers need the service."}</p>
                 </div>
               ) : null}
             </div>
             {result && !inputError ? (
               <div className="hero-results-end">
                 <Link className="button primary hero-check" href="/calculator" onClick={handOff}>
-                  Want to check the math? <ArrowUpRight size={16} />
+                  Want to check the math? <ArrowRight size={16} aria-hidden="true" />
                 </Link>
                 <p className="calc-scope">
                   Flat laminate, one material, linear elastic classical laminate theory. The full page shows the strains, the curvatures and every cited value.

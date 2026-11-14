@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
 import { HeroHandover } from "@/components/home/hero-handover";
 import { HeroOutro } from "@/components/home/hero-outro";
@@ -14,14 +14,15 @@ import { serviceHref, services } from "@/lib/services";
 import { team } from "@/lib/team";
 import "./home.css";
 
-/** The hero clip's web copy (ADR-0069), written by scripts/hero-video.sh into the git-ignored public/media. A build without it,
- * such as one from the public repository, shows the still photo instead. */
+/** The hero clip's web copy (ADR-0069), written by scripts/hero-video.sh into public/media, where it and its poster are committed
+ * since ADR-0069 amendment 1. A build without it shows the still photo instead. */
 const heroVideo = existsSync(join(process.cwd(), "public", "media", "hero.mp4"));
-// Plain HTML so the browser sees "muted" before React runs, which autoplay requires; visitors who ask for reduced motion get no
-// source, so the poster frame stays.
+// Plain HTML so the browser sees "muted" before React runs, which autoplay requires. Only a window 768 px wide or more, whose
+// visitor has not asked for reduced motion, gets the source, so phones and those visitors keep the poster frame and download no
+// clip; the page loads the clip's first frame and length at most until it plays.
 const heroVideoHtml =
-  '<video autoplay muted loop playsinline preload="auto" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
-  '<source src="/media/hero.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)"></video>';
+  '<video autoplay muted loop playsinline preload="metadata" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
+  '<source src="/media/hero.mp4" type="video/mp4" media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"></video>';
 
 /** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
  * platform, the team and the changelog, and the closing band. The workflow and the roadmap live on About. */
@@ -34,12 +35,11 @@ export default function Home() {
       <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
         <div className={heroVideo ? "home-hero-media has-video" : "home-hero-media"} aria-hidden="true">
           {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
-          {heroVideo ? <HeroVideoKeeper /> : null}
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
-        {/* The words, in Anduril's arrangement (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle,
-            and under it a row of the year, the mark and the name. The load-in (ADR-0070 amendments 1 and 4) types
-            the statement and the small lines in, and a text cursor blinks at the statement's end (components/intro-text.ts). */}
+        {/* The words (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle, and under it a row of the
+            year, the mark and the name. The load-in (ADR-0070 amendments 1 and 4) types the statement and the small lines in,
+            and a text cursor blinks at the statement's end (components/intro-text.ts). */}
         <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="type" data-outro="type" data-intro-caret="">
             one engineering platform
@@ -66,11 +66,14 @@ export default function Home() {
         <HeroOutro />
         {/* Comes up at the foot of the clip once the words have left (ADR-0077 amendment 22). */}
         <ScrollToExplore />
-        {/* UC San Diego's The Basement mark, in the bottom left corner of the hero's box (ADR-0081). It fades in with the
-            load-in and out when the words leave (ADR-0070 amendment 4). */}
+        {/* The pause button of the clip, in its top right corner (ADR-0077 amendment 50); it keeps the clip playing until pressed. */}
+        {heroVideo ? <HeroVideoKeeper /> : null}
+        {/* Where the cohort meets, in the bottom left corner of the hero's box: in words, until written permission to show The
+            Basement's mark is recorded (ADR-0081 amendment 2), with the cohort beside it (ADR-0077 amendment 28). It fades in
+            with the load-in and out when the words leave (ADR-0070 amendment 4). */}
         <p className="home-hero-backed" data-intro="fade" data-outro="fade">
-          <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
-          {/* The programme the team is part of (ADR-0081), beside the mark of the place that runs it (ADR-0077 amendment 28). */}
+          The Basement, UC San Diego{" "}
+          {/* The programme the team is part of (ADR-0081), beside the place that runs it (ADR-0077 amendment 28). */}
           <span className="home-hero-cohort">Fall 2026 Launchpad cohort</span>
         </p>
       </section>
@@ -119,7 +122,7 @@ export default function Home() {
               real mechanical test data, so every answer comes with its assumptions and references.
             </p>
             <Link className="home-link" href="/about">
-              Learn more about us <ArrowUpRight size={16} />
+              Learn more about us <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
         </div>
@@ -143,13 +146,13 @@ export default function Home() {
               ))}
             </ul>
             <Link className="home-link" href="/services">
-              Explore the services <ArrowUpRight size={16} />
+              Explore the services <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
         </div>
         <SplitPicture href="/services" />
       </section>
-      {/* About keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
+      {/* The team keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
           link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band's
           head stands on light grey from edge to edge and the portraits on white (ADR-0077 amendment 41, app/home.css). */}
       <section className="band is-light home-blurb home-about" id="working">
@@ -161,7 +164,6 @@ export default function Home() {
               could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
               decisions and their reasons with it.
             </p>
-            <p className="home-about-cohort">Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego</p>
           </div>
         </div>
         {/* The band's label stands over the portraits, at their left edge, on the white (amendment 42). */}
@@ -173,7 +175,7 @@ export default function Home() {
                 {person.photo ? (
                   <>
                     <img src={person.photo} alt={`Portrait of ${person.name}`} width={800} height={1000} loading="lazy" decoding="async" />
-                    {/* LinkedIn's mark comes up in the frame's corner under the pointer (ADR-0057 amendment 2). It is a link
+                    {/* LinkedIn's mark comes up in the frame's corner under the pointer (ADR-0077 amendment 29). It is a link
                         once the person's profile address is in lib/team.ts; until then it is only drawn. The mark itself is
                         the picture the lead uploaded, drawn in black and white by app/home.css (ADR-0077 amendment 39). */}
                     {person.linkedin ? (
@@ -266,13 +268,10 @@ export default function Home() {
         grey
         label="THE NEXT LAYER STARTS WITH A QUESTION."
         heading={["Let’s define what", "comes next."]}
-        action={{ label: "Start a conversation", href: "/workspace/fea" }}
+        action={{ label: "Contact us", href: "/contact" }}
         links={{
           label: "EXPLORE THE RESEARCH",
-          items: [
-            { label: "Materials & physics library", href: "/library" },
-            { label: "Our research approach", href: "/about" },
-          ],
+          items: [{ label: "Materials library", href: "/library" }],
         }}
       />
     </main>
