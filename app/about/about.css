@@ -90,9 +90,13 @@
   border-radius: 50%;
   background: currentColor;
 }
-.about-stage-plus {
-  font-size: 18px;
-  line-height: 20px;
+.about-stage-ring {
+  display: block;
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
 }
 .about-stage .kit-title {
   margin: 6px 0 12px;
@@ -108,12 +112,9 @@
   margin-top: 32px;
 }
 
-/* The lab: the picture in the left half, the loop's four steps as rows from the halfway line. */
-.about-lab-media {
-  grid-column: 1 / 7;
-}
+/* The lab: the loop's four steps as rows across the band, until a photograph of the lab is supplied. */
 .about-lab-cycle {
-  grid-column: 7 / 13;
+  grid-column: 1 / -1;
   align-self: stretch;
   display: grid;
   grid-auto-rows: 1fr;
@@ -127,10 +128,6 @@
 }
 .about-lab-cycle article:last-child {
   border-bottom: 1px solid var(--line);
-}
-.about-lab-cycle article > svg:last-child {
-  margin-left: auto;
-  color: var(--muted);
 }
 .about-lab-cycle p {
   margin-top: 4px;
@@ -165,9 +162,17 @@
   color: var(--muted);
 }
 
-/* What the model describes: its four subjects as four columns under a rule, then the closing paragraph under the statement. */
+/* What the model describes: its subjects as columns under a rule, then its research goals under their label, then the closing
+ * paragraph under the statement. */
 .about-model-tags {
   margin-bottom: 48px;
+}
+.about-model-tags + .about-model-goals {
+  margin-top: -16px;
+}
+.about-model-goals > p {
+  grid-column: 1 / -1;
+  margin: 0 0 -16px;
 }
 .about-model-tags span {
   grid-column: span 3;
@@ -181,7 +186,7 @@
   grid-column: 4 / 11;
 }
 
-/* The team: cards of three columns under the statement, the note about the repository in the sixth place. */
+/* The team: cards of three columns under the statement. */
 .team-grid {
   grid-column: 4 / 13;
   display: grid;
@@ -196,11 +201,6 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
-}
-.kit-page .team-card .media-slot-frame {
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
 }
 .team-card-body {
   display: flex;
@@ -218,13 +218,6 @@
 }
 .team-card .team-role + p {
   margin-top: 4px;
-}
-.team-note {
-  align-self: start;
-  padding-top: 24px;
-  border-top: 1px solid var(--text);
-  font-size: 18px;
-  line-height: 26px;
 }
 
 /* Between 1024 and 1279 px four of three columns are too narrow: they pair up, and the team's cards go two to a row. */
@@ -259,7 +252,6 @@
     padding-top: 0;
     border-top: 0;
   }
-  .about-lab-media,
   .about-lab-cycle,
   .about-context-figure,
   .about-context-notes,

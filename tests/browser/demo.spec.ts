@@ -468,7 +468,7 @@ test("on the way back up the beats are unplayed one by one, down to the hero, an
   await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(6);
 });
 
-test("Scroll to explore brings the stage to fill the window, and the first beat plays", async ({ page }) => {
+test("the hero's \"Scroll to explore\" brings the stage to fill the window, and the first beat plays", async ({ page }) => {
   await page.goto("/");
   await expect(demo(page)).toHaveAttribute("data-mode", "pinned");
   const explore = page.locator("#overview .home-hero-explore");

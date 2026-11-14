@@ -5,7 +5,7 @@
 
 abaqus_version = "Abaqus/Standard 2025"
 detected_on = "2026-11-11"
-detected_by = "Claude Code on the founder's machine, Abaqus 2025 (C:/SIMULIA/Commands/abaqus.BAT), the UCSD licence over the founder's VPN"
+detected_by = "Anisotropy engineering: Windows 11, Abaqus 2025 (UC San Diego teaching licence)"
 
 # *Element Output accepts the section points as the data line before the variables, as *El Print does: the ODB then holds S and E at
 # each listed point ("fraction = -0.875000, Layer = 1" and so on for the middle of each of 8 layers), beside PRESELECT's two faces of the

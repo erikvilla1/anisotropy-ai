@@ -16,6 +16,11 @@
 \usepackage{listings}
 \usepackage{fancyhdr}
 \usepackage{parskip}
+\usepackage[titles]{tocloft}
+% the contents: room for numbers such as 6.10.4 and a right margin, so a long title wraps before its page number
+\setlength{\cftsecnumwidth}{2.6em}\setlength{\cftsubsecnumwidth}{3.4em}\setlength{\cftsubsubsecnumwidth}{4.2em}
+\cftsetpnumwidth{2.4em}\cftsetrmarg{3.4em}
+\usepackage{xurl}  % a long URL breaks at any character instead of running past the margin
 \usepackage{hyperref}
 
 \definecolor{accent}{HTML}{9A5A00}
@@ -24,7 +29,7 @@
 \definecolor{codebg}{HTML}{F3F4F1}
 \definecolor{passgreen}{HTML}{2F6B3F}
 
-\hypersetup{colorlinks=true, linkcolor=ink, urlcolor=accent, citecolor=ink, pdfauthor={Anisotropy AI}}
+\hypersetup{colorlinks=true, linkcolor=ink, urlcolor=accent, citecolor=ink, pdfauthor={Anisotropy}}
 
 \titleformat{\section}{\sffamily\Large\bfseries\color{ink}}{\color{accent}\thesection}{0.7em}{}
 \titleformat{\subsection}{\sffamily\large\bfseries\color{ink}}{\color{accent}\thesubsection}{0.6em}{}

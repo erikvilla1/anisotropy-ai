@@ -23,7 +23,7 @@ GAUGE_GROUP = "ply_stress_local"
 REACTION_SET = "Grip-Top"
 FRD_STRESSES = ("mises_max", "sxx_max", "sxx_min", "syy_max", "syy_min", "sxy_max_abs", "gauge_mises_max", "gauge_syy_max", "gauge_sxx_max_abs")
 FRD_LENGTHS = ("gauge_from", "gauge_to")
-PLY_STRESSES = ("s1_max", "s2_max", "t12_max_abs", "gauge_s1_max")
+PLY_STRESSES = ("s1_max", "s2_max", "t12_max_abs", "s1_max_abs", "s2_max_abs", "gauge_s1_max")
 
 
 def convert(value, kind: str, from_units: str, to_units: str):

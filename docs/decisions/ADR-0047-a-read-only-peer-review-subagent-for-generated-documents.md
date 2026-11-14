@@ -4,6 +4,7 @@
 - Date: 2026-10-25
 - Decided by: Founder, 2026-10-25 ("ok let's do it", on the plan "a read-only peer-review subagent for the coupon package PDF") | Drafted by: Claude Code
 - Related: `docs/agents/subagents/document-reviewer.md`, `scripts/link-agent-dirs.ps1`, [ADR-0023](ADR-0023-agent-skills-in-the-docs-vault.md), [ADR-0041](ADR-0041-one-document-per-coupon-in-chapters.md), [ADR-0043](ADR-0043-coupon-audit-scored-by-a-fixed-rubric-delivered-as-one-package-folder.md), [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md)
+- Area: process
 
 ## Context
 

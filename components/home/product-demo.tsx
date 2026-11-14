@@ -33,7 +33,7 @@ function useMediaQuery(query: string): boolean {
 const ZONE = 0.5;
 const LEAD = 0.08;
 
-/** Where each beat's words stand: under the model, or in a block at one side with the model at the other (Scale's arrangement). */
+/** Where each beat's words stand: under the model, or in a block at one side with the model at the other (ADR-0095 amendment 1). */
 const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", model: "left", analysis: "right", report: "under" };
 /** The files a customer downloads from a run (the audit's D4), in the workspace's own labels. */
 const FILES = DOWNLOAD_LABELS.filter(([key]) => CUSTOMER_DOWNLOADS.includes(key)).map(([, label]) => label);
@@ -224,7 +224,8 @@ export function ProductDemo() {
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
         <div className="product-demo-head">
           <p className="demo-label">{DEMO_HEAD.label}</p>
-          <h2 id="demo-title">{DEMO_HEAD.title}</h2>
+          {/* The hero's "Scroll to explore" moves the focus here (components/home/scroll-to-explore.tsx). */}
+          <h2 id="demo-title" tabIndex={-1}>{DEMO_HEAD.title}</h2>
         </div>
         <div className="product-demo-view">{viewWanted ? <ProductDemoScene handle={handle} /> : null}</div>
         <p className="product-demo-hint" data-shown={turnable ? "true" : undefined}><Rotate3d size={14} aria-hidden="true" /> {TURN_HINT}</p>

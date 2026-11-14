@@ -4,6 +4,7 @@
 - Date: 2026-10-02
 - Decided by: Founder | Drafted by: Claude Code
 - Related: pull requests #1 and #2, [engine 0.1 verification report](../evaluations/2026-10-02_engine-0.1-verification.md)
+- Area: engine
 
 ## Context
 

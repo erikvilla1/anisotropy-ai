@@ -4,6 +4,7 @@
 - Date: 2026-10-11
 - Decided by: Founder (pending review) | Drafted by: Claude Code
 - Related: `docs/agents/README.md`, `docs/agents/skills/project-rules/SKILL.md`, `scripts/link-agent-dirs.ps1`
+- Area: process
 
 ## Context
 

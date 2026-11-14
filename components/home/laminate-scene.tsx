@@ -302,6 +302,10 @@ function drawsInSoftware(): boolean {
   }
 }
 
+/** How long the view turns by itself before it rests: under the five seconds after which moving content needs a way to pause it
+ * (WCAG 2.2.2). A drag still turns it where the pointer can drag. */
+const TURN_MS = 5000;
+
 // How the view steps down when it cannot hold its frame time, in order: a pixel ratio of 1.5, then 1, then the plain look, then no
 // turning by itself. A browser that draws in software starts at the plain look. (A phone draws the lite look at 1.5 from the start.)
 const STEP_PLAIN = 3;
@@ -327,6 +331,7 @@ export function LaminateSceneCanvas({
   const [visible, setVisible] = useState(true);
   const [coarse, setCoarse] = useState(false);
   const [dragged, setDragged] = useState(false);
+  const [rested, setRested] = useState(false);
   const [step, setStep] = useState(0);
   useEffect(() => {
     const available = webglAvailable();
@@ -347,12 +352,18 @@ export function LaminateSceneCanvas({
   const steered = azimuth !== null;
   const grade: CarbonGrade = step >= STEP_PLAIN ? "plain" : coarse ? "lite" : "full";
   const ratio = step >= 2 ? 1 : coarse || step === 1 ? 1.5 : 2;
-  // The view runs every frame only while it turns by itself (until the visitor first drags it); otherwise it draws when something changes.
-  const turning = decor && !reducedMotion && shown && !dragged && !steered && step < STEP_STILL;
+  // The view runs every frame only while it turns by itself (for its first five seconds in sight, until the visitor first drags
+  // it); otherwise it draws when something changes.
+  const turning = decor && !reducedMotion && shown && !dragged && !rested && !steered && step < STEP_STILL;
+  useEffect(() => {
+    if (!turning) return;
+    const timer = window.setTimeout(() => setRested(true), TURN_MS);
+    return () => window.clearTimeout(timer);
+  }, [turning]);
   if (webgl === false) return <WebGLMissing />;
   if (webgl === null) return <div className="studio-scene-loading hero-laminate-loading" role="status">Loading the 3D view…</div>;
   return (
-    <div className="hero-laminate-canvas" data-testid="laminate-scene" ref={container}>
+    <div className="hero-laminate-canvas" data-testid="laminate-scene" data-turning={turning ? "true" : undefined} ref={container}>
       <Canvas
         frameloop={turning ? "always" : "demand"}
         dpr={[1, ratio]}

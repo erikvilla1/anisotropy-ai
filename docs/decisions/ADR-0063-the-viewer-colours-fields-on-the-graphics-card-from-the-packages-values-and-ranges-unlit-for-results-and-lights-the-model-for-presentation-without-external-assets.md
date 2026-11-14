@@ -4,6 +4,7 @@
 - Date: 2026-11-06
 - Decided by: Founder, 2026-11-06 ("what do you think about this, is this good to add? A 'presentation' lighting mode", drei's Environment, ContactShadows, a clearcoat MeshPhysicalMaterial; "Colour the stresses on the graphics card"; "A small shader could take the raw values and draw smooth or banded contours with crisp isolines"; "Results mode should stay mostly unlit so the shading never skews the colours"; then "lets do it no mistakes" for this part) | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0053](ADR-0053-plate-bending-by-an-mitc4-flat-shell-with-five-dofs-on-the-laminates-a-b-d-and-transverse-shear-stiffness.md), [ADR-0062](ADR-0062-the-chat-becomes-a-workspace-product-a-solver-independent-project-three-columns-one-panel-per-step-the-assistant-beside-it.md) (part 4); `fea/src/anisotropy_fea/fields.py`, `components/studio/field-material.ts`, `components/studio/scene-lighting.tsx`, `components/studio/scene-canvas.tsx`, `lib/studio-colors.ts`, `lib/studio-fields.ts`; risk R-20
+- Area: website
 
 ## Context
 

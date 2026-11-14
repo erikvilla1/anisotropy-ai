@@ -4,6 +4,7 @@
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (test first locally, the repository too, superseded local files deleted, no `.frd` in the zips) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/paths.py`, `fea/tools/regenerate_decks.py`, [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0032](ADR-0032-local-workspace-layout-by-tool-and-test.md) (its FEA layout superseded; its homework layout stands), [ADR-0035](ADR-0035-team-models-matched-node-for-node-and-a-short-comparison-with-a-share-folder.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-one-folder-per-test.md` (ADR-0042)
+- Area: fea
 
 ## Context
 

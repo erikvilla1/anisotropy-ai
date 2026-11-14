@@ -4,6 +4,7 @@
 - Date: 2026-10-26
 - Decided by: Founder, 2026-10-26 ("i am settled with the order above": step 1 of ADR-0048, one command per job with an end-to-end test) | Drafted by: Claude Code
 - Related: [ADR-0048](ADR-0048-the-assistant-drives-tested-jobs-built-after-one-command-per-job-and-an-api-job.md), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md), [ADR-0039](ADR-0039-case-pages-attempt-history-and-one-index.md), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0043](ADR-0043-coupon-audit-scored-by-a-fixed-rubric-delivered-as-one-package-folder.md), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md), `fea/tools/run_coupon.py`, `fea/tests/test_run_coupon.py`, `fea/src/anisotropy_fea/intake.py` (`gauge_probes`, `next_commands`)
+- Area: fea
 
 ## Context
 

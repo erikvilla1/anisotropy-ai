@@ -89,6 +89,9 @@ test("a row's hint is its help's first sentence, as a sentence", () => {
     const hint = shortHelp(field);
     if (hint) assert.match(hint, /^[^a-z].*[.?!]$/, field.key); // capitalised and ended, never cut on ';' (fea-run-J2-3)
   }
+  // the Units hint says what the row is; its default comes after, on the form, never first in the hint
+  assert.ok(shortHelp(fieldByKey.units).startsWith("The unit system"));
+  assert.ok(!shortHelp(fieldByKey.units).includes("left blank") && fieldByKey.units.help.includes("left blank, it is mm-MPa"));
 });
 
 test("the form carries the engine's unit systems: labels per row, defaults per system and the library's constants, nothing converted here", () => {

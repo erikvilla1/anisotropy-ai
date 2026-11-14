@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/thermal.py`, `engine/tests/test_thermal.py`, local evaluation note `.local/notes/evaluations/2026-10-03-thermal-analysis.md` (ADR-0042), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md)
+- Area: engine
 
 ## Context
 

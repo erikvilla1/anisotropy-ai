@@ -1,7 +1,7 @@
 [project]
 name = "anisotropy-fea"
 version = "0.1.0"
-description = "Finite element layer for Anisotropy AI: reads the team's Abaqus coupon decks and solves them on the engine's laminate stiffness (ADR-0029)."
+description = "Finite element layer for Anisotropy: reads the team's Abaqus coupon decks and solves them on the engine's laminate stiffness (ADR-0029)."
 requires-python = ">=3.12"
 dependencies = [
     "anisotropy-engine==0.1.0",

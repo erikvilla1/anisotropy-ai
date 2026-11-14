@@ -23,7 +23,7 @@ test.beforeEach(async ({ page }) => {
 const TENSION_BUILT = [
   { row: "width", value: 25, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
   { row: "length", value: 250, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric" },
-  { row: "tab_length", value: 56, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric: gripped through emery cloth, with no tab length given, so 56 mm by default" },
+  { row: "tab_length", value: 56, reason: "ASTM D3039/D3039M-17, Table 2, balanced and symmetric: gripped through emery cloth, with no tab length given; 56 mm is the software's choice" },
   { row: "strain_length", value: 25, reason: "25 mm, within ASTM D3039/D3039M-17 §7.3.2's 10 to 50 mm, centred on the coupon" },
   { row: "control", value: "displacement", reason: "the top grip moves; the bottom one is held" },
   { row: "value", value: 1, reason: "the model is linear, so R, the loading at first-ply failure, does not depend on it" },
@@ -461,7 +461,7 @@ test("the tension screen takes the material and the layup, builds the model, say
   for (const key of ["length", "width", "tab_length", "grips", "element_size", "G13", "G23", "test", "units"]) expect(sent[key], key).toBeUndefined(); // the package chooses them
   const built = page.getByTestId("tension-built");
   await expect(built.locator("tr[data-row=width]")).toContainText("ASTM D3039/D3039M-17, Table 2, balanced and symmetric");
-  await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm by default");
+  await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm is the software's choice");
   await expect(built.locator("tr[data-row=value] th")).toHaveText("Applied displacement (mm)"); // the label alone in the row header (uiux-fea-run-29)
   await expect(built.locator("tr[data-row=value] td").last()).toHaveText("The model is linear, so R, the loading at first-ply failure, does not depend on it.");
   await expect(page.getByTestId("tension-files")).toContainText("Abaqus input file (.inp)", { timeout: 45_000 }); // the job ends at the eighth poll, slower on CI

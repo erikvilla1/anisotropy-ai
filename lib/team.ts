@@ -21,7 +21,7 @@ export type Person = {
 };
 
 /** The cards' order is the lead's (2026-11-13): the two founders, then Tabassum in the middle, Jusung, and Kai at the right.
- * The portraits are cut from the originals by scripts/team-photos.py (ADR-0057 amendment 2). The profile addresses are the
+ * The portraits are cut from the originals by scripts/team-photos.py (ADR-0077 amendment 29). The profile addresses are the
  * lead's of 2026-11-14 (ADR-0077 amendment 35); that each person agreed to theirs is the lead's to confirm. */
 export const team: readonly Person[] = [
   { name: "Christopher Valerio", title: "Co-Founder, CEO", role: "Co-founder and CEO", technical: "prompt engineering and AI evaluation", photo: "/assets/team/christopher-valerio.jpg", linkedin: "https://www.linkedin.com/in/christopher-valerio-916116225/" },
