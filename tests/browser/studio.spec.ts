@@ -463,6 +463,11 @@ test("the tension screen takes the material and the layup, builds the model, say
   const built = page.getByTestId("tension-built");
   await expect(built.locator("tr[data-row=width]")).toContainText("ASTM D3039/D3039M-17, Table 2, balanced and symmetric");
   await expect(built.locator("tr[data-row=tab_length]")).toContainText("56 mm is the software's choice");
+  // a blank field under Change settings shows the value in use, not nothing (ADR-0090 amendment 1)
+  await expect(page.locator("#studio-width")).toHaveAttribute("placeholder", "25");
+  await expect(page.locator("#studio-length")).toHaveAttribute("placeholder", "250");
+  await expect(page.locator("#studio-tab_length")).toHaveAttribute("placeholder", "56");
+  await expect(page.locator("#studio-width")).toHaveValue("");
   await expect(built.locator("tr[data-row=value] th")).toHaveText("Applied displacement (mm)"); // the label alone in the row header (uiux-fea-run-29)
   await expect(built.locator("tr[data-row=value] td").last()).toHaveText("The model is linear, so R, the loading at first-ply failure, does not depend on it.");
   await expect(page.getByTestId("tension-files")).toContainText("Abaqus input file (.inp)", { timeout: 45_000 }); // the job ends at the eighth poll, slower on CI

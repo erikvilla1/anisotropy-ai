@@ -83,9 +83,12 @@ if coupon.startswith("WAIT"):
         time.sleep(0.02)
 package = attempt / "package"
 package.mkdir()
-(package / "doc.pdf").write_bytes(b"%PDF")
+outputs = {"fields": str(fields), "package": str(package)}
+if "--no-pdf" not in sys.argv and not coupon.startswith("NO-DOC"):  # as the tool: the PDF by its own key; a coupon NO-DOC* stands for a failed PDF
+    (package / "doc.pdf").write_bytes(b"%PDF")
+    outputs["document"] = str(package / "doc.pdf")
 result.write_text(json.dumps({"status": "done", "message": f"attempt {number:02d}", "coupon": coupon, "attempt": str(attempt),
-                              "outputs": {"fields": str(fields), "package": str(package)}}), encoding="utf-8")
+                              "outputs": outputs}), encoding="utf-8")
 '''
 
 
@@ -134,9 +137,9 @@ def held_until(job, condition, what):
 client = TestClient(app, headers={"X-Anisotropy-Actor": "test"})
 
 
-def queued(coupon: str | None = None, values: dict | None = None) -> str:
+def queued(coupon: str | None = None, values: dict | None = None, pdf: bool = False) -> str:
     body = {"coupon": coupon} if coupon is not None else {"values": values}
-    answer = client.post("/v1/coupon-jobs", json={**body, "run_by": "A. Engineer", "pdf": False})
+    answer = client.post("/v1/coupon-jobs", json={**body, "run_by": "A. Engineer", "pdf": pdf})
     assert answer.status_code == 202, answer.text
     assert answer.json()["state"] == "queued" and answer.headers[ENQUEUE_HEADER] == answer.json()["job_id"]
     return answer.json()["job_id"]
@@ -250,6 +253,20 @@ def test_a_running_jobs_result_is_read_back_from_its_row_before_the_package(queu
     held_until(job, lambda: fetch_job(table, job_id).state == "done", "done on its row")  # the API's container reads the row
     ended = client.get(f"/v1/coupon-jobs/{job_id}").json()
     assert ended["state"] == "done" and ended["result"] == "attempt 02" and ended["documents"] == "written"
+
+
+@pytest.mark.parametrize(("coupon", "written"), [("PDF-A", True), ("NO-DOC-A", False)])
+def test_report_ready_on_a_row_read_back_needs_the_pdf(queue, monkeypatch, coupon, written):
+    """ADR-0064 amendment 2: a job read back from its row has its documents "written" only when the package came with the PDF it asked
+    for; a package without it says so, and the page shows the report as not written instead of ticking Report ready."""
+    _, solver, _, _, table, _ = queue
+    job_id = uuid.UUID(queued(coupon, pdf=True))
+    solving(solver, job_id, monkeypatch)
+    status = client.get(f"/v1/coupon-jobs/{job_id}").json()
+    assert status["state"] == "done" and "package" in status["outputs"] and ("document" in status["outputs"]) is written
+    assert (status["documents"] == "written") is written
+    if not written:
+        assert status["documents"] == "the package was written without its document"
 
 
 def test_the_per_job_timeout_stops_the_tool(queue, monkeypatch):

@@ -32,6 +32,8 @@ EXTENSOMETER_MM = 25.0  # within D3039 §7.3.2's 10 to 50 mm, as in the check
 PULL_MM = 1.0
 ELEMENT_SIZE_MM = 2.0
 MM = 1e-3
+SIZE_ROWS = ("length", "width", "tab_length")  # the size Table 2 gives, row by row
+SIZE_WORDS = {"length": "the length", "width": "the width", "tab_length": "the tab length"}
 
 
 @dataclass(frozen=True)
@@ -91,8 +93,9 @@ def d3039_class(data: dict) -> astm_d3039.Preset | None:
 def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple[Built, ...]]:
     """The values of a tension coupon with every row the engineer was not asked for chosen, and the list of those choices.
 
-    `data` is the values file without its "input" key; the rows it holds are kept as they are. A layup in no D3039 Table 2 class, or a
-    coupon under no standard, gets no size: the check then asks for the length, width and tab length by row."""
+    `data` is the values file without its "input" key; the rows it holds are kept as they are. Under D3039, each size row left blank comes
+    from Table 2 on its own (ADR-0090 amendment 1). A layup in no D3039 Table 2 class, or a coupon under no standard, gets no size: the
+    check then asks for the length, width and tab length by row."""
     out = dict(data)
     built: list[Built] = []
 
@@ -108,19 +111,27 @@ def complete_tension(data: dict, today: date | None = None) -> tuple[dict, tuple
     choose("filled_by", "workspace", "the coupon was set up in the workspace")
     choose("date", (today or date.today()).isoformat(), "the day the coupon was set up")
 
-    size_given = any(not _blank(out.get(key)) for key in ("length", "width", "tab_length"))
-    preset = d3039_class(out) if under_d3039 and not size_given else None
+    # Each size row left blank is chosen on its own (ADR-0090 amendment 1): a width typed under Change settings keeps Table 2's length and
+    # the grip length, where any one typed row once dropped all three and the check then asked for the other two.
+    given = [key for key in SIZE_ROWS if not _blank(out.get(key))]
+    size_given = bool(given)
+    preset = d3039_class(out) if under_d3039 and len(given) < len(SIZE_ROWS) else None
     if preset is not None:
-        sizes = {row: value / MM for row, value in preset.si.items() if row in ("width", "length", "tab_length")}
+        sizes = {row: value / MM for row, value in preset.si.items() if row in SIZE_ROWS}
         tab = sizes.get("tab_length", GRIP_LENGTH_MM)
         why = f"{D3039}, Table 2, {preset.label}"
         choose("width", sizes["width"], why)
         choose("length", sizes["length"], why)
         choose("tab_length", tab, why if "tab_length" in sizes else
                f"{why}: gripped through emery cloth, with no tab length given; {GRIP_LENGTH_MM:g} mm is the software's choice")
-        choose("size_from", why + ("" if "tab_length" in sizes else f"; the {GRIP_LENGTH_MM:g} mm grip length is the software's choice, since Table 2 "
-                                                                     "gives none for this class"),
-               "where the size comes from")
+        grip = "" if "tab_length" in sizes or "tab_length" in given else (f"; the {GRIP_LENGTH_MM:g} mm grip length is the software's choice, "
+                                                                          "since Table 2 gives none for this class")
+        if given:
+            yours = " and ".join(SIZE_WORDS[key] for key in given)
+            choose("size_from", f"{yours} as you gave, the rest from {why}{grip}; a deviation from {D3039} Table 2 is reported, never refused",
+                   "the rest of the size was chosen from the standard")
+        else:
+            choose("size_from", why + grip, "where the size comes from")
     elif size_given:
         choose("size_from", "the dimensions you gave" + (f": a deviation from {D3039} Table 2 is reported, never refused" if under_d3039 else ""),
                "the size was given under Change settings")

@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, Download } from "lucide-react";
 import { fileUrl, type Fields, type JobStatus } from "@/lib/studio-api";
-import { downloadName, downloadsFor } from "@/lib/studio-copy";
+import { downloadable, downloadName } from "@/lib/studio-copy";
 
 /** What a job's files are named after (ADR-0091): the standard and the layup the package wrote, else the rows on the page. */
 export function namingOf(fields: Fields | null | undefined, form?: { standard?: string; test?: string; ply_1?: string } | null, layup?: string) {
@@ -19,7 +19,7 @@ export function namingOf(fields: Fields | null | undefined, form?: { standard?: 
 export function JobFiles({ apiBase, job, naming, viewer = true, testId, all = false }: {
   apiBase: string; job: JobStatus; naming: ReturnType<typeof namingOf>; viewer?: boolean; testId?: string; all?: boolean;
 }) {
-  const available = downloadsFor(all).filter(([key]) => key in job.outputs);
+  const available = downloadable(job, all); // none while the run is going: its files are still being written and stored
   if (!available.length) return null;
   return (
     <ul className="studio-downloads" data-testid={testId}>

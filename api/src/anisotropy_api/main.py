@@ -34,7 +34,7 @@ from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .proposals import model_view_of_form, source_guard
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
-from .coupon_jobs import (FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, NotOffered, RecordingFailed,
+from .coupon_jobs import (FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
 from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, count_uploads, delete_upload, fetch_project, fetch_run, fetch_upload,
                       git_commit, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
@@ -1085,6 +1085,8 @@ def coupon_job_file(job_id: uuid.UUID, key: str, request: Request, name: Downloa
         path = jobs.output_file(job, key)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"coupon job {job_id} has no file {key!r}; it has: {exc.args[0]}") from exc
+    except JobNotDone as exc:  # the package's zip while the job still writes it (ADR-0064 amendment 2)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FileResponse(path, media_type=content_type(path), filename=_download_name(name, path.suffix) or path.name)

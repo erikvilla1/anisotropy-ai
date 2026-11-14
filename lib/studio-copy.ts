@@ -246,9 +246,10 @@ export function runTook(job: Pick<JobStatus, "state" | "started_at" | "finished_
 /** The step a job is at: a job that ended before any stage (refused at the gate, or never taken up) ended in the queue. */
 const stepOfJob = (job: Pick<JobStatus, "state" | "stage">): RunStepId =>
   !job.stage && (job.state === "stopped" || job.state === "refused") ? "queued" : stepOfStage(job.stage);
-/** A finished job whose report was not written: the outcome says so, or (a job read back from its row) no package was stored. */
+/** A finished job whose report was not written: the outcome says so, or, for a job that does not say, its files hold no PDF. "Report ready"
+ * means the PDF exists, not only the package (ADR-0064 amendment 2). */
 const reportMissing = (job: Pick<JobStatus, "documents"> & { outputs?: JobStatus["outputs"] }): boolean =>
-  job.documents ? job.documents !== "written" : job.outputs !== undefined && !("package" in job.outputs);
+  job.documents ? job.documents !== "written" : job.outputs !== undefined && !("document" in job.outputs);
 const order = (id: RunStepId) => RUN_STEPS.findIndex((s) => s.id === id);
 
 export type StepState = "done" | "current" | "waiting" | "stopped";
@@ -348,6 +349,10 @@ export const DOWNLOAD_LABELS: [string, string][] = [
 export const CUSTOMER_DOWNLOADS: readonly string[] = ["document", "abaqus_deck"];
 /** The files offered, in order: the customer's, or every one with the development switch on. */
 export const downloadsFor = (all: boolean): [string, string][] => DOWNLOAD_LABELS.filter(([key]) => all || CUSTOMER_DOWNLOADS.includes(key));
+/** The files a job offers to download: none while it runs, since its files are still being written and stored and a link would fail
+ * (ADR-0064 amendment 2); once it has ended, those of `downloadsFor` it made. */
+export const downloadable = (job: Pick<JobStatus, "state" | "outputs"> | null | undefined, all: boolean): [string, string][] =>
+  job && (job.state === "done" || job.state === "stopped") ? downloadsFor(all).filter(([key]) => key in job.outputs) : [];
 /** The neutral name a file is asked for by (ADR-0091 amendment 2): what it is, not the program it is for; the API maps it back. */
 export const FILE_URL_KEY: Record<string, string> = { abaqus_deck: "solver_input", prepomax_deck: "reference_input", prepomax_results: "reference_results" };
 const DOWNLOAD_SUFFIX: Record<string, string> = {

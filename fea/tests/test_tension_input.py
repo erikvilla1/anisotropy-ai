@@ -72,6 +72,23 @@ def test_a_layup_in_no_class_gets_no_size_and_the_check_asks_for_it_by_row(tmp_p
     assert "Length (mm): required" in problems and "Width (mm): required" in problems and "Where the size comes from" not in problems
 
 
+@pytest.mark.parametrize(("given", "size", "yours"), [
+    ({"width": 30.0}, (30.0, 250.0, 56.0), "the width"),  # the founder's case of 2026-11-14: a wider strip keeps Table 2's length and the grip length
+    ({"length": 300.0, "tab_length": 60.0}, (25.0, 300.0, 60.0), "the length and the tab length"),
+])
+def test_each_size_row_left_blank_is_chosen_on_its_own(tmp_path, given, size, yours):
+    """ADR-0090 amendment 1: under D3039, a size row the engineer typed is kept and every other one comes from Table 2 (the grip length from
+    the software's default), where one typed row once dropped all three; the deviation is reported, never refused."""
+    values, built = complete_tension({**REFERENCE, **given}, DAY)
+    assert (values["width"], values["length"], values["tab_length"]) == size
+    assert not set(given) & set(chosen(built)), "a row the engineer gave is never chosen again"
+    assert values["size_from"].startswith(f"{yours} as you gave, the rest from {D3039}, Table 2, ")
+    assert values["size_from"].endswith(f"; a deviation from {D3039} Table 2 is reported, never refused")
+    assert ("56 mm grip length is the software's choice" in values["size_from"]) == ("tab_length" not in given)
+    checklist = setup_checklist(read_values(values_file(tmp_path, {**REFERENCE, **given})), tmp_path / "none", **TOOLS)[0]
+    assert checklist.state == "ready", checklist.problems
+
+
 def test_every_choice_names_its_row_and_its_reason_and_no_given_row_is_changed():
     given = {**REFERENCE, "control": "force", "value": 5000.0, "width": 20.0, "length": 200.0, "tab_length": 40.0, "element_size": 1.5}
     values, built = complete_tension(given, DAY)
