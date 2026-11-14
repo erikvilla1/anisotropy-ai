@@ -20,15 +20,19 @@ def test_the_generator_documents_a_thermal_failure_problem(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     tex = (tmp_path / f"{case.stem}.tex").read_text(encoding="utf-8")
     assert tex.startswith(r"\documentclass") and tex.rstrip().endswith(r"\end{document}")
-    for label in ("sec:summary", "sec:problem", "sec:steps", "sec:comparison", "sec:method", "sec:reading"):
+    for label in ("sec:summary", "sec:problem", "sec:steps", "sec:comparison", "sec:method"):
         assert rf"\label{{{label}}}" in tex
+    # no reading has been written for this case: the document has no Reading section and no instruction to us to write one
+    assert r"\label{sec:reading}" not in tex and "To add one, write" not in tex and "No reading has been written" not in tex
     assert "14 of 14 compared values agree" in tex
     # the steps this problem needs, in order, each with its theory section and the code it names
     for step in ("Step 1. Ply stiffness", "Step 2. Rotation", "Step 3. Laminate stiffness", "Step 4. Temperature change", "Step 5. Mid-plane strains",
                  "Step 6. Strain and stress in every ply", "Step 7. First-ply failure", "Step 8. Laminate engineering constants"):
         assert step in tex, step
     assert tex.index("Step 4. Temperature") < tex.index("Step 5. Mid-plane") < tex.index("Step 7. First-ply")
-    assert r"\codefrom{thermal\_resultants}" in tex and r"\codefrom{first\_ply\_failure\_combined}" in tex and r"\codefrom{solve\_case}" in tex
+    assert r"\codefrom{thermal\_resultants}" in tex and r"\codefrom{first\_ply\_failure\_combined}" in tex
+    # the case runner, the same for every problem, is printed once, in the engine manual, and pointed to here
+    assert r"\codefrom{solve\_case}" not in tex and "printed once, in the engine manual" in tex
     assert "transverse tension" in tex and r"\Delta T" in tex  # the governing mode and the temperature change
     assert r"\filefrom" in tex and "fpf_ratio_max_stress" in tex  # the case file is in the appendix
 
@@ -73,3 +77,27 @@ def test_every_step_has_its_theory_fragment():
     assert set(module.FRAGMENTS) >= {"Ply stiffness", "Rotation", "Laminate stiffness", "Response to loads", "Known forces and prescribed curvature",
                                      "Mixed load and deformation conditions", "Ply surface recovery", "Failure", "Fixed and variable loading",
                                      "Laminate engineering constants", "Temperature change", "Plate buckling"}
+
+
+def test_a_result_is_named_for_a_reader_and_counted_in_words():
+    build = load_build()
+    assert build.result_label("fpf_ratio_max_stress").startswith("the first-ply-failure strength ratio by maximum stress")
+    assert "fpf" in build.result_label("fpf_ratio_max_stress") and build.result_label("Ex") == build.code("Ex")
+    assert build.plural(1, "number") == "1 number" and build.plural(2, "ply", "plies") == "2 plies" and build.plural(1, "ply", "plies") == "1 ply"
+    assert build.material_name({"material": {}}, "material") == "The case's material" and build.material_name({}, "AS4") == "AS4"
+
+
+def test_a_source_formula_keeps_its_products(tmp_path):
+    """The audit of 2026-11-12 found the source note 'nu21 = 0.27*10.3/147, ... N*m' printed as 'nu21 = 0.27\\emph{10.3/147 ...}': a star
+    inside a word is a product, never emphasis, on the cover, in the problem section and in the manual's validation table."""
+    build = load_build()
+    assert build.inline("nu21 = 0.27*10.3/147, D11 = 10.881625 N*m") == "nu21 = 0.27*10.3/147, D11 = 10.881625 N*m"
+    assert build.inline("(1000 - 0.27*20) and nu21*1000") == "(1000 - 0.27*20) and nu21*1000"
+    assert build.inline("a *stated* choice, *Finite Element Procedures*.") == r"a \emph{stated} choice, \emph{Finite Element Procedures}."
+    case = CASES / "constructed-cross-ply-plate-buckling.toml"
+    result = run(str(case), "--out", str(tmp_path), "--no-pdf", "--no-theory")
+    assert result.returncode == 0, result.stdout + result.stderr
+    tex = (tmp_path / f"{case.stem}.tex").read_text(encoding="utf-8")
+    assert r"\emph" not in tex.split(r"\section{The solution")[0] and tex.count("0.27*10.3/147") >= 2  # the cover and the problem section
+    assert "as the case gives them; the engine converts them to SI on entry and back on exit." in tex and "and back on exit (ADR-0002)" not in tex
+

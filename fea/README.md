@@ -19,13 +19,13 @@ The team's own decks go in `.local/fea/<coupon>/from-team/<date>/` (git-ignored;
 
 ## A coupon in one command
 
-`tools/run_coupon.py` takes a coupon from its filled-in input form to its package (ADR-0049). It runs the steps of the case page's Rebuild section: the specs, the decks, the next attempt, our kernel, the CalculiX twin, the record (gauge probes only) and the package. Then it adds the attempt's row to the case page and lists the files to open in Abaqus/CAE, PrePoMax and ParaView. It needs CalculiX and refuses before writing anything without it. It also takes a values file, the form's rows as one JSON object as the studio sends them (ADR-0046 amendment 3), runs the setup check of `anisotropy_fea.checks` first and refuses a blocked one, rewrites a progress file after every step (`--progress`), and keeps the checklist and the preview in the attempt's `run/studio/` (ADR-0051).
+`tools/run_coupon.py` takes a coupon from its filled-in input form to its package (ADR-0049). It runs the steps of the case page's Rebuild section: the specs, the decks, the next attempt, our kernel, the CalculiX twin, the record (gauge probes only) and the package. Then it adds the attempt's row to the case page and lists the files to open in Abaqus/CAE, PrePoMax and ParaView. It needs CalculiX and refuses before writing anything without it. It also takes a values file, the form's rows as one JSON object as the workspace sends them (ADR-0046 amendment 3), runs the setup check of `anisotropy_fea.checks` first and refuses a blocked one, rewrites a progress file after every step (`--progress`), and keeps the checklist and the preview in the attempt's `run/studio/` (ADR-0051).
 
 ```powershell
-uv run python tools/run_coupon.py <filled form>.xlsx --run-by "Erik Villa"            # a new coupon
-uv run python tools/run_coupon.py <filled form>.xlsx --run-by "Erik Villa" --replace  # after changing the form
-uv run python tools/run_coupon.py <coupon> --run-by "Erik Villa"                      # again, on the specs as they are
-uv run python tools/run_coupon.py <values>.json --run-by "Erik Villa"                # the same rows as the studio sends them
+uv run python tools/run_coupon.py <filled form>.xlsx --run-by "<role>"            # a new coupon
+uv run python tools/run_coupon.py <filled form>.xlsx --run-by "<role>" --replace  # after changing the form
+uv run python tools/run_coupon.py <coupon> --run-by "<role>"                      # again, on the specs as they are
+uv run python tools/run_coupon.py <values>.json --run-by "<role>"                # the same rows as the workspace sends them
 ```
 
 ## Units

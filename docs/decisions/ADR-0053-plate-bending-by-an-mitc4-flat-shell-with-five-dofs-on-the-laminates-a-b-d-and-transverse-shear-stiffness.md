@@ -4,6 +4,7 @@
 - Date: 2026-10-28
 - Decided by: Founder, 2026-10-28 ("Include a bending element now", the bending question of the studio plan; the element and its conventions are the drafter's proposal) | Drafted by: Claude Code
 - Related: [ADR-0029](ADR-0029-finite-element-layer-own-membrane-kernel-gmsh-and-abaqus-writer.md) (the membrane kernel), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) (CalculiX as the reference), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (the form, amendment 4), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md) (part 4 of the studio plan), `fea/src/anisotropy_fea/shell.py`, `fea/src/anisotropy_fea/kernel.py`, `fea/src/anisotropy_fea/recovery.py`, `fea/docs/theory.md` Section 8, `fea/tools/plate_closed_forms.py`, `fea/checks/cases/bend-1x1-im7-engine-equality.toml`, `fea/checks/cases/plate-*.toml`, `fea/checks/cases/strip-cantilever-tip-load-timoshenko.toml`, `fea/checks/three-point-im7-8552/`, `fea/checks/calculix-conventions.toml`
+- Area: fea
 
 ## Context
 

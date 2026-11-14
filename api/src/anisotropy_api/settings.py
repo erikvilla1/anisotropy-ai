@@ -268,6 +268,14 @@ def storage_settings(environ: Mapping[str, str]) -> StorageSettings:
                            values["ANISOTROPY_R2_SECRET_ACCESS_KEY"])
 
 
+def docs_urls(environ: Mapping[str, str]) -> dict[str, str | None]:
+    """Where the API publishes its own documentation: /docs, /redoc and the OpenAPI schema locally, nowhere behind Cloudflare Access, the
+    hosted tier (ADR-0091 amendment 2). Access is named by its team domain here; the lifespan refuses a half-set pair (access_settings)."""
+    if (environ.get(ACCESS_TEAM_DOMAIN_VARIABLE) or "").strip():
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
 def access_settings(environ: Mapping[str, str]) -> AccessSettings:
     """Off unless both variables are set; one without the other, or a domain that is not a team's, is refused with the fix."""
     domain = environ.get(ACCESS_TEAM_DOMAIN_VARIABLE, "").strip().lower() or None

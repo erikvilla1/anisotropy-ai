@@ -1,5 +1,5 @@
 {
- "description": "The units a value may carry (ADR-0060), by dimension, and the unit each reporting system uses for each quantity kind. Written from anisotropy_engine.units; tests/test_units.py holds the two equal. Names only: the factors stay in the engine.",
+ "description": "The units a value may carry, by dimension, and the unit each reporting system uses for each quantity kind. Written from anisotropy_engine.units; tests/test_units.py holds the two equal. Names only: the factors stay in the engine.",
  "units": {
   "pressure": [
    "Pa",

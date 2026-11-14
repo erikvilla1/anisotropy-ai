@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder, 2026-10-10 | Drafted by: Claude Code
 - Related: `engine/src/anisotropy_engine/mixed.py`, `engine/tests/test_mixed.py`, local evaluation note `.local/notes/evaluations/2026-10-03-validation-mixed-conditions.md` (ADR-0042), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0013](ADR-0013-prescribed-curvature-analysis.md)
+- Area: engine
 
 ## Context
 

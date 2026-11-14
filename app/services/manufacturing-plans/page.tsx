@@ -1,41 +1,36 @@
-import { MediaSlot } from "@/components/media-slot";
 import { ServicePage } from "@/components/services/service-page";
 import "../../inner-pages.css";
 import "../services.css";
 
 export const metadata = {
   title: "Manufacturing plans",
-  description: "The ply book and the cure cycle from the same layup and material record. Planned, not built.",
+  description: "Planned: a ply book and cure cycle from the same layup and material record.",
 };
 
+/** A planned service (ADR-0058; kept as a short page, the audit of 2026-11-12, decision D17): what it would start from, what is
+ * planned, and a way to ask about it. There is nothing to demonstrate yet, so the page has no demonstration. */
 export default function ManufacturingPlans() {
   return (
     <ServicePage
       slug="manufacturing-plans"
       headline={
         <>
-          From the layup
+          From the layup{" "}
           <br />
           <em>to the shop floor.</em>
         </>
       }
-      lede="Not built yet. This page says what is intended, so that nothing on the site claims more than exists. The inputs it would start from are already part of every coupon."
+      lede="A ply book, a cut list and a cure cycle, written from the same layup and material record the analysis used."
       exists={[
         {
           title: "What it would start from",
-          text: "The layup in laminate notation, the cited ply thickness and the material record exist for every coupon the studio solves.",
+          text: "The layup in laminate notation, the cited ply thickness and the material record exist for every coupon the workspace solves.",
         },
         {
-          title: "The fabrication side of the lab",
-          text: "The team fabricates and tests its own coupons, so the plan would be written by the people who cut the plies.",
+          title: "Written by people who build coupons",
+          text: "We fabricate and test our own coupons, so the plan comes from the same hands that cut the plies.",
         },
       ]}
-      demonstration={{
-        intro: "There is nothing to show yet. The slot below is for a photograph of the lab's own layup once the service exists.",
-        media: <MediaSlot label="Laying up a coupon panel in the lab" src="/assets/images/carbon-weave.jpg" alt="Woven carbon fiber" ratio="16/9" />,
-        artefacts: ["A ply book and cut list", "A cure cycle from the material record", "A fabrication record linked to the test"],
-        note: "Each item above is planned, not available.",
-      }}
       planned={[
         {
           title: "Ply book and cut list",
@@ -51,7 +46,7 @@ export default function ManufacturingPlans() {
         },
       ]}
       access={{
-        text: "No access yet. If a manufacturing plan from a coupon record is what you need, write to us and say what the shop asks for.",
+        text: "Need a manufacturing plan from a coupon record? Tell us what your shop asks for.",
         links: [{ label: "Contact us", href: "/contact", primary: true }],
       }}
     />

@@ -155,7 +155,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
                 <option value="">Reopen a coupon…</option>
                 {coupons.map((c) => {
                   const offered = isTestEnabled(c.test, allTests); // a coupon of a hidden test is listed, kept, and not reopened (ADR-0089)
-                  return <option key={c.name} value={c.name} disabled={!offered}>{c.name} ({offered ? `${c.attempts} run${c.attempts === 1 ? "" : "s"}` : `${c.test}: not available yet`})</option>;
+                  return <option key={c.name} value={c.name} disabled={!offered}>{c.name} ({offered ? `${c.attempts} run${c.attempts === 1 ? "" : "s"}` : `${c.test}: not offered yet`})</option>;
                 })}
               </select>
               <button type="button" className="studio-text-button" onClick={() => loadCoupon(reopen)} disabled={busy || !reopen}>Reopen</button>
@@ -248,7 +248,7 @@ export function FeaRail({ apiBaseUrl }: { apiBaseUrl: string }) {
 
       <StepPanel id="outputs" title="Outputs">
         {job && available.length ? (
-          <JobFiles apiBase={apiBaseUrl} job={job} naming={namingOf(fields, form, layupNotation(form))} />
+          <JobFiles apiBase={apiBaseUrl} job={job} naming={namingOf(fields, form, layupNotation(form))} all />
         ) : <p className="studio-hint">Files appear here when the analysis finishes.</p>}
       </StepPanel>
 

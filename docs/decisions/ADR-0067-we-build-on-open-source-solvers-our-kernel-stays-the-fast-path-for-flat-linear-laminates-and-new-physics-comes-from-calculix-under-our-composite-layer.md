@@ -4,6 +4,7 @@
 - Date: 2026-11-09
 - Decided by: Founder, 2026-11-09 ("I thought using opensource models was the plan to grow our platform it is not somethin we are trying to replace but more build upon"; then, on the recommendation below, "yes please write it up") | Drafted by: Claude Code
 - Related: ADR-0001 (the engine computes every number), ADR-0029 (our own membrane kernel; option 2 was CalculiX), ADR-0030 (CalculiX as the reference solver, amendment 5 on the SPOOLES bound), ADR-0053 (the flat MITC4 shell), ADR-0062 (a solver-independent project), ADR-0066 (results compared in the ply axes; amendment 1, no Abaqus column), risks R-17 and R-19
+- Area: fea
 
 ## Context
 

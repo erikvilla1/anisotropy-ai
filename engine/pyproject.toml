@@ -1,7 +1,7 @@
 [project]
 name = "anisotropy-engine"
 version = "0.1.0"
-description = "Laminate analysis engine for Anisotropy AI. The only source of numbers in a report."
+description = "Laminate analysis engine for Anisotropy. The only source of numbers in a report."
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.3",

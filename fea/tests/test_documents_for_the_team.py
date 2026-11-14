@@ -124,6 +124,14 @@ def test_the_team_reads_no_decision_record_numbers_and_finds_every_theory_sectio
     assert "ADR-0030" not in out and "ADR-0004" not in out and "# a comment of the spec (ADR-0035)" in out  # a listing stays as the file is
     assert r"Sections~\ref{sec:engine-3} and~\ref{sec:engine-4}" in out and r"Section~\ref{sec:engine-5}" in out
     assert "the engine manual, Sections 3 and 4" in coupon.for_the_team(tex, theory=False)  # no theory printed: no label to point to
+    # the finite element theory names the engine's sections by title, which every document numbers its own way
+    named = coupon.for_the_team("stiffness from the engine (engine theory, laminate stiffness; Whitney Eq. 10.5), recovery (engine theory, "
+                                "response to loads, ply surface recovery) and the criteria (engine theory, failure).")
+    assert r"(Section~\ref{sec:engine-3}; Whitney" in named and r"(Section~\ref{sec:engine-4}, ply surface recovery)" in named
+    assert r"(Section~\ref{sec:engine-5})" in named
+    assert "the engine manual, laminate stiffness" in coupon.for_the_team("(engine theory, laminate stiffness)", theory=False)
+    fea_theory = (Path(__file__).parents[2] / "fea/docs/theory.md").read_text(encoding="utf-8")
+    assert not re.search(r"\[engine theory\]\([^)]*\), Sections? \d", fea_theory)  # no number of the engine theory's own in the fea theory
 
 
 def test_a_reaction_shows_whole_in_the_comparison_table(build):
@@ -139,6 +147,19 @@ def test_row_c7_leads_with_the_earliest_criterion_and_names_the_others():
     _, found = _fpf(item, evidence, None)
     assert found.ours[0].startswith("The first ply to fail is ply 2 (45 deg) by Tsai-Hill, at 0.5") and "the earliest of the criteria" in found.ours[0]
     assert found.ours[1] == "By maximum stress: ply 2 (45 deg), at 0.75 of the applied loading"
+
+
+def test_row_c7_with_notes_says_each_criterions_answer_once():
+    """The audit of 2026-11-12 found C7's headline and the first note saying one fact twice: with the notes, the headline names the
+    earliest criterion only, and each criterion's ply, factor and place are in its own note."""
+    item = next(item for item in load_rubric().items if item.id == "C7")
+    notes = ("By Tsai-Hill, over the gauge section: ply 4 (90 deg) at 1.02 of the applied loading, element 7, the centre",
+             "By maximum stress, over the gauge section: ply 4 (90 deg) at 1.1 of the applied loading, element 7, the centre")
+    evidence = Evidence(test_code="UNT", units="mm-MPa", card=(), our_deck=None, solution=None, material=None, fpf=("tsai_hill", 1.02, 4, 90.0),
+                        fpf_others=(("max_stress", 1.1, 4, 90.0),), fpf_notes=notes, fpf_basis="the gauge section")
+    _, found = _fpf(item, evidence, None)
+    assert found.ours == ("Over the gauge section, Tsai-Hill gives the first ply to fail, the earliest of the criteria; by criterion:", *notes)
+    assert sum("1.02" in line for line in found.ours) == 1
 
 
 def test_a_coupling_keeps_its_position_in_the_model_rows():
@@ -164,6 +185,12 @@ def test_the_physics_row_says_who_judges_each_check(coupon):
                                 physics=(("Equilibrium", "our tools judge"), ("Mesh convergence where the stress peaks", "not built yet")))
     physics = dict(rows)["Physics"]
     assert "equilibrium (our tools judge)" in physics and "mesh convergence where the stress peaks (not built yet)" in physics
+    # the README has its steps only in a package with every output: without them the model row names the job, never "steps 1 to 4"
+    job = "abaqus job=X input=2-our-model/abaqus/X-abaqus.inp interactive"
+    bare = dict(audit.files_compared(c=None, our_deck="2-our-model/abaqus/X-abaqus.inp", spec="2-our-model/spec/X.toml", physics=(), job=job))
+    full = dict(audit.files_compared(c=None, our_deck="2-our-model/abaqus/X-abaqus.inp", spec="2-our-model/spec/X.toml", physics=(), job=job,
+                                     every_output=True))
+    assert "README" not in bare["The model"] and f"our deck ({job})" in bare["The model"] and "(README.txt, steps 1 to 4)" in full["The model"]
 
 
 def test_row_c4_reads_the_probe_node_beside_the_gauge_element():

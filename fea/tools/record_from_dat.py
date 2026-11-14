@@ -1,8 +1,8 @@
 """Turn a CalculiX run of one of our specs into a comparison record: numbers plus provenance (ADR-0030, ADR-0007), committed for a public check, kept with the coupon for a team's coupon (ADR-0042).
 
-    uv run python tools/record_from_dat.py ../.local/fea/<coupon>/ours/<coupon>-nodal.toml ../.local/fea/<coupon>/ours/runs/attempt-NN_<date>/run/calculix/<coupon>-nodal-ccx.dat \
-        --version 2.22 --run-by "Erik Villa" --machine "founder Windows 11, PrePoMax v2.6.0 bundle" \
-        --tolerance 0.03 --floor 0.02 --element-probes centre --out ../.local/fea/<coupon>/ours/verification/<coupon>-calculix.toml
+    uv run python tools/record_from_dat.py checks/<test>/<spec>.toml <run folder>/<spec>-ccx.dat \
+        --version 2.22 --run-by "<role>" --machine "<platform and solver build>" \
+        --tolerance 0.03 --floor 0.02 --element-probes centre --out checks/<test>/records/<spec>-calculix.toml
 
 The reference deck is the one CalculiX ran (order 2, S8R); the kernel deck is the order-1 twin on the same corner nodes. Both
 default to the spec's committed decks, `decks/<spec>-ccx.inp` and `decks/<spec>-abaqus.inp` (ADR-0036).

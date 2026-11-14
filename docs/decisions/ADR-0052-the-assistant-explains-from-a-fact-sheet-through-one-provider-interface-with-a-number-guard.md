@@ -4,6 +4,7 @@
 - Date: 2026-10-28
 - Decided by: Founder, 2026-10-28 (on the four choices asked for the studio: "Deterministic checklist + template prose now, Claude provider behind a setting", the recommended option: the checklist and the explanation computed by the fea package, a provider interface with a template writer always on and an Anthropic Claude writer when `ANISOTROPY_ASSISTANT_*` is set, and a number guard that withholds model prose whose numbers are not in the fact sheet) | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0026](ADR-0026-run-record-contents-and-startup-policy.md), [ADR-0027](ADR-0027-deployment-tiers-and-assistant-model-location.md) (item 2 of its order of work: this record), [ADR-0048](ADR-0048-the-assistant-drives-tested-jobs-built-after-one-command-per-job-and-an-api-job.md) (step 3), [ADR-0050](ADR-0050-coupon-jobs-through-the-api-run-the-tool-in-the-background-one-at-a-time.md), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), `api/src/anisotropy_api/assistant.py`, `api/src/anisotropy_api/settings.py`, `api/tests/test_assistant.py`, `fea/src/anisotropy_fea/explain.py`, risks R-10 and R-11
+- Area: assistant
 
 ## Context
 

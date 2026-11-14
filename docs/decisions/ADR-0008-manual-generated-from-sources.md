@@ -1,9 +1,10 @@
 # ADR-0008: The LaTeX manual is generated from the repository's sources
 
-- Status: Accepted
+- Status: Accepted; the manual prints only the engine's and the finite element layer's decision records, chosen by an Area line on every record, since amendment 1
 - Date: 2026-10-03
-- Decided by: Founder | Drafted by: Claude Code
+- Decided by: Founder | Drafted by: Claude Code. Amendment 1: Founder, 2026-11-12 ("accept", which decision records the engine manual prints)
 - Related: `docs/manual/`, `docs/manual/README.md`
+- Area: docs
 
 ## Context
 
@@ -36,3 +37,17 @@ Amended 2026-10-15 (ADR-0029): the same build also reads the finite element laye
 ## How we will know it was wrong
 
 If the converter keeps needing new Markdown features, or layout fixes take more time than writing the content, switch the conversion step to pandoc.
+
+## Amendment 1, 2026-11-13 (the manual prints the engine's and the finite element layer's decision records, chosen by an Area line; confirmed by the founder)
+
+**Context.** `decisions()` printed every record in `docs/decisions`. The package audit of 2026-11-12 found the engine manual, which goes to outside engineers, carrying the website's styling records (a licensed clip, pages built "after" named companies, a university mark whose permission is unverified) and a team member's own tooling. These records add pages and say nothing about the engine.
+
+**Options.**
+1. Print every record, as before: rejected for the reasons above.
+2. A list of the records to print, kept in `docs/manual/build.py`: rejected. A new record is left out, or put in, by whoever remembers the list.
+3. Mark the internal records, and print every record without the mark: rejected. A new record that is not marked prints by default.
+4. **An `- Area:` line on every record (engine, fea, website, api, assistant, data, docs, process, hosting; one or more), and the manual prints the records whose Area names engine or fea (chosen).** A record says where it belongs when it is written, and a record without the line fails a test instead of printing.
+
+**Decision.** Option 4, the audit's recommendation ("Engine and fea ADRs only, by an Area tag"), which the founder accepted on 2026-11-12 ("accept"). `docs/decisions/_template.md` and the decision-records skill carry the line; `decisions()` skips a record whose Area names neither; the website's, the API's and the project's own records stay in `docs/decisions`.
+
+**Evidence.** `fea/tests/test_coupon_document.py::test_the_manual_prints_the_engines_and_the_finite_element_layers_records_only` checks that every record has an Area line with known areas only, and that the printed chapter holds ADR-0001 and ADR-0065 and leaves out ADR-0069 and ADR-0082.

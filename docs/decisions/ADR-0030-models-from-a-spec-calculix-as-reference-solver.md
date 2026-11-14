@@ -4,6 +4,7 @@
 - Date: 2026-10-15
 - Decided by: Founder, accepted 2026-10-26 ("FEA method (7)", choosing which groups of the proposed records to accept) | Drafted by: Claude Code
 - Related: ADR-0029 (finite element phase; amendment 3 below), ADR-0001, ADR-0003, ADR-0007, ADR-0018, ADR-0021, `fea/src/anisotropy_fea/{spec,mesher,femodel,write_abaqus}.py`, `fea/validation/specs/`, [installation of the tools](../installation-fea-tools.md), risks R-15 to R-18
+- Area: fea
 
 ## Context
 

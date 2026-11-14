@@ -1,9 +1,8 @@
 /* The workspace (ADR-0062): the chooser, and the three-column shell of a workspace page. */
 .ws-page { padding-top: 36px; }
-.ws-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 6px 0 28px; }
+.ws-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 6px 0 28px; }
 .ws-tile { display: flex; flex-direction: column; gap: 8px; text-align: left; border: 1px solid var(--line); border-radius: 10px; padding: 20px; background: var(--panel); color: inherit; text-decoration: none; min-width: 0; }
 .ws-tile:hover { border-color: #565656; }
-.ws-tile[data-status=planned] { border-style: dashed; opacity: .8; }
 .ws-tile .eyebrow { font-size: 10.5px; letter-spacing: .8px; color: var(--muted); }
 .ws-tile h3 { font-size: 17px; margin: 0; display: flex; align-items: center; gap: 8px; }
 .ws-tile p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.55; }
@@ -39,6 +38,9 @@
   .ws-title > span { white-space: nowrap; }
 }
 .ws-stage .chat-spec { margin-bottom: 16px; }
+/* A table of prose in the rail ("Model settings"): it fits its panel and its last column wraps; the scroll box stays as a safety net. */
+.studio-table-scroll > .studio-table.studio-table-prose { width: 100%; }
+.studio-table-prose td:last-child { min-width: 16ch; white-space: normal; }
 
 /* The step panels (ADR-0062, part 3): one folding panel per step, its badge the worst of the checklist items that judge its rows. */
 .ws-rail-panels { display: grid; gap: 10px; }

@@ -1,67 +1,45 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
-import { ArrowUpRight, MoveUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
+import { HeroHandover } from "@/components/home/hero-handover";
 import { HeroOutro } from "@/components/home/hero-outro";
 import { ProductDemo } from "@/components/home/product-demo";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
+import { SplitPicture } from "@/components/home/split-picture";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
-import { serviceHref, services, statusLabel } from "@/lib/services";
+import { releaseDay, releases } from "@/lib/changelog";
+import { serviceHref, services } from "@/lib/services";
 import { team } from "@/lib/team";
 import "./home.css";
 
-/** The hero clip's web copy (ADR-0069), written by scripts/hero-video.sh into the git-ignored public/media. A build without it,
- * such as one from the public repository, shows the still photo instead. */
+/** The hero clip's web copy (ADR-0069), written by scripts/hero-video.sh into public/media, where it and its poster are committed
+ * since ADR-0069 amendment 1. A build without it shows the still photo instead. */
 const heroVideo = existsSync(join(process.cwd(), "public", "media", "hero.mp4"));
-// Plain HTML so the browser sees "muted" before React runs, which autoplay requires; visitors who ask for reduced motion get no
-// source, so the poster frame stays.
+// Plain HTML so the browser sees "muted" before React runs, which autoplay requires. Only a window 768 px wide or more, whose
+// visitor has not asked for reduced motion, gets the source, so phones and those visitors keep the poster frame and download no
+// clip; the page loads the clip's first frame and length at most until it plays.
 const heroVideoHtml =
-  '<video autoplay muted loop playsinline preload="auto" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
-  '<source src="/media/hero.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)"></video>';
-
-/** What shipped lately, in words a visitor can check against the changelog; no number without a record behind it. */
-const news = [
-  {
-    when: "November 2026",
-    title: "The hosted closed beta",
-    text: "The studio runs at anisotropy.dev for an invite list, with its outputs kept and every run recorded. Accounts for everyone else are not open yet.",
-  },
-  {
-    when: "October 2026",
-    title: "Bending coupons and plates",
-    text: "Three- and four-point bending in our own shell element, checked against CalculiX, and a plate kind held and loaded on regions you name.",
-  },
-  {
-    when: "October 2026",
-    title: "The studio opens on a chat",
-    text: "Describe a coupon test in a sentence; the chat fills the same rows the form holds, checks the setup and runs it.",
-  },
-];
-
-/** LinkedIn's "in", as letters only: the round ground is the badge's own (app/home.css, .home-face-in). */
-function LinkedInMark() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zM7.119 20.452H3.555V9h3.564v11.452z" />
-    </svg>
-  );
-}
+  '<video autoplay muted loop playsinline preload="metadata" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
+  '<source src="/media/hero.mp4" type="video/mp4" media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"></video>';
 
 /** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
- * platform, the team and what is new, and the closing band. The workflow and the roadmap live on About. */
+ * platform, the team and the changelog, and the closing band. The workflow and the roadmap live on About. */
 export default function Home() {
   return (
     <main id="main">
+      {/* The hero and the demo share one wrapper, so the hero can stay in the window while the page scrolls to the demo's stage
+          and dim away as the first beat comes up through it (ADR-0095 amendment 4, components/home/hero-handover.tsx). */}
+      <div className="home-opening">
       <section className="home-hero" id="overview" aria-labelledby="home-hero-title">
         <div className={heroVideo ? "home-hero-media has-video" : "home-hero-media"} aria-hidden="true">
           {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
-          {heroVideo ? <HeroVideoKeeper /> : null}
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
-        {/* The words, in Anduril's arrangement (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle,
-            and under it a row of the year, the mark and the name. The load-in (ADR-0070 amendments 1 and 4) types
-            the statement and the small lines in, and a text cursor blinks at the statement's end (components/intro-text.ts). */}
+        {/* The words (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle, and under it a row of the
+            year, the mark and the name. The load-in (ADR-0070 amendments 1 and 4) types the statement and the small lines in,
+            and a text cursor blinks at the statement's end (components/intro-text.ts). */}
         <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="type" data-outro="type" data-intro-caret="">
             one engineering platform
@@ -75,7 +53,7 @@ export default function Home() {
             {/* The row of ADR-0077 amendment 28: the year on the left, the mark, the name on the right. */}
             <div className="home-hero-notes">
               <p className="home-hero-note" data-intro="type" data-outro="type">
-                Est. 2026
+                Est 2026
               </p>
             </div>
             <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />
@@ -88,11 +66,14 @@ export default function Home() {
         <HeroOutro />
         {/* Comes up at the foot of the clip once the words have left (ADR-0077 amendment 22). */}
         <ScrollToExplore />
-        {/* UC San Diego's The Basement mark, in the bottom left corner of the hero's box (ADR-0081). It fades in with the
-            load-in and out when the words leave (ADR-0070 amendment 4). */}
+        {/* The pause button of the clip, in its top right corner (ADR-0077 amendment 50); it keeps the clip playing until pressed. */}
+        {heroVideo ? <HeroVideoKeeper /> : null}
+        {/* Where the cohort meets, in the bottom left corner of the hero's box: in words, until written permission to show The
+            Basement's mark is recorded (ADR-0081 amendment 2), with the cohort beside it (ADR-0077 amendment 28). It fades in
+            with the load-in and out when the words leave (ADR-0070 amendment 4). */}
         <p className="home-hero-backed" data-intro="fade" data-outro="fade">
-          <img src="/assets/partners/uc-san-diego-the-basement-white.png" alt="UC San Diego, The Basement" width={684} height={202} />
-          {/* The programme the team is part of (ADR-0081), beside the mark of the place that runs it (ADR-0077 amendment 28). */}
+          The Basement, UC San Diego{" "}
+          {/* The programme the team is part of (ADR-0081), beside the place that runs it (ADR-0077 amendment 28). */}
           <span className="home-hero-cohort">Fall 2026 Launchpad cohort</span>
         </p>
       </section>
@@ -101,12 +82,38 @@ export default function Home() {
           /calculator and in the workspace. */}
       {/* The product demo (ADR-0095 amendment 2): the coupon workspace in four beats, on black, a window tall, under the hero. */}
       <ProductDemo />
-      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31):
-          Mission and Platform dark, About light, What is new dark. Each band opens with the kit's head. The four principles
-          close the Mission band as a strip. */}
-      <section className="band home-blurb home-mission" id="mission">
+      <HeroHandover />
+      </div>
+      {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31), all
+          on the light ground since amendment 33: after the demo's last beat the page is white. On this page a band's head is
+          set as the demo's words are, in the middle (amendment 34, app/home.css). */}
+      {/* Mission and Services are set side by side with a picture each (ADR-0077 amendment 37): Mission's words at the left
+          and its picture at the right, Services the other way round. The picture is the hero's carbon weave for now, standing
+          in for pictures still to come. Each picture goes where its band's own link goes, About and Services, and lifts
+          under the pointer as a portrait does (amendment 39); the keyboard and a screen reader meet the worded link only,
+          so the same place is not offered twice. Under a mouse's pointer a small lens shows the photograph in the demo's
+          colours (amendment 48, components/home/split-picture.tsx); the filter it draws through is the one below. */}
+      <svg className="home-fea-filter" width="0" height="0" aria-hidden="true" focusable="false">
+        <filter id="home-fea" colorInterpolationFilters="sRGB">
+          {/* The photograph's light and dark alone, smoothed and stretched over the whole range, */}
+          <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0 0 0 1 0" />
+          <feGaussianBlur stdDeviation="6" />
+          <feComponentTransfer>
+            <feFuncR type="linear" slope="2.9" intercept="-0.42" />
+            <feFuncG type="linear" slope="2.9" intercept="-0.42" />
+            <feFuncB type="linear" slope="2.9" intercept="-0.42" />
+          </feComponentTransfer>
+          {/* then through the demo's scale (lib/demo-wing.ts, RAINBOW): blue, cyan, green, yellow, red. */}
+          <feComponentTransfer>
+            <feFuncR type="table" tableValues="0 0 0 1 1" />
+            <feFuncG type="table" tableValues="0 1 1 1 0" />
+            <feFuncB type="table" tableValues="1 1 0 0 0" />
+          </feComponentTransfer>
+        </filter>
+      </svg>
+      <section className="band is-light home-blurb home-split home-mission" id="mission">
         <div className="band-head">
-          <p className="band-label">01 / MISSION</p>
+          <p className="band-label">Mission</p>
           <div className="band-statement">
             <h2>One record, from the layup to the test.</h2>
             <p>
@@ -115,55 +122,41 @@ export default function Home() {
               real mechanical test data, so every answer comes with its assumptions and references.
             </p>
             <Link className="home-link" href="/about">
-              What we are building <ArrowUpRight size={16} />
+              Learn more about us <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
         </div>
-        <ul className="home-principles">
-          <li>PHYSICS AT THE CORE</li>
-          <li>LAB DATA AS THE FOUNDATION</li>
-          <li>RESEARCH BEFORE ASSUMPTIONS</li>
-          <li>
-            <span>
-              EVERY RESULT, TRACEABLE <MoveUpRight size={15} />
-            </span>
-          </li>
-        </ul>
+        <SplitPicture href="/about" />
       </section>
-      <section className="band home-blurb home-platform" id="platform">
+      {/* The step to the services (ADR-0077 amendment 34): the five by name, each a link to its page, and the way to all of them. */}
+      <section className="band is-light home-blurb home-split is-flipped home-platform" id="platform">
         <div className="band-head">
-          <p className="band-label">02 / PLATFORM</p>
+          <p className="band-label">Services</p>
           <div className="band-statement">
             <h2>Five ways to use it.</h2>
             <p>
               The same coupon record feeds every service. Two are built, two exist in part, one is stated as planned; each
               page says which.
             </p>
+            <ul className="home-services" aria-label="Services">
+              {services.map((service) => (
+                <li key={service.slug}>
+                  <Link href={serviceHref(service)}>{service.title}</Link>
+                </li>
+              ))}
+            </ul>
+            <Link className="home-link" href="/services">
+              Explore the services <ArrowRight size={16} aria-hidden="true" />
+            </Link>
           </div>
         </div>
-        <div className="band-grid">
-          <div className="home-cards home-platform-grid">
-            {services.map((service) => (
-              <article className="band-card" key={service.slug}>
-                <div className="home-card-top">
-                  <span className="home-tag">{service.eyebrow}</span>
-                  <span className={`home-tag home-status home-status-${service.status}`}>{statusLabel[service.status]}</span>
-                </div>
-                <h3>{service.title}</h3>
-                <p>{service.summary}</p>
-                <Link className="home-link" href={serviceHref(service)}>
-                  The page <ArrowUpRight size={16} />
-                </Link>
-              </article>
-            ))}
-          </div>
-        </div>
+        <SplitPicture href="/services" />
       </section>
-      {/* About keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
-          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. */}
+      {/* The team keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
+          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band's
+          head stands on light grey from edge to edge and the portraits on white (ADR-0077 amendment 41, app/home.css). */}
       <section className="band is-light home-blurb home-about" id="working">
         <div className="band-head">
-          <p className="band-label">03 / ABOUT</p>
           <div className="band-statement">
             <h2>Five people, two seats each.</h2>
             <p>
@@ -171,9 +164,10 @@ export default function Home() {
               could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
               decisions and their reasons with it.
             </p>
-            <p className="home-about-cohort">Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego</p>
           </div>
         </div>
+        {/* The band's label stands over the portraits, at their left edge, on the white (amendment 42). */}
+        <p className="band-label home-faces-label">Team</p>
         <div className="home-faces">
           {team.map((person) => (
             <article className="home-face" key={person.name}>
@@ -181,8 +175,9 @@ export default function Home() {
                 {person.photo ? (
                   <>
                     <img src={person.photo} alt={`Portrait of ${person.name}`} width={800} height={1000} loading="lazy" decoding="async" />
-                    {/* LinkedIn's mark comes up in the frame's corner under the pointer (ADR-0057 amendment 2). It is a link
-                        once the person's profile address is in lib/team.ts; until then it is only drawn. */}
+                    {/* LinkedIn's mark comes up in the frame's corner under the pointer (ADR-0077 amendment 29). It is a link
+                        once the person's profile address is in lib/team.ts; until then it is only drawn. The mark itself is
+                        the picture the lead uploaded, drawn in black and white by app/home.css (ADR-0077 amendment 39). */}
                     {person.linkedin ? (
                       <a
                         className="home-face-in"
@@ -190,13 +185,9 @@ export default function Home() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
-                      >
-                        <LinkedInMark />
-                      </a>
+                      />
                     ) : (
-                      <span className="home-face-in" aria-hidden="true">
-                        <LinkedInMark />
-                      </span>
+                      <span className="home-face-in" aria-hidden="true" />
                     )}
                   </>
                 ) : (
@@ -216,57 +207,71 @@ export default function Home() {
                     rel="noopener noreferrer"
                     aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
                   >
-                    {person.name} <ArrowUpRight size={16} />
+                    {person.name}
                   </a>
                 ) : (
                   person.name
                 )}
               </h3>
-              <p>
-                {person.role ? `${person.role}. ` : ""}
-                {person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}
-                {person.company ? `; ${person.company}` : ""}.
-              </p>
+              {/* One short line, as a company's page names its officers (amendment 43); the two seats in full are on About. */}
+              <p>{person.title}</p>
             </article>
           ))}
         </div>
-        <Link className="home-link home-about-link" href="/about#team">
-          The team on the About page <ArrowUpRight size={16} />
-        </Link>
       </section>
-      <section className="band home-blurb" id="news">
+      {/* The changelog (ADR-0077 amendment 46): where the versions the team publishes are listed, each with its day, its
+          name and what changed in it, line by line and tagged by kind. The list is lib/changelog.ts; it is empty until a
+          version is published, and the band then says so. */}
+      <section className="band is-light home-blurb home-feed" id="changelog">
+        {/* The band is light grey, as the closing band under it is, and its words stand on a card in the colours the demo
+            gives its analysis, blurred into one another (amendment 49). */}
+        <div className="home-feed-card">
         <div className="band-head">
-          <p className="band-label">04 / WHAT IS NEW</p>
+          <p className="band-label">Changelog</p>
           <div className="band-statement">
-            <h2>Lately.</h2>
-            <p>
-              Three recent changes, as the changelog records them. What was validated against what, and what is still
-              planned, is written there too.
-            </p>
+            <h2>Every release, and what changed.</h2>
+            <p>{releases.length ? "Each published version, newest first." : "No releases published yet. Each version and what changed in it will be listed here."}</p>
           </div>
         </div>
-        <div className="home-news">
-          {news.map((item) => (
-            <article key={item.title}>
-              <span className="home-tag">{item.when.toUpperCase()}</span>
-              <div>
-                <h3>{item.title}</h3>
-                <p>{item.text}</p>
-              </div>
-            </article>
-          ))}
+        {releases.length ? (
+          <ol className="home-changelog">
+            {releases.map((release) => (
+              <li key={release.version}>
+                <div className="home-changelog-when">
+                  <time dateTime={release.date}>{releaseDay(release.date)}</time>
+                  <span className="home-changelog-version">{release.version}</span>
+                </div>
+                <div className="home-changelog-what">
+                  <h3>{release.title}</h3>
+                  {/* A kind and the change under it: a definition list. The kind's column is fixed, so every change
+                      starts on one line down the list. */}
+                  <dl>
+                    {release.changes.map((change) => (
+                      <div key={change.text}>
+                        <dt>
+                          <span className="home-changelog-kind" data-kind={change.kind}>
+                            {change.kind}
+                          </span>
+                        </dt>
+                        <dd>{change.text}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : null}
         </div>
       </section>
       <ClosingBand
+        grey
         label="THE NEXT LAYER STARTS WITH A QUESTION."
         heading={["Let’s define what", "comes next."]}
-        action={{ label: "Start a conversation", href: "/workspace/fea" }}
+        action={{ label: "Contact us", href: "/contact" }}
         links={{
           label: "EXPLORE THE RESEARCH",
-          items: [
-            { label: "Materials & physics library", href: "/library" },
-            { label: "Our research approach", href: "/about" },
-          ],
+          items: [{ label: "Materials library", href: "/library" }],
         }}
       />
     </main>

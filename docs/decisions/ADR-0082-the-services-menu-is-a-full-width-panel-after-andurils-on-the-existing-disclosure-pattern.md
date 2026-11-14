@@ -4,6 +4,7 @@
 - Date: 2026-11-10
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-10 | Drafted by: Claude Code
 - Related: [ADR-0058](ADR-0058-one-name-anisotropy-five-service-pages-under-a-services-menu-the-calculator-on-the-home-page-and-a-contact-page.md) (the Services menu), [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) (the header), [ADR-0078](ADR-0078-the-site-drops-its-green-accent-every-green-tinted-interface-colour-becomes-the-neutral-grey-of-the-same-lightness.md), `components/services-menu.tsx`, `components/services-menu.css`, `tests/browser/expansion.spec.ts`
+- Area: website
 
 ## Context
 

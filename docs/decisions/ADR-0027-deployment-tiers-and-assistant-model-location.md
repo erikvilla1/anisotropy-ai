@@ -4,6 +4,7 @@
 - Date: 2026-10-14
 - Decided by: Founder (pending review) | Drafted by: Claude Code
 - Related: ADR-0011 (API has no authentication), ADR-0018 (user-supplied rights class), ADR-0020 (one bundled material file), ADR-0025 (hosting deferred), ADR-0026 (run records), ADR-0028 (founder-only tooling), [system overview](../00_system_overview.md), risk R-14
+- Area: hosting
 
 ## Context
 

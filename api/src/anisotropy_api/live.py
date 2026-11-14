@@ -167,7 +167,8 @@ class LiveSolver:
         try:
             worker = self.idle.get(timeout=self.wait_s)
         except queue.Empty:
-            raise LiveBusy(f"every live solver stayed busy for {self.wait_s:g} s; try again in a moment") from None
+            print(f"live solve refused: every live solver stayed busy for {self.wait_s:g} s", flush=True)  # the cause stays in the log
+            raise LiveBusy("The preview is busy. Try again in a moment.") from None  # the page's words (ADR-0091 amendment 2)
         healthy = True
         try:
             answer = worker.ask({"values": str(source), "out": str(out)}, self.timeout_s)

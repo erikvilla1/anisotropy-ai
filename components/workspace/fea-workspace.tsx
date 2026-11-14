@@ -8,7 +8,8 @@ import { ProjectProvider, useProject } from "@/components/studio/project-context
 import { TowStage } from "@/components/studio/tow-stage";
 import { isTow } from "@/lib/studio-tow";
 import { underD3039 } from "@/lib/tension-screen";
-import type { StudioForm } from "@/lib/studio-form";
+import { formDefinition, unitLabels, type StudioForm } from "@/lib/studio-form";
+import { workspace } from "@/lib/workspaces";
 import { FeaRail } from "./fea-rail";
 import { TensionScreen } from "./tension-screen";
 import { WorkspaceShell } from "./shell";
@@ -30,10 +31,13 @@ function FeaColumns({ apiBaseUrl, onLaminate }: { apiBaseUrl: string; onLaminate
   const built = run.checked?.checklist.built ?? [];
   const shown: StudioForm = allTests ? form : { ...form, test: form.test || "unnotched tension",
     ...Object.fromEntries(built.filter((b) => !(form[b.row] ?? "").trim()).map((b) => [b.row, String(b.value)])) };
-  const fallback = allTests ? undefined : { Size: underD3039(form) ? "per D3039" : "your size", Load: "default pull" };
+  // before the check, the size's source and the load the package will apply, in the words the strip uses once checked (audit fea-screens-J1-3)
+  const pull = formDefinition.tension;
+  const fallback = allTests ? undefined : { Size: underD3039(form) ? "ASTM D3039, Table 2" : "your size",
+    Load: pull ? `${pull.value} ${unitLabels(pull.units).length} ${pull.control}` : "" };
   return (
     <WorkspaceShell
-      kind="Coupon FEA"
+      kind={workspace("fea").title}
       title={<input type="text" aria-label="Project name" value={project.name} placeholder={projectTitle(project)} onChange={(e) => rename(e.target.value)} data-testid="project-name" />}
       rail={allTests ? <FeaRail apiBaseUrl={apiBaseUrl} /> : <TensionScreen apiBaseUrl={apiBaseUrl} />}
       stage={isTow(form) && allTests ? <TowStage /> : <><CouponSpec form={shown} fallback={fallback} /><CouponStudio apiBaseUrl={apiBaseUrl} /></>}

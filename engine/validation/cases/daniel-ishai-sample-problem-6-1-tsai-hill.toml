@@ -1,5 +1,8 @@
 title = "Positive shear strength of a lamina loaded at 45 degrees to the fibers, Tsai-Hill criterion"
-source = "Daniel & Ishai (2006), Sample Problem 6.1, Tsai-Hill part: at 45 deg, sigma1 = tau, sigma2 = -tau, tau12 = 0, and Eq. 6.16 gives 1/F^2 = 2/F1t^2 + 1/F2c^2, which the book notes is close to F2c for a high-fiber-strength composite. With Table A.4 strengths F = 1/sqrt(2/2280^2 + 1/228^2) = 225.754 MPa. The maximum-stress part of the same problem is the existing case daniel-ishai-sample-problem-6-1."
+# The Tsai-Hill part of Sample Problem 6.1: at 45 deg, sigma1 = tau, sigma2 = -tau, tau12 = 0, and Eq. 6.16 gives
+# 1/F^2 = 2/F1t^2 + 1/F2c^2, which the book notes is close to F2c for a high-fiber-strength composite; with the Table A.4 strengths the
+# expected value below follows. The maximum-stress part of the same problem is the case daniel-ishai-sample-problem-6-1.
+source = "Daniel & Ishai, Engineering Mechanics of Composite Materials, 2nd ed. (2006), Sample Problem 6.1, Tsai-Hill part (page not recorded); strengths from Table A.4, p. 377"
 units = "SI"
 
 [material]

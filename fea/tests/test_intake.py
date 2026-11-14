@@ -194,7 +194,7 @@ def own_constants() -> dict:
     (dict(width="wide"), "Width (mm): a number is needed, not 'wide'"),
     (dict(own_E1=100.0), "Library material and Own material: give one of the two, not both"),
     (dict(library=None), "Library material or Own material: one of the two is needed"),
-    ({**own_constants(), "own_F6": None}, "Own material strengths: give all five (F1t, F1c, F2t, F2c, F6) or none; given F1t, F1c, F2t, F2c"),
+    ({**own_constants(), "own_F6": None}, "Own material strengths: enter all five, or none; F1t, F1c, F2t, F2c given"),
     (dict(angles=[45, None, -45, 90]), "Ply 3: a blank ply row above it"),
     (dict(mesh_seeds="28, 27"), "rows per segment: 2 counts for 4 partition lines"),
     (dict(element_size=2.0), "Element size and Your Abaqus mesh: give one of the two, not both"),

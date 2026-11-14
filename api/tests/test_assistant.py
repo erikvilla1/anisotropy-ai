@@ -147,6 +147,18 @@ def test_the_model_sees_the_items_but_not_the_teams_source():
     client = StubClient("The setup is ready. Give the Value (mm or N) row a value.")
     draft = ClaudeAssistant("m", client=client).explain_setup(CHECKLIST, ["The setup is ready to solve."])
     assert draft.writer == "anthropic" and "a datasheet of 2026" not in client.calls[0]["messages"][0]["content"]
+    # the words of ADR-0091 amendment 2: the customer's own source is cut the same way, and the record's name is not shown (audit fea-run-8)
+    now = {**CHECKLIST, "items": [{"id": "material", "label": "Material defined", "state": "pass",
+                                   "message": "X-Lamina: your own constants, from a datasheet of 2026; strengths given", "rows": []}]}
+    view = model_view_of_checklist(now)
+    assert view["items"][0]["message"] == "X-Lamina: your own constants; strengths given" and "designation" not in view
+
+
+def test_the_model_does_not_see_the_coupons_record_name():
+    client = StubClient("The coupon carries 16211 N in tension.")
+    ClaudeAssistant("m", client=client).explain_result(FACTS, TEMPLATE[1:])
+    sheet = client.calls[0]["messages"][0]["content"]
+    assert '"designation"' not in sheet and "IM7-UNT-L1" not in sheet and "16211.2" in sheet
 
 
 # --------------------------------------------------------------------------------------------- the endpoint

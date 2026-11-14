@@ -5,7 +5,7 @@ import type { Preview } from "@/lib/studio-api";
 import { PLATE_TEST } from "@/lib/studio-form";
 import { regionOptions, regionsOfElement, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
 import { sketchOf } from "@/lib/studio-sketch";
-import { printed } from "@/lib/studio-colors";
+import { ANALYSIS_UNAVAILABLE, heldWords, loadWords } from "@/lib/studio-copy";
 import { JobProgress } from "./job-progress";
 import { useProject } from "./project-context";
 import { ResultsView } from "./results-view";
@@ -21,12 +21,19 @@ function nodesOf(preview: Preview, set: string): number[] {
   return [...new Set(elements.flatMap((e) => preview.mesh.quads[e] ?? []))];
 }
 
-/** The package's preview: the mesh with what is held and loaded, before a run. */
+type Load = NonNullable<Preview["loads"]>[number];
+const sameLoad = (a: Load, b: Load) => a.set === b.set && a.direction === b.direction && a.value === b.value && a.control === b.control;
+
+/** The package's preview: the mesh with what is held and loaded, before a run. Each set is one line of the key, in words ("Bottom grip:
+ * fixed"); the load the preview also lists among `loads` is drawn and keyed once (audit fea-run-16). */
 export function PreviewScene({ preview, onPick, picked }: { preview: Preview; onPick?: (element: number | null) => void; picked?: number | null }) {
-  const held: SceneMarker[] = preview.held.map((h) => ({ nodes: preview.mesh.node_sets[h.set] ?? [], label: `${h.set}: held ${h.directions.join(", ")}` }));
-  const loaded = preview.loaded ? { nodes: nodesOf(preview, preview.loaded.set), direction: preview.loaded.direction,
-    label: `${preview.loaded.set}: ${preview.loaded.control} ${printed(preview.loaded.value)} ${preview.loaded.unit} along ${preview.loaded.direction}` } : null;
-  const loads = (preview.loads ?? []).map((l) => ({ nodes: nodesOf(preview, l.set), direction: l.direction, label: `${l.set}: ${l.control} ${printed(l.value)} ${l.unit} along ${l.direction}` }));
+  const held: SceneMarker[] = [...new Set(preview.held.map((h) => h.set))].map((set) => {
+    const of = preview.held.filter((h) => h.set === set);
+    return { nodes: preview.mesh.node_sets[set] ?? [], label: heldWords(set, of.flatMap((h) => h.dofs), of.flatMap((h) => h.directions)) };
+  });
+  const loaded = preview.loaded ? { nodes: nodesOf(preview, preview.loaded.set), direction: preview.loaded.direction, label: loadWords(preview.loaded) } : null;
+  const loads = (preview.loads ?? []).filter((l) => !preview.loaded || !sameLoad(l, preview.loaded))
+    .map((l) => ({ nodes: nodesOf(preview, l.set), direction: l.direction, label: loadWords(l) }));
   return (
     <div className="studio-panel" data-testid="preview">
       <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span></h3>
@@ -41,7 +48,7 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
  * through the API (ADR-0051); the sketch draws typed rows only. */
 export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const { form, plate, setPlate, run: runner } = useProject();
-  const { checked, job, fields, explanation, live, living, liveAt, fieldsAt } = runner;
+  const { checked, job, fields, explanation, live, living, liveAt, fieldsAt, problem } = runner;
   // the newer of our kernel's live answer and the full run's fields (ADR-0086): an edit after a run is answered live, a run after it replaces it
   const showLive = Boolean(live?.fields) && (!fields || liveAt > fieldsAt);
   const shown = showLive ? live?.fields ?? null : fields;
@@ -91,7 +98,8 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
           ) : (
             <div className="studio-empty" data-testid="empty-scene">
               <h3>No model yet</h3>
-              <p>The model appears here once the coupon is set up.</p>
+              {/* while the service is down, the empty stage says what it waits for (audit fea-run-48) */}
+              <p>{problem === ANALYSIS_UNAVAILABLE ? "The model appears when the analysis service responds." : "The model appears here once the coupon is set up."}</p>
             </div>
           )}
         </>

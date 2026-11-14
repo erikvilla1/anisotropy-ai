@@ -29,6 +29,7 @@ def test_without_run_records_the_projects_answer_503(monkeypatch):
     with TestClient(app, headers={"X-Anisotropy-Actor": "studio"}) as client:
         refused = client.put(f"/v1/projects/{uuid.uuid4()}", json=body())
         assert refused.status_code == 503 and "switched off" in refused.json()["detail"]
+        assert refused.headers["x-anisotropy-records"] == "off"  # the page tells "no projects kept here" from an outage by it
         assert client.get("/v1/projects").status_code == 503
         assert client.get(f"/v1/projects/{uuid.uuid4()}").status_code == 503
 
