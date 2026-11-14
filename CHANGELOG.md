@@ -101,6 +101,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - The home page's team band has its head on light grey from edge to edge and its portraits on white, with the band's label over the portraits at their left edge (ADR-0077 amendments 41 and 42).
 - Under each name on the home page's team cards stands one short line, the role or the technical seat cut short, in place of the two seats in a sentence (ADR-0077 amendment 43).
 - If the hero's words still stand when the page scrolls to the demo, they fade as the clip grows and are gone before the demo's first words come up (ADR-0095 amendment 9).
+- On every marketing page the header leaves as the page scrolls down and comes back as a black bar as soon as it scrolls up; the keyboard's focus brings it in too (ADR-0077 amendment 44).
 - The home page's Mission and Services pictures are links to About and Services and lift under the pointer as the portraits do; the LinkedIn badge on a portrait is drawn from the lead's uploaded picture, in black and white (ADR-0077 amendment 39).
 - Each time the home hero's clip starts again, its words are typed in again, stand three seconds and leave, as at the load (ADR-0077 amendment 40).
 - The home page's Mission and Services are two short blocks set as the demo's words are, in the middle of the page: Mission links to About ("Learn more about us"), Services names the five and links to each and to all; the strip of four principles and the five status cards are removed from the home page (ADR-0077 amendment 34).

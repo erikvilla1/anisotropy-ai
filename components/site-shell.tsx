@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, Menu, X } from "lucide-react";
 import { headerLinksToProjects, isAppPath, primaryNav, siteNav } from "@/lib/site-nav";
+import { AT_TOP, headerAfterFocus, headerAfterLock, headerAfterScroll, type HeaderMemory, type HeaderPage } from "@/components/header-scroll";
 import { ServicesMenu } from "@/components/services-menu";
 
 /** The logo (ADR-0080): the triangle, then the name, both drawn by `app/brand.css` from the vector files in
@@ -20,6 +21,76 @@ function Wordmark({ onClick }: { onClick?: () => void }) {
 
 const MENU_ID = "site-menu";
 
+/** The site header on scroll: it leaves as the page goes down and comes back, as a bar fixed to the window's top, as soon as
+ * the page goes up (the rule is components/header-scroll.ts; app/globals.css draws it). This reads the page at every scroll,
+ * whenever the focus comes into the header and whenever a stage locks the page, and writes the answer on the header as
+ * `data-scroll`: nothing at the page's top, "away" or "hidden" while it is out of sight above the window, "shown" while it
+ * is the bar. It is written straight on the element, not through React's state, so the header changes in the frame the
+ * page scrolled in. */
+function useHeaderScroll(header: RefObject<HTMLElement | null>, active: boolean) {
+  useEffect(() => {
+    const element = header.current;
+    if (!active || !element) return;
+    const root = document.documentElement;
+    let memory: HeaderMemory = AT_TOP;
+    // The page as the rule sees it. Each part is read only when the rule asks for it, and on most scrolls it asks for little.
+    const page: HeaderPage = {
+      // Past its foot a phone's page springs back up, and that is not a scroll up: the page counts as at its foot.
+      get y() {
+        return Math.min(window.scrollY, root.scrollHeight - root.clientHeight);
+      },
+      get height() {
+        return element.offsetHeight;
+      },
+      // The folded navigation's button and the Services panel's each say when they are open. One that is not drawn does
+      // not count: the folded navigation's stays as it was when the window grows wide.
+      get expanded() {
+        return [...element.querySelectorAll('[aria-expanded="true"]')].some((control) => control.getClientRects().length > 0);
+      },
+      get focused() {
+        return element.querySelector(":focus-visible") !== null;
+      },
+      // A stage that takes the scroll over (components/home/tour-driver.ts) locks the page while a step plays on it and
+      // for a moment after the page was stopped there. No page mounts one now: the home page's demo follows the scroll.
+      get scripted() {
+        return root.hasAttribute("data-tour-lock");
+      },
+    };
+    const write = (next: HeaderMemory) => {
+      const before = memory.state;
+      memory = next;
+      if (next.state === before) return;
+      if (next.state === "top") {
+        delete element.dataset.scroll;
+        return;
+      }
+      // Straight from the page's flow to the bar: it is first put above the window, and the browser is made to take note,
+      // so that it slides in from there.
+      if (before === "top" && next.state === "shown") {
+        element.dataset.scroll = "away";
+        void element.offsetHeight;
+      }
+      element.dataset.scroll = next.state;
+    };
+    const onScroll = () => write(headerAfterScroll(memory, page));
+    const onFocus = () => write(headerAfterFocus(memory, page));
+    // That lock goes on without a scroll, and on a stage that holds the window a gesture plays a step and scrolls nothing.
+    const lock = new MutationObserver(() => {
+      if (root.hasAttribute("data-tour-lock")) write(headerAfterLock(memory, page));
+    });
+    onScroll(); // a page that opens already scrolled, as a reload does
+    window.addEventListener("scroll", onScroll, { passive: true });
+    element.addEventListener("focusin", onFocus);
+    lock.observe(root, { attributes: true, attributeFilter: ["data-tour-lock"] });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      element.removeEventListener("focusin", onFocus);
+      lock.disconnect();
+      delete element.dataset.scroll;
+    };
+  }, [header, active]);
+}
+
 /** The header. On narrow screens the links fold into a menu (ADR-0077 amendment 16): its button comes before it, so the next Tab
  * after opening reaches the links; opening moves the focus to the first link, Escape closes it and returns to the button, and a
  * press outside the header, the focus leaving it or a change of page closes it. Arrows: → for Workspace, ← for the workspace
@@ -31,7 +102,10 @@ export function SiteHeader() {
   const toggle = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLElement>(null);
   const close = () => setOpen(false);
+  const app = isAppPath(pathname);
 
+  // The workspace's header is another one, and stays where it is.
+  useHeaderScroll(header, !app);
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
@@ -58,7 +132,7 @@ export function SiteHeader() {
     };
   }, [open]);
 
-  if (isAppPath(pathname))
+  if (app)
     return (
       <header className="site-header chat-site-header">
         <Wordmark />
@@ -74,7 +148,8 @@ export function SiteHeader() {
         </div>
       </header>
     );
-  // On the home page the header lies over the hero and scrolls away with it (ADR-0077); elsewhere it stays sticky.
+  // At a page's top the header is in the page's flow and scrolls away with it; on the home page it lies over the hero
+  // (ADR-0077). Further down it comes back as a bar at the window's top when the page scrolls up (useHeaderScroll).
   return (
     <header ref={header} className={pathname === "/" ? "site-header is-home" : "site-header"}>
       <Wordmark onClick={close} />
