@@ -148,13 +148,15 @@ def test_remove_takes_the_link_the_menu_and_the_key_away_and_leaves_what_is_the_
     (state / "upload-key.txt").write_text("anisotropy_upload_" + "k" * 43 + "\n")
     (state / "connector.json").write_text(json.dumps({"units": "m-Pa", "address": "https://anisotropy.example/api", "token_file": str(state / "upload-key.txt")}))
     (target / "my-notes.txt").write_text("mine")
+    for name in ("messages-0123456789abcdef.txt", "messages-0123456789abcdef.window"):  # what a window started from the site left
+        (state / name).write_text("")
     (target / "__pycache__").mkdir()
     for name in ("anisotropy_link.cpython-310.pyc", "anisotropy_menu.cpython-310.pyc"):  # what Python compiled of our files
         (target / "__pycache__" / name).write_bytes(b"")
     said = []
     assert setup.remove(said.append, target, state, registry) == 0
     assert registry.keys == {} and [p.name for p in target.iterdir()] == ["my-notes.txt"]
-    assert not (state / "upload-key.txt").exists() and not (state / "machine.json").exists()
+    assert not (state / "upload-key.txt").exists() and not (state / "machine.json").exists() and sorted(p.name for p in state.iterdir()) == ["connector.json"]
     assert json.loads((state / "connector.json").read_text()) == {"units": "m-Pa", "address": "", "token_file": ""}  # the deleted key's file is no longer offered
     assert said[0] == "The site's links: no longer registered." and "Cancel it on the site too" in said[2]
     said = []

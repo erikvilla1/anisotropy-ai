@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import re
 import urllib.error
 from pathlib import Path
 
@@ -207,12 +209,15 @@ def test_the_command_that_starts_abaqus_holds_nothing_from_the_link_or_the_site(
     link.start("C:/SIMULIA/Commands/abaqus.bat", tmp_path)
     assert seen["command"] == ["C:/SIMULIA/Commands/abaqus.bat", "cae", "script=anisotropy-start.py"] and seen["cwd"] == str(tmp_path)
     assert "shell" not in seen and "creationflags" not in seen  # here, without Windows
+    first = seen["env"][link.SESSION]  # the window is given a name of its own, and the rest of the environment as it is
+    assert re.fullmatch(r"[0-9a-f]{16}", first) and {k: v for k, v in seen["env"].items() if k != link.SESSION} == {k: v for k, v in os.environ.items() if k != link.SESSION}
     monkeypatch.setattr(link.os, "name", "nt")
     monkeypatch.setattr(link.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     monkeypatch.setattr(link.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
     monkeypatch.setattr(link.subprocess, "DETACHED_PROCESS", 0x8, raising=False)
     link.start("C:/SIMULIA/Commands/abaqus.bat", tmp_path)
     assert seen["creationflags"] == 0x08000000 | 0x200  # no console of its own, and not detached: that left a terminal window open (the eleventh trial)
+    assert seen["env"][link.SESSION] != first  # another window, another name
 
 
 def test_open_does_nothing_on_a_machine_that_is_not_connected_and_runs_nothing_that_is_not_ours(link, tmp_path):

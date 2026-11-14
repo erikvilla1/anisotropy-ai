@@ -31,6 +31,7 @@ import io
 import json
 import os
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -64,6 +65,7 @@ ANSWERS_FILE = "connector.json"  # what the menu in Abaqus/CAE offers the next t
 START_SCRIPT = "anisotropy_start.py"  # beside this file; copied into the coupon's folder under the name Abaqus is started with
 START_NAME = "anisotropy-start.py"
 START_FACTS = "anisotropy-start.json"
+SESSION = "ANISOTROPY_SESSION"  # in the environment of the Abaqus/CAE started here: a name of that one window's own (`start`)
 TITLE = "Anisotropy"
 
 
@@ -314,8 +316,9 @@ def start(command: str, folder: Path):
     """Abaqus/CAE with its window, in the coupon's folder, running the start script there. The same words every time: nothing from a
     link or from the site is on this command line. On Windows Abaqus's command is a batch file and stays until the window ends; it
     is started with no console of its own, since a detached one left a terminal window open for as long as Abaqus ran (the
-    eleventh trial)."""
-    more = {}
+    eleventh trial). The window and its kernel are given one name of their own in the environment, made here and said to nobody, so
+    that the window shows what its own kernel's job-completed callback says and no other window's (`anisotropy_menu.hand_over`)."""
+    more = {"env": dict(os.environ, **{SESSION: secrets.token_hex(8)})}
     if os.name == "nt":
         more["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
     return subprocess.Popen([command, "cae", f"script={START_NAME}"], cwd=str(folder), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

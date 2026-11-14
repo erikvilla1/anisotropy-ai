@@ -36,6 +36,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import re
 import shutil
 import sys
@@ -86,9 +87,45 @@ def connector():
     return sys.modules[name]
 
 
+SESSION = "ANISOTROPY_SESSION"  # the link's helper sets it for the Abaqus/CAE it starts: a name of that one window's own
+SESSION_SHAPE = re.compile(r"[0-9a-f]{16}")
+HELD = None  # while a job-message callback runs, the lines it says (`job_completed`)
+
+
 def show(text: str, error: bool = False) -> None:
-    """A line in the message area: with the window open that is where the kernel's print goes."""
+    """A line in the message area: with the window open that is where the kernel's print goes. Inside a job-message callback the line is
+    held instead: a print from the kernel can hold back the answer to a command the window has just sent, so the click that sent it
+    looks unfinished until the next one (the twelfth trial)."""
+    if HELD is not None:
+        HELD.append(text)
+        return
     print(text)
+
+
+def window_files(folder: Path | None = None):
+    """(where this session's held lines go, the file by which its window says that it shows them); None when this Abaqus/CAE was
+    not started from the site, which is the only start that names the session."""
+    name = os.environ.get(SESSION, "")
+    if not SESSION_SHAPE.fullmatch(name):
+        return None
+    folder = folder or (Path.home() / ".anisotropy")
+    return folder / f"messages-{name}.txt", folder / f"messages-{name}.window"
+
+
+def hand_over(lines: list, folder: Path | None = None) -> None:
+    """The held lines, for the window's own side to show (`anisotropy_plugin.py`). They are printed after all when no window has
+    said that it shows them, or when they cannot be written: a line said late is better than a line never seen."""
+    if not lines:
+        return
+    files = window_files(folder)
+    try:
+        if files is None or not files[1].is_file():
+            raise OSError("no window shows them")
+        with io.open(str(files[0]), "a", encoding="utf-8", newline="\n") as handle:
+            handle.write("".join(line + "\n" for line in lines))
+    except OSError:
+        for line in lines:
+            print(line)
 
 
 class Listening:
@@ -386,7 +423,10 @@ def completed(job: str, mdb, folder: Path | None = None, read_job=None, poster=N
 def job_completed(jobName, messageType, data, userData) -> None:  # noqa: N803  Abaqus's own names
     """What Abaqus/CAE calls when a job completes. Nothing it raises may reach Abaqus: under Abaqus 2025 an exception that leaves a
     job-message callback makes Abaqus/CAE report the job itself as aborted, though the solver completed, and the exception's text
-    is written nowhere (the tenth trial). So everything is caught here, a stop of the interpreter's own included, and said."""
+    is written nowhere (the tenth trial). So everything is caught here, a stop of the interpreter's own included, and said. What it says
+    is held while it runs and handed to the window's side at the end (`show`, `hand_over`)."""
+    global HELD
+    HELD = []
     try:
         from abaqus import mdb
         completed(str(jobName), mdb)
@@ -394,6 +434,12 @@ def job_completed(jobName, messageType, data, userData) -> None:  # noqa: N803  
         try:
             show("Anisotropy: sending the results stopped. The job itself completed:\n" + traceback.format_exc(), error=True)
         except BaseException:  # noqa: BLE001  not even the saying may reach Abaqus
+            pass
+    finally:
+        held, HELD = HELD, None
+        try:
+            hand_over(held)
+        except BaseException:  # noqa: BLE001
             pass
 
 

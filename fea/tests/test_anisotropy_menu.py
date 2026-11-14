@@ -29,6 +29,8 @@ from test_write_cae_script import model as coupon  # noqa: F401  the public D303
 def menu(monkeypatch, tmp_path):
     """The menu's module with the user's home in a folder of the test, and its own connector loaded fresh."""
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))  # for the plug-in's file, which is read in the window's process
+    monkeypatch.delenv("ANISOTROPY_SESSION", raising=False)
     (tmp_path / "home" / "Downloads").mkdir(parents=True)
     before = list(sys.path)
     spec = importlib.util.spec_from_file_location("anisotropy_menu", TOOLS / "anisotropy_menu.py")  # the name Abaqus/CAE imports it under
@@ -95,7 +97,8 @@ def test_the_plugin_file_registers_two_entries_under_one_menu_and_each_calls_a_f
     # Abaqus/CAE finds a plug-in by its file's name, and imports it in its window's process, where our other modules are not
     tree = ast.parse((TOOLS / "anisotropy_plugin.py").read_text(encoding="utf-8"))
     imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)} | {a.name for node in ast.walk(tree) if isinstance(node, ast.Import) for a in node.names}
-    assert imported == {"abaqusGui"} and (TOOLS / "anisotropy_plugin.py").name.endswith("_plugin.py")
+    assert imported - set(sys.stdlib_module_names) == {"abaqusGui"} and (TOOLS / "anisotropy_plugin.py").name.endswith("_plugin.py")
+    assert plugin.MESSAGES is None  # this window has no timers of the kind the plug-in knows, and was not started from the site: the menu is there all the same
 
 
 # --- Open from Anisotropy --------------------------------------------------------------------------------------------------------------
@@ -411,3 +414,94 @@ def test_a_completed_job_of_a_model_opened_from_the_site_goes_back_to_its_run_an
         assert "sending the results stopped. The job itself completed" in capsys.readouterr().out
     monkeypatch.setattr(menu, "show", stops(OSError("no message area")))
     menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
+
+
+
+# --- what a completed job says, shown from the window's side (amendment 1, the twelfth trial) ---------------------------------------
+
+SESSION = "0123456789abcdef"
+
+
+def window_of(monkeypatch, timers: bool = True) -> SimpleNamespace:
+    """Abaqus/CAE's window for the plug-in: its menu, its message area and its timers, recording what was asked of them."""
+    there = SimpleNamespace(registered=[], shown=[], armed=[], mapped=[], fails=False)
+    toolset = SimpleNamespace(registerKernelMenuButton=lambda **named: there.registered.append(named))
+    main = SimpleNamespace(getPluginToolset=lambda: toolset, writeToMessageArea=there.shown.append)
+
+    def add_timeout(*asked):
+        if there.fails:
+            raise RuntimeError("no timers")
+        there.armed.append(asked)
+    gui = ModuleType("abaqusGui")
+    gui.getAFXApp = lambda: SimpleNamespace(getAFXMainWindow=lambda: main, addTimeout=add_timeout)
+    if timers:
+        gui.FXObject, gui.SEL_TIMEOUT, gui.FXMAPFUNC = type("FXObject", (), {}), "SEL_TIMEOUT", lambda *asked: there.mapped.append(asked)
+    monkeypatch.setitem(sys.modules, "abaqusGui", gui)
+    return there
+
+
+def test_a_window_started_from_the_site_shows_what_its_own_completed_job_says_and_the_kernel_prints_nothing_then(menu, monkeypatch, tmp_path, capsys):
+    state = tmp_path / "home" / ".anisotropy"
+    state.mkdir()
+    for name, age in (("messages-ffffffffffffffff.window", 3 * 24 * 3600), ("messages-eeeeeeeeeeeeeeee.txt", 60), ("connector.json", 3 * 24 * 3600)):
+        (state / name).write_text("")
+        os.utime(state / name, (os.path.getmtime(state / name) - age,) * 2)
+
+    there = window_of(monkeypatch)
+    assert load("anisotropy_plugin").MESSAGES is None and there.armed == [] and len(there.registered) == 2  # any other start of Abaqus/CAE: no timer at all
+    assert menu.window_files() is None and sorted(p.name for p in state.iterdir()) == ["connector.json", "messages-eeeeeeeeeeeeeeee.txt", "messages-ffffffffffffffff.window"]
+    for not_a_name in ("", "0123456789ABCDEF", "../../0123456789abcdef", "0123456789abcdef0"):
+        monkeypatch.setenv("ANISOTROPY_SESSION", not_a_name)
+        assert load("anisotropy_plugin").MESSAGES is None and menu.window_files() is None
+
+    monkeypatch.setenv("ANISOTROPY_SESSION", SESSION)  # as `anisotropy_link.start` names the window it starts
+    plugin = load("anisotropy_plugin")
+    shower = plugin.MESSAGES
+    assert plugin.SESSION == menu.SESSION == load("anisotropy_link").SESSION == "ANISOTROPY_SESSION"
+    assert there.armed == [(500, shower, 1)] and there.mapped == [(shower, "SEL_TIMEOUT", 1, plugin.Messages.onTick)]
+    assert sorted(p.name for p in state.iterdir()) == ["connector.json", "messages-eeeeeeeeeeeeeeee.txt"]  # a window of days ago left the other
+    lines, marker = menu.window_files()
+    assert (str(lines), str(marker)) == (shower.file, shower.marker) and lines.parent == state and SESSION in lines.name
+
+    def says(*texts):  # a job-completed callback that says these lines
+        monkeypatch.setattr(menu, "completed", lambda job, mdb: [menu.show(text) for text in texts])
+        menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
+    abaqus_of(monkeypatch)
+    says("before the window's first tick")
+    assert capsys.readouterr().out == "before the window's first tick\n" and not lines.exists()  # nobody has said they show them: printed as before
+
+    assert shower.onTick(None, None, None) == 1 and marker.is_file() and there.shown == [] and len(there.armed) == 2
+    says("Anisotropy: the job IM7-UNT-L1 completed", "sent: upload 1\nAgrees with ours")
+    says("Anisotropy: a second job completed")
+    assert capsys.readouterr().out == "" and menu.HELD is None  # nothing is printed from inside the callback
+    assert lines.read_text(encoding="utf-8") == "Anisotropy: the job IM7-UNT-L1 completed\nsent: upload 1\nAgrees with ours\nAnisotropy: a second job completed\n"
+    shower.onTick(None, None, None)
+    assert there.shown == ["Anisotropy: the job IM7-UNT-L1 completed", "sent: upload 1", "Agrees with ours", "Anisotropy: a second job completed"]
+    assert not lines.exists() and not Path(shower.file + ".taken").exists() and len(there.armed) == 3
+    shower.onTick(None, None, None)
+    assert len(there.shown) == 4  # shown once
+
+    menu.show("outside a callback")  # a click on the menu's own entries prints as it always did
+    assert capsys.readouterr().out == "outside a callback\n"
+
+    monkeypatch.setattr(menu, "completed", lambda job, mdb: 1 / 0)  # what stops the callback is held and shown the same way
+    menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
+    assert capsys.readouterr().out == "" and "sending the results stopped. The job itself completed" in lines.read_text(encoding="utf-8")
+
+    there.fails = True  # the window's timers stop: it says so by taking its file away, and the kernel prints again
+    assert shower.onTick(None, None, None) == 1 and not marker.exists()
+    says("after the timers stopped")
+    assert capsys.readouterr().out == "after the timers stopped\n"
+
+
+def test_a_window_whose_timers_cannot_be_had_registers_the_menu_and_the_kernel_prints(menu, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("ANISOTROPY_SESSION", SESSION)
+    for timers in (False, True):  # no timers of the kind the plug-in knows, and timers that refuse
+        there = window_of(monkeypatch, timers)
+        there.fails = True
+        assert load("anisotropy_plugin").MESSAGES is None and len(there.registered) == 2 and there.armed == []
+    assert not (tmp_path / "home" / ".anisotropy").exists()
+    abaqus_of(monkeypatch)
+    monkeypatch.setattr(menu, "completed", lambda job, mdb: menu.show("said by the kernel"))
+    menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
+    assert capsys.readouterr().out == "said by the kernel\n"

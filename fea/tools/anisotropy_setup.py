@@ -232,6 +232,11 @@ def remove(say=print, target: Path | None = None, state: Path | None = None, reg
             (state / name).unlink()
         except OSError:
             continue
+    for left in (list(state.glob("messages-*")) if state.is_dir() else []):  # what a window started from the site left for its message area
+        try:
+            left.unlink()
+        except OSError:
+            continue
     forget_key_file(state)
     say("This PC's upload key: deleted here. Cancel it on the site too, on a run's page under Send straight from Abaqus." if had_key
         else "This PC held no upload key.")
