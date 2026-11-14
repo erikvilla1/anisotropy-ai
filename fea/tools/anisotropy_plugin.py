@@ -13,7 +13,7 @@ user adds; a menu of its own on the main bar would mean replacing Abaqus/CAE's o
 
 from abaqusGui import getAFXApp
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 ENTRIES = (
     ("Anisotropy|Open from Anisotropy...", "open_from_anisotropy()",
      "Builds a coupon from the build script you downloaded from Anisotropy as a native model in this session. Nothing is saved until you save it."),

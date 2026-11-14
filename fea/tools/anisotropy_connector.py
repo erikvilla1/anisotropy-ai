@@ -69,11 +69,12 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-CONNECTOR = "anisotropy-connector 0.4.0"
+CONNECTOR = "anisotropy-connector 0.5.0"
 MODEL_FORMAT = 1
 UNITS = ("mm-MPa", "m-Pa")
 FILES = ("anisotropy_connector.py", "bundle.py", "abaqus_every_output.py", "abaqus_extract_fields.py",  # what is handed over, together
-         "anisotropy_menu.py", "anisotropy_plugin.py")  # the last two are the menu in Abaqus/CAE (step 8)
+         "anisotropy_menu.py", "anisotropy_plugin.py",  # the menu in Abaqus/CAE (step 8)
+         "anisotropy_link.py", "anisotropy_start.py", "anisotropy_setup.py")  # a click on the site reaching this machine (amendment 1)
 TEXT_LIMIT = 400  # an Abaqus object printed as text is cut here: a region's repr can run to thousands of characters
 SEND_ROUTE = "/v1/connector/uploads"  # the one route of the API an upload token opens (ADR-0094 step 5)
 TOKEN_VARIABLE = "ANISOTROPY_UPLOAD_TOKEN"

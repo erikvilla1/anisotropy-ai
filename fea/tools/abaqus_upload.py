@@ -429,10 +429,25 @@ def pack(args) -> int:
 
 
 CONNECTOR_FILES = {"anisotropy_connector.py": TOOLS, "abaqus_every_output.py": TOOLS, "abaqus_extract_fields.py": TOOLS,
-                   "bundle.py": TOOLS.parent / "src" / "anisotropy_fea", "anisotropy_menu.py": TOOLS, "anisotropy_plugin.py": TOOLS}
+                   "bundle.py": TOOLS.parent / "src" / "anisotropy_fea", "anisotropy_menu.py": TOOLS, "anisotropy_plugin.py": TOOLS,
+                   "anisotropy_link.py": TOOLS, "anisotropy_start.py": TOOLS, "anisotropy_setup.py": TOOLS}
+CONNECTOR_SETUP = ("Set up Anisotropy.bat", TOOLS / "anisotropy_setup.bat")  # what a user double-clicks; handed over with Windows's line endings
 CONNECTOR_README = """The Anisotropy connector: one command under your own Abaqus that turns a finished job into one file to send.
 
 Keep these files together in one folder. Nothing is sent anywhere unless you ask: the command writes <job>-anisotropy.zip beside your ODB.
+
+The quick way, on Windows with Abaqus 2024 or later. Once per PC:
+
+    1. Double-click "Set up Anisotropy" in this folder (it runs  abaqus python anisotropy_setup.py ). It copies these files to
+       abaqus_plugins/anisotropy in your home directory, which gives Abaqus/CAE the menu Plug-ins > Anisotropy, and it registers
+       the link type anisotropy:// for your Windows user, so the site can start Abaqus on this PC. No administrator is needed.
+    2. On a run's page on the site, open "First time on this PC" and click Connect this PC. A box on this PC names the site and
+       your account; say yes only if both are yours. This PC then holds an upload key of its own, in .anisotropy in your home
+       directory. Nothing is typed and no key is copied.
+
+From then on, Send to Abaqus on a run's page starts Abaqus/CAE with that run's coupon built as a model you can edit. Submit its
+job there. When the job completes, its results go back to the run by themselves and the comparison appears on the run's page.
+Only a model opened this way is sent by itself. To undo the setup:  abaqus python anisotropy_setup.py --remove
 
 The results and the input file Abaqus solved (no seat of Abaqus/CAE is used):
 
@@ -478,7 +493,9 @@ def connector_zip(out: Path) -> list[str]:
     """The connector's files and a note of its two commands in one zip to hand over, the same bytes for the same files."""
     names = []
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name, data in [(n, (folder / n).read_bytes()) for n, folder in CONNECTOR_FILES.items()] + [("README.txt", CONNECTOR_README.encode())]:
+        setup = CONNECTOR_SETUP[1].read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        for name, data in [(n, (folder / n).read_bytes()) for n, folder in CONNECTOR_FILES.items()] + [(CONNECTOR_SETUP[0], setup),
+                                                                                                    ("README.txt", CONNECTOR_README.encode())]:
             archive.writestr(zipfile.ZipInfo(f"anisotropy-connector/{name}", EPOCH), data, zipfile.ZIP_DEFLATED)
             names.append(name)
     return names
