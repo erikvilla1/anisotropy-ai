@@ -718,3 +718,22 @@ Re-applied on 2026-11-14 on `main` as it stood after pull requests 206, 208 and 
 Not changed: the About page's team block still says "Five people, two seats each" with who decides what. The lead's word was about the home page; whether About's follows is the lead's to say.
 
 **Evidence.** On 2026-11-14 against the dev server the band was captured at 1873 and 390 px and looked at. `home.spec.ts` 8 and `intro.spec.ts` 15: 23 passed, with the 3D view on; the new check reads the heading and the sentence and finds no word of seats, deciding, spending or the repository in the head. The overview case of `portfolio.spec.ts` passed with the new heading. `tests/marketing-pages.test.ts` and `tests/team.test.ts` 10 of 10; `npm test` 333 tests, 332 passed, 1 skipped; `npx tsc --noEmit` clean. In the same run the layout check of amendment 52 was made to wait for the load-in to end before it measures: run with the whole suite it had read the mark while it was still on its way up, and failed twice for that reason. UNVERIFIED: that the wording is what the lead wants (two other drafts were handed over with this one).
+
+## Amendment 56, 2026-11-14 (the closing band is a step lighter)
+
+**Context.** The lead, with a capture of amendment 54's band: "make this less dark."
+
+**Decision.** The home page's closing band is `#3b3b40` (it was `#222225`), and its small label `#c6c6cb` (it was `#b9b9be`), so the label stands as clear of the lighter ground. The rest of amendment 54 stands.
+
+**Evidence.** Contrast, computed: white on the ground 11.14 to 1, the small label 6.55 to 1, the band against the black footer 1.89 to 1. `home.spec.ts`, 8 of 8, computes the same in the page and asks 4.5 to 1 of every text. Captured at 1440 px and looked at. UNVERIFIED: whether this is the shade the lead wants.
+
+## Amendment 57, 2026-11-14 (the clip's pause button is off the clip; it shows to the keyboard's focus and while the clip is paused)
+
+**Context.** The lead, with a capture of the button in the clip's corner: "why is there a pause button? get rid". The button came with amendment 50, drafted after the audit of 2026-11-12, which found that a clip that plays by itself for more than five seconds needs a way to pause it (WCAG 2.2.2, level A).
+
+**Options.** (1) Remove the button and the pausing with it: the widest reading of the lead's words; not taken alone, since the audit's finding would return in full with nothing in its place. (2) Keep the button as it was: against the lead's word. (3) Take it off the clip for the eye and the pointer, and keep it in the page for the keyboard and a screen reader: chosen, as the most both asks leave room for.
+
+**Decision.** Drafted here, for the founder to accept or refuse. The button is not drawn and takes no pointer until the keyboard's focus is on it or the clip stands paused; then it is as amendment 50 drew it, so whoever paused the clip can play it again. The keeper, the clip's source and the rest of amendment 50 stand. This keeps a way to pause for someone on a keyboard or a screen reader. Someone with a pointer only has none, short of asking the system for reduced motion, which gives the clip no source.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the button is in the page with its name, has no opacity and takes no pointer; the keyboard's focus shows it and Enter pauses the clip; a paused clip stays paused after two seconds and its button stays on it wherever the focus goes; playing again, it is off the clip. `intro.spec.ts` 15 of 15. The hero was captured at 1440 px and looked at. UNVERIFIED: how a screen reader reads the button; whether the founder accepts a control that only the keyboard reaches.
+

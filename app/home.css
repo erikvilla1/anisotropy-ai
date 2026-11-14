@@ -971,15 +971,16 @@
   --muted: #666666;
   --line: #e2e2e4;
 }
-/* The closing band on the home page is dark grey (amendment 54; light grey under amendment 49): a neutral grey clearly
- * lighter than the black footer under it, so the two read as two bands. It is one of the kit's dark bands, so its label,
+/* The closing band on the home page is dark grey (amendment 54; light grey under amendment 49), a step lighter since
+ * amendment 56 ("make this less dark"): a neutral grey clearly lighter than the black footer under it, so the two read as
+ * two bands. It is one of the kit's dark bands, so its label,
  * statement and links are light; its rule is a faint light hairline, and its button is white with black words, the light
  * band's button the other way round (it greys a little and rises under the pointer, as the site's filled button does on
  * a dark ground). */
 section.band.closing-band.is-dark {
-  --bg: #222225;
+  --bg: #3b3b40;
   --text: #ffffff;
-  --muted: #b9b9be;
+  --muted: #c6c6cb;
   --line: #ffffff2e;
   --accent: #ffffff;
   border-top: 0;
@@ -1524,7 +1525,10 @@ section.band.closing-band.is-dark .button.primary {
 }
 /* The clip's pause button (WCAG 2.2.2; ADR-0077 amendment 50), in the top right corner of the box, as far in as the words at
  * its foot: the outlined square of "Scroll to explore". components/home/hero-video-keeper.tsx draws it once the clip has a
- * source (768 px and wider, without reduced motion), and keeps it when the window narrows afterwards, since the clip plays on. */
+ * source (768 px and wider, without reduced motion), and keeps it when the window narrows afterwards, since the clip plays on.
+ * Since amendment 57 (the lead: "why is there a pause button? get rid") it is not on the clip for the eye or the pointer: it
+ * shows only when the keyboard's focus is on it, and while the clip stands paused, so whoever paused it can play it again.
+ * It stays in the page for the keyboard and for a screen reader. */
 .home-hero-pause {
   position: absolute;
   z-index: 2;
@@ -1540,9 +1544,17 @@ section.band.closing-band.is-dark .button.primary {
   background: none;
   color: #ffffff;
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
   transition:
     background-color 0.15s,
-    color 0.15s;
+    color 0.15s,
+    opacity 0.15s;
+}
+.home-hero-pause:focus-visible,
+.home-hero-pause[aria-pressed="true"] {
+  opacity: 1;
+  pointer-events: auto;
 }
 .home-hero-pause svg {
   width: 16px;

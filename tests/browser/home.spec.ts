@@ -86,7 +86,8 @@ test("the hero's words are one statement and a line of the mark, the name, a hai
   await expect(hero.locator("img")).toHaveCount(0);
   // No 3D view, chat box or text field in the hero: the header's Workspace button is the way in. Its one link, "See how it
   // works", goes to the product demo and is hidden while the words stand (tests/browser/intro.spec.ts). Its one button, once
-  // the clip has a source, pauses the clip (ADR-0077 amendment 50); a build without the clip has neither.
+  // the clip has a source, pauses the clip (ADR-0077 amendment 50; shown only to the keyboard's focus, amendment 57); a build
+  // without the clip has neither.
   await expect(hero.getByRole("link", { includeHidden: true })).toHaveCount(1);
   await expect(hero.getByRole("link", { includeHidden: true })).toHaveAttribute("href", "#demo");
   const clips = await hero.locator(".home-hero-video").count();
@@ -151,7 +152,7 @@ test("the hero's clip plays in a square box on the black page, under the header,
   expect(phone.top).toBeGreaterThanOrEqual((await rect(".site-header")).bottom);
 });
 
-test("the hero's clip has a pause button, and a clip the visitor paused stays paused (WCAG 2.2.2; ADR-0077 amendment 50)", async ({ page }) => {
+test("the hero's clip can be paused from the keyboard, its button is not on the clip otherwise, and a clip the visitor paused stays paused (ADR-0077 amendments 50 and 57)", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("#overview");
   test.skip(!(await hero.locator(".home-hero-video").count()), "no clip in this build");
@@ -167,19 +168,38 @@ test("the hero's clip has a pause button, and a clip the visitor paused stays pa
     setTimeout(() => resolve(Boolean(clip.currentSrc)), 3000);
   }));
   test.skip(!chosen, "this browser chose no source for the clip");
+  // The button is in the page, with its name, for the keyboard and a screen reader; it is not on the clip for the eye or the
+  // pointer (amendment 57).
   const pause = hero.getByRole("button", { name: "Pause background video" });
-  await expect(pause).toBeVisible();
+  await expect(pause).toHaveCount(1);
   await expect(pause).toHaveAttribute("aria-pressed", "false");
-  await pause.click();
+  await expect(pause).toHaveCSS("opacity", "0");
+  await expect(pause).toHaveCSS("pointer-events", "none");
+  // The keyboard's focus shows it, and Enter pauses the clip.
+  await pause.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(pause).toBeFocused();
+  await expect(pause).toHaveCSS("opacity", "1");
+  await expect(pause).toHaveCSS("pointer-events", "auto");
+  await page.keyboard.press("Enter");
   await expect(pause).toHaveAttribute("aria-pressed", "true");
   // The keeper tries again at most once a second: after two seconds a paused clip is still paused.
   await page.waitForTimeout(2000);
   expect(await video.evaluate((clip: HTMLVideoElement) => clip.paused)).toBe(true);
+  // While the clip stands paused the button stays on it, wherever the focus goes, so a press can play it again.
+  await page.keyboard.press("Shift+Tab");
+  await expect(pause).not.toBeFocused();
+  await expect(pause).toHaveCSS("opacity", "1");
   await pause.click();
   await expect(pause).toHaveAttribute("aria-pressed", "false");
-  // A window narrowed after the clip has its source keeps the clip, so it keeps the button.
+  // Playing again, with the focus elsewhere, it is off the clip once more.
+  await page.mouse.move(5, 400);
+  await page.locator("body").click({ position: { x: 5, y: 400 } });
+  await expect(pause).toHaveCSS("opacity", "0");
+  // A window narrowed after the clip has its source keeps the clip, so it keeps the button in the page.
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(pause).toBeVisible();
+  await expect(pause).toHaveCount(1);
   // A page opened on a phone gives the clip no source, so nothing plays and there is no button.
   await page.reload();
   await expect(video).toHaveJSProperty("currentSrc", "");
@@ -242,13 +262,13 @@ test("after the demo the page is white, and Mission and Services are two short b
   expect(grid).toMatchObject({ content: '""', position: "absolute", under: "-1", press: "none", apart: "36px 36px, 36px 36px", own: "isolate" });
   expect(grid.lines).toMatch(/^linear-gradient\(to right, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\), linear-gradient\(to top, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\)$/);
   expect(grid.mask).toMatch(/^linear-gradient\(to top, rgb\(0, 0, 0\) 0%, rgb\(0, 0, 0\) 6%, rgba\(0, 0, 0, 0\) 50%\)$/);
-  // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey): lighter than the black
-  // footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
+  // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey; a step lighter since
+  // amendment 56): lighter than the black footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
   // WCAG AA's 4.5 to 1.
   const closing = page.locator(".closing-band");
   await expect(closing).toHaveClass(/\bis-dark\b/);
   await expect(closing).not.toHaveClass(/\bis-light\b/);
-  await expect(closing).toHaveCSS("background-color", "rgb(34, 34, 37)");
+  await expect(closing).toHaveCSS("background-color", "rgb(59, 59, 64)");
   await expect(closing).toHaveCSS("border-top-width", "0px");
   await expect(page.locator(".site-footer")).toHaveCSS("background-color", "rgb(0, 0, 0)");
   const tones = await closing.evaluate((band) => {
