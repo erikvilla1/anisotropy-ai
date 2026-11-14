@@ -359,6 +359,7 @@ def test_the_zip_to_hand_over_holds_the_connector_whole_and_it_runs_from_that_fo
         assert sorted(archive.namelist()) == sorted(f"anisotropy-connector/{name}" for name in (*connector.FILES, "Set up Anisotropy.bat", "README.txt"))
         setup = archive.read("anisotropy-connector/Set up Anisotropy.bat")
         assert b"abaqus python anisotropy_setup.py" in setup and setup.count(b"\r\n") == setup.count(b"\n") > 5  # Windows's line endings, whatever the checkout has
+        assert b"where abaqus >nul 2>nul\r\n" in setup and b"/dev/" not in setup  # Windows's own nowhere: the eleventh trial found a path of another system here
         archive.extractall(tmp_path)
     first = handed.read_bytes()
     upload.main(["connector", "--out", str(handed)])

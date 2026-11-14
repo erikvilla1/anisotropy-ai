@@ -72,14 +72,16 @@ def copy_files(source: Path, target: Path) -> list:
 
 
 def candidates(executable: str) -> list:
-    """Python programs to try for the link, the one running this first, then the ones Abaqus installs beside it."""
-    found = [Path(executable)]
+    """Python programs to try for the link: first the windowless one Abaqus installs, so no console flashes at a click (the helper
+    asks and answers in boxes), then the one running this, then the others beside it."""
+    found, later = [], [Path(executable)]
     for parent in list(Path(executable).resolve().parents)[:6]:
-        for pattern in ("tools/SMApy/python*/python.exe", "code/bin/SMAPython.exe"):
+        for pattern, into in (("tools/SMApy/python*/pythonw.exe", found), ("tools/SMApy/python*/python.exe", later), ("code/bin/SMAPython.exe", later)):
             try:
-                found += sorted(parent.glob(pattern))
+                into += sorted(parent.glob(pattern))
             except OSError:
                 continue
+    found += later
     seen, ordered = set(), []
     for path in found:
         if str(path).lower() not in seen and path.suffix.lower() == ".exe" and path.is_file():
@@ -155,6 +157,22 @@ def keep_abaqus(folder: Path, which=shutil.which) -> str:
     return found
 
 
+def forget_key_file(state: Path) -> None:
+    """The menu's kept answers no longer name the key's file that was just deleted, or the address it was for; the units stay."""
+    path = state / "connector.json"
+    try:
+        with io.open(str(path), encoding="utf-8") as handle:
+            answers = json.load(handle)
+    except (OSError, ValueError):
+        return
+    if not isinstance(answers, dict) or answers.get("token_file") != str(state / KEY_FILE):
+        return  # a key's file the user named themselves is theirs
+    answers.update(address="", token_file="")
+    with io.open(str(path), "w", encoding="utf-8", newline="\n") as handle:
+        json.dump(answers, handle, indent=1, sort_keys=True)
+        handle.write("\n")
+
+
 def windows_registry():
     if os.name != "nt":
         return None
@@ -195,10 +213,18 @@ def remove(say=print, target: Path | None = None, state: Path | None = None, reg
             gone += 1
         except OSError:
             continue
-    try:
-        target.rmdir()
-    except OSError:
-        pass  # something of the user's own is in it
+    cache = target / "__pycache__"  # what Python compiled of our files; anything else in it is not ours and keeps the folder
+    for name in FILES:
+        for compiled in (list(cache.glob(Path(name).stem + ".*.pyc")) if cache.is_dir() else []):
+            try:
+                compiled.unlink()
+            except OSError:
+                continue
+    for folder in (cache, target):
+        try:
+            folder.rmdir()
+        except OSError:
+            pass  # something of the user's own is in it
     say(f"The menu: {gone} files removed from {target}.")
     had_key = (state / KEY_FILE).is_file()
     for name in (KEY_FILE, MACHINE_FILE):
@@ -206,6 +232,7 @@ def remove(say=print, target: Path | None = None, state: Path | None = None, reg
             (state / name).unlink()
         except OSError:
             continue
+    forget_key_file(state)
     say("This PC's upload key: deleted here. Cancel it on the site too, on a run's page under Send straight from Abaqus." if had_key
         else "This PC held no upload key.")
     return 0

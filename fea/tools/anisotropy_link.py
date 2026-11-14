@@ -30,9 +30,9 @@ from __future__ import annotations
 import io
 import json
 import os
-import platform
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import urllib.error
@@ -165,7 +165,8 @@ def key_of(folder: Path | None = None) -> str:
 
 
 def keep_key(key: str, folder: Path) -> Path:
-    """Write the key where only this user reads it: a new file made for the owner alone, in the home directory."""
+    """Write the key in the home directory, as a new file that replaces the old one whole. On Windows the file has the folder's
+    own permissions, which keep a home directory to its user; elsewhere it is made for the owner alone."""
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / KEY_FILE
     fresh = folder / (KEY_FILE + ".new")
@@ -236,7 +237,11 @@ def host_of(address: str) -> str:
 
 def machine_name() -> str:
     """The name the key carries in the list on the site, so its owner knows which PC to cancel."""
-    name = "".join(c for c in platform.node() if c.isalnum() or c in "-_.")[:60]
+    try:
+        node = socket.gethostname()  # not platform.node(), which starts the command interpreter on Windows to ask for its version
+    except OSError:
+        node = ""
+    name = "".join(c for c in node if c.isalnum() or c in "-_.")[:60]
     return name or "a connected PC"
 
 
@@ -307,10 +312,12 @@ def abaqus_command(now: dict, which=shutil.which) -> str:
 
 def start(command: str, folder: Path):
     """Abaqus/CAE with its window, in the coupon's folder, running the start script there. The same words every time: nothing from a
-    link or from the site is on this command line."""
+    link or from the site is on this command line. On Windows Abaqus's command is a batch file and stays until the window ends; it
+    is started with no console of its own, since a detached one left a terminal window open for as long as Abaqus ran (the
+    eleventh trial)."""
     more = {}
     if os.name == "nt":
-        more["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+        more["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
     return subprocess.Popen([command, "cae", f"script={START_NAME}"], cwd=str(folder), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, close_fds=True, **more)
 

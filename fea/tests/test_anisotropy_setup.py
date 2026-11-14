@@ -111,6 +111,10 @@ def test_the_registered_command_names_a_program_never_a_batch_file_and_a_python_
     beside.parent.mkdir(parents=True)
     beside.write_bytes(b"MZ")
     assert setup.candidates(str(beside)) == [beside, python]
+    windowless = python.with_name("pythonw.exe")
+    windowless.write_bytes(b"MZ")
+    assert setup.candidates(str(beside)) == [windowless, beside, python]  # no console flashes at a click when the windowless one works
+    windowless.unlink()
 
     registry, said = Registry(), []
     run, started = runs(lambda command: command[0] == str(python) and "-I" not in command)  # only the second, and only without -I
@@ -142,12 +146,16 @@ def test_remove_takes_the_link_the_menu_and_the_key_away_and_leaves_what_is_the_
     target, state = tmp_path / "home" / "abaqus_plugins" / "anisotropy", tmp_path / "home" / ".anisotropy"
     assert setup.set_up(lambda line: None, folder, target, state, registry, str(python), runs()[0], lambda name: "abaqus.bat") == 0
     (state / "upload-key.txt").write_text("anisotropy_upload_" + "k" * 43 + "\n")
-    (state / "connector.json").write_text("{}")
+    (state / "connector.json").write_text(json.dumps({"units": "m-Pa", "address": "https://anisotropy.example/api", "token_file": str(state / "upload-key.txt")}))
     (target / "my-notes.txt").write_text("mine")
+    (target / "__pycache__").mkdir()
+    for name in ("anisotropy_link.cpython-310.pyc", "anisotropy_menu.cpython-310.pyc"):  # what Python compiled of our files
+        (target / "__pycache__" / name).write_bytes(b"")
     said = []
     assert setup.remove(said.append, target, state, registry) == 0
     assert registry.keys == {} and [p.name for p in target.iterdir()] == ["my-notes.txt"]
-    assert not (state / "upload-key.txt").exists() and not (state / "machine.json").exists() and (state / "connector.json").is_file()
+    assert not (state / "upload-key.txt").exists() and not (state / "machine.json").exists()
+    assert json.loads((state / "connector.json").read_text()) == {"units": "m-Pa", "address": "", "token_file": ""}  # the deleted key's file is no longer offered
     assert said[0] == "The site's links: no longer registered." and "Cancel it on the site too" in said[2]
     said = []
     assert setup.remove(said.append, target, state, registry) == 0
