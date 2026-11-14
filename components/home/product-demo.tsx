@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowUpRight, Check, FileText, Rotate3d } from "lucide-react";
+import { ArrowRight, Check, FileText, Rotate3d } from "lucide-react";
 import { demoWing, RAINBOW_GRADIENT } from "@/lib/demo-wing";
 import { DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
 import { libraryOptions } from "@/lib/studio-form";
@@ -269,7 +269,7 @@ export function ProductDemo() {
             <li key={name} data-shown={index < view.files ? "true" : undefined}><FileText size={15} aria-hidden="true" /> {name}</li>
           ))}
         </ul>
-        <Link className="demo-open" href="/workspace/fea">{OPEN_WORKSPACE} <ArrowUpRight size={16} aria-hidden="true" /></Link>
+        <Link className="demo-open" href="/workspace/fea">{OPEN_WORKSPACE} <ArrowRight size={16} aria-hidden="true" /></Link>
       </div>
     ),
   };

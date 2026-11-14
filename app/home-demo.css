@@ -317,21 +317,47 @@
   gap: 10px;
   transition: opacity 0.4s;
 }
+/* The way into the workspace: under the pointer it is filled with white from the right and its words and arrow turn dark,
+ * as the header's Workspace button is (app/globals.css, `.header-cta`; ADR-0098 amendment 8). */
 .demo-open {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   padding: 9px 14px;
   border: 1px solid #ffffff;
+  border-radius: 2px;
+  background: transparent;
   color: #ffffff;
   font-size: 14px;
   font-weight: 500;
-  transition: background-color 0.15s, color 0.15s;
+  transition: color 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.demo-open::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #ffffff;
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1);
 }
 .demo-open:hover,
 .demo-open:focus-visible {
-  background: #ffffff;
-  color: #0a0a0a;
+  color: #0d0d0d;
+}
+.demo-open:hover::before,
+.demo-open:focus-visible::before {
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-open,
+  .demo-open::before {
+    transition: none;
+  }
 }
 
 /* The stage. From the first paint the box is a window tall, so nothing moves when the page's script sets the mode; until

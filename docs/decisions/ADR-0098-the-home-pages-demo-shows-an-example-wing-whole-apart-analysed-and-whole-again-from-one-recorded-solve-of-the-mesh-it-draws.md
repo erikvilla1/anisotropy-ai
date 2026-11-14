@@ -136,3 +136,11 @@ A visitor or a reviewer takes the wing for something the workspace does today; a
 
 UNVERIFIED: the buckling factor (the mesh was not refined for it, and it is run by hand and not recorded); mesh convergence; how much the faces' twist changes the bend's small stresses (no flat-faced bend was solved for comparison); the argument that a swept, tapered bend cannot be made of flat faces without a shoulder or steps, which was not checked by a second method; a real graphics card, Safari and Firefox; whether the lead finds the winglet and the new angle right.
 
+## Amendment 8, 2026-11-14 (the axes stand at the wing's lower left, drawn thin; the way into the workspace is filled as the header's button is)
+
+**Context.** The lead, of amendment 5's axes on the wing with its winglet: "put the xyz in the bottom left corner by the wing not top left corner. also make it thinner, rn it is too thick." With the winglet the wing's box on the screen is tall, so its middle, where the axes stood, lies above the wing's root. And of the last beat's link: "make the open the workspace button, turn white and the arrow change like how the top right header workspace button does."
+
+**Decision.** The axes stand at the lower left corner of the wing's box, just outside it, by the root; their lines are less than half as thick, their heads and letters smaller. "Open the workspace" takes the header button's movement: under the pointer or the keyboard's focus it is filled with white from the right over 0.35 s while its words and arrow turn dark, and its arrow is the header's, pointing right.
+
+**Evidence.** On 2026-11-14 against the dev server at 1873 by 866: the held stage, before and after a turn, and the link at rest, half filled and filled were captured and looked at. The case of `demo.spec.ts` that holds and turns the wing passes. `npx tsc --noEmit` clean. UNVERIFIED: a real graphics card, Safari and Firefox.
+

@@ -214,8 +214,9 @@ function buildAxes() {
   const group = new THREE.Group();
   const materials: (THREE.MeshBasicMaterial | THREE.SpriteMaterial)[] = [];
   const disposables: { dispose: () => void }[] = [];
-  const shaft = new THREE.CylinderGeometry(0.022, 0.022, 0.8, 12);
-  const head = new THREE.ConeGeometry(0.07, 0.22, 16);
+  // Thin lines with small heads (amendment 8): a drawing aid beside the wing, not a part of the picture.
+  const shaft = new THREE.CylinderGeometry(0.009, 0.009, 0.84, 10);
+  const head = new THREE.ConeGeometry(0.034, 0.15, 14);
   disposables.push(shaft, head);
   const WHITE = "#ffffff";
   const axes: { letter: string; colour: string; along: [number, number, number] }[] = [
@@ -229,15 +230,15 @@ function buildAxes() {
     const material = new THREE.MeshBasicMaterial({ color: axis.colour, transparent: true, opacity: 0, depthTest: false, toneMapped: false });
     const arm = new THREE.Group();
     const stick = new THREE.Mesh(shaft, material);
-    stick.position.y = 0.4;
+    stick.position.y = 0.42;
     const tip = new THREE.Mesh(head, material);
-    tip.position.y = 0.9;
+    tip.position.y = 0.915;
     arm.add(stick, tip);
     arm.quaternion.setFromUnitVectors(upright, direction);
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 64;
     const context = canvas.getContext("2d")!;
-    context.font = "600 44px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.font = "500 40px ui-monospace, SFMono-Regular, Menlo, monospace";
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.fillStyle = axis.colour;
@@ -246,7 +247,7 @@ function buildAxes() {
     const label = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0, depthTest: false, toneMapped: false });
     const letter = new THREE.Sprite(label);
     letter.position.copy(direction).multiplyScalar(1.32);
-    letter.scale.setScalar(0.42);
+    letter.scale.setScalar(0.36);
     for (const object of [stick, tip, letter]) object.renderOrder = 10;
     group.add(arm, letter);
     materials.push(material, label);
@@ -359,8 +360,9 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     glow.mesh.position.set((drawn.left + drawn.right) / 2, drawn.bottom - 0.03 * height, -1);
     glow.mesh.scale.set(0.85 * (drawn.right - drawn.left), 0.09 * height + 0.25 * (drawn.top - drawn.bottom), 1);
     glow.material.opacity = 0.16 * scene.presence;
-    // The axes: just beside the wing's left end as the pose stands it, level with its middle, turned as the wing is; they
-    // come in while the pointer holds the wing and go when it lets go. The view asks for frames itself while they fade.
+    // The axes: at the lower left corner of the wing's box as the pose stands it, just outside it, turned as the wing is;
+    // they come in while the pointer holds the wing and go when it lets go. The view asks for frames itself while they
+    // fade.
     const wanted = handle.turning ? 1 : 0;
     if (axes.shown !== wanted) {
       const step = Math.min(0.05, delta); // the frame before may be long ago: the view draws on demand
@@ -370,9 +372,9 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     axes.group.visible = axes.shown > 0;
     if (axes.group.visible) {
       const reachOf = Math.min(0.06 * height, 0.05 * width);
-      // An arm with its letter reaches 1.5 times `reachOf` from the middle of the axes: they stand that far and a little
-      // more to the left of the wing's box, and never off the stage.
-      axes.group.position.set(Math.max(-width / 2 + 1.7 * reachOf, drawn.left - 1.9 * reachOf), (drawn.bottom + drawn.top) / 2, 2);
+      // An arm with its letter reaches 1.5 times `reachOf` from the middle of the axes: they stand a little more than an
+      // arm to the left of the wing's box, level with its foot, and never off the stage.
+      axes.group.position.set(Math.max(-width / 2 + 1.7 * reachOf, drawn.left - 1.3 * reachOf), drawn.bottom + 0.2 * reachOf, 2);
       axes.group.scale.setScalar(reachOf);
       axes.group.rotation.copy(group.rotation);
       for (const material of axes.materials) material.opacity = axes.shown;
