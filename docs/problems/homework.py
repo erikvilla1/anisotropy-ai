@@ -27,7 +27,6 @@ import re
 import subprocess
 import sys
 import tomllib
-from datetime import date
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -107,7 +106,7 @@ def write_results(case_path: Path, case: dict, comparisons, issues: list[str], p
     results = engine_results(case)
     record = {
         "case": problems.rel(case_path), "title": case["title"], "source": case.get("source"), "units": case["units"],
-        "engine_version": problems.engine_version(), "commit": problems.git_commit(), "built": date.today().isoformat(),
+        "engine_version": problems.engine_version(), "commit": problems.git_commit(), "built": manual.build_date()[:10],
         "results": {key: json_value(value) for key, (value, _scale) in results.items()},
         "criteria": [key.removeprefix("fpf_ratio_") for key in results if key.startswith("fpf_ratio_")],
         "comparison": [{"key": c.key, "expected": float(c.expected), "engine": float(c.engine), "allowed": float(c.allowed), "agrees": c.agrees}
@@ -152,7 +151,7 @@ def title_page(set_name: str, rows: list[tuple[Path, dict, int, int]]) -> str:
     table_rows = [rf"{k} & {inline(case['title'])} & {total_k} & {agreeing_k} \\" for k, (_, case, total_k, agreeing_k) in enumerate(rows, start=1)]
     return "\n".join([
         r"\begin{titlepage}", r"\sffamily",
-        r"{\color{accent}\bfseries\small ANISOTROPY AI \textperiodcentered{} HOMEWORK SET}\par", r"\vspace*{1.6cm}",
+        r"{\color{accent}\bfseries\small ANISOTROPY \textperiodcentered{} HOMEWORK SET}\par", r"\vspace*{1.6cm}",
         rf"{{\fontsize{{26}}{{32}}\selectfont\bfseries\color{{ink}} {escape(set_name)}}}\par", r"\vspace{0.3cm}",
         rf"{{\Large\bfseries\color{{ink}} {escape(subtitle)}}}\par", r"\vspace{0.4cm}",
         r"{\large\color{muted} The physics once, then for each problem: the problem as its case gives it, every step the engine takes with its "
@@ -160,7 +159,7 @@ def title_page(set_name: str, rows: list[tuple[Path, dict, int, int]]) -> str:
         problems.long_table(["Chapter", "Problem", "Values", "Agree"], [rf"{k + 2} & " + row.split(" & ", 1)[1] for k, row in enumerate(table_rows)],  # chapter 1 is the physics
                             r"r>{\raggedright\arraybackslash}Xrr", r"\small"),
         r"\vfill", rf"\verdict{{{verdict}}}", r"\vspace{0.6cm}",
-        rf"{{\small\color{{muted}} Built {date.today().isoformat()} by \texttt{{docs/problems/homework.py}} (anisotropy-engine {escape(problems.engine_version())}, "
+        rf"{{\small\color{{muted}} Built {manual.build_date()} by \texttt{{docs/problems/homework.py}} (anisotropy-engine {escape(problems.engine_version())}, "
         rf"commit {escape(problems.git_commit())}). The key's numbers come from the case files, every other number from running the engine.}}",
         r"\end{titlepage}",
     ])
@@ -186,7 +185,7 @@ def build(set_name: str, root: Path, pdf: bool, theory: bool) -> Path:
         r"\documentclass[11pt,letterpaper,oneside]{report}", problems.PREAMBLE, CHAPTER_STYLE,
         rf"\hypersetup{{pdftitle={{{escape(set_name)}: solved by our engine}}}}",
         r"\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0pt}",
-        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy AI \textperiodcentered{{}} Homework set \textperiodcentered{{}} {escape(set_name)}}}",
+        rf"\fancyhead[L]{{\sffamily\footnotesize\color{{muted}}Anisotropy \textperiodcentered{{}} Homework set \textperiodcentered{{}} {escape(set_name)}}}",
         r"\fancyhead[R]{\sffamily\footnotesize\color{muted}\thepage}",
         r"\fancyfoot[C]{\sffamily\scriptsize\color{muted}Agreement with an answer key is verification of the engine, not a test of a part.}",
         r"\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\sffamily\scriptsize\color{muted}\thepage}\renewcommand{\headrulewidth}{0pt}}",

@@ -1,5 +1,6 @@
 title = "Engineering constants of an AS4/3501-6 [+45/-45]s angle-ply laminate"
-source = "Daniel & Ishai (2006), Table 7.3, exact values; material from Table A.4. Gxy uses the table's 5.53 Msi (38.13 GPa); its GPa column prints 38.2."
+# The table's exact values are the expected numbers below; for Gxy the table's Msi value is used, converted, since its GPa column is rounded.
+source = "Daniel & Ishai, Engineering Mechanics of Composite Materials, 2nd ed. (2006), Table 7.3 (page not recorded); material from Table A.4, p. 377"
 units = "SI"
 
 [material]

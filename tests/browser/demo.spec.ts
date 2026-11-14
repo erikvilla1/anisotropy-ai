@@ -326,7 +326,7 @@ test("each zone of scroll plays its beat and the page is never held; the analysi
   await wheelTo(page, start + 3 * step);
   await expectStop(page, 4);
   const report = page.getByTestId("demo-report");
-  await expect(report.locator(".demo-files li[data-shown]")).toHaveText(["Report (PDF)", "Full package (ZIP)", "Solver input (.inp)"]);
+  await expect(report.locator(".demo-files li[data-shown]")).toHaveText(["Report (PDF)", "Abaqus input file (.inp)"]); // the customer's downloads (D4, D18)
   await expect(report.getByRole("link", { name: "Open the workspace" })).toHaveAttribute("href", /\/workspace\/fea\/?$/);
   expect(await offLine(page)).toBe(0);
   // The finished wing can be turned by hand (ADR-0098 amendment 1): the stage shows a hand and says so, and a drag on it
@@ -468,7 +468,7 @@ test("on the way back up the beats are unplayed one by one, down to the hero, an
   await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(6);
 });
 
-test("Scroll to explore brings the stage to fill the window, and the first beat plays", async ({ page }) => {
+test("the hero's \"Scroll to explore\" brings the stage to fill the window, and the first beat plays", async ({ page }) => {
   await page.goto("/");
   await expect(demo(page)).toHaveAttribute("data-mode", "pinned");
   const explore = page.locator("#overview .home-hero-explore");

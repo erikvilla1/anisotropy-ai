@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { ArrowRight, Check, FileText, Rotate3d } from "lucide-react";
 import { demoWing, RAINBOW_GRADIENT } from "@/lib/demo-wing";
-import { DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
+import { CUSTOMER_DOWNLOADS, DOWNLOAD_LABELS, RUN_STEPS } from "@/lib/studio-copy";
 import { libraryOptions } from "@/lib/studio-form";
 import { BEAT_COPY, BEND_NOTE, DEMO_HEAD, FILES_HEAD, OPEN_WORKSPACE, TURN_HINT, resultLines, wingFacts, wingParts } from "./product-demo-copy";
 import type { DemoSceneHandle } from "./product-demo-scene";
@@ -33,10 +33,10 @@ function useMediaQuery(query: string): boolean {
 const ZONE = 0.5;
 const LEAD = 0.08;
 
-/** Where each beat's words stand: under the model, or in a block at one side with the model at the other (Scale's arrangement). */
+/** Where each beat's words stand: under the model, or in a block at one side with the model at the other (ADR-0095 amendment 1). */
 const SIDE: Record<BeatId, "under" | "left" | "right"> = { describe: "under", model: "left", analysis: "right", report: "under" };
-/** The three files the workspace lists first for a run. */
-const FILES = DOWNLOAD_LABELS.slice(0, 3).map(([, label]) => label);
+/** The files a customer downloads from a run (the audit's D4), in the workspace's own labels. */
+const FILES = DOWNLOAD_LABELS.filter(([key]) => CUSTOMER_DOWNLOADS.includes(key)).map(([, label]) => label);
 const materialName = (id: string) => libraryOptions.find((option) => option.id === id)?.name ?? id;
 /** An end of the legend: a share as a percentage when the field has no unit, the rounded value otherwise. */
 const legendEnd = (value: number, unit: string) => (unit ? String(Math.round(value)) : `${Math.round(value * 100)} %`);
@@ -224,7 +224,8 @@ export function ProductDemo() {
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
         <div className="product-demo-head">
           <p className="demo-label">{DEMO_HEAD.label}</p>
-          <h2 id="demo-title">{DEMO_HEAD.title}</h2>
+          {/* The hero's "Scroll to explore" moves the focus here (components/home/scroll-to-explore.tsx). */}
+          <h2 id="demo-title" tabIndex={-1}>{DEMO_HEAD.title}</h2>
         </div>
         <div className="product-demo-view">{viewWanted ? <ProductDemoScene handle={handle} /> : null}</div>
         <p className="product-demo-hint" data-shown={turnable ? "true" : undefined}><Rotate3d size={14} aria-hidden="true" /> {TURN_HINT}</p>

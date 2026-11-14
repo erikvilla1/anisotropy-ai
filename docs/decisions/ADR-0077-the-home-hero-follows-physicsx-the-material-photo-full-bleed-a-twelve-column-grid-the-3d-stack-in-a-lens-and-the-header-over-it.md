@@ -1,9 +1,10 @@
 # ADR-0077: The home hero follows PhysicsX: the material photo full-bleed, a twelve-column grid, the 3D stack in a lens, and the header over it
 
-- Status: Proposed
+- Status: Proposed; the hero's clip can be paused and loads only where it plays, and its corner names The Basement in words, since amendment 50
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07; Founder, 2026-11-12 ("accept": "Composites. Calculated." and "Closed beta", amendment 16) | Drafted by: Claude Code
 - Related: [ADR-0076](ADR-0076-the-home-page-opens-on-the-hero-and-the-laminate-calculator-follows-it-as-the-demonstration.md) (the hero first; this is its option 3 in part), [ADR-0001](ADR-0001-deterministic-engine.md), the CEO's website audit of 2026-10-31 (item 7), `app/page.tsx`, `app/home.css`, `components/home/hero-lens.tsx`, `components/site-shell.tsx`, `tests/browser/home.spec.ts`
+- Area: website
 
 ## Context
 
@@ -632,7 +633,29 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server the two bands were captured at 1873 px and looked at. `home.spec.ts`, 7 of 7: the card's layered gradient, its 32 px inset, the heading in white, and the closing band's grey. UNVERIFIED: the list's white panel on the card with an entry in it (none is published).
 
-## Amendment 50, 2026-11-14 (the statement is written as a sentence, and the header's links stand at the right)
+## Amendment 50, 2026-11-13 (the clip can be paused and loads only where it plays; "Scroll to explore" leads to the demo; the corner in words; the home page's bands and links after the audit of 2026-11-12)
+
+Numbered 27 and then 32 on its branch; renumbered each time the branch took in main, where amendments 27 to 49 had the numbers by 2026-11-14.
+
+Amendments 33 to 49 were decided after this text was drafted, and they stand where the two differ. The bands carry no numbers and the team band reads "Team" (amendments 34 and 42). The Platform cards are gone, so no card's title is a link, and the Mission link reads "Learn more about us" (amendment 34). What is new is the changelog (amendment 46), so the two news items are not on the page. Of the list below, the page keeps the pause button, the clip's source, the link to the demo, the corner in words, the cohort said once, the closing band's button and link, and the right arrows, now also on the two links amendment 34 added.
+
+**Context.** The professional audit of 2026-11-12 found that the hero's clip plays and loops with no way to stop it, and `HeroVideoKeeper` restarted any pause, which WCAG 2.2.2 (Pause, Stop, Hide) does not allow for motion that starts by itself and lasts more than five seconds. The 1.57 MB clip was loaded with `preload="auto"` on phones too. "Scroll to explore" named a gesture, not where it goes, and left the focus in the hero. The page said the cohort more than once, labelled the team band "About", linked three labels to About, and listed news of tests a customer cannot use.
+
+**Options.** For the clip: (1) drop the loop so it ends within five seconds: rejected, the clip is meant to play alone once the words leave (amendment 20); (2) a pause button, and a keeper that never resumes a clip the visitor paused: chosen. For the weight: (1) a smaller encode for phones: not now, where the clip is served waits on Erik's decision (the audit's D1, "later"); (2) no source under 768 px and `preload="metadata"`: chosen. For the band labels: (1) no numbers, the audit's fix while the tour's steps 01 to 05 stood on the same page: not taken, the tour has left the page (ADR-0095) and amendment 31 keeps 01 to 04; (2) the numbers kept and the team band named TEAM: chosen.
+
+**Decision.** Drafted here, not yet confirmed.
+- **The pause button** (`HeroVideoKeeper`, `components/home/hero-video-keeper.tsx`) is a 34 px outlined square in the clip's top right corner, `aria-pressed`, named "Pause background video". It is drawn once the clip has a source, and stays if the window narrows afterwards, since the clip then plays on. A clip the visitor paused stays paused.
+- **The clip's source** carries `media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"`, and the video `preload="metadata"`.
+- **"Scroll to explore" becomes a link to `#demo`, in Kai's words** (the founder, 2026-11-13, chose them over the audit's "See how it works"). It scrolls to the section after the hero as before (ADR-0095) and then moves the focus to the product demo's heading.
+- **The bottom left corner** names The Basement in words, with amendment 28's cohort beside it behind the hairline (ADR-0081 amendment 2). The words take more room than the mark did, so the cohort stands under them from 760 px down, not 640.
+- **The bands:** the cohort is no longer repeated in the team band; the labels read 01 / MISSION, 02 / PLATFORM, 03 / TEAM and 04 / WHAT IS NEW; What is new lists the ASTM D3039 tension workspace and the closed beta; each Platform card's title is its link; the Mission link reads "About Anisotropy"; the closing band's button reads "Contact us" and goes to `/contact`, and its one other link is the materials library.
+- **Arrows:** links on the site carry a right arrow, the product demo's "Open the workspace" among them; the north-east arrow is kept for a link that opens a new tab (amendment 16).
+- **Portraits** (amendment 29): all five people agreed to their portraits on the public site and in the public repository (the founder, 2026-11-13).
+- **The calculator and its tour,** unmounted from the home page by ADR-0095 and kept, take the audit's fixes too; among them the 3D view stops turning by itself after five seconds (`TURN_MS` in `components/home/laminate-scene.tsx`). A visitor of the home page sees none of this.
+
+**Evidence.** `tests/marketing-pages.test.ts`: a paused clip is not resumed by the keeper, and no north-east arrow stands outside a link that opens a new tab; its output is in the pull request. UNVERIFIED: the updated cases of `home.spec.ts` (the corner's words, the link to `#demo`, the pause button), `intro.spec.ts` (the focus on the demo's heading) and `demo.spec.ts` were not run in this change; the clip's contrast under the words was not measured (the audit could not capture a frame of it).
+
+## Amendment 51, 2026-11-14 (the statement is written as a sentence, and the header's links stand at the right)
 
 **Context.** The two steps amendment 47 left to follow, now that the other work on the same files has landed. The lead's word is amendment 47's: the hero and the header were "literally an exact match" of the page their arrangement came from.
 
@@ -643,4 +666,6 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 - With these, the framework is told to jump, not glide, to a new page's top (`data-scroll-behavior="smooth"` on the page's root, which its guide for this version names for a site that sets smooth scrolling): a link pressed far down a page had opened the next page gliding up from where the last one stood.
 
 **Evidence.** On 2026-11-14 against the dev server the hero was captured at 1873, 1440 and 390 px and looked at. `home.spec.ts` 7, `intro.spec.ts` 15, `shell.spec.ts` 18 with 1 skipped, `expansion.spec.ts` 5 with 2 skipped, `demo.spec.ts` 13: 58 passed, 3 skipped; the overview case of `portfolio.spec.ts` passed (its heading check was brought into step with amendment 46). `npm test`: 319 tests, 318 passed, 1 skipped. `npx tsc --noEmit` clean. UNVERIFIED: whether the lead finds the hero and the header different enough now; the jump to a new page's top was not measured, only set as the guide says.
+
+Re-applied on 2026-11-14 on `main` as it stood after pull requests 206, 208 and 209, and renumbered from 50, which main's amendment above had taken. Against the dev server: `home.spec.ts` 8, `intro.spec.ts` 15, `shell.spec.ts` 18 with 1 skipped, `demo.spec.ts` 13, `expansion.spec.ts` 5 with 2 skipped: 59 passed, 3 skipped. `npm test`: 334 tests, 333 passed, 1 skipped. `npm run typecheck` clean. The hero was captured at 1440 and 390 px with main's pause button and corner words and looked at. `portfolio.spec.ts`: its overview case passes with this change and fails without it; its two workspace chat cases fail with and without it (the page shows an unnotched tension coupon where they expect an open-hole one).
 

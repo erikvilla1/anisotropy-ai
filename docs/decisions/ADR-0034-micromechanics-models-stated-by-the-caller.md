@@ -4,6 +4,7 @@
 - Date: 2026-10-19
 - Decided by: Founder, accepted 2026-10-26 ("FEA method (7)", choosing which groups of the proposed records to accept) | Drafted by: Claude Code
 - Related: ADR-0003 (no silent defaults), ADR-0007 (validation cases), ADR-0019 (theory with code markers and website cards), `engine/src/anisotropy_engine/micromechanics.py`, `engine/docs/theory.md` section 9, `engine/tests/test_micromechanics.py`, the course's two cases (local, ADR-0042), `constructed-micromechanics-eglass-epoxy-halpin-tsai`
+- Area: engine
 
 ## Context
 

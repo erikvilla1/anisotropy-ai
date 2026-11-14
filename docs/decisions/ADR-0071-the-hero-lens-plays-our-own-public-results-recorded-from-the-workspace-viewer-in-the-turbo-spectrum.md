@@ -4,6 +4,7 @@
 - Date: 2026-11-07
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-07 (the lens showing models of different applications; "try spectrum?" for its colours) | Drafted by: Claude Code
 - Related: [ADR-0077](ADR-0077-the-home-hero-follows-physicsx-the-material-photo-full-bleed-a-twelve-column-grid-the-3d-stack-in-a-lens-and-the-header-over-it.md) amendments 3 and 9 (the hero, the first lens and its removal), [ADR-0069](ADR-0069-the-licensed-hero-clip-stays-out-of-the-public-repository-a-script-makes-its-web-copy-and-the-page-plays-it-when-present.md) (the clip under it), [ADR-0045](ADR-0045-abaqus-without-the-gui-odbaccess-reports-and-an-optional-second-reference.md) (the Abaqus licence), [ADR-0042](ADR-0042-course-keys-and-team-models-stay-off-the-repository.md) (what stays off the repository), [ADR-0063](ADR-0063-the-viewer-colours-fields-on-the-graphics-card-from-the-packages-values-and-ranges-unlit-for-results-and-lights-the-model-for-presentation-without-external-assets.md) (the viewer's shader), `scripts/hero-lens.ts`, `components/home/hero-lens.tsx`, `lib/hero-lens.ts`, `app/home.css`, `tests/hero-lens.test.ts`, `tests/browser/home.spec.ts`
+- Area: website
 
 ## Context
 

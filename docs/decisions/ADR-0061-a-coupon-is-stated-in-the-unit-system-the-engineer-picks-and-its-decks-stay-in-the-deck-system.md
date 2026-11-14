@@ -4,6 +4,7 @@
 - Date: 2026-11-06
 - Decided by: Founder, 2026-11-05 and 2026-11-06 ("i see the units are hard coded to only GPa, i want it to be flexible to U.S and other S.I units like MPa, mm, m etc freedom for the user to pick the units"; asked whether the solver and decks would show the units the user selected, and told that the decks stay in one system while the results, the PDF and the package's PDF read in the user's units: "yes, make no mistakes") | Drafted by: Claude Code
 - Related: [ADR-0001](ADR-0001-deterministic-engine.md), [ADR-0002](ADR-0002-si-units-inside-the-engine.md), [ADR-0003](ADR-0003-reject-invalid-input.md), [ADR-0046](ADR-0046-coupon-intake-by-an-excel-input-form.md) (amendment 5), [ADR-0051](ADR-0051-the-coupon-studio-a-browser-page-through-the-api-with-the-fea-package-computing-every-number.md), [ADR-0055](ADR-0055-the-studio-opens-on-a-guided-chat-that-fills-the-same-form-rows-and-the-full-form-stays-one-click-away.md), [ADR-0060](ADR-0060-the-chat-solves-laminate-problems-through-the-case-solver-with-every-value-in-its-own-unit.md); `fea/src/anisotropy_fea/units.py`, `fea/src/anisotropy_fea/intake.py`, `docs/models/coupon.py`, `lib/studio-chat.ts`, `fea/tests/test_deck_units.py`, `fea/tests/test_intake.py`, `fea/tests/test_checks.py`, `fea/tests/test_coupon_document.py`, `tests/studio-chat.test.ts`, `tests/browser/studio.spec.ts`
+- Area: fea
 
 ## Context
 

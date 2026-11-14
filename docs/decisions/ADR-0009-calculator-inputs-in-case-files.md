@@ -4,6 +4,7 @@
 - Date: 2026-10-03
 - Decided by: Founder | Drafted by: Codex
 - Related: ADR-0002, ADR-0003, ADR-0007; `engine/tests/test_calculator.py`
+- Area: engine
 
 ## Context
 

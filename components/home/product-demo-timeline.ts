@@ -15,7 +15,7 @@ export type BeatId = (typeof BEAT_IDS)[number];
 export const DEMO_CLOCK_PER_SECOND = 0.25;
 /** How long each beat is on the clock: 3.2, 3.6, 4.8 and 3.2 s. */
 const LENGTHS: Record<BeatId, number> = { describe: 0.8, model: 0.9, analysis: 1.2, report: 0.8 };
-/** The model's move at the start of a beat: 1.44 s, eased in and out, as Scale's centre model moves. */
+/** The model's move at the start of a beat: 1.44 s, eased in and out. */
 export const MOVE = 0.36;
 /** The words of the beat before go in this long, as the move starts. */
 const WORDS_OUT = 0.09;
@@ -43,7 +43,7 @@ const [DESCRIBE, MODEL, ANALYSIS, REPORT] = BEATS;
  * words at the left, -1 to the left of words at the right. */
 export type Pose = { pitch: number; yaw: number; explode: number; beside: number; under: number };
 const START: Pose = { pitch: 0.56, yaw: -0.52, explode: 0, beside: 0, under: 1 };
-/** The pose at the end of each beat, Scale's way: whole in the middle, seen from above and from its tip so the aerofoil shows;
+/** The pose at the end of each beat: whole in the middle, seen from above and from its tip so the aerofoil shows;
  * then apart at one side; then at the other, turned to show the parts' other ends; then whole in the middle again. */
 export const POSES: Record<BeatId, Pose> = {
   describe: { pitch: 0.62, yaw: -0.66, explode: 0, beside: 0, under: 1 },

@@ -4,6 +4,7 @@
 - Date: 2026-11-14
 - Decided by: Kai Saucedo, software and UI/UX lead, 2026-11-14 (the words are quoted below) | Drafted by: Claude Code
 - Related: [ADR-0095](ADR-0095-the-home-page-demonstrates-the-product-the-coupon-workspace-in-a-white-box-under-the-hero-with-one-recorded-run-the-laminate-calculator-and-its-tour-are-archived.md), whose stage, beats, hand-over and scroll rules stay and whose centre model and cards this replaces; ADR-0001 (the engine computes every number in a result); ADR-0067 (new physics comes from CalculiX under our composite layer); ADR-0091 (the product view's words)
+- Area: website
 
 ## Context
 

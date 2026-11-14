@@ -4,6 +4,7 @@
 - Date: 2026-10-19
 - Decided by: Founder (pending review) | Drafted by: Claude Code
 - Related: ADR-0029, ADR-0030, ADR-0031 (what the files are), ADR-0023 (skills), `docs/agents/skills/workspace-layout/SKILL.md`, `.local/fea/README.md`, `.local/homework/README.md`, `fea/tests/test_local_tension_deck.py`
+- Area: process
 
 ## Context
 

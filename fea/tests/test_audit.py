@@ -11,8 +11,9 @@ from openpyxl import load_workbook
 from anisotropy_fea import case_pages, paths  # where the files live (ADR-0036)
 from anisotropy_fea.abaqus_reader import parse_deck, read_deck
 from anisotropy_fea.abaqus_report import read_field_report
-from anisotropy_fea.audit import (AUDITOR_BLOCK, AUDITOR_FIELDS, AUTO, CAUSES, COMPARED, COVER, EQUIVALENCE_GROUPS, FONT, GLANCE, HOW_TO, LISTED_ONLY,
-                                  NOT_BUILT_BY_TEAM, RECORD, RESULTS_SHEET, RUBRIC_COLUMNS, RUBRIC_SHEET, RULE_FIELD, SECTIONS, TO_SEND, VALUES_SHEET,
+from anisotropy_fea.forms import PICK_ERROR, number_rule
+from anisotropy_fea.audit import (left_out_text, AUDITOR_BLOCK, AUDITOR_FIELDS, AUTO, CAUSES, COMPARED, COVER, EQUIVALENCE_GROUPS, FONT, GLANCE, HOW_TO, LISTED_ONLY,
+                                  NOT_APPLICABLE_WITHOUT_TEAM, NOT_BUILT_BY_TEAM, TEAM_BLANK, RECORD, RESULTS_SHEET, RUBRIC_COLUMNS, RUBRIC_SHEET, RULE_FIELD, SECTIONS, TO_SEND, VALUES_SHEET,
                                   AuditError, Evidence, Found, Row, RubricError, _Facts, _laminate, form_tables, items_for, load_rubric, parse_rubric,
                                   read_form, score, verdict_of, write_form)
 from anisotropy_fea.report import laminate_check
@@ -66,7 +67,7 @@ def test_the_committed_rubric_reads():
     assert [s.id for s in rubric.sections] == ["A", "B", "C", "D"] and all(s.meaning for s in rubric.sections)  # E, documentation, is deferred
     assert not any("ADR" in item.acceptance or "ADR" in item.check for item in rubric.items)  # the rubric's words go to the team unchanged
     assert len({item.id for item in rubric.items}) == len(rubric.items)
-    assert rubric.version == "0.4" and rubric.status == "confirmed", "asked for by the founder on 2026-11-11 (ADR-0043 amendment 7)"
+    assert rubric.version == "0.5" and rubric.status == "draft", "after the package audit, until the founder confirms it (ADR-0043 amendment 8)"
     c8 = next(item for item in rubric.items if item.id == "C8")  # every other output a ply shows, judged by the team's engineer
     assert c8.method == "auditor" and c8.required and c8.applies_to == ("UNT",) and c8.tolerance is None and "within 1 %" in c8.acceptance and "compare_every_output" in c8.needs
     assert [item.id for item in rubric.items if item.section == "A"] == ["A1", "A2"]  # the files-identified row left in 0.3: the Record sheet names them
@@ -170,17 +171,17 @@ def test_the_scores_say_why(grips):
     found = {s.item.id: s.found for s in score(load_rubric(), grips)}
     c2 = found["C2"]
     assert c2.team[1].startswith("S11: 24 values; largest ") and c2.ours[1].startswith("S11: 24 values; largest ") and "within 1 %" in c2.difference[1]
-    assert c2.team[-1] == "S12: not in the reports, left blank, for the team to fill in" and c2.ours[-1].startswith("S12: largest ")
+    assert c2.team[-1] == "S12: not in the team's reports" and c2.ours[-1].startswith("S12: largest ")
     assert " in the band over all plies, at our element " in c2.ours[-1] and c2.difference[-1].startswith("S12: not compared; the Result waits until the team has verified S12")
     assert "unbalanced (2 plies at +30, 1 at -30)" not in found["B3"].text  # the full laminate counts both halves
     # our spec states [90/-60/60/-60/90]s from the length axis, the team's deck [0/30/-30/30/0]s from x: the balance is judged on the fibres from x (ADR-0065)
     assert found["B3"].ours[1] == "Balance: unbalanced (4 plies at +30, 2 at -30), symmetric (fibre directions from x)" and found["B3"].ours[1] == found["B3"].team[1]
     assert found["B3"].difference == ("Layup, bottom first: the same", "Balance: the same")
     assert found["B3"].ours[0].endswith("from the length axis (Ori-1, local 1 along y)") and found["B3"].team[0].endswith("from x (Ori-1, local 1 along x)")
-    assert found["C7"].team == ("left blank, for the team to fill in",) and "ply 1 (0 deg) by maximum stress, at 0.5 of the applied loading" in found["C7"].ours[0]
+    assert found["C7"].team == (TEAM_BLANK,) and "ply 1 (0 deg) by maximum stress, at 0.5 of the applied loading" in found["C7"].ours[0]
     assert found["C8"].ours[0].startswith("This package has no every-output file") and not found["C8"].team  # this fixture's deck asks for no ply's middle
     every = {s.item.id: s.found for s in score(load_rubric(), dataclasses.replace(grips, every_output=True))}["C8"]
-    assert every.team == ("left blank, for the team to fill in",) and every.ours[0] == "Every element and ply: 4-results/ours-every-output.csv"
+    assert every.team == (TEAM_BLANK,) and every.ours[0] == "Every element and ply: 4-results/ours-every-output.csv"
     # D5 states the laminate's shear coupling from its stiffness: this IM7 layup, 4 plies at +30 and 2 at -30, has it
     coupling = next(line for line in found["D5"].ours if line.startswith("In-plane shear coupling of the laminate, from our engine's stiffness: A16 = "))
     assert ": present, " in coupling and "of A11" in coupling
@@ -193,7 +194,7 @@ def test_the_scores_say_why(grips):
     b8 = found["B8"]  # boundary conditions and loads: the team's side in full beside ours
     assert b8.team[0].startswith("Reference point at (") and b8.ours[0].startswith("Reference point at (") and "U2 = " in b8.team[0] and "UR3 = 0" in b8.team[0]
     assert "Concentrated loads: none" in b8.team and "Concentrated loads: none" in b8.ours
-    assert found["C1"].team == ("left blank, for the team to fill in",) and found["C1"].ours[0].endswith(" N along the coupon at the top grip, in tension") and found["C1"].difference == ()
+    assert found["C1"].team == (TEAM_BLANK,) and found["C1"].ours[0].endswith(" N along the coupon at the top grip, in tension") and found["C1"].difference == ()
     assert found["C4"].ours[0].startswith("Largest displacement: U1 ") and found["C4"].ours[1].startswith("Strain at element ")
     assert found["D1"].team == () and found["D1"].ours[0].startswith("Element ") and found["D1"].difference[-1] == "Tolerance 1 %"
 
@@ -206,11 +207,18 @@ def test_a_stress_beyond_the_tolerance_fails(grips):
 
 
 def test_a_coupon_the_team_has_not_built_cannot_be_checked_against_their_model(grips):
+    """Without a team model (ADR-0043 amendment 8): section B and C5 do not apply, N/A and not required; C2 and C3 stay open for the
+    auditor's Abaqus run of our deck."""
     alone = dataclasses.replace(grips, team_deck=None, team_deck_sha256=None, equivalence=None, paired=(), inner_band=None, excluded=None)
     by_id = {s.item.id: s for s in score(load_rubric(), alone)}
-    assert all(by_id[f"B{n}"].result == "Not checked" for n in (1, 2, 3, 4, 5, 7, 8, 9))
-    assert by_id["C2"].result == "Not checked" and by_id["C2"].found == Found(team=(NOT_BUILT_BY_TEAM,))
+    assert all(by_id[f"B{n}"].result == "N/A" and not by_id[f"B{n}"].item.required for n in range(1, 10))
+    assert by_id["B1"].found == Found(difference=(NOT_APPLICABLE_WITHOUT_TEAM,)) and by_id["C5"].result == "N/A" and not by_id["C5"].item.required
+    assert by_id["C2"].result is None and by_id["C2"].item.required and by_id["C2"].found.team == (TEAM_BLANK,)
+    assert by_id["C3"].result is None and by_id["C3"].found.ours[0].startswith("Our Mises for every ply")
+    every = {s.item.id: s for s in score(load_rubric(), dataclasses.replace(alone, every_output=True))}
+    assert every["C2"].found.ours[0] == "Every element and ply: 4-results/ours-every-output.csv" and "your Abaqus run of our deck" in every["C2"].found.ours[1]
     assert by_id["A2"].result == "Pass" and by_id["D2"].result == "Pass"
+    assert NOT_BUILT_BY_TEAM not in "".join(s.found.text for s in by_id.values())  # every row says what to do now, not what cannot be done
 
 
 def test_a_blank_card_field_fails_the_card_row(grips):
@@ -255,7 +263,7 @@ def test_the_form_locks_our_results_and_opens_the_auditors_cells(grips, tmp_path
     record = book[RECORD]
     assert record.sheet_state == "hidden"  # for our tools; the auditor never sees it
     kept = {record.cell(r, 1).value: record.cell(r, 2).value for r in range(1, record.max_row + 1)}
-    assert kept["Rubric"] == "version 0.4 (confirmed)" and len(kept["Our results digest"]) == 64 and record.protection.sheet
+    assert kept["Rubric"] == "version 0.5 (draft)" and len(kept["Our results digest"]) == 64 and record.protection.sheet
     sheet = book[RUBRIC_SHEET]
     assert [c.value for c in sheet[1]] == list(RUBRIC_COLUMNS)
     result, observation, cause = (RUBRIC_COLUMNS.index(name) + 1 for name in ("Result", "Observation", "Cause"))
@@ -298,13 +306,15 @@ def test_the_form_computes_the_rule_counts_the_rows_and_shows_the_numbers_behind
     assert (labels["Package"] < labels[COMPARED] < labels["The model"] < labels["Team's deck"] < labels["Our deck"] < labels[AUDITOR_BLOCK] < labels[RULE_FIELD] < labels[SECTIONS]
             < labels["A. Identity and traceability"] < labels[HOW_TO] < labels[TO_SEND])
     rule = cover.cell(labels[RULE_FIELD], 2).value
-    assert rule.startswith('=IF(COUNTIFS(Rubric!$E$2:$E$200,"yes",Rubric!$G$2:$G$200,"Not checked")') and rule.endswith('"Pass with observations","Pass")))')
+    assert rule.startswith('=IF(COUNTIF(Rubric!$E$2:$E$200,"yes")-(COUNTIFS(Rubric!$E$2:$E$200,"yes",Rubric!$G$2:$G$200,"Pass")+') and rule.endswith('"Pass with observations","Pass")))')
+    assert 'Rubric!$G$2:$G$200,"N/A")' in rule and 'Rubric!$G$2:$G$200,"Fail")' in rule  # a required row counts as answered only when Pass, N/A or Fail
     assert ',"",IF(' in rule and 'COUNTIF(Rubric!$K$2:$K$200,"?*")' in rule and cover.cell(labels[RULE_FIELD], 2).protection.locked  # blank until complete
     sections = [cover.cell(r, 1).value for r in range(labels[SECTIONS] + 1, labels[SECTIONS] + 5)]
     assert sections == ["A. Identity and traceability", "B. Model match: our model is the team's model",
                         "C. Results match: verification against the team's solver", "D. Physics, independent of both solvers"]
     assert cover.cell(labels["A. Identity and traceability"], 2).value == "the coupon card and the unit system" and cover.max_column == 2
-    assert cover.cell(labels[SECTIONS] + 5, 1).value is None  # no section E, and no counts table
+    assert cover.cell(labels[SECTIONS] + 5, 1).value.startswith("Rows that do not apply to this test are left out")  # D3 and D4: the gap explained
+    assert cover.cell(labels[SECTIONS] + 6, 1).value is None  # no section E, and no counts table
     for noise in ("Engine commit", "Team deck SHA-256", "Our results digest", "Run by", "Example finding", "Findings", "ADR", "as filled in", "rule"):
         assert not any(noise in str(cover.cell(r, c).value) for r in range(1, cover.max_row + 1) for c in (1, 2)), noise
     sent = [cover.cell(r, 1).value for r in range(labels[TO_SEND] + 1, cover.max_row + 1) if cover.cell(r, 1).value]
@@ -347,7 +357,7 @@ def test_the_form_computes_the_rule_counts_the_rows_and_shows_the_numbers_behind
     assert [c.value for c in values[1]][:6] == ["Team element", "Our element", "x (mm)", "y (mm)", "Layer (1 = bottom)", "Quantity"]
     assert values.cell(2, 7).number_format == "0.00" and values.cell(2, 3).number_format == "0.000"
     kept = {book[RECORD].cell(r, 1).value: book[RECORD].cell(r, 2).value for r in range(1, book[RECORD].max_row + 1)}
-    assert kept["Team deck SHA-256"] == "0" * 64 and kept["Engine"] == "anisotropy-fea 0.1.0, commit abc1234" and kept["Rubric"] == "version 0.4 (confirmed)"
+    assert kept["Team deck SHA-256"] == "0" * 64 and kept["Engine"] == "anisotropy-fea 0.1.0, commit abc1234" and kept["Rubric"] == "version 0.5 (draft)"
     assert book[RECORD].sheet_state == "hidden" and not any("ADR" in str(c.value) for row in results.iter_rows() for c in row if c.value is not None)
     assert read_form  # a form with these sheets reads back: test_a_form_with_the_numbers_behind_it_reads_back
 
@@ -516,3 +526,64 @@ def test_a_form_for_another_team_deck_is_refused(grips, tmp_path, coupon_folders
     (verification / paths.MANIFEST).write_text(f'[team]\ndeck = "{GRIPS_FIXTURE.as_posix()}"\n', encoding="utf-8")
     with pytest.raises(case_pages.CasePageError, match="the form's team deck is not coupon-2x8-grips-im7-8552.inp"):
         case_pages.file_audit("IM7-UNT-L9", returned(tmp_path, grips), "2026-10-24")
+
+# --------------------------------------------------------------------------------------------- the form's guards (the package audit, 2026-11-12)
+
+def test_the_team_cells_are_open_and_a_clean_audit_with_team_values_passes(grips, tmp_path):
+    """The rows whose team value is entered on the form open their Team cell, yellow; values there are not observations, so a clean
+    audit still reads Pass, not Pass with observations."""
+    path = filled(tmp_path, grips)
+    book = load_workbook(path)
+    sheet = book[RUBRIC_SHEET]
+    rows = {sheet.cell(r, 1).value: r for r in range(2, sheet.max_row + 1) if sheet.cell(r, 1).value}
+    team = RUBRIC_COLUMNS.index("Team") + 1
+    for item_id in ("C1", "C4", "C7"):
+        cell = sheet.cell(rows[item_id], team)
+        assert cell.value == TEAM_BLANK and not cell.protection.locked and cell.fill.fgColor.rgb.endswith("FFF4CC"), item_id
+        cell.value = "the team's value"
+    assert sheet.cell(rows["A1"], team).protection.locked  # a row our tools judged keeps its Team cell locked
+    book.save(path)
+    form = read_form(path)
+    assert form.verdict == "Pass" and form.counts() == "none"
+
+
+def test_a_package_without_a_team_model_reaches_pass(grips, tmp_path):
+    """ADR-0043 amendment 8: with section B and C5 N/A and not required, the verdict fills once the auditor passes every open row."""
+    alone = dataclasses.replace(grips, team_deck=None, team_deck_sha256=None, equivalence=None, paired=(), inner_band=None, excluded=None)
+    form = read_form(filled(tmp_path, alone))
+    assert form.verdict == "Pass"
+    rows = {r.id: r for r in form.rows}
+    assert all(rows[f"B{n}"].result == "N/A" and not rows[f"B{n}"].required for n in range(1, 10)) and rows["C2"].required
+
+
+def test_a_list_cell_refuses_a_word_off_the_list(grips, tmp_path):
+    """Excel's error alert is on, and stops: a typed "Pased" or "TBD" cannot stand in a Result or a Cause cell."""
+    path = filled(tmp_path, grips)
+    lists = [v for v in load_workbook(path)[RUBRIC_SHEET].data_validations.dataValidation if v.type == "list"]
+    assert lists and all(v.showErrorMessage and v.errorStyle == "stop" and v.error == PICK_ERROR for v in lists)
+
+
+def test_a_number_rule_names_its_row_and_keeps_its_bounds():
+    from openpyxl import Workbook
+
+    sheet = Workbook().active
+    number_rule(sheet, ["B2"], at_least=0.0, label="Width (mm)")
+    number_rule(sheet, ["B3"], whole=True, above=0.0, label="Plies")
+    first, second = sheet.data_validations.dataValidation
+    assert first.operator == "greaterThanOrEqual" and first.formula1 == "0.0" and first.error == "Width (mm): a number of at least 0."
+    assert second.type == "whole" and second.error == "Plies: a whole number above 0." and first.showErrorMessage and first.errorStyle == "stop"
+
+
+def test_the_form_explains_the_gap_in_the_numbering(grips):
+    """D3 and D4 apply to open-hole coupons only; the cover says so, so D1, D2, D5 does not look like a missing row."""
+    rubric = load_rubric()
+    text = left_out_text(rubric, score(rubric, grips))
+    assert "D3 (" in text and "D4 (" in text and "open-hole tension only" in text
+
+
+def test_row_c4_names_the_chapter_it_is_given(grips):
+    found = {s.item.id: s.found for s in score(load_rubric(), dataclasses.replace(grips, build_chapter=4))}
+    assert all("Chapter 5" not in line for line in found["C4"].ours)
+    plain = {s.item.id: s.found for s in score(load_rubric(), grips)}
+    assert all("(Chapter" not in line for line in plain["C4"].ours)  # no chapter is named when the document gives none
+

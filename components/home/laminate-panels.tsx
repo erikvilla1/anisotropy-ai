@@ -1,14 +1,18 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Matrix } from "@/components/abd-matrix";
 import type { AnalysisResult, FirstPlyFailure, LaminateSummary, MaterialProvenance } from "@/lib/laminate-api";
 import type { LibraryOption } from "@/lib/material-library-options";
 
-/** Display conversions only: the engine's SI values shown in the units engineers read (ADR-0002). */
+/** Display conversions only: the engine's SI values shown in the units engineers read (ADR-0002), at four significant figures
+ * (docs/copy-style-guide.md). */
+export const trim = (value: number, digits = 4) => String(Number(value.toPrecision(digits)));
 const gpa = (pa: number) => trim(pa / 1e9);
 const mm = (m: number) => trim(m * 1e3);
-const trim = (value: number, digits = 4) => String(Number(value.toPrecision(digits)));
+/** A record's value as text, shown at the same figures as the answer that will replace it; text that is not a number as it is. */
+const figures = (text: string | null | undefined, digits = 4): string | null =>
+  text == null || text.trim() === "" ? null : Number.isFinite(Number(text)) ? trim(Number(text), digits) : text;
 
 /** The material's recorded properties: the engine's cited values once a response has arrived, the record's display values
  * before that, "not provided" where the record states none. */
@@ -19,14 +23,14 @@ export function PropertyRow({ option, provenance }: { option: LibraryOption | un
     return cited ? trim(cited.value * 1e6) : fallback;
   };
   const rows: { key: string; label: ReactNode; value: string | null; unit: string }[] = [
-    { key: "E1", label: "E₁", value: provenance ? gpa(provenance.E1_pa) : option?.E1_GPa ?? null, unit: "GPa" },
-    { key: "E2", label: "E₂", value: provenance ? gpa(provenance.E2_pa) : option?.E2_GPa ?? null, unit: "GPa" },
-    { key: "G12", label: "G₁₂", value: provenance ? gpa(provenance.G12_pa) : option?.G12_GPa ?? null, unit: "GPa" },
-    { key: "nu12", label: "ν₁₂", value: provenance ? trim(provenance.nu12) : option?.nu12 ?? null, unit: "" },
-    { key: "alpha1", label: "α₁", value: alpha("alpha1", option?.alpha1_per_K ?? null), unit: "10⁻⁶/K" },
-    { key: "alpha2", label: "α₂", value: alpha("alpha2", option?.alpha2_per_K ?? null), unit: "10⁻⁶/K" },
-    { key: "rho", label: "ρ", value: provenance ? (provenance.density_kg_per_m3 == null ? null : trim(provenance.density_kg_per_m3)) : option?.density_kg_per_m3 ?? null, unit: "kg/m³" },
-    { key: "Vf", label: <>V<sub>f</sub></>, value: provenance ? (provenance.fiber_volume_fraction == null ? null : trim(provenance.fiber_volume_fraction * 100, 3)) : option?.Vf_percent ?? null, unit: "%" },
+    { key: "E1", label: "E₁", value: provenance ? gpa(provenance.E1_pa) : figures(option?.E1_GPa), unit: "GPa" },
+    { key: "E2", label: "E₂", value: provenance ? gpa(provenance.E2_pa) : figures(option?.E2_GPa), unit: "GPa" },
+    { key: "G12", label: "G₁₂", value: provenance ? gpa(provenance.G12_pa) : figures(option?.G12_GPa), unit: "GPa" },
+    { key: "nu12", label: "ν₁₂", value: provenance ? trim(provenance.nu12) : figures(option?.nu12), unit: "" },
+    { key: "alpha1", label: "α₁", value: alpha("alpha1", figures(option?.alpha1_per_K)), unit: "10⁻⁶/K" },
+    { key: "alpha2", label: "α₂", value: alpha("alpha2", figures(option?.alpha2_per_K)), unit: "10⁻⁶/K" },
+    { key: "rho", label: "ρ", value: provenance ? (provenance.density_kg_per_m3 == null ? null : trim(provenance.density_kg_per_m3)) : figures(option?.density_kg_per_m3), unit: "kg/m³" },
+    { key: "Vf", label: <>V<sub>f</sub></>, value: provenance ? (provenance.fiber_volume_fraction == null ? null : trim(provenance.fiber_volume_fraction * 100, 3)) : figures(option?.Vf_percent, 3), unit: "%" },
   ];
   return (
     <dl className="hero-properties" aria-label="Material properties" data-testid="property-row">
@@ -40,25 +44,44 @@ export function PropertyRow({ option, provenance }: { option: LibraryOption | un
   );
 }
 
-/** The plies as a list, top face first, each with its colour, angle and thickness; hovering a row lights the slab. */
-export function StackList({ angles, thickness_mm, colors, hovered, onHover }: {
+/** The plies as a list, top face first, each with its colour, angle and thickness in millimetres (the unit is in the list's
+ * heading); hovering a row lights the slab, and so does focusing it where the list is `focusable` (the live calculator's, not
+ * the tour's, whose steps hold nothing to focus). The list is one tab stop, the row last focused or the top one, and the arrow
+ * keys, Home and End move along it (a roving tabindex), so a long layup does not put a tab stop on every ply. */
+export function StackList({ angles, thickness_mm, colors, hovered, onHover, focusable = false }: {
   angles: number[]; thickness_mm: string; colors: Map<number, string>; hovered: number | null; onHover: (index: number | null) => void;
+  focusable?: boolean;
 }) {
   const rows = angles.map((angle, index) => ({ angle, index })).reverse();
+  const thickness = figures(thickness_mm) ?? thickness_mm;
+  const [current, setCurrent] = useState<number | null>(null);
+  const stop = current !== null && current < angles.length ? current : rows[0]?.index;
+  const move = (event: KeyboardEvent<HTMLLIElement>) => {
+    const items = Array.from(event.currentTarget.parentElement?.children ?? []) as HTMLElement[];
+    const at = items.indexOf(event.currentTarget);
+    const to = event.key === "ArrowDown" ? at + 1 : event.key === "ArrowUp" ? at - 1 : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : null;
+    if (to === null) return;
+    event.preventDefault();
+    items[Math.max(0, Math.min(items.length - 1, to))]?.focus();
+  };
   return (
-    <ol className="hero-stack" aria-label="Stacking sequence, top face first" data-testid="stack-list">
+    <ol className="hero-stack" aria-label="Stacking sequence, top face first, thickness in mm" data-testid="stack-list">
       {rows.map(({ angle, index }) => (
         <li
           key={index}
           data-testid="stack-row"
           className={hovered === index ? "is-hovered" : ""}
+          tabIndex={focusable ? (index === stop ? 0 : -1) : undefined}
           onMouseEnter={() => onHover(index)}
           onMouseLeave={() => onHover(null)}
+          onFocus={focusable ? () => { setCurrent(index); onHover(index); } : undefined}
+          onBlur={focusable ? () => onHover(null) : undefined}
+          onKeyDown={focusable ? move : undefined}
         >
           <span className="hero-stack-swatch" style={{ background: colors.get(angle) }} aria-hidden="true" />
           <span className="hero-stack-index">{index + 1}</span>
           <span className="hero-stack-angle">{angle > 0 ? `+${angle}` : String(angle)}°</span>
-          <span className="hero-stack-thickness">{thickness_mm} mm</span>
+          <span className="hero-stack-thickness">{thickness}</span>
         </li>
       ))}
     </ol>
@@ -72,6 +95,9 @@ const kindLabel: Record<LaminateSummary["kind"], string> = {
   "quasi-isotropic": "Quasi-isotropic",
   general: "General (anisotropic)",
 };
+
+/** The answer in a few words, for the results' status line: what the laminate is and how thick it is. */
+export const summaryLine = (summary: LaminateSummary) => `${kindLabel[summary.kind]}, ${mm(summary.total_thickness_m)} mm`;
 
 /** What the stack is, as the engine says it (ADR-0059). */
 export function SpecsList({ summary }: { summary: LaminateSummary }) {
@@ -137,16 +163,16 @@ export function FailurePanel({ failure }: { failure: FirstPlyFailure }) {
   );
 }
 
-/** The A, B and D matrices in the 2 × 2 arrangement of the ABD matrix. */
-export function AbdGrid({ result }: { result: AnalysisResult }) {
+/** The A, B and D matrices in the 2 × 2 arrangement of the ABD matrix; `focusable` as on `Matrix`. */
+export function AbdGrid({ result, focusable = true }: { result: AnalysisResult; focusable?: boolean }) {
   return (
     <div className="hero-abd" data-testid="abd-grid">
-      <Matrix title="A" unit="N/m" meaning="Stretching stiffness" values={result.A_N_per_m} compact />
-      <Matrix title="B" unit="N" meaning="Stretching–bending coupling" values={result.B_N} compact />
+      <Matrix title="A" unit="N/m" meaning="Stretching stiffness" values={result.A_N_per_m} compact focusable={focusable} />
+      <Matrix title="B" unit="N" meaning="Stretching–bending coupling" values={result.B_N} compact focusable={focusable} />
       <p className="hero-abd-note">
         The ABD matrix is <span>[A B; B D]</span>: B appears twice, once above and once mirrored here. Three significant figures; the full page prints four.
       </p>
-      <Matrix title="D" unit="N·m" meaning="Bending stiffness" values={result.D_N_m} compact />
+      <Matrix title="D" unit="N·m" meaning="Bending stiffness" values={result.D_N_m} compact focusable={focusable} />
     </div>
   );
 }

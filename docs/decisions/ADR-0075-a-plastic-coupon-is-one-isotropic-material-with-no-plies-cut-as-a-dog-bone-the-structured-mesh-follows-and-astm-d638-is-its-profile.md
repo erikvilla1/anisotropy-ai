@@ -4,6 +4,7 @@
 - Date: 2026-11-10
 - Decided by: Founder, 2026-11-10 ("how about if you learn about D638", choosing ASTM D638 next over the composite standards D6641, D3518, D7264 and D5766; the founder supplied the D638-14 copy the same day, and the active D638-22 copy soon after) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/dogbone.py`, `fea/src/anisotropy_fea/mesher.py` (`structured_dogbone`), `fea/src/anisotropy_fea/spec.py`, `fea/src/anisotropy_fea/write_abaqus.py`, `fea/src/anisotropy_fea/write_calculix.py`, `fea/src/anisotropy_fea/standards/astm_d638.py`, `fea/checks/d638-type-i-plastic/`, `fea/tests/test_dogbone.py`, [ADR-0018](ADR-0018-source-rights-classes.md) (amendment 1), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md), [ADR-0065](ADR-0065-coupon-ply-angles-are-counted-from-the-coupons-length-axis.md), [ADR-0072](ADR-0072-a-coupons-test-standard-is-a-profile-of-clause-tagged-requirements-the-specimen-is-checked-against-and-a-deviation-is-reported-never-refused.md)
+- Area: fea
 
 ## Context
 

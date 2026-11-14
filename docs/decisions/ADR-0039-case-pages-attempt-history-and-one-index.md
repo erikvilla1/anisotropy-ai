@@ -4,6 +4,7 @@
 - Date: 2026-10-21
 - Decided by: Founder, 2026-10-21 (keep our layout and add the good parts of the proposal; one folder per attempt, no code copies, result files only for the latest attempt; index team tests, benchmarks, homework and projects; later the same day: no prompt or notes files, no session transcripts, no OneDrive location, as none adds value) | Drafted by: Claude Code
 - Related: `fea/src/anisotropy_fea/case_pages.py`, `fea/tools/case_pages.py`, `fea/tests/test_case_pages.py`, [ADR-0036](ADR-0036-one-folder-per-fea-test.md), [ADR-0037](ADR-0037-every-private-file-under-local-by-purpose.md), [ADR-0038](ADR-0038-coupon-identity-card-and-designation.md), local evaluation note `.local/notes/evaluations/fea/2026-10-21-case-pages.md` (ADR-0042)
+- Area: fea
 
 ## Context
 

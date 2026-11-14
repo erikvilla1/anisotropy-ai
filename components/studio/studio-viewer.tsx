@@ -51,7 +51,9 @@ export function StudioViewer({ apiBaseUrl }: { apiBaseUrl: string }) {
     <div className="studio-viewer">
       {message ? <p className="studio-alert" role="alert">{message}</p> : null}
       {job ? <JobProgress job={job} /> : null}
-      {fields ? <ResultsView fields={fields} explanation={explanation} job={job} apiBase={apiBaseUrl} preview={null} /> : <p className="studio-status" role="status">Loading results…</p>}
+      {/* a problem replaces the loading line, so a gone job does not say it is still loading (audit fea-screens-2) */}
+      {fields ? <ResultsView fields={fields} explanation={explanation} job={job} apiBase={apiBaseUrl} preview={null} />
+        : message ? null : <p className="studio-status" role="status">Loading results…</p>}
     </div>
   );
 }

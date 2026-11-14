@@ -50,13 +50,16 @@ test("an unknown address gets the site's own 404 page, with one title and the sk
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe("rgb(255, 255, 255)");
 });
 
-test("an unknown address under an old one keeps the 404 page's own header and footer", async ({ page }) => {
+test("an unknown address under an old one or under the workspace keeps the 404 page's own header and footer", async ({ page }) => {
   const hydration: string[] = [];
   page.on("console", (m) => { if (m.type() === "error" && /hydrat/i.test(m.text())) hydration.push(m.text()); });
-  await page.goto("/studio/x");
-  await expect(page.locator("main#main h1")).toHaveText("Page not found");
-  await expect(page.locator(".site-header:not(.chat-site-header)")).toBeVisible();
-  await expect(page.locator(".site-footer")).toBeVisible();
+  // /workspace/cad was the CAD placeholder until decision D5 (ADR-0091 amendment 2)
+  for (const path of ["/studio/x", "/workspace/cad"]) {
+    await page.goto(path);
+    await expect(page.locator("main#main h1"), path).toHaveText("Page not found");
+    await expect(page.locator(".site-header:not(.chat-site-header)"), path).toBeVisible();
+    await expect(page.locator(".site-footer"), path).toBeVisible();
+  }
   expect(hydration).toEqual([]);
 });
 
@@ -66,7 +69,7 @@ test("every page's title is its name and the site's, and the home's is the tagli
     ["/about", "About | Anisotropy"],
     ["/services/test-plans", "Test plans | Anisotropy"],
     ["/workspace", "Workspace | Anisotropy"],
-    ["/workspace/cad", "CAD | Anisotropy"],
+    ["/workspace/fea/view", "Viewer | Anisotropy"],
   ]) {
     await page.goto(path);
     await expect(page, path).toHaveTitle(title);
@@ -116,8 +119,8 @@ test.describe("on a phone", () => {
     await expect(nav.getByRole("link", { name: "Services", exact: true })).toHaveAttribute("aria-current", "true");
   });
 
-  test("the CAD page's header links back to the projects", async ({ page }) => {
-    await page.goto("/workspace/cad");
+  test("the viewer's header links back to the projects", async ({ page }) => {
+    await page.goto("/workspace/fea/view"); // the CAD page that also did is gone (decision D5, ADR-0091 amendment 2)
     await expect(page.locator(".site-header").getByRole("link", { name: "All projects" })).toHaveAttribute("href", "/workspace");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
@@ -179,7 +182,7 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
   await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   const services = nav.getByRole("link", { name: "Services", exact: true });
-  // the header's own links, in order, standing at the right before the Workspace button (ADR-0077 amendment 50)
+  // the header's own links, in order, standing at the right before the Workspace button (ADR-0077 amendment 51)
   const row = await nav.evaluate((el) => {
     const links = [...el.querySelectorAll(":scope > a")].filter((a) => !a.classList.contains("mobile-chat-cta") && a.getBoundingClientRect().width > 0);
     const boxes = links.map((a) => a.getBoundingClientRect());

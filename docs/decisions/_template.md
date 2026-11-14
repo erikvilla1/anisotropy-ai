@@ -4,6 +4,7 @@
 - Date: YYYY-MM-DD
 - Decided by: [person] | Drafted by: [person or tool]
 - Related: [pull request, test, report or source]
+- Area: engine | fea | website | api | assistant | data | docs | process | hosting (one or more; the engine manual prints the engine and fea records)
 
 ## Context
 

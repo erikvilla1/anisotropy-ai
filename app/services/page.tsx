@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowUpRight, BookOpen, Box, ClipboardList, FileText, Layers3, ScanLine, Wrench } from "lucide-react";
+import { ArrowRight, BookOpen, Box, ClipboardList, FileText, Layers3, ScanLine, Wrench } from "lucide-react";
+import { ClosingBand } from "@/components/closing-band";
 import { MediaSlot } from "@/components/media-slot";
 import { serviceHref, services, statusLabel, type Service } from "@/lib/services";
 import "../inner-pages.css";
@@ -7,7 +8,7 @@ import "./services.css";
 
 export const metadata = {
   title: "Services",
-  description: "Computer-aided design, finite element modeling, test plans, documentation and manufacturing plans for composite coupons, each on its own page.",
+  description: "Computer-aided design, finite element modeling, test plans, documentation and manufacturing plans for composite coupons, from one coupon record.",
 };
 
 const icons: Record<Service["slug"], typeof Layers3> = {
@@ -18,12 +19,10 @@ const icons: Record<Service["slug"], typeof Layers3> = {
   "manufacturing-plans": Wrench,
 };
 
-const media: Record<Service["slug"], { label: string; src?: string; alt?: string }> = {
-  "computer-aided-design": { label: "The studio's mesh of a D3039 tension coupon" },
-  "finite-element-modeling": { label: "A solved coupon in the studio: the first ply to fail" },
+/** The pictures the rows have; a row without one opens on its words (components/media-slot.tsx draws nothing without a file). */
+const media: Partial<Record<Service["slug"], { label: string; src: string; alt: string }>> = {
   "test-plans": { label: "Coupon specimens before a tensile test", src: "/assets/images/coupon-01.jpg", alt: "A composite coupon specimen" },
-  documentation: { label: "Pages of a coupon package: model chapter and comparison table" },
-  "manufacturing-plans": { label: "Laying up a coupon panel", src: "/assets/images/carbon-weave.jpg", alt: "Woven carbon fiber" },
+  "manufacturing-plans": { label: "Woven carbon fiber", src: "/assets/images/carbon-weave.jpg", alt: "Woven carbon fiber" },
 };
 
 /** The services landing page (audit of 2026-10-31, item 13): one short summary per service, each leading to its page. */
@@ -33,7 +32,7 @@ export default function Services() {
       <section className="page-opening">
         <p className="page-opening-label">SERVICES / ONE COMPOSITE DEVELOPMENT WORKFLOW</p>
         <h1 className="page-opening-title">
-          From an engineering question
+          From an engineering question{" "}
           <br />
           to <em>a documented answer.</em>
         </h1>
@@ -41,7 +40,7 @@ export default function Services() {
           <div className="page-opening-copy">
             <p>
               Five ways to use the same platform: the geometry, the model, the test, the document and the plan for
-              the shop, all from one coupon record. Each page says what exists today and what is planned.
+              the shop, all from one coupon record.
             </p>
           </div>
           <div className="page-opening-note">
@@ -57,20 +56,20 @@ export default function Services() {
         </div>
         <div className="page-opening-links">
           <Link href="/workspace/fea">
-            <Layers3 size={24} strokeWidth={1.4} />
+            <Layers3 size={24} strokeWidth={1.4} aria-hidden="true" />
             <div>
-              <span>TRY THE EXPERIENCE</span>
-              <h3>Development Process Streamlining</h3>
+              <span>OPEN THE WORKSPACE</span>
+              <span className="page-opening-link-title">Coupon analysis</span>
             </div>
-            <ArrowUpRight size={18} />
+            <ArrowRight size={18} aria-hidden="true" />
           </Link>
           <Link href="/library">
-            <BookOpen size={24} strokeWidth={1.4} />
+            <BookOpen size={24} strokeWidth={1.4} aria-hidden="true" />
             <div>
-              <span>EXPLORE THE FOUNDATION</span>
-              <h3>Materials & Physics Library</h3>
+              <span>OPEN THE LIBRARY</span>
+              <span className="page-opening-link-title">Materials library</span>
             </div>
-            <ArrowUpRight size={18} />
+            <ArrowRight size={18} aria-hidden="true" />
           </Link>
         </div>
       </section>
@@ -84,8 +83,8 @@ export default function Services() {
               Five ways to use it.
             </h2>
             <p>
-              A coupon described once feeds every service. The finite element model and the documentation are built;
-              geometry and test plans exist in part; manufacturing plans are stated as planned.
+              A coupon described once feeds every service. The finite element model and the documentation are available,
+              geometry and test plans in part, and manufacturing plans come later.
             </p>
           </div>
         </div>
@@ -94,36 +93,30 @@ export default function Services() {
             const Icon = icons[service.slug];
             const picture = media[service.slug];
             return (
-              <article className="kit-row service-item" key={service.slug}>
-                <MediaSlot className="kit-row-head" label={picture.label} src={picture.src} alt={picture.alt} ratio="3/2" />
+              <article className={picture ? "kit-row service-item has-media" : "kit-row service-item"} key={service.slug}>
+                {picture ? <MediaSlot className="kit-row-head" label={picture.label} src={picture.src} alt={picture.alt} ratio="3/2" /> : null}
                 <div className="kit-row-body service-item-body">
                   <div className="service-item-top">
-                    <Icon size={22} strokeWidth={1.4} />
+                    <Icon size={22} strokeWidth={1.4} aria-hidden="true" />
                     <span className="kit-mono">0{i + 1} / {service.eyebrow}</span>
+                    <span className={`kit-status kit-status-${service.status}`}>{statusLabel[service.status]}</span>
                   </div>
                   <h3>{service.title}</h3>
                   <p className="kit-text">{service.summary}</p>
                   <Link className="kit-link" href={serviceHref(service)}>
-                    Read about {service.title.toLowerCase()} <ArrowUpRight size={16} />
+                    Read about {service.title.toLowerCase()} <ArrowRight size={16} aria-hidden="true" />
                   </Link>
                 </div>
-                <span className={`kit-row-aside kit-status kit-status-${service.status}`}>{statusLabel[service.status]}</span>
               </article>
             );
           })}
         </div>
       </section>
-      <section className="band service-preview">
-        <div className="band-grid">
-          <p className="service-preview-text">
-            The studio, the materials library and the calculator are interactive today. Every page under Services
-            names its planned parts as planned, without a date.
-          </p>
-          <Link className="kit-link service-preview-link" href="/contact">
-            Ask about access <ArrowUpRight size={16} />
-          </Link>
-        </div>
-      </section>
+      <ClosingBand
+        label="ACCESS"
+        heading={["The workspace is open", "to invited users."]}
+        action={{ label: "Ask about access", href: "/contact" }}
+      />
     </main>
   );
 }

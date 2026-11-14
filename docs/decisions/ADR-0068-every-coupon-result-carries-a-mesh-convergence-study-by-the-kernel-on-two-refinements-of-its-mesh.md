@@ -4,6 +4,7 @@
 - Date: 2026-11-09
 - Decided by: Founder, 2026-11-09 (direction: the decision card's "Mesh convergence section") | Drafted by: Claude Code
 - Related: [ADR-0066](ADR-0066-solver-results-are-compared-as-one-set-of-quantities-in-the-ply-axes-at-stated-places-and-peaks-are-reported-apart.md) (the quantities and the peaks "that grow as the mesh is refined"), [ADR-0030](ADR-0030-models-from-a-spec-calculix-as-reference-solver.md) amendment 3 (the open-hole convergence study in `tools/kirsch_hole.py`), [ADR-0064](ADR-0064-a-coupon-job-reports-its-result-before-it-draws-and-builds-the-package.md) (the run's steps), [ADR-0067](ADR-0067-we-build-on-open-source-solvers-our-kernel-stays-the-fast-path-for-flat-linear-laminates-and-new-physics-comes-from-calculix-under-our-composite-layer.md) (the kernel stays the fast path for flat linear laminates: the study is the kernel's); `fea/src/anisotropy_fea/convergence.py`, `fea/tools/convergence_study.py`, `fea/tools/run_coupon.py`, `fea/tests/test_convergence.py`
+- Area: fea
 
 ## Context
 

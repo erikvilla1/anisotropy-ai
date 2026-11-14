@@ -5,7 +5,8 @@ import { useState, type ReactNode } from "react";
 import { Check, CircleAlert } from "lucide-react";
 import { changedRows, fixEcho, fixRows } from "@/lib/check-fix";
 import { enabledWords } from "@/lib/enabled-tests";
-import { labelFor, libraryOptions, shortHelp, wordsFor, type CheckItem, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
+import { libraryOptions, wordsFor, type CheckItem, type FieldDefinition, type StudioForm } from "@/lib/studio-form";
+import { fixRowWords } from "@/lib/tension-screen";
 
 /** The things to fix before running, each with the rows its check names to type in place when the card is the latest (ADR-0062
  * amendment 2): one Apply puts every row typed into the form, and the conversation checks again. A row left as it was is not sent. */
@@ -32,7 +33,7 @@ export function CheckIssues({ items, form, units, live, link, onApply, allTests 
             <CircleAlert size={14} /> <span><strong>{item.label}:</strong> {checkText(item)}</span>
             {fields ? (
               <div className="chat-fix-rows">
-                {fields.map((field) => <FixInput key={field.key} field={field} units={units} words={enabledWords(field.key, wordsFor(field, form), allTests)} value={typed[field.key] ?? form[field.key] ?? ""}
+                {fields.map((field) => <FixInput key={field.key} field={field} units={units} allTests={allTests} words={enabledWords(field.key, wordsFor(field, form), allTests)} value={typed[field.key] ?? form[field.key] ?? ""}
                   onChange={(value) => setTyped((t) => ({ ...t, [field.key]: value }))} />)}
               </div>
             ) : null}
@@ -58,11 +59,14 @@ export function CheckIssues({ items, form, units, live, link, onApply, allTests 
   );
 }
 
-/** One row in the chat: its label in the coupon's units, a list for a row of words, a text box otherwise, and the first sentence of its help.
- * Its id is the chat's own, apart from the same row's input on its panel. */
-function FixInput({ field, units, words, value, onChange }: { field: FieldDefinition; units: string; words: string[]; value: string; onChange: (value: string) => void }) {
+/** One row in the chat: its label in the coupon's units, a list for a row of words, a text box otherwise, and its hint: the tension screen's
+ * own words unless every test is offered, as on the rail (`fixRowWords`). Its id is the chat's own, apart from the same row's input on its panel. */
+function FixInput({ field, units, allTests, words, value, onChange }: {
+  field: FieldDefinition; units: string; allTests: boolean; words: string[]; value: string; onChange: (value: string) => void;
+}) {
   const id = `chat-fix-${field.key}`;
   const hint = `${id}-hint`;
+  const shown = fixRowWords(field, units, allTests);
   const numeric = field.kind === "number" || field.kind === "whole" || field.kind === "angle";
   let control: ReactNode;
   if (field.key === "library") {
@@ -85,9 +89,9 @@ function FixInput({ field, units, words, value, onChange }: { field: FieldDefini
   }
   return (
     <div className="chat-fix-row">
-      <label htmlFor={id}>{labelFor(field, units)}</label>
+      <label htmlFor={id}>{shown.label}</label>
       {control}
-      <small id={hint}>{shortHelp(field).replace(/;$/, "")}</small>
+      <small id={hint}>{shown.hint}</small>
     </div>
   );
 }

@@ -13,7 +13,7 @@ Each record names its source, its rights class and the evidence for that class: 
 
 Marks and media of others
 
-public/assets/partners/uc-san-diego-the-basement.png and uc-san-diego-the-basement-white.png are The Basement mark of UC San Diego, shown for the Launchpad cohort the team is part of (ADR-0081). They keep their owner's terms, and LICENSE grants nothing in them. Photographs and other media owned by someone other than Anisotropy keep their owners' terms in the same way.
+The site names The Basement at UC San Diego, the Launchpad cohort the team is part of, in words; it shows no mark of theirs until written permission is recorded (ADR-0081 amendment 2). Names and marks of other organisations keep their owners' terms, and LICENSE grants nothing in them. Photographs and other media owned by someone other than Anisotropy keep their owners' terms in the same way.
 
 Software dependencies
 

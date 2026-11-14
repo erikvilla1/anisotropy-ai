@@ -18,12 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from anisotropy_engine.failure import check_criterion
+from anisotropy_engine.library import library_material
 
 from . import paths
+from .audit import CRITERION
 from .calculix import ccx_version, find_ccx
 from .case_pages import read_case
 from .femodel import FEModel, build_model
-from .intake import FIELDS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, spec_from_values
+from .intake import FIELDS, STRENGTH_KEYS, FormInput, IntakeError, Values, check_form, designation_for, form_rows_of, spec_from_values
 from .mesher import MeshError, gmsh_available
 from .model import PLAUSIBLE_ISOTROPIC_MODULUS_PA, PLAUSIBLE_MODULUS_PA, is_symmetric_layup
 from .quality import QualityField, element_quality, quality_summary, quality_words
@@ -35,8 +37,8 @@ STATES = ("pass", "warn", "fail", "missing", "pending")
 SEVERITY = {"pass": 0, "warn": 1, "fail": 2, "missing": 2}
 SPOOLES_LAYER_BRICKS = 18000  # a structured mesh past this many layer bricks is where SPOOLES has failed (24000; 17850 solved), 2026-11-08; no rule, a warning
 TRANSVERSE_SHEAR_RATIO = 4.0  # G13 or G23 outside G12/4 .. 4 G12 is noted; a tape's G13 is about G12 and its G23 about G12/2 to G12 (MIL-HDBK-17-3F)
-ITEMS = (  # in the order the studio lists them: id, label
-    ("identity", "Who and which coupon"),
+ITEMS = (  # in the order the studio lists them: id, label, in the words a customer reads (ADR-0091 amendment 2)
+    ("identity", "Coupon"),
     ("units", "Units consistent"),
     ("geometry", "Geometry defined"),
     ("standard", "Test standard"),
@@ -46,9 +48,9 @@ ITEMS = (  # in the order the studio lists them: id, label
     ("load", "Load applied"),
     ("mesh", "Mesh quality acceptable"),
     ("criterion", "Failure criterion"),
-    ("probes", "Result points inside the coupon"),
-    ("solver", "Reference solver installed"),
-    ("document", "Document builder installed"),
+    ("probes", "Result points"),
+    ("solver", "Reference solver ready"),
+    ("document", "Report ready to write"),
 )
 ITEM_OF_KEY = {  # which item a form row belongs to
     **{key: "identity" for key in ("filled_by", "date", "notes", "test", "material_code", "layup_code", "size_from", "team_model", "test_data",
@@ -67,6 +69,12 @@ ITEM_OF_KEY = {  # which item a form row belongs to
 }
 ITEM_OF_LABEL = {f.label_in(units): ITEM_OF_KEY[key] for units in UNIT_SYSTEMS for key, f in FIELDS.items()}  # a row's label in any stated system
 ITEM_OF_LABEL.update({"Supports": "constraints", "Loads": "load", "Regions": "geometry"})  # a plate's lists, not rows of the form (ADR-0054)
+ITEM_OF_LABEL["Own material strengths"] = "material"  # the five strengths, refused together
+GROUP_ROWS = {"Own material strengths": tuple(FIELDS[key].label for key in STRENGTH_KEYS)}  # a group's refusal marks each of its rows
+# where the results are read, in words (intake.probes_data names the points)
+PROBE_WORDS = {"centre": "the coupon centre", "near_grip": "near a grip", "extensometer_bottom": "the ends of the strain measurement",
+               "extensometer_top": "the ends of the strain measurement", "quarter": "a quarter of the span", "centre_top": "above the hole",
+               "hole_top": "above the hole", "hole_side": "beside the hole", "gauge": "the gauge section", "far": "away from the hole"}
 
 
 @dataclass(frozen=True)
@@ -240,12 +248,34 @@ class _Notes:
     def refused(self, message: str, fallback: str = "identity", rows: tuple[str, ...] = ()) -> None:
         for label, problem in split_problems(message):
             item_id = ITEM_OF_LABEL.get(label, fallback)
-            self.note(item_id, "missing" if ": required" in problem else "fail", problem, (label, *row_labels_of(problem), *rows))
+            self.note(item_id, "missing" if ": required" in problem else "fail", problem,
+                      (label, *GROUP_ROWS.get(label, ()), *row_labels_of(problem), *rows))
 
     def items(self) -> tuple[CheckItem, ...]:
         labels = dict(ITEMS)
         return tuple(CheckItem(item_id, labels[item_id], self.state[item_id], "; ".join(self.messages[item_id]), tuple(self.rows[item_id]),
                                self.requirements.get(item_id, ())) for item_id, _ in ITEMS)
+
+
+def listed(words: list[str]) -> str:
+    """Words as a sentence lists them: "a", "a and b", "a, b and c"."""
+    if len(words) < 2:
+        return "".join(words)
+    return ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def material_words(spec, material) -> str:
+    """The material as the engineer named it: the library's name for it, or their own material's name."""
+    if spec.material.library is not None:
+        return library_material(spec.material.library, spec.material.dataset).name
+    return material.name
+
+
+def material_source(spec) -> str:
+    """Where the material's numbers come from, in the engineer's words: the library record's citation, or the source they gave."""
+    if spec.material.library is not None:
+        return library_material(spec.material.library, spec.material.dataset).citation
+    return f"your own constants, from {spec.material.source}" if spec.material.source else "constants given in the setup"
 
 
 def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Callable[[], Path | None] = find_ccx,
@@ -311,9 +341,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         lab = UNIT_LABEL[units]
         g, material, mesh, loading = spec.geometry, model.material, model.mesh, spec.loading  # loading is None for a plate (ADR-0054)
         length = lambda v: from_si(v, "length", units)  # noqa: E731
-        notes.note("identity", "pass", f"{designation}, {TEST_CODES[spec.kind][1]}; " + (
-            f"the coupon has {attempts} row{'s' if attempts != 1 else ''} in its attempt log, so this run is attempt {attempts + 1}" if exists
-            else "a new coupon: its folder and case page are written when it runs"))
+        notes.note("identity", "pass", f"{material_words(spec, material)}, {TEST_CODES[spec.kind][1]}")  # the customer's words, no record (ADR-0091)
         # units: every row is in the stated system; a modulus outside the engine's plausible range after conversion means the wrong unit
         isotropic = is_isotropic(spec)  # one material with no plies (ADR-0075): E is its only modulus on the form
         moduli = ((("E", material.E1),) if isotropic else
@@ -326,17 +354,15 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
             notes.note("units", "warn", f"{shown}: outside the plausible range for a modulus in {lab['stress']} ({lab['modulus']} typed as {lab['stress']}, "
                        "or the reverse?)", tuple(row(f"own_{name}") if name in ("E", "E1", "E2", "G12") else row(name) for name in suspicious))
         else:
-            notes.note("units", "pass", f"every row in {units_words(units)}; the results come back in the same units"
-                       + (f"; the solver input is written in {units_words(deck_units)}" if deck_units != units
-                          else f", and the decks are written in {units}"))
+            notes.note("units", "pass", f"every value in {units_words(units)}; results come back in the same units"
+                       + (f"; the solver input is written in {units_words(deck_units)}" if deck_units != units else ""))
         # transverse shear: our membrane never uses G13 and G23, CalculiX's brick does, so a value far from G12 parts the two solvers
         low, high = material.G12 / TRANSVERSE_SHEAR_RATIO, material.G12 * TRANSVERSE_SHEAR_RATIO
         odd = [] if isotropic else [name for name, value in (("G13", material.G13), ("G23", material.G23)) if not low <= value <= high]
         if odd:
             shown = ", ".join(f"{name} = {from_si(dict(moduli)[name], 'stress', units):g} {lab['stress']}" for name in odd)
-            notes.note("material", "warn", f"{shown} against G12 = {from_si(material.G12, 'stress', units):g} {lab['stress']}: a transverse shear modulus "
-                       "this far from G12 is unusual for a tape; the shell model does not use it, the reference solver's solid model does, so the two "
-                       "will differ (a coupon with 100 MPa put the reference reaction 4.6 % away, 0.8 % with 4500 MPa)", tuple(row(name) for name in odd))
+            notes.note("material", "warn", f"{shown} against G12 = {from_si(material.G12, 'stress', units):g} {lab['stress']}: far from G12, so the "
+                       "reference solver check may differ more than usual", tuple(row(name) for name in odd))
         # geometry
         size = f"{length(g.length):g} by {length(g.width):g} {lab['length']}"
         if g.tab_length:
@@ -356,7 +382,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         # material
         has_strengths = material.strengths is not None
         if not odd:
-            notes.note("material", "pass", f"{material.name}: {material.source}; rights class {material.rights}; "
+            notes.note("material", "pass", f"{material_words(spec, material)}: {material_source(spec)}; "
                        + (f"isotropic, E = {from_si(material.E1, 'stress', units):g} {lab['stress']} and nu = {material.nu12:g}; its yield and failure "
                           "are not modelled yet" if isotropic else
                           "strengths given" if has_strengths else "no strengths, so no failure criterion can be reported"))
@@ -364,14 +390,13 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
         angles = full_angles(spec)
         thickness = length(sum(p.thickness_m for p in plies))
         symmetric = is_symmetric_layup(plies)
+        coupling = "symmetric, so stretching and bending do not couple" if symmetric else "not symmetric, so stretching and bending couple"
         if model.plate:
-            kernel_words = ("symmetric" if symmetric else "not symmetric, so stretching and bending couple") + "; " + (
-                "the flat shell kernel solves it" if model.bending else "the membrane kernel solves it, nothing acts out of the plane")
+            kernel_words = coupling + ("" if model.bending else "; nothing acts out of the plane")
         elif model.bending:
-            kernel_words = "the flat shell kernel solves the bending" + ("" if symmetric else "; the layup is not symmetric, so stretching and bending couple (B is kept)")
+            kernel_words = "a shell model carries the bending" + ("" if symmetric else "; the layup is not symmetric, so stretching and bending couple")
         else:
-            kernel_words = ("symmetric, so B = 0 and the membrane model applies" if symmetric
-                            else "not symmetric (B does not vanish), so the flat shell kernel solves it with stretching and bending coupled")
+            kernel_words = coupling
         if isotropic:
             notes.note("laminate", "pass", f"no plies: one isotropic material, {thickness:g} {lab['length']} thick, in a homogeneous shell section; "
                        "the membrane model applies")
@@ -465,21 +490,20 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
                 try:
                     check_criterion(plies, criterion, material.f12_star)
                 except ValueError as exc:
-                    bad.append(f"{criterion}: {exc}")
+                    bad.append(f"{CRITERION.get(criterion, criterion)}: {exc}")
             if bad:
                 notes.note("criterion", "fail", "; ".join(bad), ("Failure criterion", "Tsai-Wu interaction f12*"))
             else:
-                notes.note("criterion", "pass", "first-ply failure by " + ", ".join(criteria)
-                           + (f" with f12* = {material.f12_star:g}" if "tsai_wu" in criteria else ""))
+                notes.note("criterion", "pass", "first-ply failure by " + listed([CRITERION.get(c, c) for c in criteria])
+                           + (f", with f12* = {material.f12_star:g}" if "tsai_wu" in criteria else ""))
         # probes
-        names = [f"node {name} at ({length(mesh.xy[i, 0]):g}, {length(mesh.xy[i, 1]):g})" for name, i in model.probe_nodes.items()]
-        names += [f"element {name}" for name in model.probe_elements]
-        notes.note("probes", "pass", "results are read at " + ", ".join(names) + f" ({lab['length']})")
+        places = [PROBE_WORDS.get(name, name.replace("_", " ")) for name in (*model.probe_nodes, *model.probe_elements)]
+        notes.note("probes", "pass", "results are read at " + listed(list(dict.fromkeys(places))))
     # what is installed
     found = ccx()
     version = ccx_version(found) if found is not None else None
     if version:
-        notes.note("solver", "pass", f"version {version}, ready")  # the program and its path stay out of the page (ADR-0091)
+        notes.note("solver", "pass", f"version {version}")  # the program and its path stay out of the page (ADR-0091)
     else:
         notes.note("solver", "fail", "CalculiX not found: set ANISOTROPY_CCX or put ccx on PATH (docs/installation-fea-tools.md); the run tool refuses "
                    "to start without it")
@@ -487,7 +511,7 @@ def setup_checklist(form: FormInput, root: Path | str | None = None, *, ccx: Cal
     if tectonic_path:
         notes.note("document", "pass", "the report is written as a PDF")
     else:
-        notes.note("document", "warn", "the report PDF cannot be written here: the package is written without its PDF")
+        notes.note("document", "warn", "the report PDF cannot be written here; the results are still kept")
 
     items = notes.items()
     blocked = any(item.state in ("fail", "missing") for item in items)

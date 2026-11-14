@@ -86,7 +86,6 @@ worker/       The Cloudflare Worker of the hosted site
 | `/workspace/fea` | The coupon workspace: an unnotched tension coupon, under ASTM D3039 or no standard, built from its material and layup (ADR-0089, ADR-0090), solved and viewed in 3D, with the coupon assistant beside it |
 | `/workspace/fea/view` | The viewer window of one job, by `?job=<id>` |
 | `/workspace/laminate` | The laminate workspace: the problem's panels, the stack and the engine's answer in the units you pick (ADR-0060), the laminate assistant beside them |
-| `/workspace/cad` | A placeholder: what is planned for geometry from a CAD file |
 | `/chat`, `/chat/view`, `/studio`, `/studio/view` | Redirect to the workspace with their query (ADR-0062; ADR-0058 amendment 1) |
 | `/data` | Local CSV inspection and submission preview (not in the header) |
 | `/calculator` | Editable laminate form with engine stiffness, strains and curvatures (not in the header) |
