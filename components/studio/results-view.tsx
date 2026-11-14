@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { explainJob, isActive, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
+import { explainJob, StudioError, type Convergence, type ExplainAnswer, type Explanation, type CalculixBeside, type Extreme, type Fields, type FirstPlyFailure, type JobStatus,
   type Preview } from "@/lib/studio-api";
 import { DEFAULT_CHOICE, elementReadout, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor, type FieldChoice, type ProbeTable } from "@/lib/studio-fields";
 import { answerOf, BASIS_WORDS, CRITERION_NAMES, extremeRows, modeWords, type AnswerRow } from "@/lib/studio-answer";
-import { customerText, downloadsFor, heldWords, loadWords, setWords, shownSentence } from "@/lib/studio-copy";
+import { customerText, downloadable, heldWords, loadWords, setWords, shownSentence } from "@/lib/studio-copy";
 import { useAllTests } from "./project-context";
 import { legendGradient, legendTicks, percentChange, printed, scaleFor, settled, type Scale } from "@/lib/studio-colors";
 import { suggestedScale } from "@/lib/studio-geometry";
@@ -487,12 +487,11 @@ export function ExplanationPanel({ explanation, answer }: { explanation: Explana
 
 export function Downloads({ apiBase, job, fields }: { apiBase: string; job: JobStatus; fields: Fields | null }) {
   const all = useAllTests(apiBase); // the customer's files, or every file with the development switch on (decision D4)
-  if (!downloadsFor(all).some(([key]) => key in job.outputs)) return null;
+  if (!downloadable(job, all).length) return null; // files once the run has ended (ADR-0064 amendment 2)
   return (
     <div className="studio-panel" data-testid="downloads">
       <h3>Files</h3>
       <JobFiles apiBase={apiBase} job={job} naming={namingOf(fields)} viewer={false} all={all} />
-      {isActive(job.state) ? <p className="studio-muted">More files appear as the analysis finishes.</p> : null}
     </div>
   );
 }

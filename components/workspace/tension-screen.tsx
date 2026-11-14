@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { ENABLED, hiddenItem, isUnsymmetricLayup, notOffered } from "@/lib/enabled-tests";
 import { isActive, StudioError } from "@/lib/studio-api";
-import { ANALYSIS_UNAVAILABLE, checkText, customerText, downloadsFor, runStatus, sentence } from "@/lib/studio-copy";
+import { ANALYSIS_UNAVAILABLE, checkText, customerText, downloadable, runStatus, sentence } from "@/lib/studio-copy";
 import { layupNotation, layupRows, parseLayup } from "@/lib/studio-chat";
 import { libraryOptions, NO_STANDARD, rowErrorsFrom, type StudioForm } from "@/lib/studio-form";
 import {
-  builtLines, D3039, isOwnMaterial, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS, tensionMissing,
+  builtLines, D3039, isOwnMaterial, LOAD_KEYS, MESH_KEYS, needsPlyThickness, OWN_MATERIAL_KEYS, SIZE_KEYS, TENSION_HINTS, TENSION_LABELS, tensionMissing, valuesInUse,
   tensionValues, underD3039,
 } from "@/lib/tension-screen";
 import { FieldGrid } from "@/components/studio/coupon-form";
@@ -41,7 +41,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
   const checklist = checked?.checklist ?? null;
   const built = builtLines(checklist);
   const problems = checklist?.items.filter((item) => item.state === "fail" || item.state === "missing") ?? [];
-  const available = job ? downloadsFor(false).filter(([key]) => key in job.outputs) : []; // the product's view: the customer's files (D4)
+  const available = downloadable(job, false); // the product's view: the customer's files (D4), once the run has ended (ADR-0064 amendment 2)
   // an outage the live preview met is said here, once; the assistant leaves it to the rail on this screen (audit fea-run-48)
   const alert = message || (problem === ANALYSIS_UNAVAILABLE ? ANALYSIS_UNAVAILABLE : "");
 
@@ -146,7 +146,7 @@ export function TensionScreen({ apiBaseUrl }: { apiBaseUrl: string }) {
 
       <StepPanel id="tension-change" title="Change settings" open={!underD3039(form)} note="load, size, mesh">
         <p className="studio-hint">Leave a field blank to use the default.</p>
-        <FieldGrid form={form} keys={[...LOAD_KEYS, ...SIZE_KEYS, ...MESH_KEYS]} errors={errors} disabled={busy} hints={TENSION_HINTS}
+        <FieldGrid form={form} keys={[...LOAD_KEYS, ...SIZE_KEYS, ...MESH_KEYS]} errors={errors} disabled={busy} hints={TENSION_HINTS} placeholders={valuesInUse(checklist)}
           onChange={(key, value) => edit({ [key]: value })} />
       </StepPanel>
 

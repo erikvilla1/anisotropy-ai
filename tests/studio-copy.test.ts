@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  bannedIn, checkText, CUSTOMER_DOWNLOADS, customerText, downloadName, DOWNLOAD_LABELS, downloadsFor, FILE_URL_KEY, heldWords, loadWords, queueAhead, rowProblems,
+  bannedIn, checkText, CUSTOMER_DOWNLOADS, customerText, downloadable, downloadName, DOWNLOAD_LABELS, downloadsFor, FILE_URL_KEY, heldWords, loadWords, queueAhead, rowProblems,
   RUN_STEPS, runDetail, runHeadline, runProblem, runStatus, runSteps, runTook, secondsText, setWords, shownSentence, stepSeconds, verificationOf, withSymbols,
 } from "../lib/studio-copy";
 
@@ -24,7 +24,10 @@ test("the pipeline's stages fold into five steps, and a job's state says which i
   assert.equal(states({ state: "stopped", stage: null }), "stopped waiting waiting waiting waiting"); // never taken up: it ended in the queue
   const stored = (outputs: Record<string, string>) => runSteps({ state: "done", stage: "the outputs", documents: null, outputs }).map((s) => s.state).join(" ");
   assert.equal(stored({ fields: "f" }), "done done done done stopped"); // read back from its row with no package stored: no report
-  assert.equal(stored({ fields: "f", package: "p" }), "done done done done done");
+  assert.equal(stored({ fields: "f", package: "p" }), "done done done done stopped"); // a package without its PDF is no report (ADR-0064 am. 2)
+  assert.equal(stored({ fields: "f", package: "p", document: "d" }), "done done done done done");
+  const missing = { state: "done", stage: "the outputs", documents: "the package was written without its document", outputs: { package: "p" } };
+  assert.equal(runSteps(missing as Parameters<typeof runSteps>[0]).map((s) => s.state).join(" "), "done done done done stopped"); // the hosted row's word
 });
 
 test("each step shows the seconds it took, and a done run how long it took in all (ADR-0064 amendment 1)", () => {
@@ -88,6 +91,15 @@ test("the verification line says verified only when every value agrees, from the
   assert.deepEqual(verificationOf("52 of 57 recorded values agree with CalculiX"), { line: "Reference solver check: 52 of 57 values agree", verified: false });
   assert.equal(verificationOf(null), null);
   assert.equal(verificationOf("the package not written"), null);
+});
+
+test("files are offered once the run has ended, never while they are still being written (ADR-0064 amendment 2)", () => {
+  const outputs = { document: "d", abaqus_deck: "a", prepomax_deck: "p", package: "z" };
+  assert.deepEqual(downloadable({ state: "running", outputs }, true), []);
+  assert.deepEqual(downloadable({ state: "queued", outputs }, false), []);
+  assert.deepEqual(downloadable({ state: "done", outputs }, false).map(([key]) => key), ["document", "abaqus_deck"]);
+  assert.deepEqual(downloadable({ state: "stopped", outputs: { prepomax_deck: "p" } }, true).map(([key]) => key), ["prepomax_deck"]); // a stopped run's deck
+  assert.deepEqual(downloadable(null, true), []);
 });
 
 test("a downloaded file is named by the standard and the layup, never by an internal code", () => {
