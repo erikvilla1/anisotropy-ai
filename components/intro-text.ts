@@ -378,6 +378,8 @@ export function prepareIntro(root: ParentNode = document): IntroRun | null {
  *
  *   data-outro="type"  the text is taken away line by line from the end of each line, its last characters as random letters;
  *   data-outro="fade"  the element fades out, after the lines have gone;
+ *   data-outro-at      on a fade: "start" has it go as the first line begins to go, not after the last, for a rule or a
+ *                      mark that belongs to a line of text and should not be left standing once that line has gone;
  *   data-outro="spin"  the element makes a quarter turn anticlockwise about its middle and fades. It is the first to move:
  *                      the lines begin to go a moment after it, and it is gone a moment before the last of them.
  *
@@ -434,8 +436,10 @@ export function prepareOutro(root: ParentNode = document): IntroRun | null {
       });
       totalMs = Math.max(totalMs, duration);
     } else {
-      moves.push({ element, keyframes: [{ opacity: 1 }, { opacity: 0 }], options: { duration: LEAVE_FADE_MS, delay: linesMs, fill: "both" } });
-      totalMs = Math.max(totalMs, linesMs + LEAVE_FADE_MS);
+      // After the lines, or with the first of them where the element asks for it (`data-outro-at="start"`).
+      const delay = element.dataset.outroAt === "start" ? lead : linesMs;
+      moves.push({ element, keyframes: [{ opacity: 1 }, { opacity: 0 }], options: { duration: LEAVE_FADE_MS, delay, fill: "both" } });
+      totalMs = Math.max(totalMs, delay + LEAVE_FADE_MS);
     }
     marked.push(element);
   }

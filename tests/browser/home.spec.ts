@@ -35,7 +35,7 @@ async function pastTheDemo(page: import("@playwright/test").Page) {
 
 const STATEMENT = /^\s*One engineering platform\s*for composite theory\s*and real test data\s*$/;
 
-test("the hero's words are one statement and a line of the mark, the name and the year (ADR-0077 amendments 19, 21, 27, 28 and 47)", async ({ page }) => {
+test("the hero's words are one statement and a line of the mark, the name, a hairline and the year (ADR-0077 amendments 19, 21, 27, 28, 47 and 52)", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
@@ -45,9 +45,34 @@ test("the hero's words are one statement and a line of the mark, the name and th
   // between the year and the name).
   await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
-  const row = await hero.evaluate((el) => ["mark", "tagline", "note"].map((part) => Math.round(el.querySelector(`.home-hero-${part}`)!.getBoundingClientRect().left)));
-  expect(row[0]).toBeLessThan(row[1]);
-  expect(row[1]).toBeLessThan(row[2]);
+  // One tidy line (amendment 52): the mark, the name, a hairline of its own and the year, in that order, with equal gaps
+  // between them, the name, the hairline and the year on one centre line and the mark a hair above it; the hairline is a
+  // little taller than the name's capitals and no taller than its line; the mark about one and three quarters of them.
+  const line = await hero.evaluate((el) => {
+    const part = (name: string) => {
+      const box = el.querySelector(`.home-hero-${name}`)!.getBoundingClientRect();
+      return { left: box.left, right: box.right, middle: (box.top + box.bottom) / 2, width: box.width, height: box.height };
+    };
+    const name = el.querySelector<HTMLElement>(".home-hero-tagline")!;
+    const year = el.querySelector<HTMLElement>(".home-hero-note")!;
+    // Where each text ends as it is drawn: its box less the tracking after its last letter.
+    const ends = (text: HTMLElement) => text.getBoundingClientRect().right - parseFloat(getComputedStyle(text).letterSpacing);
+    return { mark: part("mark"), name: part("tagline"), rule: part("rule"), year: part("note"), nameEnds: ends(name), size: parseFloat(getComputedStyle(name).fontSize) };
+  });
+  expect(line.mark.left).toBeLessThan(line.name.left);
+  expect(line.name.left).toBeLessThan(line.rule.left);
+  expect(line.rule.left).toBeLessThan(line.year.left);
+  const gaps = [line.name.left - line.mark.right, line.rule.left - line.nameEnds, line.year.left - line.rule.right];
+  for (const gap of gaps) expect(Math.abs(gap - gaps[0]), `gaps ${gaps.map((value) => value.toFixed(1)).join(", ")}`).toBeLessThan(1);
+  expect(Math.abs(line.rule.middle - line.name.middle)).toBeLessThan(1);
+  expect(Math.abs(line.year.middle - line.name.middle)).toBeLessThan(1);
+  expect(line.name.middle - line.mark.middle).toBeGreaterThanOrEqual(0);
+  expect(line.name.middle - line.mark.middle).toBeLessThan(0.1 * line.size);
+  expect(line.rule.width).toBe(1);
+  expect(line.rule.height).toBeGreaterThan(0.72 * line.size); // the capitals of the name's face stand about 0.73 of its size
+  expect(line.rule.height).toBeLessThanOrEqual(line.name.height);
+  expect(line.mark.height / (0.727 * line.size)).toBeGreaterThan(1.5);
+  expect(line.mark.height / (0.727 * line.size)).toBeLessThan(2);
   const over = await hero.evaluate((el) => [el.querySelector(".home-hero-row")!.getBoundingClientRect().bottom, el.querySelector("h1")!.getBoundingClientRect().top]);
   expect(over[0]).toBeLessThanOrEqual(over[1]);
   // The cohort stands beside the place that runs it, in the clip's bottom left corner; the place is named in words until

@@ -126,7 +126,9 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   const ready = seen.findIndex((frame) => frame.copies > 0);
   expect(ready).toBeGreaterThan(0);
   // The triangle and the corner's words wait with them to fade in, and the statement's copy carries the one text cursor.
-  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, riders: 1, running: 5, ownHeadline: STATEMENT });
+  // Six elements take part: the statement, the name and the year are typed; the mark, the hairline between the name and
+  // the year (ADR-0077 amendment 52) and the corner's words fade in.
+  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, riders: 1, running: 6, ownHeadline: STATEMENT });
   expect(seen.slice(0, ready).every((frame) => frame.opacity === 1)).toBe(true);
   // The copies go once the moves have played: the headline's 1.6 s, with room for a busy machine.
   const lifting = seen.findIndex((frame) => frame.phase === "is-lift");
@@ -177,6 +179,8 @@ test("three seconds after the load-in the hero's words are taken away and the cl
         .filter((timing) => Number.isFinite(Number(timing.endTime)));
       if (!lines.length) return null;
       const mark = move.effect!.getComputedTiming();
+      const rule = document.querySelector("#overview .home-hero-rule")?.getAnimations()[0]?.effect?.getComputedTiming();
+      if (!rule) return null;
       // Each typed line's window that shows its text: how far it is drawn back while the line still waits its turn. A copy
       // of the window's own animation, held at its first moment, says so whenever this is read.
       const shown = Array.from(document.querySelectorAll<HTMLElement>("#overview .intro-overlay .intro-line > .intro-win:not(.is-front)"));
@@ -197,6 +201,8 @@ test("three seconds after the load-in the hero's words are taken away and the cl
         markEnd: Number(mark.endTime),
         linesStart: Math.min(...lines.map((timing) => Number(timing.delay))),
         linesEnd: Math.max(...lines.map((timing) => Number(timing.endTime))),
+        ruleStart: Number(rule.delay),
+        ruleEnd: Number(rule.endTime),
       };
     },
     null,
@@ -215,9 +221,15 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   expect(exit.markEnd).toBeGreaterThan(exit.linesStart);
   // While the lines wait for the mark every one of them is whole: no character goes before its line's turn (amendment 10).
   expect(exit.waiting).toEqual(exit.whole);
+  // The hairline between the name and the year goes as the first line begins to go, and has gone before the last
+  // character: it is never left standing alone (ADR-0077 amendment 52).
+  expect(exit.ruleStart).toBe(exit.linesStart);
+  expect(exit.ruleEnd).toBeLessThan(exit.linesEnd);
   await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 12_000 });
-  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-backed"])
+  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-rule", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");
+  // Nothing of the line is drawn by a box that stays: the year's box has no border of its own.
+  await expect(hero.locator(".home-hero-notes")).toHaveCSS("border-left-width", "0px");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero.locator(".home-hero-mark")).toHaveCSS("transform", "none");
   // The statement and the words in the corner are still in the page for a screen reader.
@@ -296,7 +308,7 @@ test("each time the clip starts again the hero's words are typed in again, stand
   expect(await hero.locator(".intro-overlay").count()).toBeGreaterThanOrEqual(3);
   const began = Date.now();
   await expect(hero.locator(".intro-overlay")).toHaveCount(0, { timeout: 6_000 });
-  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-backed"])
+  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-rule", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "1");
   await expect(hero.locator("h1")).toHaveText(/One engineering platform/);
   // "Scroll to explore" stays up through the round.
@@ -309,6 +321,7 @@ test("each time the clip starts again the hero's words are typed in again, stand
   expect(Date.now() - began).toBeGreaterThan(2_900);
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero).toHaveAttribute("data-words", "gone");
+  await expect(hero.locator(".home-hero-rule")).toHaveCSS("opacity", "0"); // the hairline with them (amendment 52)
   // And the next time round they come again.
   await startsAgain();
   await expect(hero).toHaveAttribute("data-words-round", "3");
@@ -395,7 +408,7 @@ test("the home page reached by a link comes out of black with its words typed in
   // As on its first load: the copies are ready in the page's first frame, under the black, and play as it lifts.
   const first = seen.findIndex((frame) => frame.path === "/");
   expect(seen.slice(0, first).every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
-  expect(seen[first]).toMatchObject({ phase: "is-lift", shown: true, copies: 3, hiddenCopies: 3, riders: 1, running: 5, ownHeadline: STATEMENT });
+  expect(seen[first]).toMatchObject({ phase: "is-lift", shown: true, copies: 3, hiddenCopies: 3, riders: 1, running: 6, ownHeadline: STATEMENT });
   expect(seen[first].opacity).toBeGreaterThanOrEqual(0.9);
   const gone = seen.findIndex((frame, index) => index > first && frame.copies === 0);
   expect(gone).toBeGreaterThan(first);

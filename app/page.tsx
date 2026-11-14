@@ -37,9 +37,9 @@ export default function Home() {
           {heroVideo ? <div className="home-hero-video" dangerouslySetInnerHTML={{ __html: heroVideoHtml }} /> : null}
         </div>
         {/* The lens (ADR-0071) is hidden for now at the lead's request (amendment 1); `<HeroLens />` from components/home/hero-lens.tsx brings it back. */}
-        {/* The words (ADR-0077 amendments 19 and 27): one statement in large capitals in the middle, and under it a row of the
-            year, the mark and the name. The load-in (ADR-0070 amendments 1 and 4) types the statement and the small lines in,
-            and a text cursor blinks at the statement's end (components/intro-text.ts). */}
+        {/* The words (ADR-0077 amendments 19, 27, 47 and 51): one statement, written as a sentence, in the clip's lower left,
+            and over it a line of the mark, the name, a hairline and the year. The load-in (ADR-0070 amendments 1 and 4) types
+            the statement and the small lines in, and a text cursor blinks at the statement's end (components/intro-text.ts). */}
         <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="type" data-outro="type" data-intro-caret="">
             One engineering platform
@@ -50,13 +50,17 @@ export default function Home() {
             <span className="type-caret" aria-hidden="true" />
           </h1>
           <div className="home-hero-row">
-            {/* The row of ADR-0077 amendment 28: the year on the left, the mark, the name on the right. */}
+            {/* The line of ADR-0077 amendments 28 and 47: in the page's order the year, the mark, the hairline, the name; the
+                stylesheet shows the mark first and the year last. */}
             <div className="home-hero-notes">
               <p className="home-hero-note" data-intro="type" data-outro="type">
                 Est 2026
               </p>
             </div>
             <span className="home-hero-mark" aria-hidden="true" data-intro="fade" data-intro-shift="100%" data-outro="spin" />
+            {/* The hairline between the name and the year (ADR-0077 amendment 52): it fades in with the load-in and goes as
+                the lines begin to go, so nothing of the line is left on the clip. */}
+            <span className="home-hero-rule" aria-hidden="true" data-intro="fade" data-intro-shift="0px" data-outro="fade" data-outro-at="start" />
             <p className="home-hero-tagline" data-intro="type" data-outro="type">
               Anisotropy
             </p>
