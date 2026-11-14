@@ -1,4 +1,5 @@
-/* The product demo (components/home/product-demo.tsx, ADR-0095): a black stage under the hero, as wide as the hero's clip and
+/* The product demo (components/home/product-demo.tsx, ADR-0095): a black stage after the hero (on a desktop it starts half a
+ * window up, behind it: amendment 4, app/home.css), as wide as the hero's clip and
  * one window tall, in which the coupon workspace is shown in four beats (amendment 2; in amendment 1 it was a white box the
  * size of the clip). It has no edge on the black page; the small cards in it are the workspace's dark panels, behind a hairline. Two layouts share one markup: by
  * default an ordinary section, the beats one under another; on a desktop-sized window whose visitor has not asked for reduced
@@ -98,14 +99,6 @@
   font-size: 17px;
   line-height: 26px;
   color: var(--demo-soft);
-}
-.product-demo-recorded {
-  margin: 40px 0 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 16px;
-  letter-spacing: 0.04em;
-  color: #7a7d80;
 }
 
 /* The cards: the workspace's dark panels, small. */
@@ -214,9 +207,13 @@
 .demo-summary > div:nth-child(odd) {
   border-right: 1px solid #242424;
 }
-.demo-summary > div:last-child {
-  grid-column: 1 / -1;
+/* The last row has no rule under it; a last cell that stands alone in its row takes the whole row. */
+.demo-summary > div:last-child,
+.demo-summary > div:nth-last-child(2):nth-child(odd) {
   border-bottom: 0;
+}
+.demo-summary > div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
   border-right: 0;
 }
 .demo-summary dt {
@@ -320,40 +317,76 @@
   gap: 10px;
   transition: opacity 0.4s;
 }
+/* The way into the workspace: under the pointer it is filled with white from the right and its words and arrow turn dark,
+ * as the header's Workspace button is (app/globals.css, `.header-cta`; ADR-0098 amendment 8). */
 .demo-open {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   padding: 9px 14px;
   border: 1px solid #ffffff;
+  border-radius: 2px;
+  background: transparent;
   color: #ffffff;
   font-size: 14px;
   font-weight: 500;
-  transition: background-color 0.15s, color 0.15s;
+  transition: color 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.demo-open::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #ffffff;
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1);
 }
 .demo-open:hover,
 .demo-open:focus-visible {
-  background: #ffffff;
-  color: #0a0a0a;
+  color: #0d0d0d;
+}
+.demo-open:hover::before,
+.demo-open:focus-visible::before {
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-open,
+  .demo-open::before {
+    transition: none;
+  }
 }
 
 /* The stage. From the first paint the box is a window tall, so nothing moves when the page's script sets the mode; until
  * it has, nothing in the box is shown, because the markup is still the ordinary section's with every beat up. */
 @media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  /* The stage follows the page's scroll (ADR-0095 amendment 10): its section is the stage and a zone of scroll for every
+   * beat tall (`--demo-track`, in stage heights, written by components/home/product-demo.tsx), and the stage stays at the
+   * window's top while the page scrolls through it, freely. */
+  .product-demo {
+    height: calc(max(640px, 100svh) * (1 + var(--demo-track, 2)));
+  }
   .product-demo-box {
+    position: sticky;
+    top: 0;
     height: max(640px, 100svh);
     padding: 0;
   }
   .product-demo:not([data-mode="pinned"]) .product-demo-box > * {
     visibility: hidden;
   }
-  /* The box comes up empty: its parts are there once it holds the window and the first beat starts, and go again when the
-   * demo is back at its start. */
+  /* The box comes up with the first beat's words and its empty card, which come in as the page scrolls to it (--demo-arrived,
+   * written by components/home/hero-handover.tsx; ADR-0095 amendment 4), so the window is not an empty black one on the way.
+   * The model is there once the box holds the window and the first beat starts, and goes again when the demo is back at its
+   * start. */
   .product-demo[data-mode="pinned"] .product-demo-box > * {
     transition: opacity 0.7s ease;
   }
   .product-demo[data-mode="pinned"] .product-demo-box:not([data-stop]) > *,
-  .product-demo[data-mode="pinned"] .product-demo-box[data-stop="0"]:not([data-moving]) > * {
+  .product-demo[data-mode="pinned"] .product-demo-box[data-stop="0"]:not([data-moving]) > :not(.product-demo-beats) {
     opacity: 0;
     transition: none;
   }
@@ -390,6 +423,12 @@
   .product-demo[data-mode="pinned"] .product-demo-beat[data-active="true"] {
     pointer-events: auto;
   }
+  /* While the demo is at its start, the first beat's words stand once the page has scrolled to the stage, before the clock
+   * has brought them in. (`data-stop` is still 0 while the first beat plays, so they do not blink as it starts.) */
+  .product-demo[data-mode="pinned"] .product-demo-box[data-stop="0"] .product-demo-beat[data-beat="describe"] {
+    opacity: max(var(--shown, 0), var(--demo-arrived, 0));
+    translate: 0 calc((1 - max(var(--shown, 0), var(--demo-arrived, 0))) * 16px);
+  }
   .product-demo[data-mode="pinned"] .product-demo-beat[data-side="under"] {
     left: 50%;
     bottom: clamp(40px, 6vh, 64px);
@@ -418,21 +457,67 @@
   .product-demo[data-mode="pinned"] .demo-files li:not([data-shown]) {
     opacity: 0;
   }
-  .product-demo[data-mode="pinned"] .product-demo-recorded {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 14px;
-    margin: 0;
-    text-align: center;
-  }
-  .product-demo[data-mode="pinned"] .product-demo-recorded:not([data-shown]) {
-    opacity: 0;
-  }
 }
 /* A low window: the words' paragraph goes, so the model keeps its room. */
 @media (min-width: 1024px) and (min-height: 600px) and (max-height: 759px) and (prefers-reduced-motion: no-preference) {
   .product-demo[data-mode="pinned"] .product-demo-beat[data-side="under"] .product-demo-words > p:last-child {
     display: none;
   }
+}
+
+/* Turning the wing by hand, once the demo has played (ADR-0098 amendment 1): the stage shows a hand, the cards and the
+ * words keep the pointer they had, and a small line says it can be done. */
+.product-demo-box[data-turnable] {
+  cursor: grab;
+}
+.product-demo-box[data-turning] {
+  cursor: grabbing;
+  user-select: none;
+}
+.product-demo-box[data-turnable] .demo-card,
+.product-demo-box[data-turnable] .product-demo-words {
+  cursor: auto;
+}
+.product-demo-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 18px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--demo-soft);
+  pointer-events: none;
+}
+.product-demo-hint:not([data-shown]) {
+  display: none;
+}
+/* While the pointer holds the wing (ADR-0098 amendments 2 and 5) the line that says it can be turned goes, and comes back
+ * when the pointer lets go. The beat's words and its card stay. */
+.product-demo-hint {
+  transition: opacity 0.22s ease;
+}
+.product-demo-box[data-turning] .product-demo-hint {
+  opacity: 0;
+}
+@media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  .product-demo[data-mode="pinned"] .product-demo-box > .product-demo-hint {
+    position: absolute;
+    top: 26px;
+    right: 32px;
+    margin: 0;
+    opacity: 0.85;
+  }
+  .product-demo[data-mode="pinned"] .product-demo-box[data-turning] > .product-demo-hint {
+    opacity: 0;
+  }
+}
+
+.demo-result .demo-result-note {
+  font-size: 12px;
+  line-height: 18px;
+  opacity: 0.7;
 }

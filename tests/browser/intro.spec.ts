@@ -73,7 +73,7 @@ async function expectHeroWhole(page: Page, blink = "type-caret-blink") {
   await expect(hero.locator("h1")).toHaveText("one engineering platformfor composite theoryand real test data");
   await expect(hero.locator("h1")).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
-  await expect(hero.locator(".home-hero-note")).toHaveText("Est. 2026");
+  await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
   for (const line of await hero.locator(".home-hero-tagline, .home-hero-note").all()) await expect(line).toHaveCSS("color", "rgb(255, 255, 255)");
   // The text cursor: on the statement's last line, at its end, taking no room, and blinking unless the visitor asked for
   // reduced motion.
@@ -246,6 +246,56 @@ test("three seconds after the load-in the hero's words are taken away and the cl
       return Math.round(Math.abs(box.top - Math.max(0, (window.innerHeight - box.height) / 2)));
     });
   await expect.poll(off, { timeout: 10_000 }).toBeLessThanOrEqual(1);
+});
+
+test("each time the clip starts again the hero's words are typed in again, stand three seconds and leave again (ADR-0077 amendment 40)", async ({ page }) => {
+  await page.goto("/");
+  const hero = page.locator("#overview");
+  await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 20_000 });
+  await expect(hero.locator("h1")).toHaveCSS("opacity", "0");
+  await expect(hero).not.toHaveAttribute("data-words-round", /.+/);
+  // The clip reports a time earlier than its last, as it does when it loops: the test's browser may not play the clip at
+  // all, so the two reports are made for it.
+  const startsAgain = () =>
+    page.evaluate(() => {
+      const video = document.querySelector<HTMLVideoElement>("#overview .home-hero-video video")!;
+      const report = (seconds: number) => {
+        Object.defineProperty(video, "currentTime", { configurable: true, get: () => seconds });
+        video.dispatchEvent(new Event("timeupdate"));
+      };
+      report(21);
+      report(0.1);
+      delete (video as unknown as { currentTime?: number }).currentTime; // the clip's own time again
+    });
+  // Away from the page's top nothing comes back: the round is left out.
+  await page.evaluate(() => window.scrollTo({ top: 60, behavior: "instant" }));
+  await startsAgain();
+  await page.waitForTimeout(300);
+  await expect(hero).not.toHaveAttribute("data-words-round", /.+/);
+  await expect(hero.locator(".intro-overlay")).toHaveCount(0);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  // At the top the words are typed in again by the load-in's copies, the mark rising with them.
+  await startsAgain();
+  await expect(hero).toHaveAttribute("data-words-round", "2");
+  expect(await hero.locator(".intro-overlay").count()).toBeGreaterThanOrEqual(3);
+  const began = Date.now();
+  await expect(hero.locator(".intro-overlay")).toHaveCount(0, { timeout: 6_000 });
+  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-backed"])
+    await expect(hero.locator(selector), selector).toHaveCSS("opacity", "1");
+  await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
+  // "Scroll to explore" stays up through the round.
+  await expect(hero.locator(".home-hero-explore")).toBeVisible();
+  // A second report while the words stand changes nothing.
+  await startsAgain();
+  await expect(hero).toHaveAttribute("data-words-round", "2");
+  // They stand about three seconds and are taken away again.
+  await expect(hero.locator("h1")).toHaveCSS("opacity", "0", { timeout: 9_000 });
+  expect(Date.now() - began).toBeGreaterThan(2_900);
+  await expect(hero.locator(".intro-overlay")).toHaveCount(0);
+  await expect(hero).toHaveAttribute("data-words", "gone");
+  // And the next time round they come again.
+  await startsAgain();
+  await expect(hero).toHaveAttribute("data-words-round", "3");
 });
 
 test("a header link goes to its page at once, Back too, and only the home page's first load is veiled (ADR-0070 amendment 3)", async ({ page }) => {

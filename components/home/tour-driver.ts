@@ -50,6 +50,14 @@ export type TourPlay = {
   /** A page that comes to rest within this many pixels of where the element holds the window, by a link, the scroll bar or a
    * restored position (no wheel, key or finger just before), is put there. Default 0: only a page already there counts. */
   settleWithin?: number;
+  /** How far down the window the element's top edge is when nothing of it can be seen from above, in pixels. Default: the
+   * window's height, its foot. The product demo's stage starts half a window up, behind the hero, which covers it until the
+   * page scrolls (ADR-0095 amendment 4). */
+  hiddenFrom?: () => number;
+  /** Played once: when the last stop has been reached the element is an ordinary section for the rest of the visit. No
+   * gesture is taken any more, the page is never stopped on it again, and the clock stays at its end (ADR-0095 amendment
+   * 7). The element then carries `data-done`. Default false: the calculator tour went back to its start out of sight. */
+  once?: boolean;
 };
 
 export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: boolean, onFrame: (frame: TourFrame) => void, play?: TourPlay) {
@@ -81,6 +89,41 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     let wheel: WheelMemory = null;
     let touch: { x: number; y: number; ours: boolean | null } | null = null;
 
+    // The lock (ADR-0095 amendment 7). While a step plays on a stage that holds the window, and for a moment after the page
+    // has been stopped on the stage, the page cannot be scrolled at all: `html[data-tour-lock]` hides its overflow
+    // (app/globals.css). The gesture that brought the page here was the browser's own, so the browser does not let a script
+    // cancel what is left of it, a trackpad's coasting above all; undoing that scroll frame by frame showed as the next
+    // section flickering in at the window's foot. Locked, the browser has nothing to scroll. Scripts still can (`align`).
+    let finished = false; // played once, to the end: nothing is taken or stopped any more
+    let locked = false;
+    let unlockAt = 0;
+    let lockTimer = 0;
+    const unlock = () => {
+      window.clearTimeout(lockTimer);
+      if (!locked) return;
+      locked = false;
+      delete document.documentElement.dataset.tourLock;
+    };
+    /** Locks the page for at least `ms`; a step that is playing on a held stage keeps it locked until it ends. */
+    const lock = (ms: number) => {
+      unlockAt = Math.max(unlockAt, performance.now() + ms);
+      if (!locked) {
+        locked = true;
+        const root = document.documentElement;
+        // The room a scroll bar that takes room has now: kept as padding while the bar is gone.
+        root.style.setProperty("--tour-lock-bar", `${Math.max(0, window.innerWidth - root.clientWidth)}px`);
+        root.dataset.tourLock = "true";
+      }
+      window.clearTimeout(lockTimer);
+      const release = () => {
+        const left = unlockAt - performance.now();
+        if (moving && holding) return; // the step's last frame lets go
+        if (left > 0) lockTimer = window.setTimeout(release, left);
+        else unlock();
+      };
+      lockTimer = window.setTimeout(release, Math.max(0, unlockAt - performance.now()));
+    };
+
     const place = () => ({ top: element.getBoundingClientRect().top - anchor(), viewport: window.innerHeight || 1 });
     /** Where the page must be scrolled to for the stage to stand where it holds the window. */
     const stageY = () => Math.round(window.scrollY + element.getBoundingClientRect().top - anchor());
@@ -99,6 +142,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       element.dataset.stop = String(stop);
       if (moving) element.dataset.moving = "true";
       else delete element.dataset.moving;
+      if (finished) element.dataset.done = "true";
     };
     const jump = (to: number) => {
       stop = to;
@@ -115,6 +159,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       let started = 0;
       moving = true;
       holding = Math.abs(place().top) <= HOLD_PX;
+      if (holding) lock(0);
       mark();
       const tick = (now: number) => {
         if (!started) started = now;
@@ -134,6 +179,13 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
         stop = to;
         moving = holding = false;
         quietUntil = performance.now() + SETTLE_MS;
+        if (options.current?.once && to === LAST_STOP) {
+          finished = true;
+          unlockAt = 0;
+        }
+        // The lock goes with the step, unless the page was only just stopped here: then its own time runs out first.
+        if (performance.now() >= unlockAt) unlock();
+        else lock(0);
         mark();
         tell();
       };
@@ -171,6 +223,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       const now = performance.now();
       quietUntil = now + SETTLE_MS;
       clampUntil = now + (now - lastTouch < INPUT_MS ? FLING_MS : SETTLE_MS);
+      lock(clampUntil - now);
       if (stop === 0) play(1);
       else {
         mark();
@@ -182,10 +235,13 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
 
     /** Asks the rules what a gesture means and plays it. True when the tour took it, so the browser must not scroll. */
     function act(direction: 1 | -1, fresh: boolean, reach: number): boolean {
+      if (finished) return false;
       lastInput = performance.now();
       const action = decide(stop, moving, place(), direction, fresh, reach, LAST_STOP);
       if (action.kind === "native") {
         clampUntil = 0;
+        unlockAt = 0;
+        unlock();
         return false;
       }
       if (action.kind === "step") play(action.to);
@@ -242,7 +298,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
     };
 
     const onRest = () => {
-      if (moving) return;
+      if (moving || finished) return;
       const off = Math.abs(place().top);
       // The page came to rest with the stage filling the window by some other way (a link to it, the scroll bar, a restored
       // position) and the tour has not started: its first step plays.
@@ -258,7 +314,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       const { top, viewport } = place();
       const before = lastTop;
       lastTop = top;
-      if (carrying) return;
+      if (carrying || finished) return;
       const off = Math.abs(top) > HOLD_PX;
       // While a step plays on a stage that held the window, and just after the page was carried there, nothing else may
       // scroll it: what does is scrolling that was already on its way, and it is undone.
@@ -276,7 +332,7 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
         // Out of sight, the tour is where a visitor coming back to it expects it: at its start from above, at its end from below.
         // (Read from the element's own edges: where it holds the window need not be the window's top.)
         const edges = element.getBoundingClientRect();
-        if (edges.top >= viewport && stop !== 0) jump(0);
+        if (edges.top >= (options.current?.hiddenFrom?.() ?? viewport) - 0.5 && stop !== 0) jump(0);
         else if (edges.bottom <= 0 && stop !== LAST_STOP) jump(LAST_STOP);
       }
       if (Math.abs(top) < viewport / 2 !== onStage) tell();
@@ -308,9 +364,11 @@ export function useTourDriver(tour: RefObject<HTMLElement | null>, enabled: bool
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
       window.clearTimeout(rest);
+      unlock();
       if (frame) window.cancelAnimationFrame(frame);
       delete element.dataset.stop;
       delete element.dataset.moving;
+      delete element.dataset.done;
     };
   }, [tour, enabled]);
 }
