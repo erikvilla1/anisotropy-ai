@@ -43,7 +43,7 @@ export type ProjectAction =
   | { type: "rename"; name: string }
   | { type: "replace"; project: CouponProject };
 
-export type LaminateAction =
+type LaminateAction =
   | { type: "draft"; draft: LaminateDraft }
   | { type: "rename"; name: string }
   | { type: "replace"; project: LaminateProject };
@@ -51,7 +51,7 @@ export type LaminateAction =
 /** What `localStorage` offers; a test passes a Map-backed stand-in. */
 export type StorageLike = { getItem(key: string): string | null; setItem(key: string, value: string): void };
 
-export function makeId(): string {
+function makeId(): string {
   const c = globalThis.crypto;
   if (c && typeof c.randomUUID === "function") return c.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -102,7 +102,7 @@ function isLaminateProject(value: unknown): value is LaminateProject {
 }
 
 /** A tow record's specimens as kept: each an object of text cells; anything else is dropped (a project kept before the tow test has none). */
-export function specimenRows(value: unknown): TowSpecimenRow[] {
+function specimenRows(value: unknown): TowSpecimenRow[] {
   if (!Array.isArray(value)) return [];
   return value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
     .map((row) => Object.fromEntries(Object.entries(row).filter(([, v]) => typeof v === "string")) as TowSpecimenRow);

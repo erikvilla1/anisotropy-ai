@@ -7,16 +7,16 @@
 import { formDefinition, type StudioForm } from "./studio-form";
 
 export type PlateSupport = { region: string; dofs: number[]; value: string };
-export type PlateForce = { region: string; kind: "force"; dof: number; total: string };
-export type PlatePressure = { region: string; kind: "pressure"; pressure: string };
+type PlateForce = { region: string; kind: "force"; dof: number; total: string };
+type PlatePressure = { region: string; kind: "pressure"; pressure: string };
 export type PlateLoad = PlateForce | PlatePressure;
 export type PlateRegion = { name: string; x0: string; x1: string; y0: string; y1: string };
 export type PlateLists = { supports: PlateSupport[]; loads: PlateLoad[]; regions: PlateRegion[] };
 
 export const PLATE_TEST = formDefinition.plate?.test ?? "plate";
 export const DOF_WORDS: Record<number, string> = Object.fromEntries(Object.entries(formDefinition.plate?.dofs ?? {}).map(([k, v]) => [Number(k), v]));
-export const EDGES: string[] = formDefinition.plate?.edges ?? ["Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right"];
-export const AREAS: string[] = formDefinition.plate?.areas ?? ["Face"];
+const EDGES: string[] = formDefinition.plate?.edges ?? ["Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right"];
+const AREAS: string[] = formDefinition.plate?.areas ?? ["Face"];
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
 export function emptyPlate(): PlateLists {

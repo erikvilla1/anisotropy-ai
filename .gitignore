@@ -10,6 +10,9 @@ next-env.d.ts
 test-results/
 playwright-report/
 
+# Operating-system files
+.DS_Store
+
 # Python engine
 .venv/
 __pycache__/
@@ -25,7 +28,7 @@ docs/problems/build/
 
 # Local references and assistant-specific instructions
 .local/
-# Local reference archive (includes user-supplied textbooks)
+# Legacy: the local reference archive moved to .local/sources/references/ on 2026-10-21 (ADR-0037); kept so an old copy stays out.
 References/
 # Textbook page scans must never be committed or served as public assets.
 public/assets/documents/daniel-ishai-2006/
@@ -50,8 +53,8 @@ public/materials/*.tmp
 
 # Obsidian vault (root: docs/). Vault settings and workspace layout are personal.
 docs/.obsidian/
-# Abaqus job and result files: never committed. Input decks (*.inp) with public materials are committed in their test folders, fea/models/<test>/decks/ and fea/checks/ (ADR-0036);
-# the team's decks and exports live in .local/fea/<coupon>/from-team/<date>/ (ADR-0029, ADR-0040).
+# Abaqus job and result files: never committed. Input decks (*.inp) with public materials are committed in fea/checks/<test>/decks/ and fea/checks/decks/ (ADR-0036);
+# the team's decks and exports live in .local/fea/<coupon>/team/<date>/ (ADR-0029, ADR-0040 amendment 3).
 *.odb
 *.dat
 *.msg
@@ -66,10 +69,14 @@ docs/.obsidian/
 *.rpt
 *.cae
 
-# The agent skill and subagent folders are local junctions to docs/agents/skills and docs/agents/subagents
-# (scripts/link-agent-dirs.ps1, ADR-0023, ADR-0047).
-/.claude/skills/
-/.claude/agents/
+# The agent skill and subagent folders are local links to docs/agents/skills and docs/agents/subagents:
+# junctions on Windows (scripts/link-agent-dirs.ps1), symlinks on macOS and Linux (scripts/link-agent-dirs.sh). ADR-0023, ADR-0047.
+# No trailing slash: a trailing slash matches a directory only, and git reads a symlink as a file.
+/.claude/skills
+/.claude/agents
+# Other agent tools' local folders stay out of the repository, as their tooling does (ADR-0028).
+/.agents
+/.codex
 .neon
 
 # Wrangler keeps its local state and dry-run bundles here (ADR-0056); `npm run typecheck:worker` regenerates the runtime types.

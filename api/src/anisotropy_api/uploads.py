@@ -10,6 +10,9 @@ its own, and put beside a run of ours. Nothing here computes a result.
   `4-results/ours-every-output.csv` with the JSON beside it, and its deck. The verdict and every number are that command's (ADR-0001).
   No run record is written for it: the run records are read by every signed-in user, and an upload is private, so the upload's own
   row is its receipt.
+- The comparison as a document (step 7) is `docs/models/upload.py`, written from the comparison the row keeps and from nothing else,
+  when its owner first asks for it. It is kept beside the bundle, under the upload's own prefix, and never in the run's files, which
+  every signed-in user reads.
 - The connector sends with a token its owner created. The token is shown once and only its SHA-256 is kept; a cancelled token is
   refused. Nothing of an upload goes to the assistant's model provider (part 6).
 """
@@ -30,6 +33,7 @@ from .coupon_jobs import FEA, REPO, CouponJobs, Job, repository_path
 from .storage import ObjectStore
 
 TOOL = FEA / "tools" / "abaqus_upload.py"
+DOCUMENT_TOOL = REPO / "docs" / "models" / "upload.py"  # the comparison as a document (ADR-0094 step 7)
 LOCAL_UPLOADS = REPO / ".local" / "abaqus"  # the folder store's root when no bucket is named: .local/abaqus/uploads/<id>/bundle.zip
 MAX_BUNDLE_BYTES = 50 * 1024 * 1024  # the zip as sent; the first real job's bundle (1488 elements, 8 plies) unpacks to 2.2 MB (ADR-0094)
 MAX_UPLOADS = 100  # stored uploads per person; one more is refused until one is deleted
@@ -37,6 +41,7 @@ MAX_TOKENS = 10  # tokens per person that are not cancelled
 TOKEN_PREFIX = "anisotropy_upload_"
 CHECK_TIMEOUT_S = 120.0
 COMPARE_TIMEOUT_S = 240.0
+DOCUMENT_TIMEOUT_S = 180.0
 OURS = ("4-results", "ours-every-output.csv")
 OUR_DECKS = ("2-our-model", "abaqus")
 OUR_DECK_ENDING = "-abaqus.inp"
@@ -88,12 +93,21 @@ def tool_command() -> list[str] | None:
     return None if uv is None else [uv, "run", "--project", str(FEA), "python", str(TOOL)]
 
 
-class Uploads:
-    """The store the bundles go to and the command that judges them. `command` is the tool's command line without its arguments."""
+def document_command() -> list[str] | None:
+    """`uv run --project fea python docs/models/upload.py`, or None when uv is not on PATH."""
+    uv = shutil.which("uv")
+    return None if uv is None else [uv, "run", "--project", str(FEA), "python", str(DOCUMENT_TOOL)]
 
-    def __init__(self, store: ObjectStore, command: list[str] | None, founders: frozenset[str] = frozenset(), scratch: Path | None = None):
+
+class Uploads:
+    """The store the bundles go to and the command that judges them. `command` is the tool's command line without its arguments, and
+    `writer` the same for the command that writes a comparison's document."""
+
+    def __init__(self, store: ObjectStore, command: list[str] | None, founders: frozenset[str] = frozenset(), scratch: Path | None = None,
+                 writer: list[str] | None = None):
         self.store = store
         self.command = command
+        self.writer = writer if writer is not None else document_command()
         self.founders = founders
         self.scratch = scratch or Path(tempfile.gettempdir()) / "anisotropy-uploads"
         self._connector: Path | None = None  # the connector's zip, once this process has written it
@@ -106,13 +120,15 @@ class Uploads:
         self.scratch.mkdir(parents=True, exist_ok=True)
         return tempfile.TemporaryDirectory(prefix="upload-", dir=self.scratch, ignore_cleanup_errors=True)
 
-    def _run(self, args: list[str], answer: Path, timeout_s: float) -> dict:
-        """The command, waited for; its answer is the JSON it wrote, whatever its exit code said (0, 1 and 2 are all answers)."""
-        if self.command is None:
+    def _run(self, args: list[str], answer: Path, timeout_s: float, command: list[str] | None = None) -> dict:
+        """The command, waited for; its answer is the JSON it wrote, whatever its exit code said (0, 1 and 2 are all answers). The
+        bundle's command unless `command` names another of the fea environment."""
+        command = command if command is not None else self.command
+        if command is None:
             raise ToolFailed("uv is not on PATH; a bundle is judged by fea/tools/abaqus_upload.py through `uv run --project fea`")
         env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
         try:
-            done = subprocess.run([*self.command, *args, "--json", str(answer)], capture_output=True, text=True, encoding="utf-8", errors="replace",
+            done = subprocess.run([*command, *args, "--json", str(answer)], capture_output=True, text=True, encoding="utf-8", errors="replace",
                                   cwd=FEA, env={**env, "PYTHONIOENCODING": "utf-8"}, timeout=timeout_s, check=False)
         except subprocess.TimeoutExpired:
             raise ToolFailed(f"the bundle's command did not answer in {timeout_s:g} s") from None
@@ -166,6 +182,24 @@ class Uploads:
         if found.get("verdict") not in ("agrees", "differs", "incomplete", "refused"):
             raise ToolFailed("the bundle's command answered without a verdict")
         return found
+
+    def document(self, comparison: dict, folder: Path, *, upload: str, run: str | None = None, compared: str | None = None) -> Path:
+        """The comparison as a PDF in `folder` (`docs/models/upload.py`, ADR-0094 step 7), written from the comparison alone. Raises
+        `NotCompared` when no document can be written from it (a comparison that was refused, or one an older command wrote), and
+        `ToolFailed` when the document could not be compiled."""
+        if self.writer is None:
+            raise ToolFailed("uv is not on PATH; the document is written by docs/models/upload.py through `uv run --project fea`")
+        source = folder / "comparison.json"
+        source.write_text(json.dumps(comparison), encoding="utf-8")
+        args = [str(source), "--out", str(folder / "document"), "--upload", upload]
+        args += (["--run", run] if run else []) + (["--compared", compared] if compared else [])
+        found = self._run(args, folder / "document.json", DOCUMENT_TIMEOUT_S, command=self.writer)
+        if not found.get("written"):
+            raise NotCompared(str(found.get("reason") or "no document can be written from this comparison"))
+        written = Path(str(found["written"]))
+        if not found.get("pdf") or written.suffix != ".pdf" or not written.is_file() or written.stat().st_size == 0:
+            raise ToolFailed("the document was not compiled: " + str(found.get("reason") or "no PDF was written"))
+        return written
 
 
 # ------------------------------------------------------------------------------------------------------------- a run of ours

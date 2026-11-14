@@ -27,6 +27,7 @@ test("a finished run offers the way to Abaqus and back; a file sent is compared 
   await expect(build).toHaveAttribute("download", "UnnotchedTension_[45-0--45-90]s_build.py");
   expect(await build.getAttribute("href")).toContain(`/v1/coupon-jobs/${JOB}/files/abaqus_build?name=`);
   expect(await card(page).getByTestId("abaqus-connector").getAttribute("href")).toMatch(/\/v1\/abaqus-connector$/);
+  await expect(card(page).getByTestId("abaqus-connector-more")).toHaveText("Its README also shows how to add an Anisotropy menu to Abaqus/CAE and how to send every job as it finishes."); // step 8
   await expect(card(page)).toContainText("abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa");
   await expect(card(page)).toContainText("only you and the Anisotropy team can see it");
   await expect(card(page).getByTestId("abaqus-keys")).toHaveCount(0); // the connector's own route is closed here, so no upload key is offered
@@ -86,6 +87,19 @@ test("a model that differs says in how many places and shows each where it is; a
   await expect(what.nth(0)).toContainText("[45/0/-45/90/90/-45/0/45]");
   await expect(what.nth(1)).toHaveText(/The pull force\s*17020 N\s*16210 N\s*the top grip/);
   await expect(card(page).getByTestId("abaqus-build")).toHaveCount(0); // the steps are for a run without a file yet
+
+  // the comparison as a PDF (step 7): the card has it written first and says so, then the browser saves it from the link, the actor in the address
+  const saved = page.waitForEvent("download");
+  await card(page).getByTestId("abaqus-document").click();
+  const download = await saved;
+  expect(download.suggestedFilename()).toBe("Job-1-compared-with-anisotropy.pdf");
+  expect(new URL(download.url()).pathname + new URL(download.url()).search).toBe(`/v1/abaqus-uploads/${differs.id}/document?actor=studio`);
+  expect(state.documents).toEqual([`POST ${differs.id}`, `GET ${differs.id}`]);
+  await expect(card(page).getByTestId("abaqus-verdict")).toHaveText("Differs in 2 places"); // the page stays where it was
+  state.onDocument = () => ({ status: 503, body: { detail: "The document could not be written: the document was not compiled: Tectonic stopped with exit code 1" } });
+  await card(page).getByTestId("abaqus-document").click();
+  await expect(card(page).getByTestId("abaqus-problem")).toHaveText("The PDF could not be written just now. The comparison above stands. Try again.");
+  expect(state.documents).toEqual([`POST ${differs.id}`, `GET ${differs.id}`, `POST ${differs.id}`]); // no link is followed for a PDF that was not written
 
   await card(page).getByTestId("abaqus-earlier").getByRole("button").click();
   await expect(card(page).getByTestId("abaqus-verdict")).toHaveText("Agrees with ours");

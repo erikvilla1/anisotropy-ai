@@ -1020,6 +1020,15 @@ class AbaqusExchange(Contract):
     max_tokens: int
 
 
+class UploadDocument(Contract):
+    """The document of an upload's comparison, written and kept (ADR-0094 step 7). The page asks for this first, so that it can say
+    that the document is being written, and then follows the link to the file under `filename`."""
+
+    upload_id: str
+    compared_at: str
+    filename: str
+
+
 class UploadOutput(Contract):
     """An upload from Abaqus as the API keeps it (ADR-0094 part 6): whose it is, the bundle's identity, what the check found in it, and,
     once it stood beside a run of ours, that job with the verdict and the comparison as `fea/tools/abaqus_upload.py compare` wrote it.

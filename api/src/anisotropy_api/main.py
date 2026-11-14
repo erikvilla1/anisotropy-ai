@@ -41,7 +41,8 @@ from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, 
                       live_upload_tokens, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
 from .settings import all_tests, allowed_origins, environment, load_settings
-from .storage import FolderStore, R2Store, content_type, download_name, restore, sync, upload_key
+from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, sync, upload_document_key, upload_key,
+                      upload_prefix)
 from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_token, ours_of,
                       token_digest)
 from .uploads import tool_command as upload_command
@@ -51,7 +52,7 @@ from .schemas import (
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
-    ProjectRename, ProposalRequest, ProposalResponse, RunOutput, RunSummary, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
+    ProjectRename, ProposalRequest, ProposalResponse, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
     VerificationResponse,
 )
 
@@ -909,6 +910,69 @@ def upload_bundle(upload_id: uuid.UUID, actor: LinkActor, request: Request) -> R
     return RedirectResponse(store.link(row.object_key, filename=filename), status_code=307)
 
 
+def _document_name(row) -> str:
+    """What the document is saved as: the user's job when it is a plain file name, else the upload's id."""
+    try:
+        return download_name(f"{row.job}-compared-with-anisotropy.pdf", ".pdf") if row.job else f"{row.id}.pdf"
+    except ValueError:
+        return f"{row.id}.pdf"
+
+
+def _upload_document(request: Request, row) -> str:
+    """The key of the document of the upload's present comparison (ADR-0094 step 7), written first when the store does not hold it:
+    by `docs/models/upload.py`, from the comparison the row keeps and nothing else. It is kept beside the bundle, under the upload's
+    own prefix, named by the time of its comparison; the documents of earlier comparisons go. 409 when there is no comparison to
+    print, 503 when the document could not be written or kept."""
+    uploads = _uploads(request)
+    if row.comparison is None or row.compared_at is None:
+        raise HTTPException(status_code=409, detail="Not compared: " + (row.not_compared or "this upload has not stood beside a run of ours yet"))
+    key = upload_document_key(str(row.id), row.compared_at)
+    try:
+        kept = uploads.store.keys(upload_prefix(str(row.id)))
+        if key in kept:
+            return key
+        with uploads.folder() as folder:
+            written = uploads.document(dict(row.comparison), Path(folder), upload=str(row.id), run=f"our run {row.job_id}" if row.job_id else None,
+                                       compared=f"{row.compared_at.astimezone(dt.timezone.utc):%Y-%m-%d %H:%M} UTC")
+            uploads.store.put(key, written, "application/pdf", f'attachment; filename="{row.id}.pdf"')
+    except NotCompared as exc:
+        raise HTTPException(status_code=409, detail=f"Not compared: {exc}") from exc
+    except ToolFailed as exc:
+        raise HTTPException(status_code=503, detail=f"The document could not be written: {exc}") from exc
+    except Exception as exc:  # the store's own errors or the disk's
+        raise HTTPException(status_code=503, detail=f"The document could not be kept: {str(exc).splitlines()[0] if str(exc) else type(exc).__name__}") from exc
+    for old in kept:  # a document of an earlier comparison prints what the row no longer holds
+        if old != key and old.rsplit("/", 1)[-1].startswith(UPLOAD_DOCUMENT):
+            try:
+                uploads.store.delete(old)
+            except Exception:  # it is never handed out again, and it goes with the upload
+                pass
+    return key
+
+
+@app.post(UPLOADS + "/{upload_id}/document", response_model=UploadDocument)
+def write_upload_document(upload_id: uuid.UUID, actor: Actor, request: Request) -> UploadDocument:
+    """Write the document of the upload's comparison, "Compared with the uploaded Abaqus model", when it is not kept yet (ADR-0094
+    step 7), and say what it is saved as. The page asks this first and then follows `GET` of the same address. 409 for an upload that
+    has no comparison, 404 for anyone but its owner and the founders."""
+    _engine, row = _requesters_upload(request, actor, upload_id, reading=True)
+    _upload_document(request, row)
+    return UploadDocument(upload_id=str(row.id), compared_at=row.compared_at.isoformat(), filename=_document_name(row))
+
+
+@app.get(UPLOADS + "/{upload_id}/document")
+def upload_document(upload_id: uuid.UUID, actor: LinkActor, request: Request) -> Response:
+    """The comparison as a PDF, the upload's own document and never a part of the run's (ADR-0094 part 6): a redirect to a short-lived
+    link when a bucket holds it, the file itself otherwise; written first when it is not kept yet. The page offers it as a link, so
+    the actor may be named as `?actor=`."""
+    _engine, row = _requesters_upload(request, actor, upload_id, reading=True)
+    key = _upload_document(request, row)
+    store = _uploads(request).store
+    if isinstance(store, FolderStore):
+        return FileResponse(store.path(key), media_type="application/pdf", filename=_document_name(row))
+    return RedirectResponse(store.link(key, filename=_document_name(row)), status_code=307)
+
+
 @app.post(UPLOADS + "/{upload_id}/compare", response_model=UploadOutput)
 def compare_upload(upload_id: uuid.UUID, actor: Actor, request: Request, job_id: OurRun = None) -> UploadOutput:
     """Put the upload beside a run of ours again, the one `job_id` names or the owner's newest of the bundle's coupon: after a first
@@ -920,10 +984,15 @@ def compare_upload(upload_id: uuid.UUID, actor: Actor, request: Request, job_id:
 
 @app.delete(UPLOADS + "/{upload_id}", status_code=204)
 def delete_upload_endpoint(upload_id: uuid.UUID, actor: Actor, request: Request) -> Response:
-    """Delete an upload: its bundle from the store, then its row with the comparison. Its owner alone; nothing of it is kept."""
+    """Delete an upload: its documents and its bundle from the store, then its row with the comparison. Its owner alone; nothing of
+    it is kept."""
     engine, row = _requesters_upload(request, actor, upload_id, reading=False)
+    store = _uploads(request).store
     try:
-        _uploads(request).store.delete(row.object_key)
+        for key in store.keys(upload_prefix(str(row.id))):  # what was written from the bundle first, the bundle last
+            if key != row.object_key:
+                store.delete(key)
+        store.delete(row.object_key)
     except Exception as exc:  # the row stays while the bundle may still be there, so the delete can be asked again
         raise HTTPException(status_code=503, detail=f"The bundle could not be deleted, so the upload stands: {str(exc).splitlines()[0] if str(exc) else type(exc).__name__}") from exc
     try:

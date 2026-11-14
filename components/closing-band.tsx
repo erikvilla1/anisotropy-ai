@@ -8,7 +8,7 @@ type BandLink = { label: string; href: string };
  * statement as a large heading in the left half, the page's one action from the halfway line (column 7, where the header's
  * links and the footer's columns start), and an optional quiet row of links under a 1 px rule on the same columns. The home
  * page and the industries page both use it, so the two cannot drift. Its rules are `.closing-band` in `app/globals.css`. */
-export function ClosingBand({ label, heading, action, links }: {
+export function ClosingBand({ label, heading, action, links, grey }: {
   /** The small line above the statement. */
   label: string;
   /** The statement, one entry per line. */
@@ -17,9 +17,11 @@ export function ClosingBand({ label, heading, action, links }: {
   action: BandLink;
   /** The row under the rule: its label and its links. */
   links?: { label: string; items: readonly BandLink[] };
+  /** On light grey in place of white (the home page's, ADR-0077 amendment 49; the rule is in app/home.css). */
+  grey?: boolean;
 }) {
   return (
-    <section className={links ? "band is-light closing-band has-links" : "band is-light closing-band"}>
+    <section className={`band is-light closing-band${links ? " has-links" : ""}${grey ? " is-grey" : ""}`}>
       <p className="band-label">{label}</p>
       <div className="band-grid closing-band-main">
         <h2 className="closing-band-statement">

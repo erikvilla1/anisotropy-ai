@@ -4,7 +4,7 @@ import { PLY_KEYS } from "./studio-form";
 /** The most plies a layup may list before the mirror, the coupon form's own limit; a symmetric stack draws twice that. */
 export const MAX_PLIES = PLY_KEYS.length;
 
-export type ExpandedLayup = { angles: number[]; symmetric: boolean };
+type ExpandedLayup = { angles: number[]; symmetric: boolean };
 
 /** Laminate notation to the list of ply angles, bottom face first (ADR-0004): `[45/-45/0/90]s` is 45, -45, 0, 90, 90, 0,
  * -45, 45. Notation only: the same reader the coupon chat uses (`lib/studio-chat.ts`), plus the mirror an `s` asks for.

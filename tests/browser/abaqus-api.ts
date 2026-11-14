@@ -1,7 +1,7 @@
 import { type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
-/** The API's routes for the exchange with the user's own Abaqus (ADR-0094 steps 5 and 6), played for the browser tests: what the card
+/** The API's routes for the exchange with the user's own Abaqus (ADR-0094 steps 5 to 7), played for the browser tests: what the card
  * may offer, the uploads beside a run, the upload keys and the connector's zip. The comparisons are the fea package's own, from
  * tests/fixtures/abaqus (pinned by fea/tests/test_abaqus_upload.py). Register it after the run's own stand-in: the later route wins. */
 export const JOB = "0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00"; // the finished job of tests/fixtures/studio
@@ -26,12 +26,17 @@ export type ExchangeState = {
   keys: { id: string; name: string; hint: string; created_at: string; last_used_at: string | null; revoked_at: string | null }[];
   sent: { query: Record<string, string>; contentType: string | null; actor: string | null; bytes: number }[];
   compared: string[]; removed: string[]; cancelled: string[]; named: string[]; connector: number; lists: number;
+  /** each request for an upload's document: "POST <id>" to have it written, "GET <id>" for the file */
+  documents: string[];
   onSend: () => Answer; onCompare: (id: string) => Answer;
+  /** what asking for the document to be written answers; the default says it is written */
+  onDocument: (id: string) => Answer;
 };
 
 export function exchangeState(more: Partial<ExchangeState> = {}): ExchangeState {
-  return { exchange: { uploads: true, connector_route: false, ...LIMITS }, uploads: [], keys: [], sent: [], compared: [], removed: [], cancelled: [], named: [], connector: 0, lists: 0,
-    onSend: () => ({ status: 201, body: uploadOf("agrees") }), onCompare: () => ({ status: 200, body: uploadOf("agrees") }), ...more };
+  return { exchange: { uploads: true, connector_route: false, ...LIMITS }, uploads: [], keys: [], sent: [], compared: [], removed: [], cancelled: [], named: [], connector: 0, lists: 0, documents: [],
+    onSend: () => ({ status: 201, body: uploadOf("agrees") }), onCompare: () => ({ status: 200, body: uploadOf("agrees") }),
+    onDocument: (id) => ({ status: 200, body: { upload_id: id, compared_at: "2026-11-13T09:30:04+00:00", filename: "Job-1-compared-with-anisotropy.pdf" } }), ...more };
 }
 
 export const TOKEN = `anisotropy_upload_${"k".repeat(43)}`;
@@ -54,13 +59,20 @@ export async function mockExchange(page: Page, state: ExchangeState) {
       if (answer.status === 201) state.uploads.unshift(answer.body as ReturnType<typeof uploadOf>);
       return json(route, answer.body, answer.status);
     }
-    const one = path.match(/^\/v1\/abaqus-uploads\/([^/]+)(\/bundle|\/compare)?$/);
+    const one = path.match(/^\/v1\/abaqus-uploads\/([^/]+)(\/bundle|\/compare|\/document)?$/);
     if (one) {
       const index = state.uploads.findIndex((u) => u.id === one[1]);
       if (index < 0) return json(route, { detail: `No upload ${one[1]} of yours` }, 404);
       if (one[2] === "/bundle") { // a link carries no header, so the API takes the actor from the address here, and refuses a link without it
         if (!(await request.headerValue("x-anisotropy-actor")) && !url.searchParams.get("actor")) return json(route, { detail: "Header X-Anisotropy-Actor is required" }, 422);
         return route.fulfill({ status: 200, contentType: "application/zip", body: "PK" });
+      }
+      if (one[2] === "/document") { // the comparison as a PDF: asked to be written with the header, then fetched as a link, the actor in the address
+        state.documents.push(`${method} ${one[1]}`);
+        if (method === "POST") { const answer = state.onDocument(one[1]); return json(route, answer.body, answer.status); }
+        if (!(await request.headerValue("x-anisotropy-actor")) && !url.searchParams.get("actor")) return json(route, { detail: "Header X-Anisotropy-Actor is required" }, 422);
+        if (!state.uploads[index].comparison) return json(route, { detail: "Not compared: this upload has not stood beside a run of ours yet" }, 409);
+        return route.fulfill({ status: 200, contentType: "application/pdf", headers: { "content-disposition": 'attachment; filename="Job-1-compared-with-anisotropy.pdf"' }, body: "%PDF-1.4 a stand-in" });
       }
       if (one[2] === "/compare" && method === "POST") {
         state.compared.push(`${one[1]}?${url.searchParams.toString()}`);

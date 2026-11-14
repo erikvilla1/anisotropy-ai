@@ -125,6 +125,10 @@ jobs:
             -v "$PWD/tests/fixtures/studio/values.json:/check/values.json:ro" \
             -v "$PWD/docker/check-image.py:/check/check-image.py:ro" anisotropy-solver:ci
           docker exec api /app/api/.venv/bin/python /check/check-image.py --values /check/values.json --summary /tmp/summary.json
+      - name: The document of a model sent from Abaqus, network off, from a public comparison (ADR-0094 step 7)
+        run: |
+          docker run --rm --network none -v "$PWD/tests/fixtures/abaqus:/check/abaqus:ro" anisotropy-solver:ci sh -c \
+            '/app/fea/.venv/bin/python /app/docs/models/upload.py /check/abaqus/another-mesh.json --out /tmp/upload-document && test -s /tmp/upload-document/comparison.pdf && ls -l /tmp/upload-document/comparison.pdf'
       - name: The API's log and the container's end
         if: always()
         run: |

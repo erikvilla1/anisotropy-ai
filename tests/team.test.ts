@@ -17,9 +17,12 @@ test("every name and seat on the site is in docs/brain/people.md, and nothing be
     if (person.company) assert.ok(people.includes(person.company.toLowerCase()), `${person.name}: company seat "${person.company}"`);
     if (person.role) assert.ok(people.includes(person.role.toLowerCase()), `${person.name}: role "${person.role}"`);
     // The photo and the profile link are addresses, not words about the person; the test below checks them.
-    for (const value of [person.name, person.role, person.technical, person.company])
+    for (const value of [person.name, person.title, person.role, person.technical, person.company])
       assert.ok(!/@|\+?\d{3}[\s-]?\d{3}/.test(String(value ?? "")), `${person.name}: a contact detail`);
-    assert.deepEqual(Object.keys(person).filter((key) => !["name", "role", "technical", "company", "photo", "linkedin"].includes(key)), []);
+    assert.deepEqual(Object.keys(person).filter((key) => !["name", "title", "role", "technical", "company", "photo", "linkedin"].includes(key)), []);
+    // The card's one line is a title of a few words, the lead's (ADR-0077 amendment 45): short, and a title only.
+    assert.ok(person.title.trim().length > 0 && person.title.length <= 34, `${person.name}: the one line "${person.title}"`);
+    assert.ok(!/[.!?]/.test(person.title), `${person.name}: the one line is a title, not a sentence`);
   }
   assert.equal(new Set(team.map((person) => person.name)).size, team.length);
 });

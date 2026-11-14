@@ -255,7 +255,7 @@ test("a three-point bending coupon shows its supports, its deflection and the fa
   await expect(page.getByTestId("preview")).toContainText("Support-Left");
   await page.getByLabel("Run by", { exact: true }).fill("A. Engineer");
   await page.getByTestId("solve-button").click();
-  await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 30_000 }); // 15 s was passed twice on CI runners that ran every test of this file at half speed
   await expect(page.getByTestId("summary-reaction")).toContainText("pressing the coupon down");
   await expect(page.getByTestId("summary")).toContainText("the deflection w");
   await expect(page.getByTestId("convergence-not-studied")).toContainText("three point bending is a later step");  // ADR-0068: a bending coupon says so

@@ -2,6 +2,7 @@
   "name": "anisotropy",
   "version": "0.1.0",
   "private": true,
+  "license": "UNLICENSED",
   "engines": {
     "node": ">=24"
   },
@@ -28,12 +29,10 @@
     "@fontsource-variable/inter": "^5.3.0",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.2",
-    "cheerio": "^1.2.0",
     "katex": "^0.19.0",
     "lucide-react": "^0.577.0",
     "next": "^16.2.0",
     "papaparse": "^5.5.3",
-    "pdfjs-dist": "^6.3.289",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "^0.186.1"
@@ -41,13 +40,14 @@
   "devDependencies": {
     "@cloudflare/containers": "^0.3.7",
     "@neon/config": "^1.9.6",
-    "@neon/env": "^1.6.6",
     "@playwright/test": "^1.63.0",
     "@types/node": "^22.0.0",
     "@types/papaparse": "^5.3.16",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@types/three": "^0.186.0",
+    "cheerio": "^1.2.0",
+    "pdfjs-dist": "^6.3.289",
     "serve": "^14.2.6",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",

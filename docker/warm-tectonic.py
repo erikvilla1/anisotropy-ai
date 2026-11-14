@@ -8,6 +8,10 @@ for lands in the cache. A hand-written warm-up document lagged the real one (the
 the real document is the warm-up. The coupon's files are removed afterwards: the image carries no run. The CI job `image` then
 proves the cache is complete by running the same job with the network off (docker/check-image.py).
 
+The document of a model sent from Abaqus (docs/models/upload.py, ADR-0094 step 7) is built here too, from the public comparison the
+page's card is tested with (tests/fixtures/abaqus/differs.json): it shares the coupon document's preamble, and building it once
+puts any file it alone asks for in the cache. The CI job `image` builds it again with the network off.
+
 Run from the repository root with the fea environment: `uv run --project fea python docker/warm-tectonic.py`. It refuses to run
 where `.local/` already exists (a laptop with its private workspace), because it deletes that folder when it is done.
 """
@@ -18,12 +22,15 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL = ROOT / ".local"
 VALUES = ROOT / "tests" / "fixtures" / "studio" / "values.json"
 RUNNER = ROOT / "fea" / "tools" / "run_coupon.py"
+COMPARISON = ROOT / "tests" / "fixtures" / "abaqus" / "differs.json"
+UPLOAD_DOCUMENT = ROOT / "docs" / "models" / "upload.py"
 
 
 def cache() -> Path:
@@ -42,13 +49,20 @@ def main() -> None:
         raise SystemExit("tectonic is not on PATH")
     if LOCAL.exists():
         raise SystemExit(f"{LOCAL} exists: this script is for the image build, where it does not; it would delete that folder")
-    if not VALUES.is_file():
-        raise SystemExit(f"{VALUES} is missing: .dockerignore must keep this one file of tests/ in the build context")
+    for kept in (VALUES, COMPARISON):
+        if not kept.is_file():
+            raise SystemExit(f"{kept} is missing: .dockerignore must keep this file of tests/ in the build context")
     try:
         subprocess.run([sys.executable, str(RUNNER), str(VALUES), "--run-by", "image build"], cwd=ROOT, check=True)
         pdfs = sorted((LOCAL / "fea").glob("*/documents/*/*.pdf"))
         if len(pdfs) != 1 or pdfs[0].stat().st_size == 0:
             raise SystemExit(f"expected one coupon PDF under {LOCAL / 'fea'}, found {[p.name for p in pdfs]}")
+        with tempfile.TemporaryDirectory() as folder:  # the document of a model sent from Abaqus, from the public comparison
+            subprocess.run([sys.executable, str(UPLOAD_DOCUMENT), str(COMPARISON), "--out", folder], cwd=ROOT, check=True)
+            made = Path(folder) / "comparison.pdf"
+            if not made.is_file() or made.stat().st_size == 0:
+                raise SystemExit(f"{UPLOAD_DOCUMENT.name} wrote no PDF from {COMPARISON.name}")
+            print(f"warm-tectonic: the document of an upload is {made.stat().st_size} bytes")
         print(f"warm-tectonic: {pdfs[0].name} is {pdfs[0].stat().st_size} bytes; the cache at {cache()} holds {size(cache()) / 1e6:.0f} MB")
     finally:
         shutil.rmtree(LOCAL, ignore_errors=True)

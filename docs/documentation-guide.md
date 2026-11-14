@@ -181,6 +181,13 @@ No access to paywalled standards. Weak on tabular data in scanned PDFs.
 - Renderer retries LaTeX compilation up to 3 times; some figures still fail.
 ```
 
+**In this repository** ([ADR-0097](decisions/ADR-0097-the-changelog-gets-a-dated-section-per-production-deploy-one-sentence-and-its-record-per-line.md)):
+
+- A pull request adds one line under `## [Unreleased]`, in its Added, Changed or Fixed block.
+- Each line is one sentence saying what changed for a reader, then the decision record, for example "(ADR-0089 amendment 4)". The details live in the record. No team language such as "the founder's choice".
+- Each production deploy gets a dated section. A merge to `main` deploys once its Tests pass (`.github/workflows/deploy.yml`); the next change to `CHANGELOG.md` moves the lines that deploy shipped from Unreleased to `## [YYYY-MM-DD]`, the deploy's date. Deploys on one day share one section. This starts with the first deploy after the 2026-11-12 audit's pull requests have merged; that change also sorts the current Unreleased lines into dated sections.
+- Unreleased and every dated section have at most one Added, one Changed and one Fixed block, in that order.
+
 ### Document 5: Evaluation / Verification Report
 
 ```markdown

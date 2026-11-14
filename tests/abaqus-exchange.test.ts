@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  cardRows, cardText, connectorCommand, differences, ExchangeError, headline, megabytes, notComparedWords, percent, provenance, readComparison, readExchange,
-  readUpload, readUploadKey, sendProblem, type Comparison,
+  cardRows, cardText, connectorCommand, differences, documentProblem, documentUrl, ExchangeError, headline, megabytes, notComparedWords, percent, provenance,
+  readComparison, readExchange, readUpload, readUploadKey, sendProblem, sentFileUrl, type Comparison,
 } from "../lib/abaqus-exchange";
 import { StudioError } from "../lib/studio-api";
 import { ABAQUS_CARD_ALLOWS, bannedIn, bannedInAbaqusCard, downloadName } from "../lib/studio-copy";
@@ -85,6 +85,21 @@ test("an answer of another shape is not shown as a comparison", () => {
   assert.deepEqual(readExchange({ uploads: true, connector_route: false, max_bundle_bytes: 1, max_uploads: 2, max_tokens: 3 }).connector_route, false);
   assert.throws(() => readExchange({ uploads: "yes" }), StudioError);
   assert.equal(readUploadKey({ id: "k", name: "lab", hint: "abcd", created_at: "2026-11-13T09:00:00+00:00", last_used_at: null, revoked_at: null }).hint, "abcd");
+});
+
+test("the comparison as a PDF is a link that names its actor, and a PDF that was not written says so without a banned word", () => {
+  assert.equal(documentUrl("http://api.test/", "0b6f"), "http://api.test/v1/abaqus-uploads/0b6f/document?actor=studio");
+  assert.equal(sentFileUrl("http://api.test", "0b6f"), "http://api.test/v1/abaqus-uploads/0b6f/bundle?actor=studio");
+  const compiler = new ExchangeError("x", 503, "The document could not be written: the document was not compiled: Tectonic stopped with exit code 1");
+  assert.deepEqual(documentProblem(compiler), { words: "The PDF could not be written just now. The comparison above stands. Try again.", reasons: [] });
+  assert.equal(documentProblem(new ExchangeError("x", 409, "Not compared: this upload has not stood beside a run of ours yet")).words,
+    "There is no comparison to print yet. Click Compare again, then ask for the PDF.");
+  assert.equal(documentProblem(new ExchangeError("x", 404, "No upload 1 of yours")).words, "This file is no longer stored, or it belongs to someone else.");
+  assert.match(documentProblem(new ExchangeError("x", 401, null)).words, /^Your sign-in has ended\./);
+  assert.equal(documentProblem(new ExchangeError("The service did not answer (the PDF). Check your connection and try again.", undefined, null)).words,
+    "The service did not answer (the PDF). Check your connection and try again.");
+  for (const error of [compiler, new ExchangeError("x", 409, null), new ExchangeError("x", 404, null), new ExchangeError("x", 401, null)])
+    assert.deepEqual(bannedIn(documentProblem(error).words), []); // the API's own sentence, which names the compiler, never reaches the card
 });
 
 test("a file that is not taken says what happened and what to do next, in the card's words", () => {

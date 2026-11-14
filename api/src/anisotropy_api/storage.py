@@ -12,6 +12,8 @@ The layout, under one prefix per coupon:
                                                             container that runs the job (ADR-0056 amendment 3)
     uploads/<upload id>/bundle.zip                          a bundle a user sent from their own Abaqus (ADR-0094 part 6): private, read
                                                             only through the API's owner check, never restored to a coupon's folder
+    uploads/<upload id>/compared-<time>.pdf                 the document of that upload's comparison made at <time> (step 7), written when
+                                                            its owner first asks for it and deleted with the upload
 
 Without the settings nothing is stored or restored: the files stay where the tool wrote them, as before, and an upload's bundle is
 kept in a folder of the local disk under the same key (`FolderStore`).
@@ -19,6 +21,7 @@ kept in a folder of the local disk under the same key (`FolderStore`).
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import re
@@ -194,9 +197,23 @@ def input_key(job_id: str, filename: str) -> str:
     return f"{JOBS}/{job_id}/input/{filename}"
 
 
+def upload_prefix(upload_id: str) -> str:
+    """Everything kept for one upload (ADR-0094 part 6): a prefix of its own, outside every coupon's."""
+    return f"{UPLOADS}/{upload_id}/"
+
+
 def upload_key(upload_id: str) -> str:
-    """Where an upload's bundle is kept (ADR-0094 part 6): a prefix of its own, outside every coupon's."""
-    return f"{UPLOADS}/{upload_id}/bundle.zip"
+    """Where an upload's bundle is kept."""
+    return upload_prefix(upload_id) + "bundle.zip"
+
+
+UPLOAD_DOCUMENT = "compared-"  # how the name of an upload's document begins
+
+
+def upload_document_key(upload_id: str, compared_at: dt.datetime) -> str:
+    """Where the document of one comparison of an upload is kept (ADR-0094 step 7): beside the bundle, named by the time of the
+    comparison it prints, so a document of an earlier comparison is never handed out for a later one."""
+    return upload_prefix(upload_id) + f"{UPLOAD_DOCUMENT}{compared_at.astimezone(dt.timezone.utc):%Y%m%dT%H%M%S%f}Z.pdf"
 
 
 def store_file(store: ObjectStore, coupon: str, attempt: str, key: str, path: Path) -> str:

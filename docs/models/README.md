@@ -88,6 +88,16 @@ The tool refuses a form that is incomplete, inconsistent or not this package's, 
 
 `docs/models/build.py` builds one document per comparison record (ADR-0031). It is used for the checks under `fea/checks/` (the IM7/8552 regression set): `--all` builds those into `docs/models/build/<record>/`, and CI uploads them. A coupon's own CalculiX record is a chapter of its coupon document, so `--all` leaves it out. Given explicitly, a record under `.local/` goes to `report/<record>/` beside it.
 
+## A model sent from Abaqus (ADR-0094 step 7)
+
+`docs/models/upload.py` writes "Compared with the uploaded Abaqus model" for one upload, from the comparison `fea/tools/abaqus_upload.py compare --json` wrote and from nothing else:
+
+```sh
+uv run --project fea python docs/models/upload.py <comparison>.json --out <folder>   # comparison.tex and comparison.pdf
+```
+
+`--no-pdf` writes the LaTeX only; `--upload`, `--run` and `--compared` name the upload, our run and the time on the first page; `--json` writes what was written, or why nothing was. It is not a chapter of the coupon document: the API writes it for the upload's owner and keeps it with the upload (`api/README.md`), because a run's package is read by every signed-in user. Tests: `fea/tests/test_upload_document.py`, on the four comparisons of `tests/fixtures/abaqus/`.
+
 ## Adding a coupon
 
 1. Make its record with `fea/tools/record_from_dat.py` (CalculiX); `fea/tests/test_records.py` checks that the kernel reproduces every committed record.

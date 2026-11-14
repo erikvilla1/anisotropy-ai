@@ -343,7 +343,7 @@ def test_under_abaqus_cae_nothing_ends_unsaid_because_its_exit_code_and_its_wind
 # --- what is handed over -----------------------------------------------------------------------------------------------------------
 
 def test_the_connectors_files_import_nothing_beyond_the_standard_library_and_abaqus(connector):
-    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "caeModules", "odbAccess", "abaqus_extract_fields"}
+    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "abaqusGui", "caeModules", "odbAccess", "abaqus_extract_fields"}
     folders = {"bundle.py": TOOLS.parent / "src" / "anisotropy_fea"}
     for name in connector.FILES:
         tree = ast.parse((folders.get(name, TOOLS) / name).read_text(encoding="utf-8"))
@@ -362,7 +362,9 @@ def test_the_zip_to_hand_over_holds_the_connector_whole_and_it_runs_from_that_fo
     upload.main(["connector", "--out", str(handed)])
     assert handed.read_bytes() == first  # the same files give the same zip
     folder = tmp_path / "anisotropy-connector"
-    assert "abaqus python anisotropy_connector.py" in (folder / "README.txt").read_text(encoding="utf-8")
+    notes = (folder / "README.txt").read_text(encoding="utf-8")
+    assert "abaqus python anisotropy_connector.py" in notes and "--watch <the folder your jobs run in>" in notes
+    assert "abaqus_plugins in your home" in notes and "Plug-ins > Anisotropy" in notes  # the menu is this same folder, copied there
     before = list(sys.path)
     try:
         alone = load("anisotropy_connector", folder)
