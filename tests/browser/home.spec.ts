@@ -148,6 +148,17 @@ test("after the demo the page is white, and Mission and Services are two short b
     else expect(places.picture[1], id).toBeLessThanOrEqual(places.words[0]);
     expect(places.width, id).toBeGreaterThan(400);
     expect(places.radius, id).toBe("20px");
+    // The picture is a link to where its band's own link goes, and lifts under the pointer as a portrait does (amendment
+    // 39). The keyboard and a screen reader meet the worded link only.
+    const picture = page.locator(`#${id} .home-split-picture`);
+    await expect(picture).toHaveAttribute("href", id === "mission" ? /\/about\/?$/ : /\/services\/?$/);
+    await expect(picture).toHaveAttribute("tabindex", "-1");
+    await expect(picture).toHaveAttribute("aria-hidden", "true");
+    await picture.scrollIntoViewIfNeeded();
+    expect(await picture.evaluate((element) => getComputedStyle(element).transform), id).toBe("none");
+    await picture.hover();
+    await expect.poll(() => picture.evaluate((element) => getComputedStyle(element).transform), { message: id }).toBe("matrix(1.02, 0, 0, 1.02, 0, -4)");
+    await page.mouse.move(2, 2);
     expect(places.image, id).toContain("/assets/images/carbon-weave.jpg");
   }
   // Team and What is new keep their heads in the middle, as the demo's words are.
@@ -192,6 +203,9 @@ test("the About cards show the five portraits in the lead's order, and under the
   await expect(badge(2)).toHaveCSS("opacity", "1");
   await expect(badge(0)).toHaveCSS("opacity", "0");
   await expect(badge(2)).toHaveCSS("border-radius", "50%");
+  // The mark is the picture the lead uploaded, drawn in black and white (amendment 39).
+  expect(await badge(2).evaluate((mark) => getComputedStyle(mark).backgroundImage)).toContain("/assets/brand/round-linkedin-logo");
+  expect(await badge(2).evaluate((mark) => getComputedStyle(mark).filter)).toContain("grayscale(1)");
   const corner = await cards.nth(2).evaluate((card) => {
     const frame = card.querySelector(".home-face-frame")!.getBoundingClientRect();
     const mark = card.querySelector(".home-face-in")!.getBoundingClientRect();
@@ -211,8 +225,8 @@ test("the About cards show the five portraits in the lead's order, and under the
     await expect(cards.nth(index).locator("h3 a")).toHaveAttribute("href", address);
   }
   // Black with the mark in white; white with the mark in black under the pointer itself.
-  await expect(badge(2)).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  expect(await badge(2).evaluate((mark) => getComputedStyle(mark).filter)).not.toContain("invert");
   await badge(2).hover();
-  await expect(badge(2)).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect.poll(() => badge(2).evaluate((mark) => getComputedStyle(mark).filter)).toContain("invert(1)");
 });
 

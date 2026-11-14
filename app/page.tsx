@@ -30,15 +30,6 @@ const news = [
   { when: "Coming soon", about: "Research", title: "Research notes", text: "Notes on methods and test data will be posted here." },
 ];
 
-/** LinkedIn's "in", as letters only: the round ground is the badge's own (app/home.css, .home-face-in). */
-function LinkedInMark() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zM7.119 20.452H3.555V9h3.564v11.452z" />
-    </svg>
-  );
-}
-
 /** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
  * platform, the team and what is new, and the closing band. The workflow and the roadmap live on About. */
 export default function Home() {
@@ -102,7 +93,9 @@ export default function Home() {
           set as the demo's words are, in the middle (amendment 34, app/home.css). */}
       {/* Mission and Services are set side by side with a picture each (ADR-0077 amendment 37): Mission's words at the left
           and its picture at the right, Services the other way round. The picture is the hero's carbon weave for now, standing
-          in for pictures still to come. */}
+          in for pictures still to come. Each picture goes where its band's own link goes, About and Services, and lifts
+          under the pointer as a portrait does (amendment 39); the keyboard and a screen reader meet the worded link only,
+          so the same place is not offered twice. */}
       <section className="band is-light home-blurb home-split home-mission" id="mission">
         <div className="band-head">
           <p className="band-label">Mission</p>
@@ -118,7 +111,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <div className="home-split-picture" aria-hidden="true" />
+        <Link className="home-split-picture" href="/about" aria-hidden="true" tabIndex={-1} />
       </section>
       {/* The step to the services (ADR-0077 amendment 34): the five by name, each a link to its page, and the way to all of them. */}
       <section className="band is-light home-blurb home-split is-flipped home-platform" id="platform">
@@ -142,7 +135,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <div className="home-split-picture" aria-hidden="true" />
+        <Link className="home-split-picture" href="/services" aria-hidden="true" tabIndex={-1} />
       </section>
       {/* About keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
           link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. */}
@@ -167,7 +160,8 @@ export default function Home() {
                   <>
                     <img src={person.photo} alt={`Portrait of ${person.name}`} width={800} height={1000} loading="lazy" decoding="async" />
                     {/* LinkedIn's mark comes up in the frame's corner under the pointer (ADR-0057 amendment 2). It is a link
-                        once the person's profile address is in lib/team.ts; until then it is only drawn. */}
+                        once the person's profile address is in lib/team.ts; until then it is only drawn. The mark itself is
+                        the picture the lead uploaded, drawn in black and white by app/home.css (ADR-0077 amendment 39). */}
                     {person.linkedin ? (
                       <a
                         className="home-face-in"
@@ -175,13 +169,9 @@ export default function Home() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={`${person.name} on LinkedIn (opens in a new tab)`}
-                      >
-                        <LinkedInMark />
-                      </a>
+                      />
                     ) : (
-                      <span className="home-face-in" aria-hidden="true">
-                        <LinkedInMark />
-                      </span>
+                      <span className="home-face-in" aria-hidden="true" />
                     )}
                   </>
                 ) : (

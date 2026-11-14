@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { BEND_DRAWN, demoWing, wingColour, wingExtent } from "@/lib/demo-wing";
+import { boxOf, fitInto, roomBeside } from "./product-demo-fit";
 import { clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
 /** What the page hands the view: the demo's clock, written by the driver's frames, and the view's own request to be drawn again. */
@@ -89,7 +90,11 @@ const LINE_FRAGMENT = /* glsl */ `
     gl_FragColor = vec4( uColor, uOpacity );
   }`;
 
-type Part = { id: string; skin: boolean; group: THREE.Group; face: THREE.ShaderMaterial; mesh: THREE.ShaderMaterial; rim: THREE.ShaderMaterial; apart: [number, number, number] };
+type Part = {
+  id: string; skin: boolean; group: THREE.Group; face: THREE.ShaderMaterial; mesh: THREE.ShaderMaterial; rim: THREE.ShaderMaterial; apart: [number, number, number];
+  /** The part's nodes once each, and how far each moves under the load as drawn: what the wing's box on the screen is measured from. */
+  places: Float32Array; bends: Float32Array;
+};
 
 const lineMaterial = (grey: number) => new THREE.ShaderMaterial({
   vertexShader: LINE_VERTEX, fragmentShader: LINE_FRAGMENT,
@@ -130,6 +135,9 @@ function buildModel() {
     }
     for (const normal of normals.values()) normal.normalize();
     const positions: number[] = [], bends: number[] = [], colours: number[] = [], facing: number[] = [];
+    const own = [...normals.keys()];
+    const places = new Float32Array(own.flatMap((node) => at(node)));
+    const moves = new Float32Array(own.flatMap((node) => moved(node)));
     // Every edge of the part once, with how many of its faces share it: an edge of one face is the part's outline.
     const edges = new Map<string, { a: number; b: number; faces: number }>();
     for (let face = part.first; face < part.first + part.count; face++) {
@@ -192,9 +200,10 @@ function buildModel() {
     group.add(surface, wires, outline);
     root.add(group);
     disposables.push(geometry, face, net, rim);
-    return { id: part.id, skin, group, face, mesh: net, rim, apart: APART[part.id] ?? [0, 0, 0] };
+    return { id: part.id, skin, group, face, mesh: net, rim, apart: APART[part.id] ?? [0, 0, 0], places, bends: moves };
   });
-  return { root, parts: built, hasField: Boolean(field), dispose: () => disposables.forEach((item) => item.dispose()) };
+  const nodes = built.reduce((sum, part) => sum + part.places.length / 3, 0);
+  return { root, parts: built, nodes, turned: new Float32Array(nodes * 3), hasField: Boolean(field), dispose: () => disposables.forEach((item) => item.dispose()) };
 }
 
 /** The wing's own axes, as analysis programs draw them in a corner: x along the chord from nose to tail, y along the span from
@@ -267,6 +276,8 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     return { mesh: new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material), material, texture };
   }, []);
   const axes = useMemo(buildAxes, []);
+  const posed = useMemo(() => new THREE.Euler(), []);
+  const spin = useMemo(() => new THREE.Matrix4(), []);
   const turn = useRef<THREE.Group>(null);
   const invalidate = useThree((state) => state.invalidate);
   useEffect(() => {
@@ -290,17 +301,45 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     const scene = sceneAt(clock);
     const { width, height } = state.viewport; // the world's size at the model's distance
     const span = demoWing.wing.span;
-    const chord = wingExtent(demoWing);
-    const unit = (pose.size * Math.min(width, POSED_FOR * height)) / span; // world units a millimetre
-    const x = (pose.x - 0.5) * width;
-    const y = (0.5 - pose.y) * height;
+    const apart = clamp01(pose.explode);
+    const field = model.hasField ? scene.field : 0;
+    // Every node as the pose turns it, apart and bent as it is drawn, in millimetres about the wing's middle: what the
+    // wing's box on the screen is measured from.
+    posed.set(-pose.pitch, pose.yaw, 0, "YXZ");
+    const turnedBy = spin.makeRotationFromEuler(posed).elements;
+    let filled = 0;
+    for (const part of model.parts) {
+      for (let index = 0; index < part.places.length; index += 3) {
+        const along = part.places[index] + part.apart[0] * apart + part.bends[index] * field;
+        const fore = part.places[index + 1] + part.apart[1] * apart + part.bends[index + 1] * field;
+        const high = part.places[index + 2] + part.apart[2] * apart + part.bends[index + 2] * field;
+        model.turned[filled++] = turnedBy[0] * along + turnedBy[4] * fore + turnedBy[8] * high;
+        model.turned[filled++] = turnedBy[1] * along + turnedBy[5] * fore + turnedBy[9] * high;
+        model.turned[filled++] = turnedBy[2] * along + turnedBy[6] * fore + turnedBy[10] * high;
+      }
+    }
+    // In the middle the pose's own size and place hold. Beside a beat's words the wing fills the room the words leave
+    // (ADR-0098 amendment 3), whatever the window's shape; between the two the one eases into the other.
+    let unit = (pose.size * Math.min(width, POSED_FOR * height)) / span; // world units a millimetre
+    let x = (pose.x - 0.5) * width;
+    let y = (0.5 - pose.y) * height;
+    const beside = Math.min(1, Math.abs(pose.beside));
+    if (beside > 0) {
+      const pixel = width / state.size.width; // world units a pixel of the stage
+      const room = roomBeside(pose.beside > 0, state.size.width, state.size.height);
+      const fitted = fitInto(model.turned, model.nodes, {
+        left: (room.left - state.size.width / 2) * pixel, right: (room.right - state.size.width / 2) * pixel,
+        bottom: (state.size.height / 2 - room.bottom) * pixel, top: (state.size.height / 2 - room.top) * pixel,
+      }, CAMERA_Z);
+      unit += (fitted.unit - unit) * beside;
+      x += (fitted.x - x) * beside;
+      y += (fitted.y - y) * beside;
+    }
     group.position.set(x, y, 0);
     group.scale.setScalar(unit);
     const hand = handle.turn ?? { yaw: 0, pitch: 0 };
     group.rotation.set(-(pose.pitch + hand.pitch), pose.yaw + hand.yaw, 0, "YXZ");
     group.visible = scene.presence > 0;
-    const apart = clamp01(pose.explode);
-    const field = model.hasField ? scene.field : 0;
     for (const part of model.parts) {
       part.group.position.set(part.apart[0] * apart, part.apart[1] * apart, part.apart[2] * apart);
       // Whole, a skin is seen through; apart, it is solid.
@@ -315,11 +354,11 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
       part.rim.uniforms.uOpacity.value = scene.presence * (0.5 - 0.3 * field);
       for (const material of [part.face, part.mesh, part.rim]) material.uniforms.uBend.value = field;
     }
-    // A faint pool of light on the black ground, just under the wing: as wide as the span on the screen, and deeper the
-    // further the parts stand apart.
-    const reach = ((chord * Math.cos(pose.pitch) + (60 + 380 * apart) * Math.sin(pose.pitch)) * unit) / 2; // half the model's height on the screen
-    glow.mesh.position.set(x, y - reach - 0.03 * height, -1);
-    glow.mesh.scale.set(span * unit * Math.cos(pose.yaw) * 1.15, 0.09 * height + 0.5 * reach, 1);
+    // A faint pool of light on the black ground, just under the wing as the pose stands it: most of its width on the
+    // screen, and deeper the taller the wing stands.
+    const drawn = boxOf(model.turned, model.nodes, unit, x, y, CAMERA_Z);
+    glow.mesh.position.set((drawn.left + drawn.right) / 2, drawn.bottom - 0.03 * height, -1);
+    glow.mesh.scale.set(0.85 * (drawn.right - drawn.left), 0.09 * height + 0.25 * (drawn.top - drawn.bottom), 1);
     glow.material.opacity = 0.16 * scene.presence;
     // The axes: in the stage's lower left corner, turned as the wing is, coming in while the pointer holds the wing and
     // going when it lets go. The view asks for frames itself while they fade.

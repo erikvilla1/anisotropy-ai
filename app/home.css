@@ -569,10 +569,27 @@
   justify-content: flex-start;
 }
 .home-split-picture {
+  display: block;
   aspect-ratio: 4 / 3;
   border-radius: 20px;
   background: var(--panel) url("/assets/images/carbon-weave.jpg") center / cover;
   filter: grayscale(1);
+  /* The picture is a link to its band's page and lifts under the pointer as a portrait does (amendment 39). */
+  transition:
+    transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.home-split-picture:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-split-picture {
+    transition: none;
+  }
+  .home-split-picture:hover {
+    transform: none;
+  }
 }
 .home-split.is-flipped .home-split-picture {
   order: -1;
@@ -751,18 +768,17 @@
 }
 /* LinkedIn's mark (ADR-0057 amendment 2): a round black badge in the frame's bottom right corner that comes up while the
  * pointer is over the card, or while the keyboard's focus is in it. Where there is no pointer to hover with, a badge that
- * is a link is always there. */
+ * is a link is always there. The mark is the round picture the lead uploaded (ADR-0077 amendment 39), a blue disc on white:
+ * it is drawn a little larger than the badge, so the badge's round edge cuts the white away, and in black and white. */
 .home-face-frame .home-face-in {
   position: absolute;
   right: 12px;
   bottom: 12px;
-  display: grid;
-  place-items: center;
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: #000000;
-  color: #ffffff;
+  background: #000000 url("/assets/brand/round-linkedin-logo-isolated-white-background_469489-985.png") center / 111% no-repeat;
+  filter: grayscale(1) contrast(3.3);
   font-size: 0;
   letter-spacing: 0;
   opacity: 0;
@@ -770,8 +786,7 @@
   transition:
     opacity 0.2s ease,
     transform 0.2s ease,
-    background-color 0.15s ease,
-    color 0.15s ease;
+    filter 0.15s ease;
 }
 /* The name's link covers the whole card. The frame lies over that link but lets the pointer through to it, all but the
  * badge, so the pointer can reach the badge itself and a press anywhere else on the portrait still follows the name's link. */
@@ -785,13 +800,7 @@
 /* The badge under the pointer itself turns to white with the mark in black. */
 .home-face-frame a.home-face-in:hover,
 .home-face-frame a.home-face-in:focus-visible {
-  background: #ffffff;
-  color: #000000;
-}
-.home-face-in svg {
-  width: 17px;
-  height: 17px;
-  fill: currentColor;
+  filter: grayscale(1) contrast(3.3) invert(1);
 }
 .home-face:hover .home-face-in,
 .home-face:focus-within .home-face-in {
