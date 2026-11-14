@@ -103,3 +103,11 @@ A visitor or a reviewer takes the wing for something the workspace does today; a
 
 **Evidence.** On 2026-11-14 against the dev server at 1873 by 866, the lead's window: the held stage was captured and looked at: the white axes are beside the wing's root end, the report's words and card are there, the line is gone. `demo.spec.ts`: the case that holds and turns the wing now checks that the words and the report's block stay at full strength while held; it passes. `npx tsc --noEmit` clean. UNVERIFIED: a real graphics card, Safari and Firefox.
 
+## Amendment 6, 2026-11-14 (beside the words the wing takes at most about half the stage's width)
+
+**Context.** The lead, of amendment 3 on a window of about 1860 by 860: "this wing is now way too big. make smaller and not as IN UR FACE". Filling all the space the words leave made the wing some 1240 px wide there, against 745 px before amendment 3, which the lead had found too small.
+
+**Decision.** The wing's room beside the words is at most 0.52 of the stage's width and 0.62 of its height, inside the space the words leave, and stands a little nearer the words than the far edge (0.35 of the free width on the words' side). On the lead's window the wing is about 940 px wide and some 150 px from the words' card; on a 1440 px window it is as wide as the space allows, as before. The fit itself, and the beats with the words under the wing, are unchanged.
+
+**Evidence.** On 2026-11-14 against the dev server the two side beats were captured at 1873 by 866 and 1440 by 900 and looked at. `tests/product-demo-fit.test.ts`, 4 of 4: the room's width and height, that it lies in the space the words leave nearer the words, and that the two sides mirror. `npm test`: 304 tests, 303 passed, 1 skipped. UNVERIFIED: whether the lead finds this size right.
+

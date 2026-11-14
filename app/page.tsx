@@ -21,14 +21,10 @@ const heroVideoHtml =
   '<video autoplay muted loop playsinline preload="auto" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
   '<source src="/media/hero.mp4" type="video/mp4" media="(prefers-reduced-motion: no-preference)"></video>';
 
-/** The feed's cards. They are stand-ins for now, at the lead's word of 2026-11-14 ("there shouldnt be any official items in the
- * what is new newsletter here", ADR-0077 amendment 38): nothing in them announces anything. Real items replace them when the
- * team has some to post. */
-const news = [
-  { when: "Coming soon", about: "Company", title: "Company news", text: "News from the team will be posted here." },
-  { when: "Coming soon", about: "Product", title: "Product updates", text: "What changes in the product will be posted here." },
-  { when: "Coming soon", about: "Research", title: "Research notes", text: "Notes on methods and test data will be posted here." },
-];
+/** What the feed shows: one card an item. It is empty for now, at the lead's word of 2026-11-14 ("this needs to be empty as
+ * of right now; we have no published updates for the newsfeed", ADR-0077 amendment 41). An item added here gets a card. */
+type NewsItem = { when: string; about: string; title: string; text: string };
+const news: NewsItem[] = [];
 
 /** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
  * platform, the team and what is new, and the closing band. The workflow and the roadmap live on About. */
@@ -138,7 +134,8 @@ export default function Home() {
         <Link className="home-split-picture" href="/services" aria-hidden="true" tabIndex={-1} />
       </section>
       {/* About keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
-          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. */}
+          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band's
+          head stands on light grey from edge to edge and the portraits on white (ADR-0077 amendment 41, app/home.css). */}
       <section className="band is-light home-blurb home-about" id="working">
         <div className="band-head">
           <p className="band-label">Team</p>
@@ -211,21 +208,23 @@ export default function Home() {
           <p className="band-label">What is new</p>
           <div className="band-statement">
             <h2>Lately.</h2>
-            <p>News from the team, as it happens.</p>
+            <p>{news.length ? "News from the team, as it happens." : "Nothing posted yet. News from the team will appear here."}</p>
           </div>
         </div>
-        <div className="home-news">
-          {news.map((item) => (
-            <article key={item.title}>
-              <p className="home-news-meta">
-                <time>{item.when}</time>
-                <span>{item.about}</span>
-              </p>
-              <h3>{item.title}</h3>
-              <p>{item.text}</p>
-            </article>
-          ))}
-        </div>
+        {news.length ? (
+          <div className="home-news">
+            {news.map((item) => (
+              <article key={item.title}>
+                <p className="home-news-meta">
+                  <time>{item.when}</time>
+                  <span>{item.about}</span>
+                </p>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </section>
       <ClosingBand
         label="THE NEXT LAYER STARTS WITH A QUESTION."

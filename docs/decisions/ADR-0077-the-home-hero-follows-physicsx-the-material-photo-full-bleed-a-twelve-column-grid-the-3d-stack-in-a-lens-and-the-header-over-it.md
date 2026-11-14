@@ -549,3 +549,14 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server: the clip was moved to 1 s before its end and left to start again by itself; the words came back within a frame of its start (the clip at 0.03 s), and the round was captured coming in, standing and gone and looked at. `intro.spec.ts`, 5 of 5: its new case checks that a start of the clip away from the page's top brings nothing, that at the top the words are typed in, stand about three seconds with "Scroll to explore" still up and leave, and that the next start brings them again. `npx tsc --noEmit` clean. UNVERIFIED: Safari and Firefox, and a phone that pauses the clip to save power.
 
+## Amendment 41, 2026-11-14 (the team's head stands on grey and its portraits on white; the feed is empty)
+
+**Context.** The lead, of the page under the demo: "its too much white after mission and services, something needs to change at team. Maybe can just make the screenshotted section gray and the background behind the headshots still white?", with the team band's head in the picture. And of the feed's stand-in cards of amendment 38: "I already asked, this needs to be empty as of right now; we have no published updates for the newsfeed."
+
+**Decision.**
+
+- **The team band.** Its head (the label, the heading, the paragraph and the cohort's line) stands on the feed's light grey, `#f3f3f4`, from one edge of the window to the other; the five portraits under it stay on white. So after two white bands the page goes grey, white, grey.
+- **The feed is empty.** The three stand-in cards are removed. The band keeps its label and heading and says "Nothing posted yet. News from the team will appear here."; it holds no card. The list the cards are drawn from is still in `app/page.tsx`, empty: an item added there gets a card and the sentence goes back to "News from the team, as it happens." Amendment 38 had read "no official items" as stand-ins; the lead meant none.
+
+**Evidence.** On 2026-11-14 against the dev server the two bands were captured at 1873 px and at 390 px and looked at. `home.spec.ts`, 7 of 7: it checks the head's grey and that it reaches both edges of the window, that the portraits lie under it on the white band, and that the feed holds no card and says nothing is posted. `npm test`: 304 tests, 303 passed, 1 skipped. UNVERIFIED: whether the one sentence in the empty band is wanted, or the band should say nothing at all.
+

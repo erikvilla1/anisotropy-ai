@@ -38,18 +38,33 @@ export function fitInto(points: ArrayLike<number>, count: number, room: Box, eye
 
 export type Room = { left: number; right: number; top: number; bottom: number };
 
-/** The room beside a beat's words, in pixels of the stage from its left and its top: from the words' column and a gap to
- * near the stage's far edge, and most of its height. The column's place and width are those of app/home-demo.css
- * (`.product-demo-beat[data-side]`: `clamp(32px, 5vw, 80px)` in, `min(430px, 34%)` wide); the two are kept in step by hand.
- * `beside` is 1 for the room to the right of words set at the left and -1 for the room to the left of words set at the
- * right; between the two the room slides across the stage, as wide as ever, and at 0 it stands in the middle. */
+/** The room beside a beat's words, in pixels of the stage from its left and its top. The space the words leave runs from
+ * their column and a gap to near the stage's far edge, and over most of the stage's height; the column's place and width
+ * are those of app/home-demo.css (`.product-demo-beat[data-side]`: `clamp(32px, 5vw, 80px)` in, `min(430px, 34%)` wide),
+ * kept in step by hand. The wing does not get all of that space: its room is at most `BESIDE_WIDE` of the stage's width and
+ * `BESIDE_TALL` of its height, so on a wide window it is not the whole picture (ADR-0098 amendment 6), and it stands in the
+ * space a little nearer the words than the far edge. `beside` is 1 for the room to the right of words set at the left and
+ * -1 for the room to the left of words set at the right; between the two the room slides across the stage, and at 0 it
+ * stands in the middle. */
+export const BESIDE_WIDE = 0.52;
+export const BESIDE_TALL = 0.62;
+/** Of the width the room leaves free in its space, the share that lies on the words' side. */
+const BESIDE_NEAR = 0.35;
 export function roomBeside(beside: number, wide: number, tall: number): Room {
+  const side = Math.max(-1, Math.min(1, beside));
   const margin = Math.min(80, Math.max(32, 0.05 * wide));
   const column = Math.min(430, 0.34 * wide);
   const gap = Math.min(64, Math.max(36, 0.035 * wide));
   const inner = margin + column + gap, outer = 0.6 * margin;
-  const left = outer + ((inner - outer) * (Math.max(-1, Math.min(1, beside)) + 1)) / 2;
-  return { left, right: left + wide - inner - outer, top: 0.12 * tall, bottom: 0.9 * tall };
+  const space = wide - inner - outer; // what the words leave, across
+  const across = Math.min(space, BESIDE_WIDE * wide);
+  // Where the space begins as it slides, then the free width's share that lies to the room's left: the near share when the
+  // words are at the left, the far share when they are at the right.
+  const from = outer + ((inner - outer) * (side + 1)) / 2;
+  const left = from + (space - across) * (0.5 - (0.5 - BESIDE_NEAR) * side);
+  const up = Math.min(0.78 * tall, BESIDE_TALL * tall);
+  const top = 0.51 * tall - up / 2;
+  return { left, right: left + across, top, bottom: top + up };
 }
 
 /** The room over a beat's words when they stand under the wing: in the stage's middle, 0.6 of the stage wide (of 1.6 times

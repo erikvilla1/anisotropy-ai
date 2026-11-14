@@ -189,3 +189,11 @@ UNVERIFIED: a real trackpad's coasting, which the synthesized gesture only stand
 
 **Evidence.** On 2026-11-14 against the dev server: `demo.spec.ts`, `home.spec.ts` and `intro.spec.ts`, 22 of 22. The play-once case now checks that at the end the stage is still on the window's top edge with the hero's foot on it, that the hero is in the page's flow at full strength, and that 300 px up from there the hero's foot is 300 px into the window with its clip in its box and nothing fading. `npx tsc --noEmit` clean. UNVERIFIED: a real trackpad; Safari and Firefox.
 
+## Amendment 9, 2026-11-14 (if the hero's words stand when the page scrolls, they go as the clip grows)
+
+**Context.** The lead, with two pictures of the hand-over: "fix this. this shouldnt happen when rescrolling, it looks poorly done." In the first the hero's statement stands over the dimming clip with the demo's first words and the wing's outline showing through it; in the second the statement is still faintly there behind the stage's first beat. The hand-over of amendments 4 to 6 was set for a hero whose words had already left; they still stand when the page is scrolled within a few seconds of the load, and since ADR-0077 amendment 40 they stand again for a few seconds each time the clip starts again.
+
+**Decision.** Where the hand-over applies, the hero's statement, its row and the Basement's mark fade with the clip's growth (`--hero-grow`), as "Scroll to explore" does: half gone when the clip is half grown, and gone when the clip is whole-window, two fifths of the way. The demo's first words begin at three fifths, so the two never show together. Scrolling back to the top brings the words back. It is done with a `filter`, so the load-in's and the exit's own handling of the words' opacity is untouched.
+
+**Evidence.** `demo.spec.ts`: a new case scrolls while the words stand and checks that they are half gone a fifth of the way, gone from two fifths on while the demo's words come in, and whole again at the top; it and the earlier hand-over case pass (2 of 2, 2026-11-14, dev server). UNVERIFIED: the five later cases of `demo.spec.ts` could not be run to the end in this session's last run, because the home page was briefly not rendering while the wing's record was being re-made by other work in the same folder; they are to be run again when that lands. Safari and Firefox.
+

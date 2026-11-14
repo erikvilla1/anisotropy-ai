@@ -218,6 +218,48 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
   await expectStop(page, 0);
 });
 
+test("if the hero's words still stand when the page scrolls, they go as the clip grows and never lie over the demo's first words (ADR-0095 amendment 9)", async ({ page }) => {
+  await openPinned(page);
+  const hero = page.locator("#overview");
+  // Before the words have left: the load-in is over and they stand.
+  await expect(page.locator(".page-transition")).toHaveClass(/is-idle/, { timeout: 10_000 });
+  await expect(hero.locator(".intro-overlay")).toHaveCount(0, { timeout: 6_000 });
+  await expect(hero).not.toHaveAttribute("data-words", "gone");
+  const read = () => page.evaluate(() => {
+    const strength = (selector: string) => {
+      const style = getComputedStyle(document.querySelector(selector)!);
+      const through = /opacity\(([\d.]+)\)/.exec(style.filter);
+      return Number(style.opacity) * (through ? Number(through[1]) : 1);
+    };
+    return {
+      statement: strength("#overview .home-hero-stack") * strength("#overview h1"),
+      backed: strength("#overview .home-hero-backed"),
+      demo: Number(getComputedStyle(document.querySelector('.product-demo-beat[data-beat="describe"]')!).opacity),
+    };
+  });
+  expect(await read()).toEqual({ statement: 1, backed: 1, demo: 0 });
+  const way = await offLine(page);
+  // A fifth of the way: the clip is half grown and the words half gone. Nothing of the demo is up.
+  await page.mouse.wheel(0, way / 5);
+  await expect.poll(() => scrollY(page)).toBe(Math.round(way / 5));
+  await expect.poll(async () => (await read()).statement).toBeCloseTo(0.5, 1);
+  expect((await read()).demo).toBe(0);
+  // From two fifths on the clip is whole-window and the hero's words are gone, before the demo's first words begin.
+  let seen = { statement: 1, backed: 1, demo: 0 };
+  for (let step = 4; step <= 9; step++) {
+    await page.mouse.wheel(0, step === 4 ? way / 5 : way / 10);
+    await expect.poll(() => scrollY(page)).toBe(Math.round((way * step) / 10));
+    await page.waitForTimeout(80);
+    seen = await read();
+    expect([seen.statement, seen.backed], `the hero's words at ${step}/10`).toEqual([0, 0]);
+  }
+  expect(seen.demo).toBeGreaterThan(0.8);
+  // Back at the top they stand again, whole.
+  await page.mouse.wheel(0, -way);
+  await expect.poll(() => scrollY(page)).toBe(0);
+  await expect.poll(async () => (await read()).statement).toBe(1);
+});
+
 test("each gesture plays one whole beat, a swipe's burst plays one, and the analysis shows the recorded field with its legend and what it found", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

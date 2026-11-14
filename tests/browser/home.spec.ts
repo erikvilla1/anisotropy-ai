@@ -108,16 +108,25 @@ test("after the demo the page is white, and Mission and Services are two short b
   await page.goto("/");
   await pastTheDemo(page);
   for (const id of ["mission", "platform", "working"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  // What is new is a feed on light grey: three white cards, each with its month and what it is about (amendment 36).
+  // The team band's head stands on the feed's light grey from edge to edge, and the portraits under it on white (amendment 41).
+  const team = await page.locator("#working").evaluate((band) => {
+    const head = band.querySelector(".band-head")!;
+    const frame = band.querySelector(".home-face-frame")!;
+    const box = head.getBoundingClientRect();
+    return { head: getComputedStyle(head).backgroundColor, left: box.left, right: box.right, wide: document.documentElement.clientWidth, top: box.top - band.getBoundingClientRect().top, facesBelow: frame.getBoundingClientRect().top >= box.bottom };
+  });
+  expect(team.head).toBe("rgb(243, 243, 244)");
+  expect([team.left, team.right]).toEqual([0, team.wide]);
+  expect(team.top).toBeLessThanOrEqual(1);
+  expect(team.facesBelow).toBe(true);
+  // What is new is a band on light grey (amendment 36) that is empty for now: its head alone, saying so, and no card
+  // (amendment 41).
   await expect(page.locator("#news")).toHaveCSS("background-color", "rgb(243, 243, 244)");
-  const feed = page.locator("#news .home-news article");
-  await expect(feed).toHaveCount(3);
-  await expect(feed.first()).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  // The cards are stand-ins for now and announce nothing (amendment 38).
-  await expect(feed.locator(".home-news-meta time")).toHaveText(["Coming soon", "Coming soon", "Coming soon"]);
-  await expect(feed.locator(".home-news-meta span")).toHaveText(["Company", "Product", "Research"]);
-  await expect(feed.locator("h3")).toHaveText(["Company news", "Product updates", "Research notes"]);
-  await expect(page.locator("#news")).not.toContainText(/closed beta|CalculiX|studio/i);
+  await expect(page.locator("#news").getByRole("heading", { level: 2 })).toHaveText("Lately.");
+  await expect(page.locator("#news .band-statement p")).toHaveText("Nothing posted yet. News from the team will appear here.");
+  await expect(page.locator("#news article")).toHaveCount(0);
+  await expect(page.locator("#news .home-news")).toHaveCount(0);
+  await expect(page.locator("#news")).not.toContainText(/coming soon|closed beta|CalculiX|studio/i);
   // Mission: the label, the statement and one link, to About; the strip of four principles is gone.
   const mission = page.locator("#mission");
   await expect(mission.locator(".band-label")).toHaveText("Mission");

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { boxOf, fitInto, roomAbove, roomBeside } from "../components/home/product-demo-fit";
+import { BESIDE_TALL, BESIDE_WIDE, boxOf, fitInto, roomAbove, roomBeside } from "../components/home/product-demo-fit";
 
 // Where the demo's wing stands (ADR-0098 amendments 3 and 4): the room a beat's words leave, beside them or over them, and
 // the fit into it.
@@ -14,18 +14,26 @@ const slab = (() => {
   return points;
 })();
 
-test("the room beside the words starts a gap past their column and ends near the stage's far edge", () => {
-  // At 1873 px the column is 80 px in and 430 px wide (app/home-demo.css), so the room starts 64 px past 510.
-  assert.deepEqual(roomBeside(1, 1873, 866), { left: 574, right: 1873 - 48, top: 0.12 * 866, bottom: 0.9 * 866 });
+test("the room beside the words is at most about half the stage wide, nearer the words than the far edge, and mirrors", () => {
+  // At 1873 px the words' column is 80 px in and 430 px wide (app/home-demo.css) and the space they leave starts 64 px past
+  // it, at 574, and ends 48 px from the far edge.
+  const right = roomBeside(1, 1873, 866);
+  assert.ok(Math.abs(right.right - right.left - BESIDE_WIDE * 1873) < 1e-9);
+  assert.ok(right.left > 574 && right.right < 1873 - 48);
+  assert.ok(right.left - 574 < 1873 - 48 - right.right, "nearer the words than the far edge");
+  assert.ok(Math.abs(right.bottom - right.top - BESIDE_TALL * 866) < 1e-9);
+  assert.ok(right.top > 0 && right.bottom < 866);
   // The other side mirrors it, and between the two the room slides across the stage, as wide as ever.
   const left = roomBeside(-1, 1873, 866);
-  assert.deepEqual([left.left, left.right], [48, 1873 - 574]);
+  assert.ok(Math.abs(left.left - (1873 - right.right)) < 1e-9 && Math.abs(left.right - (1873 - right.left)) < 1e-9);
   const middle = roomBeside(0, 1873, 866);
   assert.ok(Math.abs(middle.left + middle.right - 1873) < 1e-9);
   assert.ok(Math.abs(middle.right - middle.left - (left.right - left.left)) < 1e-9);
-  // On the narrowest stage that plays, the column is a share of the stage and the room is still wider than the column.
+  // On the narrowest stage that plays the room keeps inside the space the words leave, which starts a gap past the column,
+  // and is still wider than the column.
   const narrow = roomBeside(1, 1024, 600);
-  assert.ok(Math.abs(narrow.left - (51.2 + 0.34 * 1024 + 36)) < 1e-9);
+  assert.ok(narrow.left >= 51.2 + 0.34 * 1024 + 36 - 1e-9);
+  assert.ok(narrow.right <= 1024 - 0.6 * 51.2 + 1e-9);
   assert.ok(narrow.right - narrow.left > 0.34 * 1024);
 });
 
