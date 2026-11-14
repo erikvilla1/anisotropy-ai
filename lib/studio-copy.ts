@@ -200,14 +200,49 @@ export const RUN_STEPS: { id: RunStepId; label: string; doing: string }[] = [
 ];
 
 /** The pipeline's stage names (fea/tools/run_coupon.py STAGES) and the step each belongs to. A stage this list does not know counts as
- * solving, the step a new stage is most likely to join. */
+ * solving, the step a new stage is most likely to join. The drawings come after the result is on the page, so they are part of writing
+ * the report (ADR-0064 amendment 1). */
 const STAGE_STEP: Record<string, RunStepId> = {
   "the setup check": "meshing", "the input": "meshing", "the decks": "meshing", "the attempt": "meshing",
   "our engine": "solving", "the convergence study": "solving", "CalculiX": "solving",
-  "the CalculiX record": "post", "the result": "post", "the drawings": "post",
-  "the package": "report", "the outputs": "report",
+  "the CalculiX record": "post", "the result": "post",
+  "the drawings": "report", "the package": "report", "the outputs": "report",
 };
 export const stepOfStage = (stage: string | null | undefined): RunStepId => (stage ? STAGE_STEP[stage] ?? "solving" : "meshing");
+
+/** The solver's own phases around the tool's stages (ADR-0056 amendment 6) and the step each belongs to: fetching the coupons before
+ * the run, sending the files after it. Its waits for the naming lock and at the gate (`lock_wait_s`, `gate_s`) fall inside the tool's
+ * first stages, which are timed already, so they are not added again. */
+const PHASE_STEP: Record<string, RunStepId> = { restore_s: "meshing", upload_s: "report" };
+
+/** The seconds each step took, from a job's timings: the queue from when the job was filed to when a solver took it up, every other step
+ * the sum of its stages and of the solver's phases in it. A step with no timing is left out. */
+export function stepSeconds(job: Pick<JobStatus, "started_at" | "claimed_at" | "timings">): Partial<Record<RunStepId, number>> {
+  const out: Partial<Record<RunStepId, number>> = {};
+  if (job.claimed_at) {
+    const waited = (Date.parse(job.claimed_at) - Date.parse(job.started_at)) / 1000;
+    if (Number.isFinite(waited) && waited >= 0) out.queued = waited;
+  }
+  for (const [name, seconds] of Object.entries(job.timings ?? {})) {
+    const step = PHASE_STEP[name] ?? (name.endsWith("_s") ? null : stepOfStage(name));
+    if (step === null || !Number.isFinite(seconds)) continue;
+    out[step] = (out[step] ?? 0) + seconds;
+  }
+  return out;
+}
+
+/** Seconds as the run's steps show them: tenths under ten, whole seconds above, by the page's number rule. */
+export function secondsText(seconds: number): string {
+  const rounded = seconds < 10 ? Math.round(seconds * 10) / 10 : Math.round(seconds);
+  return `${formatNumber(rounded, { zeros: false })} s`;
+}
+
+/** How long a finished run took from the click to the last file: "Finished in 61 s."; null until it is done. */
+export function runTook(job: Pick<JobStatus, "state" | "started_at" | "finished_at">): string | null {
+  if (job.state !== "done" || !job.finished_at) return null;
+  const seconds = (Date.parse(job.finished_at) - Date.parse(job.started_at)) / 1000;
+  return Number.isFinite(seconds) && seconds >= 0 ? `Finished in ${secondsText(seconds)}.` : null;
+}
 /** The step a job is at: a job that ended before any stage (refused at the gate, or never taken up) ended in the queue. */
 const stepOfJob = (job: Pick<JobStatus, "state" | "stage">): RunStepId =>
   !job.stage && (job.state === "stopped" || job.state === "refused") ? "queued" : stepOfStage(job.stage);

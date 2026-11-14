@@ -587,8 +587,10 @@ class CouponJobs:
         if "/" in source:  # an object key: the form or the values as sent, filed by the API's container
             argument = str(job.folder / Path(source).name)
             self.store.get(source, Path(argument))
-        shutil.rmtree(self.local_root, ignore_errors=True)  # this container's coupons are the store's, nothing else
-        sync(self.store, self.local_root)  # the bulk of it outside the lock; only what changes meanwhile is fetched under it
+        # This container's coupons are the store's, nothing else: a warm solver fetches only what changed since its last job and deletes
+        # what the store no longer holds, where wiping the disk first fetched every coupon on every job (ADR-0056 amendment 9). The bulk
+        # of it outside the lock; only what changes meanwhile is fetched under it.
+        sync(self.store, self.local_root, prune=True)
         job.timings["restore_s"] = round(time.monotonic() - started, 1)
         result, gate = job.folder / "outcome.json", job.folder / GATE
         args = [*self.command, argument, *options, "--result", str(result), "--progress", str(job.folder / PROGRESS), "--gate", str(gate)]

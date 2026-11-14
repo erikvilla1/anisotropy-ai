@@ -131,6 +131,38 @@ def test_a_failing_script_leaves_its_last_words_in_the_message(tool, tmp_path, c
     tool.script("our engine", [str(passing)], tmp_path)
 
 
+@pytest.mark.parametrize("own_python", [False, True])
+def test_a_step_in_this_process_ends_as_a_python_of_its_own_would(tool, tmp_path, monkeypatch, capsys, own_python):
+    """ADR-0049 amendment 1: a step runs in the run's own process, and what it prints, how it ends and the message a failure leaves are
+    what a Python of its own gave; the run's arguments, folder and import path are as they were after it. ANISOTROPY_STEP_PROCESS=1
+    runs it in a Python of its own, with the same messages."""
+    if own_python:
+        monkeypatch.setenv(tool.STEP_PROCESS, "1")
+    else:
+        monkeypatch.delenv(tool.STEP_PROCESS, raising=False)
+    folder = tmp_path / "scripts"
+    folder.mkdir()
+    (folder / "neighbour.py").write_text("WORD = 'from the script folder'\n", encoding="utf-8")
+    (folder / "uses.py").write_text(
+        "import os, sys\nfrom neighbour import WORD\nsys.stdout.reconfigure(encoding='utf-8')\n"
+        "print(WORD, sys.argv[1:], os.path.basename(os.getcwd()))\n", encoding="utf-8")
+    (folder / "refuses.py").write_text("raise SystemExit('spec refused: no [coupon] table')\n", encoding="utf-8")
+    (folder / "breaks.py").write_text("print('started')\nraise ValueError('the deck has no *Step')\n", encoding="utf-8")
+    (folder / "returns.py").write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+    argv, here, search = list(sys.argv), Path.cwd(), list(sys.path)
+    tool.script("our engine", [str(folder / "uses.py"), "--out", "x"], tmp_path)
+    assert "from the script folder ['--out', 'x'] " + tmp_path.name in capsys.readouterr().out
+    tool.script("our engine", [str(folder / "returns.py")], tmp_path)
+    with pytest.raises(tool.StepFailed) as refused:
+        tool.script("our engine", [str(folder / "refuses.py")], tmp_path)
+    assert str(refused.value) == "our engine: refuses.py exited with code 1: spec refused: no [coupon] table"
+    with pytest.raises(tool.StepFailed) as broke:
+        tool.script("the drawings", [str(folder / "breaks.py")], tmp_path)
+    assert str(broke.value) == "the drawings: breaks.py exited with code 1: ValueError: the deck has no *Step"
+    assert "started" in capsys.readouterr().out
+    assert (sys.argv, Path.cwd(), sys.path) == (argv, here, search)
+
+
 def test_a_failed_step_gets_its_row(tool, tmp_path, monkeypatch):
     pretend_calculix(tool, monkeypatch)
 
@@ -240,6 +272,9 @@ def test_the_record_is_made_as_the_case_page_says(tool, tmp_path, kind, probes):
     assert set(tool.LEFT_OUT) == {"open_hole_tension", None}
 
 
+STAND_IN_STUDY = {"studied": False, "reason": "a stand-in study"}
+
+
 def stand_in_steps(tool, monkeypatch, seen: dict) -> None:
     """Every script step writes the files its step names, and the package fails: what the run must report, and when."""
     def script(step, args, cwd):
@@ -250,12 +285,13 @@ def stand_in_steps(tool, monkeypatch, seen: dict) -> None:
         targets = [out / f for f in files] if files else [out]
         for target in targets:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("stand-in", encoding="utf-8")
+            target.write_text(json.dumps(STAND_IN_STUDY) if step == "the convergence study" else "stand-in", encoding="utf-8")
         seen.setdefault("steps", []).append(step)
 
-    def package(name, pdf, theory, attempt=None):
+    def package(name, pdf, theory, attempt=None, study=None):
         seen["result when the package started"] = json.loads(seen["progress"].read_text(encoding="utf-8"))["result"]
         seen["attempt"] = attempt  # the run's own, which the package names
+        seen["study"] = study  # the run's own study, which the package prints instead of solving it again (ADR-0064 amendment 1)
         raise tool.StepFailed("the package: Tectonic stopped")
 
     monkeypatch.setattr(tool, "script", script)
@@ -274,7 +310,7 @@ def test_the_result_is_reported_before_the_documents_and_a_failed_package_leaves
     assert seen["steps"] == ["our engine", "the convergence study", "CalculiX", "the CalculiX record", "the drawings"]
     assert seen["result when the package started"] == "57 of 57 recorded values agree with CalculiX"
     assert outcome.result == "57 of 57 recorded values agree with CalculiX" and outcome.result_at is not None
-    assert seen["attempt"] == "02"
+    assert seen["attempt"] == "02" and seen["study"] == STAND_IN_STUDY
     assert outcome.documents.startswith("the package not written (the package: Tectonic stopped)")
     assert {"fields", "explanation", "record", "kernel_summary", "kernel_vtu"} <= set(outcome.outputs) and "package" not in outcome.outputs
     row = next(line for line in (paths.LOCAL / DESIGNATION / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 02 |"))
