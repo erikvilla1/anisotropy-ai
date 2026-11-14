@@ -8,13 +8,16 @@ The keys are read from https://<team>.cloudflareaccess.com/cdn-cgi/access/certs 
 and keeps the old one valid for seven days, so a token whose key id is not in the cached set makes the client fetch the set again.
 A service token carries no email; its request passes with no email recorded.
 
-One route is the connector's (ADR-0094 step 5): POST /v1/connector/uploads, sent from a user's machine under Abaqus, where nobody
-signs in. Only when the settings say so (`app.state.connector_uploads`) is that one request let through without Access's token; its
-handler then checks the upload token the owner created, and nothing else is reachable that way.
+Three routes are the connector's (ADR-0094 step 5 and amendment 1), asked from a user's machine under Abaqus, where nobody signs
+in: POST /v1/connector/uploads sends a bundle, POST /v1/connector/pair swaps a one-time code for an upload token, and
+GET /v1/connector/runs/<id>/build-script reads the script of the token owner's own run. Only when the settings say so
+(`app.state.connector_uploads`) are these requests let through without Access's token; each handler then checks the upload token
+or the one-time code, and nothing else is reachable that way.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -30,6 +33,16 @@ HEADER = "Cf-Access-Jwt-Assertion"
 ALGORITHMS = ["RS256"]  # what Access signs with; nothing else is accepted
 EXEMPT_PATHS = frozenset({"/healthz"})  # what a platform polls before any user has signed in
 CONNECTOR_UPLOADS = "/v1/connector/uploads"  # POST alone, and only with the setting on: checked by an upload token in its handler
+CONNECTOR_PAIR = "/v1/connector/pair"  # POST alone: checked by a one-time code in its handler
+CONNECTOR_RUNS = "/v1/connector/runs"  # GET of /<job id>/build-script alone: checked by an upload token in its handler
+_BUILD_SCRIPT = re.compile(r"/v1/connector/runs/[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/build-script")
+
+
+def connector_route(method: str, path: str) -> bool:
+    """Whether a request is one of the connector's own, which its handler checks without Access's token."""
+    if method == "POST":
+        return path in (CONNECTOR_UPLOADS, CONNECTOR_PAIR)
+    return method == "GET" and _BUILD_SCRIPT.fullmatch(path) is not None
 
 
 class TeamKeysUnavailable(RuntimeError):
@@ -82,8 +95,8 @@ class AccessMiddleware:
         if verify is None or scope["path"] in EXEMPT_PATHS or scope["method"] == "OPTIONS":
             await self.app(scope, receive, send)
             return
-        if scope["method"] == "POST" and scope["path"] == CONNECTOR_UPLOADS and getattr(scope["app"].state, "connector_uploads", False):
-            await self.app(scope, receive, send)  # no email from Access: the handler names the owner from the upload token
+        if getattr(scope["app"].state, "connector_uploads", False) and connector_route(scope["method"], scope["path"]):
+            await self.app(scope, receive, send)  # no email from Access: the handler names the owner from the token or the code
             return
         wanted = HEADER.lower().encode("latin-1")
         token = next((value.decode("latin-1").strip() for name, value in scope["headers"] if name == wanted), "")

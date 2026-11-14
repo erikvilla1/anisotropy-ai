@@ -28,7 +28,7 @@ from anisotropy_engine.library import library_material, list_datasets
 from anisotropy_engine.response import midplane_response, prescribed_curvature_response
 from anisotropy_engine.summary import first_ply_failure_summary, laminate_summary
 
-from .access import CONNECTOR_UPLOADS, AccessMiddleware
+from .access import CONNECTOR_PAIR, CONNECTOR_RUNS, CONNECTOR_UPLOADS, AccessMiddleware
 from .access import verifier as access_verifier
 from .assistant import TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
@@ -36,14 +36,14 @@ from .proposals import model_view_of_form, source_guard
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .coupon_jobs import (FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobRefused, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
-from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, connect, count_uploads, delete_upload, fetch_project, fetch_run, fetch_upload,
-                      git_commit, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
-                      live_upload_tokens, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
+from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, claim_pairing_code, connect, count_uploads, delete_upload, fetch_pairing_code,
+                      fetch_project, fetch_run, fetch_upload, git_commit, insert_pairing_code, insert_upload, insert_upload_token, latest_done_job, list_projects, list_runs, list_upload_tokens, list_uploads,
+                      live_upload_tokens, name_pairing_token, owns_project, project_jobs, record_run, revoke_upload_token, stop_orphans, update_project, update_upload,
                       upsert_project, use_upload_token)
 from .settings import all_tests, allowed_origins, docs_urls, environment, load_settings
 from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, sync, upload_document_key, upload_key,
                       upload_prefix)
-from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_token, ours_of,
+from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_pairing_code, new_token, ours_of,
                       token_digest)
 from .uploads import tool_command as upload_command
 from .schemas import (
@@ -51,7 +51,7 @@ from .schemas import (
     LiveSolveResponse, TowTestRequest, TowTestResponse,
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
-    LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
+    LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
     ProjectRename, ProposalRequest, ProposalResponse, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
     VerificationResponse,
 )
@@ -67,6 +67,8 @@ SOLVER_JOBS = "/v1/solver/jobs"  # a solver container's own routes, which only i
 PROJECTS = "/v1/projects"
 UPLOADS = "/v1/abaqus-uploads"  # the uploads from Abaqus, each its owner's alone (ADR-0094 part 6)
 UPLOAD_TOKENS = "/v1/upload-tokens"  # what the connector sends with
+PAIRING_CODES = "/v1/pairing-codes"  # a one-time code that a signed-in page hands to the user's machine (ADR-0094 amendment 1)
+PAIRING_MINUTES = 10
 ABAQUS_EXCHANGE = "/v1/abaqus-exchange"  # what the page's card may offer here (step 6)
 ABAQUS_CONNECTOR = "/v1/abaqus-connector"  # the connector's files as one zip
 
@@ -708,6 +710,61 @@ def cancel_upload_token(token_id: uuid.UUID, actor: Actor, request: Request) -> 
     return UploadTokenOutput.of(row)
 
 
+def _owner_words(actor: str, user_email: str | None) -> str:
+    """Whose account a token or a code is for, as a machine shows it to its user before it connects."""
+    return user_email if user_email is not None else f"the local user {actor}"
+
+
+@app.post(PAIRING_CODES, status_code=201, response_model=PairingCode)
+def create_pairing_code(actor: Actor, request: Request) -> PairingCode:
+    """A one-time code that connects the requester's machine to their account (ADR-0094 amendment 1). The page puts it in a link
+    that the machine's helper opens; the helper swaps it at `POST /v1/connector/pair` for an upload token of its own, so no token is
+    copied by hand. The code is in this answer and nowhere else, lasts a few minutes and is good for one swap; asking again ends
+    the earlier one."""
+    engine = _records_engine(request)
+    code, digest = new_pairing_code()
+    now = dt.datetime.now(dt.timezone.utc)
+    try:
+        row = insert_pairing_code(engine, code_id=uuid.uuid4(), actor=actor, user_email=_email(request), code_sha256=digest, now=now,
+                                  expires_at=now + dt.timedelta(minutes=PAIRING_MINUTES))
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return PairingCode(code=code, expires_at=row.expires_at.isoformat(), minutes=PAIRING_MINUTES)
+
+
+@app.post(CONNECTOR_PAIR, response_model=Paired)
+def pair_machine(wanted: PairInput, request: Request) -> Paired:
+    """A machine swaps its one-time code for an upload token (ADR-0094 amendment 1). No sign-in and no token: the code is the proof,
+    made minutes ago by a signed-in page. With `look` nothing is swapped and the answer only says whose account the code is for, so
+    the machine asks its user before it connects. 401 for a code that is unknown, used or ended, in the same words. Behind
+    Cloudflare Access this route is reachable only when ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application lets the path
+    through."""
+    engine = _records_engine(request)
+    now = dt.datetime.now(dt.timezone.utc)
+    refused = HTTPException(status_code=401, detail=f"This code is not one of ours, was used already, or is older than {PAIRING_MINUTES} minutes. "
+                                                    "Click Connect this PC on the site again")
+    digest = token_digest(wanted.code)
+    try:
+        if wanted.look:
+            with_code = fetch_pairing_code(engine, digest, now)
+            if with_code is None:
+                raise refused
+            return Paired(owner=_owner_words(with_code.actor, with_code.user_email))
+        code = claim_pairing_code(engine, digest, now)
+        if code is None:
+            raise refused
+        if live_upload_tokens(engine, actor=code.actor, user_email=code.user_email) >= MAX_TOKENS:
+            raise HTTPException(status_code=429, detail=f"This account has {MAX_TOKENS} upload keys that are not cancelled. Cancel one on the site, then "
+                                                        "click Connect this PC again")
+        token, token_sha, hint = new_token()
+        name = wanted.name.strip() or "a connected PC"
+        row = insert_upload_token(engine, token_id=uuid.uuid4(), actor=code.actor, user_email=code.user_email, name=name, token_sha256=token_sha, hint=hint, now=now)
+        name_pairing_token(engine, code.id, row.id)
+    except SQLAlchemyError as exc:
+        raise _database_error(exc) from exc
+    return Paired(owner=_owner_words(code.actor, code.user_email), token=token, token_id=str(row.id), name=row.name)
+
+
 async def _read_bundle(request: Request) -> bytes:
     """The request's body, a bundle's zip as it is, refused past the size a bundle may have before more of it is read."""
     too_large = HTTPException(status_code=413, detail=f"A bundle is at most {MAX_BUNDLE_BYTES} bytes as sent")
@@ -742,6 +799,31 @@ def _token_owner(request: Request, authorization: Annotated[str | None, Header()
 
 async def _connector_bundle(request: Request, owner=Depends(_token_owner)):
     return owner, await _read_bundle(request)
+
+
+@app.get(CONNECTOR_RUNS + "/{job_id}/build-script")
+def connector_build_script(job_id: uuid.UUID, request: Request, owner=Depends(_token_owner)) -> Response:
+    """The script that builds a run's coupon in Abaqus/CAE, for the machine of the run's owner (ADR-0094 amendment 1): asked with an
+    upload token, answered only for a finished run of the token's owner. 404 for any other run, in the same words as for none, so no
+    run is confirmed to a stranger. Nothing is changed. Behind Cloudflare Access this route is reachable only when
+    ANISOTROPY_CONNECTOR_UPLOADS=on and the Access application lets the path through."""
+    jobs = _coupon_jobs(request)
+    job = jobs.get(job_id)
+    mine = job is not None and (job.user_email == owner.user_email if owner.user_email is not None else job.user_email is None and job.actor == owner.actor)
+    if not mine:
+        raise HTTPException(status_code=404, detail=f"No run {job_id} of yours")
+    if job.state != "done":
+        raise HTTPException(status_code=409, detail=f"Run {job_id} is {job.state}; its build script is there once it is done")
+    try:
+        path = jobs.output_file(job, "abaqus_build")
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Run {job_id} has no build script for Abaqus: only an unnotched tension run has one") from exc
+    except (FileNotFoundError, PermissionError) as exc:
+        print(f"coupon job {job_id}: no build script: {exc}", flush=True)
+        raise HTTPException(status_code=404, detail="This run's files are no longer available. Run the analysis again from your project.") from exc
+    coupon = "".join(c for c in str((job.outcome or {}).get("coupon") or "coupon") if c.isalnum() or c in "-_.") or "coupon"
+    return Response(path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{coupon}-build.py"', "X-Anisotropy-Coupon": coupon})
 
 
 def _requesters_upload(request: Request, actor: str, upload_id: uuid.UUID, *, reading: bool):
