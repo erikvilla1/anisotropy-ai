@@ -188,6 +188,7 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
               <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
               {" "}Unzip it beside your job and run <code>abaqus python anisotropy_connector.py &lt;your job&gt;.odb --units {fields.units === "m-Pa" ? "m-Pa" : "mm-MPa"}</code>.
               {" "}It writes one file, &lt;your job&gt;-anisotropy.zip, and sends nothing.
+              {" "}<span data-testid="abaqus-connector-more">Its README also shows how to add an Anisotropy menu to Abaqus/CAE and how to send every job as it finishes.</span>
             </li>
             <li>
               <strong>Send to Anisotropy.</strong>
