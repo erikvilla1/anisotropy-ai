@@ -486,3 +486,24 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server: screenshots at 1440 px and 390 px were looked at. `home.spec.ts` has a new case for the white ground, the two blocks' links and the heads' place; with `shell.spec.ts`, `expansion.spec.ts`, `intro.spec.ts` and the overview case of `portfolio.spec.ts`: 24 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 299 tests, 298 passed, 1 skipped. UNVERIFIED: whether the lead wants Team and What is new kept on the home page at all; they were not mentioned.
 
+## Amendment 35, 2026-11-14 (the team's cards lift under the pointer, and the badge and the name go to each person's LinkedIn profile)
+
+**Context.** The lead, with a recording of another site's portrait card and an image of LinkedIn's round logo: "see how it animates like that when hovering over it and also how the linkedin logo appears, use this image and make b&w like that", and gave a profile address for each of the five.
+
+**Decision.**
+
+- Under the pointer, or with the keyboard's focus in the card, the portrait lifts 4 px, grows by a fiftieth and takes a soft shadow, in 0.28 s. Reduced motion keeps it still.
+- The round badge of amendment 29 stays black with the mark in white, and is now a link to that person's profile, in a new tab; under the pointer itself it turns white with the mark in black. The name links to the same address.
+- The image the lead supplied is not added to the repository: its file name is a stock library's, and the same round mark is drawn from the letters the page already had. LinkedIn's mark is LinkedIn's; it is used only to point at a LinkedIn profile.
+- The five addresses are in `lib/team.ts`. The repository's rule is that a profile link is added only with that person's consent (ADR-0057 amendment 1); the lead supplied them, and whether each person agreed is the lead's to confirm before the merge.
+
+**Evidence.** On 2026-11-14 against the dev server: a screenshot of the card under the pointer was looked at. `home.spec.ts` checks the lift, the badge's place, its two states and the five addresses on the badge and the name: 7 of 7. A run that failed first: the name's link covers the whole card and lay over the badge, so the pointer could not reach it; the frame now lies over that link and lets the pointer through everywhere but on the badge. `tests/team.test.ts` checks each address is a LinkedIn profile address. UNVERIFIED: each person's consent; that the five addresses are the right people's (they were not opened).
+
+## Amendment 36, 2026-11-14 (What is new is a feed on light grey)
+
+**Context.** The lead, on the What is new band: "lets make the what is new, feel more like a news feed type of thing. make this section light gray too."
+
+**Decision.** The band's ground is light grey (#f3f3f4). Its three items are white cards, three to a row and one under another below 1024 px, each with its month and what it is about ("Release", "Analysis", "Workspace") on one line, then its title and text. The words of the items are unchanged.
+
+**Evidence.** On 2026-11-14 against the dev server: a screenshot at 1440 px was looked at; `home.spec.ts` checks the ground, the three cards and their lines. `home.spec.ts`: 7 of 7. The other suites of the home page (`demo.spec.ts`, `intro.spec.ts`, `shell.spec.ts`, `expansion.spec.ts`, the overview case of `portfolio.spec.ts`) passed on the run before the badge's last change: 28 passed, 3 skipped (ADR-0058 amendment 4); they were not run again after it. `npm test`: 300 tests, 299 passed, 1 skipped; `npm run build`: exit 0.
+

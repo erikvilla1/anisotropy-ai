@@ -107,7 +107,15 @@ test("the hero's clip plays in a square box on the black page, under the header,
 test("after the demo the page is white, and Mission and Services are two short blocks that lead on (ADR-0077 amendments 33 and 34)", async ({ page }) => {
   await page.goto("/");
   await pastTheDemo(page);
-  for (const id of ["mission", "platform", "working", "news"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  for (const id of ["mission", "platform", "working"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  // What is new is a feed on light grey: three white cards, each with its month and what it is about (amendment 36).
+  await expect(page.locator("#news")).toHaveCSS("background-color", "rgb(243, 243, 244)");
+  const feed = page.locator("#news .home-news article");
+  await expect(feed).toHaveCount(3);
+  await expect(feed.first()).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(feed.locator(".home-news-meta time")).toHaveText(["November 2026", "October 2026", "October 2026"]);
+  await expect(feed.locator(".home-news-meta span")).toHaveText(["Release", "Analysis", "Workspace"]);
+  await expect(feed.locator("h3")).toHaveText(["The hosted closed beta", "Bending coupons and plates", "The studio opens on a chat"]);
   // Mission: the label, the statement and one link, to About; the strip of four principles is gone.
   const mission = page.locator("#mission");
   await expect(mission.locator(".band-label")).toHaveText("Mission");
@@ -146,7 +154,7 @@ test("the home page fits a phone without horizontal scroll", async ({ page }) =>
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test("the About cards show the five portraits in the lead's order, and LinkedIn's mark comes up under the pointer (ADR-0077 amendment 29)", async ({ page }) => {
+test("the About cards show the five portraits in the lead's order, and under the pointer the portrait lifts and LinkedIn's mark comes up as a link (ADR-0077 amendments 29 and 35)", async ({ page }) => {
   await page.goto("/");
   await pastTheDemo(page);
   const cards = page.locator("#working .home-face");
@@ -156,7 +164,7 @@ test("the About cards show the five portraits in the lead's order, and LinkedIn'
   await expect.poll(() => cards.locator("img").evaluateAll((images) => images.map((image) => (image as HTMLImageElement).naturalWidth))).toEqual([800, 800, 800, 800, 800]);
   expect(await cards.locator("img").evaluateAll((images) => images.every((image) => new URL((image as HTMLImageElement).src).pathname.startsWith("/assets/team/")))).toBe(true);
   await expect(cards.locator(".home-face-frame > span:not(.home-face-in)")).toHaveCount(0);
-  // The mark is drawn in the frame's bottom right corner only for the card under the pointer; with no profile address yet it is not a link.
+  // The mark is drawn in the frame's bottom right corner only for the card under the pointer, where the portrait also lifts.
   const badge = (index: number) => cards.nth(index).locator(".home-face-in");
   await expect(badge(2)).toHaveCSS("opacity", "0");
   await cards.nth(2).hover();
@@ -170,6 +178,20 @@ test("the About cards show the five portraits in the lead's order, and LinkedIn'
   });
   expect(corner[0]).toBeLessThanOrEqual(14);
   expect(corner[1]).toBeLessThanOrEqual(14);
-  await expect(page.locator("#working a.home-face-in")).toHaveCount(0);
+  expect(await cards.nth(2).locator(".home-face-frame").evaluate((frame) => getComputedStyle(frame).transform)).not.toBe("none");
+  expect(await cards.nth(0).locator(".home-face-frame").evaluate((frame) => getComputedStyle(frame).transform)).toBe("none");
+  // The badge and the name both go to that person's LinkedIn profile, in a new tab (amendment 35).
+  const profiles = ["christopher-valerio-916116225", "erik-villa-4b329b261", "tabassum-zaman-51659a264", "jusung-park-a46b43226", "kaisaucedo"];
+  for (let index = 0; index < profiles.length; index++) {
+    const address = new RegExp(`^https://www\\.linkedin\\.com/in/${profiles[index]}/$`);
+    await expect(cards.nth(index).locator("a.home-face-in")).toHaveAttribute("href", address);
+    await expect(cards.nth(index).locator("a.home-face-in")).toHaveAttribute("target", "_blank");
+    await expect(cards.nth(index).locator("a.home-face-in")).toHaveAttribute("rel", /noopener/);
+    await expect(cards.nth(index).locator("h3 a")).toHaveAttribute("href", address);
+  }
+  // Black with the mark in white; white with the mark in black under the pointer itself.
+  await expect(badge(2)).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await badge(2).hover();
+  await expect(badge(2)).toHaveCSS("background-color", "rgb(255, 255, 255)");
 });
 

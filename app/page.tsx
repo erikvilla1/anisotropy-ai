@@ -25,16 +25,19 @@ const heroVideoHtml =
 const news = [
   {
     when: "November 2026",
+    about: "Release",
     title: "The hosted closed beta",
     text: "The studio runs at anisotropy.dev for an invite list, with its outputs kept and every run recorded. Accounts for everyone else are not open yet.",
   },
   {
     when: "October 2026",
+    about: "Analysis",
     title: "Bending coupons and plates",
     text: "Three- and four-point bending in our own shell element, checked against CalculiX, and a plate kind held and loaded on regions you name.",
   },
   {
     when: "October 2026",
+    about: "Workspace",
     title: "The studio opens on a chat",
     text: "Describe a coupon test in a sentence; the chat fills the same rows the form holds, checks the setup and runs it.",
   },
@@ -224,7 +227,7 @@ export default function Home() {
           The team on the About page <ArrowUpRight size={16} />
         </Link>
       </section>
-      <section className="band is-light home-blurb" id="news">
+      <section className="band is-light home-blurb home-feed" id="news">
         <div className="band-head">
           <p className="band-label">What is new</p>
           <div className="band-statement">
@@ -238,11 +241,12 @@ export default function Home() {
         <div className="home-news">
           {news.map((item) => (
             <article key={item.title}>
-              <span className="home-tag">{item.when.toUpperCase()}</span>
-              <div>
-                <h3>{item.title}</h3>
-                <p>{item.text}</p>
-              </div>
+              <p className="home-news-meta">
+                <time>{item.when}</time>
+                <span>{item.about}</span>
+              </p>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
             </article>
           ))}
         </div>
