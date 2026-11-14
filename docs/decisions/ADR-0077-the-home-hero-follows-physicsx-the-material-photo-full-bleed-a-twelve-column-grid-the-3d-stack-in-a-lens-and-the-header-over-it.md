@@ -568,3 +568,11 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server the band was captured at 1873 px and looked at. `home.spec.ts`, 7 of 7: it checks that the head holds no label, and that "Team" starts at the first portrait's left edge, below the head and above the portraits. `npx tsc --noEmit` clean.
 
+## Amendment 43, 2026-11-14 (one short line under each name)
+
+**Context.** The lead, of the two-seat sentences under the names, with a company's officers page as the reference (a name and a title of a few words): "these descriptions are bad, we just need quick one liners like the reference bios here".
+
+**Decision.** Under each name the home page's card shows one short line: "Co-founder and CEO", "Co-founder, AI architecture", "Fabrication and testing", "Modeling and validation", "Software and UI/UX". Each is the person's role or their technical seat cut short; none is a new title. `lib/team.ts` holds the line (`title`), and `tests/team.test.ts` checks that every word of it is one of the role's or the technical seat's as `docs/brain/people.md` words them. The About page still states both seats in full.
+
+**Evidence.** On 2026-11-14 against the dev server the cards were captured at 1873 px and looked at. `tests/team.test.ts`, 2 of 2. `home.spec.ts`, 7 of 7: it checks the five lines and that each takes one line of text. `npx tsc --noEmit` clean. UNVERIFIED: whether each person is content with their line; they are the drafter's cuts of the recorded seats, for the lead and each person to change.
+

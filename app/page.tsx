@@ -195,11 +195,8 @@ export default function Home() {
                   person.name
                 )}
               </h3>
-              <p>
-                {person.role ? `${person.role}. ` : ""}
-                {person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}
-                {person.company ? `; ${person.company}` : ""}.
-              </p>
+              {/* One short line, as a company's page names its officers (amendment 43); the two seats in full are on About. */}
+              <p>{person.title}</p>
             </article>
           ))}
         </div>

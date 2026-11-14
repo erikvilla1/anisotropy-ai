@@ -216,6 +216,9 @@ test("the About cards show the five portraits in the lead's order, and under the
   const cards = page.locator("#working .home-face");
   await cards.first().scrollIntoViewIfNeeded();
   await expect(cards.locator("h3")).toHaveText(["Christopher Valerio", "Erik Villa", "Tabassum Zaman", "Jusung Park", "Kai Saucedo"]);
+  // Under each name, one short line (amendment 43).
+  await expect(cards.locator("h3 + p")).toHaveText(["Co-founder and CEO", "Co-founder, AI architecture", "Fabrication and testing", "Modeling and validation", "Software and UI/UX"]);
+  expect(await cards.locator("h3 + p").evaluateAll((lines) => lines.map((line) => Math.round(line.getBoundingClientRect().height)))).toEqual([24, 24, 24, 24, 24]);
   // Every frame holds a portrait that has loaded, from the site's own files, and no initials.
   await expect.poll(() => cards.locator("img").evaluateAll((images) => images.map((image) => (image as HTMLImageElement).naturalWidth))).toEqual([800, 800, 800, 800, 800]);
   expect(await cards.locator("img").evaluateAll((images) => images.every((image) => new URL((image as HTMLImageElement).src).pathname.startsWith("/assets/team/")))).toBe(true);

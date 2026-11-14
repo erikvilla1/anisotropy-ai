@@ -99,6 +99,7 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - The home page's team cards lift under the pointer, and LinkedIn's round badge and each name link to that person's profile (ADR-0077 amendment 35).
 - What is new on the home page is a feed on light grey (ADR-0077 amendment 36). It is empty for now, at the lead's word: the band says nothing is posted yet and holds no card (amendment 41).
 - The home page's team band has its head on light grey from edge to edge and its portraits on white, with the band's label over the portraits at their left edge (ADR-0077 amendments 41 and 42).
+- Under each name on the home page's team cards stands one short line, the role or the technical seat cut short, in place of the two seats in a sentence (ADR-0077 amendment 43).
 - If the hero's words still stand when the page scrolls to the demo, they fade as the clip grows and are gone before the demo's first words come up (ADR-0095 amendment 9).
 - The home page's Mission and Services pictures are links to About and Services and lift under the pointer as the portraits do; the LinkedIn badge on a portrait is drawn from the lead's uploaded picture, in black and white (ADR-0077 amendment 39).
 - Each time the home hero's clip starts again, its words are typed in again, stand three seconds and leave, as at the load (ADR-0077 amendment 40).
