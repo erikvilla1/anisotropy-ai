@@ -298,3 +298,108 @@ def test_the_model_is_the_one_the_job_was_created_for_and_the_journal_is_the_sav
     assert menu.kept_answers(tmp_path / "none.json") == {}
     (tmp_path / "bad.json").write_text('["units"]', encoding="utf-8")
     assert menu.kept_answers(tmp_path / "bad.json") == {}
+
+
+# --- opened from the site (amendment 1) --------------------------------------------------------------------------------------------------
+
+RUN = "0123abcd-0123-4abc-8def-0123456789ab"
+
+
+def watched(monkeypatch) -> list:
+    """Abaqus's monitor manager and its job messages, recording what was asked of it."""
+    asked = []
+    sys.modules["abaqus"].monitorManager = SimpleNamespace(addMessageCallback=lambda **named: asked.append(named))
+    messages = ModuleType("jobMessage")
+    messages.ANY_JOB, messages.JOB_COMPLETED = "ANY_JOB", "JOB_COMPLETED"
+    monkeypatch.setitem(sys.modules, "jobMessage", messages)
+    return asked
+
+
+def test_a_script_saved_from_the_page_is_offered_whatever_joins_its_name_to_build_py(menu, coupon, tmp_path):  # noqa: F811
+    downloads = tmp_path / "home" / "Downloads"
+    for name in ("D3039_QI8_build.py", "IM7-UNT-L1-build.py"):  # as the page saves it, and as the tool names it
+        (downloads / name).write_text(write_cae_script(coupon), encoding="utf-8")
+    (downloads / "rebuild.py").write_text("print('not ours')\n", encoding="utf-8")
+    assert sorted(path.name for path in menu.build_scripts([downloads])) == ["D3039_QI8_build.py", "IM7-UNT-L1-build.py"]
+    assert "build.py" in menu.OPEN_PROMPT and "-build.py" not in menu.OPEN_PROMPT
+
+
+def test_the_start_script_builds_the_runs_coupon_and_asks_to_be_told_when_a_job_completes(menu, coupon, monkeypatch, tmp_path, capsys):  # noqa: F811
+    text = write_cae_script(coupon)
+    script = tmp_path / "IM7-UNT-L1-build.py"
+    script.write_text(text, encoding="utf-8")
+    (tmp_path / "anisotropy-start.json").write_text(json.dumps({"script": str(script), "run": RUN, "coupon": "IM7-UNT-L1", "connector": str(TOOLS)}), encoding="utf-8")
+    there = abaqus_of(monkeypatch, text)
+    asked = watched(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    load("anisotropy_start")  # as  abaqus cae script=anisotropy-start.py  runs it, in the coupon's folder
+    assert [kwargs["name"] for _, kwargs in calls(there.log, "Model")] == ["IM7-UNT-L1"] and calls(there.log, "Job")
+    assert not calls(there.log, "saveAs") and not calls(there.log, "save") and not calls(there.log, "submit")  # nothing saved, nothing run
+    assert [kwargs for _, kwargs in calls(there.log, "setValues") if "displayedObject" in kwargs]
+    assert menu.RUNS == {"IM7-UNT-L1": RUN} and menu.WATCHING is True
+    assert asked == [{"jobName": "ANY_JOB", "messageType": "JOB_COMPLETED", "callback": menu.job_completed, "userData": None}]
+    said = capsys.readouterr().out
+    assert "IM7-UNT-L1 is built from your run as the model IM7-UNT-L1, with the job IM7-UNT-L1" in said and "go back to your run by themselves" in said
+    menu.opened_from_the_site({"script": str(script), "run": RUN, "coupon": "IM7-UNT-L1"})  # a second coupon in the session asks Abaqus once
+    assert len(asked) == 1
+
+    not_ours = tmp_path / "other.py"
+    not_ours.write_text("raise SystemExit('ran')\n", encoding="utf-8")
+    for facts, why in (({"script": str(not_ours), "run": RUN}, "is not a build script Anisotropy wrote"), ({"run": RUN}, "not opened: no file at")):
+        menu.opened_from_the_site(facts)
+        assert why in capsys.readouterr().out
+
+
+def test_without_job_messages_the_coupon_is_built_and_the_menu_is_named_for_sending(menu, coupon, monkeypatch, tmp_path, capsys):  # noqa: F811
+    text = write_cae_script(coupon)
+    script = tmp_path / "IM7-UNT-L1-build.py"
+    script.write_text(text, encoding="utf-8")
+    abaqus_of(monkeypatch, text)  # an Abaqus with no monitor manager
+    menu.opened_from_the_site({"script": str(script), "run": RUN})
+    said = capsys.readouterr().out
+    assert "is built from your run" in said and "does not say when a job completes" in said and "by themselves" not in said
+    assert menu.WATCHING is False and menu.RUNS == {"IM7-UNT-L1": RUN}  # the menu's Send still puts it beside its run
+
+
+def test_a_completed_job_of_a_model_opened_from_the_site_goes_back_to_its_run_and_no_other_model_is_sent(menu, coupon, job, site, token_file, monkeypatch, tmp_path, capsys):  # noqa: F811
+    written = ast.literal_eval(next(line.split(" = ", 1)[1] for line in write_cae_script(coupon).splitlines() if line.startswith("DESCRIPTION = ")))
+    put(tmp_path, job, "IM7-UNT-L1")
+    put(tmp_path, job, "By-hand")
+    mdb, _session = session_of("IM7-UNT-L1", description=written)
+    mdb.jobs["By-hand"], mdb.models["Mine"] = SimpleNamespace(model="Mine"), cae_model()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(menu, "reading_a_copy", lambda _none, original=menu.reading_a_copy: original(reader_of(job)))
+    there_site = site()
+    abaqus_of(monkeypatch, mdb=mdb)
+
+    menu.RUNS["IM7-UNT-L1"] = RUN
+    menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)  # before this PC is connected: said, and nothing is sent
+    assert "this PC is not connected to your account, so its results were not sent" in capsys.readouterr().out and there_site.requests == []
+
+    menu.keep_answers({"units": "m-Pa", "address": there_site.address, "token_file": str(token_file)})  # as Connect this PC leaves them
+    for name in ("By-hand", "No-such-job"):  # a model nobody opened from the site is never sent by itself, and nothing is said of it
+        menu.job_completed(name, "JOB_COMPLETED", None, None)
+    assert capsys.readouterr().out == "" and there_site.requests == [] and not (tmp_path / "By-hand-anisotropy.zip").exists()
+
+    menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
+    request, = there_site.requests
+    assert request["path"] == f"/v1/connector/uploads?job_id={RUN}" and request["headers"]["authorization"] == f"Bearer {TOKEN}"
+    bundle = open_bundle(tmp_path / "IM7-UNT-L1-anisotropy.zip")
+    assert bundle.manifest["units"] == "mm-MPa" and bundle.manifest["coupon"] == "IM7-UNT-L1" and "model" in bundle.files  # the model's own units
+    said = capsys.readouterr().out
+    assert "the job IM7-UNT-L1 completed. Its results go back to the run this model was opened from" in said
+    assert "the site puts the file beside the run it was opened from" in said and "sent: upload" in said and "the comparison is on the run's page" in said
+    assert TOKEN not in said
+
+    abaqus_of(monkeypatch, mdb=mdb, session=SimpleNamespace(currentViewportName="v", viewports={"v": SimpleNamespace(displayedObject=None)}),
+              answers=lambda fields: (str(tmp_path / "IM7-UNT-L1.odb"), fields[menu.UNITS_FIELD], fields[menu.ADDRESS_FIELD], fields[menu.KEY_FIELD]))
+    menu.send_to_anisotropy()  # the menu's own Send, in the same session, also names the run
+    assert there_site.requests[-1]["path"] == f"/v1/connector/uploads?job_id={RUN}"
+
+    mdb.models["IM7-UNT-L1"].description = "changed by its user"
+    menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
+    assert "no longer says the units it was built in" in capsys.readouterr().out and len(there_site.requests) == 2
+
+    monkeypatch.setattr(menu, "completed", lambda *a, **k: 1 / 0)  # whatever goes wrong is said and never raised into Abaqus
+    menu.job_completed("IM7-UNT-L1", "JOB_COMPLETED", None, None)
+    assert "sending the results stopped" in capsys.readouterr().out
