@@ -5,8 +5,8 @@ import { ArrowUpRight } from "lucide-react";
 type BandLink = { label: string; href: string };
 
 /** The closing section of a page (ADR-0077): a light band of the section kit (`app/sections.css`) with a monospace label, the
- * statement as a large heading in the left half, the page's one action from the halfway line (column 7, where the header's
- * links and the footer's columns start), and an optional quiet row of links under a 1 px rule on the same columns. The home
+ * statement as a large heading in the left half, the page's one action from the halfway line (column 7, where the footer's
+ * columns start), and an optional quiet row of links under a 1 px rule on the same columns. The home
  * page and the industries page both use it, so the two cannot drift. Its rules are `.closing-band` in `app/globals.css`. */
 export function ClosingBand({ label, heading, action, links, grey }: {
   /** The small line above the statement. */

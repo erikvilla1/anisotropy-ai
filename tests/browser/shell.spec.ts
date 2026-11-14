@@ -179,14 +179,14 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
   await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   const services = nav.getByRole("link", { name: "Services", exact: true });
-  // the header's own links, in order, standing in the middle of the page
+  // the header's own links, in order, standing at the right before the Workspace button (ADR-0077 amendment 50)
   const row = await nav.evaluate((el) => {
     const links = [...el.querySelectorAll(":scope > a")].filter((a) => !a.classList.contains("mobile-chat-cta") && a.getBoundingClientRect().width > 0);
     const boxes = links.map((a) => a.getBoundingClientRect());
     return { names: links.map((a) => a.textContent?.trim()), off: (boxes[0].left + boxes[boxes.length - 1].right) / 2 - window.innerWidth / 2 };
   });
   expect(row.names).toEqual(["About", "Industries", "Resources", "Services", "Contact us"]);
-  expect(Math.abs(row.off)).toBeLessThanOrEqual(2);
+  expect(row.off).toBeGreaterThan(100);
   // no plus, no button, no panel
   await expect(page.getByRole("button", { name: "Show services" })).toHaveCount(0);
   await expect(page.locator(".services-menu, .services-menu-plus, .services-panel")).toHaveCount(0);

@@ -42,7 +42,7 @@ export default function Home() {
             the statement and the small lines in, and a text cursor blinks at the statement's end (components/intro-text.ts). */}
         <div className="home-hero-stack">
           <h1 className="home-hero-title" id="home-hero-title" data-intro="type" data-outro="type" data-intro-caret="">
-            one engineering platform
+            One engineering platform
             <br />
             for composite theory
             <br />

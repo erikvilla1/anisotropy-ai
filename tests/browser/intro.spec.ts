@@ -77,13 +77,13 @@ const frames = (page: Page) =>
     return taken;
   });
 
-const STATEMENT = "one engineering platform for composite theory and real test data";
+const STATEMENT = "One engineering platform for composite theory and real test data";
 
 async function expectHeroWhole(page: Page, blink = "type-caret-blink") {
   const hero = page.locator("#overview");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero.locator("[data-intro-run]")).toHaveCount(0);
-  await expect(hero.locator("h1")).toHaveText("one engineering platformfor composite theoryand real test data");
+  await expect(hero.locator("h1")).toHaveText("One engineering platformfor composite theoryand real test data");
   await expect(hero.locator("h1")).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
   await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
@@ -221,7 +221,7 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero.locator(".home-hero-mark")).toHaveCSS("transform", "none");
   // The statement and the Basement's mark are still in the page for a screen reader.
-  await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
+  await expect(hero.locator("h1")).toHaveText(/One engineering platform/);
   await expect(hero.getByAltText("UC San Diego, The Basement")).toHaveCount(1);
   // With the words gone, "Scroll to explore" comes up in the clip's bottom right corner, as far in as the Basement's mark is
   // on the left: the words, then an arrow in a square outline (ADR-0077 amendments 22 and 24) ...
@@ -295,7 +295,7 @@ test("each time the clip starts again the hero's words are typed in again, stand
   await expect(hero.locator(".intro-overlay")).toHaveCount(0, { timeout: 6_000 });
   for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "1");
-  await expect(hero.locator("h1")).toHaveText(/one engineering platform/);
+  await expect(hero.locator("h1")).toHaveText(/One engineering platform/);
   // "Scroll to explore" stays up through the round.
   await expect(hero.locator(".home-hero-explore")).toBeVisible();
   // A second report while the words stand changes nothing.
@@ -408,7 +408,7 @@ test("the home page reached by a link comes out of black with its words typed in
   await expect(page.locator("#overview h1")).toBeVisible();
   await expect(veil).toHaveClass(/is-idle/);
   const back = await frames(page);
-  expectLanding(back, "/", "one engineering platform");
+  expectLanding(back, "/", "One engineering platform");
   expect(back.every((frame) => frame.copies === 0 && frame.running === 0)).toBe(true);
   await expectHeroWhole(page);
 });

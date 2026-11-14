@@ -213,7 +213,7 @@ img {
 }
 .skip-link:focus {
   top: 10px;
-  z-index: 10001; /* over the home page's first-load veil */
+  z-index: 10001; /* over the veil a page arrives under (ADR-0070 amendment 12) */
 }
 /* A page's content takes the focus from script after a moved address opens it (components/redirect-to.tsx): no ring round it all. */
 main[tabindex="-1"]:focus {
@@ -2042,10 +2042,12 @@ html[data-tour-lock] .site-header[data-scroll] {
   }
 }
 @media (min-width: 1201px) {
+  /* The name at the left; the links at the right, ending where the gap to the Workspace button begins (ADR-0077 amendment
+   * 50; until then they stood in the middle of the page). */
   .site-header:not(.chat-site-header) {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    column-gap: 32px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: clamp(28px, 2.6vw, 44px);
     height: 84px;
     padding: 0 32px;
   }
@@ -2053,7 +2055,7 @@ html[data-tour-lock] .site-header[data-scroll] {
     justify-self: start;
   }
   .site-header:not(.chat-site-header) .main-nav {
-    justify-self: center;
+    justify-self: end;
     font-size: 16px;
     font-weight: 600;
     letter-spacing: -0.01em;

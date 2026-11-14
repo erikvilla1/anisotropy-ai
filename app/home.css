@@ -1302,15 +1302,14 @@
   row-gap: clamp(16px, 1.7vw, 28px);
   width: 100%;
 }
-/* The statement: large, of medium weight, set tight, from the left. */
+/* The statement: large, of medium weight, set tight, from the left, as a sentence is written and not in capitals. */
 .home-hero h1 {
   margin: 0;
   font-family: var(--font);
   font-weight: 500;
-  font-size: clamp(34px, 4.7vw, 92px);
-  line-height: 0.9;
+  font-size: clamp(36px, 5vw, 98px);
+  line-height: 1;
   letter-spacing: -0.04em;
-  text-transform: uppercase;
   white-space: nowrap;
   color: #ffffff;
 }
@@ -1604,8 +1603,8 @@
   }
   .home-hero h1 {
     white-space: normal;
-    font-size: clamp(30px, 9.4vw, 46px);
-    line-height: 0.92;
+    font-size: clamp(32px, 10vw, 48px);
+    line-height: 1.02;
     letter-spacing: -0.03em;
   }
   .home-hero-row {

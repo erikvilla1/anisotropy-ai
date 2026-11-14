@@ -18,7 +18,7 @@ test("the hero opens the page, and the laminate calculator and its tour are not 
   // The hero and the demo share a wrapper (ADR-0095 amendment 4); the hero is the first section in it.
   expect(await page.locator("main > .home-opening > *").first().getAttribute("id")).toBe("overview");
   expect(await page.locator("main > *").first().getAttribute("class")).toBe("home-opening");
-  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/one engineering platform\s*for composite theory/);
+  await expect(page.locator("main").locator("h1, h2").first()).toHaveText(/One engineering platform\s*for composite theory/);
   await expect(page.locator("#laminate, #tour")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Your layup, calculated." })).toHaveCount(0);
   // With the calculator gone the page asks the engine for nothing.
@@ -33,13 +33,14 @@ async function pastTheDemo(page: import("@playwright/test").Page) {
   await expect(page.locator("html")).not.toHaveAttribute("data-demo-gate", /.+/);
 }
 
-const STATEMENT = /^\s*one engineering platform\s*for composite theory\s*and real test data\s*$/;
+const STATEMENT = /^\s*One engineering platform\s*for composite theory\s*and real test data\s*$/;
 
 test("the hero's words are one statement and a line of the mark, the name and the year (ADR-0077 amendments 19, 21, 27, 28 and 47)", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
-  await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "uppercase");
+  // Written as a sentence, not in capitals (amendment 50).
+  await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "none");
   // The line over it: the triangle, the name, the year (amendment 47; until then a row under the statement with the mark
   // between the year and the name).
   await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
@@ -58,16 +59,19 @@ test("the hero's words are one statement and a line of the mark, the name and th
   await expect(hero.getByRole("textbox")).toHaveCount(0);
   await expect(hero.getByRole("link")).toHaveCount(0);
   // The header lies over the hero's black ground on the home page; elsewhere it is the same header in the page's flow, 84 px
-  // tall, with its links in the middle of the page (ADR-0077 amendments 8 and 19).
+  // tall. Its links stand at the right, ending just before the Workspace button (ADR-0077 amendments 8, 19 and 50).
   await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
   await page.goto("/about");
   await expect(page.locator(".site-header")).toHaveCSS("position", "relative");
   await expect(page.locator(".site-header")).toHaveCSS("height", "84px");
-  const nav = await page.locator(".site-header .main-nav").evaluate((el) => {
-    const box = el.getBoundingClientRect();
-    return Math.round(box.left + box.width / 2);
+  const bar = await page.locator(".site-header").evaluate((header) => {
+    const box = (selector: string) => header.querySelector(selector)!.getBoundingClientRect();
+    return { navLeft: box(".main-nav").left, navRight: box(".main-nav").right, ctaLeft: box(".header-cta").left, markRight: box(".wordmark").right, middle: window.innerWidth / 2 };
   });
-  expect(Math.abs(nav - page.viewportSize()!.width / 2)).toBeLessThanOrEqual(1);
+  expect(bar.ctaLeft - bar.navRight).toBeGreaterThanOrEqual(24);
+  expect(bar.ctaLeft - bar.navRight).toBeLessThanOrEqual(48);
+  expect(bar.navLeft).toBeGreaterThan(bar.middle);
+  expect(bar.navLeft).toBeGreaterThan(bar.markRight);
 });
 
 test("the hero's clip plays in a square box on the black page, under the header, with the words in its lower left (ADR-0077 amendments 19 and 47)", async ({ page }) => {

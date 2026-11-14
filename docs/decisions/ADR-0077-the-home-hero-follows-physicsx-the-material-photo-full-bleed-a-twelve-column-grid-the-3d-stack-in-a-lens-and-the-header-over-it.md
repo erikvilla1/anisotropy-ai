@@ -632,3 +632,15 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server the two bands were captured at 1873 px and looked at. `home.spec.ts`, 7 of 7: the card's layered gradient, its 32 px inset, the heading in white, and the closing band's grey. UNVERIFIED: the list's white panel on the card with an entry in it (none is published).
 
+## Amendment 50, 2026-11-14 (the statement is written as a sentence, and the header's links stand at the right)
+
+**Context.** The two steps amendment 47 left to follow, now that the other work on the same files has landed. The lead's word is amendment 47's: the hero and the header were "literally an exact match" of the page their arrangement came from.
+
+**Decision.**
+
+- **The statement is a sentence**, "One engineering platform for composite theory and real test data", in the page's text and on the screen, a little larger and with its lines a little further apart than the capitals were. The typed load-in, the exit and the repeat run on it as before.
+- **The header's links stand at the right**, ending where the gap to the Workspace button begins, in place of the middle of the page, from 1201 px up. Narrower windows keep the folded menu as it was.
+- With these, the framework is told to jump, not glide, to a new page's top (`data-scroll-behavior="smooth"` on the page's root, which its guide for this version names for a site that sets smooth scrolling): a link pressed far down a page had opened the next page gliding up from where the last one stood.
+
+**Evidence.** On 2026-11-14 against the dev server the hero was captured at 1873, 1440 and 390 px and looked at. `home.spec.ts` 7, `intro.spec.ts` 15, `shell.spec.ts` 18 with 1 skipped, `expansion.spec.ts` 5 with 2 skipped, `demo.spec.ts` 13: 58 passed, 3 skipped; the overview case of `portfolio.spec.ts` passed (its heading check was brought into step with amendment 46). `npm test`: 319 tests, 318 passed, 1 skipped. `npx tsc --noEmit` clean. UNVERIFIED: whether the lead finds the hero and the header different enough now; the jump to a new page's top was not measured, only set as the guide says.
+
