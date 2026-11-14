@@ -3,7 +3,7 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { BEND_DRAWN, demoWing, wingColour, wingExtent } from "@/lib/demo-wing";
+import { BEND_DRAWN, demoWing, wingBox, wingColour } from "@/lib/demo-wing";
 import { boxOf, fitInto, roomAbove, roomBeside, type Room } from "./product-demo-fit";
 import { clamp01, poseAt, sceneAt } from "./product-demo-timeline";
 
@@ -100,10 +100,12 @@ const lineMaterial = (grey: number) => new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, toneMapped: false,
 });
 
-/** The wing's parts, built once from the record, centred on the wing's middle in plan. */
+/** The wing's parts, built once from the record, centred in plan on the middle of the whole drawn mesh, winglet and all
+ * (the wing's own plane stays the height it turns about). */
 function buildModel() {
-  const { mesh, parts, wing, field, displacement } = demoWing;
-  const middle = { span: wing.span / 2, chord: wingExtent(demoWing) / 2 };
+  const { mesh, parts, field, displacement } = demoWing;
+  const box = wingBox(demoWing);
+  const middle = { span: (box.min[1] + box.max[1]) / 2, chord: (box.min[0] + box.max[0]) / 2 };
   const at = (node: number): [number, number, number] => [mesh.nodes[node][1] - middle.span, mesh.nodes[node][0] - middle.chord, mesh.nodes[node][2]];
   const moved = (node: number): [number, number, number] => {
     const move = displacement?.values[node];

@@ -67,14 +67,14 @@ export function roomBeside(beside: number, wide: number, tall: number): Room {
   return { left, right: left + across, top, bottom: top + up };
 }
 
-/** The room over a beat's words when they stand under the wing: in the stage's middle, 0.6 of the stage wide (of 1.6 times
- * its height on a wider stage, so the wing does not outgrow a low window), from a tenth down the stage to a little above
+/** The room over a beat's words when they stand under the wing: in the stage's middle, 0.66 of the stage wide (of 1.6 times
+ * its height on a wider stage, so the wing does not outgrow a low window), from a little down the stage to a little above
  * where the words begin. `under` is how far down the stage the words begin, in pixels, as the page measures it. Where there
  * are no words on the stage (the beats lie under it, not on it) the room is the stage itself, less a margin and the room
  * the pool of light under the wing takes. */
 export function roomAbove(wide: number, tall: number, under?: number): Room {
   if (under === undefined) return { left: 0.08 * wide, right: 0.92 * wide, top: 0.1 * tall, bottom: 0.84 * tall };
-  const half = 0.3 * Math.min(wide, 1.6 * tall);
-  const top = 0.1 * tall;
-  return { left: wide / 2 - half, right: wide / 2 + half, top, bottom: Math.max(under - 0.08 * tall, top + 0.2 * tall) };
+  const half = 0.33 * Math.min(wide, 1.6 * tall);
+  const top = 0.08 * tall;
+  return { left: wide / 2 - half, right: wide / 2 + half, top, bottom: Math.max(under - 0.07 * tall, top + 0.2 * tall) };
 }

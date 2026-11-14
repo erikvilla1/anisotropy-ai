@@ -138,12 +138,13 @@ test("the page scrolls to the box as any page does; the box comes up with the fi
   await expect(beat(page, "describe")).toHaveAttribute("data-active", "true");
   await expect(beat(page, "describe").getByRole("heading", { level: 3 })).toHaveText("Start from the part.");
   const facts = page.getByTestId("demo-facts");
-  await expect(facts.locator("[data-filled]")).toHaveCount(5);
-  await expect(facts.locator("dt")).toHaveText(["PART", "SPAN", "CHORD", "MATERIAL", "STRUCTURE"]);
+  await expect(facts.locator("[data-filled]")).toHaveCount(6);
+  await expect(facts.locator("dt")).toHaveText(["PART", "SPAN", "CHORD", "MATERIAL", "STRUCTURE", "WINGLET"]);
   await expect(facts).toContainText("2.13 m");
   await expect(facts).toContainText("IM7 / 8552");
   await expect(facts).toContainText("0.45 m at the root, 0.23 m at the tip");
-  await expect(facts).toContainText("2 skins, 2 spars, 9 ribs");
+  await expect(facts).toContainText("2 skins, 2 spars, 11 ribs");
+  await expect(facts).toContainText("0.33 m tall, canted 75°");
   await expect(box(page).locator("canvas")).toBeVisible();
   expect(asked).toEqual([]);
 });
@@ -298,8 +299,8 @@ test("each gesture plays one whole beat, a swipe's burst plays one, and the anal
   await expect(result).toHaveCSS("opacity", "1");
   const governing = wing.parts.find((part) => part.id === wing.solve.governing.part)!;
   await expect(result).toContainText(`Most loaded: the ${governing.name.toLowerCase()}`);
-  await expect(result).toContainText(`${wing.load.total} ${wing.load.unit} pushed up at the ribs`);
-  await expect(result).toContainText(`the tip rises ${Math.round(wing.solve.tip_deflection)} mm`);
+  await expect(result).toContainText(`${wing.load.total} ${wing.load.unit} pushed up at the wing's ribs`);
+  await expect(result).toContainText(`the winglet's tip rises ${Math.round(wing.solve.tip_deflection)} mm`);
   await expect(box(page).locator("canvas")).toBeVisible();
   // A swipe up plays a beat backwards, and a swipe down plays it again.
   expect(await swipe(page, -1)).toBe(28);
@@ -518,7 +519,7 @@ test("with reduced motion the beats lie one under another in the box, finished, 
   await expect(page.locator("#overview")).toHaveCSS("opacity", "1");
   await expect(demo(page).getByRole("heading", { level: 2 })).toHaveText("A wing, analysed part by part.");
   for (const title of ["Start from the part.", "It comes apart into its parts.", "Every part is analysed.", "Back together, with the report."]) await expect(demo(page).getByRole("heading", { name: title })).toBeVisible();
-  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(5);
+  await expect(page.getByTestId("demo-facts").locator("[data-filled]")).toHaveCount(6);
   await expect(page.getByTestId("demo-parts").locator("[data-filled]")).toHaveCount(5);
   await expect(page.getByTestId("demo-run").locator(".demo-stages li[data-state='done']")).toHaveCount(5);
   await expect(page.getByTestId("demo-result")).toContainText("Most loaded");

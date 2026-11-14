@@ -207,9 +207,13 @@
 .demo-summary > div:nth-child(odd) {
   border-right: 1px solid #242424;
 }
-.demo-summary > div:last-child {
-  grid-column: 1 / -1;
+/* The last row has no rule under it; a last cell that stands alone in its row takes the whole row. */
+.demo-summary > div:last-child,
+.demo-summary > div:nth-last-child(2):nth-child(odd) {
   border-bottom: 0;
+}
+.demo-summary > div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
   border-right: 0;
 }
 .demo-summary dt {

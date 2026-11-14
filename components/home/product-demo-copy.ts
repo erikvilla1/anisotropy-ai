@@ -1,7 +1,7 @@
 /** The product demo's words (ADR-0095, ADR-0098), in one place so the unit test can read every one against the product view's
  * banned terms (lib/studio-copy.ts, ADR-0091). The names of the run's stages and the files are the workspace's own and are
  * imported where they are shown; the numbers are the record's (lib/demo-wing.ts). */
-import { BEND_DRAWN, metres, type DemoWing } from "@/lib/demo-wing";
+import { BEND_DRAWN, metres, ribCount, type DemoWing } from "@/lib/demo-wing";
 import type { BeatId } from "./product-demo-timeline";
 
 export const DEMO_HEAD = { label: "THE WORKSPACE / ONE PART, START TO FINISH", title: "A wing, analysed part by part." };
@@ -44,7 +44,9 @@ export function wingFacts(wing: DemoWing, material: string): [string, string][] 
     ["SPAN", metres(wing.wing.span)],
     ["CHORD", `${metres(wing.wing.root_chord)} at the root, ${metres(wing.wing.tip_chord)} at the tip`],
     ["MATERIAL", material],
-    ["STRUCTURE", `2 skins, ${wing.wing.spars.length} spars, ${wing.wing.ribs.length} ribs`],
+    ["STRUCTURE", `2 skins, ${wing.wing.spars.length} spars, ${ribCount(wing)} ribs`], // the wing's ribs and the winglet's
+    // The span and the chords above are the wing's own, to the rib where the winglet begins; the winglet is stated apart.
+    ["WINGLET", `${metres(wing.wing.winglet.rise)} tall, canted ${Math.round(wing.wing.winglet.cant)}°`],
   ];
 }
 
@@ -65,7 +67,9 @@ export function resultLines(wing: DemoWing): { first: string; when: string } | n
   const how = solve.governing.mode && solve.governing.ply ? `, in ${solve.governing.mode} in ply ${solve.governing.ply}` : "";
   return {
     first: `Most loaded: the ${name} ${where}, ${used}${how}.`,
-    when: `Held at the root with ${load.total} ${load.unit} pushed up at the ribs; the tip rises ${Math.round(solve.tip_deflection)} ${wing.units.length}.`,
+    // The load lies on the wing's own ribs, none on the winglet; the largest rise is at the winglet's tip, which stands
+    // furthest out.
+    when: `Held at the root with ${load.total} ${load.unit} pushed up at the wing's ribs; the winglet's tip rises ${Math.round(solve.tip_deflection)} ${wing.units.length}.`,
   };
 }
 

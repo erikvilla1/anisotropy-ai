@@ -42,14 +42,14 @@ const [DESCRIBE, MODEL, ANALYSIS, REPORT] = BEATS;
  * 0 to 1; the rest of it is the room beside words at one side, which `beside` slides across the stage: 1 to the right of
  * words at the left, -1 to the left of words at the right. */
 export type Pose = { pitch: number; yaw: number; explode: number; beside: number; under: number };
-const START: Pose = { pitch: 0.62, yaw: -0.7, explode: 0, beside: 0, under: 1 };
+const START: Pose = { pitch: 0.56, yaw: -0.52, explode: 0, beside: 0, under: 1 };
 /** The pose at the end of each beat, Scale's way: whole in the middle, seen from above and from its tip so the aerofoil shows;
  * then apart at one side; then at the other, turned to show the parts' other ends; then whole in the middle again. */
 export const POSES: Record<BeatId, Pose> = {
-  describe: { pitch: 0.72, yaw: -0.88, explode: 0, beside: 0, under: 1 },
+  describe: { pitch: 0.62, yaw: -0.66, explode: 0, beside: 0, under: 1 },
   model: { pitch: 0.82, yaw: -1.0, explode: 1, beside: 1, under: 0 },
-  analysis: { pitch: 0.82, yaw: 0.98, explode: 1, beside: -1, under: 0 },
-  report: { pitch: 0.7, yaw: -0.8, explode: 0, beside: 0, under: 1 },
+  analysis: { pitch: 0.96, yaw: 0.76, explode: 1, beside: -1, under: 0 },
+  report: { pitch: 0.6, yaw: -0.6, explode: 0, beside: 0, under: 1 },
 };
 const mix = (a: number, b: number, u: number) => a + (b - a) * u;
 const between = (a: Pose, b: Pose, u: number): Pose => ({
