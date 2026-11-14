@@ -6,7 +6,8 @@
  * Nothing is computed here beyond picking arrays the fea package wrote.
  */
 import type { Faced, Fields } from "./studio-api";
-import { CRITERION_NAMES } from "./studio-answer";
+import { CRITERION_NAMES, modeWords } from "./studio-answer";
+import { plyLabel } from "./laminate-chat";
 
 export type FieldOption = {
   id: string; label: string; unit: string; group: string;
@@ -40,14 +41,21 @@ export function worstFace(fields: Fields, value: Faced<number | null>): number |
   return finite.length ? Math.max(...finite) : null;
 }
 
+/** Whether the coupon is pulled or pushed along y, as a tension or compression coupon is: x then runs across its width and y along the load
+ * (`heldWords` in lib/studio-copy.ts), which the page says where it prints x and y (audit fea-run-11). */
+export const loadAlongY = (fields: Fields): boolean => fields.summary.applied.dof === 2;
+const ACROSS = " (across)", ALONG = " (along the load)";
+
 export function fieldOptions(fields: Fields): FieldOption[] {
   const lab = fields.labels;
   const shell = (fields.mesh.translations ?? 2) === 3;
   const faces = hasFaces(fields);
+  const [across, along] = loadAlongY(fields) ? [ACROSS, ALONG] : ["", ""];
+  // ux and uy in plain letters, as εx and γxy are: Unicode has no subscript y, and "uᵧ" was a gamma (audit uiux-fea-run-49)
   const options: FieldOption[] = [
     { id: "u_mag", label: "Displacement |u|", unit: lab.length, group: "Displacement", signed: false, nodalOnly: true },
-    { id: "u_x", label: "Displacement uₓ", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true },
-    { id: "u_y", label: "Displacement uᵧ", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true },
+    { id: "u_x", label: `Displacement ux${across}`, unit: lab.length, group: "Displacement", signed: true, nodalOnly: true },
+    { id: "u_y", label: `Displacement uy${along}`, unit: lab.length, group: "Displacement", signed: true, nodalOnly: true },
   ];
   if (shell) {
     options.push({ id: "u_z", label: "Deflection w", unit: lab.length, group: "Displacement", signed: true, nodalOnly: true });
@@ -55,11 +63,11 @@ export function fieldOptions(fields: Fields): FieldOption[] {
     options.push({ id: "theta_y", label: "Rotation about y", unit: lab.rotation ?? "rad", group: "Rotation", signed: true, nodalOnly: true });
   }
   options.push(
-    { id: "eps_x", label: "Membrane strain εx", unit: "-", group: "Strain", signed: true },
-    { id: "eps_y", label: "Membrane strain εy", unit: "-", group: "Strain", signed: true },
+    { id: "eps_x", label: `Membrane strain εx${across}`, unit: "-", group: "Strain", signed: true },
+    { id: "eps_y", label: `Membrane strain εy${along}`, unit: "-", group: "Strain", signed: true },
     { id: "gamma_xy", label: "Membrane shear strain γxy", unit: "-", group: "Strain", signed: true },
-    { id: "N_x", label: "Section force Nx", unit: lab.force_per_length, group: "Section force", signed: true },
-    { id: "N_y", label: "Section force Ny", unit: lab.force_per_length, group: "Section force", signed: true },
+    { id: "N_x", label: `Section force Nx${across}`, unit: lab.force_per_length, group: "Section force", signed: true },
+    { id: "N_y", label: `Section force Ny${along}`, unit: lab.force_per_length, group: "Section force", signed: true },
     { id: "N_xy", label: "Section force Nxy", unit: lab.force_per_length, group: "Section force", signed: true },
   );
   if (shell) {
@@ -98,10 +106,22 @@ export function fieldOptions(fields: Fields): FieldOption[] {
   return options;
 }
 
-export const DEFAULT_CHOICE = (fields: Fields): FieldChoice => ({
-  id: Object.keys(fields.element.failure).length ? "failure_index" : (fields.mesh.translations ?? 2) === 3 ? "u_z" : "eps_y", ply: 1, face: 0,
-  // the answer's earliest criterion (ADR-0085), the gauge section's on a gripped coupon; the whole model's on an older job
-  criterion: fields.summary.verdict?.earliest ?? fields.summary.earliest ?? Object.keys(fields.element.failure)[0] ?? "", averaged: true,
+/** The field the viewer opens on: the failure index as element values, the values the answer and the readout report (an average over a node's
+ * elements reads lower than the critical element, audit fea-run-42; nodal averages stay an option); without a criterion, the deflection of a
+ * bending coupon or the strain along a pulled one, averaged for a smooth picture. */
+export const DEFAULT_CHOICE = (fields: Fields): FieldChoice => {
+  const failure = Object.keys(fields.element.failure).length > 0;
+  return {
+    id: failure ? "failure_index" : (fields.mesh.translations ?? 2) === 3 ? "u_z" : "eps_y", ply: 1, face: 0,
+    // the answer's earliest criterion (ADR-0085), the gauge section's on a gripped coupon; the whole model's on an older job
+    criterion: fields.summary.verdict?.earliest ?? fields.summary.earliest ?? Object.keys(fields.element.failure)[0] ?? "", averaged: !failure,
+  };
+};
+
+/** The choice once the Field select picks `id`: the failure index on element values, as it opens; leaving it, the other fields back on nodal
+ * averages, their smooth picture; between two other fields, the Values the engineer chose (audit fea-run-42, round-2 review N3). */
+export const withField = (choice: FieldChoice, id: string): FieldChoice => ({
+  ...choice, id, averaged: id === "failure_index" ? false : choice.id === "failure_index" ? true : choice.averaged,
 });
 
 /** The values of the chosen field: per node when averaged (or nodal by nature), else per element; with the range the package wrote for them. */
@@ -134,7 +154,7 @@ function pickValues(fields: Fields, choice: FieldChoice): Omit<FieldValues, "ran
   const face = Math.min(Math.max(choice.face ?? 0, 0), 1);
   const criterion = fields.element.failure[choice.criterion] ? choice.criterion : Object.keys(fields.element.failure)[0];
   const faceWord = option.perFace && hasFaces(fields) ? `, ${fields.mesh.faces![face]} face` : "";
-  const plyWord = option.perPly ? ` (ply ${k + 1}, ${fields.mesh.angles[k]}°${faceWord})` : "";
+  const plyWord = option.perPly ? `, ${plyLabel(k + 1, fields.mesh.angles[k])}${faceWord}` : "";
   const critWord = option.perCriterion ? `, ${CRITERION_NAMES[criterion] ?? criterion.replace("_", " ")}` : "";
   const label = `${option.label}${plyWord}${critWord}`;
   const nodal = (values: (number | null)[]): Omit<FieldValues, "range"> => ({ values, by: "node", label, unit: option.unit, signed: option.signed });
@@ -202,9 +222,10 @@ export const INVARIANT_OPTIONS: [string, string, boolean][] = [
   ["pressure", "Ply pressure stress", true],
 ];
 
-/** The columns of the probe table by their CSV names: the stresses in each ply's material axes, the invariants, the strains. The page
- * heads them with the symbols of `PROBE_HEADS` (ADR-0091). */
+/** The columns of the probe table by their keys: the stresses in each ply's material axes, the invariants, the strains. The page heads them
+ * with symbols (ADR-0091), and the CSV with the same names in plain letters, `PROBE_CSV_NAMES` (audit fea-run-52). */
 export const PROBE_COLUMNS = ["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"];
+export const PROBE_CSV_NAMES = ["sigma1", "sigma2", "tau12", "von Mises", "Tresca", "max principal", "mid principal", "min principal", "pressure", "eps1", "eps2", "gamma12"];
 
 export type ProbeRow = { ply: number; angle: number; face: string | null; values: (number | null)[] };
 export type ProbeTable = { element: string; instance: string; label: string; centroid: [number, number]; rows: ProbeRow[]; note: string };
@@ -236,15 +257,16 @@ export function probeTable(fields: Fields, element: number): ProbeTable {
   }
   const note = hasFaces(fields)
     ? "Element centroid, no averaging, fibre axes, bottom and top face of each ply."
-    : "Element centroid, no averaging, fibre axes; the same through each ply's thickness. S13 and S23 are not modelled (membrane state).";
+    : "Element centroid, no averaging, fibre axes; the same through each ply's thickness. Out-of-plane shear τ₁₃ and τ₂₃ is not computed in a membrane solve.";
   return { element: fields.mesh.element_labels[element], instance, label, centroid: [e.centroids[element][0], e.centroids[element][1]], rows, note };
 }
 
-/** The probe table as a CSV, the columns by their common FE names with the units, the numbers as the package wrote them. */
+/** The probe table as a CSV, the columns by the table's names in plain letters, the stresses with their unit and the strains, which have
+ * none, bare (audit fea-run-52); the numbers as the package wrote them. */
 export function probeCsv(fields: Fields, table: ProbeTable): string {
   const lab = fields.labels;
   const head = ["Element", "Ply", "Angle (deg)", ...(table.rows.some((r) => r.face) ? ["Face"] : []),
-    ...PROBE_COLUMNS.map((c, i) => `${c} (${i < 9 ? lab.stress : "-"})`)];
+    ...PROBE_CSV_NAMES.map((c, i) => (i < 9 ? `${c} (${lab.stress})` : c))];
   const cell = (v: number | null) => (v === null || v === undefined ? "" : String(v));
   const lines = table.rows.map((r) => [table.element, String(r.ply), String(r.angle), ...(r.face ? [r.face] : []), ...r.values.map(cell)].join(","));
   return [head.join(","), ...lines].join("\n") + "\n";
@@ -257,9 +279,9 @@ export function elementReadout(fields: Fields, element: number, choice: FieldCho
   const k = Math.min(Math.max(choice.ply, 1), fields.mesh.plies) - 1;
   const face = Math.min(Math.max(choice.face ?? 0, 0), 1);
   const faces = hasFaces(fields);
-  const plyName = `Ply ${k + 1} (${fields.mesh.angles[k]}°)${faces ? `, ${fields.mesh.faces![face]} face` : ""}`;
+  const plyName = `${plyLabel(k + 1, fields.mesh.angles[k])}${faces ? `, ${fields.mesh.faces![face]} face` : ""}`;
   const rows: [string, string][] = [
-    ["Centroid (x, y)", `${print(e.centroids[element][0])}, ${print(e.centroids[element][1])} ${lab.length}`],
+    [loadAlongY(fields) ? "Centroid (x across, y along)" : "Centroid (x, y)", `${print(e.centroids[element][0])}, ${print(e.centroids[element][1])} ${lab.length}`],
     ["εx, εy, γxy", e.strain[element].map(print).join(", ")],
     [`Nx, Ny, Nxy (${lab.force_per_length})`, e.section_force[element].map(print).join(", ")],
   ];
@@ -275,10 +297,10 @@ export function elementReadout(fields: Fields, element: number, choice: FieldCho
     const index = onFace(fields, failure.index[element][k], face);
     const mode = onFace(fields, failure.mode[element][k], face);
     const name = CRITERION_NAMES[criterion] ?? criterion.replace("_", " ");
-    rows.push([`${name}: ply ${k + 1}${faces ? ` ${fields.mesh.faces![face]} face` : ""} R, 1/R, mode`,
-      `${print(ratio)}, ${print(index)}, ${e.modes[mode]}`]);
-    const worst = failure.worst_face ? ` (${failure.worst_face[element]} face)` : "";
-    rows.push([`${name}: worst ply of the element`, `ply ${failure.worst_ply[element]}${worst}, 1/R = ${print(failure.element_index[element])}`]);
+    rows.push([`${name}: ${plyName}, R, 1/R, mode`, `${print(ratio)}, ${print(index)}, ${modeWords(e.modes[mode])}`]);
+    const worstPly = failure.worst_ply[element];
+    const worst = failure.worst_face ? `, ${failure.worst_face[element]} face` : "";
+    rows.push([`${name}: worst ply of the element`, `${plyLabel(worstPly, fields.mesh.angles[worstPly - 1] ?? 0)}${worst}, 1/R = ${print(failure.element_index[element])}`]);
   }
   return { title: `Element ${fields.mesh.element_labels[element].split(".").pop()}`, rows };
 }

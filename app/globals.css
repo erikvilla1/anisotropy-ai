@@ -6,6 +6,8 @@
   --text: #efefef;
   --muted: #a0a0a0;
   --accent: #d4d4d4;
+  /* A field's border is its only edge on a dark panel: #6b6b6b is 3.65:1 on --bg and 3.46:1 on --panel (WCAG 1.4.11, audit uiux-fea-run-23). */
+  --field-line: #6b6b6b;
   /* One typeface for the whole site, Inter, the nearest open-licence match to the Helvetica-like type on Anduril's site
    * (ADR-0093). Its file carries the display cut, which the browser picks by itself at large sizes. */
   --font: "Inter Variable", "Helvetica Neue", Arial, sans-serif;
@@ -72,6 +74,12 @@ textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 5px;
+}
+/* A field and a folding panel's heading show the same ring when the keyboard reaches them (WCAG 2.4.7, audit uiux-fea-run-24). */
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 ::selection {
   background: var(--accent);

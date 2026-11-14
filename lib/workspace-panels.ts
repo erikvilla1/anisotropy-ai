@@ -66,6 +66,38 @@ export const PANEL_OF_STEP: Record<ChatStep, PanelId> = {
 };
 export const panelOfStep = (step: ChatStep): PanelId => PANEL_OF_STEP[step];
 
+/** The tension screen's panels (ADR-0090), in the rail's order, with the titles it shows: what the product view renders in place of the step
+ * panels (components/workspace/tension-screen.tsx renders each by this id and title; `tests/workspace-ui.test.ts` holds the two together). */
+export const TENSION_PANELS = [
+  { id: "tension-coupon", title: "Unnotched tension coupon" },
+  { id: "tension-input", title: "Material and layup" },
+  { id: "tension-change", title: "Change settings" },
+  { id: "tension-files", title: "Files" },
+  { id: "tension-built", title: "Model settings" },
+] as const;
+export type TensionPanelId = (typeof TENSION_PANELS)[number]["id"];
+export const tensionPanelTitle = (id: TensionPanelId): string => TENSION_PANELS.find((p) => p.id === id)!.title;
+
+/** Where a step panel's rows sit on the tension screen (audit fea-run-3): the material and the layup, and the run, on "Material and layup";
+ * the size, the load and the mesh under "Change settings"; null for a panel the screen has no counterpart of (the project's units and notes). */
+export const TENSION_PANEL_OF: Record<PanelId, TensionPanelId | null> = {
+  test: "tension-coupon", project: null, geometry: "tension-change", layup: "tension-input", loads: "tension-change", mesh: "tension-change",
+  validate: "tension-input", run: "tension-input", outputs: "tension-files", advanced: "tension-change",
+};
+
+/** The panel a suggestion of the assistant opens, and its title, in the view on screen: the step panels when every test is offered, the
+ * tension screen's otherwise; null when that view has no such panel, so no suggestion names a panel that is not there. */
+export function shownPanel(id: PanelId, allTests: boolean): { id: string; title: string } | null {
+  if (allTests) return { id, title: panel(id).title };
+  const target = TENSION_PANEL_OF[id];
+  return target ? { id: target, title: tensionPanelTitle(target) } : null;
+}
+
+/** The assistant's "My own material" on the tension screen (audit fea-run-3): the event it sends, which the screen answers by picking "My own
+ * material…" and bringing its fields into view, the focus on the material's menu. Here, so the assistant does not depend on the screen. */
+export const OWN_MATERIAL_EVENT = "anisotropy:own-material";
+export function pickOwnMaterial() { window.dispatchEvent(new Event(OWN_MATERIAL_EVENT)); }
+
 /** The panel's rows the test shows, in the definition's order (a bending coupon has no tab length; a plate no grips). */
 export function visibleKeys(form: StudioForm, id: PanelId): string[] {
   const visible = new Set(sectionsFor(form).flatMap((section) => section.fields.map((field) => field.key)));

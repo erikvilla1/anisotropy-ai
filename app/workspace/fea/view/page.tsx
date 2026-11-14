@@ -4,19 +4,20 @@ import { StudioViewer } from "@/components/studio/studio-viewer";
 import "../../../studio/studio.css";
 
 export const metadata: Metadata = {
-  title: "Viewer",
-  description: "3D results of one solved coupon.",
+  title: "Results",
+  description: "Results of a coupon analysis: the model, first-ply failure, ply stresses and the report.",
 };
 
-/** The viewer window a solved coupon opens from the workspace, by the job's link (ADR-0051; under the workspace since ADR-0062). */
+/** The results window a solved coupon opens from the workspace, by the job's link (ADR-0051; under the workspace since ADR-0062). Its heading
+ * says what it holds, results, and the coupon once they are read; with no job it says so and where results come from (audit fea-screens-14). */
 export default function FeaViewPage() {
   return (
     <main id="main" className="studio-page studio-view-page">
       <div className="studio-heading">
-        <span className="eyebrow">WORKSPACE / VIEWER</span>
-        <h1>One solved coupon.</h1>
+        <span className="eyebrow">WORKSPACE / RESULTS</span>
+        <h1>Results</h1>
       </div>
-      <Suspense fallback={<p className="studio-status">Reading the job from the address…</p>}>
+      <Suspense fallback={<p className="studio-status">Loading…</p>}>
         <StudioViewer apiBaseUrl={process.env.NEXT_PUBLIC_ANISOTROPY_API_URL?.trim() || ""} />
       </Suspense>
     </main>

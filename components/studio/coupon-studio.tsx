@@ -6,6 +6,7 @@ import { PLATE_TEST } from "@/lib/studio-form";
 import { regionOptions, regionsOfElement, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
 import { sketchOf } from "@/lib/studio-sketch";
 import { ANALYSIS_UNAVAILABLE, heldWords, loadWords } from "@/lib/studio-copy";
+import { tensionReady } from "@/lib/tension-screen";
 import { JobProgress } from "./job-progress";
 import { useProject } from "./project-context";
 import { ResultsView } from "./results-view";
@@ -37,7 +38,8 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
   return (
     <div className="studio-panel" data-testid="preview">
       <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span></h3>
-      <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loaded={loaded} loads={loads} onPick={onPick} picked={picked ?? null} />
+      <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loaded={loaded} loads={loads} onPick={onPick} picked={picked ?? null}
+        label={`3D view of the meshed coupon, ${preview.mesh.element_count} elements`} />
       {onPick ? <p className="studio-muted">Click an element to hold or load its regions.</p> : null}
     </div>
   );
@@ -47,8 +49,8 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
  * it, the fields after a run; a plate's regions are picked here by clicking an element (ADR-0054). Every number comes from the fea package
  * through the API (ADR-0051); the sketch draws typed rows only. */
 export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
-  const { form, plate, setPlate, run: runner } = useProject();
-  const { checked, job, fields, explanation, live, living, liveAt, fieldsAt, problem } = runner;
+  const { form, plate, setPlate, run: runner, allTests, layupRefused } = useProject();
+  const { checked, job, fields, fieldsState, explanation, live, living, liveAt, fieldsAt, problem } = runner;
   // the newer of our kernel's live answer and the full run's fields (ADR-0086): an edit after a run is answered live, a run after it replaces it
   const showLive = Boolean(live?.fields) && (!fields || liveAt > fieldsAt);
   const shown = showLive ? live?.fields ?? null : fields;
@@ -61,13 +63,10 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
   const sketch = !shown && !checked?.preview ? sketchOf(form, isPlate ? plate : null) : null;
   return (
     <section className="studio-output">
-      {job ? <JobProgress job={job} /> : null}
+      {job ? <JobProgress job={job} fields={fields} fieldsState={fieldsState} onRetry={() => void runner.runAgain()} retryProblem={runner.againProblem} /> : null}
       {shown ? (
-        <>
-          {viewerLink && !showLive ? <p className="studio-viewer-link"><a href={viewerLink} target="_blank" rel="noreferrer" data-testid="viewer-link">Open results in a new window</a></p> : null}
-          <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
-            live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false} />
-        </>
+        <ResultsView fields={shown} explanation={shownExplanation} job={showLive ? null : job} apiBase={apiBaseUrl} preview={checked?.preview ?? null}
+          live={showLive && live ? { seconds: live.seconds, warm: live.warm } : null} updating={living} showFiles={false} viewerLink={showLive ? null : viewerLink} />
       ) : (
         <>
           {checked?.preview ? (
@@ -97,9 +96,14 @@ export function CouponStudio({ apiBaseUrl }: { apiBaseUrl: string }) {
             </div>
           ) : (
             <div className="studio-empty" data-testid="empty-scene">
-              <h3>No model yet</h3>
-              {/* while the service is down, the empty stage says what it waits for (audit fea-run-48) */}
-              <p>{problem === ANALYSIS_UNAVAILABLE ? "The model appears when the analysis service responds." : "The model appears here once the coupon is set up."}</p>
+              {/* while the service is down, the empty stage says what it waits for (audit fea-run-48); a tension coupon with its material and
+                  layup stated is ready, and says what Run analysis brings (audit fea-run-31), on a page that can run it and with no layup refused */}
+              {apiBaseUrl && problem !== ANALYSIS_UNAVAILABLE && !allTests && tensionReady(form) && !layupRefused ? (
+                <><h3>Ready to run</h3><p>Run analysis meshes the coupon and shows it here.</p></>
+              ) : (
+                <><h3>No model yet</h3>
+                  <p>{problem === ANALYSIS_UNAVAILABLE ? "The model appears when the analysis service responds." : "The model appears here once the coupon is set up."}</p></>
+              )}
             </div>
           )}
         </>

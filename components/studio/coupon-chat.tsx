@@ -16,22 +16,23 @@ import {
 } from "@/lib/studio-chat";
 import { chatTool, toolNamed } from "@/lib/chat-tools";
 import { printed } from "@/lib/studio-colors";
-import { CRITERION_NAMES } from "@/lib/studio-answer";
-import { panel, panelOfStep, panelToFix, type PanelId } from "@/lib/workspace-panels";
+import { firstPlyOf } from "@/lib/studio-answer";
+import { plyLabel } from "@/lib/laminate-chat";
+import { panelOfStep, panelToFix, pickOwnMaterial, shownPanel, type PanelId } from "@/lib/workspace-panels";
 import { showPanel } from "@/components/workspace/panels/step-panel";
 import { handoffKey } from "../home-composer";
 import { useProject } from "./project-context";
 import { TOW_TEST } from "@/lib/studio-tow";
 import { ENABLED, hiddenReason, isTestEnabled, isUnsymmetricLayup, understoodWithout, withoutHidden } from "@/lib/enabled-tests";
 import { tensionValues } from "@/lib/tension-screen";
-import { ANALYSIS_UNAVAILABLE, checkText, runHeadline, runProblem, setWords, stepOfStage, verificationOf } from "@/lib/studio-copy";
+import { ANALYSIS_UNAVAILABLE, checkText, runHeadline, runProblem, runVerification, setWords, stepOfStage } from "@/lib/studio-copy";
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
 type Entry =
   | { id: number; role: "user"; text: string }
   | { id: number; role: "assistant"; kind: "text"; title?: string; body?: ReactNode; tone?: "problem" }
-  | { id: number; role: "assistant"; kind: "ask"; step: ChatStep | "reopen" }
+  | { id: number; role: "assistant"; kind: "ask"; step: ChatStep | "reopen"; answer?: string }
   | { id: number; role: "assistant"; kind: "check"; answer: CheckAnswer }
   | { id: number; role: "assistant"; kind: "job"; job: string }
   | { id: number; role: "assistant"; kind: "result"; job: string }
@@ -67,7 +68,7 @@ const libraryEntry = (id: string) => libraryOptions.find((m) => m.id === id);
 
 const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> = {
   test: { title: "What are we analysing?", text: "Pick a test, or describe the coupon in one line, e.g. “unnotched tension, ASTM D3039, IM7/8552, [45/0/-45/90]s, 1 mm pull”." },
-  material: { title: "Which material?", text: "Pick one from the library, or enter your own under Layup and material." },
+  material: { title: "Which material?", text: "Pick one from the library, or enter your own under {layup}." },
   shear: { title: "Out-of-plane shear moduli", text: "G13 and G23 are not in the library. Use the tape estimate (G13 = G12, G23 = E2/3) or enter measured values." },
   layup: { title: "What is the layup?", text: "Bottom ply first. 0° runs along the load." },
   geometry: { title: "Coupon size", text: "Length runs along the load, e.g. “250 x 25 mm, 56 mm tabs”." },
@@ -79,9 +80,26 @@ const QUESTIONS: Record<ChatStep | "reopen", { title: string; text?: string }> =
 
 function Chips({ children }: { children: ReactNode }) { return <div className="chat-chips">{children}</div>; }
 
-/** A suggestion that opens a panel on the left: the rows live there (ADR-0062, part 5). */
-function PanelLink({ id, children }: { id: PanelId; children: ReactNode }) {
-  return <button type="button" data-panel={id} onClick={() => showPanel(id)}><SlidersHorizontal size={14} /> {children}</button>;
+/** A question's words, the panel it names as the view on screen calls it (audit fea-run-3). */
+const questionText = (step: ChatStep | "reopen", allTests: boolean): string | undefined =>
+  QUESTIONS[step].text?.replace("{layup}", shownPanel("layup", allTests)?.title ?? "the panels");
+
+/** What an answered question reads as once the rows answer it from a panel: one line, the answer (audit fea-run-30). */
+function answerLine(step: ChatStep, form: StudioForm): string | undefined {
+  if (step === "shear") return form.G13 && form.G23 ? `G13 ${form.G13}, G23 ${form.G23} ${unitLabels(unitsOf(form)).stress}` : undefined;
+  if (step === "name") return form.filled_by ? `Run by ${form.filled_by}` : undefined;
+  const key = ({ test: "Test", material: "Material", layup: "Layup", geometry: "Size", loading: "Load" } as Partial<Record<ChatStep, string>>)[step];
+  const value = key ? couponLines(form).find(([k]) => k === key)?.[1] : undefined;
+  return key && value ? `${key}: ${value}` : undefined;
+}
+
+/** A suggestion that opens a panel on the left: the rows live there (ADR-0062, part 5). It names and opens the panel of the view on screen,
+ * the tension screen's when only that test is offered, and is not offered where that view has no such panel (audit fea-run-3). */
+function PanelLink({ id, label }: { id: PanelId; label: (title: string) => string }) {
+  const { allTests } = useProject();
+  const target = shownPanel(id, allTests);
+  if (!target) return null;
+  return <button type="button" data-panel={target.id} onClick={() => showPanel(target.id, true)}><SlidersHorizontal size={14} /> {label(target.title)}</button>;
 }
 
 /** The coupon assistant (ADR-0055; ADR-0062, part 5): a conversation beside the panels, on the one project they share. It offers one-click
@@ -167,7 +185,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     return () => controller.abort("replaced");
   }, [apiBaseUrl]);
 
-  useEffect(() => { body.current?.scrollTo({ top: body.current.scrollHeight, behavior: "smooth" }); }, [entries, checking, fields, reading]);
+  // The newest entry comes into view. Above 1100 px the conversation scrolls in its own box; below it the box grows with the page
+  // (app/workspace/workspace.css), so the page moves, as little as it must, and only while the conversation is on screen: a reader
+  // looking at the results above is not pulled down to it.
+  useEffect(() => {
+    const box = body.current;
+    if (!box) return;
+    if (box.scrollHeight > box.clientHeight + 1) { box.scrollTo({ top: box.scrollHeight, behavior: "smooth" }); return; }
+    const shown = box.getBoundingClientRect();
+    if (shown.top < window.innerHeight && shown.bottom > 0) box.lastElementChild?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [entries, checking, fields, reading]);
 
   // a row typed on a panel answers the open question: move on, and when nothing is missing offer the check
   useEffect(() => {
@@ -175,6 +202,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (!current || current.role !== "assistant" || current.kind !== "ask" || current.step === "review" || current.step === "reopen") return;
     if (form.test === TOW_TEST) { proceed(form); return; } // a fibre tow picked on a panel: hand over to its panels once (ADR-0074)
     if (missingIn(current.step, form, simpleRef.current).length) return;
+    const said = answerLine(current.step, form);
+    if (said) setEntries((list) => list.map((e) => (e.id === current.id && e.role === "assistant" && e.kind === "ask" ? { ...e, answer: said } : e)));
     const step = nextStep(form, simpleRef.current);
     if (step !== "review") { ask(step); return; }
     setActive(null);
@@ -218,14 +247,14 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       setActive(null);
       add({ role: "assistant", kind: "text", title: "Fibre tow tests use the panels",
         body: <><p>Enter the fibre, the test and each specimen&apos;s forces on the left, then Calculate.</p>
-          <Chips><button type="button" onClick={() => showPanel("tow-fibre")}><SlidersHorizontal size={14} /> Open The fibre tow</button></Chips></> });
+          <Chips><button type="button" onClick={() => showPanel("tow-fibre", true)}><SlidersHorizontal size={14} /> Open The fibre tow</button></Chips></> });
       return;
     }
     if (next.test === PLATE_TEST) {
       setActive(null);
       add({ role: "assistant", kind: "text", title: "Plates are set up on the model",
-        body: <><p>Pick the held and loaded regions under Loads and supports, or click an element on the model.</p>
-          <Chips><PanelLink id="loads">Open Loads and supports</PanelLink></Chips></> });
+        body: <><p>Pick the held and loaded regions under {shownPanel("loads", allTests)?.title ?? "the panels"}, or click an element on the model.</p>
+          <Chips><PanelLink id="loads" label={(title) => `Open ${title}`} /></Chips></> });
       return;
     }
     const step = nextStep(next, simpleRef.current);
@@ -268,6 +297,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     setForm(fresh); runner.reset();
     setEntries([]);
     ask(simpleRef.current ? "material" : "test");
+  }
+
+  /** A new coupon clears the inputs, the results and the conversation: asked first when there is something to lose (audit fea-run-43). */
+  function confirmStartOver() {
+    const stated = couponLines(formRef.current).some(([key, value]) => key !== "Units" && key !== "Test" && value);
+    if (!stated && !job) { startOver(); return; }
+    const [entry] = add({ role: "assistant", kind: "text", title: "Start a new coupon?",
+      body: <><p>The current inputs and results are cleared.</p>
+        <Chips><button type="button" onClick={startOver} data-testid="start-over-confirm"><RotateCcw size={14} /> Start new</button>
+          <button type="button" onClick={() => setEntries((list) => list.filter((e) => e.id !== entry.id))}>Keep this one</button></Chips></> });
   }
 
   function loadExample() {
@@ -324,13 +363,13 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   function redirect(text: string, echoed = false) {
     const step = nextStep(formRef.current, simpleRef.current);
     const id = panelOfStep(step);
-    const title = panel(id).title;
+    const shown = shownPanel(id, allTests);
     const named = toolNamed(text) === "coupon";
     add(...(echoed ? [] : [{ role: "user", text } as NewEntry]), { role: "assistant", kind: "text", title: "Not sure what to change",
-      body: <div data-testid="chat-redirect" data-panel={id}>
+      body: <div data-testid="chat-redirect" data-panel={shown?.id}>
         <p>{named ? "This workspace sets up and solves test coupons. " : ""}
-          {step === "review" ? "Everything is stated: say “check”." : `Next: ${QUESTIONS[step].title.toLowerCase().replace(/\?$/, "")} (${title}).`} Try “[0/90]2s”, “AS4/8552” or “10 kN”.</p>
-        <Chips><PanelLink id={id}>Open {title}</PanelLink>{step !== "review" ? <button type="button" onClick={() => ask(step)}>Ask me here</button> : null}</Chips>
+          {step === "review" ? "Everything is stated: say “check”." : `Next: ${QUESTIONS[step].title.toLowerCase().replace(/\?$/, "")}${shown ? ` (${shown.title})` : ""}.`} Try “[0/90]2s”, “AS4/8552” or “10 kN”.</p>
+        <Chips><PanelLink id={id} label={(title) => `Open ${title}`} />{step !== "review" ? <button type="button" onClick={() => ask(step)}>Ask me here</button> : null}</Chips>
       </div> });
   }
 
@@ -338,10 +377,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     const text = value.trim();
     if (!text) return;
     setInput("");
-    if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
+    if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); confirmStartOver(); return; }
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
     if (/^(check|check setup)\b/i.test(text)) { add({ role: "user", text }); void check(formRef.current); return; }
-    if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) { add({ role: "user", text }); showPanel("advanced"); return; }
+    if (/full form|spreadsheet|all (the )?rows|advanced/i.test(text)) { add({ role: "user", text }); showPanel(shownPanel("advanced", allTests)?.id ?? "advanced", true); return; }
     if (onLaminate && toolNamed(text) === "laminate") { add({ role: "user", text }); onLaminate(); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
@@ -425,7 +464,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           <>
             <p className="chat-inline chat-units">
               <label htmlFor="chat-units">Stated in</label>
-              <select id="chat-units" aria-label="Units" value={units} onChange={(e) => switchTo(e.target.value)} data-testid="chat-units">
+              <select id="chat-units" value={units} onChange={(e) => switchTo(e.target.value)} data-testid="chat-units">
                 {UNIT_SYSTEMS.map((u) => <option key={u} value={u}>{unitWords(u)}</option>)}
               </select>
               <span className="chat-note">Results come back in these units.</span>
@@ -446,7 +485,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             <Chips>
               <button type="button" onClick={loadExample}><FlaskConical size={14} /> Start from the IM7/8552 example</button>
               {coupons.length ? <button type="button" onClick={() => ask("reopen")}><RotateCcw size={14} /> Reopen a saved coupon</button> : null}
-              <PanelLink id="test">Set up on the panels</PanelLink>
+              <PanelLink id="test" label={() => "Set up on the panels"} />
             </Chips>
           </>
         );
@@ -478,7 +517,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
                 {libraryOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
-            <Chips><PanelLink id="layup">My own constants, under Layup and material</PanelLink></Chips>
+            <Chips>{allTests ? <PanelLink id="layup" label={(title) => `My own constants, under ${title}`} /> : (
+              // the tension screen: picks "My own material…" there and brings its fields into view (audit fea-run-3)
+              <button type="button" data-panel="tension-input" onClick={pickOwnMaterial}><SlidersHorizontal size={14} /> My own material, under {shownPanel("layup", false)?.title}</button>
+            )}</Chips>
           </>
         );
       case "shear": {
@@ -493,7 +535,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
                 <Sparkles size={14} /> Use the tape estimate: G13 = {estimate.G13}, G23 = {estimate.G23} {lab.stress}
               </button>
             ) : null}
-            <PanelLink id="layup">Measured values, under Layup and material</PanelLink>
+            <PanelLink id="layup" label={(title) => `Measured values, under ${title}`} />
           </Chips>
         );
       }
@@ -510,7 +552,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
             </Chips>
             <LayupInput needThickness={needThickness} form={form} allTests={allTests} onApply={(notation, rows) => answer(notation, rows)} />
             {!needThickness ? <p className="chat-note">Ply thickness {printed(libraryThickness(form))} {lab.length} (library).</p> : null}
-            <Chips><PanelLink id="layup">Ply by ply, under Layup and material</PanelLink></Chips>
+            {allTests ? <Chips><PanelLink id="layup" label={(title) => `Ply by ply, under ${title}`} /></Chips> : null}
           </>
         );
       }
@@ -521,14 +563,14 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
               <button type="button" onClick={() => answer(SIZE_CHIPS[units].words, SIZE_CHIPS[units].rows)}>
                 <Layers3 size={14} /> {SIZE_CHIPS[units].words}</button>
             ) : null}
-            <PanelLink id="geometry">The size, under Geometry</PanelLink>
+            <PanelLink id="geometry" label={(title) => `The size, under ${title}`} />
           </Chips>
         );
       case "loading":
         return isBending(form) ? (
           <Chips>
             {(PUSH_CHIPS[units] ?? []).map((v) => <button type="button" key={v} onClick={() => answer(`Push the nose ${v} ${lab.length}`, { control: "displacement", value: v })}>Push {v} {lab.length}</button>)}
-            <PanelLink id="loads">Another travel, under Loads and supports</PanelLink>
+            <PanelLink id="loads" label={(title) => `Another travel, under ${title}`} />
           </Chips>
         ) : (
           <>
@@ -537,12 +579,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
               {(LOAD_CHIPS[units] ?? []).map((chip) => (
                 <button type="button" key={chip.words} onClick={() => answer(chip.words.replace(/^(\w+) /, "$1 of "), { control: chip.control, value: chip.value })}>{chip.words}</button>
               ))}
-              <PanelLink id="loads">Another load, under Loads and supports</PanelLink>
+              <PanelLink id="loads" label={(title) => `Another load, under ${title}`} />
             </Chips>
           </>
         );
       case "name":
-        return <Chips><PanelLink id="run">Enter it under Run</PanelLink></Chips>;
+        return <Chips><PanelLink id="run" label={(title) => `Enter it under ${title}`} /></Chips>;
       case "review":
         return null;
     }
@@ -562,9 +604,10 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           // each item takes its rows in place on the latest check (ADR-0062 amendment 2); its link still opens the panel that holds them
           <CheckIssues items={blocking} form={form} units={unitsOf(form)} live={latest && !checking} allTests={allTests} onApply={(rows, echo) => answer(echo, rows)}
             link={(item) => {
-              const target = panelToFix(item);
+              const fixAt = panelToFix(item);
+              const target = fixAt ? shownPanel(fixAt, allTests) : null; // the panel of the view on screen (audit fea-run-3)
               const step = stepsFor(item.rows).find((s): s is ChatStep => s !== null);
-              return target ? <button type="button" className="chat-link" data-panel={target} onClick={() => showPanel(target)}>Fix under {panel(target).title}</button>
+              return target ? <button type="button" className="chat-link" data-panel={target.id} onClick={() => showPanel(target.id, true)}>Fix under {target.title}</button>
                 : step ? <button type="button" className="chat-link" onClick={() => ask(step)}>Fix</button> : null;
             }} />
         ) : null}
@@ -579,7 +622,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {latest && result.state === "ready" ? (
           <div className="chat-actions">
             <button type="button" className="chat-primary" onClick={run} disabled={isActive(job?.state)} data-testid="chat-run"><Play size={14} /> Run analysis</button>
-            <button type="button" className="chat-secondary" onClick={() => showPanel(allTests ? "mesh" : "tension-change")}><SlidersHorizontal size={14} /> Change settings</button>
+            <button type="button" className="chat-secondary" onClick={() => showPanel(allTests ? "mesh" : "tension-change", true)}><SlidersHorizontal size={14} /> Change settings</button>
           </div>
         ) : null}
       </div>
@@ -590,20 +633,27 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (job?.job_id !== jobId) return <p className="chat-note">Results of an earlier run; the setup has changed since.</p>;
     if (!fields) return <p className="chat-note">Loading results…</p>;
     const s = fields.summary, lab = fields.labels;
-    const earliest = s.earliest ? s.fpf[s.earliest] : null;
-    const check = job ? verificationOf(job.result, s.calculix ?? null) : null;
+    // the answer the centre stands behind (ADR-0085): the gauge section's first-ply failure, the earlier one at a clamped edge as a note;
+    // the whole model's on a job solved before the answer was written
+    const first = firstPlyOf(fields);
+    const check = job ? runVerification(job, fields, runner.fieldsState) : null;
+    const set = setWords(s.reaction.set);
     return (
       <div data-testid="chat-result">
         <h4>Results</h4>
         <div className="chat-stats">
-          <div><span>Reaction</span><strong data-testid="chat-reaction">{printed(Math.abs(s.reaction.value))} {lab.force}</strong><small>{s.reaction.sense}, {setWords(s.reaction.set)}</small></div>
-          <div><span>Largest displacement</span><strong>{printed(s.max_displacement.value)} {lab.length}</strong><small>{s.applied.control} {printed(s.applied.value)} {s.applied.unit}</small></div>
-          {earliest ? (
-            <div className={earliest.factor < 1 ? "chat-stat-bad" : undefined}><span>First-ply failure</span><strong>R = {printed(earliest.factor)}</strong>
-              <small>{CRITERION_NAMES[s.earliest ?? ""] ?? s.earliest}, ply {earliest.ply} · {earliest.angle}°</small></div>
+          <div><span>Reaction</span><strong data-testid="chat-reaction">{printed(Math.abs(s.reaction.value))} {lab.force}</strong>
+            <small>{s.reaction.sense.replace(/^in /, "")}, at {/^the /.test(set) ? set : `the ${set}`}</small></div>
+          <div><span>Largest displacement</span><strong>{printed(s.max_displacement.value)} {lab.length}</strong><small>at node {s.max_displacement.label.split(".").pop()}</small></div>
+          {first ? (
+            <div className={first.factor < 1 ? "chat-stat-bad" : undefined} data-testid="chat-fpf"><span>First-ply failure</span><strong>R = {printed(first.factor)}</strong>
+              <small>{first.name}, {first.basis.replace(/^the /, "")}, <span className="studio-nowrap">{plyLabel(first.ply, first.angle)}</span></small></div>
           ) : <div><span>First-ply failure</span><strong>–</strong><small>no criterion selected</small></div>}
         </div>
-        {earliest?.touches_grip ? <p className="chat-note">The first failure is at a grip edge.</p> : null}
+        {first?.outside ? (
+          <p className="chat-note" data-testid="chat-fpf-outside">{first.outside.touches_grip ? "At a grip edge" : `Outside ${first.basis}`}, R = {printed(first.outside.factor)} is reached
+            earlier{first.outside.touches_grip ? "; stress there grows as the mesh is refined" : ""}.</p>
+        ) : first?.atGrip ? <p className="chat-note">The first failure is at a grip edge.</p> : null}
         {check ? <p className={check.verified ? "chat-ok" : "chat-note"} data-testid="chat-result-line">{check.verified ? <Check size={13} /> : null} {check.line}</p> : null}
         {job && job.state !== "done" ? <p className="chat-note">{runHeadline(job)}{job.state !== "running" ? "."
           : stepOfStage(job.stage) === "report" ? "…" : job.result ? ". The report follows." : "…"}</p> : null}
@@ -611,30 +661,35 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("loading")}>Change the load</button>
           <button type="button" onClick={() => ask("material")}>Try another material</button>
-          <button type="button" onClick={startOver}>New coupon</button>
+          <button type="button" onClick={confirmStartOver}>New coupon</button>
         </Chips>
       </div>
     );
   }
 
-  function render(entry: Entry, latestCheck: number | undefined): ReactNode {
+  function render(entry: Entry, latestCheck: number | undefined, latest: boolean): ReactNode {
     if (entry.role === "user") return <div className="chat-user" key={entry.id}>{entry.text}</div>;
     let content: ReactNode;
     if (entry.kind === "ask") {
       const q = QUESTIONS[entry.step];
       const isLive = entry.id === active && !checking;
-      content = <div data-step={entry.step} data-testid={isLive ? "chat-question" : undefined}><h4>{q.title}</h4>{isLive && q.text ? <p>{q.text}</p> : null}{askWidget(entry.step, isLive)}</div>;
+      const text = questionText(entry.step, allTests);
+      content = !isLive && entry.answer
+        ? <div data-step={entry.step}><p className="chat-answered"><Check size={13} aria-hidden="true" /> {entry.answer}</p></div>
+        : <div data-step={entry.step} data-testid={isLive ? "chat-question" : undefined}><h4>{q.title}</h4>{isLive && text ? <p>{text}</p> : null}{askWidget(entry.step, isLive)}</div>;
     } else if (entry.kind === "text") content = <div className={entry.tone === "problem" ? "chat-problem" : undefined}>{entry.title ? <h4>{entry.title}</h4> : null}{entry.body}</div>;
     else if (entry.kind === "check") content = checkMessage(entry.answer, entry.id === latestCheck && checked === entry.answer);
-    else if (entry.kind === "job") content = job?.job_id === entry.job ? <ChatRun job={job} /> : <p className="chat-note">An earlier run.</p>;
+    else if (entry.kind === "job") content = job?.job_id === entry.job ? <ChatRun job={job} onRetry={() => void runner.runAgain()} /> : <p className="chat-note">An earlier run.</p>;
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}
         onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
     }
     else content = resultMessage(entry.job);
+    // the suggestions of an earlier entry are spent once the conversation has moved on: only the latest entry and the open question offer their
+    // chips (audit fea-run-30)
     return (
-      <div className="chat-assistant" key={entry.id}>
+      <div className="chat-assistant" key={entry.id} data-stale={latest ? undefined : ""}>
         <span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span>
         <div>{content}</div>
       </div>
@@ -642,17 +697,18 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
+  const latestEntry = [...entries].reverse().find((e) => e.role === "assistant")?.id;
   return (
     <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
       <div className="chat-pane-top">
         <span><span className="status-dot" /> Coupon assistant</span>
         <span>
-          {allTests ? <button type="button" className="chat-link" onClick={() => showPanel("advanced")}><TableProperties size={13} /> All inputs</button> : null}
-          <button type="button" className="icon-button" aria-label="Start a new coupon" title="Start a new coupon" onClick={startOver}><RotateCcw size={14} /></button>
+          {allTests ? <button type="button" className="chat-link" onClick={() => showPanel("advanced", true)}><TableProperties size={13} /> All inputs</button> : null}
+          <button type="button" className="icon-button" aria-label="Start a new coupon" title="Start a new coupon" onClick={confirmStartOver}><RotateCcw size={14} /></button>
         </span>
       </div>
       <div className="chat-scroll" ref={body} aria-live="polite" aria-relevant="additions">
-        {entries.map((e) => render(e, latestCheck))}
+        {entries.map((e) => render(e, latestCheck, e.id === latestEntry || e.id === active))}
         {reading ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing" data-testid="chat-reading">Reading your message…</p></div></div> : null}
         {checking ? <div className="chat-assistant"><span className="message-avatar" aria-hidden="true"><MessagesSquare size={15} /></span><div><p className="chat-typing">Checking the setup…</p></div></div> : null}
         {/* on the tension screen the rail says an outage, once (audit fea-run-48); every other problem is said here */}
@@ -671,23 +727,28 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   );
 }
 
-/** The run in the conversation: one line, the state in a word and a stopped run's plain reason; the steps are on the centre's card. */
-function ChatRun({ job }: { job: JobStatus }) {
-  const problem = runProblem(job);
+/** The run in the conversation: one line, the state in a word; the steps and a stopped run's plain words are on the Analysis card, said there
+ * once (audit fea-run-18), and a stopped run is offered again here. A run that did not start keeps its reason, which names what to fix. */
+function ChatRun({ job, onRetry }: { job: JobStatus; onRetry: () => void }) {
+  const problem = job.state === "stopped" ? null : runProblem(job);
   return (
     <div data-testid="chat-job" data-state={job.state}>
       <h4>Analysis: {runHeadline(job)}</h4>
-      {problem ? <p className="chat-problem">{problem}</p> : isActive(job.state) ? <p className="chat-note">Progress is shown above the model.</p> : null}
+      {job.state === "stopped" ? <Chips><button type="button" onClick={onRetry}><RotateCcw size={14} /> Run again</button></Chips>
+        : problem ? <p className="chat-problem">{problem}</p> : isActive(job.state) ? <p className="chat-note">Progress is shown on the Analysis card.</p> : null}
     </div>
   );
 }
+
+/** A number and its unit kept on one line ("250 × 25 mm", "56 mm tabs"): a no-break space between them (audit fea-run-60). */
+const keepTogether = (text: string) => text.replace(/ × /g, "\u00a0×\u00a0").replace(/(\d) (?=[A-Za-zµ°%])/g, "$1\u00a0");
 
 /** The coupon in a few fields, as stated so far: the strip above the workspace's stage. `fallback` names what a blank field will be. */
 export function CouponSpec({ form, fallback = {} }: { form: StudioForm; fallback?: Record<string, string> }) {
   const lines = couponLines(form);
   return (
     <dl className="chat-spec" data-testid="chat-spec">
-      {lines.map(([k, v]) => <div key={k} data-filled={v || fallback[k] ? "yes" : "no"}><dt>{k}</dt><dd>{v || fallback[k] || "–"}</dd></div>)}
+      {lines.map(([k, v]) => <div key={k} data-filled={v || fallback[k] ? "yes" : "no"}><dt>{k}</dt><dd>{keepTogether(v || fallback[k] || "–")}</dd></div>)}
     </dl>
   );
 }

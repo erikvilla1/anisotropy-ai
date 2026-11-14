@@ -14,7 +14,8 @@
 .calc-field { display: flex; flex-direction: column; min-width: 0; gap: 6px; }
 .calc-field label { font-size: 12px; color: var(--text); }
 .calc-form { color-scheme: dark; }
-.calc-field input, .calc-field textarea, .calc-field select { width: 100%; min-width: 0; background: var(--bg); border: 1px solid #414141; border-radius: 4px; color: var(--text); padding: 10px 12px; }
+/* the field's edge at 3:1 or more (WCAG 1.4.11, audit uiux-fea-run-23): the site's one field border, app/globals.css */
+.calc-field input, .calc-field textarea, .calc-field select { width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--field-line); border-radius: 4px; color: var(--text); padding: 10px 12px; }
 .calc-field input { font-variant-numeric: tabular-nums; }
 .calc-field textarea { resize: vertical; font-size: 12px; line-height: 1.65; }
 .calc-field input:focus-visible, .calc-field textarea:focus-visible, .calc-field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

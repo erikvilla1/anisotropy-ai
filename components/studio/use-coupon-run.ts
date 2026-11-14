@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  checkSetup, fetchExplanation, fetchFields, getJob, isActive, liveSolve, POLL_MS, startSolve, StudioError,
-  type CheckAnswer, type Explanation, type Fields, type JobStatus, type LiveAnswer,
+  checkSetup, fetchExplanation, fetchFields, fieldsStamp, getJob, isActive, liveSolve, POLL_MS, startSolve, StudioError,
+  type CheckAnswer, type Explanation, type Fields, type JobState, type JobStatus, type LiveAnswer,
 } from "@/lib/studio-api";
 import type { StudioValues } from "@/lib/studio-form";
 import { liveKey } from "@/lib/studio-live";
+import { ANALYSIS_UNAVAILABLE } from "@/lib/studio-copy";
 
 /** A coupon's run: the setup check, the job, its polling and its files, in one place for the chat and the form (ADR-0062). Every number
  * shown comes from the fea package through the API (ADR-0051); this hook only asks and keeps the answers. `check` and `solve` throw a
@@ -21,6 +22,9 @@ export type CouponRun = {
   explanation: Explanation | null;
   /** The job whose fields were read first; changes once per job, so a message can follow it. */
   loadedJob: string | null;
+  /** The job's state when the fields shown were read: a finished job's summary carries the reference solver's values, an earlier read may
+   * not yet (audit fea-run-10). */
+  fieldsState: JobState | null;
   problem: string;
   /** The live solve (ADR-0086): our kernel's last answer to the rows as they stood, the rows it answered, and whether one is on its way. */
   live: LiveAnswer | null;
@@ -37,6 +41,12 @@ export type CouponRun = {
   cancelLive(): void;
   check(values: StudioValues): Promise<CheckAnswer>;
   solve(values: StudioValues, runBy: string, replace: boolean): Promise<JobStatus>;
+  /** The last run once more, with the rows it ran: checked again, then solved when ready (a stopped run's "Run again", audit fea-run-18).
+   * Never throws: a failure lands in `againProblem`, an outage in `problem`. False when there is nothing to run again or it did not start. */
+  runAgain(): Promise<boolean>;
+  /** Why the last "Run again" did not start, said on the Analysis card under its button, where it was pressed, so it shows with the
+   * assistant closed too (round-2 review N9); empty once a run starts. An outage goes to `problem`, which the rail and the stage say. */
+  againProblem: string;
   /** A changed setup: the check no longer stands. */
   clearChecked(): void;
   /** The results of the last run are left behind; a run still going keeps its progress. */
@@ -53,7 +63,9 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
   const [fields, setFields] = useState<Fields | null>(null);
   const [explanation, setExplanation] = useState<Explanation | null>(null);
   const [loadedJob, setLoadedJob] = useState<string | null>(null);
+  const [fieldsState, setFieldsState] = useState<JobState | null>(null);
   const [problem, setProblem] = useState("");
+  const [againProblem, setAgainProblem] = useState("");
   const [live, setLive] = useState<LiveAnswer | null>(null);
   const [liveFor, setLiveFor] = useState<string | null>(null);
   const [living, setLiving] = useState(false);
@@ -65,6 +77,7 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
   const checks = useRef(0);
   const liveAbort = useRef<AbortController | null>(null);
   const fieldsLoaded = useRef<string | null>(null);
+  const lastSolve = useRef<{ values: StudioValues; runBy: string } | null>(null); // what "Run again" runs
   const readFor = useRef<string | null>(null); // the job whose fields have been read once, whatever the reads in between
   const aborts = useRef<AbortController[]>([]);
   const [tick, setTick] = useState(0); // a failed poll or read schedules another try
@@ -94,13 +107,30 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
 
   const solve = useCallback(async (values: StudioValues, runBy: string, replace: boolean) => {
     if (!apiBaseUrl) throw new StudioError("The page was built without the API's address (NEXT_PUBLIC_ANISOTROPY_API_URL), so nothing can be checked or solved.");
-    setProblem(""); setFields(null); setExplanation(null); fieldsLoaded.current = null; readFor.current = null;
+    setProblem(""); setAgainProblem(""); setFields(null); setFieldsState(null); setExplanation(null); fieldsLoaded.current = null; readFor.current = null;
     liveAbort.current?.abort("superseded"); liveAbort.current = null; setLiving(false); // the full run supersedes a live answer still on its way
+    lastSolve.current = { values, runBy };
     const started = await startSolve(apiBaseUrl, values, runBy, replace, undefined, projectId);
     retries.current = 0;
     setJob(started);
     return started;
   }, [apiBaseUrl, projectId]);
+
+  const runAgain = useCallback(async () => {
+    const again = lastSolve.current;
+    if (!again) return false;
+    setAgainProblem("");
+    try {
+      const answer = await check(again.values);
+      if (answer.state !== "ready") { setAgainProblem("The setup no longer passes its check. Fix the items listed, then run again."); return false; }
+      await solve(again.values, again.runBy, answer.checklist.coupon_exists);
+      return true;
+    } catch (error) {
+      const text = error instanceof StudioError ? error.message : "The analysis could not be started. Reload the page; if it happens again, contact us.";
+      if (text === ANALYSIS_UNAVAILABLE) setProblem(text); else setAgainProblem(text);
+      return false;
+    }
+  }, [check, solve]);
 
   const solveLive = useCallback(async (values: StudioValues, key: string) => {
     if (!apiBaseUrl) return;
@@ -135,13 +165,14 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
   const clearResults = useCallback(() => {
     setJob((current) => {
       if (isActive(current?.state)) return current;
-      setFields(null); setExplanation(null); setLoadedJob(null); fieldsLoaded.current = null; readFor.current = null;
+      setFields(null); setFieldsState(null); setExplanation(null); setLoadedJob(null); setAgainProblem(""); fieldsLoaded.current = null; readFor.current = null;
       return null;
     });
   }, []);
   const reset = useCallback(() => {
-    setChecked(null); setJob(null); setFields(null); setExplanation(null); setLoadedJob(null); setProblem(""); fieldsLoaded.current = null; readFor.current = null;
-    checkedKey.current = null;
+    setChecked(null); setJob(null); setFields(null); setFieldsState(null); setExplanation(null); setLoadedJob(null); setProblem(""); setAgainProblem("");
+    fieldsLoaded.current = null;
+    readFor.current = null; checkedKey.current = null; lastSolve.current = null;
     liveAbort.current?.abort("reset"); liveAbort.current = null; setLive(null); setLiveFor(null); setLiving(false);
   }, []);
 
@@ -156,7 +187,9 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
 
   useEffect(() => {
     if (!job || !apiBaseUrl || !("fields" in job.outputs)) return;
-    const stamp = `${job.job_id}:${"explanation" in job.outputs}:${job.state}`; // the explanation and the final state arrive after the fields
+    // the explanation, the reference solver's values (written into the fields before the result line arrives) and the final state come after
+    // the fields: each is a reason to read them again (audit fea-run-10)
+    const stamp = fieldsStamp(job);
     if (fieldsLoaded.current === stamp) return;
     fieldsLoaded.current = stamp;
     const controller = new AbortController();
@@ -164,6 +197,7 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
     (async () => {
       try {
         setFields(await fetchFields(apiBaseUrl, job.job_id, controller.signal));
+        setFieldsState(job.state);
         setFieldsAt(Date.now());
         setExplanation("explanation" in job.outputs ? await fetchExplanation(apiBaseUrl, job.job_id, controller.signal) : null);
         setProblem("");
@@ -177,6 +211,6 @@ export function useCouponRun(apiBaseUrl: string, projectId: string | null = null
     })();
   }, [job, apiBaseUrl, tick]);
 
-  return { checking, checked, job, fields, explanation, loadedJob, problem, live, liveFor, living, liveAt, fieldsAt, solveLive, dropLive, cancelLive, check, solve,
-    clearChecked, clearResults, reset, setProblem };
+  return { checking, checked, job, fields, explanation, loadedJob, fieldsState, problem, againProblem, live, liveFor, living, liveAt, fieldsAt, solveLive, dropLive, cancelLive, check,
+    solve, runAgain, clearChecked, clearResults, reset, setProblem };
 }

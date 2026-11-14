@@ -69,7 +69,7 @@ test("every page's title is its name and the site's, and the home's is the tagli
     ["/about", "About | Anisotropy"],
     ["/services/test-plans", "Test plans | Anisotropy"],
     ["/workspace", "Workspace | Anisotropy"],
-    ["/workspace/fea/view", "Viewer | Anisotropy"],
+    ["/workspace/fea/view", "Results | Anisotropy"],
   ]) {
     await page.goto(path);
     await expect(page, path).toHaveTitle(title);

@@ -187,6 +187,11 @@ export function layupRows(layup: { plies: number[]; symmetric: boolean }): Studi
   return rows;
 }
 
+/** Whether a layup is the one the rows already hold: the same layup submitted again ("Use layup" or Enter) is no edit, so a finished run
+ * stays (audit fea-run-J2-2, round-1 review P1). */
+export const sameLayup = (form: StudioForm, layup: { plies: number[]; symmetric: boolean }): boolean =>
+  layupNotation({ ...form, ...layupRows(layup) }) === layupNotation(form);
+
 const NUM = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
 /** A load keeps a typed minus sign, so the setup check refuses it rather than the chat quietly dropping it (ADR-0003). */
 const SIGNED = String.raw`(-?(?:\d+(?:\.\d+)?|\.\d+))`;

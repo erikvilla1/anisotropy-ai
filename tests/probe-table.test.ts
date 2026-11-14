@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Fields } from "../lib/studio-api";
-import { DEFAULT_CHOICE, fieldOptions, PROBE_COLUMNS, probeCsv, probeTable, valuesFor } from "../lib/studio-fields";
+import { DEFAULT_CHOICE, fieldOptions, PROBE_COLUMNS, PROBE_CSV_NAMES, probeCsv, probeTable, valuesFor } from "../lib/studio-fields";
 
 const fields = JSON.parse(readFileSync("tests/fixtures/studio/fields.json", "utf8")) as Fields;
 
@@ -38,15 +38,17 @@ test("the probe table holds every ply of the element by its number in its instan
   assert.equal(row.values[3], fields.element.ply.mises[element][1]);
   assert.equal(row.values[4], fields.element.ply.invariants!.tresca[element][1]);
   assert.deepEqual(row.values.slice(9), fields.element.ply.strain_12[element][1]);
-  assert.match(table.note, /S13 and S23 are not modelled/);
+  assert.match(table.note, /Out-of-plane shear τ₁₃ and τ₂₃ is not computed in a membrane solve\./); // the table's symbols (audit fea-run-21)
   assert.equal(PROBE_COLUMNS.length, row.values.length);
 });
 
-test("the probe CSV carries the same numbers with Abaqus's column names and the units", () => {
+test("the probe CSV carries the same numbers under the table's names in plain letters, the stresses with their unit and the strains bare (audit fea-run-52)", () => {
   const table = probeTable(fields, 3);
   const lines = probeCsv(fields, table).trim().split("\n");
   assert.equal(lines.length, 1 + fields.mesh.plies);
-  assert.match(lines[0], /^Element,Ply,Angle \(deg\),S11 \(MPa\),S22 \(MPa\),S12 \(MPa\),Mises \(MPa\),Tresca \(MPa\),.*E12 \(-\)$/);
+  assert.equal(lines[0], "Element,Ply,Angle (deg),sigma1 (MPa),sigma2 (MPa),tau12 (MPa),von Mises (MPa),Tresca (MPa),max principal (MPa),mid principal (MPa),"
+    + "min principal (MPa),pressure (MPa),eps1,eps2,gamma12");
+  assert.equal(PROBE_CSV_NAMES.length, PROBE_COLUMNS.length);
   assert.equal(lines[1].split(",")[3], String(table.rows[0].values[0]));
 });
 

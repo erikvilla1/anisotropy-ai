@@ -2,6 +2,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { printed } from "../../lib/studio-colors";
 import { ANALYSIS_UNAVAILABLE, bannedIn, bannedInAbaqusCard } from "../../lib/studio-copy";
+import { TENSION_PANELS } from "../../lib/workspace-panels";
 import { exchangeState, LIMITS, mockExchange, uploadOf } from "./abaqus-api";
 
 const fixture = (name: string, dir = "studio") => JSON.parse(readFileSync(`tests/fixtures/${dir}/${name}.json`, "utf8"));
@@ -161,15 +162,29 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-mode", "results"); // coloured on the graphics card, unlit (ADR-0063)
   await expect(page.getByTestId("studio-scene")).toHaveAttribute("data-bands", "8");
   await expect(page.getByTestId("legend")).toHaveAttribute("data-source", "package"); // the legend's ends are the package's
-  const written = fixture("fields").ranges.failure_index.tsai_hill.nodal as [number, number];
-  await expect(page.getByTestId("legend")).toContainText(`${printed(written[0])} to ${printed(written[1])} · 8 bands`);
+  const written = fixture("fields").ranges.failure_index.tsai_hill.element as [number, number]; // element values, as the answer reports them (audit fea-run-42)
+  await expect(page.getByTestId("legend")).toContainText(`element values · ${printed(written[0])} to ${printed(written[1])} · 8 bands`);
+  // the 3D view: a named image with its key below it, in sight, and the keyboard's way to what a click shows (audit fea-run-17, fea-run-47)
+  const scene = page.getByTestId("studio-scene");
+  await expect(scene).toHaveAttribute("role", "img");
+  await expect(scene).toHaveAttribute("aria-label", /^3D view: Failure index 1\/R, worst ply, Tsai-Hill, element values, .*; critical element 183 outlined$/);
+  await expect(page.getByTestId("model-panel").locator(".studio-scene-key")).toBeVisible();
+  await expect(page.getByTestId("model-panel").locator(".studio-scene-key")).toContainText("the critical element, outlined in a wide dark band");
   await page.getByTestId("studio-scene").locator("canvas").evaluate((canvas) => { canvas.dataset.kept = "yes"; });
   await expect(page.getByTestId("summary-reaction")).toContainText("N (in tension)");
   // the validation table (ADR-0066): laminate theory beside Anisotropy, one row per ply in the fibre axes; the peaks apart, per ply, collapsed
   await expect(page.getByTestId("validation-table")).toContainText("Laminate theory");
-  await expect(page.getByTestId("validation-table").locator("tr[data-ply='2']")).toContainText("Ply 2 · 0°");
+  await expect(page.getByTestId("validation-plies").locator("tr[data-ply='2'] th")).toHaveText("Ply 2 · 0°");
+  await expect(page.getByTestId("validation-plies").locator("tr[data-ply='2'] td")).toHaveCount(9); // one number per cell, three per source (uiux-fea-screens-27)
+  await expect(page.getByTestId("validation-table").locator("tr[data-row=reaction] td").first()).toHaveText("–"); // laminate theory takes the reaction as its load
+  await expect(page.getByTestId("validation-table").locator("tr[data-row=strain]").first()).toContainText("Gauge εx (microstrain)");
+  // every wide table is a named region the keyboard reaches (audit fea-run-9)
+  const verification = page.getByRole("region", { name: "Verification: the reaction and the gauge strain" });
+  await expect(verification).toHaveAttribute("tabindex", "0");
+  await verification.focus();
+  await expect(verification).toBeFocused();
   await expect(page.getByTestId("peaks")).toContainText("Peak stresses at the grips (not converged)");
-  await expect(page.getByTestId("peaks-table").locator("tr[data-ply='2']")).toContainText("at element 178"); // the 0° ply's largest σ₁, named by its element
+  await expect(page.getByTestId("peaks-table").locator("tr[data-ply='2']")).toContainText("178"); // the 0° ply's largest σ₁, named by its element
   // the mesh convergence study (ADR-0068): the kernel at 1x, 2x and 4x; the reaction settles, the 0° ply's clamped-edge peak keeps growing
   await expect(page.getByTestId("convergence")).toContainText("Mesh convergence");
   await expect(page.getByTestId("convergence-table")).toContainText("4,000 elements");
@@ -185,21 +200,34 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   const answer = page.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-basis", "gauge");
   await expect(answer).toHaveAttribute("data-fails", "false");
-  await expect(page.getByTestId("answer-headline")).toContainText("Holds at the applied loading (Tsai-Hill).");
-  await expect(page.getByTestId("answer-headline")).toContainText("The first ply would fail at 1.032 × the applied loading (1.032 mm,");
+  await expect(page.getByTestId("answer-headline")).toContainText("Holds at the applied loading.");
+  await expect(page.getByTestId("answer-headline")).toContainText("Tsai-Hill: the first ply would fail at 1.032 × the applied loading, ");
+  await expect(page.getByTestId("answer-headline")).toContainText("N at the top grip, in Ply 4 · 90°, element 183.");
   await expect(page.getByTestId("answer-verdict-tsai_hill")).toHaveText("holds");
   await expect(page.getByTestId("answer-factor-tsai_hill")).toHaveText("1.032");
-  await expect(page.getByTestId("answer-loading-tsai_hill")).toContainText("1.032 mm");
+  await expect(page.getByTestId("answer-loading-tsai_hill")).toHaveText("1.032"); // its unit in the heading (audit fea-run-25)
+  await expect(page.getByTestId("answer-table").locator("thead")).toContainText("Displacement (mm)");
+  await expect(page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button")).toHaveAccessibleName("Show element 183, first-ply failure by Tsai-Hill, on the model");
+  // a table scrolled sideways, then Show reached by the keyboard: the table scrolls back, so the sticky row heading does not cover it (uiux-fea-run-21)
+  const answerBox = page.getByTestId("answer-table").locator("xpath=..");
+  await answerBox.evaluate((box) => { box.scrollLeft = box.scrollWidth; });
+  await answerBox.focus();
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("answer-table").locator("tbody button").first()).toBeFocused();
+  expect(await answerBox.evaluate((box) => box.scrollLeft)).toBe(0);
   await expect(page.getByTestId("answer-outside")).toContainText("At a grip edge, Tsai-Hill is reached earlier, at 1.013 × the applied loading");
   await expect(page.getByTestId("answer-extremes").locator("tbody tr")).toHaveCount(5);
   await expect(page.getByTestId("fpf-details")).not.toHaveAttribute("open", ""); // the per-criterion tables of the whole model fold away under the answer
   await expect(page.getByTestId("explanation")).toHaveAttribute("data-writer", "template", { timeout: 15_000 }); // the API answered the explain call
-  // the result before the documents (ADR-0064): the agreement line while the job still draws and builds the package
+  // the result before the documents (ADR-0064): the results while the job still draws and builds the package; the fixture's fields carry no
+  // reference solver block, so no verification line over a Verification table of dashes while the report is written (audit fea-run-10)
   await expect(page.getByTestId("job-progress")).toContainText("Results are ready. The report follows.", { timeout: 15_000 });
-  await expect(page.getByTestId("job-message")).toContainText("Verified against reference solver: 57 of 57 values agree");
+  await expect(page.locator("[data-testid=job-progress][data-state=running] [data-testid=job-message]")).toHaveCount(0);
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
-  await expect(page.getByTestId("job-message")).toContainText("Verified against reference solver: 57 of 57 values agree");
+  // the fixture's fields carry no reference solver block: a finished run claims no pass the page cannot show (audit fea-run-10)
+  await expect(page.getByTestId("job-message")).toHaveText("Reference solver check: values could not be shown for this run.");
   await expect(page.getByTestId("job-progress").locator("li[data-state=done]")).toHaveCount(5); // the five steps of a finished job (ADR-0091)
+  await expect(page.getByTestId("job-progress").locator("li[data-step=report]")).toContainText("Report ready, done"); // its state for a screen reader too (fea-run-20)
   const outputs = page.getByTestId("panel-outputs"); // the files in the left column, named by the standard and the layup (ADR-0091)
   await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("href", /\/v1\/coupon-jobs\/0f3a2c9e[^/]*\/files\/package\?name=UnnotchedTension_%5B45%2C0%2C-45%2C90%5Ds_package\.zip$/);
   await expect(outputs.locator("a[data-key=package]")).toHaveAttribute("download", "UnnotchedTension_[45,0,-45,90]s_package.zip"); // commas (fea-run-39)
@@ -207,10 +235,11 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await expect(outputs.locator("a[data-key=prepomax_results]")).toHaveAttribute("href", /\/files\/reference_results\?name=/); // by a neutral name
   await expect(page.getByTestId("downloads")).toHaveCount(0); // not twice: the centre leaves the files to the left column
   await expect(page.getByTestId("viewer-link")).toHaveAttribute("href", "/workspace/fea/view?job=0f3a2c9e-6b1d-4d2a-9c1e-7a5b3d2f1e00");
+  await expect(page.getByTestId("model-panel").getByTestId("viewer-link")).toHaveAccessibleName("Open results in a new window"); // in the model's heading row (uiux-fea-run-28)
   await page.getByLabel("Field", { exact: true }).selectOption("S22");
   await page.getByLabel("Ply", { exact: true }).selectOption("3");
-  await expect(page.getByTestId("legend")).toContainText("Ply stress σ₂ (ply 3, -45°)");
-  await page.getByLabel("Shown as", { exact: true }).selectOption("element");
+  await expect(page.getByTestId("legend")).toContainText("Ply stress σ₂, Ply 3 · −45°");
+  await page.getByLabel("Values", { exact: true }).selectOption("element"); // named by its visible label (WCAG 2.5.3, fea-run-36)
   await expect(page.getByTestId("legend")).toContainText("element values");
   await expect(page.getByTestId("studio-scene").locator("canvas")).toHaveAttribute("data-kept", "yes"); // the field switch uploads values; the mesh and the canvas stay
   const perPly = fixture("fields").ranges.S22.element[2] as [number, number];
@@ -221,16 +250,26 @@ test("the studio checks a setup, solves it, shows the fields as soon as our engi
   await page.getByLabel("Contours", { exact: true }).selectOption("8");
   await page.getByTestId("answer-table").locator("tr[data-criterion=tsai_hill] button").click(); // the answer's own row, in the gauge section (ADR-0085)
   await expect(page.getByTestId("readout")).toContainText("critical");
-  await expect(page.getByTestId("readout")).toContainText("Tsai-Hill: ply");
+  await expect(page.getByTestId("readout")).toContainText("Tsai-Hill: Ply 4 · 90°");
+  await expect(page.getByTestId("readout").locator("h4")).toBeFocused(); // Show brings the readout to the keyboard (fea-run-37)
   // every ply of the picked element (ADR-0066 amendment 2): its number, each ply's stresses and invariants
   const probe = page.getByTestId("probe");
   await expect(probe).toContainText("Ply results at element");
   await expect(probe.getByTestId("probe-table").locator("tbody tr")).toHaveCount(8);
   await expect(probe.getByTestId("probe-table").locator("thead")).toContainText("Tresca");
-  await expect(probe).toContainText("S13 and S23 are not modelled (membrane state)");
+  await expect(probe).toContainText("Out-of-plane shear τ₁₃ and τ₂₃ is not computed in a membrane solve");
+  await expect(probe.getByTestId("probe-table").locator("thead")).toContainText("von Mises (MPa)");
+  await expect(page.getByRole("region", { name: /^Ply results at element \d+$/ })).toHaveAttribute("tabindex", "0");
   await expect(probe.getByTestId("probe-csv")).toHaveAttribute("download", /^probe-element-\d+\.csv$/);
+  // an element by its number, from the keyboard (fea-run-47)
+  await page.getByLabel("Element", { exact: true }).fill("55");
+  await page.getByLabel("Element", { exact: true }).press("Enter");
+  await expect(page.getByTestId("readout").locator("h4")).toHaveText("Element 55");
+  await page.getByLabel("Element", { exact: true }).fill("99999");
+  await page.getByLabel("Element", { exact: true }).press("Enter");
+  await expect(page.getByTestId("field-controls").getByRole("alert")).toHaveText("No element 99999 in this model.");
   await page.getByLabel("Field", { exact: true }).selectOption("tresca");
-  await expect(page.getByLabel("Shown as", { exact: true })).toHaveCount(0); // element values only: no display averages for an invariant
+  await expect(page.getByLabel("Values", { exact: true })).toHaveCount(0); // element values only: no display averages for an invariant
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: ".local/website/screenshots/studio-results.png", fullPage: true });
   expect(browserErrors).toEqual([]);
@@ -473,6 +512,101 @@ test("the tension screen takes the material and the layup, builds the model, say
   await expect(page.getByTestId("status")).toHaveText("Done. Download the report and files under Files.");
 });
 
+/** Every suggestion of the assistant that names a panel opens one the page renders (audit fea-run-3): each visible chip's panel exists. */
+async function everyChipHasItsPanel(page: Page, where: string) {
+  for (const chip of await page.getByTestId("ws-assistant").locator("button[data-panel]").all()) {
+    if (!(await chip.isVisible())) continue;
+    const id = await chip.getAttribute("data-panel");
+    expect(await page.locator(`#panel-${id}`).count(), `${where}: #panel-${id}`).toBe(1);
+  }
+}
+
+test("on the tension screen every suggestion of the assistant opens a panel that is there, under its own name (audit fea-run-3)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false });
+  await page.goto("/workspace/fea");
+  const question = page.getByTestId("chat-question");
+  await expect(question).toHaveAttribute("data-step", "material");
+  await expect(question).toContainText("enter your own under Material and layup");
+  // the screen renders every panel the product view names, under the title the assistant uses, and no other
+  for (const { id, title } of TENSION_PANELS) await expect(page.getByTestId(`panel-${id}`).locator(".ws-panel-title")).toHaveText(title);
+  await expect(page.getByTestId("tension-screen").locator("details.ws-panel")).toHaveCount(TENSION_PANELS.length);
+  await everyChipHasItsPanel(page, "the material");
+  // "My own material": folded first, so the suggestion has something to open; it picks the own material and takes the focus there
+  const input = page.getByTestId("panel-tension-input");
+  await input.locator("summary").click();
+  await expect(input).not.toHaveAttribute("open", "");
+  await question.getByRole("button", { name: "My own material, under Material and layup" }).click();
+  await expect(input).toHaveAttribute("open", "");
+  await expect(page.getByLabel("Material", { exact: true })).toHaveValue("own");
+  await expect(page.getByTestId("own-material")).toBeVisible();
+  await expect(page.getByLabel("Material", { exact: true })).toBeFocused();
+  // a word that names no value: the redirect names this screen's panel, and its chip opens it
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("help");
+  await message.press("Enter");
+  const redirect = page.getByTestId("chat-redirect").last();
+  await expect(redirect).toHaveAttribute("data-panel", "tension-input");
+  await expect(redirect).toContainText("(Material and layup)");
+  await everyChipHasItsPanel(page, "the redirect");
+  // no standard, a library material, then the layup, on the rail: the questions answered there read as their answers (fea-run-30), and with
+  // no standard the size is asked next
+  await page.getByTestId("tension-standard").locator(`input[value="none"]`).check();
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await expect(question).toHaveAttribute("data-step", "layup");
+  await expect(question.getByRole("button", { name: /Ply by ply/ })).toHaveCount(0); // no ply-by-ply panel on this screen
+  await everyChipHasItsPanel(page, "the layup");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await expect(page.getByTestId("ws-assistant").locator(".chat-answered").last()).toContainText("Layup: [45/0/-45/90]s");
+  // an earlier entry's suggestions are spent: out of sight once the conversation moved on (fea-run-30)
+  for (const chips of await page.getByTestId("ws-assistant").locator(".chat-assistant[data-stale] .chat-chips").all()) await expect(chips).toBeHidden();
+  // the size's suggestion opens Change settings
+  await expect(question).toHaveAttribute("data-step", "geometry");
+  const change = page.getByTestId("panel-tension-change");
+  await change.locator("summary").click();
+  await expect(change).not.toHaveAttribute("open", "");
+  await question.getByRole("button", { name: "The size, under Change settings" }).click();
+  await expect(change).toHaveAttribute("open", "");
+  await everyChipHasItsPanel(page, "the size");
+  expect(calls.checks).toHaveLength(0);
+});
+
+test("an edit on the rail after a run leaves no verification line or files of the earlier inputs, and the badge says when a check ran (audit fea-run-J2-2, fea-run-29)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  await mockApi(page, calls, { allTests: false });
+  await page.goto("/workspace/fea");
+  const badge = page.getByTestId("panel-tension-input").locator("summary .studio-badge");
+  await expect(badge).toHaveText("needs input");
+  await page.getByLabel("Material", { exact: true }).selectOption("im7-8552");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[45/0/-45/90]s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await expect(badge).toHaveText("not checked"); // stated, not checked: no "checked" before a check ran
+  await expect(page.getByTestId("empty-scene")).toContainText("Ready to run"); // and the stage says what Run analysis brings (fea-run-31)
+  await page.getByTestId("build-button").click();
+  const run = page.getByTestId("job-progress");
+  await expect(run).toHaveAttribute("data-state", "done", { timeout: 45_000 });
+  await expect(badge).toHaveText("checked");
+  await expect(run.getByTestId("job-message")).toBeVisible();
+  await expect(page.getByTestId("tension-files")).toBeVisible();
+  await expect(page.getByTestId("panel-tension-files")).toHaveAttribute("open", ""); // the files open, the settings fold (fea-run-57)
+  await expect(page.getByTestId("panel-tension-built")).not.toHaveAttribute("open", "");
+  // the same layup submitted again is no edit: Enter and "Use layup" leave the finished run and its files in place (review P1)
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await page.getByRole("button", { name: "Use layup" }).click();
+  await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done");
+  await expect(page.getByTestId("tension-files")).toBeVisible();
+  // the layup changed on the rail: the earlier run's verification and files go, as an edit in the assistant does
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).fill("[0/90]2s");
+  await page.getByLabel("Layup, bottom ply first", { exact: true }).press("Enter");
+  await expect(page.getByTestId("job-progress")).toHaveCount(0);
+  await expect(page.getByTestId("ws-stage")).not.toContainText("Verified against reference solver");
+  await expect(page.getByTestId("ws-stage")).not.toContainText("Reference solver check");
+  await expect(page.getByTestId("tension-files")).toHaveCount(0);
+  await expect(page.getByTestId("ws-assistant")).toContainText("Results of an earlier run; the setup has changed since.");
+  await expect(badge).toHaveText("not checked");
+});
+
 test("a coupon solved under a test standard shows the quantities the standard reduces a test to (ADR-0072)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);
@@ -491,7 +625,10 @@ test("a coupon solved under a test standard shows the quantities the standard re
   await expect(card).toContainText("ASTM D3039/D3039M-17 test quantities");
   await expect(card).toContainText(`${Number(tm.strain.chord.modulus.toPrecision(3))} GPa`); // the package's chord modulus, at three figures
   await expect(card).toContainText(`laminate theory ${Number(tm.laminate_theory.modulus.toPrecision(3))} GPa`);
-  await expect(card).toContainText("not ultimate strength");
+  await expect(card).toContainText(`under ${printed(Math.abs(tm.force))} N`); // the load at the page's four figures, as the Summary prints it (fea-run-19)
+  await expect(card).toContainText("to three significant figures as the standard reports them");
+  await expect(card).not.toContainText("not ultimate strength"); // the caveat once, under the answer (fea-run-23)
+  await expect(page.getByTestId("answer")).toContainText("First-ply failure is the onset of damage, not ultimate strength.");
   await expect(page.getByTestId("explanation")).toContainText("chord modulus between 1000 and 3000 microstrain");
 });
 
@@ -525,8 +662,14 @@ test("a coupon reopens into the form and the viewer window reads a job by its ad
   await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("summary")).toContainText("Largest displacement");
   await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 15_000 });
+  await expect(page.getByTestId("job-progress")).toContainText("Analysis complete"); // a finished run in one line in the viewer (fea-screens-31)
+  await expect(page.getByTestId("viewer-coupon")).toHaveText("Unnotched tension · [45/0/-45/90]s");
+  // h1 "Results", then a section heading over the panels' h3s: no level skipped (fea-run-46, uiux-fea-screens-14)
+  await expect(page.getByRole("heading", { level: 2, name: "The analysis and its results" })).toHaveCount(1);
   await page.goto("/workspace/fea/view");
-  await expect(page.getByText("No results to show")).toBeVisible();
+  await expect(page.getByTestId("viewer-empty")).toContainText("No results open"); // not an error: where results come from, and the way back (fea-screens-15)
+  await expect(page.getByTestId("viewer-empty").getByRole("link", { name: "Open your projects" })).toHaveAttribute("href", "/workspace");
+  await expect(page.locator(".studio-viewer").getByRole("status")).toHaveCount(0);
 });
 
 test("the studio's old addresses go to the chat with their query (ADR-0055 amendment 3)", async ({ page }) => {
@@ -589,7 +732,12 @@ test("the guided chat asks one thing at a time, checks the setup itself, reads t
   expect((calls.solves[0] as { run_by: string }).run_by).toBe("A. Engineer");
   await expect(page.getByTestId("chat-reaction")).toContainText("N");
   await expect(page.getByTestId("results")).toBeVisible();
-  await expect(page.getByTestId("chat-result")).toContainText("Verified against reference solver: 57 of 57 values agree", { timeout: 15_000 });
+  // the assistant gives the answer the centre gives: the gauge section's R, the clamped edge's earlier one as a note (audit fea-run-2)
+  await expect(page.getByTestId("chat-fpf")).toContainText("R = 1.032");
+  await expect(page.getByTestId("chat-fpf")).toContainText("Tsai-Hill, gauge section, Ply 4 · 90°");
+  await expect(page.getByTestId("chat-fpf-outside")).toHaveText("At a grip edge, R = 1.013 is reached earlier; stress there grows as the mesh is refined.");
+  await expect(page.getByTestId("job-progress")).toHaveAttribute("data-state", "done", { timeout: 30_000 });
+  await expect(page.getByTestId("chat-result")).toContainText("Reference solver check: values could not be shown for this run.", { timeout: 15_000 }); // as the centre says it
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: ".local/website/screenshots/studio-chat.png", fullPage: true });
   expect(browserErrors).toEqual([]);
@@ -1098,12 +1246,16 @@ test("the customer's workspace never names a tool, a vendor, a model, a script, 
   const run = page.getByTestId("job-progress").first();
   await expect(run).toHaveAttribute("data-state", "queued", { timeout: 15_000 });
   await expect(page.getByTestId("job-state").first()).toHaveText("Queued (1 ahead)");
+  await expect(page.getByTestId("build-button")).toHaveText("Queued…"); // the button says the run's state, not "Running…" (decision D23)
   await expectNoBannedTerms(page, "queued");
   phase = "running";
   await expect(run).toHaveAttribute("data-state", "running", { timeout: 30_000 });
   await expectNoBannedTerms(page, "running");
   phase = "result"; // solved and checked against the reference solver, the report still being written
-  await expect(run.getByTestId("job-message")).toHaveText("Verified against reference solver: 57 of 57 values agree", { timeout: 30_000 });
+  await expect(run).toContainText("Results are ready. The report follows.", { timeout: 30_000 });
+  await expect(page.getByTestId("results")).toBeVisible({ timeout: 15_000 }); // the fields are read
+  // the fixture's fields carry no reference solver block: no verification line over a table of dashes (audit fea-run-10)
+  await expect(run.getByTestId("job-message")).toHaveCount(0);
   await expectNoBannedTerms(page, "the result in, the report being written");
   phase = "done";
   await expect(run).toHaveAttribute("data-state", "done", { timeout: 30_000 });
@@ -1141,8 +1293,16 @@ test("a stopped run says what happened and what to do, in plain words (ADR-0091)
   const run = page.getByTestId("job-progress").first();
   await expect(run).toHaveAttribute("data-state", "stopped", { timeout: 15_000 });
   await expect(run.getByTestId("job-problem")).toHaveText("The analysis stopped while solving. Run it again; if it stops again, contact us.");
+  await expect(run.getByTestId("job-problem").getByRole("link", { name: "contact us" })).toHaveAttribute("href", "/contact");
+  await expect(run.getByRole("alert")).toHaveCount(0); // announced once, by the rail's status (fea-run-18)
+  await expect(page.getByTestId("status")).toHaveText("Stopped. See Analysis.");
+  await expect(page.getByTestId("chat-job")).not.toContainText("contact us"); // said once, on the Analysis card
+  await expect(page.getByTestId("chat-job").getByRole("button", { name: "Run again" })).toBeVisible();
   await expect(run.locator("li[data-step=solving]")).toHaveAttribute("data-state", "stopped");
+  await expect(run.locator("li[data-step=solving]")).toContainText("Solving, stopped");
   await expect(run).not.toContainText("exited with code");
+  await run.getByTestId("run-again").click(); // the same inputs, checked and run once more
+  await expect.poll(() => calls.solves.length).toBe(2);
   await expectNoBannedTerms(page, "stopped");
 });
 

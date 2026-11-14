@@ -4,7 +4,7 @@
  * pipeline and the API keep their own names; this file is where they become the product's. `BANNED_TERMS` is the one list the page's
  * guard (`customerText`) and the browser test read.
  */
-import type { JobStatus } from "./studio-api";
+import type { Fields, JobState, JobStatus } from "./studio-api";
 import { formatNumber, inProse } from "./number-format";
 
 /** What an outage says, on the calculator and in the workspaces: what happened and what to do (style guide, rule 8). */
@@ -289,6 +289,22 @@ export function verificationOf(result: string | null | undefined, beside?: { agr
   return agree === of && of > 0
     ? { line: `Verified against reference solver: ${agree} of ${of} values ${how}`, verified: true }
     : { line: `Reference solver check: ${agree} of ${of} values ${how}`, verified: false };
+}
+
+/** What the run says about the reference solver (audit fea-run-10), the same in the centre and in the assistant: "within 3 %" from the
+ * reference solver's values in the fields, the ones the Verification table shows; the pipeline's own count only for a job that wrote no
+ * fields. Fields not read yet, or read without those values, say nothing yet (they are read again once the result line arrives), and a
+ * finished job whose fields, read after it finished, carry none says so rather than claim a pass the page cannot show. Null before the
+ * reference solver has run. */
+export function runVerification(job: JobStatus, fields?: Fields | null, fieldsState?: JobState | null): Verification | null {
+  if (job.state !== "running" && job.state !== "done") return null;
+  const beside = fields?.summary.calculix ?? null;
+  const counted = verificationOf(job.result ?? (job.state === "done" ? job.message : null), beside);
+  if (!counted) return null;
+  if (!beside && (fields || "fields" in job.outputs)) {
+    return job.state === "done" && fields && fieldsState === "done" ? { line: "Reference solver check: values could not be shown for this run.", verified: false } : null;
+  }
+  return counted;
 }
 
 /** The run's state in the side panel: the plain problem when it ended badly, else done with where the files are, else the headline. No

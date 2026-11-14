@@ -6,7 +6,9 @@ import { FolderOpen, Plus } from "lucide-react";
 import { mergeProjects, newLaminateProject, newProject, projectOfRecord, projectTitle, readProjects, upsert, writeProjects, type Project } from "@/lib/project-store";
 import { listProjects, noProjectStore } from "@/lib/studio-api";
 import { browserStorage, useAllTests } from "@/components/studio/project-context";
+import { TableScroll } from "@/components/studio/table-scroll";
 import { isTestEnabled } from "@/lib/enabled-tests";
+import { libraryOptions } from "@/lib/studio-form";
 import { problemLines } from "@/lib/laminate-chat";
 import { TEST_CHOICES } from "@/lib/studio-chat";
 import { workspace, WORKSPACES, type WorkspaceId } from "@/lib/workspaces";
@@ -25,15 +27,16 @@ function when(stamp: string): string {
 function about(project: Project, allTests: boolean): string {
   if (project.kind === "fea") {
     const test = project.form.test;
-    if (!test) return "–";
+    if (!test) return allTests ? "–" : testTitle("unnotched tension"); // the only test the workspace offers, before its standard is picked (audit fea-screens-11)
     return isTestEnabled(test, allTests) ? testTitle(test) : `${testTitle(test)}: not offered yet`;
   }
   const layup = problemLines(project.draft).find(([k]) => k === "Layup")?.[1];
   return layup || "–";
 }
 
+/** A project's material by its name in the library ("IM7 / 8552"), not its id, or the name given to one's own (audit fea-screens-11). */
 function materialOf(project: Project): string {
-  if (project.kind === "fea") return project.form.library || project.form.own_name || "–";
+  if (project.kind === "fea") return libraryOptions.find((m) => m.id === project.form.library)?.name ?? (project.form.own_name || project.form.library || "–");
   return problemLines(project.draft).find(([k]) => k === "Material")?.[1] || "–";
 }
 
@@ -95,36 +98,44 @@ export function WorkspaceChooser({ apiBaseUrl }: { apiBaseUrl: string }) {
         <h1>Start a project</h1>
         <p>Set up and solve a coupon test, or work out a laminate&apos;s response to loads.</p>
       </div>
+      {/* each tile a heading holding its button, the button named shortly and described by the tile's words; the whole tile is its target
+          (audit fea-run-46) */}
       <div className="ws-tiles" data-testid="workspace-tiles">
         {WORKSPACES.map((w) => (
-          <button type="button" key={w.id} className="ws-tile" data-workspace={w.id} onClick={() => create(w.id)}>
-            <span className="eyebrow">{w.eyebrow}</span>
-            <h3><Plus size={15} /> New {w.title} project</h3>
-            <p>{w.detail}</p>
-          </button>
+          <div key={w.id} className="ws-tile" data-workspace={w.id}>
+            <span className="eyebrow" id={`ws-tile-${w.id}-kind`}>{w.eyebrow}</span>
+            <h2 className="ws-tile-title">
+              <button type="button" onClick={() => create(w.id)} aria-describedby={`ws-tile-${w.id}-kind ws-tile-${w.id}-detail`}>
+                <Plus size={15} aria-hidden="true" /> New {w.title} project</button>
+            </h2>
+            <p id={`ws-tile-${w.id}-detail`}>{w.detail}</p>
+          </div>
         ))}
       </div>
       <section className="studio-panel ws-projects" data-testid="workspace-projects" data-source={source}>
-        <h3><FolderOpen size={15} /> Your projects</h3>
+        <h2 className="ws-projects-title"><FolderOpen size={15} aria-hidden="true" /> Your projects</h2>
         {source === "down"
           ? <p className="studio-alert" role="status" data-testid="projects-source">{SOURCE_WORDS.down}</p>
           : <p className="studio-muted" data-testid="projects-source">{SOURCE_WORDS[source]}</p>}
         {projects.length ? (
-          <table className="studio-table">
-            <thead><tr><th>Project</th><th>Kind</th><th>About</th><th>Material</th><th>Last change</th><th></th></tr></thead>
-            <tbody>
-              {projects.map((p) => (
-                <tr key={p.id} data-project={p.id} data-kind={p.kind}>
-                  <td>{projectTitle(p)}</td>
-                  <td>{kindWord(p.kind)}</td>
-                  <td>{about(p, allTests)}</td>
-                  <td>{materialOf(p)}</td>
-                  <td>{when(p.updated)}</td>
-                  <td><button type="button" className="chat-link" onClick={() => open(p)}>Open</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <TableScroll label="Your projects">
+            <table className="studio-table studio-table-sticky">
+              <thead><tr><th scope="col">Project</th><th scope="col">Kind</th><th scope="col">About</th><th scope="col">Material</th><th scope="col">Last change</th>
+                <th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+              <tbody>
+                {projects.map((p) => (
+                  <tr key={p.id} data-project={p.id} data-kind={p.kind}>
+                    <th scope="row">{projectTitle(p)}</th>
+                    <td>{kindWord(p.kind)}</td>
+                    <td>{about(p, allTests)}</td>
+                    <td>{materialOf(p)}</td>
+                    <td>{when(p.updated)}</td>
+                    <td><button type="button" className="chat-link" onClick={() => open(p)}>Open<span className="sr-only"> {projectTitle(p)}</span></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
         ) : <p className="studio-muted">None yet. Start one from the tiles above.</p>}
       </section>
     </div>
