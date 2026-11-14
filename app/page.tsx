@@ -162,11 +162,12 @@ export default function Home() {
       <section className="band is-light home-blurb home-about" id="working">
         <div className="band-head">
           <div className="band-statement">
-            <h2>Five people, two seats each.</h2>
+            {/* Who is behind the product and what they cover, for a visitor (ADR-0077 amendment 55): the fields are the
+                technical seats docs/brain/people.md records, in a visitor's words. How the team decides is not said here. */}
+            <h2>The team behind the platform.</h2>
             <p>
-              One technical seat and one for the company per person. A lead decides alone inside the seat; anything that
-              could alter results, cost, security, test plans or spending goes to the CEO. The repository is public, the
-              decisions and their reasons with it.
+              Five people covering modeling and validation, fabrication and mechanical testing, and the software and AI that
+              connect them.
             </p>
           </div>
         </div>

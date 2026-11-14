@@ -48,6 +48,10 @@ test("the hero's words are one statement and a line of the mark, the name, a hai
   // One tidy line (amendment 52): the mark, the name, a hairline of its own and the year, in that order, with equal gaps
   // between them, the name, the hairline and the year on one centre line and the mark a hair above it; the hairline is a
   // little taller than the name's capitals and no taller than its line; the mark about one and three quarters of them.
+  // Read once the load-in has ended (the black has lifted and no move is left): until then the mark is still on its way
+  // up to its place.
+  await expect(page.locator(".page-transition")).toHaveClass(/is-idle/, { timeout: 10_000 });
+  await expect(hero.locator("[data-intro-run]")).toHaveCount(0, { timeout: 10_000 });
   const line = await hero.evaluate((el) => {
     const part = (name: string) => {
       const box = el.querySelector(`.home-hero-${name}`)!.getBoundingClientRect();
@@ -198,6 +202,12 @@ test("after the demo the page is white, and Mission and Services are two short b
   expect([team.left, team.right]).toEqual([0, team.wide]);
   expect(team.top).toBeLessThanOrEqual(1);
   expect(team.facesBelow).toBe(true);
+  // The head says who is behind the product and what they cover (amendment 55): one short heading and one sentence, and
+  // nothing of how the team is run.
+  const teamHead = page.locator("#working .band-head");
+  await expect(teamHead.getByRole("heading", { level: 2 })).toHaveText("The team behind the platform.");
+  await expect(teamHead.locator("p")).toHaveText("Five people covering modeling and validation, fabrication and mechanical testing, and the software and AI that connect them.");
+  await expect(teamHead).not.toContainText(/seats?\b|decides|spending|repository|\bCEO\b/i);
   // The band's label is not in the head: it stands on the white under it, over the portraits and at their left edge
   // (amendment 42).
   await expect(page.locator("#working .band-head .band-label")).toHaveCount(0);
