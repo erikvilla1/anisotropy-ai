@@ -1,14 +1,14 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
-import { ArrowUpRight, MoveUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
 import { HeroHandover } from "@/components/home/hero-handover";
 import { HeroOutro } from "@/components/home/hero-outro";
 import { ProductDemo } from "@/components/home/product-demo";
 import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
-import { serviceHref, services, statusLabel } from "@/lib/services";
+import { serviceHref, services } from "@/lib/services";
 import { team } from "@/lib/team";
 import "./home.css";
 
@@ -108,11 +108,11 @@ export default function Home() {
       <HeroHandover />
       </div>
       {/* The sections under the demo are bands of the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31), all
-          on the light ground since amendment 33: after the demo's last beat the page is white. Each band opens with the kit's
-          head. The four principles close the Mission band as a strip. */}
+          on the light ground since amendment 33: after the demo's last beat the page is white. On this page a band's head is
+          set as the demo's words are, in the middle (amendment 34, app/home.css). */}
       <section className="band is-light home-blurb home-mission" id="mission">
         <div className="band-head">
-          <p className="band-label">01 / MISSION</p>
+          <p className="band-label">Mission</p>
           <div className="band-statement">
             <h2>One record, from the layup to the test.</h2>
             <p>
@@ -121,47 +121,31 @@ export default function Home() {
               real mechanical test data, so every answer comes with its assumptions and references.
             </p>
             <Link className="home-link" href="/about">
-              What we are building <ArrowUpRight size={16} />
+              Learn more about us <ArrowUpRight size={16} />
             </Link>
           </div>
         </div>
-        <ul className="home-principles">
-          <li>PHYSICS AT THE CORE</li>
-          <li>LAB DATA AS THE FOUNDATION</li>
-          <li>RESEARCH BEFORE ASSUMPTIONS</li>
-          <li>
-            <span>
-              EVERY RESULT, TRACEABLE <MoveUpRight size={15} />
-            </span>
-          </li>
-        </ul>
       </section>
+      {/* The step to the services (ADR-0077 amendment 34): the five by name, each a link to its page, and the way to all of them. */}
       <section className="band is-light home-blurb home-platform" id="platform">
         <div className="band-head">
-          <p className="band-label">02 / PLATFORM</p>
+          <p className="band-label">Services</p>
           <div className="band-statement">
             <h2>Five ways to use it.</h2>
             <p>
               The same coupon record feeds every service. Two are built, two exist in part, one is stated as planned; each
               page says which.
             </p>
-          </div>
-        </div>
-        <div className="band-grid">
-          <div className="home-cards home-platform-grid">
-            {services.map((service) => (
-              <article className="band-card" key={service.slug}>
-                <div className="home-card-top">
-                  <span className="home-tag">{service.eyebrow}</span>
-                  <span className={`home-tag home-status home-status-${service.status}`}>{statusLabel[service.status]}</span>
-                </div>
-                <h3>{service.title}</h3>
-                <p>{service.summary}</p>
-                <Link className="home-link" href={serviceHref(service)}>
-                  The page <ArrowUpRight size={16} />
-                </Link>
-              </article>
-            ))}
+            <ul className="home-services" aria-label="Services">
+              {services.map((service) => (
+                <li key={service.slug}>
+                  <Link href={serviceHref(service)}>{service.title}</Link>
+                </li>
+              ))}
+            </ul>
+            <Link className="home-link" href="/services">
+              Explore the services <ArrowUpRight size={16} />
+            </Link>
           </div>
         </div>
       </section>
@@ -169,7 +153,7 @@ export default function Home() {
           link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. */}
       <section className="band is-light home-blurb home-about" id="working">
         <div className="band-head">
-          <p className="band-label">03 / ABOUT</p>
+          <p className="band-label">Team</p>
           <div className="band-statement">
             <h2>Five people, two seats each.</h2>
             <p>
@@ -242,7 +226,7 @@ export default function Home() {
       </section>
       <section className="band is-light home-blurb" id="news">
         <div className="band-head">
-          <p className="band-label">04 / WHAT IS NEW</p>
+          <p className="band-label">What is new</p>
           <div className="band-statement">
             <h2>Lately.</h2>
             <p>

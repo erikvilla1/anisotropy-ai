@@ -496,12 +496,82 @@
   }
 }
 
-/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31): Mission and Platform
- * dark, About light, News dark. Each numbered band opens with the kit's head. Platform's cards start at column 4, under the
- * statement, three columns wide and three to a row. The label column holds only labels, so the news dates sit in it and each
- * item's words start under the statement. The four principles close the Mission band as a strip on all twelve columns, and
- * About's five face cards take the whole width. Every colour here is one of the band's variables, so one rule serves both
- * grounds. */
+/* The sections under the demo, on the section kit (app/sections.css, ADR-0077 amendments 11, 14 and 31), all on the light
+ * ground (amendment 33). On this page a band's head is not the kit's label column and ruled statement: it is set as the demo's
+ * words are (amendment 34), a small monospace label, the heading and a paragraph in the middle of the page, and under them
+ * what the band leads to. The news dates keep the kit's columns, and About's five face cards take the whole width. Every
+ * colour here is one of the band's variables. */
+.home-blurb .band-head {
+  display: block;
+  max-width: 880px;
+  margin: 0 auto 64px;
+  text-align: center;
+}
+.home-blurb .band-label {
+  display: block;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.home-blurb .band-label::before {
+  content: none;
+}
+.home-blurb .band-statement {
+  justify-items: center;
+  gap: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+}
+.home-blurb .band-statement h2 {
+  font-size: clamp(30px, 3.2vw, 46px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.home-blurb .band-statement p {
+  max-width: 34em;
+  margin-top: 18px;
+  font-size: 17px;
+  line-height: 26px;
+}
+.home-blurb .band-statement > .home-link {
+  justify-self: center;
+  margin-top: 28px;
+}
+/* A band whose head is all it holds ends there. */
+.home-mission .band-head,
+.home-platform .band-head {
+  margin-bottom: 0;
+}
+/* The five services by name, as the demo's chips are drawn: each goes to its page. */
+.home-services {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-services a {
+  display: block;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--text);
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.home-services a:hover,
+.home-services a:focus-visible {
+  border-color: var(--text);
+  background: var(--panel);
+}
 .home-link {
   display: inline-flex;
   align-items: center;
@@ -527,67 +597,6 @@
   text-transform: uppercase;
   color: var(--muted);
 }
-/* The Mission band ends on its strip, so it has no padding of its own under it. */
-.band.home-mission {
-  padding-bottom: 0;
-}
-.home-mission .band-head {
-  margin-bottom: 0;
-}
-.home-principles {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  column-gap: 32px;
-  row-gap: 12px;
-  margin: 88px 0 0;
-  padding: 26px 0;
-  border-top: 1px solid var(--line);
-  list-style: none;
-}
-.home-principles li {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 14px;
-  line-height: 20px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.home-principles li::before {
-  content: "";
-  flex: none;
-  width: 1px;
-  height: 11px;
-  background: currentColor;
-}
-/* The arrow closes the strip; it stays with its words when they wrap. */
-.home-principles svg {
-  margin-left: 4px;
-  vertical-align: -2px;
-}
-/* Three cards to a row from column 4: nine columns and eight gutters split in three is three columns and two gutters each,
- * so the cards' edges fall on the head's columns. */
-.home-cards {
-  grid-column: 4 / -1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 32px;
-  min-width: 0;
-}
-.home-cards > article {
-  display: flex;
-  flex-direction: column;
-}
-.home-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 32px;
-}
-.home-cards h3,
 .home-face h3,
 .home-news h3 {
   font-family: var(--font);
@@ -596,43 +605,11 @@
   line-height: 28px;
   letter-spacing: -0.01em;
 }
-.home-cards p,
 .home-face p,
 .home-news p {
   font-size: 16px;
   line-height: 24px;
   color: var(--muted);
-}
-.home-cards h3 + p {
-  margin-top: 12px;
-}
-.home-cards > article > .home-link {
-  align-self: flex-start;
-  margin-top: auto;
-  padding-top: 24px;
-}
-/* How much of a service exists, without a colour: a full dot for built, half for in part, a ring for planned. */
-.home-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
-  white-space: nowrap;
-}
-.home-status::before {
-  content: "";
-  flex: none;
-  box-sizing: border-box;
-  width: 8px;
-  height: 8px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-}
-.home-status-built::before {
-  background: currentColor;
-}
-.home-status-partly::before {
-  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
 }
 /* About says the one fact about the programme again, as a small monospace line under its statement: the strip above has the
  * logo and the sentence, so this is neither. */
@@ -654,6 +631,16 @@
   width: 1px;
   height: 11px;
   background: currentColor;
+}
+/* In the middle with the rest of the head, without the tick. */
+.home-blurb .band-statement > .home-about-cohort {
+  justify-content: center;
+  margin-top: 18px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.home-blurb .band-statement > .home-about-cohort::before {
+  content: none;
 }
 /* The face cards: a 4:5 frame ready for a portrait, holding the person's initials until there is one, then the name and the
  * seats. Five to a row across the band's whole width. The frame is the card, so it carries the border, the radius and the
@@ -756,7 +743,9 @@
   vertical-align: -1px;
 }
 .home-about-link {
-  margin-top: 48px;
+  display: flex;
+  width: fit-content;
+  margin: 48px auto 0;
 }
 .home-news {
   border-top: 1px solid var(--line);
@@ -781,42 +770,18 @@
 .home-news p {
   max-width: 36em;
 }
-/* Narrower than 1280 px the cards and the principles go two to a row and the faces three; under 1024 px the head stacks, so
- * the cards take the whole width; on a phone the cards go one to a row and the faces two. */
+/* Narrower than 1280 px the faces go three to a row, and on a phone two. */
 @media (max-width: 1279px) {
-  .home-cards,
-  .home-principles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .home-faces {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 @media (max-width: 1023px) {
-  .home-cards {
-    grid-column: 1 / -1;
-  }
-  .home-principles {
-    margin-top: 64px;
-  }
   .home-news article > div {
     grid-column: 4 / -1;
   }
 }
 @media (max-width: 760px) {
-  .home-cards {
-    gap: 20px;
-  }
-  .home-card-top {
-    margin-bottom: 24px;
-  }
-  .home-principles {
-    margin-top: 48px;
-    padding: 20px 0;
-  }
-  .home-principles li {
-    font-size: 12px;
-  }
   .home-faces {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
@@ -842,12 +807,6 @@
   }
   .home-news .home-tag {
     padding-top: 0;
-  }
-}
-@media (max-width: 640px) {
-  .home-cards,
-  .home-principles {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 

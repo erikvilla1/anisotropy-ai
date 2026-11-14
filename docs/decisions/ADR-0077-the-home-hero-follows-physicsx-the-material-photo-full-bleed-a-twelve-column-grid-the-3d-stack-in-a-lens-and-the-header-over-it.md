@@ -473,3 +473,16 @@ Numbered 16 on its branch; renumbered when the branch took in main, where an ame
 
 **Evidence.** On 2026-11-14 against the dev server: screenshots of the three bands at 1440 px were looked at; the cards, tags and rules follow the light variables with no other change. The browser suites listed in ADR-0095 amendment 6: 34 passed, 3 skipped. UNVERIFIED: whether the lead meant an animated change from black to white at the end of the demo, which this does not do.
 
+## Amendment 34, 2026-11-14 (Mission and Services are two short blocks set as the demo's words are; the principles' strip goes)
+
+**Context.** The lead, on the bands under the demo: "I also dont like the layout we're using here. it seems like out of place in terms of theme, font, layout, arrangement type from the previous two pages. I like the blocks: mission, and then the link from there going to the about. 'Learn more about us' instead of what we are building. I dont really know what purpose that | physics at the core... etc... banner is serving, so... the second should be like a stepping stone to the services."
+
+**Decision.**
+
+- On the home page a band's head is no longer the kit's label column and ruled statement. It is set as the demo's words are: a small monospace label, the heading in the demo's weight and tracking, a paragraph, all in the middle of the page. The numbers before the labels go ("Mission", "Services", "Team", "What is new"). The kit itself and the other pages are unchanged.
+- Mission keeps its statement; its link reads "Learn more about us" and goes to About. The strip of four principles is removed.
+- The second block is the step to the services: the five by name, each a link to its page, and "Explore the services". The five cards with their status marks are removed from the home page; the sentence that says how many are built stays, and each service's page still says which.
+- Team and What is new keep their content under the same kind of head.
+
+**Evidence.** On 2026-11-14 against the dev server: screenshots at 1440 px and 390 px were looked at. `home.spec.ts` has a new case for the white ground, the two blocks' links and the heads' place; with `shell.spec.ts`, `expansion.spec.ts`, `intro.spec.ts` and the overview case of `portfolio.spec.ts`: 24 passed, 3 skipped (ADR-0058 amendment 4). `npm test`: 299 tests, 298 passed, 1 skipped. UNVERIFIED: whether the lead wants Team and What is new kept on the home page at all; they were not mentioned.
+

@@ -94,6 +94,32 @@ test("the hero's clip plays in a square box on the black page, under the header,
   expect(phone.top).toBeGreaterThanOrEqual((await rect(".site-header")).bottom);
 });
 
+test("after the demo the page is white, and Mission and Services are two short blocks that lead on (ADR-0077 amendments 33 and 34)", async ({ page }) => {
+  await page.goto("/");
+  for (const id of ["mission", "platform", "working", "news"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  // Mission: the label, the statement and one link, to About; the strip of four principles is gone.
+  const mission = page.locator("#mission");
+  await expect(mission.locator(".band-label")).toHaveText("Mission");
+  await expect(mission.getByRole("heading", { level: 2 })).toHaveText("One record, from the layup to the test.");
+  await expect(mission.getByRole("link")).toHaveCount(1);
+  await expect(mission.getByRole("link", { name: "Learn more about us" })).toHaveAttribute("href", /\/about\/?$/);
+  await expect(page.locator(".home-principles")).toHaveCount(0);
+  await expect(page.getByText("Physics at the core", { exact: false })).toHaveCount(0);
+  // Services: the five by name, each to its page, and the way to all of them; no cards and no status marks.
+  const services = page.locator("#platform");
+  await expect(services.locator(".band-label")).toHaveText("Services");
+  const five = services.getByRole("list", { name: "Services" }).getByRole("link");
+  await expect(five).toHaveText(["Computer-aided design", "Finite element modeling", "Test plans", "Documentation", "Manufacturing plans"]);
+  await expect(five.nth(1)).toHaveAttribute("href", /\/services\/finite-element-modeling\/?$/);
+  await expect(services.getByRole("link", { name: "Explore the services" })).toHaveAttribute("href", /\/services\/?$/);
+  await expect(services.locator(".band-card, .home-status")).toHaveCount(0);
+  // The heads are set in the middle, as the demo's words are.
+  for (const id of ["mission", "platform", "working", "news"]) {
+    const off = await page.locator(`#${id} .band-statement h2`).evaluate((h) => { const r = h.getBoundingClientRect(); return (r.left + r.right) / 2 - window.innerWidth / 2; });
+    expect(Math.abs(off), id).toBeLessThanOrEqual(2);
+  }
+});
+
 test("the hero's lens is hidden for now (ADR-0071 amendment 1)", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#overview .home-hero-lens")).toHaveCount(0);
