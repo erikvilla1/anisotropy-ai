@@ -144,3 +144,11 @@ UNVERIFIED: the buckling factor (the mesh was not refined for it, and it is run 
 
 **Evidence.** On 2026-11-14 against the dev server at 1873 by 866: the held stage, before and after a turn, and the link at rest, half filled and filled were captured and looked at. The case of `demo.spec.ts` that holds and turns the wing passes. `npx tsc --noEmit` clean. UNVERIFIED: a real graphics card, Safari and Firefox.
 
+## Amendment 9, 2026-11-14 (the axes keep clear of the wing as it is turned)
+
+**Context.** The lead, with a recording in which the axes' y arm and its letter lie against the wing's root while the wing is turned: "lets make sure the xyz doesnt touch or overlap with the wing". Amendment 8 placed the axes by the box of the wing as the pose stands it, an arm's reach from it; the hand turns the wing out of that box, and an arm with its letter reaches further than the gap left.
+
+**Decision.** The axes are placed by the box of the wing as the hand has turned it, measured on each frame while they show: their middle stands 1.9 times an arm's reach to the left of that box, and an arm with its letter reaches 1.5 times, so no part of them can touch the wing whichever way an arm points. They follow the wing's left edge as it turns, a little above the box's foot, and are drawn smaller where the stage leaves less room at the wing's left than that takes.
+
+**Evidence.** On 2026-11-14 against the dev server at 1873 by 866 the held wing was captured at five turns and looked at: the axes are clear of the wing in each. The case of `demo.spec.ts` that holds and turns the wing passes. `npx tsc --noEmit` clean. UNVERIFIED: a turn that brings the wing's left edge to the stage's own edge, where the axes are at their smallest and could still meet it.
+

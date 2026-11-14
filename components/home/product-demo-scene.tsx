@@ -204,7 +204,7 @@ function buildModel() {
     return { id: part.id, skin, group, face, mesh: net, rim, apart: APART[part.id] ?? [0, 0, 0], places, bends: moves };
   });
   const nodes = built.reduce((sum, part) => sum + part.places.length / 3, 0);
-  return { root, parts: built, nodes, turned: new Float32Array(nodes * 3), hasField: Boolean(field), dispose: () => disposables.forEach((item) => item.dispose()) };
+  return { root, parts: built, nodes, turned: new Float32Array(nodes * 3), held: new Float32Array(nodes * 3), hasField: Boolean(field), dispose: () => disposables.forEach((item) => item.dispose()) };
 }
 
 /** The wing's own axes: x along the chord from nose to tail, y along the span from root to tip, z up (the record's
@@ -309,18 +309,21 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     // Every node as the pose turns it, apart and bent as it is drawn, in millimetres about the wing's middle: what the
     // wing's box on the screen is measured from.
     posed.set(-pose.pitch, pose.yaw, 0, "YXZ");
-    const turnedBy = spin.makeRotationFromEuler(posed).elements;
-    let filled = 0;
-    for (const part of model.parts) {
-      for (let index = 0; index < part.places.length; index += 3) {
-        const along = part.places[index] + part.apart[0] * apart + part.bends[index] * field;
-        const fore = part.places[index + 1] + part.apart[1] * apart + part.bends[index + 1] * field;
-        const high = part.places[index + 2] + part.apart[2] * apart + part.bends[index + 2] * field;
-        model.turned[filled++] = turnedBy[0] * along + turnedBy[4] * fore + turnedBy[8] * high;
-        model.turned[filled++] = turnedBy[1] * along + turnedBy[5] * fore + turnedBy[9] * high;
-        model.turned[filled++] = turnedBy[2] * along + turnedBy[6] * fore + turnedBy[10] * high;
+    const turnInto = (into: Float32Array, by: THREE.Euler) => {
+      const turnedBy = spin.makeRotationFromEuler(by).elements;
+      let filled = 0;
+      for (const part of model.parts) {
+        for (let index = 0; index < part.places.length; index += 3) {
+          const along = part.places[index] + part.apart[0] * apart + part.bends[index] * field;
+          const fore = part.places[index + 1] + part.apart[1] * apart + part.bends[index + 1] * field;
+          const high = part.places[index + 2] + part.apart[2] * apart + part.bends[index + 2] * field;
+          into[filled++] = turnedBy[0] * along + turnedBy[4] * fore + turnedBy[8] * high;
+          into[filled++] = turnedBy[1] * along + turnedBy[5] * fore + turnedBy[9] * high;
+          into[filled++] = turnedBy[2] * along + turnedBy[6] * fore + turnedBy[10] * high;
+        }
       }
-    }
+    };
+    turnInto(model.turned, posed);
     // The wing's size and place: it fills the room the beat's words leave, over them or beside them (ADR-0098 amendments 3
     // and 4), whatever the window's shape; between two beats the one room's fit eases into the other's.
     const wide = state.size.width, tall = state.size.height;
@@ -376,10 +379,16 @@ function Wing({ handle }: { handle: DemoSceneHandle }) {
     }
     axes.group.visible = axes.shown > 0;
     if (axes.group.visible) {
-      const reachOf = Math.min(0.06 * height, 0.05 * width);
-      // An arm with its letter reaches 1.5 times `reachOf` from the middle of the axes: they stand a little more than an
-      // arm to the left of the wing's box, level with its foot, and never off the stage.
-      axes.group.position.set(Math.max(-width / 2 + 1.7 * reachOf, drawn.left - 1.3 * reachOf), drawn.bottom + 0.2 * reachOf, 2);
+      // The wing's box as the hand has turned it: the axes keep clear of the wing as it is drawn now, not as the pose
+      // stood it (amendment 9). An arm with its letter reaches 1.5 times `reachOf` from the middle of the axes, so their
+      // middle stands 1.9 times that to the left of the box: nothing of them can touch the wing, whichever way an arm
+      // points. They are drawn smaller where the stage leaves less room at the wing's left than that takes.
+      turnInto(model.held, group.rotation);
+      const now = boxOf(model.held, model.nodes, unit, x, y, CAMERA_Z);
+      const most = Math.min(0.06 * height, 0.05 * width);
+      const room = now.left + width / 2 - 0.015 * width; // from near the stage's left edge to the wing's
+      const reachOf = Math.min(most, Math.max(0.45 * most, room / 3.4));
+      axes.group.position.set(now.left - 1.9 * reachOf, now.bottom + 0.6 * reachOf, 2);
       axes.group.scale.setScalar(reachOf);
       axes.group.rotation.copy(group.rotation);
       for (const material of axes.materials) material.opacity = axes.shown;
