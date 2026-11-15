@@ -1061,9 +1061,10 @@ section.band.closing-band.is-dark .button.primary {
 /* The hero (ADR-0077; its arrangement since amendments 47 and 66). The material clip fills the first screen from edge to
  * edge, and the header lies over its top, on the clip itself (until amendment 66 the clip played in a box under the header,
  * with the page's black at the sides and the foot). The words stand in the lower left, set from the left on the page's
- * margin, where the header's logo starts: a small line of the mark, the name and the year, and under it the statement in
- * large type. (Until amendment 47 they stood in the middle, centred, in capitals, with the mark between the year and the
- * name: an arrangement taken from another company's home page, which this one had come to match too closely.)
+ * margin, where the header's logo starts: the statement in large type, and nothing over it since amendment 74 (a small
+ * line of the mark, the name and the year stood there). (Until amendment 47 the words stood in the middle, centred, in
+ * capitals, with the mark between the year and the name: an arrangement taken from another company's home page, which
+ * this one had come to match too closely.)
  *   --hero-top     the header's height: what stands at the top keeps clear of it
  *   --hero-margin  the page's margin, the header's own: how far the words and the corners stand from the window's edge
  * The ground is a layer of its own, under the clip. */
@@ -1143,52 +1144,6 @@ section.band.closing-band.is-dark .button.primary {
   white-space: nowrap;
   color: #ffffff;
 }
-/* The line over it: the mark, the name, a hairline and the year (ADR-0077 amendments 47 and 52). It is the same parts as
- * before, in the page's order the year, the mark, the hairline, the name; the stylesheet puts the mark first and the row
- * over the statement. Every size in the line is a share of the row's one type size, so the parts keep their proportions at
- * every width; the gaps between them are equal, and all four stand on one centre line, that of the name's capitals. */
-.home-hero-row {
-  order: -1;
-  display: flex;
-  align-items: center;
-  gap: 0.8em;
-  font-size: clamp(13px, 1.05vw, 18px);
-}
-/* The space that tracking leaves after the last letter is taken back, here and in the year, so the gaps are the row's. */
-.home-hero-tagline {
-  order: 2;
-  margin: 0 -0.06em 0 0;
-  font-size: 1em;
-  font-weight: 700;
-  line-height: 1.3;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-/* The mark stands about one and three quarters of the capitals' height tall. A triangle's weight lies below the middle of
- * its box, so the box stands a hair above the centre line; `top`, not a transform, which the load-in and the exit animate. */
-.home-hero-mark {
-  order: 1;
-  position: relative;
-  top: -0.05em;
-  display: block;
-  /* The middle of the triangle, which lies below the middle of its box: the mark turns about it when the words leave. */
-  transform-origin: 50% 61%;
-  width: 1.6em;
-  aspect-ratio: 246.24 / 201.022;
-  background: currentColor;
-  -webkit-mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
-  mask: url("/assets/brand/anisotropy-triangle.svg") center / contain no-repeat;
-}
-/* The hairline between the name and the year: an element of its own, a little taller than the capitals, so the load-in
- * brings it in and the exit takes it away with the words (components/intro-text.ts). As a border of the year's box it
- * was left standing on the clip when the words had gone. */
-.home-hero-rule {
-  order: 3;
-  flex: none;
-  width: 1px;
-  height: 1.05em;
-  background: #ffffff66;
-}
 /* The header's bar over the hero and the demo (ADR-0077 amendment 71). A scroll up brings the header back as a bar fixed
  * to the window's top (app/globals.css); while the hero's clip or the demo's black stage lies under it, the bar has no
  * ground of its own, so it is the header the page opened with, over the clip's own shade. Past the demo, over the white
@@ -1243,18 +1198,6 @@ section.band.closing-band.is-dark .button.primary {
   .home-opening > .product-demo {
     margin-top: calc(-0.5 * max(640px, 100svh));
   }
-}
-/* The year, last in the line: the labels' monospace, its capitals nearly the name's height, set a little wide. */
-.home-hero-notes {
-  order: 4;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.9em;
-  line-height: 1.3;
-  text-transform: uppercase;
-}
-.home-hero-note {
-  margin: 0 -0.14em 0 0;
-  letter-spacing: 0.14em;
 }
 /* The lens (ADR-0071): a 4:3 window over the clip, its right edge on the gutter before the copy and its foot just above the
  * headline's middle, under the words. Through it the clip is dimmed and blurred like glass, and our results play in colour on
@@ -1486,7 +1429,7 @@ section.band.closing-band.is-dark .button.primary {
   }
 }
 /* The header is taller or shorter below 1201 px and the page's margin narrower below 1024 and 641 px: the hero follows both.
- * Under 1024 px the statement may break where it needs to, and under 761 px the row stacks. */
+ * Under 1024 px the statement may break where it needs to. */
 @media (max-width: 1200px) {
   .home-hero {
     --hero-top: 86px;
@@ -1510,9 +1453,6 @@ section.band.closing-band.is-dark .button.primary {
     font-size: clamp(32px, 10vw, 48px);
     line-height: 1.02;
     letter-spacing: -0.03em;
-  }
-  .home-hero-row {
-    flex-wrap: wrap;
   }
   /* The cohort stands under the place's name, so the two stay clear of "Scroll to explore" in the other corner: set in
    * words, the pair is wider than the mark was (ADR-0081 amendment 2), so this starts at 760 px, not 640 (ADR-0077 amendment 28). */

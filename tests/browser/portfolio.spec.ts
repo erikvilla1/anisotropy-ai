@@ -10,7 +10,7 @@ test("overview, the home page's blurbs, and material source document", async ({
   await page.goto("/");
   // The hero's statement is the heading, and the name stands beside the mark over it (ADR-0077 amendments 19, 27 and 47).
   await expect(page.getByRole("heading", { level: 1 })).toContainText("One engineering platform");
-  await expect(page.locator(".home-hero-tagline")).toHaveText("Anisotropy");
+  await expect(page.locator(".site-header .wordmark")).toHaveText("Anisotropy");
   // The lab imagery carousel and its lightbox left the home page (audit of 2026-10-31, item 6).
   await expect(page.getByRole("button", { name: "Next research image" })).toHaveCount(0);
   for (const name of ["Five ways to use it.", "Every release, and what changed."])

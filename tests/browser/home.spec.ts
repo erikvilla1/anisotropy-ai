@@ -35,50 +35,18 @@ async function pastTheDemo(page: import("@playwright/test").Page) {
 
 const STATEMENT = /^\s*One engineering platform\s*for composite theory\s*and real test data\s*$/;
 
-test("the hero's words are one statement and a line of the mark, the name, a hairline and the year (ADR-0077 amendments 19, 21, 27, 28, 47 and 52)", async ({ page }) => {
+test("the hero's words are one statement, with nothing over it (ADR-0077 amendments 19, 21, 27, 47 and 74)", async ({ page }) => {
   await page.goto("/");
   const hero = page.locator("#overview");
   await expect(hero.getByRole("heading", { level: 1 })).toHaveText(STATEMENT);
   // Written as a sentence, not in capitals (amendment 51).
   await expect(hero.getByRole("heading", { level: 1 })).toHaveCSS("text-transform", "none");
-  // The line over it: the triangle, the name, the year (amendment 47; until then a row under the statement with the mark
-  // between the year and the name).
-  await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
-  await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
-  // One tidy line (amendment 52): the mark, the name, a hairline of its own and the year, in that order, with equal gaps
-  // between them, the name, the hairline and the year on one centre line and the mark a hair above it; the hairline is a
-  // little taller than the name's capitals and no taller than its line; the mark about one and three quarters of them.
-  // Read once the load-in has ended (the black has lifted and no move is left): until then the mark is still on its way
-  // up to its place.
-  await expect(page.locator(".page-transition")).toHaveClass(/is-idle/, { timeout: 10_000 });
-  await expect(hero.locator("[data-intro-run]")).toHaveCount(0, { timeout: 10_000 });
-  const line = await hero.evaluate((el) => {
-    const part = (name: string) => {
-      const box = el.querySelector(`.home-hero-${name}`)!.getBoundingClientRect();
-      return { left: box.left, right: box.right, middle: (box.top + box.bottom) / 2, width: box.width, height: box.height };
-    };
-    const name = el.querySelector<HTMLElement>(".home-hero-tagline")!;
-    const year = el.querySelector<HTMLElement>(".home-hero-note")!;
-    // Where each text ends as it is drawn: its box less the tracking after its last letter.
-    const ends = (text: HTMLElement) => text.getBoundingClientRect().right - parseFloat(getComputedStyle(text).letterSpacing);
-    return { mark: part("mark"), name: part("tagline"), rule: part("rule"), year: part("note"), nameEnds: ends(name), size: parseFloat(getComputedStyle(name).fontSize) };
-  });
-  expect(line.mark.left).toBeLessThan(line.name.left);
-  expect(line.name.left).toBeLessThan(line.rule.left);
-  expect(line.rule.left).toBeLessThan(line.year.left);
-  const gaps = [line.name.left - line.mark.right, line.rule.left - line.nameEnds, line.year.left - line.rule.right];
-  for (const gap of gaps) expect(Math.abs(gap - gaps[0]), `gaps ${gaps.map((value) => value.toFixed(1)).join(", ")}`).toBeLessThan(1);
-  expect(Math.abs(line.rule.middle - line.name.middle)).toBeLessThan(1);
-  expect(Math.abs(line.year.middle - line.name.middle)).toBeLessThan(1);
-  expect(line.name.middle - line.mark.middle).toBeGreaterThanOrEqual(0);
-  expect(line.name.middle - line.mark.middle).toBeLessThan(0.1 * line.size);
-  expect(line.rule.width).toBe(1);
-  expect(line.rule.height).toBeGreaterThan(0.72 * line.size); // the capitals of the name's face stand about 0.73 of its size
-  expect(line.rule.height).toBeLessThanOrEqual(line.name.height);
-  expect(line.mark.height / (0.727 * line.size)).toBeGreaterThan(1.5);
-  expect(line.mark.height / (0.727 * line.size)).toBeLessThan(2);
-  const over = await hero.evaluate((el) => [el.querySelector(".home-hero-row")!.getBoundingClientRect().bottom, el.querySelector("h1")!.getBoundingClientRect().top]);
-  expect(over[0]).toBeLessThanOrEqual(over[1]);
+  // Nothing stands over it since amendment 74: the line of the mark, the name, a hairline and the year is gone, and the
+  // name is said once at the top of the page, by the header's logo.
+  await expect(hero.locator(".home-hero-row, .home-hero-mark, .home-hero-tagline, .home-hero-note, .home-hero-rule")).toHaveCount(0);
+  await expect(hero).not.toContainText(/Est\.? 2026/i);
+  expect(await hero.locator(".home-hero-stack > *").count()).toBe(1);
+  await expect(page.locator(".site-header .wordmark")).toHaveText("Anisotropy");
   // The cohort stands beside the place that runs it, in the clip's bottom left corner; the place is named in words until
   // written permission for The Basement's mark is recorded (ADR-0081 amendment 2).
   await expect(hero.locator(".home-hero-backed")).toHaveText("The Basement, UC San Diego Fall 2026 Launchpad cohort");
@@ -132,20 +100,19 @@ test("the hero's clip fills the first screen from edge to edge with the header o
   const shade = await page.locator("#overview .home-hero-media").evaluate((el) => getComputedStyle(el, "::after").backgroundImage);
   expect(shade).toMatch(/^linear-gradient\((to bottom, )?rgba\(0, 0, 0, 0\.[5-9]\d*\) 0%, rgba\(0, 0, 0, 0\) 26%\)(, none)?$/);
   // The words stand inside the clip, clear of the header and of the window's edges.
-  for (const selector of ["#overview h1", "#overview .home-hero-row", "#overview .home-hero-backed"]) {
+  for (const selector of ["#overview h1", "#overview .home-hero-backed"]) {
     const part = await rect(selector);
     expect(part.left, selector).toBeGreaterThanOrEqual(clip.left + 16);
     expect(part.right, selector).toBeLessThanOrEqual(clip.right - 16);
     expect(part.top, selector).toBeGreaterThanOrEqual(header.bottom + 16);
     expect(part.bottom, selector).toBeLessThanOrEqual(clip.bottom - 16);
   }
-  // They stand in the lower left, set from the left (amendment 47): the statement, the line over it and the cohort's line
+  // They stand in the lower left, set from the left (amendment 47): the statement and the cohort's line
   // start on one edge, the page's margin, where the header's logo starts, and lie in the lower half, over the cohort's line,
   // which stands the same margin up from the window's foot.
-  const [statement, line, backed] = [await rect("#overview h1"), await rect("#overview .home-hero-row"), await rect("#overview .home-hero-backed")];
+  const [statement, backed] = [await rect("#overview h1"), await rect("#overview .home-hero-backed")];
   expect(statement.left).toBe(32);
   expect(statement.left).toBe((await rect(".site-header .wordmark")).left);
-  expect(line.left).toBe(statement.left);
   expect(backed.left).toBe(statement.left);
   await expect(page.locator("#overview .home-hero-backed")).toHaveCSS("bottom", "32px");
   expect(statement.top).toBeGreaterThan((clip.top + clip.bottom) / 2 - 40);

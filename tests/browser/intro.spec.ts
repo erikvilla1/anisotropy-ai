@@ -19,7 +19,6 @@ type Frame = {
   ring: boolean; // the keyboard's focus is shown on something other than the skip link
   copies: number; // the copies that play the moves
   riders: number; // the copies' own text cursors
-  markFrom: string; // where the hero's triangle starts its fade from, while it fades in
   hiddenCopies: number; // of those, the ones hidden from assistive technology
   running: number; // elements whose own text is transparent while a copy plays
   ownHeadline: string; // the headline's own text nodes, without any copy
@@ -50,7 +49,6 @@ async function record(page: Page) {
           ring: !!focused && focused !== document.body && focused.matches(":focus-visible") && !focused.classList.contains("skip-link"),
           copies: copies.length,
           riders: document.querySelectorAll(".intro-overlay .intro-caret").length,
-          markFrom: String((document.querySelector("#overview .home-hero-mark")?.getAnimations()[0]?.effect as KeyframeEffect | undefined)?.getKeyframes()[0]?.transform ?? ""),
           hiddenCopies: copies.filter((copy) => copy.getAttribute("aria-hidden") === "true" && copy.hasAttribute("inert")).length,
           running: document.querySelectorAll("[data-intro-run]").length,
           ownHeadline: headline
@@ -85,9 +83,8 @@ async function expectHeroWhole(page: Page, blink = "type-caret-blink") {
   await expect(hero.locator("[data-intro-run]")).toHaveCount(0);
   await expect(hero.locator("h1")).toHaveText("One engineering platformfor composite theoryand real test data");
   await expect(hero.locator("h1")).toHaveCSS("color", "rgb(255, 255, 255)");
-  await expect(hero.locator(".home-hero-tagline")).toHaveText("Anisotropy");
-  await expect(hero.locator(".home-hero-note")).toHaveText("Est 2026");
-  for (const line of await hero.locator(".home-hero-tagline, .home-hero-note").all()) await expect(line).toHaveCSS("color", "rgb(255, 255, 255)");
+  // No line stands over the statement (ADR-0077 amendment 74).
+  await expect(hero.locator(".home-hero-row, .home-hero-tagline, .home-hero-note, .home-hero-mark, .home-hero-rule")).toHaveCount(0);
   // The text cursor: on the statement's last line, at its end, taking no room, and blinking unless the visitor asked for
   // reduced motion.
   const caret = await hero.locator("h1 > .type-caret").evaluate((own) => {
@@ -121,14 +118,13 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   const seen = await frames(page);
   // The first paint is black, #010101.
   expect(seen[0]).toMatchObject({ phase: "is-enter", shown: true, opacity: 1, colour: "rgb(1, 1, 1)", copies: 0 });
-  // The statement, the tagline and the small line are made ready while the black still covers the page, so the finished text is never
-  // seen before its move: a copy each, hidden from assistive technology, over the page's own text, which stays in place.
+  // The statement is made ready while the black still covers the page, so the finished text is never seen before its
+  // move: a copy, hidden from assistive technology, over the page's own text, which stays in place.
   const ready = seen.findIndex((frame) => frame.copies > 0);
   expect(ready).toBeGreaterThan(0);
-  // The triangle and the corner's words wait with them to fade in, and the statement's copy carries the one text cursor.
-  // Six elements take part: the statement, the name and the year are typed; the mark, the hairline between the name and
-  // the year (ADR-0077 amendment 52) and the corner's words fade in.
-  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 3, hiddenCopies: 3, riders: 1, running: 6, ownHeadline: STATEMENT });
+  // The corner's words wait with it to fade in, and the statement's copy carries the one text cursor. Two elements take
+  // part since ADR-0077 amendment 74: the statement is typed, and the corner's words fade in.
+  expect(seen[ready]).toMatchObject({ opacity: 1, copies: 1, hiddenCopies: 1, riders: 1, running: 2, ownHeadline: STATEMENT });
   expect(seen.slice(0, ready).every((frame) => frame.opacity === 1)).toBe(true);
   // The copies go once the moves have played: the headline's 1.6 s, with room for a busy machine.
   const lifting = seen.findIndex((frame) => frame.phase === "is-lift");
@@ -137,8 +133,6 @@ test("the home page loads out of black and the hero's words are typed in (ADR-00
   expect(gone).toBeGreaterThan(lifting);
   expect(seen.slice(ready, gone).every((frame) => frame.ownHeadline === STATEMENT)).toBe(true);
   expect(seen[seen.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0, copies: 0, running: 0 });
-  // The triangle comes up as it fades in: it starts its own height low (ADR-0070 amendment 9).
-  expect(seen.some((frame) => frame.markFrom === "translateY(100%)")).toBe(true);
 });
 
 test("three seconds after the load-in the hero's words are taken away and the clip plays alone (ADR-0077 amendments 20 and 26)", async ({ page }) => {
@@ -167,20 +161,16 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   // "Scroll to explore" is not there while the words stand.
   const explore = hero.locator(".home-hero-explore");
   await expect(explore).toBeHidden();
-  // They stand for three seconds, then are untyped in about a second, while the mark turns (ADR-0070 amendments 4 to 9).
+  // They stand for three seconds, then are untyped in about a second (ADR-0070 amendments 4 to 9). No mark turns first
+  // since ADR-0077 amendment 74, so the statement begins to go at once.
   const turn = await page.waitForFunction(
     () => {
-      const move = document.querySelector("#overview .home-hero-mark")?.getAnimations()[0];
-      if (!move) return null;
       // The windows of the typed lines: when the first begins to go and when the last has gone (the letters' flicker never ends).
       const lines = Array.from(document.querySelectorAll("#overview .intro-overlay .intro-win"))
         .flatMap((box) => box.getAnimations())
         .map((line) => line.effect!.getComputedTiming())
         .filter((timing) => Number.isFinite(Number(timing.endTime)));
       if (!lines.length) return null;
-      const mark = move.effect!.getComputedTiming();
-      const rule = document.querySelector("#overview .home-hero-rule")?.getAnimations()[0]?.effect?.getComputedTiming();
-      if (!rule) return null;
       // Each typed line's window that shows its text: how far it is drawn back while the line still waits its turn. A copy
       // of the window's own animation, held at its first moment, says so whenever this is read.
       const shown = Array.from(document.querySelectorAll<HTMLElement>("#overview .intro-overlay .intro-line > .intro-win:not(.is-front)"));
@@ -196,13 +186,8 @@ test("three seconds after the load-in the hero's words are taken away and the cl
       return {
         waiting,
         whole: shown.map(() => 0),
-        steps: (move.effect as KeyframeEffect).getKeyframes().map((step) => String(step.transform ?? "")),
-        markStart: Number(mark.delay),
-        markEnd: Number(mark.endTime),
         linesStart: Math.min(...lines.map((timing) => Number(timing.delay))),
         linesEnd: Math.max(...lines.map((timing) => Number(timing.endTime))),
-        ruleStart: Number(rule.delay),
-        ruleEnd: Number(rule.endTime),
       };
     },
     null,
@@ -213,25 +198,16 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   const hold = await page.evaluate(() => (window as unknown as { __hold: { settled: number; leaving: number } }).__hold);
   expect(hold.leaving - hold.settled).toBeGreaterThanOrEqual(2900);
   expect(hold.leaving - hold.settled).toBeLessThan(4200);
-  expect(exit.steps).toEqual(["rotate(0deg)", "", "rotate(-90deg)"]); // a quarter turn, anticlockwise
-  // The mark is the first to move and has gone before the last character does (ADR-0070 amendment 9).
-  expect(exit.markStart).toBe(0);
-  expect(exit.linesStart).toBeGreaterThanOrEqual(300);
-  expect(exit.markEnd).toBeLessThan(exit.linesEnd);
-  expect(exit.markEnd).toBeGreaterThan(exit.linesStart);
-  // While the lines wait for the mark every one of them is whole: no character goes before its line's turn (amendment 10).
+  // The statement's first line begins to go at once, nothing waits for a mark, and the lines take about a second.
+  expect(exit.linesStart).toBe(0);
+  expect(exit.linesEnd).toBeGreaterThan(500);
+  expect(exit.linesEnd).toBeLessThan(2500);
+  // Before its turn every line is whole: no character goes early (ADR-0070 amendment 10).
   expect(exit.waiting).toEqual(exit.whole);
-  // The hairline between the name and the year goes as the first line begins to go, and has gone before the last
-  // character: it is never left standing alone (ADR-0077 amendment 52).
-  expect(exit.ruleStart).toBe(exit.linesStart);
-  expect(exit.ruleEnd).toBeLessThan(exit.linesEnd);
   await expect(hero).toHaveAttribute("data-words", "gone", { timeout: 12_000 });
-  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-rule", ".home-hero-backed"])
+  for (const selector of ["h1", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "0");
-  // Nothing of the line is drawn by a box that stays: the year's box has no border of its own.
-  await expect(hero.locator(".home-hero-notes")).toHaveCSS("border-left-width", "0px");
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
-  await expect(hero.locator(".home-hero-mark")).toHaveCSS("transform", "none");
   // The statement and the words in the corner are still in the page for a screen reader.
   await expect(hero.locator("h1")).toHaveText(/One engineering platform/);
   await expect(hero.locator(".home-hero-backed")).toHaveText("The Basement, UC San Diego Fall 2026 Launchpad cohort");
@@ -304,13 +280,13 @@ test("each time the clip starts again the hero's words are typed in again, stand
   await expect(hero).not.toHaveAttribute("data-words-round", /.+/);
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  // At the top the words are typed in again by the load-in's copies, the mark rising with them.
+  // At the top the words are typed in again by the load-in's copy.
   await startsAgain();
   await expect(hero).toHaveAttribute("data-words-round", "2");
-  expect(await hero.locator(".intro-overlay").count()).toBeGreaterThanOrEqual(3);
+  expect(await hero.locator(".intro-overlay").count()).toBeGreaterThanOrEqual(1);
   const began = Date.now();
   await expect(hero.locator(".intro-overlay")).toHaveCount(0, { timeout: 6_000 });
-  for (const selector of ["h1", ".home-hero-tagline", ".home-hero-note", ".home-hero-mark", ".home-hero-rule", ".home-hero-backed"])
+  for (const selector of ["h1", ".home-hero-backed"])
     await expect(hero.locator(selector), selector).toHaveCSS("opacity", "1");
   await expect(hero.locator("h1")).toHaveText(/One engineering platform/);
   // "Scroll to explore" stays up through the round.
@@ -323,7 +299,6 @@ test("each time the clip starts again the hero's words are typed in again, stand
   expect(Date.now() - began).toBeGreaterThan(2_900);
   await expect(hero.locator(".intro-overlay")).toHaveCount(0);
   await expect(hero).toHaveAttribute("data-words", "gone");
-  await expect(hero.locator(".home-hero-rule")).toHaveCSS("opacity", "0"); // the hairline with them (amendment 52)
   // And the next time round they come again.
   await startsAgain();
   await expect(hero).toHaveAttribute("data-words-round", "3");
@@ -429,7 +404,7 @@ test("the home page reached by a link comes out of black with its words typed in
   // As on its first load: the copies are ready in the page's first frame, under the black, and play as it lifts.
   const first = seen.findIndex((frame) => frame.path === "/");
   expectFadeToBlack(seen.slice(0, first)); // About fades to black before the home page takes its place (amendment 13)
-  expect(seen[first]).toMatchObject({ phase: "is-lift", shown: true, copies: 3, hiddenCopies: 3, riders: 1, running: 6, ownHeadline: STATEMENT });
+  expect(seen[first]).toMatchObject({ phase: "is-lift", shown: true, copies: 1, hiddenCopies: 1, riders: 1, running: 2, ownHeadline: STATEMENT });
   expect(seen[first].opacity).toBeGreaterThanOrEqual(0.9);
   const gone = seen.findIndex((frame, index) => index > first && frame.copies === 0);
   expect(gone).toBeGreaterThan(first);
