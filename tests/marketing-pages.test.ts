@@ -147,7 +147,8 @@ test("a page title's line breaks keep a space before them, since a phone hides t
   // JSX drops the space before a line end, so a title written "Engineering built" + newline + <br /> would read "builton" once
   // the <br /> is hidden; each break needs a {" "} before it.
   let breaks = 0;
-  for (const file of ["app/about/page.tsx", "app/contact/page.tsx", "app/industries/page.tsx", "app/services/page.tsx", ...servicePages]) {
+  // The contact page has no title of this kind since ADR-0058 amendment 7: its heading is one short line.
+  for (const file of ["app/about/page.tsx", "app/industries/page.tsx", "app/services/page.tsx", ...servicePages]) {
     const source = parse(file);
     const inTitle = (node: ts.Node): boolean => {
       for (let up: ts.Node | undefined = node.parent; up; up = up.parent) {
@@ -171,7 +172,7 @@ test("a page title's line breaks keep a space before them, since a phone hides t
     };
     visit(source);
   }
-  assert.equal(breaks, 4 + servicePages.length);
+  assert.equal(breaks, 3 + servicePages.length);
 });
 
 test("the coupon illustration carries no words of its own, which would shrink with it", () => {

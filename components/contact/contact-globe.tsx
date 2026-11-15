@@ -49,10 +49,12 @@ export function ContactGlobe({ className }: { className?: string }) {
     /** One frame: the net, the coasts and the outline, as the globe stands now. */
     const draw = () => {
       const size = sheet.width;
-      if (!size) return;
-      const scale = size / Math.max(1, box.clientWidth); // the canvas's pixels to one of the page's
+      // Nothing to draw on while the globe is not laid out: a page hides it on a narrow window, and its box is then empty.
+      if (!size || !box.clientWidth) return;
+      const scale = size / box.clientWidth; // the canvas's pixels to one of the page's
       const middle = size / 2;
       const radius = middle - EDGE.width * scale;
+      if (radius <= 0) return;
       const matrix = turnMatrix({ lon, lat: START.lat });
       pen.clearRect(0, 0, size, size);
       pen.strokeStyle = getComputedStyle(box).color;

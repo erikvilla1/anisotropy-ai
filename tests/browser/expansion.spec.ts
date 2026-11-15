@@ -121,6 +121,16 @@ test("a service page leads to the workspace and the contact page has an address 
   await expect(page).toHaveURL(/\/contact\/?$/);
   // One address, the words of its own mailto link (ADR-0058 amendment 6; the audit's decision D2 had three), and no
   // repository link (D3). The row of links that stood under the addresses is gone.
+  // The page is white under the header's bar; its heading is one short line, not a statement, and in a laptop's window the
+  // whole form is in view as the page opens (ADR-0058 amendment 7).
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Get in touch");
+  await expect(page.locator("main")).not.toContainText(/Tell us about/i);
+  await expect(page.locator("main")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.setViewportSize({ width: 1440, height: 789 });
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await page.evaluate(() => Math.round(document.querySelector(".contact-card")!.getBoundingClientRect().bottom))).toBeLessThanOrEqual(789);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  expect(await page.evaluate(() => Math.round(document.querySelector(".contact-submit")!.getBoundingClientRect().bottom))).toBeLessThanOrEqual(720);
   await expect(page.getByRole("link", { name: "chvalerio@ucsd.edu" })).toHaveAttribute("href", "mailto:chvalerio@ucsd.edu");
   await expect(page.locator("main a[href^='mailto:']")).toHaveCount(1);
   await expect(page.locator("main")).not.toContainText(/e1villa|saucedo|outlook\.com|Before you write|Workspace access/i);
@@ -153,6 +163,20 @@ test("a service page leads to the workspace and the contact page has an address 
   await expect(page.getByRole("link", { name: "Calculator", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Studio", exact: true })).toHaveCount(0);
   await expect(page.locator(".site-header .wordmark")).toHaveText("Anisotropy");
+});
+
+test("the inner pages are white under the header's black bar, and their footer is black (ADR-0077 amendment 69)", async ({ page }) => {
+  for (const address of ["/about", "/industries", "/services", "/services/finite-element-modeling", "/contact", "/no-such-page"]) {
+    await page.goto(address);
+    await expect(page.locator(".site-header"), address).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(page.locator(".site-footer"), address).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(page.locator("main"), address).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(page.locator("main h1"), address).toHaveCSS("color", "rgb(17, 17, 17)");
+    // The opening and every band: white, or the team band's light grey. No band is dark.
+    const grounds = await page.locator("main").evaluate((main) => [...main.querySelectorAll(".page-opening, .band")].map((part) => getComputedStyle(part).backgroundColor));
+    expect(grounds.length, address).toBeGreaterThan(0);
+    for (const ground of grounds) expect(["rgb(255, 255, 255)", "rgb(243, 243, 244)"], address).toContain(ground);
+  }
 });
 
 test("the mobile menu lists the five services under Services", async ({ page }) => {

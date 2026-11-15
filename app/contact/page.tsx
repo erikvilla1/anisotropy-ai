@@ -18,24 +18,21 @@ function seatOf(name: string): string {
   return seat.charAt(0).toLowerCase() + seat.slice(1);
 }
 
-/** The contact page (ADR-0058 amendments 5 and 6): on the page's black, under its opening, two columns. At the left, how to
- * reach us: one address (lib/contact-mail.ts), plain text inside a mailto link so it can be copied as well as clicked, over
- * the upper half of a slowly turning wireframe globe (components/contact/contact-globe.tsx). At the right, a card with a form
- * that writes the email for the visitor (components/contact/contact-form.tsx). The site is a static export, so nothing is
- * sent from the page: the visitor's own email app sends. */
+/** The contact page (ADR-0058 amendments 5 to 7): a white page under the header's bar, two columns that fit a laptop's
+ * window without scrolling. At the left, how to reach us: a small label, the page's heading, what to write about, one
+ * address (lib/contact-mail.ts), plain text inside a mailto link so it can be copied as well as clicked, over the upper half
+ * of a slowly turning wireframe globe (components/contact/contact-globe.tsx). At the right, a card with a form that writes
+ * the email for the visitor (components/contact/contact-form.tsx). The large statement that opened the page is gone
+ * (amendment 7): it pushed the form below the window. The site is a static export, so nothing is sent from the page: the
+ * visitor's own email app sends. */
 export default function Contact() {
   return (
     <main id="main" className="kit-page contact-page">
       <section className="page-opening contact-opening">
-        <p className="page-opening-label">CONTACT / WRITE TO US</p>
-        <h1 className="page-opening-title">
-          Tell us about{" "}
-          <br />
-          <em>your coupon.</em>
-        </h1>
         <div className="contact-columns">
           <div className="contact-reach">
-            <h2>Get in touch</h2>
+            <p className="contact-label">CONTACT</p>
+            <h1>Get in touch</h1>
             <p>
               A material you need to understand, a test you are planning, a result you want checked, or a question about
               what the platform does. ASTM D3039 unnotched tension is offered today.

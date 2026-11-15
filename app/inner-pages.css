@@ -1,12 +1,34 @@
 /* The inner pages (About, Industries, Services and its five pages, Contact) set as the home page is (ADR-0077 amendment 12).
- * Each opens on the dark page ground under the header, with the hero's type: a monospace label with a tick, the headline, and
+ * Each is a white page under the header's black bar (amendment 69; until then it opened on the dark page ground, and
+ * its bands were light and dark by turns). It opens with the hero's type: a monospace label with a tick, the headline, and
  * the introduction from the halfway line (column 7, where the header's links start). Every section after it is a band of the
- * section kit (`app/sections.css`), light first and then alternating. This file holds the parts those pages share and the
+ * section kit (`app/sections.css`), with a hairline between one band and the next. This file holds the parts those pages share and the
  * Industries page's own; `app/about/about.css` and `app/services/services.css` hold the rest. A page's stylesheet stays loaded
  * after a visit, so every name here is new (`kit-`, `page-opening`, `industry-`) and nothing restyles a class another page uses,
  * except the media slot, which only these pages use. Lines of running text stay under about 75 characters. */
 .kit-page {
   overflow: clip;
+  /* The page's ground and words: the light values of the site's variables, the ones a light band of the kit sets, for the
+   * whole of the page's content, so its opening and every band read them. The header and the footer are outside it and
+   * keep the dark values. */
+  --bg: #ffffff;
+  --panel: #f6f6f6;
+  --raised: #efefef;
+  --line: #e1e1e1;
+  --text: #111111;
+  --muted: #666666;
+  --accent: #111111;
+  background: var(--bg);
+  color: var(--text);
+}
+/* The filled button is the accent colour, near black here, so its words are white wherever it stands on the page (the
+ * kit says the same for a light band). */
+.kit-page .button.primary {
+  color: #ffffff;
+}
+.kit-page .button.primary:hover {
+  background: #333333;
+  border-color: #333333;
 }
 
 /* The page opening. 32 px margins as the header has, so the label and the headline start under the logo. */
@@ -40,7 +62,7 @@
   font-weight: 400;
   line-height: 1.04;
   letter-spacing: -0.03em;
-  color: #ffffff;
+  color: var(--text);
   text-wrap: balance;
 }
 .page-opening-title em {
