@@ -808,6 +808,18 @@
 .home-about .home-faces {
   padding: 0 32px;
 }
+/* Five to a row, the portraits take about three quarters of the band's width, in its middle (amendment 64): across the
+ * whole width they were larger than a face needs to be. The row is never narrower than 1180 px, so a title still fits
+ * on one line under its portrait. Three and two to a row they keep the whole width. */
+@media (min-width: 1280px) {
+  .home-about .home-faces {
+    width: max(76%, 1180px);
+    max-width: calc(100% - 64px);
+    margin-inline: auto;
+    padding: 0;
+    gap: 24px;
+  }
+}
 /* Narrower than 900 px the head is one column: the heading, then the words under it. */
 @media (max-width: 900px) {
   .home-blurb.home-about .band-head {

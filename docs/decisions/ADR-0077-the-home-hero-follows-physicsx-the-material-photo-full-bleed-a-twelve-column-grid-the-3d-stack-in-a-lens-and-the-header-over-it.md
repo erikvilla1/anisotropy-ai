@@ -790,3 +790,19 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `shell.spec.ts`, 18 with 1 skipped: the two links, each with its address, in a new tab, with its name. `tests/site-map.test.ts`: both are https addresses on their own hosts. UNVERIFIED: that the two addresses open the company's pages; neither was opened from here.
 
+## Amendment 63, 2026-11-14 (the footer loses its tagline, its release stage and the arrow beside Workspace)
+
+**Context.** The lead, with a capture of the footer: "get rid of composites. calculated. move linkedin and x up to that line. get rid of closed beta too. and get rid of arrow next to workspace". The tagline and "Closed beta" in the footer were the founder's choice of 2026-11-12 (amendment 16).
+
+**Decision.** The footer's left half is the logo and, on the line under it, LinkedIn and X (amendment 60). "Composites. Calculated." and "Closed beta" are no longer in the footer; the page's title keeps the tagline. The footer's Workspace link is a plain link like the others in its column; the header's Workspace button keeps its arrow. **For the founder:** this takes two of his amendment 16 choices out of the footer.
+
+**Evidence.** `shell.spec.ts`, 18 with 1 skipped: no tagline and no stage in the footer, two items in its bottom row, no drawing in its Workspace link, the two links within 28 px under the logo. UNVERIFIED: the footer was not captured again after this change.
+
+## Amendment 64, 2026-11-14 (the five portraits are smaller and stand in the band's middle)
+
+**Context.** The lead, with a capture at about 1900 px: "can you make our headshots a lil smaller, theyre huge rn and stretching from side to side."
+
+**Decision.** From 1280 px, where the portraits stand five to a row, the row takes 76 % of the band's width, never less than 1180 px, in the band's middle, with 24 px between the portraits. At 1900 px a portrait is about 268 px wide where it was 340; at 1280 px it is as it was, so each title still fits on one line. Three and two to a row, below 1280 px, they keep the whole width.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the row is in the band's middle, between 1180 px and 76 % of the width, and every title is one line. Captured at 1900 px and looked at; 1440 px was captured and not looked at. UNVERIFIED: whether this is small enough for the lead.
+

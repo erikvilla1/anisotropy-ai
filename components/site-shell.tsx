@@ -206,11 +206,12 @@ function backToTop(event: MouseEvent<HTMLAnchorElement>) {
   document.querySelector<HTMLElement>(".site-header .wordmark")?.focus({ preventScroll: true });
 }
 
-/** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and the tagline in the left half, and the site's
+/** The footer (ADR-0077 amendment 13), after PhysicsX's: the logo and, under it, the company's pages elsewhere in the left half, and the site's
  * navigation (`siteNav` in `lib/site-nav.ts`, Services with its five pages, also while the header hides its panel) as columns of links from the halfway line: the plain pages and the workspace in the first
- * column, then each item with children as a column of its own under its landing page. Under a rule, the copyright line, the
- * release stage and the way back to the top, on the same columns. Absent in the workspace, which is an app. The tagline and the
- * stage are the founder's choice of 2026-11-12 (ADR-0077 amendment 16). */
+ * column, then each item with children as a column of its own under its landing page. Under a rule, the copyright line and
+ * the way back to the top, on the same columns. Absent in the workspace, which is an app. The tagline and the release stage,
+ * the founder's choice of 2026-11-12 (ADR-0077 amendment 16), left the footer at the lead's word (amendment 63), as did the
+ * arrow beside Workspace. */
 export function SiteFooter() {
   const pathname = usePathname();
   if (isAppPath(pathname)) return null;
@@ -221,9 +222,9 @@ export function SiteFooter() {
       <div className="site-footer-top">
         <div className="site-footer-brand">
           <Wordmark />
-          <p>Composites. Calculated.</p>
-          {/* The company's pages elsewhere (lib/site-nav.ts, ADR-0077 amendment 60): each opens in a new tab, so each
-              carries the north-east arrow. None is drawn until its address is filled in. */}
+          {/* The company's pages elsewhere (lib/site-nav.ts, ADR-0077 amendment 60), on the line under the logo since
+              amendment 63 took the tagline away: each opens in a new tab, so each carries the north-east arrow. None is
+              drawn until its address is filled in. */}
           {elsewhere.length > 0 && (
             <ul className="site-footer-social" aria-label="Anisotropy elsewhere">
               {elsewhere.map((link) => (
@@ -248,9 +249,7 @@ export function SiteFooter() {
                 </li>
               ))}
             <li>
-              <Link href="/workspace">
-                Workspace <ArrowRight size={16} />
-              </Link>
+              <Link href="/workspace">Workspace</Link>
             </li>
           </ul>
           {siteNav
@@ -275,7 +274,6 @@ export function SiteFooter() {
       </div>
       <div className="site-footer-bottom">
         <span>© {new Date().getFullYear()} Anisotropy</span>
-        <span>Closed beta</span>
         <a href="#main" onClick={backToTop}>
           Back to top <ArrowUp size={16} />
         </a>

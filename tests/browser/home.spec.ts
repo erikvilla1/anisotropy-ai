@@ -261,12 +261,18 @@ test("after the demo the page is white, and Mission and Services are two short b
       frameLeft: Math.round(box(".home-face-frame").left), lastRight: Math.round([...band.querySelectorAll(".home-face-frame")].pop()!.getBoundingClientRect().right), wide: document.documentElement.clientWidth,
     };
   });
-  expect(Math.round(placed.label.left)).toBe(placed.frameLeft);
-  expect(Math.round(placed.heading.left)).toBe(placed.frameLeft);
+  expect(Math.round(placed.label.left)).toBe(32); // the page's margin
+  expect(Math.round(placed.heading.left)).toBe(32);
   expect(placed.label.bottom).toBeLessThan(placed.heading.top);
   expect(Math.abs(placed.text.left - placed.wide / 2)).toBeLessThanOrEqual(20); // from the halfway line
-  expect(Math.round(placed.text.right)).toBeLessThanOrEqual(placed.lastRight + 1);
+  expect(Math.round(placed.text.right)).toBeLessThanOrEqual(placed.wide - 32 + 1);
   expect(placed.text.bottom).toBeLessThanOrEqual(placed.head.bottom + 1);
+  // The five portraits stand in the band's middle and take about three quarters of its width, not all of it (amendment 64).
+  const row = placed.lastRight - placed.frameLeft;
+  expect(Math.abs((placed.frameLeft + placed.lastRight) / 2 - placed.wide / 2)).toBeLessThanOrEqual(2);
+  expect(row).toBeGreaterThanOrEqual(Math.min(1180, placed.wide - 64) - 1);
+  expect(row).toBeLessThanOrEqual(Math.max(0.76 * placed.wide, 1180) + 1);
+  expect(row).toBeLessThan(placed.wide - 64 + 1);
   // The changelog is a white band (amendment 59; light grey under amendments 36 and 46) with nothing published yet: its
   // head alone, saying so, and no list. It is not a news feed: no card, no "What is new".
   const changelog = page.locator("#changelog");

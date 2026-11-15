@@ -106,6 +106,8 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - The home page's closing band is a lighter grey (ADR-0077 amendments 56, 58 and 59).
 - The home page's team band is one condensed light grey block, heading and portraits together, and the changelog's band is white round its card (ADR-0077 amendment 59).
 - The footer links to the company's pages on LinkedIn and X, each in a new tab (ADR-0077 amendments 60 and 62).
+- The footer no longer carries the tagline or "Closed beta", its Workspace link has no arrow, and LinkedIn and X stand on the line under the logo (ADR-0077 amendment 63, which takes two of the founder's choices out of the footer).
+- The home page's five portraits are smaller and stand in the middle of their band instead of running from edge to edge (ADR-0077 amendment 64).
 - The home page's team band has a head across the page's width: "From university to industry." at the left, and at the right who the team is, with its degrees said of the team as a whole, and the Launchpad cohort at The Basement in words (ADR-0077 amendment 61).
 - The hero clip's pause button is no longer drawn on the clip: it shows only when the keyboard's focus is on it and while the clip is paused (ADR-0077 amendment 57, which undoes part of the audit's fix and awaits the founder's word).
 - While the demo's finished wing is held to turn it, its x, y and z axes show in thin white lines at its lower left, clear of the wing however it is turned, and the line that says it can be turned steps back; the beat's words stay (ADR-0098 amendments 2, 5, 8 and 9).

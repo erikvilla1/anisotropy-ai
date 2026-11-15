@@ -1134,11 +1134,6 @@ main[tabindex="-1"]:focus {
   align-content: start;
   justify-items: start;
 }
-.site-footer-brand p {
-  font-size: 16px;
-  line-height: 22px;
-  color: var(--muted);
-}
 .site-footer-nav {
   grid-column: 7 / 13;
   display: grid;
@@ -1165,13 +1160,13 @@ main[tabindex="-1"]:focus {
 .site-footer-child a {
   color: var(--muted);
 }
-/* The company's pages elsewhere, in a row under the tagline (ADR-0077 amendment 60): the footer's own type, each with
+/* The company's pages elsewhere, in a row under the logo (ADR-0077 amendments 60 and 63): the footer's own type, each with
  * the arrow of a link that opens a new tab. */
 .site-footer-social {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 28px;
-  margin: 4px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   font-size: 16px;

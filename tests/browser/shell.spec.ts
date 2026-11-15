@@ -200,8 +200,20 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
   await expect(services).toHaveAttribute("aria-current", "page");
   const footer = page.getByRole("navigation", { name: "Footer" });
   for (const name of five) await expect(footer.getByRole("link", { name, exact: true })).toBeVisible();
-  // The company's pages elsewhere stand under the footer's tagline, one link for each address that is filled in, each in a
-  // new tab (ADR-0077 amendment 60); with none filled in there is no list.
+  // The footer has no tagline and no release stage, and its Workspace link has no arrow (ADR-0077 amendment 63).
+  const foot = page.locator(".site-footer");
+  await expect(foot).not.toContainText(/Composites\. Calculated\.|Closed beta/i);
+  await expect(foot.locator(".site-footer-brand p")).toHaveCount(0);
+  await expect(footer.getByRole("link", { name: "Workspace", exact: true })).toBeVisible();
+  await expect(footer.getByRole("link", { name: "Workspace", exact: true }).locator("svg")).toHaveCount(0);
+  await expect(foot.locator(".site-footer-bottom > *")).toHaveCount(2);
+  // The company's pages elsewhere stand on the line under the footer's logo, one link for each address that is filled in,
+  // each in a new tab (ADR-0077 amendments 60 and 63); with none filled in there is no list.
+  if (shownSocialLinks().length) {
+    const gap = await foot.evaluate((element) => element.querySelector(".site-footer-social")!.getBoundingClientRect().top - element.querySelector(".site-footer-brand .wordmark")!.getBoundingClientRect().bottom);
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThanOrEqual(28);
+  }
   const elsewhere = page.locator(".site-footer-social a");
   await expect(elsewhere).toHaveCount(shownSocialLinks().length);
   await expect(page.locator(".site-footer-social")).toHaveCount(shownSocialLinks().length ? 1 : 0);
