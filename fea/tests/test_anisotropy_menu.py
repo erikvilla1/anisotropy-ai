@@ -1,7 +1,7 @@
 """The Anisotropy menu in Abaqus/CAE (ADR-0094, step 8): `tools/anisotropy_plugin.py` registers two entries and
 `tools/anisotropy_menu.py` is what they do. Abaqus's modules are replaced: the registration is recorded, the input boxes answer what a
-test sets, the session's model database is the stand-in of test_anisotropy_connector.py, and the build script runs against the
-recorder of test_write_cae_script.py. No Abaqus runs here: that Abaqus/CAE lists the entries and that its own input boxes and model
+test sets, the session's model database is the stand-in of test_anisotropy_connector.py, and a coupon is built, from its data and by
+the connector's own code, against the recorder of test_write_cae_script.py. No Abaqus runs here: that Abaqus/CAE lists the entries and that its own input boxes and model
 objects are these is checked on the founder's machine."""
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ import pytest
 
 from anisotropy_fea.bundle import open_bundle
 from anisotropy_fea.write_cae_script import write_cae_script
+from test_anisotropy_build import Constants, as_sent
+from test_anisotropy_build import site as site_code  # noqa: F401  the site's own reading of a build script
 from test_anisotropy_connector import TOOLS, cae_model, connector, job, load, reader_of  # noqa: F401
 from test_connector_send import TOKEN, site, token_file  # noqa: F401
 from test_connector_watch import put
@@ -39,14 +41,26 @@ def menu(monkeypatch, tmp_path):
     spec.loader.exec_module(module)
     yield module
     sys.modules.pop("anisotropy_connector_of_the_menu", None)
+    sys.modules.pop("anisotropy_build_of_the_menu", None)
     sys.path[:] = before
 
 
-def abaqus_of(monkeypatch, text: str = "", answers=None, mdb=None, session=None, taken=None) -> SimpleNamespace:
+@pytest.fixture
+def coupon_file(site_code, coupon, tmp_path):  # noqa: F811
+    """The public check's coupon as Send to Abaqus leaves it on a PC: its data, checked, in the coupon's folder under the home directory."""
+    folder = tmp_path / "home" / "Anisotropy" / "IM7-UNT-L1"
+    folder.mkdir(parents=True)
+    path = folder / "IM7-UNT-L1-coupon.json"
+    path.write_text(json.dumps(as_sent(site_code, coupon)), encoding="utf-8")
+    return path
+
+
+def abaqus_of(monkeypatch, answers=None, mdb=None, session=None, taken=None) -> SimpleNamespace:
     """Abaqus's modules for one click: the input boxes give `answers` (None is Cancel) and keep what they were asked; `mdb` and
     `session` are given, or recorders that write every call to `log`."""
     log, asked = [], []
-    abaqus, constants, cae, mesh, regions = (ModuleType(n) for n in ("abaqus", "abaqusConstants", "caeModules", "mesh", "regionToolset"))
+    abaqus, cae, mesh, regions = (ModuleType(n) for n in ("abaqus", "caeModules", "mesh", "regionToolset"))
+    constants = Constants("abaqusConstants")  # a symbolic constant stands for its own name
     abaqus.mdb = mdb if mdb is not None else Recorder(log, "mdb", taken or {})
     abaqus.session = session if session is not None else Recorder(log, "session", taken or {})
 
@@ -58,9 +72,6 @@ def abaqus_of(monkeypatch, text: str = "", answers=None, mdb=None, session=None,
         asked.append((tuple(fields), label, dialogTitle))
         return answers(dict(fields)) if callable(answers) else answers
     abaqus.getInput, abaqus.getInputs = get_input, get_inputs
-    for node in ast.walk(ast.parse(text)):  # a symbolic constant stands for its own name
-        if isinstance(node, ast.Name) and node.id.isupper():
-            setattr(constants, node.id, node.id)
     mesh.ElemType = Recorder(log, "mesh.ElemType", taken or {})
     regions.Region = Recorder(log, "regionToolset.Region", taken or {})
     for module in (abaqus, constants, cae, mesh, regions):
@@ -103,45 +114,47 @@ def test_the_plugin_file_registers_two_entries_under_one_menu_and_each_calls_a_f
 
 # --- Open from Anisotropy --------------------------------------------------------------------------------------------------------------
 
-def test_open_offers_the_newest_build_script_and_builds_it_in_the_session_saving_nothing(menu, coupon, monkeypatch, tmp_path, capsys):  # noqa: F811
-    text = write_cae_script(coupon)
-    downloads = tmp_path / "home" / "Downloads"
-    older, newer = downloads / "old-coupon-build.py", downloads / "IM7-UNT-L1-build.py"
-    for age, path in ((200, older), (100, newer)):
-        path.write_text(text, encoding="utf-8")
-        os.utime(path, (path.stat().st_atime - age, path.stat().st_mtime - age))
-    (downloads / "someone-elses-build.py").write_text("print('not ours')\n", encoding="utf-8")  # newest, and never offered
-    assert menu.build_scripts([downloads, tmp_path / "missing"]) == [newer, older]
+def test_open_offers_the_newest_coupon_file_and_builds_it_in_the_session_saving_nothing(menu, coupon_file, monkeypatch, tmp_path, capsys):
+    older = tmp_path / "home" / "Anisotropy" / "An-older-coupon" / "An-older-coupon-coupon.json"
+    older.parent.mkdir()
+    older.write_text(coupon_file.read_text(encoding="utf-8"), encoding="utf-8")
+    os.utime(older, (older.stat().st_atime - 200, older.stat().st_mtime - 200))
+    (tmp_path / "home" / "Downloads" / "IM7-UNT-L1-build.py").write_text("# a build script, downloaded\n", encoding="utf-8")  # a script is never offered
+    assert menu.kept_coupons() == [coupon_file, older] and menu.coupon_files([tmp_path / "missing"]) == []
     monkeypatch.chdir(tmp_path)
-    there = abaqus_of(monkeypatch, text, answers=lambda default: default)  # OK on what is offered
+    there = abaqus_of(monkeypatch, answers=lambda default: default)  # OK on what is offered
     menu.open_from_anisotropy()
-    assert there.asked == [(menu.OPEN_PROMPT, str(newer))]
+    assert there.asked == [(menu.OPEN_PROMPT, str(coupon_file))] and "coupon.json" in menu.OPEN_PROMPT
     assert [kwargs["name"] for _, kwargs in calls(there.log, "Model")] == ["IM7-UNT-L1"] and calls(there.log, "Job")
     assert not calls(there.log, "saveAs") and not calls(there.log, "writeInput") and not calls(there.log, "save")
     assert [kwargs for _, kwargs in calls(there.log, "setValues") if "displayedObject" in kwargs]  # the new model is put on the screen
-    assert "built: model IM7-UNT-L1" in capsys.readouterr().out
+    assert "built: model IM7-UNT-L1, 7 nodes and 7 S4 elements, job IM7-UNT-L1, units mm-MPa; nothing is saved until you save it" in capsys.readouterr().out
 
 
-def test_open_runs_only_a_script_anisotropy_wrote_and_says_every_other_ending(menu, coupon, monkeypatch, tmp_path, capsys):  # noqa: F811
-    text = write_cae_script(coupon)
-    ours = tmp_path / "IM7-UNT-L1-build.py"
-    ours.write_text(text, encoding="utf-8")
-    other = tmp_path / "other.py"
-    other.write_text("open('ran.txt', 'w').write('this must never run')\n", encoding="utf-8")
+def test_open_reads_a_coupon_file_as_data_runs_no_script_and_says_every_other_ending(menu, coupon, coupon_file, monkeypatch, tmp_path, capsys):  # noqa: F811
+    script = tmp_path / "IM7-UNT-L1-build.py"
+    script.write_text("open('ran.txt', 'w').write('this must never run')\n" + write_cae_script(coupon), encoding="utf-8")  # ours or not: no script is run here
+    renamed = tmp_path / "renamed-coupon.json"
+    renamed.write_text(script.read_text(encoding="utf-8"), encoding="utf-8")
+    other = tmp_path / "other-coupon.json"
+    other.write_text(json.dumps({**json.loads(coupon_file.read_text(encoding="utf-8")), "element": "C3D8", "script": "import os"}), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
-    there = abaqus_of(monkeypatch, text, answers=None)  # Cancel
+    there = abaqus_of(monkeypatch, answers=None)  # Cancel
     menu.open_from_anisotropy()
-    assert there.asked == [(menu.OPEN_PROMPT, str(ours))] and there.log == [] and capsys.readouterr().out == ""
+    assert there.asked[0][0] == menu.OPEN_PROMPT and there.log == [] and capsys.readouterr().out == ""
 
-    for answer, words in ((f'"{other}"', "other.py is not a build script Anisotropy wrote, so this entry does not run it"),
-                          (str(tmp_path / "missing-build.py"), "not opened: no file at"), ("  ", "not opened: name the build script")):
-        there = abaqus_of(monkeypatch, text, answers=answer)
+    for answer, words in ((f'"{script}"', "IM7-UNT-L1-build.py is a script, and this entry runs none. A build script from a run's page is run with File > Run Script"),
+                          (str(renamed), "renamed-coupon.json is not a coupon file this connector builds: it is not JSON"),
+                          (str(other), "other-coupon.json is not a coupon file this connector builds: it has a field this connector does not know, 'script'"),
+                          (str(tmp_path / "missing-coupon.json"), "not opened: missing-coupon.json is not a coupon file this connector builds: no file at"),
+                          ("  ", "not opened: name the coupon file")):
+        there = abaqus_of(monkeypatch, answers=answer)
         menu.open_from_anisotropy()
-        assert words in capsys.readouterr().out and there.log == [] and not (tmp_path / "ran.txt").exists()
+        assert words in capsys.readouterr().out and there.log == [] and not (tmp_path / "ran.txt").exists(), words
 
-    # the script's own refusal, a model of that name already in the session, is said in its words and nothing is built
-    there = abaqus_of(monkeypatch, text, answers=str(ours), taken={"mdb.models": ["IM7-UNT-L1"]})
+    # the build's own refusal, a model of that name already in the session, is said in its words and nothing is built
+    there = abaqus_of(monkeypatch, answers=str(coupon_file), taken={"mdb.models": ["IM7-UNT-L1"]})
     menu.open_from_anisotropy()
     assert "not built: a model named IM7-UNT-L1 is already in this session" in capsys.readouterr().out and not calls(there.log, "Model")
 
@@ -274,7 +287,7 @@ def test_a_model_the_build_script_made_names_its_coupon_and_units_and_one_drawn_
     abaqus_of(monkeypatch, mdb=mdb, session=session, answers=(str(odb), "m-Pa", "", ""))
     menu.send_to_anisotropy()
     said = capsys.readouterr().out
-    assert "note: the build script made this model in mm-MPa and you stated m-Pa" in said and "newest finished run" not in said
+    assert "note: this model was built from Anisotropy in mm-MPa and you stated m-Pa" in said and "newest finished run" not in said
     assert open_bundle(tmp_path / "IM7-UNT-L1-anisotropy.zip").manifest["units"] == "m-Pa"
 
     # a model drawn by hand, or one whose description was changed, names no coupon: the file goes without one and nothing is said of it
@@ -318,21 +331,9 @@ def watched(monkeypatch) -> list:
     return asked
 
 
-def test_a_script_saved_from_the_page_is_offered_whatever_joins_its_name_to_build_py(menu, coupon, tmp_path):  # noqa: F811
-    downloads = tmp_path / "home" / "Downloads"
-    for name in ("D3039_QI8_build.py", "IM7-UNT-L1-build.py"):  # as the page saves it, and as the tool names it
-        (downloads / name).write_text(write_cae_script(coupon), encoding="utf-8")
-    (downloads / "rebuild.py").write_text("print('not ours')\n", encoding="utf-8")
-    assert sorted(path.name for path in menu.build_scripts([downloads])) == ["D3039_QI8_build.py", "IM7-UNT-L1-build.py"]
-    assert "build.py" in menu.OPEN_PROMPT and "-build.py" not in menu.OPEN_PROMPT
-
-
-def test_the_start_script_builds_the_runs_coupon_and_asks_to_be_told_when_a_job_completes(menu, coupon, monkeypatch, tmp_path, capsys):  # noqa: F811
-    text = write_cae_script(coupon)
-    script = tmp_path / "IM7-UNT-L1-build.py"
-    script.write_text(text, encoding="utf-8")
-    (tmp_path / "anisotropy-start.json").write_text(json.dumps({"script": str(script), "run": RUN, "coupon": "IM7-UNT-L1", "connector": str(TOOLS)}), encoding="utf-8")
-    there = abaqus_of(monkeypatch, text)
+def test_the_start_script_builds_the_runs_coupon_from_its_data_and_asks_to_be_told_when_a_job_completes(menu, coupon_file, monkeypatch, tmp_path, capsys):
+    (tmp_path / "anisotropy-start.json").write_text(json.dumps({"coupon_file": str(coupon_file), "run": RUN, "coupon": "IM7-UNT-L1", "connector": str(TOOLS)}), encoding="utf-8")
+    there = abaqus_of(monkeypatch)
     asked = watched(monkeypatch)
     monkeypatch.chdir(tmp_path)
     load("anisotropy_start")  # as  abaqus cae script=anisotropy-start.py  runs it, in the coupon's folder
@@ -343,22 +344,26 @@ def test_the_start_script_builds_the_runs_coupon_and_asks_to_be_told_when_a_job_
     assert asked == [{"jobName": "ANY_JOB", "messageType": "JOB_COMPLETED", "callback": menu.job_completed, "userData": None}]
     said = capsys.readouterr().out
     assert "IM7-UNT-L1 is built from your run as the model IM7-UNT-L1, with the job IM7-UNT-L1" in said and "go back to your run by themselves" in said
-    menu.opened_from_the_site({"script": str(script), "run": RUN, "coupon": "IM7-UNT-L1"})  # a second coupon in the session asks Abaqus once
+    menu.opened_from_the_site({"coupon_file": str(coupon_file), "run": RUN, "coupon": "IM7-UNT-L1"})  # a second coupon in the session asks Abaqus once
     assert len(asked) == 1
 
-    not_ours = tmp_path / "other.py"
-    not_ours.write_text("raise SystemExit('ran')\n", encoding="utf-8")
-    for facts, why in (({"script": str(not_ours), "run": RUN}, "is not a build script Anisotropy wrote"), ({"run": RUN}, "not opened: no file at")):
-        menu.opened_from_the_site(facts)
-        assert why in capsys.readouterr().out
-
-
-def test_without_job_messages_the_coupon_is_built_and_the_menu_is_named_for_sending(menu, coupon, monkeypatch, tmp_path, capsys):  # noqa: F811
-    text = write_cae_script(coupon)
+    # nothing but a coupon's data is opened: a script is refused unread, whoever names it and whatever it says of itself
     script = tmp_path / "IM7-UNT-L1-build.py"
-    script.write_text(text, encoding="utf-8")
-    abaqus_of(monkeypatch, text)  # an Abaqus with no monitor manager
-    menu.opened_from_the_site({"script": str(script), "run": RUN})
+    script.write_text("# Built by anisotropy_fea 0.1.0 from IM7-UNT-L1\nraise SystemExit('ran')\n", encoding="utf-8")
+    disguised = tmp_path / "disguised-coupon.json"
+    disguised.write_text(script.read_text(encoding="utf-8"), encoding="utf-8")
+    for facts, why in (({"coupon_file": str(script), "run": RUN}, "is a script, and this entry runs none"),
+                       ({"script": str(script), "run": RUN}, "not opened: the start names no coupon file: click Send to Abaqus on the run's page again"),
+                       ({"coupon_file": str(disguised), "run": RUN}, "it is not JSON"), ({"run": RUN}, "the start names no coupon file"),
+                       ({"coupon_file": str(tmp_path / "gone-coupon.json"), "run": RUN}, "no file at")):
+        there = abaqus_of(monkeypatch)
+        menu.opened_from_the_site(facts)
+        assert why in capsys.readouterr().out and there.log == [], why
+
+
+def test_without_job_messages_the_coupon_is_built_and_the_menu_is_named_for_sending(menu, coupon_file, monkeypatch, tmp_path, capsys):
+    abaqus_of(monkeypatch)  # an Abaqus with no monitor manager
+    menu.opened_from_the_site({"coupon_file": str(coupon_file), "run": RUN})
     said = capsys.readouterr().out
     assert "is built from your run" in said and "does not say when a job completes" in said and "by themselves" not in said
     assert menu.WATCHING is False and menu.RUNS == {"IM7-UNT-L1": RUN}  # the menu's Send still puts it beside its run

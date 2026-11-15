@@ -2,8 +2,8 @@
 
 Abaqus/CAE imports every file named `*_plugin.py` that it finds, when it starts, under a folder called `abaqus_plugins` in the user's
 home directory, in the directory it is started in, or in its own installation, and in their subfolders. To install the menu, copy
-the connector's folder (this file with `anisotropy_menu.py`, `anisotropy_connector.py`, `bundle.py`, `abaqus_every_output.py` and
-`abaqus_extract_fields.py`) into `abaqus_plugins` in your home directory and start Abaqus/CAE again.
+the connector's folder (this file with `anisotropy_menu.py`, `anisotropy_build.py`, `anisotropy_connector.py`, `bundle.py`,
+`abaqus_every_output.py` and `abaqus_extract_fields.py`) into `abaqus_plugins` in your home directory and start Abaqus/CAE again.
 
 This file registers the two entries. Each is a kernel plug-in: a click makes Abaqus/CAE import `anisotropy_menu` in its kernel
 and call one function there, which asks its questions with Abaqus's own input box. No window of our own is drawn. The menu is under
@@ -27,10 +27,11 @@ try:
 except ImportError:  # a window made otherwise: the menu is registered all the same
     FXObject = object
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 ENTRIES = (
     ("Anisotropy|Open from Anisotropy...", "open_from_anisotropy()",
-     "Builds a coupon from the build script you downloaded from Anisotropy as a native model in this session. Nothing is saved until you save it."),
+     "Builds a coupon as a native model in this session from the coupon file that Send to Abaqus left on this PC. Nothing is saved "
+     "until you save it."),
     ("Anisotropy|Send to Anisotropy...", "send_to_anisotropy()",
      "Writes one file from a finished job, its results, its input file and the model as built, and sends it to Anisotropy when you give "
      "the address and your upload key. Your .cae and your ODB are not changed."),

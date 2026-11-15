@@ -9,9 +9,11 @@ one of two things and nothing else:
         directory and is never shown, printed or put on a command line.
 
     anisotropy://open?run=<the id of a finished run>
-        Send to Abaqus: the build script of that run, which must be a run of the connected account, is fetched with the key, written
-        to `Anisotropy/<coupon>/` in the home directory, and Abaqus/CAE is started there with the coupon built, as a model to edit.
-        When its job completes, the results go back to the run by themselves (`anisotropy_menu.py`).
+        Send to Abaqus: the coupon of that run, which must be a run of the connected account, is fetched with the key as data, the
+        numbers and names of the model and no code (amendment 4). It is checked here, field by field (`anisotropy_build.check`),
+        written to `Anisotropy/<coupon>/` in the home directory, and Abaqus/CAE is started there, where the connector's own code
+        builds the coupon from it as a model to edit. When its job completes, the results go back to the run by themselves
+        (`anisotropy_menu.py`).
 
 Any web page can open such a link, so a link is read as hostile text:
 
@@ -20,13 +22,16 @@ Any web page can open such a link, so a link is read as hostile text:
   script=anisotropy-start.py` in the coupon's folder, the same words every time;
 - the key goes only to the address this machine was connected to, which only a yes in the box sets or changes; an open link carries
   no address;
-- a redirect is an answer and is never followed, and a build script is run only when our writer wrote it (its first lines say so).
+- a redirect is an answer and is never followed;
+- what the site answers is read as data and never run: JSON of a stated shape, refused whole when one field is not what it must
+  be. No file of the connector runs text (`exec`, `eval`), from the site or from the disk.
 
 The standard library only, Python 3. Run as `python anisotropy_link.py <link>`; Abaqus's own Python is enough.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import os
@@ -41,7 +46,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-HELPER = "anisotropy-link 0.6.0"
+HELPER = "anisotropy-link 0.7.0"
 SCHEME = "anisotropy"
 MAX_LINK = 600
 CODE = re.compile(r"anisotropy_pair_[A-Za-z0-9_-]{43}")
@@ -50,14 +55,12 @@ LINK_TEXT = re.compile(r"[A-Za-z0-9:/?&=%._~-]+")  # every character a link of o
 SITE_TEXT = re.compile(r"https?://[A-Za-z0-9:/._-]{1,200}")  # an address as a link may state it: no name or password, no ? and no #
 HOST = re.compile(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?")
 SITE_PATH = re.compile(r"(/[A-Za-z0-9._-]+)*/?")
-COUPON = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}")
 TOKEN_PREFIX = "anisotropy_upload_"
 PAIR_ROUTE = "/v1/connector/pair"
 RUNS_ROUTE = "/v1/connector/runs"
 THIS_MACHINE = ("localhost", "127.0.0.1")
-MARK = "# Built by anisotropy_fea "  # in the first lines of every build script (`write_cae_script`)
-HEAD_LINES = 4
-MAX_SCRIPT_BYTES = 2 * 1024 * 1024
+MAX_ANSWER_BYTES = 2 * 1024 * 1024  # of any answer of the site's; a coupon is a few thousand
+BUILDER = "anisotropy_build.py"  # beside this file: the check of a coupon's data, and the code that builds it in Abaqus/CAE
 TIMEOUT_S = 30.0
 KEY_FILE = "upload-key.txt"
 MACHINE_FILE = "machine.json"  # the address this machine is connected to, whose account, and where Abaqus's command is
@@ -191,13 +194,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def call(request, timeout: float):
-    """(status, body, headers) of the request as sent, without following a redirect; at most MAX_SCRIPT_BYTES of the body and one more."""
+    """(status, body, headers) of the request as sent, without following a redirect; at most MAX_ANSWER_BYTES of the body and one more."""
     opener = urllib.request.build_opener(NoRedirect)
     try:
         with opener.open(request, timeout=timeout) as response:
-            return response.status, response.read(MAX_SCRIPT_BYTES + 1), dict(response.headers.items())
+            return response.status, response.read(MAX_ANSWER_BYTES + 1), dict(response.headers.items())
     except urllib.error.HTTPError as answer:
-        return answer.code, answer.read(MAX_SCRIPT_BYTES + 1), dict(answer.headers.items())
+        return answer.code, answer.read(MAX_ANSWER_BYTES + 1), dict(answer.headers.items())
 
 
 def detail_of(body: bytes) -> str:
@@ -226,9 +229,9 @@ def pair_request(site: str, code: str, look: bool, name: str = ""):
         "Content-Type": "application/json", "Accept": "application/json", "User-Agent": HELPER})
 
 
-def script_request(site: str, run: str, key: str):
-    return urllib.request.Request(f"{site}{RUNS_ROUTE}/{run}/build-script", method="GET", headers={
-        "Authorization": f"Bearer {key}", "Accept": "text/x-python", "User-Agent": HELPER})
+def coupon_request(site: str, run: str, key: str):
+    return urllib.request.Request(f"{site}{RUNS_ROUTE}/{run}/coupon", method="GET", headers={
+        "Authorization": f"Bearer {key}", "Accept": "application/json", "User-Agent": HELPER})
 
 
 # ------------------------------------------------------------------------------------------------------- Connect this PC
@@ -295,9 +298,16 @@ def pair(link: dict, confirm, caller=call, folder: Path | None = None, name: str
 
 # ------------------------------------------------------------------------------------------------------- Send to Abaqus
 
-def is_ours(text: str) -> bool:
-    """Whether the script's first lines say that Anisotropy's build-script writer wrote it."""
-    return any(line.startswith(MARK) for line in text.splitlines()[:HEAD_LINES])
+def builder():
+    """The connector's own `anisotropy_build.py`, loaded from beside this file by its path: this helper runs with a Python that
+    looks nowhere for modules but in its own library."""
+    path = here() / BUILDER
+    if not path.is_file():
+        raise NotDone(f"{BUILDER} is not beside the helper: keep the connector's files together in one folder, or run the setup again")
+    spec = importlib.util.spec_from_file_location("anisotropy_build_of_the_helper", str(path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def abaqus_command(now: dict, which=shutil.which) -> str:
@@ -308,7 +318,7 @@ def abaqus_command(now: dict, which=shutil.which) -> str:
     found = which("abaqus")
     if not found:
         raise NotDone("Abaqus's command was not found on this PC. Run the setup again from the connector's folder (Set up Anisotropy), "
-                      "or open the build script by hand: Plug-ins > Anisotropy > Open from Anisotropy")
+                      "or download the build script from the run's page and run it in Abaqus/CAE with File > Run Script")
     return found
 
 
@@ -326,7 +336,8 @@ def start(command: str, folder: Path):
 
 
 def open_run(link: dict, caller=call, folder: Path | None = None, work: Path | None = None, starter=start, which=shutil.which) -> dict:
-    """Fetch the run's build script with this machine's key and start Abaqus/CAE with the coupon built. Returns {"coupon", "folder"}."""
+    """Fetch the run's coupon as data with this machine's key, check it, and start Abaqus/CAE where the connector's own code builds
+    it. Returns {"coupon", "folder"}. Nothing the site answers is run."""
     folder = folder or state_folder()
     now = machine(folder)
     key = key_of(folder)
@@ -335,33 +346,29 @@ def open_run(link: dict, caller=call, folder: Path | None = None, work: Path | N
     except NotDone:
         raise NotDone("this PC is not connected to your account yet: click Connect this PC on the run's page, then Send to Abaqus again") from None
     command = abaqus_command(now, which)
-    status, body, headers = asked(caller, script_request(site, link["run"], key))
+    source = here() / START_SCRIPT
+    if not source.is_file():
+        raise NotDone(f"{START_SCRIPT} is not beside the helper: keep the connector's files together in one folder, or run the setup again")
+    build = builder()
+    status, body, _ = asked(caller, coupon_request(site, link["run"], key))
     if status == 401:
         raise NotDone("the site no longer takes this PC's key (it was cancelled, or the site does not take keys from a PC yet). Click "
                       "Connect this PC on the run's page, then Send to Abaqus again")
     if status != 200:
         said = detail_of(body)
-        raise NotDone(f"the site did not give the run's build script ({status})" + (f": {said}" if said else ""))
-    if len(body) > MAX_SCRIPT_BYTES:
-        raise NotDone("the site's answer is larger than any build script, so it was not kept")
+        raise NotDone(f"the site did not give the run's coupon ({status})" + (f": {said}" if said else ""))
     try:
-        text = body.decode("utf-8")
-    except UnicodeDecodeError:
-        text = ""
-    if not is_ours(text):
-        raise NotDone("the site's answer is not a build script Anisotropy wrote, so it was not run")
-    coupon = headers.get("x-anisotropy-coupon", "")
-    coupon = coupon if COUPON.fullmatch(coupon) is not None else "coupon"
+        data = build.parse(body)
+    except build.NotACoupon as exc:
+        why = "; ".join(exc.problems[:3])[:400]
+        raise NotDone(f"the site's answer is not a coupon this connector builds, so nothing was opened: {why}") from None
+    coupon = data["coupon"]
     target = (work or work_folder()) / coupon
     target.mkdir(parents=True, exist_ok=True)
-    script = target / f"{coupon}-build.py"
-    with io.open(str(script), "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
-    source = here() / START_SCRIPT
-    if not source.is_file():
-        raise NotDone(f"{START_SCRIPT} is not beside the helper: keep the connector's files together in one folder, or run the setup again")
+    kept = target / f"{coupon}-coupon.json"
+    write_json(kept, data)  # the data as checked, so what Abaqus/CAE is given holds no field this connector does not know
     shutil.copyfile(str(source), str(target / START_NAME))
-    write_json(target / START_FACTS, {"script": str(script), "run": link["run"], "coupon": coupon, "connector": str(here())})
+    write_json(target / START_FACTS, {"coupon_file": str(kept), "run": link["run"], "coupon": coupon, "connector": str(here())})
     starter(command, target)
     return {"coupon": coupon, "folder": target}
 

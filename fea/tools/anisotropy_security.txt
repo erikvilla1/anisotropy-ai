@@ -1,4 +1,4 @@
-Anisotropy connector 0.6.0 for Abaqus/CAE on Windows: security note
+Anisotropy connector 0.7.0 for Abaqus/CAE on Windows: security note
 ====================================================================
 
 For the person who decides whether this may be installed. Checked against the connector's code on 2026-11-14.
@@ -7,15 +7,18 @@ fea/tools/anisotropy_security.txt there).
 
 The connector lets an engineer open a coupon from Anisotropy in their own Abaqus and send the solved job back
 to be compared. It runs under the user's own Abaqus and licence, as that user. It sends data to one site, the one
-the user confirmed in a box, and only for the job the user chose.
+the user confirmed in a box, and only for the job the user chose. What it receives from the site is data, never
+code.
 
 
 1. What it is
 
-- Plain-text files: nine Python files, one batch file that starts the setup, a README, this note and a list of
+- Plain-text files: ten Python files, one batch file that starts the setup, a README, this note and a list of
   checksums (SHA256SUMS.txt). No installer, no compiled program, no driver.
 - The Python files use Python's standard library and Abaqus's own modules. Nothing is downloaded or installed
   from a package index.
+- No file of the connector runs text as code: there is no exec and no eval in it. Beside Python's standard
+  library and Abaqus's own modules, it loads Python only from its own folder, the files the setup checked.
 - No administrator right is needed at any point.
 
 
@@ -42,7 +45,7 @@ Everything is under the current Windows user. Nothing is written under HKEY_LOCA
 Abaqus installation.
 
 - %USERPROFILE%\abaqus_plugins\anisotropy
-      Nine Python files. Abaqus/CAE loads plug-ins from this folder and shows the menu Plug-ins > Anisotropy.
+      Ten Python files. Abaqus/CAE loads plug-ins from this folder and shows the menu Plug-ins > Anisotropy.
 - HKEY_CURRENT_USER\Software\Classes\anisotropy
       One link type, anisotropy://. A click on the site starts the helper anisotropy_link.py with the link as
       its one argument. The registered command names a Python program beside Abaqus directly, never a batch
@@ -52,7 +55,8 @@ Abaqus installation.
 - %USERPROFILE%\.anisotropy\upload-key.txt
       The upload key, after Connect this PC.
 - %USERPROFILE%\Anisotropy\<coupon>
-      The build script of a coupon and the user's own Abaqus files for it.
+      The coupon of a run as a data file (JSON), a copy of the connector's start file, and the user's own Abaqus
+      files for it.
 
 No service, scheduled task, startup entry or listening port is created. Nothing keeps running after Abaqus
 closes.
@@ -79,8 +83,9 @@ checked the standard way. A redirect is never followed, so the key cannot be pas
       A one-time code from the user's signed-in page, and the PC's host name. The first call only asks whose
       account the code is for. The second is made after the user says yes in a box that names the site and the
       account.
-- Send to Abaqus:  GET /v1/connector/runs/<run>/build-script
-      The run's id and the key. The answer is the build script of the user's own finished run.
+- Send to Abaqus:  GET /v1/connector/runs/<run>/coupon
+      The run's id and the key. The answer is the coupon of the user's own finished run as data (JSON): its
+      dimensions, material, layup, grips, load and mesh counts. It holds no code.
 - The job of a model opened from the site completes, or the user clicks Send to Anisotropy:
   POST /v1/connector/uploads
       One zip and the key. At most 50 MB.
@@ -100,8 +105,8 @@ the command line without --send, the connector writes the zip and sends nothing.
 - On the PC it is one file in the user's home directory. The connector never shows it, prints it or puts it on a
   command line.
 - Its owner can cancel it on the site at any time. A person may hold ten keys that are not cancelled.
-- The key can do two things: fetch the build script of its owner's own finished runs, and send an upload to its
-  owner's account. It cannot sign in or read other data.
+- The key can do two things: fetch the coupon of its owner's own finished runs, and send an upload to its owner's
+  account. It cannot sign in or read other data.
 
 
 7. How a link from a web page is handled
@@ -118,7 +123,23 @@ Any web page can try to open an anisotropy:// link, so the helper reads a link a
   account that is not theirs would send later results there, which is why the box names it.
 
 
-8. What the site keeps
+8. What runs in the user's Abaqus
+
+Only the connector's own files: the ones in the zip, whose checksum is recorded (section 2).
+
+- What the site answers to Send to Abaqus is data. Before Abaqus is started the helper checks every field of it:
+  its type, its size and its range. A field it does not know is refused, and so is the whole answer when one field
+  is wrong. The connector's own code (anisotropy_build.py) then builds the model from the numbers and the names.
+  Nothing in the answer is executed, imported or placed on a command line.
+- So the worst a compromised site could send is a wrong coupon: a model with other dimensions or materials, of
+  at most 2,000,000 elements. It could not run a program on the PC.
+- The menu entry Open from Anisotropy reads such a data file from the disk in the same way. It runs no script.
+- The run's page also offers the coupon as a build script to download, for a user without the connector. That is
+  a Python file which the user runs by hand with Abaqus's own File > Run Script. The connector never fetches it
+  and never runs it.
+
+
+9. What the site keeps
 
 - The zip, in object storage (Cloudflare R2), and one database row (PostgreSQL at Neon) with the owner, the zip's
   SHA-256 and the comparison.
@@ -129,7 +150,7 @@ Any web page can try to open an anisotropy:// link, so the helper reads a link a
 - Remove on the run's page deletes the zip and then the row.
 
 
-9. How to remove it
+10. How to remove it
 
     abaqus python anisotropy_setup.py --remove
 
@@ -137,12 +158,11 @@ deletes the plug-in's files, the link type and the key on the PC. The user then 
 folder %USERPROFILE%\Anisotropy holds the user's own models and is left in place.
 
 
-10. Not in place yet
+11. Not in place yet
 
 - No Windows (Authenticode) signature. The files are plain text; the checks of section 2 stand in for it.
-- A build script from the site runs in the user's Abaqus. Send to Abaqus fetches Python that the site wrote
-  for the run and runs it. The helper checks that it carries our writer's mark, which guards against mistakes,
-  not against a compromised site.
+- Connectors before 0.7.0 fetched a build script from the site and ran it. The site still answers that request
+  for the PCs that are not yet set up again. A PC set up with this version never makes it.
 - The model and the results are stored in our cloud. There is no mode yet in which nothing leaves the PC, apart
   from running the connector without --send.
 - No terms of use, no data processing agreement, no SOC 2 and no ISO 27001.

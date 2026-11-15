@@ -431,7 +431,7 @@ def pack(args) -> int:
 
 CONNECTOR_FILES = {"anisotropy_connector.py": TOOLS, "abaqus_every_output.py": TOOLS, "abaqus_extract_fields.py": TOOLS,
                    "bundle.py": TOOLS.parent / "src" / "anisotropy_fea", "anisotropy_menu.py": TOOLS, "anisotropy_plugin.py": TOOLS,
-                   "anisotropy_link.py": TOOLS, "anisotropy_start.py": TOOLS, "anisotropy_setup.py": TOOLS}
+                   "anisotropy_link.py": TOOLS, "anisotropy_start.py": TOOLS, "anisotropy_setup.py": TOOLS, "anisotropy_build.py": TOOLS}
 CONNECTOR_DATE = (2026, 11, 14, 12, 0, 0)  # every file's time in the connector's zip: the zip format's first day showed in Windows as a day in 1899
 CONNECTOR_SETUP = ("Set up Anisotropy.bat", TOOLS / "anisotropy_setup.bat")  # what a user double-clicks; handed over with Windows's line endings
 CONNECTOR_SECURITY = ("SECURITY.txt", TOOLS / "anisotropy_security.txt")  # what it installs, reads and sends, for whoever decides whether it may be installed
@@ -487,11 +487,12 @@ closing the terminal: the record is written whole each time.
 A menu in Abaqus/CAE (Abaqus 2024 or later): copy this whole folder into a folder named abaqus_plugins in your home
 directory (create it if it is not there) and start Abaqus/CAE again. Under Plug-ins > Anisotropy you then have
 
-    Open from Anisotropy...   builds the coupon from the build script you downloaded from a run's page
+    Open from Anisotropy...   builds a coupon again from the coupon file that Send to Abaqus left on this PC
     Send to Anisotropy...     writes the file from a finished job, with the model open in the session, and sends it
 
-A model that Open from Anisotropy built knows which coupon it is, so a file sent from the menu is compared beside your
-newest finished run of that coupon with nothing more to type.
+A model built from Anisotropy knows which coupon it is, so a file sent from the menu is compared beside your newest
+finished run of that coupon with nothing more to type. A build script downloaded from a run's page is run with
+Abaqus's own File > Run Script: the connector itself runs no script, from the site or from a file.
 
 Each asks in a small box and answers in the message area under the viewport. Your .cae and your ODB are not changed.
 """

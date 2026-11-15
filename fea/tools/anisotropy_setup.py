@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 FILES = ("anisotropy_connector.py", "bundle.py", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_menu.py", "anisotropy_plugin.py",
-         "anisotropy_link.py", "anisotropy_start.py", "anisotropy_setup.py")
+         "anisotropy_link.py", "anisotropy_start.py", "anisotropy_setup.py", "anisotropy_build.py")
 PLUGINS = "abaqus_plugins"
 FOLDER = "anisotropy"
 SCHEME = "anisotropy"

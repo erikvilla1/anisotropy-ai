@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from anisotropy_api import access, main, uploads
+from anisotropy_api import abaqus_coupon, access, main, uploads
 from anisotropy_api.coupon_jobs import FEA, CouponJobs, Job
 from anisotropy_api.main import app, job_recorder
 from anisotropy_api.records import fetch_job, fetch_upload, insert_job, update_job
@@ -288,8 +288,8 @@ def test_the_connector_is_handed_out_as_one_zip_the_same_each_time_and_only_as_r
     assert hashlib.sha256(answer.content).hexdigest() == offered["connector_sha256"]  # what the card shows is what was handed out
     with zipfile.ZipFile(io.BytesIO(answer.content)) as archive:
         assert sorted(archive.namelist()) == [
-            "README.txt", "SECURITY.txt", "SHA256SUMS.txt", "Set up Anisotropy.bat", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py",
-            "anisotropy_link.py", "anisotropy_menu.py", "anisotropy_plugin.py", "anisotropy_setup.py", "anisotropy_start.py", "bundle.py"]  # at the zip's top
+            "README.txt", "SECURITY.txt", "SHA256SUMS.txt", "Set up Anisotropy.bat", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_build.py",
+            "anisotropy_connector.py", "anisotropy_link.py", "anisotropy_menu.py", "anisotropy_plugin.py", "anisotropy_setup.py", "anisotropy_start.py", "bundle.py"]  # at the zip's top
         assert archive.read("anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes()
         note = client.get(CONNECTOR_ZIP + "/security-note")  # the same words before anything is downloaded
         assert note.status_code == 200 and note.headers["content-type"].startswith("text/plain") and note.content == archive.read("SECURITY.txt")
@@ -584,17 +584,25 @@ BUILD_SCRIPT = "# Built by anisotropy_fea for the test: the script that builds t
 NOBODY = {"X-Anisotropy-Actor": ""}  # as a machine asks: no actor header and no token of Access
 
 
-def with_a_build_script(registry: CouponJobs, engine, job_id: uuid.UUID, tmp_path: Path) -> None:
+def load_tool(name: str):
+    """One of the connector's files, loaded by its path as the user's machine has it: the standard library only."""
+    spec = importlib.util.spec_from_file_location(f"{name}_under_test", FEA / "tools" / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def with_a_build_script(registry: CouponJobs, engine, job_id: uuid.UUID, tmp_path: Path, text: str = BUILD_SCRIPT) -> None:
     """Give a finished job the build script the tool writes for an unnotched tension coupon: on the disk for a job of this process,
-    in the store for one that another container ran."""
+    in the store for one that another container ran. `text` is a stand-in, or the script our writer wrote (`made / "build.py"`)."""
     job = registry.jobs.get(job_id)
     if job is not None:
         path = job.folder / f"{COUPON}_build.py"
-        path.write_text(BUILD_SCRIPT, encoding="utf-8")
+        path.write_text(text, encoding="utf-8")
         job.outcome["outputs"]["abaqus_build"] = str(path)
         return
     source = tmp_path / f"{job_id}_build.py"
-    source.write_text(BUILD_SCRIPT, encoding="utf-8")
+    source.write_text(text, encoding="utf-8")
     key = f"coupons/{COUPON}/attempt-01/{COUPON}_build.py"
     registry.store.put(key, source, "text/x-python")
     row = fetch_job(engine, job_id)
@@ -728,9 +736,70 @@ def test_behind_access_the_build_script_passes_on_the_owners_token_only_when_the
         assert answer.status_code == 401 and "behind Cloudflare Access" in answer.json()["detail"]  # a token opens this one file of a run, by GET
 
 
-def test_the_connectors_routes_are_three_and_no_path_beside_them():
+def test_a_connected_machine_reads_its_owners_coupon_as_data_read_from_the_build_script_and_never_run(local, made, tmp_path):
+    """Amendment 4: what Send to Abaqus fetches is the coupon as numbers and names. The site reads them from the head of the run's
+    stored build script; the connector builds from them with code of its own (`fea/tests/test_anisotropy_build.py`)."""
+    client, registry, _kept, engine = local
+    secret = client.post(PAIR, json={"code": client.post(PAIRING).json()["code"]}, headers=NOBODY).json()["token"]
+    bearer = {"Authorization": f"Bearer {secret}", **NOBODY}
+    real = (made / "build.py").read_text(encoding="utf-8")
+    mine, plain, old = (run_on_this_disk(registry, engine, made) for _ in range(3))
+    theirs, running = run_on_this_disk(registry, engine, made, actor="test"), run_on_this_disk(registry, engine, made, state="running")
+    for job_id in (mine, theirs, running):
+        with_a_build_script(registry, engine, job_id, tmp_path, real)
+    with_a_build_script(registry, engine, old, tmp_path)  # a script that states no coupon
+    answer = client.get(f"{RUNS}/{mine}/coupon", headers=bearer)
+    assert answer.status_code == 200 and answer.headers["content-type"] == "application/json" and answer.headers["cache-control"] == "no-store"
+    data = answer.json()
+    assert data["format"] == "anisotropy-coupon/1" and data["coupon"] == COUPON and (data["model"], data["job"], data["units"]) == ("IM7-UNT-L1", "IM7-UNT-L1", "mm-MPa")
+    assert (data["width"], data["length"], data["columns"], data["element"]) == (25.0, 250.0, 12, "S4") and len(data["plies"]) == 4 and data["symmetric"] is True
+    assert set(data) == {"format", "coupon", *abaqus_coupon.FIELDS.values()} and "def " not in answer.text and "import" not in answer.text
+    assert data == abaqus_coupon.coupon_data(real, COUPON)
+    builder = load_tool("anisotropy_build")  # the connector's own check takes the answer as it is
+    assert builder.parse(answer.content)["sets"][0] == ("Tab-Bottom", "faces", ((12.5, 28.0),))
+    for job_id in (theirs, uuid.uuid4()):  # another's run and no run at all, in the same words
+        missing = client.get(f"{RUNS}/{job_id}/coupon", headers=bearer)
+        assert missing.status_code == 404 and missing.json()["detail"] == f"No run {job_id} of yours"
+    early = client.get(f"{RUNS}/{running}/coupon", headers=bearer)
+    assert early.status_code == 409 and "once it is done" in early.json()["detail"]
+    none = client.get(f"{RUNS}/{plain}/coupon", headers=bearer)
+    assert none.status_code == 404 and "only an unnotched tension run has one" in none.json()["detail"]
+    stale = client.get(f"{RUNS}/{old}/coupon", headers=bearer)
+    assert stale.status_code == 409 and "do not state its coupon for Abaqus. Run the analysis again" in stale.json()["detail"]
+    for headers in (NOBODY, {"Authorization": "Bearer anisotropy_upload_" + "x" * 43}, {"Authorization": secret}):
+        refused = client.get(f"{RUNS}/{mine}/coupon", headers=headers)
+        assert refused.status_code == 401 and refused.headers["www-authenticate"] == "Bearer"
+    assert client.get(f"{RUNS}/not-a-run/coupon", headers=bearer).status_code == 422
+    # a coupon whose name on the site is not a plain name still names a folder the connector takes
+    registry.jobs[mine].outcome["coupon"] = "-été/..\\x"
+    assert builder.parse(client.get(f"{RUNS}/{mine}/coupon", headers=bearer).content)["coupon"] == "coupon"
+
+
+def test_behind_access_the_coupon_passes_on_the_owners_token_only_when_the_settings_say_so(hosted, made, monkeypatch, tmp_path):
+    client, registry, _store, engine = hosted
+    mine, theirs = run_in_the_bucket(registry, engine, made), run_in_the_bucket(registry, engine, made, email=OTHER)
+    for job_id in (mine, theirs):
+        with_a_build_script(registry, engine, job_id, tmp_path, (made / "build.py").read_text(encoding="utf-8"))
+    secret = client.post(TOKENS, json={"name": "workstation"}, headers=signed()).json()["token"]
+    bearer = {"Authorization": f"Bearer {secret}", **NOBODY}
+    closed = client.get(f"{RUNS}/{mine}/coupon", headers=bearer)
+    assert closed.status_code == 401 and "behind Cloudflare Access" in closed.json()["detail"]
+    monkeypatch.setattr(app.state, "connector_uploads", True, raising=False)
+    answer = client.get(f"{RUNS}/{mine}/coupon", headers=bearer)
+    assert answer.status_code == 200 and answer.json()["format"] == "anisotropy-coupon/1" and answer.json()["coupon"] == COUPON
+    assert client.get(f"{RUNS}/{theirs}/coupon", headers=bearer).status_code == 404
+    for answer in (client.get(f"{RUNS}/{mine}/coupon/", headers=bearer), client.post(f"{RUNS}/{mine}/coupon", headers=bearer),
+                   client.get(f"{RUNS}/{mine}/coupons", headers=bearer), client.delete(f"{RUNS}/{mine}/coupon", headers=bearer)):
+        assert answer.status_code == 401 and "behind Cloudflare Access" in answer.json()["detail"]
+
+
+def test_the_connectors_routes_are_four_and_no_path_beside_them():
     run = "0123abcd-0123-4abc-8def-0123456789ab"
     assert access.connector_route("POST", CONNECTOR) and access.connector_route("POST", PAIR) and access.connector_route("GET", f"{RUNS}/{run}/build-script")
+    assert access.connector_route("GET", f"{RUNS}/{run}/coupon")
+    for method, path in (("POST", f"{RUNS}/{run}/coupon"), ("GET", f"{RUNS}/{run}/coupon/x"), ("GET", f"{RUNS}/x/coupon"), ("GET", f"{RUNS}/{run}/coupon\n"),
+                         ("HEAD", f"{RUNS}/{run}/coupon"), ("GET", f"{RUNS}/{run}/couponbuild-script")):
+        assert not access.connector_route(method, path), (method, path)
     for method, path in (("GET", CONNECTOR), ("GET", PAIR), ("POST", f"{RUNS}/{run}/build-script"), ("GET", f"{RUNS}/{run}"), ("GET", f"{RUNS}/{run}/build-script/x"),
                          ("GET", f"{RUNS}/{run}/../{run}/build-script"), ("GET", f"{RUNS}/x/build-script"), ("POST", PAIR + "/"), ("POST", "/v1/connector"),
                          ("POST", PAIRING), ("PUT", PAIR), ("DELETE", CONNECTOR), ("GET", f"{RUNS}/{run}/build-script\n"), ("HEAD", f"{RUNS}/{run}/build-script")):

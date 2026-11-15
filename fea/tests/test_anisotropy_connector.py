@@ -345,7 +345,8 @@ def test_under_abaqus_cae_nothing_ends_unsaid_because_its_exit_code_and_its_wind
 # --- what is handed over -----------------------------------------------------------------------------------------------------------
 
 def test_the_connectors_files_import_nothing_beyond_the_standard_library_and_abaqus(connector):
-    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "abaqusGui", "caeModules", "odbAccess", "jobMessage", "abaqus_extract_fields", "anisotropy_menu"}
+    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "abaqusGui", "caeModules", "odbAccess", "jobMessage", "mesh", "regionToolset",
+                                              "abaqus_extract_fields", "anisotropy_menu"}
     folders = {"bundle.py": TOOLS.parent / "src" / "anisotropy_fea"}
     for name in connector.FILES:
         tree = ast.parse((folders.get(name, TOOLS) / name).read_text(encoding="utf-8"))
