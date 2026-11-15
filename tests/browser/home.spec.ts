@@ -199,27 +199,76 @@ test("after the demo the page is white, and Mission and Services are two short b
   for (const id of ["mission", "platform"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
   // The team band is not on this page: since amendment 73 it is on About alone (tests/browser/team.spec.ts).
   await expect(page.locator("#working, #team, .team-band, .team-face")).toHaveCount(0);
+  // Where it stood, between Services and the changelog, is the library's band (amendment 77): light grey from edge to
+  // edge, its head across the page, the label and the heading at the left and the words with the way to the library from
+  // the halfway line, and under it how much the library holds, three figures counted from the library's own lists.
+  const library = page.locator("#resources");
+  expect(await page.locator("main > section").evaluateAll((sections) => sections.map((section) => section.id).filter(Boolean))).toEqual(["mission", "platform", "resources", "changelog"]); // after the opening, which holds the hero and the demo
+  await expect(library).toHaveCSS("background-color", "rgb(243, 243, 244)");
+  await expect(library.locator(".band-label")).toHaveText("Resources");
+  await expect(library.getByRole("heading", { level: 2 })).toHaveText("Every value, with its source.");
+  await expect(library.getByRole("link")).toHaveCount(1);
+  await expect(library.getByRole("link", { name: "Open the library" })).toHaveAttribute("href", /\/library\/?$/);
+  await expect(library.locator("dt")).toHaveText(["Materials", "Equations", "References"]);
+  const counts = (await library.locator("dd").allTextContents()).map(Number);
+  expect(counts.every((count) => Number.isInteger(count) && count > 0)).toBe(true);
+  const placedLibrary = await library.evaluate((band) => {
+    const box = (selector: string) => band.querySelector(selector)!.getBoundingClientRect();
+    const cells = [...band.querySelectorAll(".home-library-counts > div")].map((cell) => cell.getBoundingClientRect());
+    return {
+      edges: [band.getBoundingClientRect().left, document.documentElement.clientWidth - band.getBoundingClientRect().right],
+      title: Math.round(box(".home-library-title").left), text: Math.round(box(".home-library-text").left - window.innerWidth / 2),
+      first: Math.round(cells[0].left), last: Math.round(document.documentElement.clientWidth - cells[cells.length - 1].right), row: new Set(cells.map((cell) => Math.round(cell.top))).size,
+      under: cells[0].top > box(".home-library-head").bottom,
+    };
+  });
+  expect(placedLibrary).toMatchObject({ edges: [0, 0], title: 32, first: 32, last: 32, row: 1, under: true });
+  expect(Math.abs(placedLibrary.text)).toBeLessThanOrEqual(20);
+  // The figures are the library's own: its page says the same number of materials.
+  const libraryPage = await page.context().newPage();
+  await libraryPage.goto("/library");
+  await expect(libraryPage.getByText(`${counts[0]} materials`, { exact: true })).toBeVisible();
+  await libraryPage.close();
   // The changelog is a white band (amendment 59; light grey under amendments 36 and 46) with nothing published yet: its
   // head alone, saying so, and no list. It is not a news feed: no card, no "What is new".
   const changelog = page.locator("#changelog");
   await expect(changelog).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  // Its words stand in white on a card whose ground is the demo's colours blurred into one another, rising into a dark
-  // blue (amendment 49; amendment 72 took back amendment 68's near-white top).
+  // Its words stand in white on a card that is the pictures' lens at the card's size (amendment 77; until then the demo's
+  // colours blurred into one another over a dark blue, under a wider grid): the material photograph, a little lighter, and
+  // over it the same photograph drawn through the lens's own filter and laid on as colour alone, both pictures only.
   const card = changelog.locator(".home-feed-card");
-  const ground = await card.evaluate((element) => getComputedStyle(element).backgroundImage);
-  expect(ground).toMatch(/radial-gradient.*radial-gradient.*linear-gradient\(168deg, rgb\(6, 11, 58\) 0%/);
   await expect(changelog.getByRole("heading", { level: 2 })).toHaveCSS("color", "rgb(255, 255, 255)");
   const inset = await card.evaluate((element) => { const box = element.getBoundingClientRect(); return [box.left, document.documentElement.clientWidth - box.right]; });
   expect(inset).toEqual([32, 32]);
-  // Over the colours lies a thin grid (amendment 54): a layer of its own under the card's words, two sets of hairlines
-  // 36 px apart, masked so it is whole at the card's foot and gone half way up, and it takes no press.
-  const grid = await card.evaluate((element) => {
-    const layer = getComputedStyle(element, "::before");
-    return { content: layer.content, position: layer.position, under: layer.zIndex, press: layer.pointerEvents, lines: layer.backgroundImage, apart: layer.backgroundSize, mask: layer.maskImage || layer.webkitMaskImage, own: getComputedStyle(element).isolation };
+  const [cardViews, lensViews] = await page.evaluate(() => {
+    const read = (selector: string) => [...document.querySelectorAll(selector)].map((view) => {
+      const style = getComputedStyle(view);
+      return { photo: /carbon-weave\.jpg/.test(style.backgroundImage), filter: style.filter, blend: style.mixBlendMode };
+    });
+    return [read("#changelog .home-feed-view"), read("#mission .home-split-lens-view")];
   });
-  expect(grid).toMatchObject({ content: '""', position: "absolute", under: "-1", press: "none", apart: "36px 36px, 36px 36px", own: "isolate" });
-  expect(grid.lines).toMatch(/^linear-gradient\(to right, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\), linear-gradient\(to top, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\)$/);
-  expect(grid.mask).toMatch(/^linear-gradient\(to top, rgb\(0, 0, 0\) 0%, rgb\(0, 0, 0\) 6%, rgba\(0, 0, 0, 0\) 50%\)$/);
+  expect(cardViews).toEqual([
+    { photo: true, filter: "grayscale(1) brightness(1.45) contrast(0.85)", blend: "normal" },
+    { photo: true, filter: 'url("#home-fea")', blend: "color" },
+  ]);
+  expect(cardViews).toEqual(lensViews); // the card's two views are drawn exactly as the lens's two
+  await expect(page.locator("#home-fea")).toHaveCount(1);
+  const views = await card.evaluate((element) => [...element.querySelectorAll(".home-feed-view")].map((view) => {
+    const [box, outer, style] = [view.getBoundingClientRect(), element.getBoundingClientRect(), getComputedStyle(view)];
+    return { hidden: view.getAttribute("aria-hidden"), press: style.pointerEvents, whole: Math.round(box.width) === Math.round(outer.width) && Math.round(box.height) === Math.round(outer.height) };
+  }));
+  expect(views).toEqual([{ hidden: "true", press: "none", whole: true }, { hidden: "true", press: "none", whole: true }]);
+  // Over the picture lies the lens's fine mesh: hairlines 18 px apart both ways, the same as the lens draws, over the whole
+  // card, taking no press. And one thing the lens has not: a shade under the words, so white reads on every colour.
+  const layers = await page.evaluate(() => {
+    const card = document.querySelector("#changelog .home-feed-card")!;
+    const [mesh, shade, lens] = [getComputedStyle(card, "::before"), getComputedStyle(card, "::after"), getComputedStyle(document.querySelector("#mission .home-split-lens")!, "::after")];
+    return { mesh: mesh.backgroundImage, lens: lens.backgroundImage, press: [mesh.pointerEvents, shade.pointerEvents], shade: shade.backgroundImage, own: getComputedStyle(card).isolation, ground: getComputedStyle(card).backgroundColor };
+  });
+  expect(layers.mesh).toBe(layers.lens);
+  expect(layers.mesh).toMatch(/^repeating-linear-gradient\(to right, rgba\(255, 255, 255, 0\.18\) 0px, rgba\(255, 255, 255, 0\.18\) 1px, rgba\(0, 0, 0, 0\) 1px, rgba\(0, 0, 0, 0\) 18px\), repeating-linear-gradient\((to bottom, )?rgba\(255, 255, 255, 0\.18\) 0px,/);
+  expect(layers).toMatchObject({ press: ["none", "none"], own: "isolate", ground: "rgb(0, 0, 0)" });
+  expect(layers.shade).toMatch(/^radial-gradient\(/);
   // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey; lighter since
   // amendments 56, 58 and 59): lighter than the black footer under it, with light words and a white button with black words. Every text on it clears
   // WCAG AA's 4.5 to 1.
@@ -338,6 +387,14 @@ test("after the demo the page is white, and Mission and Services are two short b
     if (wordsFirst) expect(places.words[1], id).toBeLessThanOrEqual(places.picture[0]);
     else expect(places.picture[1], id).toBeLessThanOrEqual(places.words[0]);
     expect(places.width, id).toBeGreaterThan(400);
+    // The picture stands on the page's margin, its outer edge the changelog card's, and takes half the page's columns;
+    // the words start on the other margin, or on the halfway line beside a picture at the left (amendment 77; until
+    // then both stood in a narrower block in the page's middle).
+    const wide = page.viewportSize()!.width;
+    const half = (wide - 64 - 32) / 2;
+    expect(Math.abs(places.width - half), id).toBeLessThanOrEqual(1);
+    if (wordsFirst) expect([Math.round(places.words[0]), Math.round(wide - places.picture[1])], id).toEqual([32, 32]);
+    else expect([Math.round(places.picture[0]), Math.round(places.words[0] - places.picture[1])], id).toEqual([32, 32]);
     expect(places.radius, id).toBe("0px"); // square corners (amendment 48)
     // The picture is a picture, not a link (amendment 53, which ended amendment 39's): no address, no role, no place in the
     // keyboard's order, and nothing in it is a link. The keyboard and a screen reader meet the band's worded link only.

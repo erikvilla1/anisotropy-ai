@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { ClosingBand } from "@/components/closing-band";
 import { HeroHandover } from "@/components/home/hero-handover";
 import { HeroOutro } from "@/components/home/hero-outro";
@@ -10,6 +10,9 @@ import { ScrollToExplore } from "@/components/home/scroll-to-explore";
 import { SplitPicture } from "@/components/home/split-picture";
 import { HeroVideoKeeper } from "@/components/home/hero-video-keeper";
 import { releaseDay, releases } from "@/lib/changelog";
+import { citedSources } from "@/lib/cited-sources";
+import { curatedMaterials } from "@/lib/curated-materials";
+import { physicsCardCount } from "@/lib/physics";
 import { serviceHref, services } from "@/lib/services";
 import "./home.css";
 
@@ -23,8 +26,16 @@ const heroVideoHtml =
   '<video autoplay muted loop playsinline preload="metadata" poster="/media/hero.jpg" disablepictureinpicture tabindex="-1">' +
   '<source src="/media/hero.mp4" type="video/mp4" media="(min-width: 768px) and (prefers-reduced-motion: no-preference)"></video>';
 
+/** What the library holds, counted from the library's own lists so the home page cannot say another number than the
+ * library shows: its materials, its equations and the references it cites. */
+const LIBRARY_COUNTS: readonly { label: string; count: number }[] = [
+  { label: "Materials", count: curatedMaterials.length },
+  { label: "Equations", count: physicsCardCount },
+  { label: "References", count: citedSources().reduce((total, group) => total + group.sources.length, 0) },
+];
+
 /** The home page: the hero first (ADR-0076, ADR-0077), the product demo under it (ADR-0095), then bands on the mission, the
- * platform and the changelog, and the closing band. The workflow, the roadmap and the team live on About (the team since
+ * platform, the library and the changelog, and the closing band. The workflow, the roadmap and the team live on About (the team since
  * ADR-0077 amendment 73). */
 export default function Home() {
   return (
@@ -141,13 +152,46 @@ export default function Home() {
         </div>
         <SplitPicture />
       </section>
+      {/* The library (ADR-0077 amendment 77): one light grey band between Services and the changelog, where the team band
+          stood until amendment 73. Its head spans the page, the label and the heading at the left and what the library
+          holds from the halfway line, with the way to it; under the head, how much it holds, in large figures counted
+          from the library's own lists (LIBRARY_COUNTS above). No value of any material is shown here: each is shown
+          with its citation, on the library's page. */}
+      <section className="band is-light home-library" id="resources">
+        <div className="home-library-head">
+          <div className="home-library-title">
+            <p className="band-label">Resources</p>
+            <h2>Every value, with its source.</h2>
+          </div>
+          <div className="home-library-text">
+            <p>
+              The library lists composite materials with their properties in English and SI units, and the equations of
+              lamina and laminate analysis with their assumptions, each cited to the reference it comes from.
+            </p>
+            <Link className="home-link" href="/library">
+              Open the library <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          </div>
+        </div>
+        <dl className="home-library-counts">
+          {LIBRARY_COUNTS.map((item) => (
+            <div key={item.label}>
+              <dt>{item.label}</dt>
+              <dd>{item.count}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
       {/* The changelog (ADR-0077 amendment 46): where the versions the team publishes are listed, each with its day, its
           name and what changed in it, line by line and tagged by kind. The list is lib/changelog.ts; it is empty until a
           version is published, and the band then says so. */}
       <section className="band is-light home-blurb home-feed" id="changelog">
-        {/* The band is white (amendment 59), and its words stand on a card in the colours the demo gives its analysis, blurred into one
-            another (amendment 49), with a thin grid over the colours that fades out half way up the card (amendment 54). */}
+        {/* The band is white (amendment 59), and its words stand on a card that is the pictures' lens at the card's size
+            (amendment 77): the material photograph drawn through the demo's colours by the filter above, with the lens's
+            fine mesh over it. The two layers are pictures only. */}
         <div className="home-feed-card">
+          <span className="home-feed-view is-photo" aria-hidden="true" />
+          <span className="home-feed-view is-field" aria-hidden="true" />
         <div className="band-head">
           <p className="band-label">Changelog</p>
           <div className="band-statement">
