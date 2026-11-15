@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Upload as UploadIcon } from "lucide-react";
 import {
-  cancelUploadKey, cardRows, cardText, compareAgain, connectorCommand, connectorUrl, createPairingCode, createUploadKey, differences, documentProblem, documentUrl, getExchange, getUpload,
+  cancelUploadKey, cardRows, cardText, compareAgain, connectorCommand, connectorName, connectorNoteUrl, connectorUrl, createPairingCode, createUploadKey, differences, documentProblem, documentUrl, getExchange, getUpload,
   headline, KEY_FILE,
   listUploadKeys, listUploads, megabytes, notComparedWords, openLink, openOnThisPc, pairLink, percent, provenance, quantityName, removeUpload, sendProblem, sendUpload, sentFileUrl, writeDocument,
   type Comparison, type Exchange, type NewUploadKey, type Refusal, type SendStage, type Upload, type UploadKey,
@@ -182,7 +182,7 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
           <h3>Compare with your Abaqus model</h3>
           <p>Solve this coupon in your own Abaqus and send the result here. The model, the pull force and every ply&apos;s stresses and strains are compared with this run.</p>
           {exchange.connector_route && "abaqus_build" in job.outputs ? (
-            <ThisPc apiBase={apiBase} jobId={jobId} expecting={expecting > 0} onSent={() => setExpecting(Date.now())} />
+            <ThisPc apiBase={apiBase} jobId={jobId} exchange={exchange} expecting={expecting > 0} onSent={() => setExpecting(Date.now())} />
           ) : null}
           {exchange.connector_route && "abaqus_build" in job.outputs ? <h4 className="studio-abaqus-by-hand">Or by hand</h4> : null}
           <ol className="studio-abaqus-steps">
@@ -195,10 +195,11 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
             </li>
             <li>
               <strong>Run the job, then the connector.</strong>{" "}
-              <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
+              <a href={connectorUrl(apiBase)} download={connectorName(exchange)} target="_blank" rel="noreferrer" data-testid="abaqus-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
               {" "}Unzip it beside your job and run <code>abaqus python anisotropy_connector.py &lt;your job&gt;.odb --units {fields.units === "m-Pa" ? "m-Pa" : "mm-MPa"}</code>.
               {" "}It writes one file, &lt;your job&gt;-anisotropy.zip, and sends nothing.
               {" "}<span data-testid="abaqus-connector-more">Its README also shows how to add an Anisotropy menu to Abaqus/CAE and how to send every job as it finishes.</span>
+              <ConnectorFacts apiBase={apiBase} exchange={exchange} testId="abaqus-connector-facts" />
             </li>
             <li>
               <strong>Send to Anisotropy.</strong>
@@ -323,7 +324,7 @@ function Compared({ comparison, upload, fields, onShow }: { comparison: Comparis
  * connects. The page never shows the code, and no key is copied by hand. A PC without the setup does nothing on a click, and the page
  * cannot see the PC. What it can see is the account's upload keys, so it says what they show: which PCs are connected, that one
  * connected a moment ago (a key that was not there before the click), and that one took this coupon (a key used since the click). */
-function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId: string; expecting: boolean; onSent: () => void }) {
+function ThisPc({ apiBase, jobId, exchange, expecting, onSent }: { apiBase: string; jobId: string; exchange: Exchange; expecting: boolean; onSent: () => void }) {
   const [connecting, setConnecting] = useState(0); // when Connect this PC was clicked, while the page looks for the PC's key
   const [sent, setSent] = useState(0); // when Send to Abaqus was clicked, while the page looks for a PC that took the coupon
   const [message, setMessage] = useState("");
@@ -396,8 +397,9 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
         <summary>First time on this PC</summary>
         <ol className="studio-abaqus-steps">
           <li><strong>Set up, once.</strong>{" "}
-            <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-setup-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
-            {" "}Unzip it first: right-click the downloaded file and choose Extract All. In the folder that opens, double-click Set up Anisotropy. A box says when it is done. It adds an Anisotropy menu to Abaqus/CAE and lets this site start Abaqus on this PC. For Windows.</li>
+            <a href={connectorUrl(apiBase)} download={connectorName(exchange)} target="_blank" rel="noreferrer" data-testid="abaqus-setup-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
+            {" "}Unzip it first: right-click the downloaded file and choose Extract All. In the folder that opens, double-click Set up Anisotropy. A box says when it is done. It adds an Anisotropy menu to Abaqus/CAE and lets this site start Abaqus on this PC. For Windows.
+            <ConnectorFacts apiBase={apiBase} exchange={exchange} testId="abaqus-setup-connector-facts" /></li>
           <li><strong>Connect, once.</strong>{" "}
             <button type="button" className="studio-text-button" onClick={() => void connect()} data-testid="abaqus-connect">Connect this PC</button>.
             {" "}A box on your PC names this site and your account. Say yes there, and this PC can send its results to you alone.</li>
@@ -406,6 +408,18 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
         {message ? <p className="studio-alert" role="alert">{message}</p> : null}
       </details>
     </div>
+  );
+}
+
+/** Which connector the download is and how to check it (ADR-0094 amendment 3): its version, the SHA-256 recorded for that version's
+ * zip, and a link to the note that says what it installs, reads and sends, for whoever decides whether it may be installed. The API
+ * hands the zip out only when it has that checksum. */
+function ConnectorFacts({ apiBase, exchange, testId }: { apiBase: string; exchange: Exchange; testId: string }) {
+  return (
+    <span className="studio-muted studio-abaqus-connector-facts" data-testid={testId}>
+      {exchange.connector_version && exchange.connector_sha256 ? <>Version {exchange.connector_version}. The downloaded file has the SHA-256 <code>{exchange.connector_sha256}</code>.{" "}</> : null}
+      <a href={connectorNoteUrl(apiBase)} target="_blank" rel="noreferrer" data-testid={`${testId}-note`}>What it installs, reads and sends</a>, for your IT.
+    </span>
   );
 }
 

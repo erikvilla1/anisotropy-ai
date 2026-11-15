@@ -32,10 +32,12 @@ folder, so no ODB is sent twice; an ODB that changes (the job run again) is a ne
 and the watch goes on. It ends with Ctrl+C. The watch reads ODBs only, so it runs under `abaqus python` and takes no seat of
 Abaqus/CAE.
 
-The connector is six files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`, and
-for the menu in Abaqus/CAE `anisotropy_menu.py` and `anisotropy_plugin.py` (step 8).
-`uv run python tools/abaqus_upload.py connector --out anisotropy-connector.zip` writes them as one zip to hand over; in the repository
-they are found where they live.
+The connector is nine Python files kept in one folder: this one, `bundle.py`, `abaqus_every_output.py` and `abaqus_extract_fields.py`;
+for the menu in Abaqus/CAE `anisotropy_menu.py` and `anisotropy_plugin.py` (step 8); and for the site's links `anisotropy_setup.py`,
+`anisotropy_link.py` and `anisotropy_start.py` (amendment 1). `uv run python tools/abaqus_upload.py connector --out
+anisotropy-connector.zip` writes them as one zip to hand over, with a README, the security note and a list of checksums; the zip of
+a version is the same bytes wherever it is written, and its SHA-256 is recorded in `connector-releases.json` (amendment 3). In the
+repository the files are found where they live.
 
 The user's `.cae` is never opened: a copy in a temporary folder is. Opening a `.cae` changes the file even when nothing is saved
 (Abaqus 2025, the first trial: another SHA-256 after `openMdb` alone). Under Abaqus/CAE the ODB comes first among our arguments,
@@ -69,7 +71,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-CONNECTOR = "anisotropy-connector 0.5.0"
+CONNECTOR = "anisotropy-connector 0.6.0"
 MODEL_FORMAT = 1
 UNITS = ("mm-MPa", "m-Pa")
 FILES = ("anisotropy_connector.py", "bundle.py", "abaqus_every_output.py", "abaqus_extract_fields.py",  # what is handed over, together

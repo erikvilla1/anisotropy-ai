@@ -41,7 +41,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-HELPER = "anisotropy-link 0.5.0"
+HELPER = "anisotropy-link 0.6.0"
 SCHEME = "anisotropy"
 MAX_LINK = 600
 CODE = re.compile(r"anisotropy_pair_[A-Za-z0-9_-]{43}")

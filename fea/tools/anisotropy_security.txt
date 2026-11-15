@@ -1,0 +1,156 @@
+Anisotropy connector 0.6.0 for Abaqus/CAE on Windows: security note
+====================================================================
+
+For the person who decides whether this may be installed. Checked against the connector's code on 2026-11-14.
+The source is public: https://github.com/erikvilla1/anisotropy-ai  (folder fea/tools; this note is
+fea/tools/anisotropy_security.txt there).
+
+The connector lets an engineer open a coupon from Anisotropy in their own Abaqus and send the solved job back
+to be compared. It runs under the user's own Abaqus and licence, as that user. It sends data to one site, the one
+the user confirmed in a box, and only for the job the user chose.
+
+
+1. What it is
+
+- Plain-text files: nine Python files, one batch file that starts the setup, a README, this note and a list of
+  checksums (SHA256SUMS.txt). No installer, no compiled program, no driver.
+- The Python files use Python's standard library and Abaqus's own modules. Nothing is downloaded or installed
+  from a package index.
+- No administrator right is needed at any point.
+
+
+2. How to check your download
+
+- The zip is named for its version, anisotropy-connector-<version>.zip. Its SHA-256 is recorded for that version
+  in the public repository, in fea/tools/connector-releases.json. On Windows:
+      certutil -hashfile anisotropy-connector-<version>.zip SHA256
+- The site hands out a zip only when it matches the checksum recorded for its version.
+- The zip is written without compression and with fixed dates, so the same source gives the same bytes. It can be
+  rebuilt from the repository and compared:
+      uv run --project fea python fea/tools/abaqus_upload.py connector --out anisotropy-connector.zip
+- Versions published on the repository's Releases page carry a build attestation, which says that the zip was
+  built by the repository's own workflow from a named commit:
+      gh attestation verify anisotropy-connector-<version>.zip --repo erikvilla1/anisotropy-ai
+- SHA256SUMS.txt in the zip lists the SHA-256 of every other file in it. The setup checks every file it installs
+  against that list before it installs anything, and stops when one does not match. This catches a damaged or
+  mixed-up folder. It is not a signature: the proof of origin is the zip's own checksum, above.
+
+
+3. What the setup changes on the PC
+
+Everything is under the current Windows user. Nothing is written under HKEY_LOCAL_MACHINE, Program Files or the
+Abaqus installation.
+
+- %USERPROFILE%\abaqus_plugins\anisotropy
+      Nine Python files. Abaqus/CAE loads plug-ins from this folder and shows the menu Plug-ins > Anisotropy.
+- HKEY_CURRENT_USER\Software\Classes\anisotropy
+      One link type, anisotropy://. A click on the site starts the helper anisotropy_link.py with the link as
+      its one argument. The registered command names a Python program beside Abaqus directly, never a batch
+      file and never the command interpreter.
+- %USERPROFILE%\.anisotropy\machine.json
+      Where Abaqus's command is, and after Connect this PC the site's address and the account's name.
+- %USERPROFILE%\.anisotropy\upload-key.txt
+      The upload key, after Connect this PC.
+- %USERPROFILE%\Anisotropy\<coupon>
+      The build script of a coupon and the user's own Abaqus files for it.
+
+No service, scheduled task, startup entry or listening port is created. Nothing keeps running after Abaqus
+closes.
+
+
+4. What it reads
+
+- The ODB of the job the user chose, through Abaqus's own reader. Inside Abaqus/CAE it reads a temporary copy.
+- The input file of that job, beside the ODB.
+- The model of that job as it stands in the open Abaqus session.
+- The journal (.jnl) beside the .cae, when the model was saved. A journal can hold file paths and the history
+  of the model.
+
+It never changes a .cae or an ODB. It does not read other folders, other models, the browser or any credential
+store.
+
+
+5. What leaves the PC, and when
+
+All traffic is HTTPS on port 443 to one address, the site's API (https://anisotropy.dev/api). Certificates are
+checked the standard way. A redirect is never followed, so the key cannot be passed on to another address.
+
+- Connect this PC, once:  POST /v1/connector/pair, twice
+      A one-time code from the user's signed-in page, and the PC's host name. The first call only asks whose
+      account the code is for. The second is made after the user says yes in a box that names the site and the
+      account.
+- Send to Abaqus:  GET /v1/connector/runs/<run>/build-script
+      The run's id and the key. The answer is the build script of the user's own finished run.
+- The job of a model opened from the site completes, or the user clicks Send to Anisotropy:
+  POST /v1/connector/uploads
+      One zip and the key. At most 50 MB.
+
+The zip that is sent holds the job's input file, the stresses and strains of every element and ply, the reaction
+forces, the model as built (parts, materials, layup, steps, boundary conditions), the journal when there is one,
+and a manifest with the SHA-256 of each file. The same zip is written beside the ODB, so the user can open it and
+see exactly what was sent.
+
+Only a model opened from the site is sent by itself. Any other model is sent only on a click in the menu. Run from
+the command line without --send, the connector writes the zip and sends nothing.
+
+
+6. The key
+
+- The site makes a key of 256 random bits for each PC and keeps only its SHA-256.
+- On the PC it is one file in the user's home directory. The connector never shows it, prints it or puts it on a
+  command line.
+- Its owner can cancel it on the site at any time. A person may hold ten keys that are not cancelled.
+- The key can do two things: fetch the build script of its owner's own finished runs, and send an upload to its
+  owner's account. It cannot sign in or read other data.
+
+
+7. How a link from a web page is handled
+
+Any web page can try to open an anisotropy:// link, so the helper reads a link as hostile text.
+
+- A link must match one of two exact shapes, to the character: connect, with a code and an https address, or
+  open, with a run's id. Anything else is refused.
+- Nothing from a link is executed or placed on a command line. Abaqus is started with the same fixed words every
+  time.
+- A link that opens a run carries no address. The key goes only to the address the user confirmed in the box.
+- With an open link, the worst a hostile page can do is start Abaqus with one of the user's own finished runs.
+- With a connect link, a box names the site and the account, and No is the default. A user who says yes to an
+  account that is not theirs would send later results there, which is why the box names it.
+
+
+8. What the site keeps
+
+- The zip, in object storage (Cloudflare R2), and one database row (PostgreSQL at Neon) with the owner, the zip's
+  SHA-256 and the comparison.
+- An upload is visible to its owner. The Anisotropy founders can list, open and download uploads; they cannot
+  compare them again or delete them.
+- The zip is read as data. Nothing in it is executed on the server. A journal is stored as text.
+- Uploads are not used to train any model and are not sent to an AI provider.
+- Remove on the run's page deletes the zip and then the row.
+
+
+9. How to remove it
+
+    abaqus python anisotropy_setup.py --remove
+
+deletes the plug-in's files, the link type and the key on the PC. The user then cancels the key on the site. The
+folder %USERPROFILE%\Anisotropy holds the user's own models and is left in place.
+
+
+10. Not in place yet
+
+- No Windows (Authenticode) signature. The files are plain text; the checks of section 2 stand in for it.
+- A build script from the site runs in the user's Abaqus. Send to Abaqus fetches Python that the site wrote
+  for the run and runs it. The helper checks that it carries our writer's mark, which guards against mistakes,
+  not against a compromised site.
+- The model and the results are stored in our cloud. There is no mode yet in which nothing leaves the PC, apart
+  from running the connector without --send.
+- No terms of use, no data processing agreement, no SOC 2 and no ISO 27001.
+- The repository's licence allows the code to be read. It does not yet grant a company the right to use it.
+- Nobody outside the team has reviewed the connector or the site's API.
+- Uploads are private to their owner, but the runs on the site are not yet scoped per user: every signed-in user
+  of the invite list can see them.
+- A key does not expire. It lives until its owner cancels it.
+- An administrator cannot fix the address or turn sending off for all users of a PC.
+- Not checked for this note: the region where the storage and the database are held, how long backups keep a
+  deleted upload, and what the hosting provider logs of a request.

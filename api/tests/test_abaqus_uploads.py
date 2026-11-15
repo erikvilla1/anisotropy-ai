@@ -9,6 +9,7 @@ The bundles and the run of ours are made once by `abaqus_bundles.py` in the fea 
 real `fea/tools/abaqus_upload.py`: no stand-in judges a bundle here. No Abaqus runs: their side is our own kernel's run."""
 
 import datetime as dt
+import hashlib
 import importlib.util
 import io
 import json
@@ -40,6 +41,8 @@ FOUNDER = "founder@example.com"
 ROUTE, TOKENS, CONNECTOR = "/v1/abaqus-uploads", "/v1/upload-tokens", "/v1/connector/uploads"
 EXCHANGE, CONNECTOR_ZIP = "/v1/abaqus-exchange", "/v1/abaqus-connector"  # what the page's card asks first, and the connector to hand out (step 6)
 LIMITS = {"max_bundle_bytes": 50 * 1024 * 1024, "max_uploads": 100, "max_tokens": 10}
+_RECORD = json.loads((FEA / "tools" / "connector-releases.json").read_text(encoding="utf-8"))
+RELEASE = {"connector_version": _RECORD["current"], "connector_sha256": _RECORD["releases"][_RECORD["current"]]["sha256"]}  # the connector handed out (amendment 3)
 needs_uv = pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not on PATH: the bundles are made and judged by the fea package's tools")
 pytestmark = [needs_test_database, needs_uv]
 
@@ -139,7 +142,7 @@ def test_without_run_records_the_uploads_answer_503(monkeypatch):
         for answer in (client.post(ROUTE, content=b"PK"), client.get(ROUTE), client.get(f"{ROUTE}/{uuid.uuid4()}"), client.delete(f"{ROUTE}/{uuid.uuid4()}"),
                        client.post(TOKENS, json={"name": "x"}), client.get(TOKENS), client.post(CONNECTOR, content=b"PK")):
             assert answer.status_code == 503 and "switched off" in answer.json()["detail"]
-        assert client.get(EXCHANGE).json() == {"uploads": False, "connector_route": True, **LIMITS}  # so the page's card offers nothing here
+        assert client.get(EXCHANGE).json() == {"uploads": False, "connector_route": True, **LIMITS, **RELEASE}  # so the page's card offers nothing here
 
 
 # ------------------------------------------------------------------------------------------------------- a bundle, stored
@@ -264,7 +267,7 @@ def test_a_run_is_named_when_the_bundle_names_no_coupon_and_a_comparison_asked_f
 
 def test_the_page_is_told_what_it_may_offer_and_lists_the_uploads_beside_one_run(local, made):
     client, registry, _kept, engine = local
-    assert client.get(EXCHANGE).json() == {"uploads": True, "connector_route": True, **LIMITS}  # no sign-in in front: the connector's route is open
+    assert client.get(EXCHANGE).json() == {"uploads": True, "connector_route": True, **LIMITS, **RELEASE}  # no sign-in in front: the connector's route is open
     first, second = run_on_this_disk(registry, engine, made), run_on_this_disk(registry, engine, made)
     beside_first = client.post(ROUTE, content=bundle(made, "agrees"), params={"job_id": str(first)}).json()
     beside_second = client.post(ROUTE, content=bundle(made, "differs"), params={"job_id": str(second)}).json()
@@ -275,22 +278,37 @@ def test_the_page_is_told_what_it_may_offer_and_lists_the_uploads_beside_one_run
     assert client.get(ROUTE, params={"job_id": str(uuid.uuid4())}).json() == [] and client.get(ROUTE, params={"job_id": "x"}).status_code == 422
 
 
-def test_the_connector_is_handed_out_as_one_zip_the_same_each_time(local):
+def test_the_connector_is_handed_out_as_one_zip_the_same_each_time_and_only_as_recorded(local, monkeypatch, tmp_path):
     client, _registry, kept, _engine = local
+    offered = client.get(EXCHANGE).json()
+    name = f"anisotropy-connector-{offered['connector_version']}.zip"
     answer = client.get(CONNECTOR_ZIP)
     assert answer.status_code == 200 and answer.headers["content-type"] == "application/zip"
-    assert 'filename="anisotropy-connector.zip"' in answer.headers["content-disposition"]
+    assert f'filename="{name}"' in answer.headers["content-disposition"]  # named for its version
+    assert hashlib.sha256(answer.content).hexdigest() == offered["connector_sha256"]  # what the card shows is what was handed out
     with zipfile.ZipFile(io.BytesIO(answer.content)) as archive:
         assert sorted(archive.namelist()) == [
-            "README.txt", "Set up Anisotropy.bat", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py", "anisotropy_link.py",
-            "anisotropy_menu.py", "anisotropy_plugin.py", "anisotropy_setup.py", "anisotropy_start.py", "bundle.py"]  # with the menu (step 8) and the links (amendment 1), at the zip's top
+            "README.txt", "SECURITY.txt", "SHA256SUMS.txt", "Set up Anisotropy.bat", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py",
+            "anisotropy_link.py", "anisotropy_menu.py", "anisotropy_plugin.py", "anisotropy_setup.py", "anisotropy_start.py", "bundle.py"]  # at the zip's top
         assert archive.read("anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes()
-    assert client.get(CONNECTOR_ZIP).content == answer.content and (kept.scratch / "connector" / "anisotropy-connector.zip").is_file()
+        note = client.get(CONNECTOR_ZIP + "/security-note")  # the same words before anything is downloaded
+        assert note.status_code == 200 and note.headers["content-type"].startswith("text/plain") and note.content == archive.read("SECURITY.txt")
+    assert client.get(CONNECTOR_ZIP).content == answer.content and (kept.scratch / "connector" / name).is_file()
     kept.command = None  # no uv: the zip already written is still handed out; a fresh process without uv says why not
     assert client.get(CONNECTOR_ZIP).status_code == 200
-    (kept.scratch / "connector" / "anisotropy-connector.zip").unlink()
+    (kept.scratch / "connector" / name).unlink()
     refused = client.get(CONNECTOR_ZIP)
     assert refused.status_code == 503 and "uv is not on PATH" in refused.json()["detail"]
+
+    # a zip that is not the one recorded for its version is given to nobody
+    record = json.loads((FEA / "tools" / "connector-releases.json").read_text(encoding="utf-8"))
+    record["releases"][record["current"]]["sha256"] = "0" * 64
+    other = tmp_path / "connector-releases.json"
+    other.write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setattr(uploads.connector_release, "__defaults__", (other,))
+    kept.command, kept._connector = uploads.tool_command(), None
+    refused = client.get(CONNECTOR_ZIP)
+    assert refused.status_code == 503 and "is not the one recorded for version" in refused.json()["detail"] and not (kept.scratch / "connector" / name).exists()
 
 
 def test_a_bundle_out_of_scope_is_kept_and_not_compared(local, made):
@@ -524,8 +542,9 @@ def test_behind_access_the_connectors_route_passes_on_its_token_only_when_the_se
     assert both.status_code == 201 and both.json()["user_email"] == EMAIL
     assert client.post(CONNECTOR, content=bundle(made, "unnamed"), headers=signed()).status_code == 401  # Access's token alone is not an upload token
 
-    assert client.get(EXCHANGE, headers=signed()).json() == {"uploads": True, "connector_route": False, **LIMITS}  # the page offers no upload key yet
+    assert client.get(EXCHANGE, headers=signed()).json() == {"uploads": True, "connector_route": False, **LIMITS, **RELEASE}  # the page offers no upload key yet
     assert client.get(EXCHANGE).status_code == 401 and client.get(CONNECTOR_ZIP).status_code == 401  # both behind the sign-in, as everything is
+    assert client.get(CONNECTOR_ZIP + "/security-note").status_code == 401 and client.get(CONNECTOR_ZIP + "/security-note", headers=signed()).status_code == 200  # the note too
 
     monkeypatch.setattr(app.state, "connector_uploads", True, raising=False)
     assert client.get(EXCHANGE, headers=signed()).json()["connector_route"] is True

@@ -371,6 +371,8 @@ details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .studio-abaqus-quick { margin: 0 0 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; line-height: 1.6; }
 .studio-abaqus-quick .studio-abaqus-actions { margin: 0 0 8px; }
 .studio-abaqus-quick .studio-button { padding: 8px 18px; font-size: 13px; }
+.studio-abaqus-connector-facts { display: block; margin-top: 4px; font-size: 12px; }
+.studio-abaqus-connector-facts code { overflow-wrap: anywhere; }
 .studio-abaqus-quick p { margin: 0 0 8px; }
 .studio-abaqus-quick details { margin-top: 6px; }
 .studio-abaqus-quick .studio-abaqus-steps { margin: 10px 0 6px; }

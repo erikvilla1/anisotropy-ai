@@ -43,7 +43,8 @@ from .records import (ACTORS, STATUSES, KindChanged, ProjectTaken, check_ready, 
 from .settings import all_tests, allowed_origins, docs_urls, environment, load_settings
 from .storage import (UPLOAD_DOCUMENT, FolderStore, R2Store, content_type, download_name, restore, sync, upload_document_key, upload_key,
                       upload_prefix)
-from .uploads import (LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, new_pairing_code, new_token, ours_of,
+from .uploads import (CONNECTOR_NOTE, LOCAL_UPLOADS, MAX_BUNDLE_BYTES, MAX_TOKENS, MAX_UPLOADS, NotCompared, ToolFailed, UploadRefused, Uploads, bearer, connector_release,
+                      new_pairing_code, new_token, ours_of,
                       token_digest)
 from .uploads import tool_command as upload_command
 from .schemas import (
@@ -652,9 +653,14 @@ def abaqus_exchange(request: Request) -> AbaqusExchange:
     application must let the path through as well, which this API cannot see). Not a run: nothing is computed or recorded."""
     state = request.app.state
     behind_access = getattr(state, "access_verifier", None) is not None
+    try:
+        release = connector_release()
+    except ToolFailed:
+        release = {"version": None, "sha256": None}  # the card then shows the download without them
     return AbaqusExchange(uploads=getattr(state, "records", None) is not None and getattr(state, "uploads", None) is not None,
                           connector_route=not behind_access or bool(getattr(state, "connector_uploads", False)),
-                          max_bundle_bytes=MAX_BUNDLE_BYTES, max_uploads=MAX_UPLOADS, max_tokens=MAX_TOKENS)
+                          max_bundle_bytes=MAX_BUNDLE_BYTES, max_uploads=MAX_UPLOADS, max_tokens=MAX_TOKENS,
+                          connector_version=release["version"], connector_sha256=release["sha256"])
 
 
 @app.get(ABAQUS_CONNECTOR)
@@ -666,6 +672,17 @@ def abaqus_connector(request: Request) -> Response:
     except ToolFailed as exc:
         raise HTTPException(status_code=503, detail=f"The connector could not be handed out: {exc}") from exc
     return FileResponse(path, media_type="application/zip", filename=path.name)
+
+
+@app.get(ABAQUS_CONNECTOR + "/security-note")
+def abaqus_connector_note() -> Response:
+    """What the connector installs, reads and sends, as plain text (ADR-0094 amendment 3): the same words as SECURITY.txt in its zip,
+    for whoever decides whether it may be installed, before anything is downloaded. The same for every requester."""
+    try:
+        text = CONNECTOR_NOTE.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="The connector's security note could not be read.") from exc
+    return Response(text, media_type="text/plain; charset=utf-8", headers={"Content-Disposition": 'inline; filename="anisotropy-connector-SECURITY.txt"'})
 
 
 @app.post(UPLOAD_TOKENS, status_code=201, response_model=UploadTokenCreated)

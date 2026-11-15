@@ -5,7 +5,9 @@ double-click "Set up Anisotropy", which runs exactly this:
     abaqus python anisotropy_setup.py --box         the same, and a box of Windows's own says how it ended (what the double-click runs)
     abaqus python anisotropy_setup.py --remove      takes all of it away again
 
-It does three things, for this Windows user alone and without administrator's rights, and says each:
+Before anything else it checks every file beside it against `SHA256SUMS.txt`, the list the connector's zip carries, and stops when one
+is missing or does not match: a folder that was unzipped in part, or mixed with the files of another version, is not installed. Then
+it does three things, for this Windows user alone and without administrator's rights, and says each:
 
 1. copies the connector's files to `abaqus_plugins/anisotropy` in the home directory, so Abaqus/CAE shows Plug-ins > Anisotropy the
    next time it starts;
@@ -21,6 +23,7 @@ The standard library only, Python 3.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -40,6 +43,7 @@ PROBE = "import ssl, json, ctypes, urllib.request; print('anisotropy-ok')"  # wh
 PROBE_TIMEOUT_S = 120.0
 MACHINE_FILE = "machine.json"
 KEY_FILE = "upload-key.txt"
+SUMS = "SHA256SUMS.txt"  # in the connector's zip: `<SHA-256>  <name>` for every other file in it
 NOT_IN_A_COMMAND = '"%\r\n'  # a path with one of these is not put into the registered command
 TITLE = "Anisotropy"
 NO_ABAQUS = "3. Abaqus's command was not found on PATH. Send to Abaqus on the site will say so; the menu in Abaqus/CAE works without it."
@@ -65,6 +69,40 @@ def state_folder() -> Path:
     return Path.home() / ".anisotropy"
 
 
+def verify(source: Path) -> int:
+    """Check the connector's folder against the list of checksums its zip carries: every file the setup installs is on the list and
+    has that SHA-256, and so has every other file of the list that is in the folder (the installed folder holds the Python files and
+    the list alone). Returns how many files were checked; `NotDone` says which one failed. This is a check against a damaged or
+    mixed-up folder, not a signature: who made the zip is checked on the zip's own checksum."""
+    again = "Download the connector again, unzip all of it into a new folder, and run the setup from there"
+    try:
+        with io.open(str(source / SUMS), encoding="utf-8") as handle:
+            lines = [line.rstrip("\r\n") for line in handle if line.strip()]
+    except OSError:
+        raise NotDone(f"{SUMS} is not beside the setup, so its files cannot be checked. {again}") from None
+    listed = {}
+    for line in lines:
+        digest, _, name = line.partition("  ")
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest) or not name or "/" in name or "\\" in name or name in listed:
+            raise NotDone(f"{SUMS} is not a list of checksums this setup can read. {again}")
+        listed[name] = digest
+    checked = 0
+    for name in sorted(set(FILES) | set(listed)):
+        if name not in listed:
+            raise NotDone(f"{SUMS} does not name {name}, so this is not a whole connector. {again}")
+        try:
+            with io.open(str(source / name), "rb") as handle:
+                found = hashlib.sha256(handle.read()).hexdigest()
+        except OSError:
+            if name in FILES:
+                raise NotDone(f"{name} is missing from the connector's folder. {again}") from None
+            continue  # the README, this note or the batch file: not installed, and not needed to be here
+        if found != listed[name]:
+            raise NotDone(f"{name} is not the file this connector was made with (its checksum differs from {SUMS}). {again}")
+        checked += 1
+    return checked
+
+
 def copy_files(source: Path, target: Path) -> list:
     """The connector's files in the folder Abaqus/CAE reads plug-ins from. Running the setup from that folder copies nothing."""
     missing = [name for name in FILES if not (source / name).is_file()]
@@ -73,7 +111,7 @@ def copy_files(source: Path, target: Path) -> list:
     if source.resolve() == target.resolve():
         return []
     target.mkdir(parents=True, exist_ok=True)
-    for name in FILES:
+    for name in (*FILES, SUMS):  # the list goes with them, so the installed folder can be checked again
         shutil.copyfile(str(source / name), str(target / name))
     return list(FILES)
 
@@ -191,6 +229,7 @@ def set_up(say=print, source: Path | None = None, target: Path | None = None, st
            run=subprocess.run, which=shutil.which) -> int:
     source, target, state = source or here(), target or plugin_folder(), state or state_folder()
     try:
+        say(f"0. The files: {verify(source)} checked against {SUMS}.")
         copied = copy_files(source, target)
         say(f"1. The menu: {len(copied) or len(FILES)} files {'copied to' if copied else 'are in'} {target}. Start Abaqus/CAE again and look under Plug-ins > Anisotropy.")
         if registry is None:
@@ -220,6 +259,10 @@ def remove(say=print, target: Path | None = None, state: Path | None = None, reg
             gone += 1
         except OSError:
             continue
+    try:
+        (target / SUMS).unlink()
+    except OSError:
+        pass
     cache = target / "__pycache__"  # what Python compiled of our files; anything else in it is not ours and keeps the folder
     for name in FILES:
         for compiled in (list(cache.glob(Path(name).stem + ".*.pyc")) if cache.is_dir() else []):

@@ -28,6 +28,8 @@ test("a finished run offers the way to Abaqus and back; a file sent is compared 
   expect(await build.getAttribute("href")).toContain(`/v1/coupon-jobs/${JOB}/files/abaqus_build?name=`);
   expect(await card(page).getByTestId("abaqus-connector").getAttribute("href")).toMatch(/\/v1\/abaqus-connector$/);
   await expect(card(page).getByTestId("abaqus-connector-more")).toHaveText("Its README also shows how to add an Anisotropy menu to Abaqus/CAE and how to send every job as it finishes."); // step 8
+  await expect(card(page).getByTestId("abaqus-connector")).toHaveAttribute("download", "anisotropy-connector.zip"); // an API that names no version: no version is shown
+  await expect(card(page).getByTestId("abaqus-connector-facts")).toHaveText("What it installs, reads and sends, for your IT.");
   await expect(card(page)).toContainText("abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa");
   await expect(card(page)).toContainText("only you and the Anisotropy team can see it");
   await expect(card(page).getByTestId("abaqus-keys")).toHaveCount(0); // the connector's own route is closed here, so no upload key is offered
@@ -193,7 +195,7 @@ test("an upload key is shown once, the command never holds it, and a file sent f
 });
 
 test("Send to Abaqus hands the run to this PC, Connect this PC hands it a code the page never shows, the page says what the PC did, and the results arrive by themselves", async ({ page }) => {
-  const state = exchangeState({ exchange: { uploads: true, connector_route: true, ...LIMITS } });
+  const state = exchangeState({ exchange: { uploads: true, connector_route: true, ...LIMITS, connector_version: "0.6.0", connector_sha256: "ab".repeat(32) } });
   await page.addInitScript(() => { // what the page hands to the PC, kept instead of handed over
     const kept: string[] = [];
     (window as unknown as { handed: string[] }).handed = kept;
@@ -210,6 +212,10 @@ test("Send to Abaqus hands the run to this PC, Connect this PC hands it a code t
   await expect(card(page).getByTestId("abaqus-build")).toBeVisible(); // the way by hand stays, under it
   await expect(quick.getByTestId("abaqus-pcs")).toHaveText("No PC is connected to your account yet. Do the two steps below, once.");
   await expect(quick.getByTestId("abaqus-connect")).toBeVisible(); // with no PC connected the two steps are open
+  // which connector the download is, how to check it, and the note for whoever decides whether it may be installed (amendment 3)
+  await expect(quick.getByTestId("abaqus-setup-connector")).toHaveAttribute("download", "anisotropy-connector-0.6.0.zip");
+  await expect(quick.getByTestId("abaqus-setup-connector-facts")).toHaveText(`Version 0.6.0. The downloaded file has the SHA-256 ${"ab".repeat(32)}. What it installs, reads and sends, for your IT.`);
+  expect(await quick.getByTestId("abaqus-setup-connector-facts-note").getAttribute("href")).toMatch(/\/v1\/abaqus-connector\/security-note$/);
 
   expect(await quick.getByTestId("abaqus-setup-connector").getAttribute("href")).toMatch(/\/v1\/abaqus-connector$/);
   const api = ((await quick.getByTestId("abaqus-setup-connector").getAttribute("href")) ?? "").replace(/\/v1\/abaqus-connector$/, "");

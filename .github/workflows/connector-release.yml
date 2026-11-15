@@ -1,0 +1,73 @@
+# The connector's release (ADR-0094 amendment 3): started by hand on main, it writes the zip of the version that
+# fea/tools/connector-releases.json names as current, refuses it unless its SHA-256 is the one recorded there, attests that this
+# workflow built it from this commit (GitHub's artifact attestations), and publishes it as the release connector-v<version>.
+# A version that is released already is never replaced: change a file of the connector, raise its version, record the new checksum.
+# Whoever has the zip checks it with
+#   certutil -hashfile anisotropy-connector-<version>.zip SHA256          (against the record, or the release's notes)
+#   gh attestation verify anisotropy-connector-<version>.zip --repo <this repository>
+name: Connector release
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write           # the tag and the release
+      id-token: write           # the certificate the attestation is signed with
+      attestations: write       # the attestation itself
+      artifact-metadata: write  # its storage record
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Write the zip and check it against the record
+        id: zip
+        working-directory: fea
+        run: |
+          uv sync --locked
+          version=$(python3 -c "import json; print(json.load(open('tools/connector-releases.json'))['current'])")
+          recorded=$(python3 -c "import json; r = json.load(open('tools/connector-releases.json')); print(r['releases'][r['current']]['sha256'])")
+          zip="$RUNNER_TEMP/anisotropy-connector-$version.zip"
+          uv run python tools/abaqus_upload.py connector --out "$zip"
+          written=$(sha256sum "$zip" | cut -d' ' -f1)
+          echo "version $version: recorded $recorded, written $written"
+          test "$written" = "$recorded"
+          { echo "version=$version"; echo "sha256=$written"; echo "zip=$zip"; } >> "$GITHUB_OUTPUT"
+      - name: Refuse a version that is released already
+        env:
+          VERSION: ${{ steps.zip.outputs.version }}
+        run: |
+          if gh release view "connector-v$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "connector-v$VERSION is released already, and a released version is never replaced"
+            exit 1
+          fi
+      - name: Attest that this workflow built the zip from this commit
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ steps.zip.outputs.zip }}
+      - name: Publish the release
+        env:
+          VERSION: ${{ steps.zip.outputs.version }}
+          SHA256: ${{ steps.zip.outputs.sha256 }}
+          ZIP: ${{ steps.zip.outputs.zip }}
+        run: |
+          {
+            echo "The Anisotropy connector for Abaqus/CAE, version $VERSION. SECURITY.txt in the zip says what it installs, reads and sends."
+            echo
+            echo "SHA-256 of anisotropy-connector-$VERSION.zip:"
+            echo
+            echo "    $SHA256"
+            echo
+            echo "Check a download on Windows with \`certutil -hashfile anisotropy-connector-$VERSION.zip SHA256\`."
+            echo "Check that this repository's workflow built it from commit $GITHUB_SHA with"
+            echo "\`gh attestation verify anisotropy-connector-$VERSION.zip --repo $GITHUB_REPOSITORY\`."
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "connector-v$VERSION" "$ZIP" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Anisotropy connector $VERSION" --notes-file "$RUNNER_TEMP/notes.md"

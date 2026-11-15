@@ -27,7 +27,7 @@ try:
 except ImportError:  # a window made otherwise: the menu is registered all the same
     FXObject = object
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 ENTRIES = (
     ("Anisotropy|Open from Anisotropy...", "open_from_anisotropy()",
      "Builds a coupon from the build script you downloaded from Anisotropy as a native model in this session. Nothing is saved until you save it."),
