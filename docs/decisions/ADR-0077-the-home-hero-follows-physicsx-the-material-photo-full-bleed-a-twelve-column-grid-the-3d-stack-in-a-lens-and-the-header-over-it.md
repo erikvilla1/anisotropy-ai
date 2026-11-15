@@ -840,3 +840,19 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `home.spec.ts`, 8 of 8, reads the ground's first colour and the words' colours. Captured at 1900 px and looked at. UNVERIFIED: the words' contrast was not measured where the sentence's last line meets the blue (judged by eye), and a published list of releases on this ground was not looked at.
 
+## Amendment 70, 2026-11-15 ("Scroll to explore" stands in the middle of the hero's foot)
+
+**Context.** The lead, with a capture of the link in the hero's bottom right corner: "now can we have this be centered on the home page instead of rigth corner".
+
+**Decision.** From 1200 px the link stands in the middle of the hero's foot, as far up as before. Narrower it stays in the bottom right corner: the cohort's line, about 450 px long from the left margin, would run into it in the middle.
+
+**Evidence.** `intro.spec.ts`, 15 of 15: the link's middle is the clip's, 24 px or more clear of the cohort's line. `home.spec.ts`, 8 of 8: in the middle at 1280 px, in the corner on the margin at 1199 px. UNVERIFIED: not captured or looked at after the change.
+
+## Amendment 71, 2026-11-15 (over the hero and the demo the returning header has no black ground)
+
+**Context.** The lead, with a recording of the home page: "when on hero homepage first landing page, the header shouldnt be black on rescroll, should be same as first landing. only black on rescroll past the demo". Amendment 44 brought the header back as a black bar wherever the page was; with the clip edge to edge (amendment 66) that bar covered the clip's top.
+
+**Decision.** On the home page the bar a scroll up brings in has no ground of its own while the hero's clip or the demo's black stage lies under the whole of it, so it is the header the page opens with; once the band after the demo is under it, it is the black bar of amendment 44. `components/site-shell.tsx` writes which on the header (`data-clear`) at every scroll, and `app/home.css` draws it; the rule of when the bar comes and goes (`components/header-scroll.ts`) is untouched. This holds where the hero stays in the window on the way to the demo. Where it scrolls away as an ordinary section (a window under 1024 px wide or 600 px high, or reduced motion) the bar stays black, because the clip's shade for the header would not be under it.
+
+**Evidence.** `shell.spec.ts`, 18 with 1 skipped: at 200 px down the bar is fixed with a transparent ground, the same on the demo's stage, black 300 px into the band after the demo, and clear again back in the hero. UNVERIFIED: the recording itself was not opened; the bar over the wing where the demo draws near the window's top was not looked at; Safari, Firefox and phones.
+

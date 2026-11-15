@@ -152,6 +152,17 @@ test("the hero's clip fills the first screen from edge to edge with the header o
   expect(statement.bottom).toBeLessThan(backed.top);
   expect(statement.right).toBeLessThan(viewport.width * 0.75);
   await expect(page.locator("#overview h1")).toHaveCSS("text-align", "left");
+  // "Scroll to explore" (not shown yet; its place is read) stands in the middle of the foot from 1200 px (amendment 70),
+  // and narrower in the bottom right corner on the page's margin, clear of the cohort's line.
+  const explore = () => page.evaluate(() => {
+    const [link, cohort] = [document.querySelector("#overview .home-hero-explore")!.getBoundingClientRect(), document.querySelector("#overview .home-hero-backed")!.getBoundingClientRect()];
+    return { offMiddle: Math.round(Math.abs((link.left + link.right) / 2 - window.innerWidth / 2)), fromRight: Math.round(window.innerWidth - link.right), clear: Math.round(link.left - cohort.right) };
+  });
+  expect(await explore()).toMatchObject({ offMiddle: 0 });
+  expect((await explore()).clear).toBeGreaterThanOrEqual(24);
+  await page.setViewportSize({ width: 1199, height: 720 });
+  expect(await explore()).toMatchObject({ fromRight: 32 });
+  expect((await explore()).clear).toBeGreaterThanOrEqual(24);
   // On a phone the picture is edge to edge too, and the words follow the narrower margin.
   await page.setViewportSize({ width: 390, height: 844 });
   const phone = await rect("#overview .home-hero-media");

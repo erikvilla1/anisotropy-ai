@@ -235,8 +235,9 @@ test("three seconds after the load-in the hero's words are taken away and the cl
   // The statement and the words in the corner are still in the page for a screen reader.
   await expect(hero.locator("h1")).toHaveText(/One engineering platform/);
   await expect(hero.locator(".home-hero-backed")).toHaveText("The Basement, UC San Diego Fall 2026 Launchpad cohort");
-  // With the words gone, "Scroll to explore" comes up in the clip's bottom right corner, as far in as the cohort's words are
-  // on the left: the words, then an arrow in a square outline (ADR-0077 amendments 22 and 24) ...
+  // With the words gone, "Scroll to explore" comes up in the middle of the clip's foot (ADR-0077 amendment 70; in the
+  // bottom right corner until then), as far up as the cohort's words are: the words, then an arrow in a square outline
+  // (amendments 22 and 24) ...
   await expect(explore).toBeVisible();
   await expect(explore).toHaveText("Scroll to explore");
   await expect(explore).toHaveAttribute("href", "#demo");
@@ -249,9 +250,9 @@ test("three seconds after the load-in the hero's words are taken away and the cl
     const mark = box("#overview .home-hero-backed");
     const outline = getComputedStyle(document.querySelector("#overview .home-hero-explore-box")!);
     return {
-      fromRight: clip.right - button.right,
+      offMiddle: Math.abs((button.left + button.right) / 2 - (clip.left + clip.right) / 2),
+      clearOfMark: button.left - mark.right,
       fromFoot: clip.bottom - button.bottom,
-      markFromLeft: mark.left - clip.left,
       markFromFoot: clip.bottom - mark.bottom,
       square: [square.width, square.height],
       squareLast: Math.abs(square.right - button.right),
@@ -259,7 +260,8 @@ test("three seconds after the load-in the hero's words are taken away and the cl
       radius: outline.borderTopLeftRadius,
     };
   });
-  expect(placed.fromRight).toBe(placed.markFromLeft);
+  expect(placed.offMiddle).toBeLessThanOrEqual(0.5);
+  expect(placed.clearOfMark).toBeGreaterThanOrEqual(24);
   expect(placed.fromFoot).toBe(placed.markFromFoot);
   expect(placed.square).toEqual([34, 34]);
   expect(placed.squareLast).toBeLessThanOrEqual(0.5);

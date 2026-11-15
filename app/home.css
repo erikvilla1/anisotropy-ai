@@ -1446,6 +1446,20 @@ section.band.closing-band.is-dark .button.primary {
   height: 1.05em;
   background: #ffffff66;
 }
+/* The header's bar over the hero and the demo (ADR-0077 amendment 71). A scroll up brings the header back as a bar fixed
+ * to the window's top (app/globals.css); while the hero's clip or the demo's black stage lies under it, the bar has no
+ * ground of its own, so it is the header the page opened with, over the clip's own shade. Past the demo, over the white
+ * bands, it is the black bar. components/site-shell.tsx says which, as `data-clear`. The ground changes over a fifth of a
+ * second where the bar crosses from one to the other. */
+.site-header.is-home[data-scroll][data-clear] {
+  background: transparent;
+}
+.site-header.is-home[data-scroll="shown"],
+.site-header.is-home[data-scroll="hidden"] {
+  transition:
+    transform 0.24s cubic-bezier(0.215, 0.61, 0.355, 1),
+    background-color 0.2s;
+}
 /* The hand-over to the demo (ADR-0095 amendment 4). Where the demo is a stepped stage, the hero stays in the window while the
  * page scrolls to the stage, lying over it, and dims away as the scroll goes (--hero-left, written by
  * components/home/hero-handover.tsx), while the first beat's words come up through it: the window is never an empty black
@@ -1649,9 +1663,10 @@ section.band.closing-band.is-dark .button.primary {
   outline: 2px solid #ffffff;
   outline-offset: 4px;
 }
-/* "Scroll to explore" (components/home/scroll-to-explore.tsx; ADR-0077 amendments 22, 24 and 50): in the bottom right corner of
- * the clip, as far in as the cohort's words are on the left: the words in the site's typeface, then a down arrow in a square
- * outline with soft corners. It is not there, for the eye, the pointer or the keyboard, until the hero's
+/* "Scroll to explore" (components/home/scroll-to-explore.tsx; ADR-0077 amendments 22, 24 and 50): at the clip's foot, as
+ * far up as the cohort's words are: the words in the site's typeface, then a down arrow in a square outline with soft
+ * corners. From 1200 px it stands in the middle of the foot (amendment 70); narrower, where the cohort's line would run
+ * into it there, it stays in the bottom right corner, as far in as the cohort's words are on the left. It is not there, for the eye, the pointer or the keyboard, until the hero's
  * words have left (`data-words="gone"`, set by components/home/hero-outro.tsx); then it fades in. */
 .home-hero-explore {
   position: absolute;
@@ -1684,6 +1699,13 @@ section.band.closing-band.is-dark .button.primary {
   transition:
     opacity 0.7s ease 0.15s,
     visibility 0s;
+}
+@media (min-width: 1200px) {
+  .home-hero-explore {
+    right: auto;
+    left: 50%;
+    translate: -50% 0;
+  }
 }
 .home-hero-explore-box {
   display: grid;

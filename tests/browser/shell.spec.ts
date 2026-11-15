@@ -247,9 +247,10 @@ test("Back to top takes the focus to the top with the page", async ({ page }) =>
 
 test("on an inner page the header leaves as the page scrolls down and comes back as a black bar on the way up, wherever the page is", async ({ page }) => {
   await page.goto("/about");
-  // At the page's top it is what it was: in the page's flow, on the page's own ground.
+  // At the page's top it is in the page's flow, a black bar over the white page (ADR-0077 amendment 69; until then it had
+  // no ground of its own, on a black page).
   const atTop = await bar(page);
-  expect(atTop).toEqual({ top: 0, bottom: 84, position: "relative", ground: "rgba(0, 0, 0, 0)", state: "top" });
+  expect(atTop).toEqual({ top: 0, bottom: 84, position: "relative", ground: "rgb(0, 0, 0)", state: "top" });
   const before = await places(page);
   await page.mouse.move(720, 500);
   // Down: it scrolls away with the page as it always did, and is then kept above the window.
@@ -388,7 +389,7 @@ test.describe("on the home page", () => {
   /** The states the header has taken since the last look. */
   const seen = (page: Page) => page.evaluate(() => (window as unknown as { headerStates: string[] }).headerStates.splice(0));
 
-  test("the header lies over the hero at the top as before and leaves with it; a scroll up or the keyboard's focus brings it in as the bar, and at the top it is the hero's header again", async ({ page }) => {
+  test("the header lies over the hero at the top as before and leaves with it; a scroll up or the keyboard's focus brings it in as the bar, clear over the hero and the demo and black past them, and at the top it is the hero's header again", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#overview h1")).toBeVisible();
     const atTop = await bar(page);
@@ -400,16 +401,41 @@ test.describe("on the home page", () => {
     await expect.poll(() => pageY(page)).toBe(300);
     await expect(header(page)).toHaveAttribute("data-scroll", "away");
     expect((await bar(page)).bottom).toBeLessThanOrEqual(0);
-    // Up a little: the bar, black, over what the window shows, with the page still off its top.
+    // Up a little: the bar, over what the window shows, with the page still off its top. The hero's clip is under it, so
+    // it has no ground of its own: it is the header the page opened with (ADR-0077 amendment 71; black until then).
     await page.mouse.wheel(0, -100);
     await barIn(page);
-    expect(await bar(page)).toEqual({ top: 0, bottom: 84, position: "fixed", ground: "rgb(0, 0, 0)", state: "shown" });
+    expect(await bar(page)).toEqual({ top: 0, bottom: 84, position: "fixed", ground: "rgba(0, 0, 0, 0)", state: "shown" });
     expect(await pageY(page)).toBe(200);
     expect(await barOnTop(page)).toBe(true);
+    expect(await seen(page)).toEqual(["away", "shown"]);
+    // On the demo's stage it is clear too, and black once the band after the demo is under it.
+    const stageY = await page.evaluate(() => Math.round(document.getElementById("demo")!.getBoundingClientRect().top + window.scrollY) + 400);
+    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), stageY + 100);
+    await expect.poll(() => pageY(page)).toBe(stageY + 100);
+    await page.mouse.wheel(0, -100);
+    await barIn(page);
+    await expect.poll(async () => (await bar(page)).ground).toBe("rgba(0, 0, 0, 0)");
+    expect(await bar(page)).toMatchObject({ position: "fixed", state: "shown" });
+    const pastY = await page.evaluate(() => Math.round(document.getElementById("mission")!.getBoundingClientRect().top + window.scrollY));
+    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), pastY + 300);
+    await expect.poll(() => pageY(page)).toBe(pastY + 300);
+    await page.mouse.wheel(0, -100);
+    await barIn(page);
+    await expect.poll(async () => (await bar(page)).ground).toBe("rgb(0, 0, 0)");
+    expect(await bar(page)).toMatchObject({ position: "fixed", state: "shown" });
+    // Back in the hero, a little way down, as before.
+    await page.evaluate(() => window.scrollTo({ top: 310, behavior: "instant" }));
+    await expect.poll(() => pageY(page)).toBe(310);
+    await page.mouse.wheel(0, -110);
+    await expect.poll(() => pageY(page)).toBe(200);
+    await barIn(page);
+    await expect.poll(async () => (await bar(page)).ground).toBe("rgba(0, 0, 0, 0)");
+    await seen(page);
     // Down: gone.
     await page.mouse.wheel(0, 100);
     await barOut(page);
-    expect(await seen(page)).toEqual(["away", "shown", "hidden"]);
+    expect(await seen(page)).toEqual(["hidden"]);
     // The keyboard: Tab to the logo brings the bar in, and the page stays where it is.
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");

@@ -26,7 +26,12 @@ const MENU_ID = "site-menu";
  * whenever the focus comes into the header and whenever a stage locks the page, and writes the answer on the header as
  * `data-scroll`: nothing at the page's top, "away" or "hidden" while it is out of sight above the window, "shown" while it
  * is the bar. It is written straight on the element, not through React's state, so the header changes in the frame the
- * page scrolled in. */
+ * page scrolled in.
+ * On the home page the bar has no ground of its own while the hero's clip or the demo's black stage lies under it
+ * (`data-clear`; app/home.css draws it, ADR-0077 amendment 71): it is then the header as the page opens with it, over the
+ * clip, and it is the black bar only further down, over the bands. That holds where the hero stays in the window while
+ * the page scrolls to the demo (components/home/hero-handover.tsx says so on their wrapper); where it scrolls away as an
+ * ordinary section, the bar is black as soon as it comes in. */
 function useHeaderScroll(header: RefObject<HTMLElement | null>, active: boolean) {
   useEffect(() => {
     const element = header.current;
@@ -72,8 +77,19 @@ function useHeaderScroll(header: RefObject<HTMLElement | null>, active: boolean)
       }
       element.dataset.scroll = next.state;
     };
-    const onScroll = () => write(headerAfterScroll(memory, page));
-    const onFocus = () => write(headerAfterFocus(memory, page));
+    // Whether the bar lies wholly over the home page's opening, the hero and the demo, with the hero held in the window.
+    const ground = () => {
+      const opening = element.classList.contains("is-home") ? document.querySelector<HTMLElement>(".home-opening") : null;
+      element.toggleAttribute("data-clear", Boolean(opening?.hasAttribute("data-handover")) && opening!.getBoundingClientRect().bottom >= element.offsetHeight);
+    };
+    const onScroll = () => {
+      ground();
+      write(headerAfterScroll(memory, page));
+    };
+    const onFocus = () => {
+      ground();
+      write(headerAfterFocus(memory, page));
+    };
     // That lock goes on without a scroll, and on a stage that holds the window a gesture plays a step and scrolls nothing.
     const lock = new MutationObserver(() => {
       if (root.hasAttribute("data-tour-lock")) write(headerAfterLock(memory, page));
@@ -87,6 +103,7 @@ function useHeaderScroll(header: RefObject<HTMLElement | null>, active: boolean)
       element.removeEventListener("focusin", onFocus);
       lock.disconnect();
       delete element.dataset.scroll;
+      element.removeAttribute("data-clear");
     };
   }, [header, active]);
 }
