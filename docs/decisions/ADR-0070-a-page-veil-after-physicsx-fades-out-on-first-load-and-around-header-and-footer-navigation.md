@@ -224,3 +224,20 @@ Numbered 3 on its branch; renumbered when the branch took in main, where an amen
 
 UNVERIFIED: a real restore from the back-forward cache (the test browser keeps no page; only a simulated one is tested); Safari, Firefox and phones; a slow network, where fonts later than 600 ms would change the text's type after the lift; a real screen reader; the hosted site. Known and left: where no script runs, a focus ring other than the skip link's can lie under the black for up to 0.6 s and the lift.
 
+## Amendment 13, 2026-11-14 (a link fades its page to black first, and the page that comes in lifts more slowly)
+
+**Context.** The lead, with a recording of amendment 12's fade: "can we make the fade to black smoother between switching pages and not as fast." In the recording the page pressed for cuts to black in one frame and is clear about half a second later. A fade to black cannot be shown without keeping the page that is being left on screen while it fades, which is the delay amendment 3 took away at the founder's word and amendment 12 kept away. **This reverses that part of amendments 3 and 12 and is for the founder to accept or refuse with the pull request (R-32).**
+
+**Options.** (1) A longer lift only, with the cut to black kept: not chosen, the cut is what reads as abrupt. (2) The browser's view transitions, which fade between two pictures of the page without holding the navigation: not chosen now; the load-in moves would have to be rebuilt on them, and there is no evidence yet that the result would feel different. (3) Hold the link for a short fade to black, then lift slowly: chosen.
+
+**Decision.**
+
+- **A link fades its page to black.** A link to another page of the site, pressed with a pointer, fades the page it is on to black in 360 ms, eased at both ends. Its page is fetched while the fade runs and asked for when the black is whole. So such a link is held 360 ms, and 560 ms at most if the fade's end is never heard.
+- **The page that comes in lifts in 850 ms,** eased at both ends, by a link, Back or Forward (it was 600 ms, fastest at its start). A page that was loaded keeps its 600 ms.
+- **Back and Forward are not held:** the browser changes the page at once, so their page comes in black with no fade before it.
+- **Not held and not faded:** a link pressed from the keyboard, a press with a modifier key, a link that opens a new tab, a link within the page, a link to or from the workspace, and every link for a visitor who asks for reduced motion.
+- A second press while the page fades changes where it goes. If the page asked for has not come 4 s after the fade, the black goes.
+- The rest of amendment 12 stands.
+
+**Evidence.** Frames read in the page on 2026-11-14 against the dev server, one press from About to Industries: the black rises from 0 to 1 over the 360 ms after the press, Industries takes About's place under whole black 448 ms after the press and is clear 1.27 s after it. `intro.spec.ts`, 15 of 15: the fade to black has five frames or more, is never lighter from one to the next and is whole before the new page is there; the new page is there no sooner than 330 ms after the press and, for the fastest of four presses, within 610 ms; its lift takes 700 to 1300 ms; Back and Forward are not faded before; a press from the keyboard, reduced motion and the workspace get no veil. `home.spec.ts` 8, `shell.spec.ts` 18 with 1 skipped, `expansion.spec.ts` 5 with 2 skipped, `demo.spec.ts` 13: 44 passed, 3 skipped. `npm test`: 336 tests, 335 passed, 1 skipped. `npx tsc --noEmit` clean. UNVERIFIED: a production build (these are the dev server's times); Safari, Firefox and phones; whether these lengths are the ones the lead wants.
+

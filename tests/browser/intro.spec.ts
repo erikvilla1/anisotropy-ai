@@ -330,14 +330,30 @@ test("each time the clip starts again the hero's words are typed in again, stand
 /** When a press last reached the page, in ms since the document started. */
 const pressedAt = (page: Page) => page.evaluate(() => (window as unknown as { __pressed: number }).__pressed);
 
-/** What the frames say of a page that came in without a reload. While the page being left is still there nothing fades: the
- * black belongs to the page that comes in. That page's first frame has its address, its heading and the black together, at
- * most one frame into the lift; the black only ever lifts from there, and the veil is out of the way within a second. Returns
- * when the page's first frame was read and when the veil was first out of the way. */
-function expectLanding(seen: Frame[], path: string, title: string) {
+/** What the frames say of a page that a link is leaving (ADR-0070 amendment 13): it stands clear, then fades to black without
+ * ever getting lighter, over about 360 ms and many frames, and is black when the next page takes its place. */
+function expectFadeToBlack(before: Frame[]) {
+  const from = before.findIndex((frame) => frame.phase !== "is-idle");
+  expect(from, "a fade to black before the page is left").toBeGreaterThanOrEqual(0);
+  expect(before.slice(0, from).every((frame) => frame.opacity === 0)).toBe(true);
+  const fade = before.slice(from);
+  expect(fade.every((frame) => frame.phase === "is-cover")).toBe(true);
+  expect(fade.every((frame, index) => index === 0 || frame.opacity >= fade[index - 1].opacity)).toBe(true);
+  expect(fade[fade.length - 1].opacity).toBeGreaterThanOrEqual(0.99);
+  expect(fade[fade.length - 1].at - fade[0].at).toBeGreaterThanOrEqual(300);
+  expect(fade.length).toBeGreaterThanOrEqual(5); // a fade, not a cut
+}
+
+/** What the frames say of a page that came in without a reload. By a link, the page being left fades to black first
+ * (expectFadeToBlack); by Back or Forward, which cannot be held, nothing fades while the page being left is still there. The
+ * page that comes in has its address, its heading and the black together in its first frame, at most one frame into the
+ * lift; the black only ever lifts from there, and the veil is out of the way within about a second (the lift is 850 ms).
+ * Returns when the page's first frame was read and when the veil was first out of the way. */
+function expectLanding(seen: Frame[], path: string, title: string, by: "link" | "traversal") {
   const first = seen.findIndex((frame) => frame.path === path);
   expect(first, `a frame of ${path}`).toBeGreaterThanOrEqual(0);
-  expect(seen.slice(0, first).every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
+  if (by === "link") expectFadeToBlack(seen.slice(0, first));
+  else expect(seen.slice(0, first).every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
   expect(seen[first]).toMatchObject({ phase: "is-lift", shown: true, colour: "rgb(1, 1, 1)" });
   expect(seen[first].opacity).toBeGreaterThanOrEqual(0.9);
   expect(seen[first].title).toContain(title);
@@ -347,7 +363,8 @@ function expectLanding(seen: Frame[], path: string, title: string) {
   const idle = here.find((frame) => frame.phase === "is-idle");
   expect(idle, "the veil out of the way").toBeTruthy();
   expect(idle!.opacity).toBe(0);
-  expect(idle!.at - here[0].at).toBeLessThanOrEqual(1000);
+  expect(idle!.at - here[0].at).toBeLessThanOrEqual(1300);
+  expect(idle!.at - here[0].at).toBeGreaterThanOrEqual(700); // slower than a loaded page's 600 ms
   expect(here[here.length - 1]).toMatchObject({ phase: "is-idle", opacity: 0 });
   return { at: here[0].at, clear: idle!.at };
 }
@@ -355,7 +372,7 @@ function expectLanding(seen: Frame[], path: string, title: string) {
 const ABOUT = "Engineering built";
 const INDUSTRIES = "Built for research.";
 
-test("a link goes to its page at once, and the page comes out of black; Back and Forward too (ADR-0070)", async ({ page }) => {
+test("a link fades its page to black, then goes, and the page that comes in fades out of black slowly; Back and Forward come out of black too (ADR-0070 amendments 12 and 13)", async ({ page }) => {
   await record(page);
   await page.goto("/");
   const veil = page.locator(".page-transition");
@@ -372,26 +389,28 @@ test("a link goes to its page at once, and the page comes out of black; Back and
     await page.locator(`.site-header a[href='${path}']`).first().click();
     await expect(page).toHaveURL(new RegExp(`${path}/?$`));
     await expect(veil).toHaveClass(/is-idle/);
-    const landing = expectLanding(await frames(page), path, title);
+    const landing = expectLanding(await frames(page), path, title, "link");
     const pressed = await pressedAt(page);
     waits.push({ toPage: landing.at - pressed, toClear: landing.clear - pressed });
     // No load-in moves on these pages: nothing of theirs is tagged for them.
     await expect(page.locator(".intro-overlay, [data-intro-run]")).toHaveCount(0);
   }
-  // A link is not held back. The delay that amendment 3 took away kept every link for 350 to 550 ms before its page was even
-  // asked for; the fastest of the four presses here has the new page on screen in less than that, and clear of the black
-  // within the 600 ms lift after it. The fastest is taken because one slow answer from the server is not a delay of ours.
-  expect(Math.min(...waits.map((wait) => wait.toPage))).toBeLessThan(350);
-  expect(Math.min(...waits.map((wait) => wait.toClear))).toBeLessThan(350 + 1000);
+  // A link is held for the fade to black and no longer (amendment 13, at the lead's word; amendment 3 had taken every such
+  // delay away): the new page is on screen after the fade's 360 ms and within a few frames of it, and clear of the black
+  // within the 850 ms lift after that. The fastest of the four presses is taken, because one slow answer from the server
+  // is not a delay of ours.
+  for (const wait of waits) expect(wait.toPage).toBeGreaterThanOrEqual(330);
+  expect(Math.min(...waits.map((wait) => wait.toPage))).toBeLessThan(360 + 250);
+  expect(Math.min(...waits.map((wait) => wait.toClear))).toBeLessThan(360 + 250 + 1300);
   // Back and Forward bring their pages out of black as well.
   await page.goBack();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/about");
   await expect(veil).toHaveClass(/is-idle/);
-  expectLanding(await frames(page), "/about", ABOUT);
+  expectLanding(await frames(page), "/about", ABOUT, "traversal");
   await page.goForward();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/industries");
   await expect(veil).toHaveClass(/is-idle/);
-  expectLanding(await frames(page), "/industries", INDUSTRIES);
+  expectLanding(await frames(page), "/industries", INDUSTRIES, "traversal");
 });
 
 test("the home page reached by a link comes out of black with its words typed in; brought back by Back, with its words whole", async ({ page }) => {
@@ -407,7 +426,7 @@ test("the home page reached by a link comes out of black with its words typed in
   const seen = await frames(page);
   // As on its first load: the copies are ready in the page's first frame, under the black, and play as it lifts.
   const first = seen.findIndex((frame) => frame.path === "/");
-  expect(seen.slice(0, first).every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
+  expectFadeToBlack(seen.slice(0, first)); // About fades to black before the home page takes its place (amendment 13)
   expect(seen[first]).toMatchObject({ phase: "is-lift", shown: true, copies: 3, hiddenCopies: 3, riders: 1, running: 6, ownHeadline: STATEMENT });
   expect(seen[first].opacity).toBeGreaterThanOrEqual(0.9);
   const gone = seen.findIndex((frame, index) => index > first && frame.copies === 0);
@@ -424,7 +443,7 @@ test("the home page reached by a link comes out of black with its words typed in
   await expect(page.locator("#overview h1")).toBeVisible();
   await expect(veil).toHaveClass(/is-idle/);
   const back = await frames(page);
-  expectLanding(back, "/", "One engineering platform");
+  expectLanding(back, "/", "One engineering platform", "traversal");
   expect(back.every((frame) => frame.copies === 0 && frame.running === 0)).toBe(true);
   await expectHeroWhole(page);
 });
