@@ -832,3 +832,11 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `home.spec.ts`, 8 of 8: the band's ground is white, the layer's is the grey, its inset is 0, 32, 32, 32, the gap to the card is 32 px, the footer follows at once, and every text on the grey still clears 4.5 to 1. Captured at 1900 px and looked at. UNVERIFIED: the phone's arrangement was not looked at.
 
+## Amendment 68, 2026-11-15 (the changelog's card rises into a near-white blue, with dark words)
+
+**Context.** The lead, with a capture of the card: "can we also have this instead of fading to a dark blue fade to like a really light blue, near white".
+
+**Decision.** The card's colours at its foot are as they were (amendment 49), and the grid over them (amendment 54). Above them the ground rises into a very light blue, `#f4f8ff` at the top, where it was a dark blue. White words would not read there, so the label, the heading and the sentence are a dark blue (`#0a1538`, the sentence `#26335c`).
+
+**Evidence.** `home.spec.ts`, 8 of 8, reads the ground's first colour and the words' colours. Captured at 1900 px and looked at. UNVERIFIED: the words' contrast was not measured where the sentence's last line meets the blue (judged by eye), and a published list of releases on this ground was not looked at.
+

@@ -981,15 +981,16 @@
   border-top: 0;
 }
 /* The card (amendment 49): a soft field in the colours the demo gives its analysis, blue through cyan, green and yellow to
- * red, each blurred into the next, with the band's words on it in white. It is a ground and nothing more: it shows no
- * result. A list of releases, when there is one, stands on a white panel on it. */
+ * red, each blurred into the next. It is a ground and nothing more: it shows no result. Since amendment 68 the colours
+ * rise into a very light blue, near white, at the card's top (until then into a dark blue, with the words in white), so
+ * the band's words stand on it in a dark blue. A list of releases, when there is one, stands on a white panel on it. */
 .home-feed-card {
   /* The grid below lies on the card's ground and under everything in the card. */
   position: relative;
   isolation: isolate;
-  --text: #ffffff;
-  --muted: #ffffffd9;
-  --line: #ffffff59;
+  --text: #0a1538;
+  --muted: #26335c;
+  --line: #0a153833;
   --panel: #ffffff;
   min-height: clamp(360px, 46vh, 520px);
   padding: clamp(64px, 9vh, 104px) 32px clamp(72px, 10vh, 120px);
@@ -999,7 +1000,7 @@
     radial-gradient(46% 70% at 80% 96%, #ffd400d9 0%, #ffd40000 64%),
     radial-gradient(48% 74% at 54% 112%, #1fd65ccc 0%, #1fd65c00 62%),
     radial-gradient(54% 82% at 22% 104%, #00c8ffb8 0%, #00c8ff00 64%),
-    linear-gradient(168deg, #060b3a 0%, #0b1f9c 46%, #1448f0 100%);
+    linear-gradient(to bottom, #f4f8ff 0%, #eaf2ff 34%, #bcd8ff 62%, #4f93ff 86%, #1c5cf2 100%);
 }
 /* A thin grid over the colours (amendment 54): hairlines of white, 36 px apart, strongest at the card's foot, where the
  * colours are, and faded to nothing half way up, so the words at the top stand on a clean ground. A picture effect, as the
