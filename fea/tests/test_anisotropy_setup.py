@@ -189,7 +189,7 @@ def test_a_double_click_ends_in_a_box_that_says_it_is_set_up_and_what_comes_next
         say("not set up: no Python beside Abaqus could be started on its own")
         return 1
     assert setup.main(["--box"], tell, stopped) == 1
-    assert told[-1] == (setup.NOT_SET_UP + "\n\nnot set up: no Python beside Abaqus could be started on its own", True)
+    assert told[-1] == (setup.NOT_SET_UP + "\n\nNo Python beside Abaqus could be started on its own", True)  # the reason once, not the console's first words again
 
     assert setup.main([], tell, done) == 0 and len(told) == 3  # from a command window: the lines, and no box
     removed = []

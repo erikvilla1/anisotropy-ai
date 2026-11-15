@@ -266,7 +266,8 @@ def box(text: str, error: bool = False) -> bool:
 def ending(code: int, said: list) -> str:
     """How the setup ended, in the few words a box holds: that it is done and what comes next, or the reason it is not."""
     if code != 0:
-        return "\n\n".join([NOT_SET_UP, *[line for line in said if line.startswith("not set up: ")][-1:]])
+        why = [line[len("not set up: "):] for line in said if line.startswith("not set up: ")][-1:]  # the reason, without the console's own first words
+        return "\n\n".join([NOT_SET_UP, *[line[:1].upper() + line[1:] for line in why]])
     return "\n\n".join([SET_UP, *[line[3:] for line in said if line == NO_ABAQUS], NEXT])
 
 
