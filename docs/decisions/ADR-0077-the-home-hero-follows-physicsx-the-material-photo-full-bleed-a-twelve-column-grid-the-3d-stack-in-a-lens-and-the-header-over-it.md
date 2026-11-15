@@ -745,3 +745,25 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** Contrast, computed: white on the ground 6.65 to 1, the small label 4.96 to 1, the band against the black footer 3.16 to 1 and against the light band above it 6.0 to 1. `home.spec.ts`, 8 of 8. Captured at 1440 px beside a darker and a lighter grey (`#4a4a4f`, `#707075`) for the lead to choose from, and looked at. UNVERIFIED: whether this is the shade the lead wants.
 
+## Amendment 59, 2026-11-14 (the team band is one grey block; the changelog's band is white; the closing band is lighter again)
+
+**Context.** The lead, with captures of the three bands: "this section is feeling useless. perhaps combine the gray box and the headshots box together to condense and make entire box that same gray. and then make the box for the changelog white. also make the contact us box lighter."
+
+**Decision.**
+
+- **The team band is one light grey block** (`#f3f3f4`) from edge to edge: the heading and its sentence stand close over the portraits, about 100 px less tall than the grey head over white portraits of amendment 41. The "Team" label stays over the portraits at their left edge (amendment 42).
+- **The changelog's band is white** round its card, so the page still alternates: white, grey, white, the closing band, the black footer.
+- **The closing band is `#707075`** (it was `#5c5c61`), its small label white and its rule a little stronger. That is about as light as white words allow: lighter, and the small words fall under 4.5 to 1, so the words would have to turn dark.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the band's ground and the head's lack of one, the portraits under the sentence within 100 px, names and titles at 4.5 to 1 or more on the grey, the changelog's band white, the closing band's ground and every text on it at 4.5 to 1 or more. Contrast of white on `#707075`, computed: 4.93 to 1. The bands were captured at 1440 px and looked at. UNVERIFIED: 390 px was captured and not looked at closely; whether the lead finds the team band condensed enough and the grey light enough.
+
+## Amendment 60, 2026-11-14 (the footer links to the company's pages on LinkedIn and X)
+
+**Context.** The lead, with a capture of the footer: "I wanna add X, Linkedin here in this."
+
+**Options.** (1) The two networks' marks as icons: not taken now, a mark is another owner's drawing with its own rules (R-30 is open on one already), and the footer is set in words. (2) The two names as links in the footer's own type, each with the arrow of a link that opens a new tab (amendment 16): chosen.
+
+**Decision.** Under the footer's tagline stand "LinkedIn" and "X", in that order, each a link to the company's page there that opens in a new tab and says so to a screen reader. The addresses are in `lib/site-nav.ts`. A link is drawn only when its address is filled in and is an https address on the network's own host, so the footer never carries a link that leads nowhere. The addresses are not known here and are left empty: until the lead gives them, the footer shows neither.
+
+**Evidence.** `tests/site-map.test.ts`: the two entries, and that one without a full address on its host is not shown. `tests/site-metadata.test.ts`: every north-east arrow in the shell stands in a link that opens a new tab. `shell.spec.ts`, 18 with 1 skipped: one link for each address filled in, in a new tab, with its name; with none, no list. The footer was captured at 1440 px with two example addresses, which are not in the repository, and looked at. `npm test`: 336 tests, 335 passed, 1 skipped. UNVERIFIED: the links themselves, until there are addresses.
+

@@ -56,3 +56,17 @@ export function headerLinksToProjects(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, "");
   return isAppPath(path) && path.startsWith(`${WORKSPACE_ROOT}/`) && !WORKSPACES.some((w) => w.href === path);
 }
+
+/** The company's pages elsewhere, shown in the footer under the tagline (ADR-0077 amendment 60): LinkedIn and X, in that
+ * order. `href` is the page's full address. An entry whose address is not filled in is not shown, so the footer never
+ * carries a link that leads nowhere; `host` is where the address must lead. */
+export type SocialLink = { label: string; host: string; href: string };
+export const socialLinks: readonly SocialLink[] = [
+  { label: "LinkedIn", host: "www.linkedin.com", href: "" },
+  { label: "X", host: "x.com", href: "" },
+];
+/** Whether an entry's address is a full https address on its own host. */
+export const isSocialAddress = (link: SocialLink): boolean => link.href.startsWith(`https://${link.host}/`) && link.href.length > `https://${link.host}/`.length && !/\s/.test(link.href);
+/** The entries the footer shows. */
+export const shownSocialLinks = (links: readonly SocialLink[] = socialLinks): SocialLink[] => links.filter(isSocialAddress);
+

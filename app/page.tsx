@@ -157,8 +157,8 @@ export default function Home() {
         <SplitPicture />
       </section>
       {/* The team keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
-          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band's
-          head stands on light grey from edge to edge and the portraits on white (ADR-0077 amendment 41, app/home.css). */}
+          link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band is
+          one light grey block, its head close over the portraits (ADR-0077 amendment 59, app/home.css). */}
       <section className="band is-light home-blurb home-about" id="working">
         <div className="band-head">
           <div className="band-statement">
@@ -171,7 +171,7 @@ export default function Home() {
             </p>
           </div>
         </div>
-        {/* The band's label stands over the portraits, at their left edge, on the white (amendment 42). */}
+        {/* The band's label stands over the portraits, at their left edge (amendment 42). */}
         <p className="band-label home-faces-label">Team</p>
         <div className="home-faces">
           {team.map((person) => (
@@ -228,7 +228,7 @@ export default function Home() {
           name and what changed in it, line by line and tagged by kind. The list is lib/changelog.ts; it is empty until a
           version is published, and the band then says so. */}
       <section className="band is-light home-blurb home-feed" id="changelog">
-        {/* The band is light grey, and its words stand on a card in the colours the demo gives its analysis, blurred into one
+        {/* The band is white (amendment 59), and its words stand on a card in the colours the demo gives its analysis, blurred into one
             another (amendment 49), with a thin grid over the colours that fades out half way up the card (amendment 54). */}
         <div className="home-feed-card">
         <div className="band-head">

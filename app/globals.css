@@ -1165,11 +1165,30 @@ main[tabindex="-1"]:focus {
 .site-footer-child a {
   color: var(--muted);
 }
+/* The company's pages elsewhere, in a row under the tagline (ADR-0077 amendment 60): the footer's own type, each with
+ * the arrow of a link that opens a new tab. */
+.site-footer-social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 16px;
+  line-height: 22px;
+}
+.site-footer-social a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .site-footer-nav a,
+.site-footer-social a,
 .site-footer-bottom a {
   transition: opacity 0.15s;
 }
 .site-footer-nav a:hover,
+.site-footer-social a:hover,
 .site-footer-bottom a:hover {
   opacity: 0.6;
 }

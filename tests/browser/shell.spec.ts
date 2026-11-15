@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { SERVICES_PANEL_IN_HEADER } from "../../lib/site-nav";
+import { SERVICES_PANEL_IN_HEADER, shownSocialLinks } from "../../lib/site-nav";
 
 // The site's shell after the audit of 2026-11-12 (ADR-0077 amendment 16, ADR-0058 amendment 2): the 404 page, the titles, the folded
 // menu's keyboard order, Back to top and the workspace header's way back to the projects. Runs against the built site.
@@ -200,6 +200,17 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
   await expect(services).toHaveAttribute("aria-current", "page");
   const footer = page.getByRole("navigation", { name: "Footer" });
   for (const name of five) await expect(footer.getByRole("link", { name, exact: true })).toBeVisible();
+  // The company's pages elsewhere stand under the footer's tagline, one link for each address that is filled in, each in a
+  // new tab (ADR-0077 amendment 60); with none filled in there is no list.
+  const elsewhere = page.locator(".site-footer-social a");
+  await expect(elsewhere).toHaveCount(shownSocialLinks().length);
+  await expect(page.locator(".site-footer-social")).toHaveCount(shownSocialLinks().length ? 1 : 0);
+  for (const [index, link] of shownSocialLinks().entries()) {
+    await expect(elsewhere.nth(index)).toHaveAttribute("href", link.href);
+    await expect(elsewhere.nth(index)).toHaveAttribute("target", "_blank");
+    await expect(elsewhere.nth(index)).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(elsewhere.nth(index)).toHaveAccessibleName(`Anisotropy on ${link.label} (opens in a new tab)`);
+  }
   await footer.getByRole("link", { name: "Test plans", exact: true }).focus(); // on the home page focus opens what follows the demo
   await footer.getByRole("link", { name: "Test plans", exact: true }).click();
   await expect(page).toHaveURL(/\/services\/test-plans\/?$/);

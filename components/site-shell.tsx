@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, Menu, X } from "lucide-react";
-import { headerLinksToProjects, isAppPath, primaryNav, siteNav } from "@/lib/site-nav";
+import { ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Menu, X } from "lucide-react";
+import { headerLinksToProjects, isAppPath, primaryNav, shownSocialLinks, siteNav } from "@/lib/site-nav";
 import { AT_TOP, headerAfterFocus, headerAfterLock, headerAfterScroll, type HeaderMemory, type HeaderPage } from "@/components/header-scroll";
 import { ServicesMenu } from "@/components/services-menu";
 
@@ -215,12 +215,26 @@ export function SiteFooter() {
   const pathname = usePathname();
   if (isAppPath(pathname)) return null;
   const current = (href: string) => (pathname === href ? "page" : undefined);
+  const elsewhere = shownSocialLinks();
   return (
     <footer className="site-footer">
       <div className="site-footer-top">
         <div className="site-footer-brand">
           <Wordmark />
           <p>Composites. Calculated.</p>
+          {/* The company's pages elsewhere (lib/site-nav.ts, ADR-0077 amendment 60): each opens in a new tab, so each
+              carries the north-east arrow. None is drawn until its address is filled in. */}
+          {elsewhere.length > 0 && (
+            <ul className="site-footer-social" aria-label="Anisotropy elsewhere">
+              {elsewhere.map((link) => (
+                <li key={link.label}>
+                  <a href={link.href} target="_blank" rel="noopener noreferrer" aria-label={`Anisotropy on ${link.label} (opens in a new tab)`}>
+                    {link.label} <ArrowUpRight size={16} aria-hidden="true" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <nav className="site-footer-nav" aria-label="Footer">
           <ul>

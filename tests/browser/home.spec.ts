@@ -210,26 +210,40 @@ test("the hero's clip can be paused from the keyboard, its button is not on the 
 test("after the demo the page is white, and Mission and Services are two short blocks that lead on (ADR-0077 amendments 33 and 34)", async ({ page }) => {
   await page.goto("/");
   await pastTheDemo(page);
-  for (const id of ["mission", "platform", "working"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  // The team band's head stands on the feed's light grey from edge to edge, and the portraits under it on white (amendment 41).
+  for (const id of ["mission", "platform"]) await expect(page.locator(`#${id}`), id).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  // The team band is one light grey block from edge to edge: its head has no ground of its own, and the portraits stand
+  // close under it on the same grey (amendment 59, which ended amendment 41's grey head over white).
   const team = await page.locator("#working").evaluate((band) => {
     const head = band.querySelector(".band-head")!;
     const frame = band.querySelector(".home-face-frame")!;
-    const box = head.getBoundingClientRect();
-    return { head: getComputedStyle(head).backgroundColor, left: box.left, right: box.right, wide: document.documentElement.clientWidth, top: box.top - band.getBoundingClientRect().top, facesBelow: frame.getBoundingClientRect().top >= box.bottom };
+    const words = head.querySelector("p")!.getBoundingClientRect();
+    const box = band.getBoundingClientRect();
+    return {
+      band: getComputedStyle(band).backgroundColor, head: getComputedStyle(head).backgroundColor, left: box.left, right: box.right, wide: document.documentElement.clientWidth,
+      facesBelow: frame.getBoundingClientRect().top >= head.getBoundingClientRect().bottom, gap: frame.getBoundingClientRect().top - words.bottom,
+      framesInside: frame.getBoundingClientRect().bottom < box.bottom,
+    };
   });
-  expect(team.head).toBe("rgb(243, 243, 244)");
+  expect(team.band).toBe("rgb(243, 243, 244)");
+  expect(team.head).toBe("rgba(0, 0, 0, 0)");
   expect([team.left, team.right]).toEqual([0, team.wide]);
-  expect(team.top).toBeLessThanOrEqual(1);
   expect(team.facesBelow).toBe(true);
+  expect(team.framesInside).toBe(true);
+  expect(team.gap).toBeLessThan(100); // the sentence and the portraits are one block: it was about 150 px with the head's own ground
+  // Names and titles on the grey keep 4.5 to 1.
+  const faceTones = await page.locator("#working .home-face").first().evaluate((card) => ({ name: getComputedStyle(card.querySelector("h3")!).color, title: getComputedStyle(card.querySelector("p")!).color }));
+  const lightOf = (colour: string) => {
+    const [red, green, blue] = colour.match(/[\d.]+/g)!.slice(0, 3).map((value) => { const share = Number(value) / 255; return share <= 0.04045 ? share / 12.92 : ((share + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  for (const [name, colour] of Object.entries(faceTones)) expect((lightOf("rgb(243, 243, 244)") + 0.05) / (lightOf(colour) + 0.05), name).toBeGreaterThanOrEqual(4.5);
   // The head says who is behind the product and what they cover (amendment 55): one short heading and one sentence, and
   // nothing of how the team is run.
   const teamHead = page.locator("#working .band-head");
   await expect(teamHead.getByRole("heading", { level: 2 })).toHaveText("The team behind the platform.");
   await expect(teamHead.locator("p")).toHaveText("Five people covering modeling and validation, fabrication and mechanical testing, and the software and AI that connect them.");
   await expect(teamHead).not.toContainText(/seats?\b|decides|spending|repository|\bCEO\b/i);
-  // The band's label is not in the head: it stands on the white under it, over the portraits and at their left edge
-  // (amendment 42).
+  // The band's label is not in the head: it stands under it, over the portraits and at their left edge (amendment 42).
   await expect(page.locator("#working .band-head .band-label")).toHaveCount(0);
   await expect(page.locator("#working .home-faces-label")).toHaveText("Team");
   const label = await page.locator("#working").evaluate((band) => {
@@ -243,10 +257,10 @@ test("after the demo the page is white, and Mission and Services are two short b
   expect(label.left).toBe(label.frameLeft);
   expect(label.top).toBeGreaterThan(label.headBottom);
   expect(label.bottom).toBeLessThan(label.frameTop);
-  // The changelog is a band on light grey (amendments 36 and 46) with nothing published yet: its head alone, saying so,
-  // and no list. It is not a news feed: no card, no "What is new".
+  // The changelog is a white band (amendment 59; light grey under amendments 36 and 46) with nothing published yet: its
+  // head alone, saying so, and no list. It is not a news feed: no card, no "What is new".
   const changelog = page.locator("#changelog");
-  await expect(changelog).toHaveCSS("background-color", "rgb(243, 243, 244)");
+  await expect(changelog).toHaveCSS("background-color", "rgb(255, 255, 255)");
   // Its words stand in white on a card whose ground is the demo's colours blurred into one another (amendment 49).
   const card = changelog.locator(".home-feed-card");
   expect(await card.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/radial-gradient.*radial-gradient.*linear-gradient/);
@@ -263,12 +277,12 @@ test("after the demo the page is white, and Mission and Services are two short b
   expect(grid.lines).toMatch(/^linear-gradient\(to right, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\), linear-gradient\(to top, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\)$/);
   expect(grid.mask).toMatch(/^linear-gradient\(to top, rgb\(0, 0, 0\) 0%, rgb\(0, 0, 0\) 6%, rgba\(0, 0, 0, 0\) 50%\)$/);
   // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey; lighter since
-  // amendments 56 and 58): lighter than the black footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
+  // amendments 56, 58 and 59): lighter than the black footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
   // WCAG AA's 4.5 to 1.
   const closing = page.locator(".closing-band");
   await expect(closing).toHaveClass(/\bis-dark\b/);
   await expect(closing).not.toHaveClass(/\bis-light\b/);
-  await expect(closing).toHaveCSS("background-color", "rgb(92, 92, 97)");
+  await expect(closing).toHaveCSS("background-color", "rgb(112, 112, 117)");
   await expect(closing).toHaveCSS("border-top-width", "0px");
   await expect(page.locator(".site-footer")).toHaveCSS("background-color", "rgb(0, 0, 0)");
   const tones = await closing.evaluate((band) => {
@@ -279,7 +293,7 @@ test("after the demo the page is white, and Mission and Services are two short b
       rule: of(".closing-band-links", "borderTopColor"), button: of(".closing-band-action", "backgroundColor"), buttonWords: of(".closing-band-action", "color"),
     };
   });
-  expect(tones).toMatchObject({ label: "rgb(255, 255, 255)", statement: "rgb(255, 255, 255)", link: "rgb(255, 255, 255)", rule: "rgba(255, 255, 255, 0.18)", button: "rgb(255, 255, 255)", buttonWords: "rgb(0, 0, 0)" });
+  expect(tones).toMatchObject({ label: "rgb(255, 255, 255)", statement: "rgb(255, 255, 255)", link: "rgb(255, 255, 255)", rule: "rgba(255, 255, 255, 0.24)", button: "rgb(255, 255, 255)", buttonWords: "rgb(0, 0, 0)" });
   const light = (colour: string) => {
     const [red, green, blue] = colour.match(/[\d.]+/g)!.slice(0, 3).map((value) => { const share = Number(value) / 255; return share <= 0.04045 ? share / 12.92 : ((share + 0.055) / 1.055) ** 2.4; });
     return 0.2126 * red + 0.7152 * green + 0.0722 * blue;

@@ -103,7 +103,9 @@ Notable changes, newest first. Dates are YYYY-MM-DD. Engine versions follow `eng
 - Mission's and Services' pictures are no longer links and no longer lift under the pointer; the pointer over them is a crosshair and the colour lens is unchanged (ADR-0077 amendment 53).
 - The home page's closing band is dark grey with light words and a white button, and the changelog's card has a thin grid over its colours that fades out half way up (ADR-0077 amendment 54).
 - The home page's team band says who is behind the product and what they cover, in place of the team's own structure note; a draft for the lead to confirm (ADR-0077 amendment 55).
-- The home page's closing band is a lighter grey (ADR-0077 amendments 56 and 58).
+- The home page's closing band is a lighter grey (ADR-0077 amendments 56, 58 and 59).
+- The home page's team band is one condensed light grey block, heading and portraits together, and the changelog's band is white round its card (ADR-0077 amendment 59).
+- The footer can link to the company's pages on LinkedIn and X, each in a new tab; a link shows once its address is filled in (ADR-0077 amendment 60).
 - The hero clip's pause button is no longer drawn on the clip: it shows only when the keyboard's focus is on it and while the clip is paused (ADR-0077 amendment 57, which undoes part of the audit's fix and awaits the founder's word).
 - While the demo's finished wing is held to turn it, its x, y and z axes show in thin white lines at its lower left, clear of the wing however it is turned, and the line that says it can be turned steps back; the beat's words stay (ADR-0098 amendments 2, 5, 8 and 9).
 - The demo's "Open the workspace" link is filled with white from the right under the pointer, as the header's Workspace button is (ADR-0098 amendment 8).
