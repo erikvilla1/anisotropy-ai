@@ -109,7 +109,7 @@ def test_a_yes_to_the_box_that_names_the_site_and_the_account_connects_this_mach
     assert (home / "upload-key.txt").read_text(encoding="utf-8") == KEY + "\n"
     assert json.loads((home / "machine.json").read_text()) == {"address": SITE, "owner": OWNER}
     assert json.loads((home / "connector.json").read_text()) == {"units": "", "address": SITE, "token_file": str(home / "upload-key.txt")}
-    assert texts == [(f"This PC is connected to anisotropy.example as {OWNER}.\n\nGo back to the run's page and click Open in Abaqus.", False)]
+    assert texts == [(f"This PC is connected to anisotropy.example as {OWNER}.\n\nGo back to the run's page and click Send to Abaqus.", False)]
     everything = capsys.readouterr()
     assert KEY not in everything.out + everything.err + repr(texts) + repr(asked) + (home / "machine.json").read_text() + (home / "connector.json").read_text()
     assert CODE not in repr(texts) + repr(asked)
@@ -175,7 +175,7 @@ def test_a_second_link_for_another_site_or_account_says_what_it_replaces_and_onl
     assert link.machine(home) == {"address": SITE, "owner": "someone-else@example.com", "abaqus": "C:/SIMULIA/Commands/abaqus.bat"}  # the setup's fact stands
 
 
-# ------------------------------------------------------------------------------------------------------- Open in Abaqus
+# ------------------------------------------------------------------------------------------------------- Send to Abaqus
 
 def connected(link, home: Path, abaqus: Path) -> None:
     assert link.main([PAIR_LINK], confirm=lambda text: True, tell=said([]), caller=Site(), folder=home) == 0

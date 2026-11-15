@@ -9,7 +9,7 @@ one of two things and nothing else:
         directory and is never shown, printed or put on a command line.
 
     anisotropy://open?run=<the id of a finished run>
-        Open in Abaqus: the build script of that run, which must be a run of the connected account, is fetched with the key, written
+        Send to Abaqus: the build script of that run, which must be a run of the connected account, is fetched with the key, written
         to `Anisotropy/<coupon>/` in the home directory, and Abaqus/CAE is started there with the coupon built, as a model to edit.
         When its job completes, the results go back to the run by themselves (`anisotropy_menu.py`).
 
@@ -162,7 +162,7 @@ def key_of(folder: Path | None = None) -> str:
     except OSError:
         key = ""
     if not key.startswith(TOKEN_PREFIX) or len(key.split()) != 1:
-        raise NotDone("this PC is not connected to your account yet: click Connect this PC on the run's page, then Open in Abaqus again")
+        raise NotDone("this PC is not connected to your account yet: click Connect this PC on the run's page, then Send to Abaqus again")
     return key
 
 
@@ -293,7 +293,7 @@ def pair(link: dict, confirm, caller=call, folder: Path | None = None, name: str
     return {"address": site, "owner": owner}
 
 
-# ------------------------------------------------------------------------------------------------------- Open in Abaqus
+# ------------------------------------------------------------------------------------------------------- Send to Abaqus
 
 def is_ours(text: str) -> bool:
     """Whether the script's first lines say that Anisotropy's build-script writer wrote it."""
@@ -333,12 +333,12 @@ def open_run(link: dict, caller=call, folder: Path | None = None, work: Path | N
     try:
         site = site_address(now.get("address") if isinstance(now.get("address"), str) else "")
     except NotDone:
-        raise NotDone("this PC is not connected to your account yet: click Connect this PC on the run's page, then Open in Abaqus again") from None
+        raise NotDone("this PC is not connected to your account yet: click Connect this PC on the run's page, then Send to Abaqus again") from None
     command = abaqus_command(now, which)
     status, body, headers = asked(caller, script_request(site, link["run"], key))
     if status == 401:
         raise NotDone("the site no longer takes this PC's key (it was cancelled, or the site does not take keys from a PC yet). Click "
-                      "Connect this PC on the run's page, then Open in Abaqus again")
+                      "Connect this PC on the run's page, then Send to Abaqus again")
     if status != 200:
         said = detail_of(body)
         raise NotDone(f"the site did not give the run's build script ({status})" + (f": {said}" if said else ""))
@@ -397,7 +397,7 @@ def main(argv=None, confirm=None, tell=None, caller=call, folder: Path | None = 
         link = read_link(argv[0])
         if link["what"] == "pair":
             done = pair(link, confirm, caller, folder)
-            tell(f"This PC is connected to {host_of(done['address'])} as {done['owner']}.\n\nGo back to the run's page and click Open in Abaqus.")
+            tell(f"This PC is connected to {host_of(done['address'])} as {done['owner']}.\n\nGo back to the run's page and click Send to Abaqus.")
         else:
             done = open_run(link, caller, folder, work, starter, which)
             print(f"Abaqus/CAE is starting with {done['coupon']} in {done['folder']}")
