@@ -813,3 +813,22 @@ Not changed: the About page's team block still says "Five people, two seats each
 **Decision.** In the team head's right column, under the paragraph, the mark stands 46 px high in black, and beside it, behind a hairline, "Part of the Fall 2026 Launchpad cohort" in the small monospace type. The words no longer name the programme, since the mark does; the picture's alternative text names it for a screen reader. Narrower than the two fit, the words go under the mark.
 
 **Evidence.** `home.spec.ts`, 8 of 8, reads the mark and the words. Captured at 1900 px and looked at. UNVERIFIED: phone widths, and the mark's sharpness on a dense screen above 46 px (the file is 202 px high).
+
+## Amendment 66, 2026-11-15 (the hero's clip fills the first screen from edge to edge, with the header over it)
+
+**Context.** The lead, with a capture of the hero and one of another company's home page, whose picture fills the window behind its header: "get rid of the black border around and make similar ... keep the scroll down fade tho. but keep the rescroll up triggering the black header bar". Since amendment 19 the clip played in a box under the header, with the page's black at the sides and the foot.
+
+**Options.** (1) Keep the box and thin its frame: rejected, the lead asked for no border. (2) The clip edge to edge and the header on a black strip above it: rejected, the strip is the border's top. (3) The clip edge to edge with the header over it: chosen.
+
+**Decision.** The clip (and the still under it) fills the hero from the window's top to its foot and from side to side. The header lies over its top with no ground of its own, as it already lay over the black strip; a shade over the clip's top, 60 % black at the window's edge and gone 26 % of the way down, keeps the header's white links readable. The words, the cohort's line and "Scroll to explore" stand on the page's margin (32, 24 and 20 px, the header's own), so the statement starts where the logo does; until now they stood a second margin in, inside the box. The scroll is as it was: the clip dims away into the demo over the same part of the way (ADR-0095 amendment 11 takes out only the box's growth), and a scroll up brings the header in as the black bar (amendment 44, unchanged; no line of it was touched). Only the arrangement of the reference is followed, the picture behind the header; nothing of that page is copied, and amendment 47's words stay as they are.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the clip's four edges are the window's, the header is at the top with a transparent ground, the shade is read, the statement starts at the logo's left edge, at 1280 px and on a 390 px phone. `demo.spec.ts`, 13 of 13: the clip is whole-window at every step of the way and dims as before. `shell.spec.ts`, 18 with 1 skipped: at the top the header has no ground, and a scroll up brings the black bar. Captured at 1900 px (top, words standing, bar back) and 390 px and looked at. UNVERIFIED: the header's links against the clip's brightest frames on a real screen (the shade was judged by eye on two frames, not measured), Safari, Firefox and real phones.
+
+## Amendment 67, 2026-11-15 (the home page's grey closing band is a box, with white round it)
+
+**Context.** The lead, with a capture of the changelog's card and the grey band under it: "make the gray background here for contact us a gray box just as there is a box above it, showing the white background along the edges."
+
+**Decision.** The band is white and the grey (`#707075`, amendment 59) is a box on it: 32 px of white at its sides and its foot, and the changelog band's own 32 px foot between the two boxes, so both have the same left and right edges. The box is a layer under the band's words, so the closing band's markup, shared with the industries and services pages, is unchanged; its words keep 32 px from the box's edge. On a phone both boxes stand on 20 px.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the band's ground is white, the layer's is the grey, its inset is 0, 32, 32, 32, the gap to the card is 32 px, the footer follows at once, and every text on the grey still clears 4.5 to 1. Captured at 1900 px and looked at. UNVERIFIED: the phone's arrangement was not looked at.
+

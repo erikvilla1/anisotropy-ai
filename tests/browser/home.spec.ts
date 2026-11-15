@@ -96,7 +96,7 @@ test("the hero's words are one statement and a line of the mark, the name, a hai
   if (await buttons.count()) await expect(buttons).toHaveAccessibleName("Pause background video");
   await expect(hero.locator("canvas, [data-testid='laminate-scene']")).toHaveCount(0);
   await expect(hero.getByRole("textbox")).toHaveCount(0);
-  // The header lies over the hero's black ground on the home page; elsewhere it is the same header in the page's flow, 84 px
+  // The header lies over the hero's clip on the home page; elsewhere it is the same header in the page's flow, 84 px
   // tall. Its links stand at the right, ending just before the Workspace button (ADR-0077 amendments 8, 19 and 50).
   await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
   await page.goto("/about");
@@ -112,7 +112,7 @@ test("the hero's words are one statement and a line of the mark, the name, a hai
   expect(bar.navLeft).toBeGreaterThan(bar.markRight);
 });
 
-test("the hero's clip plays in a square box on the black page, under the header, with the words in its lower left (ADR-0077 amendments 19 and 47)", async ({ page }) => {
+test("the hero's clip fills the first screen from edge to edge with the header over it, and the words stand in its lower left on the page's margin (ADR-0077 amendments 47 and 66)", async ({ page }) => {
   await page.goto("/");
   const rect = (selector: string) => page.locator(selector).first().evaluate((el) => {
     const box = el.getBoundingClientRect();
@@ -121,35 +121,43 @@ test("the hero's clip plays in a square box on the black page, under the header,
   const viewport = page.viewportSize()!;
   const clip = await rect("#overview .home-hero-media");
   const header = await rect(".site-header");
-  // The box stands on the page's 32 px margin at the sides and the foot, and starts under the header.
-  expect([clip.left, viewport.width - clip.right, viewport.height - clip.bottom]).toEqual([32, 32, 32]);
-  expect(clip.top).toBe(header.bottom);
-  expect(clip.left).toBe((await rect(".site-header .wordmark")).left);
-  await expect(page.locator("#overview .home-hero-media")).toHaveCSS("border-radius", "0px");
-  // The page around it is the site's black, and the words sit inside the box, the statement and the mark on its middle line.
-  expect(await page.locator("#overview").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(0, 0, 0)");
+  // The clip reaches the window's four edges: no black stands round it (amendment 66; until then it played in a box
+  // under the header, on the page's margin).
+  expect([clip.left, clip.top, viewport.width - clip.right, viewport.height - clip.bottom]).toEqual([0, 0, 0, 0]);
+  // The header lies over the clip's top, with no ground of its own, and the clip is shaded there for its links: a shade
+  // deepest at the window's edge and gone a quarter of the way down, over the even one.
+  expect([header.top, header.bottom]).toEqual([0, 84]);
+  await expect(page.locator(".site-header")).toHaveCSS("position", "absolute");
+  await expect(page.locator(".site-header")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const shade = await page.locator("#overview .home-hero-media").evaluate((el) => getComputedStyle(el, "::after").backgroundImage);
+  expect(shade).toMatch(/^linear-gradient\((to bottom, )?rgba\(0, 0, 0, 0\.[5-9]\d*\) 0%, rgba\(0, 0, 0, 0\) 26%\)(, none)?$/);
+  // The words stand inside the clip, clear of the header and of the window's edges.
   for (const selector of ["#overview h1", "#overview .home-hero-row", "#overview .home-hero-backed"]) {
     const part = await rect(selector);
     expect(part.left, selector).toBeGreaterThanOrEqual(clip.left + 16);
     expect(part.right, selector).toBeLessThanOrEqual(clip.right - 16);
-    expect(part.top, selector).toBeGreaterThanOrEqual(clip.top + 16);
+    expect(part.top, selector).toBeGreaterThanOrEqual(header.bottom + 16);
     expect(part.bottom, selector).toBeLessThanOrEqual(clip.bottom - 16);
   }
-  // The words stand in the box's lower left, set from the left (amendment 47): the statement and the line over it start on
-  // one edge, the box's own padding in, and lie in the box's lower half, over the Basement's mark.
+  // They stand in the lower left, set from the left (amendment 47): the statement, the line over it and the cohort's line
+  // start on one edge, the page's margin, where the header's logo starts, and lie in the lower half, over the cohort's line,
+  // which stands the same margin up from the window's foot.
   const [statement, line, backed] = [await rect("#overview h1"), await rect("#overview .home-hero-row"), await rect("#overview .home-hero-backed")];
-  expect(statement.left).toBe(clip.left + 32);
+  expect(statement.left).toBe(32);
+  expect(statement.left).toBe((await rect(".site-header .wordmark")).left);
   expect(line.left).toBe(statement.left);
   expect(backed.left).toBe(statement.left);
+  await expect(page.locator("#overview .home-hero-backed")).toHaveCSS("bottom", "32px");
   expect(statement.top).toBeGreaterThan((clip.top + clip.bottom) / 2 - 40);
   expect(statement.bottom).toBeLessThan(backed.top);
   expect(statement.right).toBeLessThan(viewport.width * 0.75);
   await expect(page.locator("#overview h1")).toHaveCSS("text-align", "left");
-  // On a phone the box follows the narrower margin.
+  // On a phone the picture is edge to edge too, and the words follow the narrower margin.
   await page.setViewportSize({ width: 390, height: 844 });
   const phone = await rect("#overview .home-hero-media");
-  expect([phone.left, 390 - phone.right]).toEqual([20, 20]);
-  expect(phone.top).toBeGreaterThanOrEqual((await rect(".site-header")).bottom);
+  expect([phone.left, phone.top, 390 - phone.right]).toEqual([0, 0, 0]);
+  expect((await rect("#overview h1")).left).toBe(20);
+  expect((await rect("#overview h1")).left).toBe((await rect(".site-header .wordmark")).left);
 });
 
 test("the hero's clip can be paused from the keyboard, its button is not on the clip otherwise, and a clip the visitor paused stays paused (ADR-0077 amendments 50 and 57)", async ({ page }) => {
@@ -304,16 +312,32 @@ test("after the demo the page is white, and Mission and Services are two short b
   // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey; lighter since
   // amendments 56, 58 and 59): lighter than the black footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
   // WCAG AA's 4.5 to 1.
+  // Since amendment 67 the grey is a box on a white band, as the changelog's card over it is: the two boxes have the same
+  // left and right edges, 32 px of white stands between them and at the grey one's sides and foot, and its words keep the
+  // kit's 32 px from its edge.
   const closing = page.locator(".closing-band");
   await expect(closing).toHaveClass(/\bis-dark\b/);
   await expect(closing).not.toHaveClass(/\bis-light\b/);
-  await expect(closing).toHaveCSS("background-color", "rgb(112, 112, 117)");
+  await expect(closing).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(closing).toHaveCSS("border-top-width", "0px");
+  const boxes = await closing.evaluate((band) => {
+    const layer = getComputedStyle(band, "::before");
+    const [outer, above] = [band.getBoundingClientRect(), document.querySelector(".home-feed-card")!.getBoundingClientRect()];
+    const px = (value: string) => Math.round(parseFloat(value));
+    return {
+      ground: layer.backgroundColor, under: layer.zIndex, own: getComputedStyle(band).isolation,
+      inset: [px(layer.top), px(layer.right), px(layer.bottom), px(layer.left)],
+      gap: Math.round(outer.top - above.bottom), cardEdges: [Math.round(above.left), Math.round(outer.right - above.right)],
+      words: Math.round(band.querySelector(".band-label")!.getBoundingClientRect().left - outer.left),
+      footer: Math.round(document.querySelector(".site-footer")!.getBoundingClientRect().top - outer.bottom),
+    };
+  });
+  expect(boxes).toEqual({ ground: "rgb(112, 112, 117)", under: "-1", own: "isolate", inset: [0, 32, 32, 32], gap: 32, cardEdges: [32, 32], words: 64, footer: 0 });
   await expect(page.locator(".site-footer")).toHaveCSS("background-color", "rgb(0, 0, 0)");
   const tones = await closing.evaluate((band) => {
     const of = (selector: string, property: "color" | "backgroundColor" | "borderTopColor") => getComputedStyle(band.querySelector(selector)!)[property];
     return {
-      ground: getComputedStyle(band).backgroundColor,
+      ground: getComputedStyle(band, "::before").backgroundColor,
       label: of(".band-label", "color"), statement: of(".closing-band-statement", "color"), aside: of(".closing-band-links > span", "color"), link: of(".closing-band-links a", "color"),
       rule: of(".closing-band-links", "borderTopColor"), button: of(".closing-band-action", "backgroundColor"), buttonWords: of(".closing-band-action", "color"),
     };

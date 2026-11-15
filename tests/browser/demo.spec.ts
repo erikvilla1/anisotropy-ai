@@ -73,15 +73,17 @@ const legendEnd = (value: number) => (wing.field.unit ? String(Math.round(value)
 const PARTS = ["FRONT SPAR", "REAR SPAR", "RIBS", "SKIN"];
 const LAYUPS = [...wing.parts.filter((part) => !part.cover).map((part) => part.layup), "Clear film, not analysed"];
 
-test("the demo is a black stage as wide as the clip and a window tall, which starts half a window up behind the hero and stays in the window through its section", async ({ page }) => {
+test("the demo is a black stage on the page's margin and a window tall, which starts half a window up behind the hero and stays in the window through its section", async ({ page }) => {
   await openPinned(page);
   const rects = await page.evaluate(() => {
     const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
     return { clip: rect("#overview .home-hero-media"), box: rect("#demo .product-demo-box"), section: rect("#demo"), next: rect("#mission") };
   });
-  // As wide as the clip, a window tall, and followed at once by the next band. With the page at its top it starts half a
-  // window up, behind the hero, which lies over it (ADR-0095 amendment 4): half a window of scrolling brings it up.
-  expect([rects.box.left, rects.box.right]).toEqual([rects.clip.left, rects.clip.right]);
+  // On the page's 32 px margin, where the hero's clip stood until it went edge to edge (ADR-0077 amendment 66), a window
+  // tall, and followed at once by the next band. With the page at its top it starts half a window up, behind the hero,
+  // which lies over the whole of it (ADR-0095 amendment 4): half a window of scrolling brings it up.
+  expect([rects.box.left, page.viewportSize()!.width - rects.box.right]).toEqual([32, 32]);
+  expect([rects.clip.left, rects.clip.right]).toEqual([0, page.viewportSize()!.width]);
   expect(rects.box.height).toBe(page.viewportSize()!.height);
   expect(rects.box.top).toBe(page.viewportSize()!.height / 2);
   // The stage stays in the window while the page scrolls through its section, which is the stage and half a stage of
@@ -114,7 +116,7 @@ test("the page scrolls to the stage as any page does; the first beat's words com
   await page.waitForTimeout(500);
   expect(await scrollY(page)).toBe(100);
   await expectStop(page, 0);
-  // The model waits for the first beat. The first beat's words wait too, while the hero's clip is still growing (amendments
+  // The model waits for the first beat. The first beat's words wait too, while the hero's clip is still being cleared (amendments
   // 4 and 6), and no other beat's are up.
   await expect(box(page).locator(".product-demo-view")).toHaveCSS("opacity", "0");
   await expect(page.getByTestId("demo-recorded")).toHaveCount(0);
@@ -160,7 +162,7 @@ test("the page scrolls to the stage as any page does; the first beat's words com
   expect(asked).toEqual([]);
 });
 
-test("on the way to the stage the hero stays in the window, its clip grows to the whole window and dims, then the first beat's words come up through it; the window is never empty (ADR-0095 amendments 4 to 6)", async ({ page }) => {
+test("on the way to the stage the hero stays in the window, its whole-window clip is cleared and then dims, then the first beat's words come up through it; the window is never empty (ADR-0095 amendments 4 to 6, ADR-0077 amendment 66)", async ({ page }) => {
   await openPinned(page);
   const opening = page.locator(".home-opening");
   const read = () => page.evaluate(() => {
@@ -185,9 +187,10 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
   await expect(page.locator(".home-hero-explore")).toHaveCSS("opacity", "1");
   // At the top: the hero whole, the stage behind it, nothing of the demo's words yet.
   await expect(opening).toHaveAttribute("data-handover", "ready");
-  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
-  // Down by the wheel in steps of a tenth of the way. The hero does not move. First its clip grows to the whole window, at
-  // full strength and with nothing of the demo up (amendments 5 and 6); then it dims; and the first beat's words come in only
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [0, 0, 0, 0] });
+  // Down by the wheel in steps of a tenth of the way. The hero does not move, and its clip is whole-window all the way
+  // (ADR-0077 amendment 66; until then it grew from a box first). First what stands on the clip goes, the clip at full
+  // strength and with nothing of the demo up (amendments 5 and 6); then it dims; and the first beat's words come in only
   // once it is well on its way to black. At every step something is on the screen: the clip, or the words, or both.
   const way = await offLine(page);
   expect(way).toBe(page.viewportSize()!.height / 2);
@@ -201,12 +204,10 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
     expect(now.heroTop, `the hero's place at ${step}/10`).toBe(0);
     expect(now.hero, `the hero at ${step}/10`).toBeLessThanOrEqual(before.hero);
     expect(now.words, `the words at ${step}/10`).toBeGreaterThanOrEqual(before.words);
-    for (let edge = 0; edge < 4; edge++) expect(now.clip[edge], `the clip's edge ${edge} at ${step}/10`).toBeLessThanOrEqual(before.clip[edge]);
-    if (step < 4) expect(now.clip[0], `the clip's top at ${step}/10`).toBeGreaterThan(0);
-    else expect(now.clip, `the clip at ${step}/10`).toEqual([0, 0, 0, 0]);
-    // growing: the clip at full strength, no words yet
-    if (step <= 4) expect([now.hero, now.words], `growing at ${step}/10`).toEqual([1, 0]);
-    // "Scroll to explore" goes as the clip grows and is gone once it is whole-window
+    expect(now.clip, `the clip at ${step}/10`).toEqual([0, 0, 0, 0]);
+    // clearing: the clip at full strength, no words yet
+    if (step <= 4) expect([now.hero, now.words], `clearing at ${step}/10`).toEqual([1, 0]);
+    // "Scroll to explore" goes first and is gone before the clip dims
     expect(now.button, `the button at ${step}/10`).toBeLessThan(before.button === 0 ? 0.001 : before.button);
     if (step >= 4) expect(now.button, `the button at ${step}/10`).toBe(0);
     // the words wait for the clip to be well on its way to black
@@ -226,10 +227,10 @@ test("on the way to the stage the hero stays in the window, its clip grows to th
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await expect(opening).toHaveAttribute("data-handover", "ready");
   await expectStop(page, 0);
-  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [84, 32, 32, 32] });
+  expect(await read()).toMatchObject({ heroTop: 0, hero: 1, words: 0, clip: [0, 0, 0, 0] });
 });
 
-test("if the hero's words still stand when the page scrolls, they go as the clip grows and never lie over the demo's first words (ADR-0095 amendment 9)", async ({ page }) => {
+test("if the hero's words still stand when the page scrolls, they go before the clip dims and never lie over the demo's first words (ADR-0095 amendment 9)", async ({ page }) => {
   await openPinned(page);
   const hero = page.locator("#overview");
   // Before the words have left: the load-in is over and they stand.
@@ -250,12 +251,12 @@ test("if the hero's words still stand when the page scrolls, they go as the clip
   });
   expect(await read()).toEqual({ statement: 1, backed: 1, demo: 0 });
   const way = await offLine(page);
-  // A fifth of the way: the clip is half grown and the words half gone. Nothing of the demo is up.
+  // A fifth of the way: the words are half gone. Nothing of the demo is up.
   await page.mouse.wheel(0, way / 5);
   await expect.poll(() => scrollY(page)).toBe(Math.round(way / 5));
   await expect.poll(async () => (await read()).statement).toBeCloseTo(0.5, 1);
   expect((await read()).demo).toBe(0);
-  // From two fifths on the clip is whole-window and the hero's words are gone, before the demo's first words begin.
+  // From two fifths on the hero's words are gone, before the clip dims and the demo's first words begin.
   let seen = { statement: 1, backed: 1, demo: 0 };
   for (let step = 4; step <= 9; step++) {
     await page.mouse.wheel(0, step === 4 ? way / 5 : way / 10);
