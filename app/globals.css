@@ -1045,8 +1045,8 @@ main[tabindex="-1"]:focus {
 }
 /* The closing band (components/closing-band.tsx; ADR-0077 amendment 75): a band of the section kit (app/sections.css)
  * set in the site's own way of ending a page. Everything stands in the middle, as the home page's band heads and the
- * demo's words do: a small monospace label, the statement of medium weight set tight, and under it the page's one action
- * with any quiet links beside it. At the band's foot a few hairlines lie one over another, closer together towards the
+ * demo's words do: a small monospace label, the statement of medium weight set tight, and under it the page's one action,
+ * alone (amendment 76). At the band's foot a few hairlines lie one over another, closer together towards the
  * foot and fading out upwards: a laminate's plies seen from the edge, the mark of this site and nothing more (they show
  * no layup of any coupon). Until amendment 75 the band was laid out on the page's twelve columns, the statement at the
  * left, the action from the halfway line and a ruled row of links under them, after another company's closing sections.
@@ -1091,24 +1091,6 @@ main[tabindex="-1"]:focus {
   padding: 16px 22px;
   font-size: 16px;
   line-height: 22px;
-}
-/* A quiet link beside the action. The arrow is set in the line, tied to the last word, so it follows that word when the
- * link wraps. */
-.closing-band .closing-band-link {
-  font-size: 16px;
-  line-height: 22px;
-  color: var(--text);
-  transition: opacity 0.15s;
-}
-.closing-band-link > span {
-  white-space: nowrap;
-}
-.closing-band-link svg {
-  margin-left: 6px;
-  vertical-align: -2px;
-}
-.closing-band-link:hover {
-  opacity: 0.6;
 }
 /* The plies: seven hairlines in the band's line colour across its foot, 6 px apart at the foot and wider upwards,
  * strongest at the foot and gone by the top one. A picture only: under the words, taking no press. */

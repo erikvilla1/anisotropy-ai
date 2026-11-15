@@ -900,3 +900,11 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `home.spec.ts`, 7 of 7: the label, the statement and the actions stand one under another within 2 px of the window's middle, the link beside the button, no rule and no row's label, seven lines in a picture that takes no press and lies inside the box, both corners 12 px, and every text on the grey at 4.5 to 1 or better. `expansion.spec.ts` and `shell.spec.ts` as before. Captured on the home page and on the services page at 1900 px and looked at. UNVERIFIED: the industries page's band and the phone's arrangement were captured and not looked at; whether the lead finds it distinct enough.
 
+## Amendment 76, 2026-11-15 (the closing band's action stands alone)
+
+**Context.** The lead, with a capture of the home page's closing band: "get rid of the materials library button here".
+
+**Decision.** The link to the materials library beside "Contact us" is gone, and with it the band's way of taking such links (the `links` property and its rules), which no other page used. The band's one link is its action. The library is still reached from Resources in the header and the footer.
+
+**Evidence.** `home.spec.ts`, 7 of 7: the band holds one link, "Contact us", and no words about the library. UNVERIFIED: not captured again after the change.
+
