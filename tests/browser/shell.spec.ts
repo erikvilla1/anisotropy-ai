@@ -92,7 +92,7 @@ test.describe("on a phone", () => {
     await toggle.click();
     const nav = page.getByRole("navigation", { name: "Main navigation" });
     await expect(nav.getByRole("link", { name: "About", exact: true })).toBeFocused();
-    const row = await nav.getByRole("link", { name: "Industries", exact: true }).boundingBox();
+    const row = await nav.getByRole("link", { name: "Resources", exact: true }).boundingBox();
     expect(row!.height).toBeGreaterThanOrEqual(44);
     await page.keyboard.press("Escape");
     await expect(nav).toBeHidden();
@@ -188,7 +188,7 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
     const boxes = links.map((a) => a.getBoundingClientRect());
     return { names: links.map((a) => a.textContent?.trim()), off: (boxes[0].left + boxes[boxes.length - 1].right) / 2 - window.innerWidth / 2 };
   });
-  expect(row.names).toEqual(["About", "Industries", "Resources", "Services", "Contact us"]);
+  expect(row.names).toEqual(["About", "Services", "Resources", "Contact us"]);
   expect(row.off).toBeGreaterThan(100);
   // no plus, no button, no panel
   await expect(page.getByRole("button", { name: "Show services" })).toHaveCount(0);
@@ -214,6 +214,9 @@ test("Services is a plain link in the header for now, wide or folded, with no pa
     expect(gap).toBeGreaterThan(0);
     expect(gap).toBeLessThanOrEqual(28);
   }
+  // The footer's logo is a step larger than the header's (ADR-0080 amendment 8; it was smaller on a wide window).
+  const marks = await page.evaluate(() => [".site-header", ".site-footer"].map((part) => Math.round(document.querySelector(`${part} .wordmark .brand-mark`)!.getBoundingClientRect().height)));
+  expect(marks[1]).toBeGreaterThan(marks[0]);
   const elsewhere = page.locator(".site-footer-social a");
   await expect(elsewhere).toHaveCount(shownSocialLinks().length);
   await expect(page.locator(".site-footer-social")).toHaveCount(shownSocialLinks().length ? 1 : 0);

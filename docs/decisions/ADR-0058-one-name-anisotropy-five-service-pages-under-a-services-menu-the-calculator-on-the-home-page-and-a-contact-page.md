@@ -141,3 +141,13 @@ Numbered 3 and then 4 on its branch; renumbered each time the branch took in mai
 
 **Evidence.** `expansion.spec.ts`: the heading, the white ground, the card's foot inside a 1440 by 789 window and the button's inside a 1280 by 720 one, and the form's behaviour as before. Captured at 1900 by 900 and looked at; measured at 1440 by 789, 1280 by 720 and 390 by 844. UNVERIFIED: the 1440 px and phone captures were not looked at; real browsers and devices.
 
+## Amendment 8, 2026-11-15 (Industries leaves the navigation for now, and the order is About, Services, Resources, Contact us)
+
+**Context.** The lead, on the header: "tbh I think we dont even need Industries right now, it feels too premature, hide for now." and then "Now make the sequence of pages in the header: About, Services, Resources, Contact Us. workspace is fine where is".
+
+**Options.** (1) Delete the Industries page: rejected, the lead said to hide it for now. (2) Keep the page at its address and take every link to it out of the navigation, behind one switch: chosen, as amendment 4 did for the Services panel.
+
+**Decision.** `INDUSTRIES_IN_NAV` in `lib/site-nav.ts` is `false`: the header and the footer, which both read `siteNav`, carry no link to `/industries`, and no other page links to it. The page still answers at its address, unchanged but for its white ground; `true` brings its links back. The navigation's order is About, Services, Resources, Contact us, in the header and in the footer's list; the Workspace button is where it was.
+
+**Evidence.** `tests/site-map.test.ts` reads the switch and the four labels in order. `expansion.spec.ts`: no link to `/industries` on the page, and the page answers. `shell.spec.ts`, 18 with 1 skipped: the header's row reads About, Services, Resources, Contact us. `intro.spec.ts`, 15 of 15, with the page-fade cases going to Services where they went to Industries. UNVERIFIED: the page is not marked against indexing, so a search engine that already knows it may still list it; the order was not captured and looked at.
+

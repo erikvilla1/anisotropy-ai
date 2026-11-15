@@ -17,12 +17,18 @@ export const servicesNav: NavItem = {
   children: services.map((service) => ({ label: service.title, href: serviceHref(service) })),
 };
 
-/** Every page the navigation knows, in order. The footer lists them all. */
+/** Whether the Industries page is in the navigation. Off for now, at the lead's request of 2026-11-15 (ADR-0058 amendment
+ * 8: "it feels too premature, hide for now"): no link in the header or the footer leads to it. The page itself stays at
+ * its address, and `true` brings its links back. */
+export const INDUSTRIES_IN_NAV: boolean = false;
+
+/** Every page the navigation knows, in order: About, Services, Resources, Contact us (the lead's order of 2026-11-15,
+ * ADR-0058 amendment 8; Resources stood before Services until then). The footer lists them all. */
 export const siteNav: readonly NavItem[] = [
   { label: "About", href: "/about" },
-  { label: "Industries", href: "/industries" },
-  { label: "Resources", href: "/library" },
+  ...(INDUSTRIES_IN_NAV ? [{ label: "Industries", href: "/industries" }] : []),
   servicesNav,
+  { label: "Resources", href: "/library" },
   { label: "Contact us", href: "/contact" },
 ];
 

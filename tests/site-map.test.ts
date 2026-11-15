@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { findService, serviceHref, services, statusLabel } from "../lib/services";
-import { SERVICES_PANEL_IN_HEADER, isSocialAddress, primaryNav, servicesNav, shownSocialLinks, siteNav, socialLinks, type SocialLink } from "../lib/site-nav";
+import { INDUSTRIES_IN_NAV, SERVICES_PANEL_IN_HEADER, isSocialAddress, primaryNav, servicesNav, shownSocialLinks, siteNav, socialLinks, type SocialLink } from "../lib/site-nav";
 
 // The site map of ADR-0058: five services, each with a page, and a header without Calculator or Studio.
 
@@ -29,10 +29,12 @@ test("the five services are unique, ordered as the audit lists them, and each ha
   assert.equal(findService("nowhere"), undefined);
 });
 
-test("the site's navigation is About, Industries, Resources, Services and Contact, with the services under Services", () => {
+test("the site's navigation is About, Services, Resources and Contact, with the services under Services; Industries is hidden for now", () => {
+  // Industries is out of the navigation since ADR-0058 amendment 8; its page keeps its address.
+  assert.equal(INDUSTRIES_IN_NAV, false);
   assert.deepEqual(
     siteNav.map((item) => item.label),
-    ["About", "Industries", "Resources", "Services", "Contact us"],
+    ["About", "Services", "Resources", "Contact us"],
   );
   const labels = siteNav.flatMap((item) => [item.label, ...(item.children ?? []).map((child) => child.label)]);
   assert.ok(!labels.includes("Calculator"));

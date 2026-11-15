@@ -26,7 +26,10 @@ test("navigation routes load directly with research-focused About", async ({
   await expect(page.getByRole("heading", { name: "From university to industry." })).toBeVisible();
   await expect(page.locator("#team .team-face")).toHaveCount(5);
   await expect(page.getByRole("heading", { name: "Start small. Prove it. Build forward." })).toBeVisible();
-  await nav.getByRole("link", { name: "Industries", exact: true }).click();
+  // Industries is hidden from the navigation for now (ADR-0058 amendment 8): no link leads to it, in the header or the
+  // footer, and the page still answers at its address.
+  await expect(page.locator("a[href='/industries']")).toHaveCount(0);
+  await page.goto("/industries");
   await expect(page.getByRole("heading", { name: "Aerospace" })).toBeVisible();
   await nav.getByRole("link", { name: "Services", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(

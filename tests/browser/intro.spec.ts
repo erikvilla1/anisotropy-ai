@@ -372,20 +372,20 @@ function expectLanding(seen: Frame[], path: string, title: string, by: "link" | 
 }
 
 const ABOUT = "Engineering built";
-const INDUSTRIES = "Built for research.";
+const SERVICES = "From an engineering question";
 
 test("a link fades its page to black, then goes, and the page that comes in fades out of black slowly; Back and Forward come out of black too (ADR-0070 amendments 12 and 13)", async ({ page }) => {
   await record(page);
   await page.goto("/");
   const veil = page.locator(".page-transition");
   await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
-  // From the home page to About, then to Industries, as the lead's recording goes, and round once more.
+  // From the home page to About, then to Services (Industries, in the lead's recording, until it left the navigation), and round once more.
   const waits: { toPage: number; toClear: number }[] = [];
   for (const [path, title] of [
     ["/about", ABOUT],
-    ["/industries", INDUSTRIES],
+    ["/services", SERVICES],
     ["/about", ABOUT],
-    ["/industries", INDUSTRIES],
+    ["/services", SERVICES],
   ]) {
     await frames(page);
     await page.locator(`.site-header a[href='${path}']`).first().click();
@@ -410,9 +410,9 @@ test("a link fades its page to black, then goes, and the page that comes in fade
   await expect(veil).toHaveClass(/is-idle/);
   expectLanding(await frames(page), "/about", ABOUT, "traversal");
   await page.goForward();
-  await expect.poll(() => new URL(page.url()).pathname).toBe("/industries");
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/services");
   await expect(veil).toHaveClass(/is-idle/);
-  expectLanding(await frames(page), "/industries", INDUSTRIES, "traversal");
+  expectLanding(await frames(page), "/services", SERVICES, "traversal");
 });
 
 test("the home page reached by a link comes out of black with its words typed in; brought back by Back, with its words whole", async ({ page }) => {
@@ -455,7 +455,7 @@ test("a page loaded on its own starts black and is clear of it within about a se
   const veil = page.locator(".page-transition");
   for (const [path, title] of [
     ["/about", ABOUT],
-    ["/industries", INDUSTRIES],
+    ["/services", SERVICES],
     ["/no-such-page", "Page not found"],
   ]) {
     await page.goto(path);
@@ -585,7 +585,7 @@ test.describe("in a browser with scripting off", () => {
 
 test("no focus ring is ever under the black: a link pressed from the keyboard brings its page in without it, and Tab ends it", async ({ page }) => {
   await record(page);
-  await page.goto("/industries");
+  await page.goto("/services");
   const veil = page.locator(".page-transition");
   await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
   // Tab to the header's About link and press Enter: the link keeps the focus and its ring, so the page comes in unveiled.
@@ -602,13 +602,13 @@ test("no focus ring is ever under the black: a link pressed from the keyboard br
   expect(byKeyboard.every((frame) => frame.phase === "is-idle" && frame.opacity === 0)).toBe(true);
   // A press with the pointer brings the next page out of black; Tab while it lifts moves the focus on, and the black goes
   // in that frame. Whenever the Tab lands, no frame has a ring under a veil that is not out of the way.
-  await page.locator(".site-header a[href='/industries']").first().click();
-  await expect(page).toHaveURL(/\/industries\/?$/);
+  await page.locator(".site-header a[href='/services']").first().click();
+  await expect(page).toHaveURL(/\/services\/?$/);
   await page.keyboard.press("Tab");
   await expect(veil).toHaveClass(/is-idle/);
   await page.waitForTimeout(300);
   const byPointer = await frames(page);
-  expect(byPointer.some((frame) => frame.path === "/industries" && frame.ring)).toBe(true);
+  expect(byPointer.some((frame) => frame.path === "/services" && frame.ring)).toBe(true);
   expect(byPointer.every((frame) => !frame.ring || (frame.phase === "is-idle" && frame.opacity === 0))).toBe(true);
 });
 
@@ -618,19 +618,19 @@ test("links pressed one after the other end on the last page, whole, with the ve
   const veil = page.locator(".page-transition");
   await expect(veil).toHaveClass(/is-idle/, { timeout: 10_000 });
   await frames(page);
-  // To the home page, whose words begin to be typed in, and on to Industries while its black is still lifting.
+  // To the home page, whose words begin to be typed in, and on to Services while its black is still lifting.
   await page.locator(".site-header .wordmark").click();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/");
-  await page.locator(".site-header a[href='/industries']").first().click();
-  await expect(page).toHaveURL(/\/industries\/?$/);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText(INDUSTRIES);
+  await page.locator(".site-header a[href='/services']").first().click();
+  await expect(page).toHaveURL(/\/services\/?$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(SERVICES);
   await expect(veil).toHaveClass(/is-idle/);
   const seen = await frames(page);
   // The second page starts from black again, wherever the first one's lift had got to, and ends clear.
-  const second = seen.findIndex((frame) => frame.path === "/industries");
+  const second = seen.findIndex((frame) => frame.path === "/services");
   expect(seen[second]).toMatchObject({ phase: "is-lift", shown: true, copies: 0, running: 0 });
   expect(seen[second].opacity).toBeGreaterThanOrEqual(0.9);
-  expect(seen[seen.length - 1]).toMatchObject({ path: "/industries", phase: "is-idle", opacity: 0, copies: 0, running: 0 });
+  expect(seen[seen.length - 1]).toMatchObject({ path: "/services", phase: "is-idle", opacity: 0, copies: 0, running: 0 });
   await expect(veil).toHaveCount(1);
   await expect(page.locator(".intro-overlay, [data-intro-run]")).toHaveCount(0);
   // Three in a row, ending on the home page: its words are typed in and stand whole, and the veil is out of the way.
@@ -638,8 +638,8 @@ test("links pressed one after the other end on the last page, whole, with the ve
   await expect(page).toHaveURL(/\/about\/?$/);
   await page.locator(".site-header .wordmark").click();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/");
-  await page.locator(".site-header a[href='/industries']").first().click();
-  await expect(page).toHaveURL(/\/industries\/?$/);
+  await page.locator(".site-header a[href='/services']").first().click();
+  await expect(page).toHaveURL(/\/services\/?$/);
   await page.locator(".site-header .wordmark").click();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/");
   await expect(veil).toHaveClass(/is-idle/);
@@ -657,9 +657,9 @@ test("a page the browser brings back as it was left is shown at once, never left
   const restored = await page.evaluate(
     () =>
       new Promise<{ before: string; after: string; opacity: string }>((resolve) => {
-        document.querySelector<HTMLElement>(".site-header a[href='/industries']")!.click();
+        document.querySelector<HTMLElement>(".site-header a[href='/services']")!.click();
         const tick = () => {
-          if (location.pathname !== "/industries") return void requestAnimationFrame(tick);
+          if (location.pathname !== "/services") return void requestAnimationFrame(tick);
           const veil = document.querySelector(".page-transition")!;
           const before = veil.className;
           window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
@@ -698,18 +698,18 @@ test.describe("for a visitor who asks for reduced motion", () => {
     await expect(veil).toBeHidden();
     await expect(veil).toHaveClass(/is-idle/);
     await page.waitForTimeout(700);
-    await page.locator(".site-header a[href='/industries']").first().click();
-    await expect(page).toHaveURL(/\/industries\/?$/);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(INDUSTRIES);
+    await page.locator(".site-header a[href='/services']").first().click();
+    await expect(page).toHaveURL(/\/services\/?$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(SERVICES);
     await page.waitForTimeout(700);
     await page.locator(".site-header .wordmark").click();
     await expect.poll(() => new URL(page.url()).pathname).toBe("/");
     await expectHeroWhole(page, "none");
     await page.goBack();
-    await expect.poll(() => new URL(page.url()).pathname).toBe("/industries");
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/services");
     await page.waitForTimeout(700);
     const seen = await frames(page);
-    for (const path of ["/about", "/industries", "/"]) expect(seen.some((frame) => frame.path === path), path).toBe(true);
+    for (const path of ["/about", "/services", "/"]) expect(seen.some((frame) => frame.path === path), path).toBe(true);
     expect(seen.every((frame) => !frame.shown && frame.copies === 0 && frame.running === 0)).toBe(true);
     // A page that came in by a link or by Back never had the veil's class for black at all.
     expect(seen.filter((frame) => frame.path !== "/about").every((frame) => frame.phase === "is-idle")).toBe(true);
