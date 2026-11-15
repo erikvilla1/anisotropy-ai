@@ -806,3 +806,10 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `home.spec.ts`, 8 of 8: the row is in the band's middle, between 1180 px and 76 % of the width, and every title is one line. Captured at 1900 px and looked at; 1440 px was captured and not looked at. UNVERIFIED: whether this is small enough for the lead.
 
+## Amendment 65, 2026-11-15 (The Basement's mark, in black, beside the cohort in the team band)
+
+**Context.** The lead asked for The Basement's mark in the team band "in all b&w" (ADR-0081 amendment 3 records the permission as the lead states it).
+
+**Decision.** In the team head's right column, under the paragraph, the mark stands 46 px high in black, and beside it, behind a hairline, "Part of the Fall 2026 Launchpad cohort" in the small monospace type. The words no longer name the programme, since the mark does; the picture's alternative text names it for a screen reader. Narrower than the two fit, the words go under the mark.
+
+**Evidence.** `home.spec.ts`, 8 of 8, reads the mark and the words. Captured at 1900 px and looked at. UNVERIFIED: phone widths, and the mark's sharpness on a dense screen above 46 px (the file is 202 px high).

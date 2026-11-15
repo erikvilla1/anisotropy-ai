@@ -162,8 +162,8 @@ export default function Home() {
       <section className="band is-light home-blurb home-about" id="working">
         {/* The head spans the page as the portraits do (ADR-0077 amendment 61): the band's label and its heading at the left,
             and from the halfway line who the team is and the programme it is part of. The degrees are said of the team as a
-            whole, as the lead gave them on 2026-11-14, and of no one by name. The Basement is named in words: its mark returns
-            only once its permission is recorded (ADR-0081 amendment 2). How the team decides is not said here. */}
+            whole, as the lead gave them on 2026-11-14, and of no one by name. The Basement's mark stands beside the cohort
+            since ADR-0081 amendment 3. How the team decides is not said here. */}
         <div className="band-head home-team-head">
           <div className="home-team-title">
             <p className="band-label">Team</p>
@@ -175,7 +175,13 @@ export default function Home() {
               BS in structural engineering and one a BS in mechanical engineering. Between them they cover modeling and
               validation, fabrication and mechanical testing, and the software and AI that connect them.
             </p>
-            <p className="home-team-cohort">Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego</p>
+            {/* The Basement's mark, drawn in black, beside the cohort (ADR-0081 amendment 3, which records the lead's word
+                that The Basement agreed to its use). The picture says the programme's name, so the words do not repeat it. */}
+            <div className="home-team-cohort">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="home-team-mark" src="/assets/partners/uc-san-diego-the-basement.png" alt="UC San Diego, The Basement" width={684} height={202} loading="lazy" decoding="async" />
+              <span>Part of the Fall 2026 Launchpad cohort</span>
+            </div>
           </div>
         </div>
         <div className="home-faces">

@@ -794,9 +794,23 @@
   line-height: 26px;
   color: var(--muted);
 }
-/* The programme, in the small monospace type and behind the hairline the hero's corner names it in. */
-.home-about .home-team-text .home-team-cohort {
-  padding-left: 12px;
+/* The programme: The Basement's mark, drawn in black whatever its file's colours (ADR-0081 amendment 3), and behind a
+ * hairline the cohort in the small monospace type the hero's corner uses. */
+.home-about .home-team-cohort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin-top: 4px;
+}
+.home-about .home-team-mark {
+  flex: none;
+  width: auto;
+  height: 46px;
+  filter: brightness(0);
+}
+.home-about .home-team-cohort span {
+  padding-left: 18px;
   border-left: 1px solid currentColor;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;

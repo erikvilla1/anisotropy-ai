@@ -236,17 +236,26 @@ test("after the demo the page is white, and Mission and Services are two short b
   };
   for (const [name, colour] of Object.entries(faceTones)) expect((lightOf("rgb(243, 243, 244)") + 0.05) / (lightOf(colour) + 0.05), name).toBeGreaterThanOrEqual(4.5);
   // The head spans the page as the portraits do (amendment 61): the band's label over its heading at the portraits' left
-  // edge, and from the halfway line who the team is and the programme it is part of. Nothing of how the team is run, no
-  // one's degree by name, and The Basement in words, not as a picture (ADR-0081 amendment 2).
+  // edge, and from the halfway line who the team is and the programme it is part of. Nothing of how the team is run, and no
+  // one's degree by name.
   const teamHead = page.locator("#working .band-head");
   await expect(teamHead.locator(".band-label")).toHaveText("Team");
   await expect(teamHead.getByRole("heading", { level: 2 })).toHaveText("From university to industry.");
   await expect(teamHead.locator(".home-team-text p").first()).toHaveText(
     "Five engineers trained in structures and mechanics: two are pursuing PhDs in structural engineering, two hold a BS in structural engineering and one a BS in mechanical engineering. Between them they cover modeling and validation, fabrication and mechanical testing, and the software and AI that connect them.",
   );
-  await expect(teamHead.locator(".home-team-cohort")).toHaveText("Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego");
+  // The Basement's mark stands beside the cohort, once, with its name for a screen reader, drawn in black (ADR-0081 amendment 3).
+  await expect(teamHead.locator(".home-team-cohort span")).toHaveText("Part of the Fall 2026 Launchpad cohort");
+  const mark = teamHead.locator("img");
+  await expect(mark).toHaveCount(1);
+  await expect(mark).toHaveAttribute("alt", "UC San Diego, The Basement");
+  await expect(mark).toHaveAttribute("src", "/assets/partners/uc-san-diego-the-basement.png");
+  await expect(mark).toHaveCSS("filter", "brightness(0)");
+  await mark.scrollIntoViewIfNeeded();
+  await expect.poll(() => mark.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(684);
+  expect(await mark.evaluate((image) => Math.round(image.getBoundingClientRect().height))).toBe(46);
+  await expect(page.locator("img[src*='uc-san-diego-the-basement']")).toHaveCount(1);
   await expect(teamHead).not.toContainText(/seats?\b|decides|spending|repository|\bCEO\b/i);
-  await expect(teamHead.locator("img")).toHaveCount(0);
   await expect(page.locator("#working .home-faces-label")).toHaveCount(0);
   await expect(page.locator("#working .home-faces")).not.toContainText(/PhD|\bBS\b/);
   const placed = await page.locator("#working").evaluate((band) => {
