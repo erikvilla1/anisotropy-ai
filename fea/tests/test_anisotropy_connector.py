@@ -360,6 +360,10 @@ def test_the_zip_to_hand_over_holds_the_connector_whole_and_it_runs_from_that_fo
         setup = archive.read("anisotropy-connector/Set up Anisotropy.bat")
         assert b"abaqus python anisotropy_setup.py" in setup and setup.count(b"\r\n") == setup.count(b"\n") > 5  # Windows's line endings, whatever the checkout has
         assert b"where abaqus >nul 2>nul\r\n" in setup and b"/dev/" not in setup  # Windows's own nowhere: the eleventh trial found a path of another system here
+        lines = setup.decode("ascii").split("\r\n")  # started from inside the zip it says to unzip, before anything else; it ends by saying that it ended
+        assert lines.index("if not exist anisotropy_setup.py (") < lines.index("where abaqus >nul 2>nul") < lines.index("call abaqus python anisotropy_setup.py --box")
+        assert "Extract All" in setup.decode("ascii") and lines[-3:] == ["echo The setup has ended. Press any key to close this window.", "pause >nul", ""]
+        assert {info.date_time[0] for info in archive.infolist()} == {2026}  # a day Windows shows as a day, not the zip format's first, which it showed as 1899
         archive.extractall(tmp_path)
     first = handed.read_bytes()
     upload.main(["connector", "--out", str(handed)])
@@ -368,7 +372,7 @@ def test_the_zip_to_hand_over_holds_the_connector_whole_and_it_runs_from_that_fo
     notes = (folder / "README.txt").read_text(encoding="utf-8")
     assert "abaqus python anisotropy_connector.py" in notes and "--watch <the folder your jobs run in>" in notes
     assert "abaqus_plugins in your home" in notes and "Plug-ins > Anisotropy" in notes  # the menu is this same folder, copied there
-    assert 'Double-click "Set up Anisotropy"' in notes and "Connect this PC" in notes and "anisotropy_setup.py --remove" in notes  # amendment 1
+    assert 'double-click "Set up Anisotropy" in the unzipped folder' in notes and "Extract All" in notes and "Connect this PC" in notes and "anisotropy_setup.py --remove" in notes  # amendment 1
     before = list(sys.path)
     try:
         alone = load("anisotropy_connector", folder)

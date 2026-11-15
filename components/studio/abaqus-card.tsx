@@ -349,7 +349,7 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
         <ol className="studio-abaqus-steps">
           <li><strong>Set up, once.</strong>{" "}
             <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-setup-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
-            {" "}Unzip it and double-click Set up Anisotropy in its folder. It adds an Anisotropy menu to Abaqus/CAE and lets this site start Abaqus on this PC. For Windows.</li>
+            {" "}Unzip it first: right-click the downloaded file and choose Extract All. In the folder that opens, double-click Set up Anisotropy. A box says when it is done. It adds an Anisotropy menu to Abaqus/CAE and lets this site start Abaqus on this PC. For Windows.</li>
           <li><strong>Connect, once.</strong>{" "}
             <button type="button" className="studio-text-button" onClick={() => void connect()} data-testid="abaqus-connect">Connect this PC</button>.
             {" "}A box on your PC names this site and your account. Say yes there, and this PC can send its results to you alone.</li>

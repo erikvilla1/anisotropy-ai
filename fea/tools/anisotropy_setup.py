@@ -2,6 +2,7 @@
 double-click "Set up Anisotropy", which runs exactly this:
 
     abaqus python anisotropy_setup.py
+    abaqus python anisotropy_setup.py --box         the same, and a box of Windows's own says how it ended (what the double-click runs)
     abaqus python anisotropy_setup.py --remove      takes all of it away again
 
 It does three things, for this Windows user alone and without administrator's rights, and says each:
@@ -40,6 +41,12 @@ PROBE_TIMEOUT_S = 120.0
 MACHINE_FILE = "machine.json"
 KEY_FILE = "upload-key.txt"
 NOT_IN_A_COMMAND = '"%\r\n'  # a path with one of these is not put into the registered command
+TITLE = "Anisotropy"
+NO_ABAQUS = "3. Abaqus's command was not found on PATH. Send to Abaqus on the site will say so; the menu in Abaqus/CAE works without it."
+SET_UP = "Anisotropy is set up on this PC."
+NEXT = ("Next, on a run's page on the site: open First time on this PC and click Connect this PC. After that, Send to Abaqus starts "
+        "Abaqus with the run's coupon built.")
+NOT_SET_UP = "Anisotropy was not set up on this PC."
 
 
 class NotDone(Exception):
@@ -193,7 +200,7 @@ def set_up(say=print, source: Path | None = None, target: Path | None = None, st
             register(link_command(python, flags, target / "anisotropy_link.py"), registry)
             say(f"2. The site's links: anisotropy:// now starts the helper in that folder with {python}, for this Windows user alone.")
         abaqus = keep_abaqus(state, which)
-        say(f"3. Abaqus's command: {abaqus}." if abaqus else "3. Abaqus's command was not found on PATH. Send to Abaqus on the site will say so; the menu in Abaqus/CAE works without it.")
+        say(f"3. Abaqus's command: {abaqus}." if abaqus else NO_ABAQUS)
         say("")
         say("Done. Next, on a run's page on the site: First time on this PC, Connect this PC. Then Send to Abaqus.")
     except NotDone as exc:
@@ -243,12 +250,42 @@ def remove(say=print, target: Path | None = None, state: Path | None = None, reg
     return 0
 
 
-def main(argv=None) -> int:
+def box(text: str, error: bool = False) -> bool:
+    """A box of Windows's own with the text, in front of the other windows; whether one was shown. A double-click on the setup ends
+    in a console window that closes at a key, which told its first user nothing (2026-11-14)."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, text, TITLE, (0x10 if error else 0x40) | 0x10000 | 0x40000)
+    except Exception:  # noqa: BLE001  no box on this machine: the lines in the console are the answer
+        return False
+    return True
+
+
+def ending(code: int, said: list) -> str:
+    """How the setup ended, in the few words a box holds: that it is done and what comes next, or the reason it is not."""
+    if code != 0:
+        return "\n\n".join([NOT_SET_UP, *[line for line in said if line.startswith("not set up: ")][-1:]])
+    return "\n\n".join([SET_UP, *[line[3:] for line in said if line == NO_ABAQUS], NEXT])
+
+
+def main(argv=None, tell=box, set_up=set_up, remove=remove) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if argv not in ([], ["--remove"]):
-        print("anisotropy_setup.py takes nothing, or --remove")
+    if argv not in ([], ["--remove"], ["--box"]):
+        print("anisotropy_setup.py takes nothing, --box or --remove")
         return 2
-    return remove(registry=windows_registry()) if argv else set_up(registry=windows_registry())
+    if argv == ["--remove"]:
+        return remove(registry=windows_registry())
+    said = []
+
+    def say(line):
+        said.append(line)
+        print(line)
+    code = set_up(say, registry=windows_registry())
+    if argv:
+        tell(ending(code, said), error=code != 0)
+    return code
 
 
 if __name__ == "__main__":
