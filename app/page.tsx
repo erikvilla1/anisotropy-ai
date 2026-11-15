@@ -158,21 +158,26 @@ export default function Home() {
       </section>
       {/* The team keeps the old section's id, so links to #working still land. Each card is ready for a portrait and a profile
           link (lib/team.ts); until a person gives one, the frame holds their initials and the name is plain text. The band is
-          one light grey block, its head close over the portraits (ADR-0077 amendment 59, app/home.css). */}
+          one light grey block, its head close over the portraits (ADR-0077 amendments 59 and 61, app/home.css). */}
       <section className="band is-light home-blurb home-about" id="working">
-        <div className="band-head">
-          <div className="band-statement">
-            {/* Who is behind the product and what they cover, for a visitor (ADR-0077 amendment 55): the fields are the
-                technical seats docs/brain/people.md records, in a visitor's words. How the team decides is not said here. */}
-            <h2>The team behind the platform.</h2>
+        {/* The head spans the page as the portraits do (ADR-0077 amendment 61): the band's label and its heading at the left,
+            and from the halfway line who the team is and the programme it is part of. The degrees are said of the team as a
+            whole, as the lead gave them on 2026-11-14, and of no one by name. The Basement is named in words: its mark returns
+            only once its permission is recorded (ADR-0081 amendment 2). How the team decides is not said here. */}
+        <div className="band-head home-team-head">
+          <div className="home-team-title">
+            <p className="band-label">Team</p>
+            <h2>From university to industry.</h2>
+          </div>
+          <div className="home-team-text">
             <p>
-              Five people covering modeling and validation, fabrication and mechanical testing, and the software and AI that
-              connect them.
+              Five engineers trained in structures and mechanics: two are pursuing PhDs in structural engineering, two hold a
+              BS in structural engineering and one a BS in mechanical engineering. Between them they cover modeling and
+              validation, fabrication and mechanical testing, and the software and AI that connect them.
             </p>
+            <p className="home-team-cohort">Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego</p>
           </div>
         </div>
-        {/* The band's label stands over the portraits, at their left edge (amendment 42). */}
-        <p className="band-label home-faces-label">Team</p>
         <div className="home-faces">
           {team.map((person) => (
             <article className="home-face" key={person.name}>

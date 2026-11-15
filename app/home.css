@@ -753,45 +753,78 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 32px;
 }
-/* The team band (ADR-0077 amendment 59): one light grey band from edge to edge, its heading and sentence close over the
- * portraits, so the team is one block of the page and not two. Under amendment 41 the head alone was grey, a block of its
- * own over portraits on white. */
+/* The team band (ADR-0077 amendments 59 and 61): one light grey band from edge to edge. Its head spans the page as the
+ * portraits do, on the page's twelve columns: the band's label and its heading at the left, and from the halfway line who
+ * the team is and the programme it is part of. The portraits stand close under it. Under amendment 59 the head was a short
+ * block of words in the middle of the page with the label apart from it, over the portraits. */
 .band.is-light.home-about {
   --bg: #f3f3f4;
   padding: 72px 0 80px;
 }
 .home-blurb.home-about .band-head {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: end;
   max-width: none;
-  margin: 0 0 40px;
-  padding: 0 32px;
-}
-.home-blurb.home-about .band-head > * {
-  max-width: 880px;
-  margin-left: auto;
-  margin-right: auto;
-}
-.home-blurb.home-about .band-statement {
-  margin-top: 0;
-}
-/* The band's label is not in the head: it stands under it, over the portraits, at their left edge (amendment 42). */
-.home-about .home-faces-label {
-  margin: 0 0 18px;
+  margin: 0 0 44px;
   padding: 0 32px;
   text-align: left;
 }
+.home-about .home-team-title {
+  grid-column: 1 / 7;
+}
+.home-about .home-team-title h2 {
+  margin: 14px 0 0;
+  font-size: clamp(34px, 4vw, 60px);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.home-about .home-team-text {
+  grid-column: 7 / 13;
+  display: grid;
+  gap: 18px;
+}
+.home-about .home-team-text p {
+  max-width: 38em;
+  margin: 0;
+  font-size: 17px;
+  line-height: 26px;
+  color: var(--muted);
+}
+/* The programme, in the small monospace type and behind the hairline the hero's corner names it in. */
+.home-about .home-team-text .home-team-cohort {
+  padding-left: 12px;
+  border-left: 1px solid currentColor;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
 .home-about .home-faces {
   padding: 0 32px;
+}
+/* Narrower than 900 px the head is one column: the heading, then the words under it. */
+@media (max-width: 900px) {
+  .home-blurb.home-about .band-head {
+    row-gap: 22px;
+    align-items: start;
+  }
+  .home-about .home-team-title,
+  .home-about .home-team-text {
+    grid-column: 1 / -1;
+  }
 }
 @media (max-width: 760px) {
   .band.is-light.home-about {
     padding: 56px 0 64px;
   }
   .home-blurb.home-about .band-head {
-    margin-bottom: 28px;
-    padding: 0 20px;
-  }
-  .home-about .home-faces-label {
-    margin-bottom: 16px;
+    margin-bottom: 32px;
     padding: 0 20px;
   }
   .home-about .home-faces {

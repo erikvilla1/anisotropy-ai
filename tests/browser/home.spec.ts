@@ -216,20 +216,18 @@ test("after the demo the page is white, and Mission and Services are two short b
   const team = await page.locator("#working").evaluate((band) => {
     const head = band.querySelector(".band-head")!;
     const frame = band.querySelector(".home-face-frame")!;
-    const words = head.querySelector("p")!.getBoundingClientRect();
     const box = band.getBoundingClientRect();
     return {
       band: getComputedStyle(band).backgroundColor, head: getComputedStyle(head).backgroundColor, left: box.left, right: box.right, wide: document.documentElement.clientWidth,
-      facesBelow: frame.getBoundingClientRect().top >= head.getBoundingClientRect().bottom, gap: frame.getBoundingClientRect().top - words.bottom,
-      framesInside: frame.getBoundingClientRect().bottom < box.bottom,
+      gap: frame.getBoundingClientRect().top - head.getBoundingClientRect().bottom, framesInside: frame.getBoundingClientRect().bottom < box.bottom,
     };
   });
   expect(team.band).toBe("rgb(243, 243, 244)");
   expect(team.head).toBe("rgba(0, 0, 0, 0)");
   expect([team.left, team.right]).toEqual([0, team.wide]);
-  expect(team.facesBelow).toBe(true);
   expect(team.framesInside).toBe(true);
-  expect(team.gap).toBeLessThan(100); // the sentence and the portraits are one block: it was about 150 px with the head's own ground
+  expect(team.gap).toBeGreaterThan(0);
+  expect(team.gap).toBeLessThan(80); // the head and the portraits are one block
   // Names and titles on the grey keep 4.5 to 1.
   const faceTones = await page.locator("#working .home-face").first().evaluate((card) => ({ name: getComputedStyle(card.querySelector("h3")!).color, title: getComputedStyle(card.querySelector("p")!).color }));
   const lightOf = (colour: string) => {
@@ -237,26 +235,38 @@ test("after the demo the page is white, and Mission and Services are two short b
     return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
   };
   for (const [name, colour] of Object.entries(faceTones)) expect((lightOf("rgb(243, 243, 244)") + 0.05) / (lightOf(colour) + 0.05), name).toBeGreaterThanOrEqual(4.5);
-  // The head says who is behind the product and what they cover (amendment 55): one short heading and one sentence, and
-  // nothing of how the team is run.
+  // The head spans the page as the portraits do (amendment 61): the band's label over its heading at the portraits' left
+  // edge, and from the halfway line who the team is and the programme it is part of. Nothing of how the team is run, no
+  // one's degree by name, and The Basement in words, not as a picture (ADR-0081 amendment 2).
   const teamHead = page.locator("#working .band-head");
-  await expect(teamHead.getByRole("heading", { level: 2 })).toHaveText("The team behind the platform.");
-  await expect(teamHead.locator("p")).toHaveText("Five people covering modeling and validation, fabrication and mechanical testing, and the software and AI that connect them.");
+  await expect(teamHead.locator(".band-label")).toHaveText("Team");
+  await expect(teamHead.getByRole("heading", { level: 2 })).toHaveText("From university to industry.");
+  await expect(teamHead.locator(".home-team-text p").first()).toHaveText(
+    "Five engineers trained in structures and mechanics: two are pursuing PhDs in structural engineering, two hold a BS in structural engineering and one a BS in mechanical engineering. Between them they cover modeling and validation, fabrication and mechanical testing, and the software and AI that connect them.",
+  );
+  await expect(teamHead.locator(".home-team-cohort")).toHaveText("Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego");
   await expect(teamHead).not.toContainText(/seats?\b|decides|spending|repository|\bCEO\b/i);
-  // The band's label is not in the head: it stands under it, over the portraits and at their left edge (amendment 42).
-  await expect(page.locator("#working .band-head .band-label")).toHaveCount(0);
-  await expect(page.locator("#working .home-faces-label")).toHaveText("Team");
-  const label = await page.locator("#working").evaluate((band) => {
+  await expect(teamHead.locator("img")).toHaveCount(0);
+  await expect(page.locator("#working .home-faces-label")).toHaveCount(0);
+  await expect(page.locator("#working .home-faces")).not.toContainText(/PhD|\bBS\b/);
+  const placed = await page.locator("#working").evaluate((band) => {
     const box = (selector: string) => band.querySelector(selector)!.getBoundingClientRect();
-    const mark = band.querySelector(".home-faces-label")!;
-    const range = document.createRange();
-    range.selectNodeContents(mark);
-    const words = range.getBoundingClientRect();
-    return { left: Math.round(words.left), top: words.top, bottom: words.bottom, headBottom: box(".band-head").bottom, frameTop: box(".home-face-frame").top, frameLeft: Math.round(box(".home-face-frame").left) };
+    const words = (selector: string) => {
+      const range = document.createRange();
+      range.selectNodeContents(band.querySelector(selector)!);
+      return range.getBoundingClientRect();
+    };
+    return {
+      label: words(".band-head .band-label"), heading: words(".band-head h2"), text: box(".home-team-text"), head: box(".band-head"),
+      frameLeft: Math.round(box(".home-face-frame").left), lastRight: Math.round([...band.querySelectorAll(".home-face-frame")].pop()!.getBoundingClientRect().right), wide: document.documentElement.clientWidth,
+    };
   });
-  expect(label.left).toBe(label.frameLeft);
-  expect(label.top).toBeGreaterThan(label.headBottom);
-  expect(label.bottom).toBeLessThan(label.frameTop);
+  expect(Math.round(placed.label.left)).toBe(placed.frameLeft);
+  expect(Math.round(placed.heading.left)).toBe(placed.frameLeft);
+  expect(placed.label.bottom).toBeLessThan(placed.heading.top);
+  expect(Math.abs(placed.text.left - placed.wide / 2)).toBeLessThanOrEqual(20); // from the halfway line
+  expect(Math.round(placed.text.right)).toBeLessThanOrEqual(placed.lastRight + 1);
+  expect(placed.text.bottom).toBeLessThanOrEqual(placed.head.bottom + 1);
   // The changelog is a white band (amendment 59; light grey under amendments 36 and 46) with nothing published yet: its
   // head alone, saying so, and no list. It is not a news feed: no card, no "What is new".
   const changelog = page.locator("#changelog");
@@ -396,8 +406,9 @@ test("after the demo the page is white, and Mission and Services are two short b
     expect(await photo.evaluate((element) => getComputedStyle(element).backgroundImage), id).toContain("/assets/images/carbon-weave.jpg");
     expect(await photo.evaluate((element) => getComputedStyle(element).filter), id).toContain("grayscale(1)");
   }
-  // Team and the changelog keep their heads in the middle, as the demo's words are.
-  for (const id of ["working", "changelog"]) {
+  // The changelog keeps its head in the middle, as the demo's words are; the team's stands at the left since amendment 61
+  // (checked above).
+  for (const id of ["changelog"]) {
     const off = await page.locator(`#${id} .band-statement h2`).evaluate((h) => { const r = h.getBoundingClientRect(); return (r.left + r.right) / 2 - window.innerWidth / 2; });
     expect(Math.abs(off), id).toBeLessThanOrEqual(2);
   }

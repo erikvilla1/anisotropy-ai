@@ -767,3 +767,26 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `tests/site-map.test.ts`: the two entries, and that one without a full address on its host is not shown. `tests/site-metadata.test.ts`: every north-east arrow in the shell stands in a link that opens a new tab. `shell.spec.ts`, 18 with 1 skipped: one link for each address filled in, in a new tab, with its name; with none, no list. The footer was captured at 1440 px with two example addresses, which are not in the repository, and looked at. `npm test`: 336 tests, 335 passed, 1 skipped. UNVERIFIED: the links themselves, until there are addresses.
 
+## Amendment 61, 2026-11-14 (the team band's head spans the page: "From university to industry.", who the team is, and the programme in words)
+
+**Context.** The lead, with a capture of amendment 59's band: "change the header and text. maybe there we can add back the ucsd basement logo. from university to industry. or something like that. also change the aestheticness of it. having it just be a lil snip in the center with nothing on the sides looks and feels weird. especially with the smaller text "TEAM" on the top left." With it the lead gave the team's degrees: two are pursuing a PhD in structural engineering, two hold a BS in structural engineering, and one a BS in mechanical engineering.
+
+**Options.** For the mark: (1) show The Basement's mark in the band: not done; ADR-0081 amendment 2, which the founder confirmed, lets the mark return only with an amendment there that records The Basement's permission, and its files are no longer in the repository. (2) Name the programme in words, as the hero's corner does: chosen. For the degrees: (1) a line on each person's card: not done, a degree beside a name is a personal fact and no one's agreement to it is recorded (ADR-0057 amendment 1); `lib/team.ts` keeps roles only. (2) One sentence about the team as a whole: chosen.
+
+**Decision.**
+
+- **The head spans the page as the portraits do,** on the page's twelve columns: the band's label "Team" over the heading at the portraits' left edge, and from the halfway line the words. Narrower than 900 px it is one column. The separate label over the portraits (amendment 42) is gone: the label is the heading's own again.
+- **The heading is "From university to industry."**
+- **The words:** "Five engineers trained in structures and mechanics: two are pursuing PhDs in structural engineering, two hold a BS in structural engineering and one a BS in mechanical engineering. Between them they cover modeling and validation, fabrication and mechanical testing, and the software and AI that connect them." Under them, in the hero corner's small type behind a hairline: "Part of the Fall 2026 Launchpad cohort at The Basement, UC San Diego".
+- **For the founder:** the page now names the cohort twice, in the hero's corner and here; ADR-0081 amendment 2 had the page name it once. The wording is a draft for the lead to confirm.
+
+**Evidence.** `home.spec.ts`, 8 of 8: the label and the heading at the portraits' left edge, the words from the halfway line and within the portraits' width, the head less than 80 px over the portraits, the heading and the two paragraphs word for word, no picture in the head, no degree on a card, nothing of how the team is run. `tests/marketing-pages.test.ts` still finds no reference to the mark's file. The band was captured at 1440 and 390 px and looked at; 1024 px was captured and not looked at. UNVERIFIED: that each person agrees to the sentence about the degrees; where the degrees are from, which the page does not say; whether the lead wants this wording.
+
+## Amendment 62, 2026-11-14 (the footer's two addresses)
+
+**Context.** The lead gave the company's addresses for amendment 60's links: `https://x.com/anisotropy_ai` and `https://www.linkedin.com/company/anisotropy/posts/`.
+
+**Decision.** Both are in `lib/site-nav.ts`, so the footer now shows "LinkedIn" and "X". LinkedIn's link goes to the company's page itself, `https://www.linkedin.com/company/anisotropy/`; the address given led to its posts.
+
+**Evidence.** `shell.spec.ts`, 18 with 1 skipped: the two links, each with its address, in a new tab, with its name. `tests/site-map.test.ts`: both are https addresses on their own hosts. UNVERIFIED: that the two addresses open the company's pages; neither was opened from here.
+

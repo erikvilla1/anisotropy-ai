@@ -13,7 +13,7 @@ test("overview, the home page's blurbs, and material source document", async ({
   await expect(page.locator(".home-hero-tagline")).toHaveText("Anisotropy");
   // The lab imagery carousel and its lightbox left the home page (audit of 2026-10-31, item 6).
   await expect(page.getByRole("button", { name: "Next research image" })).toHaveCount(0);
-  for (const name of ["Five ways to use it.", "The team behind the platform.", "Every release, and what changed."])
+  for (const name of ["Five ways to use it.", "From university to industry.", "Every release, and what changed."])
     await expect(page.getByRole("heading", { name })).toBeVisible();
   // The Impact section left the home page (ADR-0077 amendment 14).
   await expect(page.getByRole("heading", { name: "Knowledge worth building on." })).toHaveCount(0);
