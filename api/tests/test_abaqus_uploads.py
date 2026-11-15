@@ -281,10 +281,10 @@ def test_the_connector_is_handed_out_as_one_zip_the_same_each_time(local):
     assert answer.status_code == 200 and answer.headers["content-type"] == "application/zip"
     assert 'filename="anisotropy-connector.zip"' in answer.headers["content-disposition"]
     with zipfile.ZipFile(io.BytesIO(answer.content)) as archive:
-        assert sorted(archive.namelist()) == [f"anisotropy-connector/{name}" for name in (
+        assert sorted(archive.namelist()) == [
             "README.txt", "Set up Anisotropy.bat", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py", "anisotropy_link.py",
-            "anisotropy_menu.py", "anisotropy_plugin.py", "anisotropy_setup.py", "anisotropy_start.py", "bundle.py")]  # with the menu (step 8) and the links (amendment 1)
-        assert archive.read("anisotropy-connector/anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes()
+            "anisotropy_menu.py", "anisotropy_plugin.py", "anisotropy_setup.py", "anisotropy_start.py", "bundle.py"]  # with the menu (step 8) and the links (amendment 1), at the zip's top
+        assert archive.read("anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes()
     assert client.get(CONNECTOR_ZIP).content == answer.content and (kept.scratch / "connector" / "anisotropy-connector.zip").is_file()
     kept.command = None  # no uv: the zip already written is still handed out; a fresh process without uv says why not
     assert client.get(CONNECTOR_ZIP).status_code == 200

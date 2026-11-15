@@ -15,6 +15,9 @@ import { namingOf } from "./job-files";
 
 const WAIT_MS = 5000; // how often the card looks for a file sent straight from Abaqus, while its instructions are open
 const EXPECT_MS = 30 * 60 * 1000; // how long the card looks for the results after Send to Abaqus; after that a reload shows them
+const PC_MS = 2500; // how often the card looks at the account's upload keys after a click that a PC answers
+const CONNECT_MS = 10 * 60 * 1000; // how long it looks for a PC's new key after Connect this PC: as long as the one-time code lasts
+const ANSWER_MS = 2 * 60 * 1000; // how long it looks for a PC that took the coupon after Send to Abaqus
 const ZONE_WORDS: Record<string, string> = { gauge: "Gauge section", "free length": "Between gauge and tabs", band: "Within one width of a tab", "tab line": "At a tab line",
   gripped: "Under the grips" };
 const when = (iso: string | null): string => {
@@ -318,18 +321,58 @@ function Compared({ comparison, upload, fields, onShow }: { comparison: Comparis
  * results of its job come back to this card by themselves. A PC is set up and connected once: the connector's setup, then Connect this
  * PC, which asks for a one-time code and hands it to the PC in a link; the PC shows this site and the account and asks before it
  * connects. The page never shows the code, and no key is copied by hand. A PC without the setup does nothing on a click, and the page
- * cannot tell, so the words under the button say what to do. */
+ * cannot see the PC. What it can see is the account's upload keys, so it says what they show: which PCs are connected, that one
+ * connected a moment ago (a key that was not there before the click), and that one took this coupon (a key used since the click). */
 function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId: string; expecting: boolean; onSent: () => void }) {
-  const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState(0); // when Connect this PC was clicked, while the page looks for the PC's key
+  const [sent, setSent] = useState(0); // when Send to Abaqus was clicked, while the page looks for a PC that took the coupon
   const [message, setMessage] = useState("");
+  const [pcs, setPcs] = useState<UploadKey[] | null>(null); // the keys that are not cancelled; null until the list is read
+  const [connected, setConnected] = useState<UploadKey | null>(null);
+  const [answered, setAnswered] = useState<UploadKey | null>(null);
+  const before = useRef<UploadKey[] | null>(null); // the keys as they were at the click the page is looking after
   const link = openLink(jobId);
+  const live = useCallback(async (signal?: AbortSignal) => (await listUploadKeys(apiBase, signal)).filter((k) => !k.revoked_at), [apiBase]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    live(controller.signal).then(setPcs).catch(() => undefined); // without the list the card says nothing about PCs; its buttons work all the same
+    return () => controller.abort("replaced");
+  }, [live]);
+
+  useEffect(() => {
+    if (!connecting && !sent) return;
+    const timer = window.setInterval(() => {
+      if (connecting && Date.now() - connecting > CONNECT_MS) setConnecting(0);
+      if (sent && Date.now() - sent > ANSWER_MS) setSent(0);
+      live().then((now) => {
+        const was = before.current;
+        before.current = now;
+        setPcs(now);
+        if (was === null) return; // the first list since the click: nothing to tell a change by yet
+        const fresh = connecting ? now.find((k) => !was.some((w) => w.id === k.id)) : undefined;
+        if (fresh) { setConnected(fresh); setConnecting(0); }
+        const used = sent ? now.find((k) => k.last_used_at !== null && k.last_used_at !== (was.find((w) => w.id === k.id)?.last_used_at ?? null) && !(fresh && fresh.id === k.id)) : undefined;
+        if (used) { setAnswered(used); setSent(0); }
+      }).catch(() => undefined);
+    }, PC_MS);
+    return () => window.clearInterval(timer);
+  }, [connecting, sent, live]);
+
   if (!link) return null;
+  const pcName = (k: UploadKey) => k.name || "A PC";
+
+  function send() {
+    setMessage(""); setAnswered(null); setConnected(null);
+    before.current = pcs; setSent(Date.now());
+    onSent(); openOnThisPc(link!);
+  }
 
   async function connect() {
-    setMessage(""); setConnecting(false);
+    setMessage(""); setConnecting(0); setConnected(null);
     try {
       const { code } = await createPairingCode(apiBase);
-      setConnecting(true);
+      before.current = pcs; setConnecting(Date.now());
       openOnThisPc(pairLink(code, new URL(apiBase, window.location.href).href));
     } catch (error) {
       const status = (error as { status?: number }).status;
@@ -340,11 +383,16 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
   return (
     <div className="studio-abaqus-quick" data-testid="abaqus-quick">
       <p className="studio-abaqus-actions">
-        <button type="button" className="studio-button" onClick={() => { setMessage(""); onSent(); openOnThisPc(link); }} data-testid="abaqus-send-to-abaqus">Send to Abaqus</button>
+        <button type="button" className="studio-button" onClick={send} data-testid="abaqus-send-to-abaqus">Send to Abaqus</button>
       </p>
       <p>Abaqus/CAE starts on this PC with this coupon built as a model you can edit. Change what you want to study and submit its job there. When the job completes, the comparison appears here by itself.</p>
-      {expecting ? <p className="studio-status" role="status" data-testid="abaqus-expecting">Waiting for the results from Abaqus… If Abaqus did not start, set up this PC first.</p> : null}
-      <details className="studio-details" data-testid="abaqus-setup">
+      {connected ? <p className="studio-status" role="status" data-testid="abaqus-connected">{pcName(connected)} is connected to your account. Now click Send to Abaqus.</p>
+        : expecting && answered ? <p className="studio-status" role="status" data-testid="abaqus-answered">{pcName(answered)} took this coupon at {when(answered.last_used_at)}, and Abaqus is starting there. Submit its job in Abaqus. The comparison appears here when the job completes.</p>
+          : expecting ? <p className="studio-status" role="status" data-testid="abaqus-expecting">Waiting for the results from Abaqus… If Abaqus did not start, set up this PC first.</p> : null}
+      {pcs === null || connected || (expecting && answered) ? null : pcs.length
+        ? <p className="studio-muted" data-testid="abaqus-pcs">Connected to your account: {pcs.map((k) => `${pcName(k)} (since ${when(k.created_at)})`).join(", ")}.</p>
+        : <p className="studio-muted" data-testid="abaqus-pcs">No PC is connected to your account yet. Do the two steps below, once.</p>}
+      <details className="studio-details" data-testid="abaqus-setup" open={pcs !== null && pcs.length === 0 ? true : undefined}>
         <summary>First time on this PC</summary>
         <ol className="studio-abaqus-steps">
           <li><strong>Set up, once.</strong>{" "}
@@ -354,7 +402,7 @@ function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId:
             <button type="button" className="studio-text-button" onClick={() => void connect()} data-testid="abaqus-connect">Connect this PC</button>.
             {" "}A box on your PC names this site and your account. Say yes there, and this PC can send its results to you alone.</li>
         </ol>
-        {connecting ? <p className="studio-status" role="status" data-testid="abaqus-connecting">Answer the box on your PC, then click Send to Abaqus. If no box appeared, do the setup first.</p> : null}
+        {connecting ? <p className="studio-status" role="status" data-testid="abaqus-connecting">Answer the box on your PC. This page says when it is connected. If no box appeared, do the setup first.</p> : null}
         {message ? <p className="studio-alert" role="alert">{message}</p> : null}
       </details>
     </div>

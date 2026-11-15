@@ -439,7 +439,7 @@ Keep these files together in one folder. Nothing is sent anywhere unless you ask
 
 The quick way, on Windows with Abaqus 2024 or later. Once per PC:
 
-    1. Unzip this folder first (right-click the zip, Extract All), then double-click "Set up Anisotropy" in the unzipped folder
+    1. Unzip first (right-click the zip, Extract All), then double-click "Set up Anisotropy" in the folder that opens
        (it runs  abaqus python anisotropy_setup.py ). A box says when it is done. It copies these files to
        abaqus_plugins/anisotropy in your home directory, which gives Abaqus/CAE the menu Plug-ins > Anisotropy, and it registers
        the link type anisotropy:// for your Windows user, so the site can start Abaqus on this PC. No administrator is needed.
@@ -492,13 +492,15 @@ Each asks in a small box and answers in the message area under the viewport. You
 
 
 def connector_zip(out: Path) -> list[str]:
-    """The connector's files and a note of its two commands in one zip to hand over, the same bytes for the same files."""
+    """The connector's files and a note of its two commands in one zip to hand over, the same bytes for the same files. The files are
+    at the zip's top, with no folder around them: Windows's Extract All makes a folder named for the zip, so a folder inside the zip
+    showed the same name twice and the setup one level further down than the page said (the founder's first use, 2026-11-14)."""
     names = []
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
         setup = CONNECTOR_SETUP[1].read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
         for name, data in [(n, (folder / n).read_bytes()) for n, folder in CONNECTOR_FILES.items()] + [(CONNECTOR_SETUP[0], setup),
                                                                                                     ("README.txt", CONNECTOR_README.encode())]:
-            archive.writestr(zipfile.ZipInfo(f"anisotropy-connector/{name}", CONNECTOR_DATE), data, zipfile.ZIP_DEFLATED)
+            archive.writestr(zipfile.ZipInfo(name, CONNECTOR_DATE), data, zipfile.ZIP_DEFLATED)
             names.append(name)
     return names
 
