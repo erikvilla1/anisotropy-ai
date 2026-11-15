@@ -125,16 +125,19 @@ test("the north-east arrow is kept for links that open a new tab; links on the s
   }
 });
 
-test("The Basement's mark is shown once, in the home page's team band, and the hero's corner names it in words (ADR-0081 amendments 2 and 3)", () => {
+test("The Basement's mark is shown once, in the team band on About, and the home hero's corner names it in words (ADR-0081 amendments 2 and 3)", () => {
   const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return sources(path);
     return /\.(tsx?|css)$/.test(entry.name) ? [path] : [];
   });
-  // One file names the mark, once: the home page, in its team band. The copy recoloured in white stays out of the repository.
+  // One file names the mark, once: the team band, which is on About (ADR-0077 amendment 73). The copy recoloured in
+  // white stays out of the repository.
   const naming = ["app", "components", "lib"].flatMap(sources).filter((file) => /uc-san-diego-the-basement/.test(readFileSync(file, "utf8")));
-  assert.deepEqual(naming, [join("app", "page.tsx")]);
-  assert.equal((readFileSync("app/page.tsx", "utf8").match(/uc-san-diego-the-basement/g) ?? []).length, 1);
+  assert.deepEqual(naming, [join("components", "team-band.tsx")]);
+  assert.equal((readFileSync("components/team-band.tsx", "utf8").match(/uc-san-diego-the-basement/g) ?? []).length, 1);
+  assert.match(readFileSync("app/about/page.tsx", "utf8"), /<TeamBand \/>/);
+  assert.doesNotMatch(readFileSync("app/page.tsx", "utf8"), /TeamBand|team-band/);
   assert.equal(existsSync(join("public", "assets", "partners", "uc-san-diego-the-basement.png")), true);
   assert.equal(existsSync(join("public", "assets", "partners", "uc-san-diego-the-basement-white.png")), false);
   assert.match(readFileSync("app/page.tsx", "utf8"), /The Basement, UC San Diego/);

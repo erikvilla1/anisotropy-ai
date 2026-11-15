@@ -70,3 +70,10 @@ Option 3.
 **Decision.** The permission recorded here is the lead's statement above and nothing more: no letter, email or licence from The Basement is in the repository, and who gave the permission and in what words is not recorded. `public/assets/partners/uc-san-diego-the-basement.png` returns from the repository's history unchanged (684 by 202 px, transparent ground) and is drawn black by a style rule, so no recoloured copy is stored. It stands once, in the team band's head at the right (ADR-0077 amendment 65), 46 px high, with the alternative text "UC San Diego, The Basement" and the cohort beside it in words. The hero's corner keeps the words of amendment 2; the white copy stays deleted.
 
 **Evidence.** `tests/marketing-pages.test.ts`: one file under `app/`, `components/` and `lib/` names the mark, once, and the white copy does not exist; `home.spec.ts` reads the one picture, its alternative text, its black filter and its height. Outputs are in the pull request. UNVERIFIED: that the permission covers a one colour version of the mark, and that it covers a public website; both rest on the lead's word. For the founder to confirm with the pull request.
+
+## Amendment 4, 2026-11-15 (the mark is on About, with the team band)
+
+**Decision.** The team band left the home page for About (ADR-0077 amendment 73) and the mark went with it, unchanged: once on the site, in black, beside the cohort. The home hero's corner keeps the words of amendment 2. Amendment 3's permission and its UNVERIFIED points stand as written.
+
+**Evidence.** `tests/marketing-pages.test.ts` finds the mark named once, in `components/team-band.tsx`, which About shows and the home page does not.
+

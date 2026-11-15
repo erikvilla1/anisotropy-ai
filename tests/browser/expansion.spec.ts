@@ -22,8 +22,9 @@ test("navigation routes load directly with research-focused About", async ({
     "physical evidence",
   );
   await expect(page.locator(".technology-section")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "The team." })).toBeVisible();
-  await expect(page.locator(".team-card")).toHaveCount(5);
+  // The team band, which stood on the home page until ADR-0077 amendment 73, in place of the cards of names and seats.
+  await expect(page.getByRole("heading", { name: "From university to industry." })).toBeVisible();
+  await expect(page.locator("#team .team-face")).toHaveCount(5);
   await expect(page.getByRole("heading", { name: "Start small. Prove it. Build forward." })).toBeVisible();
   await nav.getByRole("link", { name: "Industries", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Aerospace" })).toBeVisible();

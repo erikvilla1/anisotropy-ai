@@ -864,3 +864,11 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `home.spec.ts`, 8 of 8, reads the ground's first colour and the heading's white. UNVERIFIED: not captured again after the change.
 
+## Amendment 73, 2026-11-15 (the team band leaves the home page for About)
+
+**Context.** The lead, with a capture of the home page's team band: "lets move the entire team headshots section to about only, not shown on homepage."
+
+**Decision.** The band, its head ("From university to industry.", the paragraph, The Basement's mark and the cohort) and the five portraits, is a component (`components/team-band.tsx`, rules in `components/team-band.css`) and is the About page's last section, under `#team`. It replaces About's cards of names and seats and the paragraph on how the team decides ("Five people, two seats each ..."), which the lead had called irrelevant to a customer (amendment 55); the seats stay in `lib/team.ts`, which is unchanged. The home page goes from Services to the changelog, and `#working` is gone from it. The band's classes are renamed from `home-` to `team-`, and the home page's head rules it relied on are written out in its own stylesheet.
+
+**Evidence.** `team.spec.ts`, 2 of 2 (the cases moved from `home.spec.ts`, run on About); `home.spec.ts`, 7 of 7, with no team band on the page; `expansion.spec.ts`, 5 with 2 skipped; `npm test`, 342 of 343 with 1 skipped. Captured on About and on the home page at 1900 px and looked at. UNVERIFIED: phone widths; whether anything outside the repository links to the home page's `#working`.
+

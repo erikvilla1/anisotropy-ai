@@ -12,7 +12,7 @@ import { CouponVisual } from "@/components/coupon-visual";
 import { MediaSlot } from "@/components/media-slot";
 import { modelGoals, modelSubjects, roadmap, validationGate, workflowSteps } from "@/lib/about-content";
 import { findService, serviceHref, statusLabel, type ServiceStatus } from "@/lib/services";
-import { team } from "@/lib/team";
+import { TeamBand } from "@/components/team-band";
 import "../inner-pages.css";
 import "./about.css";
 
@@ -348,35 +348,9 @@ export default function About() {
           </p>
         </div>
       </section>
-      <section className="band is-light about-team" id="team">
-        <div className="band-head">
-          <p className="band-label">ABOUT US</p>
-          <div className="band-statement">
-            <h2>The team.</h2>
-            <p>
-              Five people, two seats each: one technical, one for the company. A lead decides alone inside the seat and
-              checks with the CEO on anything that could alter results, cost, security, test plans or spending.
-            </p>
-          </div>
-        </div>
-        <div className="band-grid">
-          {/* A card is the name and the seats. It shows no portrait yet: the portraits in lib/team.ts are on the home page's cards
-              (ADR-0077 amendment 29, each person's consent still to be confirmed), and About's cards take them with Kai's work on
-              the team cards. */}
-          <div className="team-grid">
-            {team.map((person) => (
-              <article className="team-card" key={person.name}>
-                <div className="team-card-body">
-                  <h3 className="kit-title">{person.name}</h3>
-                  {person.role ? <span className="kit-mono team-role">{person.role}</span> : null}
-                  <p>{person.technical.charAt(0).toUpperCase() + person.technical.slice(1)}.</p>
-                  {person.company ? <p>{person.company.charAt(0).toUpperCase() + person.company.slice(1)}.</p> : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* The team (ADR-0077 amendment 73): the band that stood on the home page, head, programme and portraits, in place
+          of this page's cards of names and seats. How the team decides is not said on the site. */}
+      <TeamBand />
     </main>
   );
 }
