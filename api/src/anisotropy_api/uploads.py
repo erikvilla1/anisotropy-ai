@@ -39,6 +39,7 @@ MAX_BUNDLE_BYTES = 50 * 1024 * 1024  # the zip as sent; the first real job's bun
 MAX_UPLOADS = 100  # stored uploads per person; one more is refused until one is deleted
 MAX_TOKENS = 10  # tokens per person that are not cancelled
 TOKEN_PREFIX = "anisotropy_upload_"
+PAIRING_PREFIX = "anisotropy_pair_"  # a one-time code, never taken for a token: `bearer` wants the token's own prefix
 CHECK_TIMEOUT_S = 120.0
 COMPARE_TIMEOUT_S = 240.0
 DOCUMENT_TIMEOUT_S = 180.0
@@ -70,6 +71,13 @@ def new_token() -> tuple[str, str, str]:
     """A fresh token, its SHA-256, and its last four characters. The token is 256 random bits; only the digest is kept."""
     token = TOKEN_PREFIX + secrets.token_urlsafe(32)
     return token, token_digest(token), token[-4:]
+
+
+def new_pairing_code() -> tuple[str, str]:
+    """A fresh one-time code that connects a machine (ADR-0094 amendment 1), and its SHA-256: 256 random bits, of which only the
+    digest is kept, as a token's."""
+    code = PAIRING_PREFIX + secrets.token_urlsafe(32)
+    return code, token_digest(code)
 
 
 def token_digest(token: str) -> str:

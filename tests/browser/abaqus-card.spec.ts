@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { bannedIn, bannedInAbaqusCard } from "../../lib/studio-copy";
-import { comparisonOf, exchangeState, JOB, LIMITS, mockExchange, mockRun, TOKEN, uploadOf } from "./abaqus-api";
+import { comparisonOf, exchangeState, JOB, LIMITS, mockExchange, mockRun, PAIR_CODE, TOKEN, uploadOf } from "./abaqus-api";
 
 /** The card of the user's own Abaqus on a finished run (ADR-0094 part 7, step 6), in the viewer window, against a stand-in API. The
  * comparisons shown are the fea package's own (tests/fixtures/abaqus). No Abaqus and no API run here. */
@@ -31,6 +31,7 @@ test("a finished run offers the way to Abaqus and back; a file sent is compared 
   await expect(card(page)).toContainText("abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa");
   await expect(card(page)).toContainText("only you and the Anisotropy team can see it");
   await expect(card(page).getByTestId("abaqus-keys")).toHaveCount(0); // the connector's own route is closed here, so no upload key is offered
+  await expect(card(page).getByTestId("abaqus-quick")).toHaveCount(0); // and no click that would need it (amendment 1)
   expect(await cardWords(page)).not.toMatch(/\b(bundle|ODB|equivalence)\b/); // the product's own words on the first screen
 
   await card(page).getByTestId("abaqus-file").setInputFiles(file());
@@ -189,6 +190,57 @@ test("an upload key is shown once, the command never holds it, and a file sent f
   const words = await cardWords(page);
   expect(bannedInAbaqusCard(words)).toEqual([]);
   expect(bannedIn(words)).toEqual(["Abaqus", ".py"]); // and those two are what the card alone may name
+});
+
+test("Send to Abaqus hands the run to this PC, Connect this PC hands it a code the page never shows, and the results arrive by themselves", async ({ page }) => {
+  const state = exchangeState({ exchange: { uploads: true, connector_route: true, ...LIMITS } });
+  await page.addInitScript(() => { // what the page hands to the PC, kept instead of handed over
+    const kept: string[] = [];
+    (window as unknown as { handed: string[] }).handed = kept;
+    window.open = (url) => { kept.push(String(url)); return null; };
+  });
+  const handed = () => page.evaluate(() => (window as unknown as { handed: string[] }).handed);
+  await mockRun(page, { outputs: BUILD });
+  await mockExchange(page, state);
+  await page.goto(VIEW);
+  const quick = card(page).getByTestId("abaqus-quick");
+  await expect(quick).toBeVisible({ timeout: 20_000 });
+  await expect(quick.getByTestId("abaqus-send-to-abaqus")).toHaveText("Send to Abaqus"); // the first thing on the card, in the user's own words
+  await expect(quick).toContainText("When the job completes, the comparison appears here by itself.");
+  await expect(card(page).getByTestId("abaqus-build")).toBeVisible(); // the way by hand stays, under it
+  await expect(quick.getByTestId("abaqus-connect")).toBeHidden(); // the setup is one fold away, since it is done once
+
+  await quick.getByTestId("abaqus-send-to-abaqus").click();
+  expect(await handed()).toEqual([`anisotropy://open?run=${JOB}`]); // the run and nothing else: no address, no key
+  await expect(quick.getByTestId("abaqus-expecting")).toHaveText("Waiting for the results from Abaqus… If Abaqus did not start, set up this PC first.");
+
+  await quick.getByTestId("abaqus-setup").locator("summary").click();
+  expect(await quick.getByTestId("abaqus-setup-connector").getAttribute("href")).toMatch(/\/v1\/abaqus-connector$/);
+  const api = ((await quick.getByTestId("abaqus-setup-connector").getAttribute("href")) ?? "").replace(/\/v1\/abaqus-connector$/, "");
+  await quick.getByTestId("abaqus-connect").click();
+  await expect(quick.getByTestId("abaqus-connecting")).toBeVisible();
+  expect(state.codes).toBe(1);
+  expect((await handed())[1]).toBe(`anisotropy://pair?code=${PAIR_CODE}&site=${encodeURIComponent(api)}`); // the code goes to the PC, with the address it will show
+  expect(await page.content()).not.toContain("anisotropy_pair_"); // and is nowhere on the page
+  expect(bannedInAbaqusCard(await cardWords(page))).toEqual([]);
+
+  state.onCode = () => ({ status: 401, body: { detail: "signed out" } });
+  await quick.getByTestId("abaqus-connect").click();
+  await expect(quick.getByRole("alert")).toHaveText("Your sign-in has ended. Reload the page, sign in, and connect again.");
+  expect(await handed()).toHaveLength(2);
+
+  state.uploads.unshift(uploadOf("agrees")); // the job completed on the PC and its results were sent: the card finds them without a click
+  await expect(card(page).getByTestId("abaqus-verdict")).toHaveText("Agrees with ours", { timeout: 15_000 });
+  await expect(card(page).getByTestId("abaqus-quick")).toHaveCount(0);
+});
+
+test("a run with no build script offers no click to Abaqus", async ({ page }) => {
+  const state = exchangeState({ exchange: { uploads: true, connector_route: true, ...LIMITS } });
+  await mockRun(page);
+  await mockExchange(page, state);
+  await page.goto(VIEW);
+  await expect(card(page).getByTestId("abaqus-keys")).toBeVisible({ timeout: 20_000 });
+  await expect(card(page).getByTestId("abaqus-quick")).toHaveCount(0);
 });
 
 test("where uploads are not kept, or the run is not a finished tension coupon, there is no card", async ({ page }) => {

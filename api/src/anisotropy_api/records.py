@@ -171,6 +171,23 @@ class UploadTokenRow(Base):
     revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class PairingCodeRow(Base):
+    """A one-time code that connects a user's machine to their account (ADR-0094 amendment 1, migration 0011). The signed-in page
+    asks for one and hands it to the machine in a link; the machine swaps it, once and within minutes, for an upload token of its
+    own. Only the code's SHA-256 is kept. `used_at` is when it was swapped and `token_id` the token it became."""
+
+    __tablename__ = "pairing_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    actor: Mapped[str] = mapped_column(String(40), nullable=False)
+    user_email: Mapped[str | None] = mapped_column(String(320))
+    code_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("upload_tokens.id"))
+
+
 class UploadRow(Base):
     """A bundle sent from a user's own Abaqus (ADR-0094 part 6, migration 0010): private, its owner's alone. The bundle itself is in the
     object store under `object_key`; the row keeps its SHA-256 and size, what the check found (`facts`, `in_scope`), the token it came
@@ -462,6 +479,42 @@ def list_upload_tokens(engine: Engine, *, actor: str, user_email: str | None) ->
     statement = _by_owner(select(UploadTokenRow).order_by(UploadTokenRow.created_at.desc(), UploadTokenRow.id), UploadTokenRow, user_email, actor)
     with Session(engine, expire_on_commit=False) as session:
         return list(session.scalars(statement))
+
+
+def insert_pairing_code(engine: Engine, *, code_id: uuid.UUID, actor: str, user_email: str | None, code_sha256: str, now: dt.datetime,
+                        expires_at: dt.datetime) -> PairingCodeRow:
+    """A new code for the requester. Their earlier codes that were never swapped end now, so one code stands at a time."""
+    with Session(engine, expire_on_commit=False) as session:
+        session.execute(_by_owner(update(PairingCodeRow).where(PairingCodeRow.used_at.is_(None), PairingCodeRow.expires_at > now), PairingCodeRow,
+                                  user_email, actor).values(expires_at=now))
+        row = PairingCodeRow(id=code_id, actor=actor, user_email=user_email, code_sha256=code_sha256, created_at=now, expires_at=expires_at)
+        session.add(row)
+        session.commit()
+        return row
+
+
+def fetch_pairing_code(engine: Engine, code_sha256: str, now: dt.datetime) -> PairingCodeRow | None:
+    """The code with that digest when it could still be swapped, unchanged; None otherwise."""
+    with Session(engine, expire_on_commit=False) as session:
+        return session.scalars(select(PairingCodeRow).where(PairingCodeRow.code_sha256 == code_sha256, PairingCodeRow.used_at.is_(None),
+                                                            PairingCodeRow.expires_at > now)).first()
+
+
+def claim_pairing_code(engine: Engine, code_sha256: str, now: dt.datetime) -> PairingCodeRow | None:
+    """The code with that digest when it was never swapped and has not ended, marked as swapped now; None otherwise. The update names
+    the unused row, so of two requests with one code one gets it."""
+    with Session(engine, expire_on_commit=False) as session:
+        claimed = session.execute(update(PairingCodeRow).where(PairingCodeRow.code_sha256 == code_sha256, PairingCodeRow.used_at.is_(None),
+                                                               PairingCodeRow.expires_at > now).values(used_at=now).returning(PairingCodeRow.id)).first()
+        session.commit()
+        return None if claimed is None else session.get(PairingCodeRow, claimed[0])
+
+
+def name_pairing_token(engine: Engine, code_id: uuid.UUID, token_id: uuid.UUID) -> None:
+    """Write down which token a swapped code became."""
+    with Session(engine) as session:
+        session.execute(update(PairingCodeRow).where(PairingCodeRow.id == code_id).values(token_id=token_id))
+        session.commit()
 
 
 def live_upload_tokens(engine: Engine, *, actor: str, user_email: str | None) -> int:

@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Upload as UploadIcon } from "lucide-react";
 import {
-  cancelUploadKey, cardRows, cardText, compareAgain, connectorCommand, connectorUrl, createUploadKey, differences, documentProblem, documentUrl, getExchange, getUpload,
+  cancelUploadKey, cardRows, cardText, compareAgain, connectorCommand, connectorUrl, createPairingCode, createUploadKey, differences, documentProblem, documentUrl, getExchange, getUpload,
   headline, KEY_FILE,
-  listUploadKeys, listUploads, megabytes, notComparedWords, percent, provenance, quantityName, removeUpload, sendProblem, sendUpload, sentFileUrl, writeDocument,
+  listUploadKeys, listUploads, megabytes, notComparedWords, openLink, openOnThisPc, pairLink, percent, provenance, quantityName, removeUpload, sendProblem, sendUpload, sentFileUrl, writeDocument,
   type Comparison, type Exchange, type NewUploadKey, type Refusal, type SendStage, type Upload, type UploadKey,
 } from "@/lib/abaqus-exchange";
 import { fileUrl, type Fields, type JobStatus } from "@/lib/studio-api";
@@ -14,6 +14,7 @@ import { downloadName } from "@/lib/studio-copy";
 import { namingOf } from "./job-files";
 
 const WAIT_MS = 5000; // how often the card looks for a file sent straight from Abaqus, while its instructions are open
+const EXPECT_MS = 30 * 60 * 1000; // how long the card looks for the results after Send to Abaqus; after that a reload shows them
 const ZONE_WORDS: Record<string, string> = { gauge: "Gauge section", "free length": "Between gauge and tabs", band: "Within one width of a tab", "tab line": "At a tab line",
   gripped: "Under the grips" };
 const when = (iso: string | null): string => {
@@ -40,6 +41,7 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
   const [busy, setBusy] = useState<Busy>(null);
   const [problem, setProblem] = useState<Problem>(null);
   const [waiting, setWaiting] = useState(false);
+  const [expecting, setExpecting] = useState(0); // when Send to Abaqus was clicked: the results come back by themselves, so the card looks for them
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const jobId = job.job_id;
@@ -54,7 +56,7 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
 
   useEffect(() => {
     const controller = new AbortController();
-    setExchange(null); setUpload(null); setEarlier([]); setProblem(null);
+    setExchange(null); setUpload(null); setEarlier([]); setProblem(null); setExpecting(0);
     (async () => {
       const offered = await getExchange(apiBase, controller.signal);
       if (controller.signal.aborted || !offered?.uploads) return;
@@ -66,12 +68,13 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
 
   const newest = upload?.id ?? null;
   useEffect(() => {
-    if (!waiting || !exchange) return;
+    if (!(waiting || expecting) || !exchange) return;
     const timer = window.setInterval(() => {
-      listUploads(apiBase, jobId).then((all) => { if (all.length && all[0].id !== newest) { setWaiting(false); setProblem(null); void load(); } }).catch(() => undefined);
+      if (!waiting && Date.now() - expecting > EXPECT_MS) { setExpecting(0); return; }
+      listUploads(apiBase, jobId).then((all) => { if (all.length && all[0].id !== newest) { setWaiting(false); setExpecting(0); setProblem(null); void load(); } }).catch(() => undefined);
     }, WAIT_MS);
     return () => window.clearInterval(timer);
-  }, [waiting, exchange, apiBase, jobId, newest, load]);
+  }, [waiting, expecting, exchange, apiBase, jobId, newest, load]);
 
   if (!exchange) return null;
 
@@ -175,6 +178,10 @@ export function AbaqusCard({ apiBase, job, fields, onShow }: {
         <>
           <h3>Compare with your Abaqus model</h3>
           <p>Solve this coupon in your own Abaqus and send the result here. The model, the pull force and every ply&apos;s stresses and strains are compared with this run.</p>
+          {exchange.connector_route && "abaqus_build" in job.outputs ? (
+            <ThisPc apiBase={apiBase} jobId={jobId} expecting={expecting > 0} onSent={() => setExpecting(Date.now())} />
+          ) : null}
+          {exchange.connector_route && "abaqus_build" in job.outputs ? <h4 className="studio-abaqus-by-hand">Or by hand</h4> : null}
           <ol className="studio-abaqus-steps">
             <li>
               <strong>Open in Abaqus/CAE.</strong>{" "}
@@ -304,6 +311,53 @@ function Compared({ comparison, upload, fields, onShow }: { comparison: Comparis
           {upload.compared_at ? ` Compared ${when(upload.compared_at)}.` : ""}</p>
       </details>
     </>
+  );
+}
+
+/** The two-click way (ADR-0094 amendment 1): Send to Abaqus starts Abaqus/CAE on the user's PC with this run's coupon built, and the
+ * results of its job come back to this card by themselves. A PC is set up and connected once: the connector's setup, then Connect this
+ * PC, which asks for a one-time code and hands it to the PC in a link; the PC shows this site and the account and asks before it
+ * connects. The page never shows the code, and no key is copied by hand. A PC without the setup does nothing on a click, and the page
+ * cannot tell, so the words under the button say what to do. */
+function ThisPc({ apiBase, jobId, expecting, onSent }: { apiBase: string; jobId: string; expecting: boolean; onSent: () => void }) {
+  const [connecting, setConnecting] = useState(false);
+  const [message, setMessage] = useState("");
+  const link = openLink(jobId);
+  if (!link) return null;
+
+  async function connect() {
+    setMessage(""); setConnecting(false);
+    try {
+      const { code } = await createPairingCode(apiBase);
+      setConnecting(true);
+      openOnThisPc(pairLink(code, new URL(apiBase, window.location.href).href));
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      setMessage(status === 401 || status === 403 ? "Your sign-in has ended. Reload the page, sign in, and connect again." : "This PC was not connected. Try again.");
+    }
+  }
+
+  return (
+    <div className="studio-abaqus-quick" data-testid="abaqus-quick">
+      <p className="studio-abaqus-actions">
+        <button type="button" className="studio-button" onClick={() => { setMessage(""); onSent(); openOnThisPc(link); }} data-testid="abaqus-send-to-abaqus">Send to Abaqus</button>
+      </p>
+      <p>Abaqus/CAE starts on this PC with this coupon built as a model you can edit. Change what you want to study and submit its job there. When the job completes, the comparison appears here by itself.</p>
+      {expecting ? <p className="studio-status" role="status" data-testid="abaqus-expecting">Waiting for the results from Abaqus… If Abaqus did not start, set up this PC first.</p> : null}
+      <details className="studio-details" data-testid="abaqus-setup">
+        <summary>First time on this PC</summary>
+        <ol className="studio-abaqus-steps">
+          <li><strong>Set up, once.</strong>{" "}
+            <a href={connectorUrl(apiBase)} download="anisotropy-connector.zip" target="_blank" rel="noreferrer" data-testid="abaqus-setup-connector"><Download size={12} aria-hidden="true" /> Connector (ZIP)</a>.
+            {" "}Unzip it and double-click Set up Anisotropy in its folder. It adds an Anisotropy menu to Abaqus/CAE and lets this site start Abaqus on this PC. For Windows.</li>
+          <li><strong>Connect, once.</strong>{" "}
+            <button type="button" className="studio-text-button" onClick={() => void connect()} data-testid="abaqus-connect">Connect this PC</button>.
+            {" "}A box on your PC names this site and your account. Say yes there, and this PC can send its results to you alone.</li>
+        </ol>
+        {connecting ? <p className="studio-status" role="status" data-testid="abaqus-connecting">Answer the box on your PC, then click Send to Abaqus. If no box appeared, do the setup first.</p> : null}
+        {message ? <p className="studio-alert" role="alert">{message}</p> : null}
+      </details>
+    </div>
   );
 }
 

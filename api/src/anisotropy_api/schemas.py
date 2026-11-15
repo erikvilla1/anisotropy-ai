@@ -1008,6 +1008,34 @@ class UploadTokenCreated(UploadTokenOutput):
         return cls(**UploadTokenOutput.of(row).model_dump(), token=token)
 
 
+class PairingCode(Contract):
+    """A one-time code that connects a machine to the requester's account (ADR-0094 amendment 1): in this answer and nowhere else,
+    good for `minutes` and for one swap."""
+
+    code: str
+    expires_at: str
+    minutes: int
+
+
+class PairInput(Contract):
+    """What a machine sends to be connected: the code its user's page handed it, and the name the token will carry. With `look`,
+    nothing is swapped: the answer says whose account the code is for, so the machine can ask its user first."""
+
+    code: Annotated[str, Field(min_length=20, max_length=200)]
+    name: Annotated[str, Field(max_length=100)] = ""
+    look: bool = False
+
+
+class Paired(Contract):
+    """The answer to a machine: whose account it is (`owner`: the signed-in email, or the local actor) and, once swapped, the upload
+    token, shown this once."""
+
+    owner: str
+    token: str | None = None
+    token_id: str | None = None
+    name: str | None = None
+
+
 class AbaqusExchange(Contract):
     """What the page's card needs to know before it offers anything (ADR-0094 step 6): whether this API keeps uploads at all, whether
     the connector's own route can be reached with an upload token (always without a sign-in in front; behind Cloudflare Access only

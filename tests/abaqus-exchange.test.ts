@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  cardRows, cardText, connectorCommand, differences, documentProblem, documentUrl, ExchangeError, headline, megabytes, notComparedWords, percent, provenance,
+  cardRows, cardText, connectorCommand, differences, documentProblem, documentUrl, ExchangeError, headline, megabytes, notComparedWords, openLink, pairLink, percent, provenance,
   readComparison, readExchange, readUpload, readUploadKey, sendProblem, sentFileUrl, type Comparison,
 } from "../lib/abaqus-exchange";
 import { StudioError } from "../lib/studio-api";
@@ -149,4 +149,13 @@ test("the command that sends from Abaqus names the key's file and never the key"
   const odd = connectorCommand({ apiAddress: "http://localhost:8000", jobId: "j", coupon: "a coupon; rm -rf", units: "in-psi" });
   assert.equal(odd, "abaqus python anisotropy_connector.py <your job>.odb --units mm-MPa --send http://localhost:8000 --token-file anisotropy-key.txt --our-run j"); // a name that is not plain is left out; a deck of ours is in mm-MPa or m-Pa
   assert.equal(downloadName("abaqus_build", { standard: "ASTM D3039/D3039M-17", layup: "[45/0/-45/90]s" }), "D3039_[45,0,-45,90]s_build.py"); // plies parted by commas (audit fea-run-39)
+});
+
+test("the links the page hands to a PC are the two the PC's helper reads, to the character", () => {
+  // the same two links are the fixtures of fea/tests/test_anisotropy_link.py, which the helper reads as written here
+  const code = `anisotropy_pair_${"c_-".repeat(14)}c`;
+  assert.equal(pairLink(code, "https://anisotropy.example/api/"), `anisotropy://pair?code=${code}&site=https%3A%2F%2Fanisotropy.example%2Fapi`);
+  assert.equal(pairLink(code, "http://localhost:8000"), `anisotropy://pair?code=${code}&site=http%3A%2F%2Flocalhost%3A8000`);
+  assert.equal(openLink("0123abcd-0123-4abc-8def-0123456789ab"), "anisotropy://open?run=0123abcd-0123-4abc-8def-0123456789ab"); // the run and nothing else
+  for (const id of ["", "j", "0123ABCD-0123-4ABC-8DEF-0123456789AB", "0123abcd-0123-4abc-8def-0123456789ab&x=1", "../x"]) assert.equal(openLink(id), null);
 });

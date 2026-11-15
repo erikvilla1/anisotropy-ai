@@ -2,7 +2,8 @@
 prefix of its own with its owner's row, put beside a finished run of ours, read back and deleted by its owner alone; to a second
 user it does not exist; the founders named in the settings see it and change nothing; the connector sends with a token that is
 shown once and refused once cancelled; behind Cloudflare Access the connector's one route passes on its token only when the settings
-say so.
+say so. Since amendment 1 a machine is connected by a one-time code that a signed-in page asks for, swapped once and within minutes
+for a token of its own, and a connected machine reads the build script of its owner's finished run and of no other.
 
 The bundles and the run of ours are made once by `abaqus_bundles.py` in the fea environment, and the check and the comparison are the
 real `fea/tools/abaqus_upload.py`: no stand-in judges a bundle here. No Abaqus runs: their side is our own kernel's run."""
@@ -11,6 +12,7 @@ import datetime as dt
 import importlib.util
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -24,7 +26,7 @@ from fastapi.testclient import TestClient
 from anisotropy_api import access, main, uploads
 from anisotropy_api.coupon_jobs import FEA, CouponJobs, Job
 from anisotropy_api.main import app, job_recorder
-from anisotropy_api.records import fetch_upload, insert_job, update_job
+from anisotropy_api.records import fetch_job, fetch_upload, insert_job, update_job
 from anisotropy_api.settings import ACCESS_AUDIENCE_VARIABLE, ACCESS_TEAM_DOMAIN_VARIABLE, DATABASE_VARIABLE, RECORDING_VARIABLE, AccessSettings
 from anisotropy_api.storage import FolderStore
 
@@ -280,8 +282,8 @@ def test_the_connector_is_handed_out_as_one_zip_the_same_each_time(local):
     assert 'filename="anisotropy-connector.zip"' in answer.headers["content-disposition"]
     with zipfile.ZipFile(io.BytesIO(answer.content)) as archive:
         assert sorted(archive.namelist()) == [f"anisotropy-connector/{name}" for name in (
-            "README.txt", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py", "anisotropy_menu.py",
-            "anisotropy_plugin.py", "bundle.py")]  # the last three with the menu in Abaqus/CAE (step 8)
+            "README.txt", "Set up Anisotropy.bat", "abaqus_every_output.py", "abaqus_extract_fields.py", "anisotropy_connector.py", "anisotropy_link.py",
+            "anisotropy_menu.py", "anisotropy_plugin.py", "anisotropy_setup.py", "anisotropy_start.py", "bundle.py")]  # with the menu (step 8) and the links (amendment 1)
         assert archive.read("anisotropy-connector/anisotropy_connector.py") == (FEA / "tools" / "anisotropy_connector.py").read_bytes()
     assert client.get(CONNECTOR_ZIP).content == answer.content and (kept.scratch / "connector" / "anisotropy-connector.zip").is_file()
     kept.command = None  # no uv: the zip already written is still handed out; a fresh process without uv says why not
@@ -554,3 +556,163 @@ def test_the_connectors_own_request_is_what_the_route_takes(local, made, tmp_pat
     assert answer["verdict"] == "agrees" and answer["job_id"] == str(job_id) and answer["bundle_bytes"] == len(bundle(made, "agrees"))
     with pytest.raises(connector.NotSent, match=r"the site refused it \(401\): This route takes a bundle sent with an upload token"):
         connector.send(connector.send_address("http://localhost:8000"), "anisotropy_upload_" + "x" * 43, made / "agrees.zip", poster)
+
+
+# ------------------------------------------------------------------------------------------------------- a machine connected by a code
+
+PAIRING, PAIR, RUNS = "/v1/pairing-codes", "/v1/connector/pair", "/v1/connector/runs"
+BUILD_SCRIPT = "# Built by anisotropy_fea for the test: the script that builds the coupon in Abaqus/CAE\nprint('built')\n"
+NOBODY = {"X-Anisotropy-Actor": ""}  # as a machine asks: no actor header and no token of Access
+
+
+def with_a_build_script(registry: CouponJobs, engine, job_id: uuid.UUID, tmp_path: Path) -> None:
+    """Give a finished job the build script the tool writes for an unnotched tension coupon: on the disk for a job of this process,
+    in the store for one that another container ran."""
+    job = registry.jobs.get(job_id)
+    if job is not None:
+        path = job.folder / f"{COUPON}_build.py"
+        path.write_text(BUILD_SCRIPT, encoding="utf-8")
+        job.outcome["outputs"]["abaqus_build"] = str(path)
+        return
+    source = tmp_path / f"{job_id}_build.py"
+    source.write_text(BUILD_SCRIPT, encoding="utf-8")
+    key = f"coupons/{COUPON}/attempt-01/{COUPON}_build.py"
+    registry.store.put(key, source, "text/x-python")
+    row = fetch_job(engine, job_id)
+    update_job(engine, job_id, stored={**row.stored, "abaqus_build": key}, outputs={**row.outputs, "abaqus_build": f".local/fea/{COUPON}/ours/{COUPON}_build.py"})
+
+
+def test_without_run_records_a_machine_is_not_connected(monkeypatch):
+    monkeypatch.setenv(RECORDING_VARIABLE, "off")
+    with TestClient(app, headers={"X-Anisotropy-Actor": "studio"}) as client:
+        for answer in (client.post(PAIRING), client.post(PAIR, json={"code": "anisotropy_pair_" + "x" * 43}),
+                       client.get(f"{RUNS}/{uuid.uuid4()}/build-script", headers={"Authorization": "Bearer anisotropy_upload_" + "x" * 43})):
+            assert answer.status_code == 503 and "switched off" in answer.json()["detail"]
+
+
+def test_a_machine_is_connected_by_a_code_that_is_shown_once_swapped_once_and_ends_in_minutes(hosted, made, monkeypatch):
+    client, registry, _store, engine = hosted
+    run_in_the_bucket(registry, engine, made)
+    assert client.post(PAIRING).status_code == 401  # a code is asked for by a signed-in page alone
+    made_code = client.post(PAIRING, headers=signed())
+    assert made_code.status_code == 201 and made_code.json()["minutes"] == 10
+    code = made_code.json()["code"]
+    assert re.fullmatch(r"anisotropy_pair_[A-Za-z0-9_-]{43}", code)
+    assert all(re.fullmatch(r"anisotropy_pair_[A-Za-z0-9_-]{43}", uploads.new_pairing_code()[0]) for _ in range(200))  # the random part may hold "_" and "-"
+    with engine.connect() as connection:  # the database holds the digest alone
+        kept = connection.exec_driver_sql("SELECT code_sha256 FROM pairing_codes").scalar()
+    assert kept == uploads.token_digest(code) and code not in kept
+
+    closed = client.post(PAIR, json={"code": code}, headers=NOBODY)  # the setting is off: Access's token is needed, as everywhere
+    assert closed.status_code == 401 and "behind Cloudflare Access" in closed.json()["detail"]
+    monkeypatch.setattr(app.state, "connector_uploads", True, raising=False)
+    for _ in range(2):  # a look says whose account it is and swaps nothing, as often as asked
+        looked = client.post(PAIR, json={"code": code, "look": True}, headers=NOBODY)
+        assert looked.status_code == 200 and looked.json() == {"owner": EMAIL, "token": None, "token_id": None, "name": None}
+    assert client.get(TOKENS, headers=signed()).json() == []
+    paired = client.post(PAIR, json={"code": code, "name": "ERIK-PC"}, headers=NOBODY)
+    assert paired.status_code == 200, paired.text
+    secret, token_id = paired.json()["token"], paired.json()["token_id"]
+    assert secret.startswith("anisotropy_upload_") and paired.json()["owner"] == EMAIL and paired.json()["name"] == "ERIK-PC"
+    assert [(t["id"], t["name"]) for t in client.get(TOKENS, headers=signed()).json()] == [(token_id, "ERIK-PC")]
+    assert secret not in client.get(TOKENS, headers=signed()).text and client.get(TOKENS, headers=signed(OTHER)).json() == []
+    with engine.connect() as connection:
+        became = connection.exec_driver_sql("SELECT token_id, used_at IS NOT NULL FROM pairing_codes").one()
+    assert (str(became[0]), became[1]) == (token_id, True)
+
+    for wanted in ({"code": code}, {"code": code, "look": True}, {"code": "anisotropy_pair_" + "x" * 43}, {"code": secret}):  # once, and only ours
+        refused = client.post(PAIR, json=wanted, headers=NOBODY)
+        assert refused.status_code == 401 and "Click Connect this PC on the site again" in refused.json()["detail"] and "token" not in refused.json()
+    assert len(client.get(TOKENS, headers=signed()).json()) == 1
+    sent = client.post(CONNECTOR, content=bundle(made, "agrees"), headers={"Authorization": f"Bearer {secret}", **NOBODY})  # the token it became sends
+    assert sent.status_code == 201 and sent.json()["user_email"] == EMAIL and sent.json()["token_id"] == token_id
+
+    for wanted in ({"code": "short"}, {"code": "x" * 201}, {"code": code, "name": "x" * 101}, {"code": code, "owner": OTHER}, {}):
+        assert client.post(PAIR, json=wanted, headers=NOBODY).status_code == 422
+    for answer in (client.get(PAIR, headers=NOBODY), client.post(PAIRING, headers={"Authorization": f"Bearer {secret}", **NOBODY}),
+                   client.post(PAIR + "/", json={"code": code}, headers=NOBODY), client.put(PAIR, json={"code": code}, headers=NOBODY)):
+        assert answer.status_code == 401 and "behind Cloudflare Access" in answer.json()["detail"]  # one path, one method, and no code from a token
+
+
+def test_a_new_code_ends_the_requesters_earlier_one_and_a_code_past_its_minutes_is_refused(hosted, monkeypatch):
+    client, _registry, _store, engine = hosted
+    monkeypatch.setattr(app.state, "connector_uploads", True, raising=False)
+    first = client.post(PAIRING, headers=signed()).json()["code"]
+    theirs = client.post(PAIRING, headers=signed(OTHER)).json()["code"]
+    second = client.post(PAIRING, headers=signed()).json()["code"]
+    assert client.post(PAIR, json={"code": first, "look": True}, headers=NOBODY).status_code == 401
+    assert client.post(PAIR, json={"code": first}, headers=NOBODY).status_code == 401
+    assert client.post(PAIR, json={"code": theirs, "look": True}, headers=NOBODY).json()["owner"] == OTHER  # another's code is not ended by mine
+    assert client.post(PAIR, json={"code": second, "look": True}, headers=NOBODY).json()["owner"] == EMAIL
+    with engine.begin() as connection:  # eleven minutes later
+        connection.exec_driver_sql("UPDATE pairing_codes SET expires_at = expires_at - interval '11 minutes', created_at = created_at - interval '11 minutes'")
+    for code in (second, theirs):
+        late = client.post(PAIR, json={"code": code}, headers=NOBODY)
+        assert late.status_code == 401 and "older than 10 minutes" in late.json()["detail"]
+    assert client.get(TOKENS, headers=signed()).json() == [] and client.get(TOKENS, headers=signed(OTHER)).json() == []
+
+
+def test_a_code_connects_no_machine_past_the_owners_limit_of_tokens_and_locally_names_the_local_user(local, monkeypatch):
+    client, _registry, _kept, _engine = local
+    monkeypatch.setattr(main, "MAX_TOKENS", 1)
+    code = client.post(PAIRING).json()["code"]
+    assert client.post(PAIR, json={"code": code, "look": True}, headers=NOBODY).json()["owner"] == "the local user studio"
+    paired = client.post(PAIR, json={"code": code}, headers=NOBODY)
+    assert paired.status_code == 200 and paired.json()["name"] == "a connected PC"
+    full = client.post(PAIR, json={"code": client.post(PAIRING).json()["code"]}, headers=NOBODY)
+    assert full.status_code == 429 and "Cancel one on the site" in full.json()["detail"] and len(client.get(TOKENS).json()) == 1
+    assert client.delete(f"{TOKENS}/{paired.json()['token_id']}").status_code == 200
+    assert client.post(PAIR, json={"code": client.post(PAIRING).json()["code"]}, headers=NOBODY).status_code == 200
+
+
+def test_a_connected_machine_reads_the_build_script_of_its_owners_finished_run_and_of_no_other(local, made, tmp_path):
+    client, registry, _kept, engine = local
+    secret = client.post(PAIR, json={"code": client.post(PAIRING).json()["code"]}, headers=NOBODY).json()["token"]
+    bearer = {"Authorization": f"Bearer {secret}", **NOBODY}
+    mine, plain = run_on_this_disk(registry, engine, made), run_on_this_disk(registry, engine, made)
+    theirs, running = run_on_this_disk(registry, engine, made, actor="test"), run_on_this_disk(registry, engine, made, state="running")
+    for job_id in (mine, theirs, running):
+        with_a_build_script(registry, engine, job_id, tmp_path)
+    script = client.get(f"{RUNS}/{mine}/build-script", headers=bearer)
+    assert script.status_code == 200 and script.text == BUILD_SCRIPT and script.headers["content-type"].startswith("text/x-python")
+    assert script.headers["content-disposition"] == f'attachment; filename="{COUPON}-build.py"' and script.headers["x-anisotropy-coupon"] == COUPON
+    for job_id in (theirs, uuid.uuid4()):  # another's run and no run at all, in the same words
+        missing = client.get(f"{RUNS}/{job_id}/build-script", headers=bearer)
+        assert missing.status_code == 404 and missing.json()["detail"] == f"No run {job_id} of yours"
+    early = client.get(f"{RUNS}/{running}/build-script", headers=bearer)
+    assert early.status_code == 409 and "once it is done" in early.json()["detail"]
+    none = client.get(f"{RUNS}/{plain}/build-script", headers=bearer)
+    assert none.status_code == 404 and "only an unnotched tension run has one" in none.json()["detail"]
+    for headers in (NOBODY, {"Authorization": "Bearer anisotropy_upload_" + "x" * 43}, {"Authorization": secret}):
+        refused = client.get(f"{RUNS}/{mine}/build-script", headers=headers)
+        assert refused.status_code == 401 and refused.headers["www-authenticate"] == "Bearer"
+    assert client.get(f"{RUNS}/not-a-run/build-script", headers=bearer).status_code == 422
+
+
+def test_behind_access_the_build_script_passes_on_the_owners_token_only_when_the_settings_say_so(hosted, made, monkeypatch, tmp_path):
+    client, registry, _store, engine = hosted
+    mine, theirs = run_in_the_bucket(registry, engine, made), run_in_the_bucket(registry, engine, made, email=OTHER)
+    for job_id in (mine, theirs):
+        with_a_build_script(registry, engine, job_id, tmp_path)
+    secret = client.post(TOKENS, json={"name": "workstation"}, headers=signed()).json()["token"]
+    bearer = {"Authorization": f"Bearer {secret}", **NOBODY}
+    closed = client.get(f"{RUNS}/{mine}/build-script", headers=bearer)
+    assert closed.status_code == 401 and "behind Cloudflare Access" in closed.json()["detail"]
+    monkeypatch.setattr(app.state, "connector_uploads", True, raising=False)
+    script = client.get(f"{RUNS}/{mine}/build-script", headers=bearer)
+    assert script.status_code == 200 and script.text == BUILD_SCRIPT
+    assert client.get(f"{RUNS}/{theirs}/build-script", headers=bearer).status_code == 404
+    for answer in (client.get(f"{RUNS}/{mine}", headers=bearer), client.get(f"{RUNS}/{mine}/build-script/", headers=bearer),
+                   client.get(f"{RUNS}/{mine}/files/package", headers=bearer), client.post(f"{RUNS}/{mine}/build-script", headers=bearer),
+                   client.get(f"{RUNS}/../coupon-jobs/{mine}/build-script", headers=bearer), client.get(f"/v1/coupon-jobs/{mine}", headers=bearer),
+                   client.get(f"/v1/coupon-jobs/{mine}/files/abaqus_build", headers=bearer), client.delete(f"{RUNS}/{mine}/build-script", headers=bearer)):
+        assert answer.status_code == 401 and "behind Cloudflare Access" in answer.json()["detail"]  # a token opens this one file of a run, by GET
+
+
+def test_the_connectors_routes_are_three_and_no_path_beside_them():
+    run = "0123abcd-0123-4abc-8def-0123456789ab"
+    assert access.connector_route("POST", CONNECTOR) and access.connector_route("POST", PAIR) and access.connector_route("GET", f"{RUNS}/{run}/build-script")
+    for method, path in (("GET", CONNECTOR), ("GET", PAIR), ("POST", f"{RUNS}/{run}/build-script"), ("GET", f"{RUNS}/{run}"), ("GET", f"{RUNS}/{run}/build-script/x"),
+                         ("GET", f"{RUNS}/{run}/../{run}/build-script"), ("GET", f"{RUNS}/x/build-script"), ("POST", PAIR + "/"), ("POST", "/v1/connector"),
+                         ("POST", PAIRING), ("PUT", PAIR), ("DELETE", CONNECTOR), ("GET", f"{RUNS}/{run}/build-script\n"), ("HEAD", f"{RUNS}/{run}/build-script")):
+        assert not access.connector_route(method, path), (method, path)

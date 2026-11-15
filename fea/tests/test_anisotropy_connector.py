@@ -343,7 +343,7 @@ def test_under_abaqus_cae_nothing_ends_unsaid_because_its_exit_code_and_its_wind
 # --- what is handed over -----------------------------------------------------------------------------------------------------------
 
 def test_the_connectors_files_import_nothing_beyond_the_standard_library_and_abaqus(connector):
-    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "abaqusGui", "caeModules", "odbAccess", "abaqus_extract_fields"}
+    allowed = set(sys.stdlib_module_names) | {"abaqus", "abaqusConstants", "abaqusGui", "caeModules", "odbAccess", "jobMessage", "abaqus_extract_fields", "anisotropy_menu"}
     folders = {"bundle.py": TOOLS.parent / "src" / "anisotropy_fea"}
     for name in connector.FILES:
         tree = ast.parse((folders.get(name, TOOLS) / name).read_text(encoding="utf-8"))
@@ -356,7 +356,10 @@ def test_the_zip_to_hand_over_holds_the_connector_whole_and_it_runs_from_that_fo
     handed = tmp_path / "anisotropy-connector.zip"
     assert upload.main(["connector", "--out", str(handed)]) == 0
     with zipfile.ZipFile(handed) as archive:
-        assert sorted(archive.namelist()) == sorted(f"anisotropy-connector/{name}" for name in (*connector.FILES, "README.txt"))
+        assert sorted(archive.namelist()) == sorted(f"anisotropy-connector/{name}" for name in (*connector.FILES, "Set up Anisotropy.bat", "README.txt"))
+        setup = archive.read("anisotropy-connector/Set up Anisotropy.bat")
+        assert b"abaqus python anisotropy_setup.py" in setup and setup.count(b"\r\n") == setup.count(b"\n") > 5  # Windows's line endings, whatever the checkout has
+        assert b"where abaqus >nul 2>nul\r\n" in setup and b"/dev/" not in setup  # Windows's own nowhere: the eleventh trial found a path of another system here
         archive.extractall(tmp_path)
     first = handed.read_bytes()
     upload.main(["connector", "--out", str(handed)])
@@ -365,6 +368,7 @@ def test_the_zip_to_hand_over_holds_the_connector_whole_and_it_runs_from_that_fo
     notes = (folder / "README.txt").read_text(encoding="utf-8")
     assert "abaqus python anisotropy_connector.py" in notes and "--watch <the folder your jobs run in>" in notes
     assert "abaqus_plugins in your home" in notes and "Plug-ins > Anisotropy" in notes  # the menu is this same folder, copied there
+    assert 'Double-click "Set up Anisotropy"' in notes and "Connect this PC" in notes and "anisotropy_setup.py --remove" in notes  # amendment 1
     before = list(sys.path)
     try:
         alone = load("anisotropy_connector", folder)
