@@ -118,9 +118,35 @@ test("a service page leads to the workspace and the contact page has an address 
   await expect(page.getByRole("link", { name: "Open the workspace", exact: true })).toHaveAttribute("href", /\/workspace\/fea$/);
   await page.getByRole("link", { name: "Contact us", exact: true }).first().click();
   await expect(page).toHaveURL(/\/contact\/?$/);
-  // Three addresses, each the words of its own mailto link (the audit of 2026-11-12, decision D2), and no repository link (D3).
-  for (const address of ["e1villa@ucsd.edu", "chvalerio@ucsd.edu", "ka1saucedo@outlook.com"])
-    await expect(page.getByRole("link", { name: address })).toHaveAttribute("href", `mailto:${address}`);
+  // One address, the words of its own mailto link (ADR-0058 amendment 6; the audit's decision D2 had three), and no
+  // repository link (D3). The row of links that stood under the addresses is gone.
+  await expect(page.getByRole("link", { name: "chvalerio@ucsd.edu" })).toHaveAttribute("href", "mailto:chvalerio@ucsd.edu");
+  await expect(page.locator("main a[href^='mailto:']")).toHaveCount(1);
+  await expect(page.locator("main")).not.toContainText(/e1villa|saucedo|outlook\.com|Before you write|Workspace access/i);
+  await expect(page.locator("main")).toContainText("Christopher Valerio, co-founder and CEO");
+  // Beside it, the upper half of a turning globe that is a drawing only: hidden from assistive technology, taking no pointer.
+  const globe = page.locator(".contact-globe");
+  await expect(globe).toHaveAttribute("aria-hidden", "true");
+  await expect(globe).toHaveCSS("pointer-events", "none");
+  expect(await globe.locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.width)).toBeGreaterThan(200);
+  expect(await page.locator(".contact-globe-window").evaluate((holder) => holder.getBoundingClientRect().height / holder.querySelector(".contact-globe")!.getBoundingClientRect().height)).toBeLessThan(0.65);
+  // The form sends nothing and says so; it will not write an email with a field missing.
+  const form = page.locator(".contact-form");
+  await expect(form.locator(".contact-form-note")).toHaveText("Nothing is sent from this page. Your email app opens with the message written, and you send it from there.");
+  await form.getByRole("button", { name: "Open in your email app" }).click();
+  await expect(form.getByRole("link", { name: "open the email here" })).toHaveCount(0);
+  expect(await form.getByLabel("Full name").evaluate((field: HTMLInputElement) => field.validity.valueMissing)).toBe(true);
+  // Filled in, a press writes the email to that one address from what was typed, and gives it as a link as well.
+  await form.getByLabel("Full name").fill("Ada Example");
+  await form.getByLabel("Company").fill("Example Works");
+  await form.getByLabel("Email address").fill("ada@example.com");
+  await form.getByLabel("Message", { exact: true }).fill("IM7 / 8552 under D3039.\nWhat do you need from me?");
+  await form.getByRole("button", { name: "Open in your email app" }).click();
+  const written = form.getByRole("link", { name: "open the email here" });
+  await expect(written).toHaveAttribute("href", /^mailto:chvalerio@ucsd\.edu\?subject=Inquiry%20from%20Ada%20Example%2C%20Example%20Works&body=/);
+  const body = decodeURIComponent((await written.getAttribute("href"))!.split("&body=")[1]);
+  expect(body).toBe("IM7 / 8552 under D3039.\r\nWhat do you need from me?\r\n\r\nAda Example\r\nExample Works\r\nada@example.com");
+  await expect(page).toHaveURL(/\/contact\/?$/);
   await expect(page.locator("main")).not.toContainText(/gmail|for now|will follow/i);
   await expect(page.locator("main a[href*='github.com']")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Calculator", exact: true })).toHaveCount(0);

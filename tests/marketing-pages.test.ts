@@ -23,6 +23,7 @@ const MARKETING_FILES = [
   "app/about/page.tsx",
   "app/industries/page.tsx",
   "app/contact/page.tsx",
+  "components/contact/contact-form.tsx",
   "app/services/page.tsx",
   ...servicePages,
   "components/services/service-page.tsx",

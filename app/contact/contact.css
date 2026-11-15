@@ -1,0 +1,286 @@
+/* The contact page (ADR-0058 amendment 6): under the page's opening, on its black, two columns of the page's twelve. At the
+ * left, how to reach us: a short heading, what to write about, the one address, and the upper half of a slowly turning
+ * wireframe globe that fades into the page. At the right, from the halfway line, a card with the form that writes the email.
+ * Every colour here is for the black ground. */
+.contact-opening {
+  padding-bottom: 104px;
+}
+.contact-columns {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  align-items: start;
+  margin-top: 72px;
+}
+.contact-reach {
+  grid-column: 1 / 7;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  max-width: 540px;
+}
+.contact-reach h2,
+.contact-card h2 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 30px;
+  letter-spacing: -0.015em;
+  color: #ffffff;
+}
+.contact-reach > p {
+  max-width: 30em;
+  margin: 0;
+  font-size: 17px;
+  line-height: 26px;
+  color: #a0a0a0;
+}
+/* The address: who answers in a small line, and under it the address itself as the words of its link, so it can be
+ * selected and copied as well as clicked. Its icon stands in a small outlined square that fills under the pointer. */
+.contact-address {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.contact-person {
+  font-size: 14px;
+  line-height: 20px;
+  color: #a0a0a0;
+}
+.contact-email {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.contact-email-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #ffffff38;
+  border-radius: 10px;
+  background: #ffffff0f;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+.contact-email:hover .contact-email-icon,
+.contact-email:focus-visible .contact-email-icon {
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #000000;
+}
+/* The globe's window: the globe is a square as wide as the column, and the window shows its upper half; the lower half is
+ * cut away and the cut fades into the page's ground. The globe draws in this element's colour. */
+.contact-globe-window {
+  position: relative;
+  height: 270px;
+  margin-top: 22px;
+  overflow: hidden;
+  color: #d9d9de;
+}
+.contact-globe-window .contact-globe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+.contact-globe-window::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 62%;
+  background: linear-gradient(to top, var(--bg) 4%, transparent);
+  pointer-events: none;
+}
+/* The card. */
+.contact-card {
+  grid-column: 7 / 13;
+  display: grid;
+  gap: 22px;
+  padding: 34px;
+  border: 1px solid #262628;
+  border-radius: 18px;
+  background: #0f0f10;
+}
+.contact-card-head {
+  display: grid;
+  gap: 6px;
+}
+.contact-card-head p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  color: #a0a0a0;
+}
+/* A row of small dots between the card's head and its form, fading out at both ends. */
+.contact-card-rule {
+  height: 6px;
+  background-image: radial-gradient(circle, #ffffff59 0.9px, transparent 1.1px);
+  background-size: 7px 6px;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+.contact-form {
+  display: grid;
+  gap: 18px;
+}
+.contact-form-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.contact-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.contact-field > span,
+.contact-field > label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a6a6ab;
+}
+.contact-field > span i {
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: #8a8a90;
+}
+.contact-field input,
+.contact-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px solid #2f2f32;
+  border-radius: 12px;
+  background: #171718;
+  color: #ffffff;
+  font: inherit;
+  font-size: 15px;
+  line-height: 22px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.contact-field textarea {
+  min-height: 132px;
+  resize: vertical;
+}
+.contact-field input:hover,
+.contact-field textarea:hover {
+  border-color: #48484c;
+}
+.contact-field input:focus-visible,
+.contact-field textarea:focus-visible {
+  outline: none;
+  border-color: #ffffff;
+  box-shadow: 0 0 0 3px #ffffff2e;
+}
+.contact-field small {
+  font-size: 13px;
+  line-height: 19px;
+  color: #a0a0a0;
+}
+.contact-submit {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #000000;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.contact-submit svg {
+  transition: transform 0.2s;
+}
+.contact-submit:hover {
+  background: #dededf;
+}
+.contact-submit:hover svg {
+  transform: translateX(3px);
+}
+.contact-submit:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+.contact-form-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 19px;
+  color: #a0a0a0;
+}
+.contact-form-note a {
+  color: #ffffff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .contact-submit svg,
+  .contact-email-icon {
+    transition: none;
+  }
+  .contact-submit:hover svg {
+    transform: none;
+  }
+}
+/* Narrower than 1000 px the two columns stand one under the other, the card last. */
+@media (max-width: 1000px) {
+  .contact-columns {
+    row-gap: 48px;
+    margin-top: 56px;
+  }
+  .contact-reach,
+  .contact-card {
+    grid-column: 1 / -1;
+  }
+  .contact-reach {
+    max-width: none;
+  }
+  .contact-globe-window {
+    max-width: 480px;
+    height: 230px;
+  }
+}
+@media (max-width: 560px) {
+  .contact-opening {
+    padding-bottom: 72px;
+  }
+  .contact-card {
+    padding: 22px;
+    border-radius: 16px;
+  }
+  .contact-form-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .contact-email {
+    gap: 12px;
+    font-size: 19px;
+    line-height: 26px;
+  }
+  .contact-globe-window {
+    height: 190px;
+  }
+}
