@@ -221,11 +221,11 @@ test("after the demo the page is white, and Mission and Services are two short b
   expect(grid.lines).toMatch(/^linear-gradient\(to right, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\), linear-gradient\(to top, rgba\(255, 255, 255, 0\.\d+\) 1px, rgba\(0, 0, 0, 0\) 1px\)$/);
   expect(grid.mask).toMatch(/^linear-gradient\(to top, rgb\(0, 0, 0\) 0%, rgb\(0, 0, 0\) 6%, rgba\(0, 0, 0, 0\) 50%\)$/);
   // The closing band under it is dark grey (amendment 54, which ended amendment 49's light grey; lighter since
-  // amendments 56, 58 and 59): lighter than the black footer under it, with light words, a faint light rule and a white button with black words. Every text on it clears
+  // amendments 56, 58 and 59): lighter than the black footer under it, with light words and a white button with black words. Every text on it clears
   // WCAG AA's 4.5 to 1.
   // Since amendment 67 the grey is a box on a white band, as the changelog's card over it is: the two boxes have the same
-  // left and right edges, 32 px of white stands between them and at the grey one's sides and foot, and its words keep the
-  // kit's 32 px from its edge.
+  // left and right edges, 32 px of white stands between them and at the grey one's sides and foot. Both have corners a
+  // little round (amendment 75).
   const closing = page.locator(".closing-band");
   await expect(closing).toHaveClass(/\bis-dark\b/);
   await expect(closing).not.toHaveClass(/\bis-light\b/);
@@ -233,33 +233,67 @@ test("after the demo the page is white, and Mission and Services are two short b
   await expect(closing).toHaveCSS("border-top-width", "0px");
   const boxes = await closing.evaluate((band) => {
     const layer = getComputedStyle(band, "::before");
-    const [outer, above] = [band.getBoundingClientRect(), document.querySelector(".home-feed-card")!.getBoundingClientRect()];
+    const card = document.querySelector(".home-feed-card")!;
+    const [outer, above] = [band.getBoundingClientRect(), card.getBoundingClientRect()];
     const px = (value: string) => Math.round(parseFloat(value));
     return {
-      ground: layer.backgroundColor, under: layer.zIndex, own: getComputedStyle(band).isolation,
+      ground: layer.backgroundColor, own: getComputedStyle(band).isolation,
       inset: [px(layer.top), px(layer.right), px(layer.bottom), px(layer.left)],
       gap: Math.round(outer.top - above.bottom), cardEdges: [Math.round(above.left), Math.round(outer.right - above.right)],
-      words: Math.round(band.querySelector(".band-label")!.getBoundingClientRect().left - outer.left),
+      round: [layer.borderTopLeftRadius, getComputedStyle(card).borderTopLeftRadius],
       footer: Math.round(document.querySelector(".site-footer")!.getBoundingClientRect().top - outer.bottom),
     };
   });
-  expect(boxes).toEqual({ ground: "rgb(112, 112, 117)", under: "-1", own: "isolate", inset: [0, 32, 32, 32], gap: 32, cardEdges: [32, 32], words: 64, footer: 0 });
+  expect(boxes).toEqual({ ground: "rgb(112, 112, 117)", own: "isolate", inset: [0, 32, 32, 32], gap: 32, cardEdges: [32, 32], round: ["12px", "12px"], footer: 0 });
   await expect(page.locator(".site-footer")).toHaveCSS("background-color", "rgb(0, 0, 0)");
-  const tones = await closing.evaluate((band) => {
-    const of = (selector: string, property: "color" | "backgroundColor" | "borderTopColor") => getComputedStyle(band.querySelector(selector)!)[property];
+  // The band is set in the site's own way (amendment 75; until then on twelve columns, the statement at the left, the
+  // action from the halfway line and a ruled row of links under them): a small label, the statement and the actions, one
+  // under another in the middle of the box, the quiet link beside the button, and no rule and no row's label.
+  await expect(closing.locator(".closing-band-label")).toHaveText("THE NEXT LAYER STARTS WITH A QUESTION.");
+  await expect(closing.getByRole("heading", { level: 2 })).toHaveText("Let’s define whatcomes next.");
+  await expect(closing.getByRole("link")).toHaveText(["Contact us", /^Materials library/]);
+  await expect(closing.getByRole("link", { name: "Contact us" })).toHaveAttribute("href", "/contact");
+  await expect(closing.getByRole("link", { name: "Materials library" })).toHaveAttribute("href", "/library");
+  await expect(closing.locator(".band-label, .band-grid, .closing-band-links")).toHaveCount(0);
+  await expect(closing).not.toContainText(/explore the research/i);
+  const set = await closing.evaluate((band) => {
+    const middle = (selector: string) => { const box = band.querySelector(selector)!.getBoundingClientRect(); return Math.round((box.left + box.right) / 2 - window.innerWidth / 2); };
+    const top = (selector: string) => band.querySelector(selector)!.getBoundingClientRect().top;
+    const [button, link] = [band.querySelector(".closing-band-action")!.getBoundingClientRect(), band.querySelector(".closing-band-link")!.getBoundingClientRect()];
     return {
-      ground: getComputedStyle(band, "::before").backgroundColor,
-      label: of(".band-label", "color"), statement: of(".closing-band-statement", "color"), aside: of(".closing-band-links > span", "color"), link: of(".closing-band-links a", "color"),
-      rule: of(".closing-band-links", "borderTopColor"), button: of(".closing-band-action", "backgroundColor"), buttonWords: of(".closing-band-action", "color"),
+      off: [middle(".closing-band-label"), middle(".closing-band-statement"), middle(".closing-band-actions")],
+      inOrder: top(".closing-band-label") < top(".closing-band-statement") && top(".closing-band-statement") < top(".closing-band-actions"),
+      beside: link.left > button.right && Math.abs((link.top + link.bottom) / 2 - (button.top + button.bottom) / 2) < 2,
+      weight: getComputedStyle(band.querySelector(".closing-band-statement")!).fontWeight, align: getComputedStyle(band).textAlign,
     };
   });
-  expect(tones).toMatchObject({ label: "rgb(255, 255, 255)", statement: "rgb(255, 255, 255)", link: "rgb(255, 255, 255)", rule: "rgba(255, 255, 255, 0.24)", button: "rgb(255, 255, 255)", buttonWords: "rgb(0, 0, 0)" });
+  for (const off of set.off) expect(Math.abs(off)).toBeLessThanOrEqual(2);
+  expect(set).toMatchObject({ inOrder: true, beside: true, weight: "500", align: "center" });
+  // Across the box's foot lie the plies: seven hairlines, a picture only, inside the box and under its words.
+  const plies = await closing.locator(".closing-band-plies").evaluate((element) => {
+    const [box, outer, style] = [element.getBoundingClientRect(), element.parentElement!.getBoundingClientRect(), getComputedStyle(element)];
+    return {
+      hidden: element.getAttribute("aria-hidden"), press: style.pointerEvents, under: style.zIndex, lines: style.backgroundImage.split("linear-gradient").length - 1,
+      inset: [Math.round(box.left - outer.left), Math.round(outer.right - box.right), Math.round(outer.bottom - box.bottom)], tall: Math.round(box.height),
+      clearOfWords: box.top > element.parentElement!.querySelector(".closing-band-actions")!.getBoundingClientRect().bottom,
+    };
+  });
+  expect(plies).toEqual({ hidden: "true", press: "none", under: "-1", lines: 7, inset: [32, 32, 32], tall: 84, clearOfWords: true });
+  const tones = await closing.evaluate((band) => {
+    const of = (selector: string, property: "color" | "backgroundColor") => getComputedStyle(band.querySelector(selector)!)[property];
+    return {
+      ground: getComputedStyle(band, "::before").backgroundColor,
+      label: of(".closing-band-label", "color"), statement: of(".closing-band-statement", "color"), link: of(".closing-band-link", "color"),
+      button: of(".closing-band-action", "backgroundColor"), buttonWords: of(".closing-band-action", "color"),
+    };
+  });
+  expect(tones).toMatchObject({ label: "rgb(255, 255, 255)", statement: "rgb(255, 255, 255)", link: "rgb(255, 255, 255)", button: "rgb(255, 255, 255)", buttonWords: "rgb(0, 0, 0)" });
   const light = (colour: string) => {
     const [red, green, blue] = colour.match(/[\d.]+/g)!.slice(0, 3).map((value) => { const share = Number(value) / 255; return share <= 0.04045 ? share / 12.92 : ((share + 0.055) / 1.055) ** 2.4; });
     return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
   };
   const contrast = (a: string, b: string) => { const [high, low] = [light(a), light(b)].sort((x, y) => y - x); return (high + 0.05) / (low + 0.05); };
-  for (const [name, words, ground] of [["label", tones.label, tones.ground], ["statement", tones.statement, tones.ground], ["aside", tones.aside, tones.ground], ["link", tones.link, tones.ground], ["button", tones.buttonWords, tones.button]] as const)
+  for (const [name, words, ground] of [["label", tones.label, tones.ground], ["statement", tones.statement, tones.ground], ["link", tones.link, tones.ground], ["button", tones.buttonWords, tones.button]] as const)
     expect(contrast(words, ground), name).toBeGreaterThanOrEqual(4.5);
   expect(contrast(tones.ground, "rgb(0, 0, 0)")).toBeGreaterThan(1.2); // the band can be told from the footer
   // Only the home page's: the industries and the services pages keep their light closing band.

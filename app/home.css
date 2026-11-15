@@ -747,9 +747,12 @@
  * result. A list of releases, when there is one, stands on a white panel on it. (Amendment 68 let the colours rise into a
  * near-white blue with dark words; amendment 72 took that back the same day.) */
 .home-feed-card {
-  /* The grid below lies on the card's ground and under everything in the card. */
+  /* The grid below lies on the card's ground and under everything in the card. The corners are a little round
+   * (amendment 75), and the grid is cut to them. */
   position: relative;
   isolation: isolate;
+  overflow: hidden;
+  border-radius: 12px;
   --text: #ffffff;
   --muted: #ffffffd9;
   --line: #ffffff59;
@@ -810,9 +813,13 @@ section.band.closing-band.is-dark {
    * foot is that margin. The box is a layer under the band's words, so the band's markup is the kit's, unchanged; the
    * words keep the kit's padding from the box's edge. */
   --closing-edge: 32px;
+  /* The box's corners are a little round (amendment 75), as the changelog card's are. */
+  --closing-round: 12px;
+  /* The plies at the box's foot are light on the grey. */
+  --ply: #ffffff7a;
   position: relative;
   isolation: isolate;
-  padding: 88px calc(var(--closing-edge) + 32px) calc(var(--closing-edge) + 32px);
+  padding: 96px calc(var(--closing-edge) + 32px) calc(var(--closing-edge) + 132px);
   border-top: 0;
   background: #ffffff;
 }
@@ -820,8 +827,16 @@ section.band.closing-band.is-dark::before {
   content: "";
   position: absolute;
   inset: 0 var(--closing-edge) var(--closing-edge);
-  z-index: -1;
+  z-index: -2;
+  border-radius: var(--closing-round);
   background: var(--bg);
+}
+/* The plies lie inside the box, across its foot, and follow its round corners. */
+section.band.closing-band.is-dark .closing-band-plies {
+  left: var(--closing-edge);
+  right: var(--closing-edge);
+  bottom: var(--closing-edge);
+  border-radius: 0 0 var(--closing-round) var(--closing-round);
 }
 /* On a phone the two boxes stand on a narrower margin, the same for both. */
 @media (max-width: 760px) {
@@ -830,7 +845,7 @@ section.band.closing-band.is-dark::before {
   }
   section.band.closing-band.is-dark {
     --closing-edge: 20px;
-    padding: 64px calc(var(--closing-edge) + 20px) calc(var(--closing-edge) + 24px);
+    padding: 72px calc(var(--closing-edge) + 20px) calc(var(--closing-edge) + 116px);
   }
 }
 section.band.closing-band.is-dark .button.primary {

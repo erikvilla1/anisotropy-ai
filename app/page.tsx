@@ -192,10 +192,7 @@ export default function Home() {
         label="THE NEXT LAYER STARTS WITH A QUESTION."
         heading={["Let’s define what", "comes next."]}
         action={{ label: "Contact us", href: "/contact" }}
-        links={{
-          label: "EXPLORE THE RESEARCH",
-          items: [{ label: "Materials library", href: "/library" }],
-        }}
+        links={[{ label: "Materials library", href: "/library" }]}
       />
     </main>
   );

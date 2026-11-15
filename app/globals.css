@@ -1043,73 +1043,112 @@ main[tabindex="-1"]:focus {
   border-top: 1px solid var(--line);
   padding-top: 20px;
 }
-/* The closing band (components/closing-band.tsx; ADR-0077 amendment 13), after PhysicsX's closing sections: a light band of the
- * section kit (app/sections.css). The label, then the statement in the left half (columns 1 to 6) and the page's one action from
- * the halfway line (column 7, where the header's links start), then an optional row of links under a 1 px rule on the same
- * columns. A selector names the band as well as the part wherever the kit, loaded later, or `.inner-page h2` would otherwise win. */
-.band.closing-band.has-links {
-  padding-bottom: 32px;
+/* The closing band (components/closing-band.tsx; ADR-0077 amendment 75): a band of the section kit (app/sections.css)
+ * set in the site's own way of ending a page. Everything stands in the middle, as the home page's band heads and the
+ * demo's words do: a small monospace label, the statement of medium weight set tight, and under it the page's one action
+ * with any quiet links beside it. At the band's foot a few hairlines lie one over another, closer together towards the
+ * foot and fading out upwards: a laminate's plies seen from the edge, the mark of this site and nothing more (they show
+ * no layup of any coupon). Until amendment 75 the band was laid out on the page's twelve columns, the statement at the
+ * left, the action from the halfway line and a ruled row of links under them, after another company's closing sections.
+ * A selector names the band as well as the part wherever the kit, loaded later, or `.inner-page h2` would otherwise win. */
+.band.closing-band {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  justify-items: center;
+  padding-top: 96px;
+  padding-bottom: 132px;
+  text-align: center;
 }
-.closing-band .band-label {
-  margin-bottom: 40px;
-}
-.closing-band .closing-band-main {
-  align-items: end;
+.closing-band .closing-band-label {
+  margin: 0 0 18px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .closing-band .closing-band-statement {
-  grid-column: 1 / 7;
   margin: 0;
   font-family: var(--font);
-  font-size: clamp(40px, 4.6vw, 64px);
-  font-weight: 400;
+  font-size: clamp(34px, 4vw, 58px);
+  font-weight: 500;
   line-height: 1.06;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.closing-band .closing-band-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 16px 32px;
+  margin-top: 36px;
 }
 .closing-band .closing-band-action {
-  grid-column: 7 / 13;
-  justify-self: start;
   gap: 20px;
-  margin-bottom: 6px;
   padding: 16px 22px;
   font-size: 16px;
   line-height: 22px;
 }
-.closing-band .closing-band-links {
-  align-items: baseline;
-  margin-top: 64px;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
+/* A quiet link beside the action. The arrow is set in the line, tied to the last word, so it follows that word when the
+ * link wraps. */
+.closing-band .closing-band-link {
   font-size: 16px;
   line-height: 22px;
-}
-.closing-band-links > span {
-  grid-column: 1 / 7;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 14px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.closing-band-links > div {
-  grid-column: 7 / 13;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 32px;
-}
-/* The arrow is set in the line, tied to the last word, so it follows that word when a link wraps. */
-.closing-band-links a {
-  justify-self: start;
+  color: var(--text);
   transition: opacity 0.15s;
 }
-.closing-band-links a > span {
+.closing-band-link > span {
   white-space: nowrap;
 }
-.closing-band-links a svg {
+.closing-band-link svg {
   margin-left: 6px;
   vertical-align: -2px;
 }
-.closing-band-links a:hover {
+.closing-band-link:hover {
   opacity: 0.6;
+}
+/* The plies: seven hairlines in the band's line colour across its foot, 6 px apart at the foot and wider upwards,
+ * strongest at the foot and gone by the top one. A picture only: under the words, taking no press. */
+.closing-band .closing-band-plies {
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 84px;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--ply, var(--line)), var(--ply, var(--line))),
+    linear-gradient(var(--ply, var(--line)), var(--ply, var(--line))),
+    linear-gradient(var(--ply, var(--line)), var(--ply, var(--line))),
+    linear-gradient(var(--ply, var(--line)), var(--ply, var(--line))),
+    linear-gradient(var(--ply, var(--line)), var(--ply, var(--line))),
+    linear-gradient(var(--ply, var(--line)), var(--ply, var(--line))),
+    linear-gradient(var(--ply, var(--line)), var(--ply, var(--line)));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position:
+    0 calc(100% - 6px),
+    0 calc(100% - 13px),
+    0 calc(100% - 22px),
+    0 calc(100% - 33px),
+    0 calc(100% - 46px),
+    0 calc(100% - 61px),
+    0 calc(100% - 78px);
+  -webkit-mask-image: linear-gradient(to top, #000000 0%, #000000 12%, transparent 100%);
+  mask-image: linear-gradient(to top, #000000 0%, #000000 12%, transparent 100%);
+}
+@media (max-width: 760px) {
+  .band.closing-band {
+    padding-top: 72px;
+    padding-bottom: 116px;
+  }
+  .closing-band .closing-band-statement {
+    font-size: clamp(30px, 8.4vw, 40px);
+  }
 }
 /* The footer (SiteFooter in components/site-shell.tsx; ADR-0077 amendment 13), after PhysicsX's: dark, 32 px margins, the logo
  * and the tagline in the left half, and the site's navigation as two columns of links from the halfway line (columns 7 and 10),
@@ -1220,25 +1259,9 @@ main[tabindex="-1"]:focus {
   gap: 8px;
   color: var(--text);
 }
-/* Under the kit's 1024 px the halves stack: the action under the statement, the links under their label, and the footer's
- * columns under the logo, still two abreast. Under 520 px the columns of links become one. */
+/* Under the kit's 1024 px the footer's columns stand under the logo, still two abreast. Under 520 px the columns of links
+ * become one. */
 @media (max-width: 1023px) {
-  .closing-band .closing-band-main {
-    row-gap: 32px;
-  }
-  .closing-band .closing-band-statement,
-  .closing-band .closing-band-action,
-  .closing-band-links > span,
-  .closing-band-links > div {
-    grid-column: 1 / -1;
-  }
-  .closing-band .closing-band-action {
-    margin-bottom: 0;
-  }
-  .closing-band .closing-band-links {
-    row-gap: 16px;
-    margin-top: 48px;
-  }
   .site-footer {
     padding-top: 48px;
   }
@@ -1264,27 +1287,16 @@ main[tabindex="-1"]:focus {
   }
 }
 @media (max-width: 760px) {
-  .band.closing-band.has-links {
-    padding-bottom: 24px;
-  }
-  .closing-band .band-label {
-    margin-bottom: 28px;
-  }
-  .closing-band .closing-band-statement {
-    font-size: clamp(32px, 9vw, 40px);
-  }
   .site-footer {
     padding: 48px 20px 24px;
   }
   .site-footer-top,
   .site-footer-bottom,
-  .site-footer-nav,
-  .closing-band-links > div {
+  .site-footer-nav {
     column-gap: 20px;
   }
 }
 @media (max-width: 520px) {
-  .closing-band-links > div,
   .site-footer-nav {
     grid-template-columns: minmax(0, 1fr);
   }
