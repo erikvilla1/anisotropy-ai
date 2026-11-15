@@ -163,3 +163,37 @@ def test_remove_takes_the_link_the_menu_and_the_key_away_and_leaves_what_is_the_
     assert setup.remove(said.append, target, state, registry) == 0
     assert said == ["The site's links: were not registered.", f"The menu: 0 files removed from {target}.", "This PC held no upload key."]
     assert setup.main(["--help"]) == 2
+
+
+def test_a_double_click_ends_in_a_box_that_says_it_is_set_up_and_what_comes_next_or_why_not(setup, capsys):
+    told = []
+    tell = lambda text, error=False: told.append((text, error))  # noqa: E731
+
+    def done(say, registry=None):
+        for line in ("1. The menu: 9 files copied.", "2. The site's links: registered.", "3. Abaqus's command: C:\\SIMULIA\\Commands\\abaqus.BAT.", "", "Done."):
+            say(line)
+        return 0
+    assert setup.main(["--box"], tell, done) == 0
+    assert told == [(setup.SET_UP + "\n\n" + setup.NEXT, False)] and "Connect this PC" in setup.NEXT and "Send to Abaqus" in setup.NEXT
+    assert "1. The menu: 9 files copied." in capsys.readouterr().out  # the console still has every line
+
+    def no_abaqus(say, registry=None):
+        say("1. The menu: 9 files copied.")
+        say(setup.NO_ABAQUS)
+        return 0
+    assert setup.main(["--box"], tell, no_abaqus) == 0
+    assert told[-1] == (setup.SET_UP + "\n\nAbaqus's command was not found on PATH. Send to Abaqus on the site will say so; the menu in Abaqus/CAE works without it.\n\n" + setup.NEXT, False)
+
+    def stopped(say, registry=None):
+        say("1. The menu: 9 files copied.")
+        say("not set up: no Python beside Abaqus could be started on its own")
+        return 1
+    assert setup.main(["--box"], tell, stopped) == 1
+    assert told[-1] == (setup.NOT_SET_UP + "\n\nNo Python beside Abaqus could be started on its own", True)  # the reason once, not the console's first words again
+
+    assert setup.main([], tell, done) == 0 and len(told) == 3  # from a command window: the lines, and no box
+    removed = []
+    assert setup.main(["--remove"], tell, done, lambda registry=None: removed.append(1) or 0) == 0 and removed == [1] and len(told) == 3
+    assert setup.main(["--box", "--remove"], tell, done) == 2
+    assert setup.box("here, without Windows, nothing is shown") is False
+

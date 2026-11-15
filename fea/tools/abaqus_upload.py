@@ -46,7 +46,7 @@ import compare_every_output as team  # noqa: E402  the comparison the team's eng
 
 from anisotropy_fea import __version__  # noqa: E402
 from anisotropy_fea.abaqus_reader import read_deck  # noqa: E402
-from anisotropy_fea.bundle import EPOCH, BundleRefused, open_bundle, write_bundle  # noqa: E402
+from anisotropy_fea.bundle import BundleRefused, open_bundle, write_bundle  # noqa: E402
 from anisotropy_fea.equivalence import EquivalenceError, deck_equivalence, equivalence_without_mesh, outline  # noqa: E402
 from anisotropy_fea.model import DeckError, expanded_layers  # noqa: E402
 from anisotropy_fea.units import DECK_UNIT_SYSTEMS, UNIT_LABEL, from_si, to_si  # noqa: E402
@@ -431,6 +431,7 @@ def pack(args) -> int:
 CONNECTOR_FILES = {"anisotropy_connector.py": TOOLS, "abaqus_every_output.py": TOOLS, "abaqus_extract_fields.py": TOOLS,
                    "bundle.py": TOOLS.parent / "src" / "anisotropy_fea", "anisotropy_menu.py": TOOLS, "anisotropy_plugin.py": TOOLS,
                    "anisotropy_link.py": TOOLS, "anisotropy_start.py": TOOLS, "anisotropy_setup.py": TOOLS}
+CONNECTOR_DATE = (2026, 11, 14, 12, 0, 0)  # every file's time in the connector's zip: the zip format's first day showed in Windows as a day in 1899
 CONNECTOR_SETUP = ("Set up Anisotropy.bat", TOOLS / "anisotropy_setup.bat")  # what a user double-clicks; handed over with Windows's line endings
 CONNECTOR_README = """The Anisotropy connector: one command under your own Abaqus that turns a finished job into one file to send.
 
@@ -438,7 +439,8 @@ Keep these files together in one folder. Nothing is sent anywhere unless you ask
 
 The quick way, on Windows with Abaqus 2024 or later. Once per PC:
 
-    1. Double-click "Set up Anisotropy" in this folder (it runs  abaqus python anisotropy_setup.py ). It copies these files to
+    1. Unzip this folder first (right-click the zip, Extract All), then double-click "Set up Anisotropy" in the unzipped folder
+       (it runs  abaqus python anisotropy_setup.py ). A box says when it is done. It copies these files to
        abaqus_plugins/anisotropy in your home directory, which gives Abaqus/CAE the menu Plug-ins > Anisotropy, and it registers
        the link type anisotropy:// for your Windows user, so the site can start Abaqus on this PC. No administrator is needed.
     2. On a run's page on the site, open "First time on this PC" and click Connect this PC. A box on this PC names the site and
@@ -496,7 +498,7 @@ def connector_zip(out: Path) -> list[str]:
         setup = CONNECTOR_SETUP[1].read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
         for name, data in [(n, (folder / n).read_bytes()) for n, folder in CONNECTOR_FILES.items()] + [(CONNECTOR_SETUP[0], setup),
                                                                                                     ("README.txt", CONNECTOR_README.encode())]:
-            archive.writestr(zipfile.ZipInfo(f"anisotropy-connector/{name}", EPOCH), data, zipfile.ZIP_DEFLATED)
+            archive.writestr(zipfile.ZipInfo(f"anisotropy-connector/{name}", CONNECTOR_DATE), data, zipfile.ZIP_DEFLATED)
             names.append(name)
     return names
 
