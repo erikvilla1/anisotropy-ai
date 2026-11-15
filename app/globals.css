@@ -638,17 +638,17 @@ main[tabindex="-1"]:focus {
   padding-bottom: 90px;
 }
 .workspace {
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--line);
   border-radius: 7px;
   overflow: hidden;
-  background: #121212;
+  background: var(--bg);
 }
 .workspace-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--line);
-  background: #1a1a1a;
+  background: var(--panel);
   padding: 0 22px;
   gap: 15px;
 }
@@ -742,18 +742,18 @@ main[tabindex="-1"]:focus {
 }
 .table-scroll th {
   font-weight: 500;
-  color: #989898;
+  color: var(--muted);
   white-space: nowrap;
-  background: #202020;
+  background: var(--panel);
   font-size: 9px;
 }
 .table-scroll td,
 .table-scroll th {
   padding: 11px;
-  border-bottom: 1px solid #363636;
+  border-bottom: 1px solid var(--line);
 }
 .table-scroll td {
-  color: #c8c8c8;
+  color: var(--text);
 }
 .table-scroll td:first-child {
   white-space: nowrap;
@@ -766,7 +766,7 @@ main[tabindex="-1"]:focus {
 .data-intro {
   padding: 35px 26px;
   border-right: 1px solid var(--line);
-  background: linear-gradient(145deg, #1e1e1e, #131313 70%);
+  background: var(--panel);
 }
 /* Two classes, so this wins over .inner-page h2 (app/expansion.css), which loads later at the same weight. */
 .data-layout .data-intro h2 {
@@ -777,7 +777,7 @@ main[tabindex="-1"]:focus {
 }
 .data-intro > p {
   font-size: 12px;
-  color: #9f9f9f;
+  color: var(--muted);
   line-height: 1.85;
 }
 .data-steps {
@@ -790,11 +790,11 @@ main[tabindex="-1"]:focus {
   align-items: center;
   gap: 11px;
   font-size: 12px;
-  color: #9a9a9a;
+  color: var(--muted);
   padding: 12px 0;
 }
 .data-steps li[aria-current="step"] {
-  color: #dedede;
+  color: var(--text);
 }
 .data-steps .done {
   color: var(--accent);
@@ -805,13 +805,13 @@ main[tabindex="-1"]:focus {
   justify-content: center;
   width: 17px;
   height: 17px;
-  border: 1px solid #5a5a5a;
+  border: 1px solid var(--field);
   border-radius: 50%;
   font-size: 11px;
 }
 .data-intro p.local-note {
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--muted);
   border-top: 1px solid var(--line);
   padding-top: 20px;
 }
@@ -823,23 +823,23 @@ main[tabindex="-1"]:focus {
 .dropzone {
   width: 100%;
   min-height: 320px;
-  border: 1px dashed #505050;
+  border: 1px dashed var(--field);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: #1c1c1c;
+  background: var(--panel);
   border-radius: 6px;
   gap: 7px;
 }
 .dropzone:hover,
 .dropzone.dragging {
   border-color: var(--accent);
-  background: #292929;
+  background: var(--raised);
 }
 .upload-icon {
-  background: #313131;
-  border: 1px solid #4e4e4e;
+  background: var(--bg);
+  border: 1px solid var(--line);
   color: var(--accent);
   width: 59px;
   height: 59px;
@@ -856,12 +856,12 @@ main[tabindex="-1"]:focus {
 }
 .dropzone > span:not(.upload-icon) {
   font-size: 12px;
-  color: #aeaeae;
+  color: var(--muted);
 }
 .dropzone small {
   margin-top: 14px;
   font-size: 12px;
-  color: #959595;
+  color: var(--muted);
 }
 /* The coupon table: a row header per coupon, numbers right-aligned in tabular figures. */
 .table-scroll .data-table th,
@@ -869,7 +869,7 @@ main[tabindex="-1"]:focus {
   font-size: 12px;
 }
 .table-scroll .data-table th[scope="row"] {
-  color: #c8c8c8;
+  color: var(--text);
   font-weight: 400;
   background: none;
 }
@@ -915,8 +915,8 @@ main[tabindex="-1"]:focus {
   gap: 12px;
   align-items: center;
   padding: 15px;
-  background: #262626;
-  border: 1px solid #4e4e4e;
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 5px;
   margin-top: 22px;
   color: var(--accent);
@@ -929,17 +929,17 @@ main[tabindex="-1"]:focus {
 .validation-banner span {
   font-size: 9px;
   display: block;
-  color: #aeaeae;
+  color: var(--muted);
   margin-top: 3px;
 }
 .validation-banner.invalid,
 .error-banner {
-  background: #33251b;
-  border-color: #6c4b2e;
-  color: #e3bd8a;
+  background: #fdf3e7;
+  border-color: #e2c08f;
+  color: #7a4a10;
 }
 .validation-banner.invalid span {
-  color: #c5a37c;
+  color: #7a4a10;
 }
 .error-banner {
   padding: 14px;
@@ -952,8 +952,8 @@ main[tabindex="-1"]:focus {
   max-height: 160px;
   overflow: auto;
   font-size: 10px;
-  color: #d9b792;
-  background: #241d15;
+  color: #7a4a10;
+  background: #fbf0e2;
   border-radius: 4px;
 }
 .validation-errors li {
@@ -968,7 +968,7 @@ main[tabindex="-1"]:focus {
 }
 .submission-actions > span {
   font-size: 9px;
-  color: #959595;
+  color: var(--muted);
   max-width: 170px;
 }
 .direction-section {
@@ -1977,6 +1977,11 @@ html:has(.site-header:not(.chat-site-header)) {
   top: 0;
   left: 0;
   right: 0;
+}
+/* On every page but the home page the header is a black bar at the page's top, and the page under it is white (ADR-0077
+ * amendment 69; until then the page's own black showed through it). On the home page it lies over the hero's clip. */
+.site-header:not(.chat-site-header):not(.is-home) {
+  background: #000000;
 }
 /* The header on scroll: it leaves as the page goes down and comes back as soon as the page goes up, wherever the page is
  * (components/header-scroll.ts decides; components/site-shell.tsx writes the answer here as `data-scroll`). At the page's

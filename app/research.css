@@ -263,7 +263,7 @@
 .studio-mode {
   font-size: 9px;
   letter-spacing: 1.3px;
-  color: #b6b6b6;
+  color: var(--muted);
   padding: 18px 22px;
 }
 /* The test-data page's label keeps the 11 px floor at every width (it outranks the narrow-screen rule below). */
@@ -273,7 +273,7 @@
 .source-materials {
   grid-template-columns: 310px minmax(0, 1fr);
   align-items: start;
-  background: #141414;
+  background: var(--bg);
   /* clip, not hidden: the corners stay rounded and the material list can stick while the page scrolls */
   overflow: clip;
 }
@@ -285,11 +285,11 @@
   overflow-y: auto;
   padding-bottom: 48px;
   scrollbar-width: auto;
-  scrollbar-color: #8a8a8a #1a1a1a;
+  scrollbar-color: #a0a0a5 var(--panel);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
 }
 .source-materials .material-detail {
-  background: #161616;
+  background: var(--bg);
 }
 .source-materials .material-list button {
   flex-wrap: nowrap;
@@ -300,7 +300,7 @@
   width: 5px;
   height: 5px;
   border-radius: 100%;
-  background: #d8b77d;
+  background: #a8741a;
 }
 .source-toolbar {
   display: flex;
@@ -308,13 +308,13 @@
   justify-content: space-between;
   gap: 15px;
   padding: 15px 0;
-  border-top: 1px solid #3c3c3c;
-  color: #999999;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
   font-size: 8px;
   letter-spacing: 1px;
 }
 .source-toolbar a {
-  color: #c7c7c7;
+  color: var(--text);
   font-size: 10px;
   letter-spacing: 0;
   display: flex;
@@ -326,12 +326,12 @@
 }
 .source-materials td:first-child {
   font-size: 12px;
-  color: #e0e0e0;
+  color: var(--text);
 }
 .source-materials td:last-child {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: #dedede;
+  color: var(--text);
 }
 .source-materials th {
   white-space: nowrap;
@@ -340,7 +340,7 @@
   display: block;
   font-size: 10px;
   line-height: 1.7;
-  color: #cbb185;
+  color: #6b4e0c;
   margin-top: 7px;
   max-width: 300px;
 }
@@ -348,21 +348,21 @@
   display: block;
   width: fit-content;
   margin-top: 5px;
-  border: 1px solid #675434;
-  color: #ddc394;
+  border: 1px solid #cfae6a;
+  color: #6b4e0c;
   border-radius: 3px;
   padding: 2px 5px;
   font-size: 8px;
 }
 .flagged-property {
-  background: #ad833608;
+  background: #ad833614;
 }
 .material-detail .source-review {
-  color: #d8bf91;
+  color: #6b4e0c;
   font-size: 12px;
   border-left: 2px solid #a58956;
   padding: 10px 14px;
-  background: #a8894810;
+  background: #a889481f;
 }
 .library-source-note {
   padding: 28px 0 0;
@@ -370,7 +370,7 @@
 }
 .library-source-note p {
   font-size: 12px;
-  color: #9c9c9c;
+  color: var(--muted);
   line-height: 1.85;
   margin: 12px 0;
 }
@@ -398,7 +398,7 @@
   background: none;
   border: 0;
   border-bottom: 1px solid var(--line);
-  color: #a2a2a2;
+  color: var(--muted);
   padding: 21px 13px;
   display: flex;
   align-items: baseline;
@@ -407,7 +407,7 @@
 }
 .topic-list button > span {
   font-size: 11px;
-  color: #999999;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 .topic-list button strong {
@@ -419,11 +419,11 @@
   font-size: 12px;
   font-weight: 400;
   margin-top: 8px;
-  color: #8b8b8b;
+  color: var(--muted);
 }
 .topic-list button[aria-pressed="true"] {
   color: var(--accent);
-  background: #242424;
+  background: var(--panel);
   border-left: 2px solid var(--accent);
 }
 .topic-content {
@@ -436,28 +436,28 @@
   margin: 14px 0 25px;
 }
 .topic-assumptions {
-  border: 1px solid #3d3d3d;
-  background: #181818;
+  border: 1px solid var(--line);
+  background: var(--panel);
   padding: 20px 23px;
   border-radius: 4px;
 }
 .topic-assumptions strong {
   font-size: 11px;
   font-weight: 500;
-  color: #cbcbcb;
+  color: var(--text);
 }
 .topic-assumptions p,
 .method-entry p {
   font-size: 12px;
   line-height: 1.9;
-  color: #adadad;
+  color: var(--muted);
   margin: 10px 0 0;
 }
 .function-search {
   margin: 20px 0;
 }
 .method-entry {
-  border-bottom: 1px solid #3c3c3c;
+  border-bottom: 1px solid var(--line);
 }
 .method-entry summary {
   list-style: none;
@@ -466,14 +466,14 @@
   align-items: center;
   padding: 20px 0;
   cursor: pointer;
-  color: #d8d8d8;
+  color: var(--text);
 }
 .method-entry summary::-webkit-details-marker {
   display: none;
 }
 .method-entry summary > span {
   font-size: 11px;
-  color: #8a8a8a;
+  color: var(--muted);
   min-width: 2.2em;
   font-variant-numeric: tabular-nums;
 }
@@ -491,10 +491,10 @@
 .physics-equation {
   padding: 20px;
   margin: 0;
-  border: 1px solid #404040;
+  border: 1px solid var(--line);
   border-radius: 4px;
-  background: #1b1b1b;
-  color: #dcdcdc;
+  background: var(--panel);
+  color: var(--text);
   font-family: "Cambria Math", Consolas, monospace;
   font-size: 15px;
   line-height: 1.9;
@@ -505,7 +505,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #c3c3c3;
+  color: var(--text);
   font-size: 11px;
   line-height: 1.7;
   margin-top: 24px;
@@ -551,7 +551,7 @@
     padding-bottom: 10px;
     padding-right: 40px;
     border-right: 0;
-    border-bottom: 1px solid #414141;
+    border-bottom: 1px solid var(--line);
     mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
   }
   .source-materials .material-list button {
