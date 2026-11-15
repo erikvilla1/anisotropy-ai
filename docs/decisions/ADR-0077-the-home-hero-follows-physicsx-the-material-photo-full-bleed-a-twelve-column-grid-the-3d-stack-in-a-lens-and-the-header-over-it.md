@@ -856,3 +856,11 @@ Not changed: the About page's team block still says "Five people, two seats each
 
 **Evidence.** `shell.spec.ts`, 18 with 1 skipped: at 200 px down the bar is fixed with a transparent ground, the same on the demo's stage, black 300 px into the band after the demo, and clear again back in the hero. UNVERIFIED: the recording itself was not opened; the bar over the wing where the demo draws near the window's top was not looked at; Safari, Firefox and phones.
 
+## Amendment 72, 2026-11-15 (the changelog's card is the dark blue one again)
+
+**Context.** The lead, with a capture of the card as amendment 68 made it: "revert to previous".
+
+**Decision.** Amendment 68 is taken back: the card rises into the dark blue of amendment 49 and its words are white. The grid (amendment 54) and the grey box under it (amendment 67) are as they were.
+
+**Evidence.** `home.spec.ts`, 8 of 8, reads the ground's first colour and the heading's white. UNVERIFIED: not captured again after the change.
+

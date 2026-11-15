@@ -305,13 +305,12 @@ test("after the demo the page is white, and Mission and Services are two short b
   // head alone, saying so, and no list. It is not a news feed: no card, no "What is new".
   const changelog = page.locator("#changelog");
   await expect(changelog).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  // Its words stand on a card whose ground is the demo's colours blurred into one another (amendment 49), rising into a
-  // very light blue, near white, at the top (amendment 68; a dark blue until then), so the words are a dark blue.
+  // Its words stand in white on a card whose ground is the demo's colours blurred into one another, rising into a dark
+  // blue (amendment 49; amendment 72 took back amendment 68's near-white top).
   const card = changelog.locator(".home-feed-card");
   const ground = await card.evaluate((element) => getComputedStyle(element).backgroundImage);
-  expect(ground).toMatch(/radial-gradient.*radial-gradient.*linear-gradient\((to bottom, )?rgb\(244, 248, 255\) 0%/);
-  await expect(changelog.getByRole("heading", { level: 2 })).toHaveCSS("color", "rgb(10, 21, 56)");
-  await expect(changelog.locator(".band-statement p")).toHaveCSS("color", "rgb(38, 51, 92)");
+  expect(ground).toMatch(/radial-gradient.*radial-gradient.*linear-gradient\(168deg, rgb\(6, 11, 58\) 0%/);
+  await expect(changelog.getByRole("heading", { level: 2 })).toHaveCSS("color", "rgb(255, 255, 255)");
   const inset = await card.evaluate((element) => { const box = element.getBoundingClientRect(); return [box.left, document.documentElement.clientWidth - box.right]; });
   expect(inset).toEqual([32, 32]);
   // Over the colours lies a thin grid (amendment 54): a layer of its own under the card's words, two sets of hairlines
