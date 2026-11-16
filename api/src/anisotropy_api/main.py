@@ -1362,7 +1362,7 @@ def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, resp
                                     reason=reading.reason)
         kept = source_guard(reading.raw, proposal.message, rows, conditions)
         return ProposalResponse(run_id=None, writer=reading.writer, model=reading.model, proposals=kept.proposals, conditions=kept.conditions,
-                                question=kept.question, dropped=kept.dropped, reason=None)
+                                question=kept.question, dropped=kept.dropped, reason=None, unread=kept.unread)
 
     return _deliver(request, response, actor, proposal, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
 

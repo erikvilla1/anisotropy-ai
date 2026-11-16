@@ -40,8 +40,9 @@ def proposal(key, value, unit, quote):
     return {"key": key, "value": value, "unit": unit, "quote": quote}
 
 
-def kept(message, proposals, rows=COUPON_ROWS, conditions=(), question=None, offered_conditions=()):
-    return source_guard({"proposals": list(proposals), "conditions": list(conditions), "question": question}, message, rows, list(offered_conditions))
+def kept(message, proposals, rows=COUPON_ROWS, conditions=(), question=None, offered_conditions=(), unread=()):
+    return source_guard({"proposals": list(proposals), "conditions": list(conditions), "question": question, "unread": list(unread)},
+                        message, rows, list(offered_conditions))
 
 
 # --------------------------------------------------------------------------------------------- the unit reader
@@ -130,6 +131,34 @@ def test_a_condition_must_be_offered_and_asked_for_and_a_question_may_hold_only_
     assert asked.question == "Is 180 °C the cure temperature or the change?" and asked.dropped == []
 
 
+def test_what_the_model_could_not_use_is_kept_as_the_engineers_own_words_and_a_reason_by_name():
+    """ADR-0088 amendment 1: the message of 2026-11-16 that the page answered with "Not sure what to change"."""
+    message = "same thing but make it compresion and 16 plys"
+    out = kept(message, [], unread=[{"quote": "same thing", "reason": "refers_back"}, {"quote": "compresion", "reason": "not_offered"},
+                                    {"quote": "16 plys", "reason": "no_value"}])
+    assert out.proposals == [] and out.dropped == []
+    assert out.unread == [{"quote": "same thing", "reason": "refers_back"}, {"quote": "compresion", "reason": "not_offered"},
+                          {"quote": "16 plys", "reason": "no_value"}]
+
+
+def test_an_unread_part_outside_the_message_or_with_another_reason_is_left_out():
+    message = "make it 250 mm long and compresion, like the last one, with a hole, tabs, a notch and a bevel"
+    out = kept(message, [proposal("length", "250", "mm", "250 mm long")], unread=[
+        {"quote": "compression", "reason": "not_offered"},            # not the engineer's spelling: not in the message
+        {"quote": "compresion", "reason": "the workspace is limited"},  # a reason the model phrased
+        {"quote": "250 mm long", "reason": "no_value"},               # words a kept proposal took
+        {"quote": "", "reason": "not_offered"}, "compresion", {"reason": "not_offered"},
+        {"quote": "Compresion", "reason": "not_offered"}, {"quote": "compresion", "reason": "no_value"},  # the same words twice: the first stands
+        {"quote": "like the last one", "reason": "refers_back"}, {"quote": "a hole", "reason": "not_offered"}, {"quote": "tabs", "reason": "not_offered"},
+        {"quote": "a notch", "reason": "not_offered"}, {"quote": "a bevel", "reason": "not_offered"},
+    ])
+    assert [p["key"] for p in out.proposals] == ["length"]
+    assert out.unread == [{"quote": "Compresion", "reason": "not_offered"}, {"quote": "like the last one", "reason": "refers_back"},
+                          {"quote": "a hole", "reason": "not_offered"}, {"quote": "tabs", "reason": "not_offered"},
+                          {"quote": "a notch", "reason": "not_offered"}]  # five at most
+    assert kept(message, []).unread == [] and source_guard({"proposals": []}, message, COUPON_ROWS, []).unread == []
+
+
 def test_the_model_sees_no_name_note_or_source():
     form = {"test": "unnotched tension", "length": "250", "filled_by": "A. Engineer", "notes": "for the review", "own_name": "X-Lamina",
             "own_source": "the team's datasheet", "size_from": "the drawing", "team_model": "Job-3.inp", "material_code": "X840", "units": "mm-MPa",
@@ -155,7 +184,7 @@ class StubClient:
         self.beta = SimpleNamespace(messages=Messages())
 
 
-ANSWER = {"proposals": [proposal("length", "250", "mm", "250 mm long")], "conditions": [], "question": None}
+ANSWER = {"proposals": [proposal("length", "250", "mm", "250 mm long")], "conditions": [], "question": None, "unread": []}
 
 
 def test_the_claude_writer_asks_for_the_schema_and_returns_its_answer_unjudged():
@@ -166,6 +195,8 @@ def test_the_claude_writer_asks_for_the_schema_and_returns_its_answer_unjudged()
     assert call["output_config"] == {"effort": "low", "format": {"type": "json_schema", "schema": PROPOSAL_SCHEMA}}
     assert call["fallbacks"] == "default" and call["betas"] == ["server-side-fallback-2026-07-01"] and call["max_tokens"] == 8000
     assert "digit for digit" in call["system"] and "a 250 mm long strip" in call["messages"][0]["content"]
+    assert PROPOSAL_SCHEMA["properties"]["unread"]["items"]["properties"]["reason"]["enum"] == ["not_offered", "no_value", "refers_back"]
+    assert "unread" in PROPOSAL_SCHEMA["required"] and all(reason in call["system"] for reason in ("not_offered", "no_value", "refers_back"))
     assert "temperature" not in call and "thinking" not in call
 
 
@@ -207,7 +238,11 @@ def test_the_endpoint_returns_what_the_guard_keeps_and_the_model_saw_no_name_or_
     body = client.post("/v1/workspace/proposals", json=REQUEST).json()
     assert body["writer"] == "anthropic" and body["model"] == "claude-opus-5-5"
     assert [(p["key"], p["value"], p["unit"]) for p in body["proposals"]] == [("length", "250", "mm"), ("force", "10000", "N")]
-    assert [d["key"] for d in body["dropped"]] == ["width", "width"]
+    assert [d["key"] for d in body["dropped"]] == ["width", "width"] and body["unread"] == []
+    said = {**answer, "proposals": [], "unread": [{"quote": "1 in wide", "reason": "not_offered"}, {"quote": "a 2 m span", "reason": "not_offered"}]}
+    monkeypatch.setattr(app.state, "assistant", ClaudeAssistant("claude-opus-5-5", client=StubClient(json.dumps(said))), raising=False)
+    nothing = client.post("/v1/workspace/proposals", json=REQUEST).json()
+    assert nothing["proposals"] == [] and nothing["unread"] == [{"quote": "1 in wide", "reason": "not_offered"}]  # the second is not in the message
     seen = json.loads(stub.calls[0]["messages"][0]["content"])
     assert seen["form"] == {"units": "mm-MPa"} and seen["message"] == REQUEST["message"] and [r["key"] for r in seen["rows"]] == [r["key"] for r in COUPON_ROWS]
     assert "A. Engineer" not in stub.calls[0]["messages"][0]["content"] and "datasheet" not in stub.calls[0]["messages"][0]["content"]

@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
-  type JobStatus, type ProposalAnswer } from "@/lib/studio-api";
-import { couponOffer, couponRowsFrom } from "@/lib/proposals";
+  type JobStatus, type ProposalAnswer, type UnreadPart } from "@/lib/studio-api";
+import { couponOffer, couponRowsFrom, unreadLines } from "@/lib/proposals";
 import { answerResultQuestion, extremeSentence, extremeWords, questionFrom, readResultQuestion, RESULT_COLUMNS, resultOffer, resultSentence, resultUnit, type ResultExtremes,
   type ResultQuestion, type ResultValues } from "@/lib/result-question";
-import { ProposalCard, type ProposalLine } from "./proposal-card";
+import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
 import { CheckIssues } from "./check-fix";
 import {
   blankForm, buildValues, exampleForm, fieldByLabel, formFromValues, libraryOptions, mergeRows, PLATE_TEST, UNIT_SYSTEMS, unitLabels, unitsOf, unitWords, type StudioForm,
@@ -440,8 +440,15 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       add({ role: "assistant", kind: "text", title: "Reading simple phrases only",
         body: <p className="chat-note">Free-text reading is unavailable right now, so short phrases like the examples are read from here on. Reload to try again.</p> });
     }
+    const parts = answer?.unread ?? [];
     if (shown.fields && ASKING.test(text)) unread(text, true); // a question nothing read is not a row of the setup
-    else readWithPatterns(text, true);
+    else readWithPatterns(text, true, parts.length ? () => notUsed(parts) : undefined);
+  }
+
+  /** What the model could not use of a message the patterns read nothing of (ADR-0088 amendment 1): the engineer's words, each with why. */
+  function notUsed(parts: UnreadPart[]) {
+    add({ role: "assistant", kind: "text", title: "Read, but nothing to enter",
+      body: <div data-testid="chat-not-used"><UnreadList lines={unreadLines(parts)} /></div> });
   }
 
   /** The proposals the engineer ticked go into the rows, and the conversation moves on. */
@@ -462,8 +469,9 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }));
   }
 
-  /** The message read by the page's fixed patterns (ADR-0055); `echoed` when the user's words are already in the conversation. */
-  function readWithPatterns(text: string, echoed = false) {
+  /** The message read by the page's fixed patterns (ADR-0055); `echoed` when the user's words are already in the conversation. `nothing`
+   * answers in place of the pointer to the next panel when the patterns read none of it (what the model could not use, amendment 1). */
+  function readWithPatterns(text: string, echoed = false, nothing?: () => void) {
     const you: NewEntry[] = echoed ? [] : [{ role: "user", text }];
     const read = applyMessage(formRef.current, text);
     const { rows, notes: hiddenNotes, dropped } = withoutHidden(read.rows, allTests); // what the studio does not offer yet stays out (ADR-0089)
@@ -477,6 +485,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     }
     if (!understood.length) {
       if (note) add(...you, { role: "assistant", kind: "text", title: "Another unit system", tone: "problem", body: <p>{note}</p> });
+      else if (nothing) nothing();
       else redirect(text, echoed);
       return;
     }
@@ -795,6 +804,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}
+        unread={unreadLines(entry.answer.unread)}
         onApply={(ticked) => applyProposals(entry.answer, ticked)} />;
     }
     else content = resultMessage(entry.job);

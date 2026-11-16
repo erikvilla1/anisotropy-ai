@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .proposals import UNREAD_REASONS
+
 NUMBER = re.compile(r"(?<![\w.\-+])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")  # a number on its own, not the digits of a name
 PROVIDER_ANTHROPIC = "anthropic"
 MAX_TOKENS = 2000
@@ -61,7 +63,11 @@ PROPOSE_SYSTEM = (
     "copied character for character, that states the value and its unit. For a choice row the value is one of the row's choice values. For "
     "a notation row the value is the notation as written. Propose a condition only when the message asks for its physics, quoting the words "
     "that ask. When a value is ambiguous, propose nothing for it and ask one short question; otherwise the question is null. Never propose a "
-    "row that is not on offer and never state a value the message does not write." + VOICE
+    "row that is not on offer and never state a value the message does not write. When the message asks for a change you propose nothing "
+    "for, list it under unread: the words that ask, copied character for character from the message, and one reason. The reasons: "
+    "not_offered, no row or choice on offer covers it; no_value, it names a row on offer but writes no value that row takes (a count of "
+    "plies is not a layup's notation); refers_back, it leans on an earlier message, which you were not given. With nothing of the kind, "
+    "unread is an empty list." + VOICE
 )
 # The model's answer: a fixed schema, so the API compiles it once (structured outputs, `output_config.format`).
 PROPOSAL_SCHEMA: dict[str, Any] = {
@@ -76,8 +82,12 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
             "type": "object", "properties": {"id": {"type": "string"}, "quote": {"type": "string"}},
             "required": ["id", "quote"], "additionalProperties": False}},
         "question": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        # what the message asks for and the model proposes nothing for (ADR-0088 amendment 1): the engineer's own words and a reason by name
+        "unread": {"type": "array", "items": {
+            "type": "object", "properties": {"quote": {"type": "string"}, "reason": {"type": "string", "enum": list(UNREAD_REASONS)}},
+            "required": ["quote", "reason"], "additionalProperties": False}},
     },
-    "required": ["proposals", "conditions", "question"],
+    "required": ["proposals", "conditions", "question", "unread"],
     "additionalProperties": False,
 }
 

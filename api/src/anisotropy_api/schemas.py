@@ -852,6 +852,13 @@ class DroppedProposal(Contract):
     reason: str
 
 
+class UnreadPart(Contract):
+    """Words of the message the model proposed nothing for, and why, by name (ADR-0088 amendment 1). The words are the engineer's own."""
+
+    quote: str
+    reason: Literal["not_offered", "no_value", "refers_back"]
+
+
 class ProposalResponse(Contract):
     """What the model read and the source guard kept (ADR-0088), for the engineer to tick; nothing here has entered the problem. `writer` is
     `template` when no model read the message, with the reason when one was asked; the page then reads it with its own patterns."""
@@ -864,6 +871,7 @@ class ProposalResponse(Contract):
     question: str | None
     dropped: list[DroppedProposal]
     reason: str | None
+    unread: list[UnreadPart] = []
 
 
 ResultQuantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]

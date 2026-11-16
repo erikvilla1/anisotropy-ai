@@ -12,12 +12,22 @@ import {
 import { expandLayup } from "./layup";
 import { layupNotation, layupRows, parseLayup, TEST_CHOICES } from "./studio-chat";
 import { fieldByKey, fields, libraryOptions, unitLabels, unitsOf, type StudioForm } from "./studio-form";
-import type { OfferedRow, Proposal, ProposalRequest } from "./studio-api";
+import type { OfferedRow, Proposal, ProposalRequest, UnreadPart } from "./studio-api";
 
 /** Rows the model never sees: who filled the form in, notes, sources and names, the team's own model and data (R-11). */
 const HIDDEN = new Set(["filled_by", "date", "notes", "size_from", "team_model", "test_data", "material_code", "layup_code", "tab_material", "own_name",
   "own_source"]);
 const hidden = (key: string) => HIDDEN.has(key) || key.startsWith("name_") || key.startsWith("mesh_") || /^ply_\d+$/.test(key);
+
+/** Why nothing was proposed for a part of the message, in the page's words (ADR-0088 amendment 1). The model names the reason and
+ * quotes the engineer; it phrases nothing here. */
+const UNREAD_WORDS: Record<UnreadPart["reason"], string> = {
+  not_offered: "not something you can set here yet",
+  no_value: "names no value to enter; state the value itself, for example a layup as [0/90]2s",
+  refers_back: "each message is read on its own, so say the whole change",
+};
+export type UnreadLine = { quote: string; words: string };
+export const unreadLines = (parts: UnreadPart[]): UnreadLine[] => parts.map((p) => ({ quote: p.quote, words: UNREAD_WORDS[p.reason] }));
 
 // ----------------------------------------------------------------------------------------------- the coupon
 

@@ -902,6 +902,58 @@ test("a model that does not answer leaves the message to the page's patterns, an
   await expect(page.getByTestId("proposal-card")).toHaveCount(0);
 });
 
+test("the assistant says which words it could not use and why, in place of “Not sure what to change” (ADR-0088 amendment 1)", async ({ page }) => {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const reading = { run_id: "run-p", writer: "anthropic", model: "claude-stand-in", conditions: [], question: null, dropped: [], reason: null };
+  await mockApi(page, calls, { allTests: false }); // the product's view, as on the hosted tier: the unnotched tension coupon only
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    const said = (request.postDataJSON() as { message: string }).message;
+    if (said.includes("16 plys")) {
+      return json({ ...reading, proposals: [], unread: [{ quote: "same thing", reason: "refers_back" }, { quote: "compresion", reason: "not_offered" },
+        { quote: "16 plys", reason: "no_value" }] });
+    }
+    if (said.includes("300")) {
+      return json({ ...reading, unread: [{ quote: "like before", reason: "refers_back" }], proposals: [{ key: "length", label: "Length (mm)", value: "300",
+        unit: "mm", written_value: "300", written_unit: "mm", quote: "300 mm long" }] });
+    }
+    return json({ ...reading, proposals: [], unread: [{ quote: "compression", reason: "not_offered" }] });
+  });
+  await page.goto("/workspace/fea");
+  const chat = page.getByTestId("coupon-chat");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  // the founder's message of 2026-11-16 on the live site: nothing in it can become a row, and the page now says why, part by part
+  await message.fill("same thing but make it compresion and 16 plys");
+  await message.press("Enter");
+  const notUsed = page.getByTestId("chat-not-used");
+  await expect(notUsed).toHaveCount(1);
+  await expect(notUsed.locator("li")).toHaveText([
+    /same thing.*each message is read on its own, so say the whole change/,
+    /compresion.*not something you can set here yet/,
+    /16 plys.*names no value to enter; state the value itself, for example a layup as \[0\/90\]2s/,
+  ]);
+  await expect(page.getByText("Not sure what to change")).toHaveCount(0);
+  await expect(page.getByTestId("proposal-card")).toHaveCount(0);
+  // a test the page knows by name keeps the page's own, fuller answer: the patterns read first
+  await message.fill("make it compression");
+  await message.press("Enter");
+  await expect(page.getByTestId("chat-not-available")).toContainText("not offered yet");
+  await expect(notUsed).toHaveCount(1);
+  // beside values that were read, the card lists the words that were not
+  await message.fill("300 mm long like before");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card");
+  await expect(card.locator("[data-key=length]")).toContainText("300 mm");
+  await expect(card.getByTestId("proposal-unread")).toContainText("like before");
+  await expect(card.getByTestId("proposal-unread")).toContainText("each message is read on its own");
+  const said = (await chat.innerText()).toLowerCase();
+  for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
+});
+
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);

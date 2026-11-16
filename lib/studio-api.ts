@@ -500,9 +500,13 @@ export type ProposalRequest = {
 };
 /** A value the engineer wrote, for an offered row: as the row takes it, as written, and the words it came from. */
 export type Proposal = { key: string; label: string; value: string; unit: string | null; written_value: string; written_unit: string | null; quote: string };
+/** Words of the message the model proposed nothing for, and why, by name (ADR-0088 amendment 1); the page writes the sentence. */
+export const UNREAD_REASONS = ["not_offered", "no_value", "refers_back"] as const;
+export type UnreadPart = { quote: string; reason: (typeof UNREAD_REASONS)[number] };
 export type ProposalAnswer = {
   run_id: string | null; writer: string; model: string | null; proposals: Proposal[];
   conditions: { id: string; title: string; quote: string }[]; question: string | null; dropped: { key: string; reason: string }[]; reason: string | null;
+  unread: UnreadPart[];
 };
 export type AssistantInfo = { proposes: boolean; provider: string | null; model: string | null };
 
@@ -519,7 +523,10 @@ export function readProposalAnswer(payload: unknown): ProposalAnswer {
   }
   for (const c of payload.conditions) if (!isObject(c) || !isText(c.id) || !isText(c.title) || !isText(c.quote)) throw bad();
   for (const d of payload.dropped) if (!isObject(d) || !isText(d.key) || !isText(d.reason)) throw bad();
-  return payload as unknown as ProposalAnswer;
+  const unread = payload.unread ?? []; // an API from before amendment 1 sends none
+  if (!Array.isArray(unread)) throw bad();
+  for (const u of unread) if (!isObject(u) || !isText(u.quote) || !(UNREAD_REASONS as readonly unknown[]).includes(u.reason)) throw bad();
+  return { ...payload, unread } as unknown as ProposalAnswer;
 }
 
 /** The model's reading of a message, kept by the source guard; nothing in it has entered the problem until the engineer applies it. */

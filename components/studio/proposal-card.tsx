@@ -2,19 +2,21 @@
 
 import { useState, type ReactNode } from "react";
 import { Check, Quote, X } from "lucide-react";
+import type { UnreadLine } from "@/lib/proposals";
 
 /** One value the model read, as the card shows it: the row, the value with the unit it goes in with, a note (how it was written when the
  * API converted it), and the words it came from. `blocked` says why it cannot go in as it stands, and leaves it unticked. */
 export type ProposalLine = { id: string; label: string; value: string; unit: string; note?: string; quote: string; blocked?: string };
 
 /** The model's reading of a message, for the engineer to confirm (ADR-0088): every value ticked by default except one that cannot go in,
- * the conditions it would turn on, a question when it asks one, and what the source guard did not take, with why. Nothing enters the
- * problem until Apply; the card then keeps what was applied. */
-export function ProposalCard({ lines, conditions, question, dropped, onApply }: {
+ * the conditions it would turn on, a question when it asks one, what the source guard did not take, with why, and the words nothing
+ * was proposed for (amendment 1). Nothing enters the problem until Apply; the card then keeps what was applied. */
+export function ProposalCard({ lines, conditions, question, dropped, unread = [], onApply }: {
   lines: ProposalLine[];
   conditions: { id: string; title: string; quote: string }[];
   question: string | null;
   dropped: { key: string; reason: string }[];
+  unread?: UnreadLine[];
   onApply: (ids: Set<string>) => void;
 }) {
   const ids = [...lines.filter((l) => !l.blocked).map((l) => l.id), ...conditions.map((c) => `condition:${c.id}`)];
@@ -42,6 +44,7 @@ export function ProposalCard({ lines, conditions, question, dropped, onApply }: 
         </ul>
       ) : null}
       {question ? <p className="proposal-question" data-testid="proposal-question">{question}</p> : null}
+      <UnreadList lines={unread} />
       {dropped.length ? (
         <details className="proposal-dropped" data-testid="proposal-dropped">
           <summary>Not applied ({dropped.length})</summary>
@@ -59,5 +62,15 @@ export function ProposalCard({ lines, conditions, question, dropped, onApply }: 
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** The words of a message nothing was proposed for, each with why (ADR-0088 amendment 1): the engineer's own words, the page's reason. */
+export function UnreadList({ lines }: { lines: UnreadLine[] }) {
+  if (!lines.length) return null;
+  return (
+    <ul className="proposal-unread" data-testid="proposal-unread">
+      {lines.map((u, i) => <li key={`${u.quote}-${i}`}><span className="proposal-quote"><Quote size={11} /> {u.quote}</span><span className="chat-note">{u.words}</span></li>)}
+    </ul>
   );
 }
