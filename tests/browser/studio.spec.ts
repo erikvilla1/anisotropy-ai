@@ -954,6 +954,68 @@ test("the assistant says which words it could not use and why, in place of “No
   for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
 });
 
+/** The stand-in for the mesh scenarios: with `model`, the assistant has a model that answers a size that is not written as a model does,
+ * with nothing to enter and the words it could not use (api/tests/test_proposals.py); every message it is sent is kept in `asked`. */
+async function meshScenario(page: Page, model: boolean) {
+  const calls = { checks: [] as unknown[], solves: [] as unknown[], lives: [] as unknown[] };
+  const asked: string[] = [];
+  await mockApi(page, calls, { allTests: true });
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant" && model) return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    asked.push((request.postDataJSON() as { message: string }).message);
+    return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null,
+      supports: [], loads: [], unread: [{ quote: "coarser", reason: "no_value" }] });
+  });
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  // the rows the page last asked a preview for: the new size goes to the package, which meshes it (the page computes no mesh)
+  const sizeSent = () => (calls.lives.at(-1) as { values: Record<string, unknown> } | undefined)?.values.element_size;
+  return { calls, asked, sizeSent, chat: page.getByTestId("coupon-chat"), message: page.getByLabel("Message the coupon assistant", { exact: true }) };
+}
+
+test("the mesh is changed by talking: a written element size, and finer as half the size held (ADR-0088 amendment 2)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const { calls, sizeSent, chat, message } = await meshScenario(page, false);
+  // no model on: the page's own patterns read it, say the size before and after, and the preview is asked for with the new size.
+  // “Who is running it?” is open, and “finer mesh” is not taken as the name
+  await message.fill("finer mesh");
+  await message.press("Enter");
+  await expect(chat.locator(".chat-understood").last()).toContainText("element size 1 mm (half of 2 mm)");
+  await expect.poll(sizeSent).toBe(1);
+  await message.fill("use 4 mm elements");
+  await message.press("Enter");
+  await expect(chat.locator(".chat-understood").last()).toContainText("element size 4 mm");
+  await expect.poll(sizeSent).toBe(4);
+  // a question about the mesh changes nothing, and is not taken as the name either
+  const livesBefore = calls.lives.length;
+  await message.fill("would a finer mesh change the answer?");
+  await message.press("Enter");
+  await expect(page.getByText("Not sure what to change").last()).toBeVisible();
+  await page.waitForTimeout(1_200); // longer than the preview's wait after an edit
+  expect(calls.lives.length).toBe(livesBefore);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-mesh-talk.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});
+
+test("with a model on, a mesh step the model cannot turn into a value is still read by the page (ADR-0088 amendment 2)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const { asked, sizeSent, chat, message } = await meshScenario(page, true);
+  await message.fill("make the mesh coarser");
+  await message.press("Enter");
+  await expect(chat.locator(".chat-understood").last()).toContainText("element size 4 mm (twice 2 mm)");
+  expect(asked).toEqual(["make the mesh coarser"]); // the model was asked first
+  await expect(page.getByTestId("chat-not-used")).toHaveCount(0);
+  await expect.poll(sizeSent).toBe(4);
+  expect(browserErrors).toEqual([]);
+});
+
 test("a plate is held and loaded by talking: regions named in words, and “here” as the element clicked (ADR-0101)", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));

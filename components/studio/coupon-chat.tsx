@@ -418,8 +418,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (onLaminate && toolNamed(text) === "laminate") { add({ role: "user", text }); onLaminate(); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
-    // an answer to "Who is running it?" is a name; on a plate read by a model, "hold this edge" is an edit and goes on to be read (ADR-0101 amendment 1)
-    if (step === "name" && !/\d/.test(text) && !(onPlateNow && namesPlateEdit(text))) { answer(text, { filled_by: text }); return; }
+    // an answer to "Who is running it?" is a name, unless the message is an edit: one the page's patterns read ("finer mesh", "make it
+    // compression"; ADR-0088 amendment 2) or, on a plate read by a model, one that names a region or an action on it (ADR-0101 amendment 1)
+    // nor is a question a name
+    const edit = applyMessage(formRef.current, text).understood.length > 0 || (onPlateNow && namesPlateEdit(text));
+    const asks = /\?\s*$/.test(text) || ASKING.test(text);
+    if (step === "name" && !/\d/.test(text) && !edit && !asks) { answer(text, { filled_by: text }); return; }
     // another unit system named: the chat's own switch handles it (ADR-0061), since a proposal is read in the coupon's system
     const named = unitsNamed(text);
     if (model?.proposes && apiBaseUrl && !isSwitchRequest(text) && (named === null || named === unitsOf(formRef.current))) { void readWithModel(text); return; }
@@ -502,7 +506,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       you.length = 0;
     }
     if (!understood.length) {
-      if (note) add(...you, { role: "assistant", kind: "text", title: "Another unit system", tone: "problem", body: <p>{note}</p> });
+      if (note) add(...you, { role: "assistant", kind: "text", title: unitsNamed(text) ? "Another unit system" : "Nothing to change yet", tone: "problem", body: <p>{note}</p> });
       else if (nothing) nothing();
       else redirect(text, echoed);
       return;
