@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
-import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
-  type JobStatus, type ProposalAnswer, type UnreadPart } from "@/lib/studio-api";
+import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
+  type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
+import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
 import { namesPlateEdit, plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
 import { answerResultQuestion, extremeSentence, extremeWords, questionFrom, readResultQuestion, RESULT_COLUMNS, resultOffer, resultSentence, resultUnit, type ResultExtremes,
@@ -43,7 +44,9 @@ type Entry =
   // a value read from the results on the page (ADR-0099): the answer as read, the fields it was read from, and whether they were a preview
   | { id: number; role: "assistant"; kind: "values"; answer: ResultValues; from: Fields; preview: boolean }
   // where a quantity is largest in those results (ADR-0100): stored values picked out, by the page's patterns or a model's reading
-  | { id: number; role: "assistant"; kind: "extremes"; answer: ResultExtremes; from: Fields; preview: boolean; reader: "patterns" | "model" };
+  | { id: number; role: "assistant"; kind: "extremes"; answer: ResultExtremes; from: Fields; preview: boolean; reader: "patterns" | "model" }
+  // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
+  | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean };
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
 type NewEntry = Without<Entry>;
 
@@ -405,11 +408,32 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       body: <p data-testid="chat-value-unread">Ask for a quantity and a place: “stress in ply 3 at element 120”, “strain here” after clicking an element, or “where is the shear stress highest?”.</p> });
   }
 
+  /** A question of why, answered in words (ADR-0102): the API puts the shown result's fact sheet beside the sections of our theory pages
+   * the question finds, and keeps a model's answer only when every number in it is the results' or the question's. No row changes. */
+  async function answerWhy(text: string, facts: Record<string, unknown>, preview: boolean) {
+    add({ role: "user", text });
+    setReading(true);
+    let answer: ResultAnswer | null = null;
+    try { answer = await answerResult(apiBaseUrl, text, facts); } catch { /* said below */ } finally { setReading(false); }
+    if (answer) add({ role: "assistant", kind: "why", answer, preview });
+    else add({ role: "assistant", kind: "text", title: "No answer right now", body: <p data-testid="chat-why-failed">That question could not be answered right now. Try again in a moment.</p> });
+  }
+
   function send(value = input) {
     const text = value.trim();
     if (!text) return;
     setInput("");
     if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
+    // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102)
+    const facts = factsOf(shown.live ? runner.live?.explanation : explanation);
+    if (asksWhy(text)) {
+      if (apiBaseUrl && shown.fields && facts) { void answerWhy(text, facts, shown.live); return; }
+      // with no result there is nothing to answer from, and a question is never a row: "why is ply 4 in compression?" changes no test
+      add({ role: "user", text }, { role: "assistant", kind: "text", title: "No results to answer from yet",
+        body: <p data-testid="chat-why-none">{shown.fields ? "This result cannot be explained in words. Run the analysis again, then ask."
+          : `A question of why is answered from a solved model. ${checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again."}`}</p> });
+      return;
+    }
     const question = readResultQuestion(text);
     if (question) { answerQuestion(text, question); return; }
     if (/^(run|solve|go|run it|run analysis)\b/i.test(text) && checked?.state === "ready") { void run(); return; }
@@ -759,6 +783,18 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     );
   }
 
+  /** An answer in words to a question of why (ADR-0102): its sentences, and under them what it rests on, the theory sections by name. */
+  function whyMessage(entry: Extract<Entry, { kind: "why" }>): ReactNode {
+    const lines = whyLines(entry.answer, entry.preview);
+    return (
+      <div data-testid="chat-why" data-answered={lines.prose.length ? "yes" : "no"} data-covered={entry.answer.covered ? "yes" : "no"} data-source={entry.preview ? "live" : "run"}>
+        <h4>{lines.prose.length ? "Why" : "No answer in words"}</h4>
+        {lines.prose.map((sentence, i) => <p key={i} data-testid="chat-why-sentence">{sentence}</p>)}
+        <p className="chat-note" data-testid="chat-why-note">{lines.note}</p>
+      </div>
+    );
+  }
+
   /** Where a quantity is largest (ADR-0100): one quantity as a sentence with each ply's own extreme under it, several as one row each;
    * with the region read, how the values are taken, and the grip edge said where the largest sits on it. */
   function extremesMessage(entry: Extract<Entry, { kind: "extremes" }>): ReactNode {
@@ -823,6 +859,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else if (entry.kind === "job") content = job?.job_id === entry.job ? <ChatRun job={job} /> : <p className="chat-note">An earlier run.</p>;
     else if (entry.kind === "values") content = valuesMessage(entry);
     else if (entry.kind === "extremes") content = extremesMessage(entry);
+    else if (entry.kind === "why") content = whyMessage(entry);
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}

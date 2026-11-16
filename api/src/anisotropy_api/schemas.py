@@ -997,6 +997,57 @@ class ResultQuestionResponse(Contract):
     reason: str | None
 
 
+FactValue = bool | int | float | str | None | list[bool | int | float | str | None]
+MAX_FACTS_CHARS = 40_000
+
+
+class ResultAnswerRequest(Contract):
+    """A question to answer in words about a result (ADR-0102): the question, and the fact sheet of the result the page shows, the
+    numbers our engine computed for it (a job's `explanation.json`, or a live solve's). The model sees the sheet without a name, a note,
+    a date or a record name (R-11), beside the theory sections the question finds."""
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    facts: Annotated[dict[str, FactValue], Field(min_length=1, max_length=400)]
+
+    @model_validator(mode="after")
+    def _a_sheet_not_a_file(self) -> Self:
+        if len(json.dumps(self.facts, ensure_ascii=False)) > MAX_FACTS_CHARS:
+            raise ValueError(f"the fact sheet is longer than {MAX_FACTS_CHARS} characters")
+        return self
+
+
+class ResultAnswerReceipt(Contract):
+    """What the run record keeps of an answer: the question, the digest of the facts the writer saw, and the sections found."""
+
+    question: str
+    facts_sha256: str
+    sections: list[str]
+
+
+class TheorySource(Contract):
+    """A section of our theory pages, as an answer names it."""
+
+    id: str
+    document: str
+    title: str
+
+
+class ResultAnswerResponse(Contract):
+    """An answer in words to a question about a result (ADR-0102). `prose` is the model's, kept only when every number in it is the fact
+    sheet's or the question's; `sources` are the theory sections it rests on. With no model, or an answer the guard set aside
+    (`withheld`), `prose` is empty and `sources` are the sections the question found, so the page can say where to read. `covered` is
+    false when the sections do not hold the reason asked for."""
+
+    run_id: str | None
+    writer: str
+    model: str | None
+    prose: list[str]
+    sources: list[TheorySource]
+    covered: bool
+    withheld: bool
+    reason: str | None
+
+
 class CouponTests(Contract):
     """Whether every coupon test is offered here (ADR-0089): the page asks once, and with no answer offers the unnotched tension
     coupon only, the list its form definition carries."""

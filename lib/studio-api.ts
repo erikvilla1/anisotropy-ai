@@ -595,6 +595,26 @@ export async function readResultRequest(apiBase: string, offer: ResultOffer, sig
   return readResultReading(payload);
 }
 
+/** A section of our theory pages, as an answer names it (ADR-0102). */
+export type TheorySource = { id: string; document: string; title: string };
+/** An answer in words to a question about a result (ADR-0102): the prose, kept by the API only when every number in it is the results'
+ * or the question's, and the theory sections it rests on. With no prose, `sources` are the sections the question found. */
+export type ResultAnswer = { run_id: string | null; writer: string; model: string | null; prose: string[]; sources: TheorySource[]; covered: boolean;
+  withheld: boolean; reason: string | null };
+
+export function readResultAnswer(payload: unknown): ResultAnswer {
+  if (!isObject(payload) || !isText(payload.writer) || !isTextOrNull(payload.model) || !isTextOrNull(payload.reason) || !Array.isArray(payload.prose)
+    || !payload.prose.every(isText) || typeof payload.covered !== "boolean" || typeof payload.withheld !== "boolean" || !Array.isArray(payload.sources)
+    || !payload.sources.every((s) => isObject(s) && isText(s.id) && isText(s.document) && isText(s.title))) throw unreadable("the answer");
+  return payload as unknown as ResultAnswer;
+}
+
+/** A question about a result answered in words (ADR-0102), from the fact sheet of the result the page shows and our theory pages. */
+export async function answerResult(apiBase: string, question: string, facts: Record<string, unknown>, signal?: AbortSignal): Promise<ResultAnswer> {
+  const payload = await call(`${base(apiBase)}/v1/workspace/result-answers`, { method: "POST", headers, body: JSON.stringify({ question, facts }), signal }, "the answer");
+  return readResultAnswer(payload);
+}
+
 const couponTestAnswers = new Map<string, Promise<boolean>>();
 /** Whether every coupon test is offered here (ADR-0089), asked once per API address. False, the unnotched tension coupon only, unless the
  * API says all: before it answers, when it does not (an older API) and with no API at all. */

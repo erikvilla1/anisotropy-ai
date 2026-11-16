@@ -649,8 +649,9 @@ test("the assistant answers a question about a ply's stress from the results on 
   await expect(page.getByTestId("chat-value-refused").last()).toHaveText("This model has no element 1212. Its elements are numbered 1 to 250.");
   await say("stress on ply 9 at element 12");
   await expect(page.getByTestId("chat-value-refused").last()).toContainText("there is no ply 9");
-  // a question the patterns do not read is told so; it is never read as a row of the setup ("compression" is a test's name)
-  await say("why is ply 4 in compression?");
+  // a question the patterns do not read is told so; it is never read as a row of the setup ("compression" is a test's name).
+  // A question of why is answered in words (ADR-0102)
+  await say("which is worse here, tension or compression?");
   await expect(page.getByTestId("chat-value-unread")).toContainText("where is the shear stress highest?");
   expect(calls.checks).toHaveLength(1);
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
@@ -739,16 +740,110 @@ test("with a model on, a loose question about the results is read into a fixed r
 
   // a message the model reads as nothing of the results goes on to the setup's reading, and a setup line never asks about results
   expect(proposalsAsked).toBe(0);
-  await say("why is ply 4 in compression?"); // a question, though the setup's patterns know "compression": the model is asked first,
-  await expect(page.getByTestId("chat-value-unread")).toBeVisible(); // and with nothing read, it is told so and no row changes
+  await say("which is worse here, tension or compression?"); // a question, though the setup's patterns know "compression": the model is asked first,
+  await expect(page.getByTestId("chat-value-unread")).toBeVisible(); // and with nothing read, it is told so and no row changes (a question of why is ADR-0102's)
   expect(offers).toHaveLength(5);
-  expect((offers[4] as { message: string }).message).toBe("why is ply 4 in compression?");
+  expect((offers[4] as { message: string }).message).toBe("which is worse here, tension or compression?");
   await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
   await say("thanks, looks good");
   await expect(page.getByTestId("chat-redirect").last()).toBeVisible();
   expect(offers).toHaveLength(6);
   expect(proposalsAsked).toBe(2);
   expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers about a result").toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
+test("a question of why is answered in words from the results and our theory pages, the section named, and no row changes (ADR-0102)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const asked: { question: string; facts: Record<string, unknown> }[] = [];
+  let readings = 0;
+  const FAILURE = { id: "engine:5-failure", document: "Laminate theory", title: "5. Failure" };
+  const PLIES = { id: "fea:6-ply-stresses-in-material-axes", document: "Finite element theory", title: "6. Ply stresses in material axes" };
+  const written = { run_id: "run-w", writer: "anthropic", model: "claude-stand-in", withheld: false, reason: null };
+  // a model behind the API: its answers, as the number guard would keep them, or none
+  const answers: Record<string, unknown> = {
+    "why does ply 4 fail first?": { ...written, covered: true, sources: [FAILURE],
+      prose: ["Ply 4 (90 degrees) fails first by tension across its fibres: sigma_2 is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."] },
+    "why is ply 4 in compression?": { ...written, covered: false, sources: [],
+      prose: ["The results show ply 4 (90 degrees) at -364.8 MPa along its fibres.", "The theory pages do not explain this yet."] },
+    "what does the failure index mean?": { ...written, writer: "template", model: null, covered: false, withheld: true, reason: "numbers", prose: [], sources: [FAILURE, PLIES] },
+  };
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if ((path === "/v1/workspace/proposals" || path === "/v1/workspace/result-questions") && request.method() === "POST") {
+      readings += 1;
+      return json({ run_id: "run-p", writer: "template", model: null, proposals: [], conditions: [], request: null, question: null, dropped: [], reason: null });
+    }
+    if (path !== "/v1/workspace/result-answers" || request.method() !== "POST") return route.fallback();
+    const body = request.postDataJSON() as { question: string; facts: Record<string, unknown> };
+    asked.push(body);
+    return body.question in answers ? json(answers[body.question]) : json({ detail: "the service is busy" }, 503);
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+
+  // before a result there is nothing to answer from: the page says so, nothing is sent, and no row changes
+  const before = readings;
+  await say("why is ply 4 in compression?");
+  await expect(page.getByTestId("chat-why-none")).toHaveText("A question of why is answered from a solved model. Say “run”, then ask again.");
+  expect(asked).toHaveLength(0);
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension"); // "compression" in a question is not the test
+
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+
+  // answered in words: the fact sheet of the result on the page goes with the question, and the section is named under the answer
+  await say("why does ply 4 fail first?");
+  const why = page.getByTestId("chat-why").last();
+  await expect(why).toHaveAttribute("data-answered", "yes");
+  await expect(why).toHaveAttribute("data-covered", "yes");
+  await expect(why).toHaveAttribute("data-source", "run");
+  await expect(why.getByTestId("chat-why-sentence")).toHaveText(["Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."]);
+  await expect(why.getByTestId("chat-why-note")).toHaveText("From the results and the theory: Laminate theory, 5. Failure. Every number is the results’ own.");
+  expect(asked).toHaveLength(1);
+  expect(Object.keys(asked[0]).sort()).toEqual(["facts", "question"]);
+  expect(asked[0].facts).toEqual(fixture("explanation").facts); // the engine's fact sheet, as the job wrote it
+
+  // a reason the pages do not hold is said to be missing, and nothing is cited; the setup's patterns do not read "compression"
+  await say("why is ply 4 in compression?");
+  const uncovered = page.getByTestId("chat-why").last();
+  await expect(uncovered).toHaveAttribute("data-covered", "no");
+  await expect(uncovered.getByTestId("chat-why-sentence").first()).toHaveText(`The results show ply 4 (90 degrees) at ${printed(-364.8)} MPa along its fibres.`);
+  await expect(uncovered.getByTestId("chat-why-note")).toHaveText("From the results; the theory pages do not explain this yet. Every number is the results’ own.");
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
+
+  // an answer the guard set aside is not shown; the sections the question found are named
+  await say("what does the failure index mean?");
+  const withheld = page.getByTestId("chat-why").last();
+  await expect(withheld).toHaveAttribute("data-answered", "no");
+  await expect(withheld.getByTestId("chat-why-sentence")).toHaveCount(0);
+  await expect(withheld.getByTestId("chat-why-note")).toHaveText("An answer was written, but it held a number the results do not, so it is not shown. Sections of the theory behind it: Laminate theory, 5. Failure; Finite element theory, 6. Ply stresses in material axes.");
+
+  await page.getByTestId("chat-why").first().scrollIntoViewIfNeeded();
+  await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-why.png" });
+
+  // a service that does not answer is said plainly
+  await say("explain the shear in ply 1");
+  await expect(page.getByTestId("chat-why-failed")).toBeVisible();
+  expect(asked).toHaveLength(4);
+
+  // a question about a value is still the lookup's, and none of the questions of why was read as a row or a value
+  await say("where is the shear stress highest?");
+  await expect(page.getByTestId("chat-extremes").last()).toHaveAttribute("data-reader", "patterns");
+  expect(asked).toHaveLength(4);
+  expect(readings).toBe(before);
+  expect(calls.checks).toHaveLength(1);
+  expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers of why").toEqual([]);
   expect(browserErrors).toEqual([]);
 });
 

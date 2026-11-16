@@ -30,11 +30,13 @@ from anisotropy_engine.summary import first_ply_failure_summary, laminate_summar
 
 from .access import CONNECTOR_PAIR, CONNECTOR_RUNS, CONNECTOR_UPLOADS, AccessMiddleware
 from .access import verifier as access_verifier
-from .assistant import PROPOSAL_SCHEMA, TemplateAssistant, assistant_for
+from .assistant import PROPOSAL_SCHEMA, TemplateAssistant, assistant_for, model_view_of_facts
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
 from .plate_proposals import PLATE_SYSTEM, KeptPlate, plate_guard, plate_schema, plate_view
 from .proposals import model_view_of_form, source_guard
+from .result_answers import SECTIONS_SHOWN, answer_guard, answer_schema, answer_view
 from .result_questions import model_view, question_guard, question_schema
+from .theory import find as find_theory
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
 from .coupon_jobs import (EVERY_TEST, FILE_ALIASES, LOCAL_FEA, NEUTRAL_DECKS, CheckTimedOut, CouponJobs, Job, JobBusy, JobLimited, JobNotDone, JobRefused, NotOffered, RecordingFailed,
                           SolverBusy, UnknownCoupon, neutral_deck, runner_command, studio_command)
@@ -54,7 +56,7 @@ from .schemas import (
     CouponJobRequest, CouponSummary, CouponValuesOutput, ExplainReceipt, ExplainRequest, ExplainResponse, FirstPlyFailureOutput, LaminateAnswer,
     LaminateProblem,
     LaminateSummaryOutput, LibraryMaterialInput, MaterialProvenance, Paired, PairingCode, PairInput, PrescribedCurvatureRequest, PrescribedCurvatureResponse, ProjectInput, ProjectOutput,
-    ProjectRename, ProposalRequest, ProposalResponse, ResultQuestionRequest, ResultQuestionResponse, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
+    ProjectRename, ProposalRequest, ProposalResponse, ResultAnswerReceipt, ResultAnswerRequest, ResultAnswerResponse, ResultQuestionRequest, ResultQuestionResponse, TheorySource, RunOutput, RunSummary, UploadDocument, UploadOutput, UploadTokenCreated, UploadTokenInput, UploadTokenOutput,
     VerificationResponse,
 )
 
@@ -1408,6 +1410,37 @@ def read_result_question(asked: ResultQuestionRequest, actor: Actor, request: Re
                                       dropped=kept.dropped, reason=None)
 
     return _deliver(request, response, actor, asked, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
+
+
+@app.post("/v1/workspace/result-answers", response_model=ResultAnswerResponse)
+def answer_result_question(asked: ResultAnswerRequest, actor: Actor, request: Request, response: Response) -> ResultAnswerResponse:
+    """A question about a result answered in words (ADR-0102): from the fact sheet of the result the page shows and the sections of our
+    theory pages the question's words find. The model's answer is kept only when every number in it is the sheet's or the question's
+    (the explanation's guard, ADR-0052), and the sections it rests on come back by name. With no model, or an answer set aside, no prose
+    comes back and the sections found do, so the page says where to read. Recorded with the question, the digest of the facts, the
+    sections found and the model's name when one wrote (ADR-0026)."""
+    assistant = getattr(request.app.state, "assistant", None) or TemplateAssistant()
+    facts = model_view_of_facts(asked.facts)
+    found = [section for section, _ in find_theory(asked.question, limit=SECTIONS_SHOWN)]
+    receipt = ResultAnswerReceipt(question=asked.question, sections=[s.id for s in found],
+                                  facts_sha256=hashlib.sha256(json.dumps(facts, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest())
+
+    def named(sections) -> list[TheorySource]:
+        return [TheorySource(id=s.id, document=s.document, title=s.title) for s in sections]
+
+    def compute() -> ResultAnswerResponse:
+        reading = assistant.answer_question(answer_view(asked.question, facts, found), answer_schema([s.id for s in found]))
+        if reading.raw is None:
+            return ResultAnswerResponse(run_id=None, writer=reading.writer, model=None, prose=[], sources=named(found), covered=False, withheld=False,
+                                        reason=reading.reason)
+        kept = answer_guard(reading.raw, asked.question, facts, found)
+        if not kept.prose:  # set aside by the guard: no prose of the model's is shown, and the page says where to read
+            return ResultAnswerResponse(run_id=None, writer="template", model=None, prose=[], sources=named(found), covered=False,
+                                        withheld=kept.withheld, reason=kept.reason)
+        return ResultAnswerResponse(run_id=None, writer=reading.writer, model=reading.model, prose=list(kept.prose), sources=named(kept.sources),
+                                    covered=kept.covered, withheld=False, reason=None)
+
+    return _deliver(request, response, actor, receipt, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
 
 
 @app.post("/v1/laminates/prescribed-curvature", response_model=PrescribedCurvatureResponse)
