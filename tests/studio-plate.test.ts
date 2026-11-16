@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { emptyPlate, plateFromValues, plateValues, plateWords, regionOptions, regionsHere, regionsOfElement, withLoad, withSupport, PLATE_TEST } from "../lib/studio-plate";
+import { emptyPlate, plateFromValues, plateValues, plateWords, regionOptions, regionsHere, namesPlateEdit, regionsOfElement, shapeWords, withLoad, withSupport, PLATE_TEST } from "../lib/studio-plate";
 import { blankForm, buildValues, sectionsFor } from "../lib/studio-form";
 import { plateLines, plateOffer, plateWith } from "../lib/proposals";
 import { readPreview, readProposalAnswer } from "../lib/studio-api";
@@ -117,4 +117,36 @@ test("a plate's supports and loads in the proposals' answer are read only in the
     { ...good, loads: [{ ...load, kind: "pressure" }] }, { ...good, loads: [{ ...load, kind: "moment" }] }, { ...good, loads: [{ ...load, sense: "pull" }] },
     { ...good, loads: "none" },
   ]) assert.throws(() => readProposalAnswer(bad), /could not be read/);
+});
+
+test("a plate's shape is read with no load, its regions are clickable, and a model with no load is refused (ADR-0101 amendment 1)", () => {
+  const raw = JSON.parse(readFileSync("tests/fixtures/studio-plate/preview.json", "utf8"));
+  const bare = readPreview({ ...raw, held: [], loads: [], loaded: null, shape: ["supports", "loads"] });
+  assert.equal(bare.loaded, null);
+  assert.deepEqual(bare.shape, ["supports", "loads"]);
+  // the element clicked on the shape is "here", exactly as on the checked model: the same mesh and sets
+  const form = { ...blankForm(), test: PLATE_TEST };
+  const edge = bare.mesh.node_sets["Edge-Bottom"];
+  const onEdge = bare.mesh.quads.findIndex((quad) => quad.filter((node) => edge.includes(node)).length >= 2);
+  assert.ok(onEdge >= 0);
+  assert.deepEqual(regionsHere(onEdge, bare.mesh, form), regionsHere(onEdge, preview.mesh, form));
+  assert.ok(regionsHere(onEdge, bare.mesh, form).some((region) => region.name === "Edge-Bottom" && region.kind === "edge"));
+  // only a shape may come with no load, and a shape names a list that is missing
+  for (const bad of [{ ...raw, loaded: null }, { ...raw, loaded: null, shape: [] }, { ...raw, loaded: null, shape: ["regions"] }, { ...raw, loaded: null, shape: "loads" }]) {
+    assert.throws(() => readPreview(bad), /could not be read/);
+  }
+  assert.deepEqual(readPreview({ ...raw, loads: [], loaded: null, shape: ["loads"] }).held, raw.held); // held, not loaded yet: what is held is drawn
+  assert.match(shapeWords(["supports", "loads"]), /^Nothing is held or loaded yet\./);
+  assert.match(shapeWords(["supports"]), /^Nothing is held yet\./);
+  assert.match(shapeWords(["loads"]), /^No load yet\./);
+  for (const words of [shapeWords(["supports", "loads"]), shapeWords(["supports"]), shapeWords(["loads"])]) assert.match(words, /cannot be solved until/);
+});
+
+test("a plate edit is told from a person's name (ADR-0101 amendment 1)", () => {
+  for (const edit of ["hold this edge", "Hold the bottom edge", "clamp it here", "press the face", "pin the hole", "fix that", "pull the top tab", "load here"]) {
+    assert.equal(namesPlateEdit(edit), true, edit);
+  }
+  for (const name of ["Erik", "A. Engineer", "Maria Holden", "Thi Sanh", "Loadstone Lab", "Presley", "Fixler", "the test team"]) {
+    assert.equal(namesPlateEdit(name), false, name);
+  }
 });

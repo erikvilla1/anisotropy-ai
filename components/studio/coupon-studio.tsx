@@ -3,7 +3,7 @@
 import { useCallback, useEffect } from "react";
 import type { Preview } from "@/lib/studio-api";
 import { PLATE_TEST } from "@/lib/studio-form";
-import { regionOptions, regionsOfElement, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
+import { regionOptions, regionsOfElement, shapeWords, withLoad, withSupport, type PlateLists } from "@/lib/studio-plate";
 import { sketchOf } from "@/lib/studio-sketch";
 import { ANALYSIS_UNAVAILABLE, heldWords, loadWords } from "@/lib/studio-copy";
 import { JobProgress } from "./job-progress";
@@ -39,6 +39,7 @@ export function PreviewScene({ preview, onPick, picked }: { preview: Preview; on
     <div className="studio-panel" data-testid="preview">
       <h3>The model <span className="studio-badge">{preview.mesh.element_count} elements, {preview.mesh.node_count} nodes</span></h3>
       <Scene nodes={preview.mesh.nodes} quads={preview.mesh.quads} thickness={preview.geometry.thickness} held={held} loaded={loaded} loads={loads} onPick={onPick} picked={picked ?? null} />
+      {preview.shape?.length ? <p className="studio-muted" data-testid="preview-shape">{shapeWords(preview.shape)}</p> : null}
       {onPick ? <p className="studio-muted">Click an element to hold or load its regions.</p> : null}
     </div>
   );

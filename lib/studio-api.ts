@@ -31,7 +31,11 @@ export type Preview = {
   mesh: { nodes: number[][]; quads: number[][]; node_sets: Record<string, number[]>; element_sets: Record<string, number[]>; order: number; mesher: string;
     node_count: number; element_count: number };
   held: { set: string; through: string | null; dofs: number[]; directions: string[]; nodes: number }[];
-  loaded: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number };
+  /** The first load; null only on a plate's shape that states no load yet (`shape`). */
+  loaded: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number } | null;
+  /** On a plate that does not state its supports or its loads yet: the lists still missing. The mesh and regions are shown to be clicked,
+   * nothing is drawn for a missing list, and the setup stays blocked (ADR-0101 amendment 1). Absent on a model the setup built. */
+  shape?: ("supports" | "loads")[];
   loads?: { set: string; through: string | null; control: string; dof: number; direction: string; value: number; unit: string; nodes: number }[];
   regions?: { edges: string[]; areas: string[] } | null;
   plies: { index: number; angle: number; thickness: number; z_bottom: number; z_top: number; material: string }[];
@@ -224,9 +228,12 @@ export function readChecklist(payload: unknown): Checklist {
   return payload as unknown as Checklist;
 }
 
+/** A shape's `shape`: the missing lists by name, at least one. Only a shape may come with no load. */
+const isShape = (value: unknown): boolean => Array.isArray(value) && value.length > 0 && value.every((name) => name === "supports" || name === "loads");
+
 export function readPreview(payload: unknown): Preview {
   if (!isObject(payload) || !isObject(payload.mesh) || !Array.isArray(payload.mesh.nodes) || !Array.isArray(payload.mesh.quads)
-    || !Array.isArray(payload.held) || !isObject(payload.loaded) || !Array.isArray(payload.plies) || !isObject(payload.geometry) || !isObject(payload.coupon)
+    || !Array.isArray(payload.held) || !(isObject(payload.loaded) || (payload.loaded === null && isShape(payload.shape))) || !Array.isArray(payload.plies) || !isObject(payload.geometry) || !isObject(payload.coupon)
     || typeof payload.units !== "string") {
     throw unreadable("the preview");
   }

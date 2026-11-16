@@ -35,14 +35,14 @@ from pathlib import Path
 from anisotropy_fea import enabled, paths
 from anisotropy_fea.abaqus_reader import read_deck
 from anisotropy_fea.case_pages import CasePageError, read_case
-from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, setup_checklist
+from anisotropy_fea.checks import ITEMS, Checklist, CheckItem, plate_shape, setup_checklist
 from anisotropy_fea.convergence import convergence_study
 from anisotropy_fea.explain import explanation
 from anisotropy_fea.fields import field_data
 from anisotropy_fea.intake import IntakeError, read_input, values_of_spec
 from anisotropy_fea.kernel import solve_deck
 from anisotropy_fea.mesh import KernelError
-from anisotropy_fea.preview import preview_data
+from anisotropy_fea.preview import preview_data, shape_data
 from anisotropy_fea.spec import TEST_CODES, SpecError, layup_text, load_spec
 from anisotropy_fea.test_quantities import method_inputs
 from anisotropy_fea.tow_test import tow_answer
@@ -104,10 +104,20 @@ def check(values_path: Path, out: Path, root: Path):
         return
     checklist, model, quality = setup_checklist(form, root)
     write_json(out / "checklist.json", checklist.as_dict())
-    if model is not None:
-        write_json(out / "preview.json", preview_data(model, quality))
+    write_preview(out, form, root, model, quality)
     counts = {state: sum(item.state == state for item in checklist.items) for state in ("pass", "warn", "fail", "missing", "pending")}
     print(f"{checklist.state}: " + ", ".join(f"{n} {state}" for state, n in counts.items() if n) + (f"; {checklist.designation}" if checklist.designation else ""))
+
+
+def write_preview(out: Path, form, root: Path, model, quality) -> None:
+    """preview.json: the model the setup built, or, for a plate that states no support or no load yet, its shape alone, so that a
+    region can be clicked before anything is held (ADR-0101 amendment 1). Nothing is written when neither can be built."""
+    if model is not None:
+        write_json(out / "preview.json", preview_data(model, quality))
+        return
+    shape = plate_shape(form, root)
+    if shape is not None:
+        write_json(out / "preview.json", shape_data(*shape))
 
 
 def coupons(root: Path) -> list[dict]:
@@ -187,8 +197,7 @@ def live(values_path: Path, out: Path, root: Path, started: float | None = None)
     checklist, model, quality = setup_checklist(form, root)
     timings["check"] = time.perf_counter() - clock
     write_json(out / "checklist.json", checklist.as_dict())
-    if model is not None:
-        write_json(out / "preview.json", preview_data(model, quality))
+    write_preview(out, form, root, model, quality)
     if not solvable(checklist, model):
         write_json(out / "timings.json", timings)
         print(f"{checklist.state}: nothing solved")

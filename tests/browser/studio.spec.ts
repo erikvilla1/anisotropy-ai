@@ -1007,9 +1007,11 @@ test("a plate is held and loaded by talking: regions named in words, and “here
   expect(first.loads).toEqual([{ region: "Edge-Top", dof: 2, total: 10000 }]);
   // an element clicked on the model is “here”: the page says which regions that is, and sends them with the next message
   await expect(page.getByTestId("chat-here")).toHaveCount(0);
-  const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  await expect(page.getByTestId("picked-regions")).toContainText("Face");
+  await expect(async () => { // the scene takes a click once it has drawn the new model: on a slow machine the first one can come too early
+    const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.getByTestId("picked-regions")).toContainText("Face", { timeout: 1_500 });
+  }).toPass({ timeout: 20_000 });
   await expect(page.getByTestId("chat-here")).toContainText("Face");
   await message.fill("press here with 0.01 MPa");
   await message.press("Enter");
@@ -1026,6 +1028,78 @@ test("a plate is held and loaded by talking: regions named in words, and “here
   for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: ".local/website/screenshots/studio-plate-talk.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});
+
+test("a plate with nothing held shows its shape, and the first hold is the edge clicked (ADR-0101 amendment 1)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const lives: { values: { supports?: unknown[]; loads?: unknown[] } }[] = [];
+  const asked: { message: string; plate?: { here: string[]; held: string[] } }[] = [];
+  const full = fixture("preview", "studio-plate");
+  await mockApi(page, calls, { allTests: true });
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path === "/v1/coupon-jobs/live" && request.method() === "POST") { // the package's answer for a plate that states no support yet: blocked, with its shape
+      const body = request.postDataJSON() as (typeof lives)[number];
+      lives.push(body);
+      if (body.values.supports?.length) return; // held: the scenario goes on with the check the apply sends
+      const checklist = fixture("checklist", "studio-plate");
+      checklist.state = "blocked";
+      checklist.items = checklist.items.map((item: { id: string }) => item.id === "constraints"
+        ? { ...item, state: "missing", message: "Supports: required for a plate (at least one)", rows: [] } : { ...item, state: "pending", message: "" });
+      return json({ run_id: "run-live", state: "blocked", designation: null, solver: "kernel", warm: true, seconds: 0.2, timings: { check: 0.1 }, checklist,
+        preview: { ...full, held: [], loads: [], loaded: null, shape: ["supports", "loads"] }, fields: null, explanation: null });
+    }
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    const body = request.postDataJSON() as (typeof asked)[number];
+    asked.push(body);
+    const edge = body.plate?.here.find((name) => name.startsWith("Edge-")) ?? "Edge-Bottom"; // as the API's guard keeps it: the edge clicked
+    return json({ run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null, unread: [],
+      supports: [{ region: edge, dofs: [1, 2, 3], quote: "hold this edge" }], loads: [] });
+  });
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await pickTest(page, "plate");
+  await page.getByLabel("Length (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Width (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Tab length (mm)", { exact: true }).fill("");
+  // nothing is held or loaded, and the plate is on the page to be clicked: its mesh, no support and no load drawn
+  await expect(page.getByTestId("preview")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("preview-shape")).toContainText("Nothing is held or loaded yet");
+  expect(lives.at(-1)!.values.supports ?? []).toEqual([]);
+  await expect(page.getByTestId("plate-words")).toHaveCount(0);
+  // an element on an edge is clicked: the canvas is walked up from its centre, towards the plate's far edges, until the page names an edge
+  const canvas = page.getByTestId("studio-scene").locator("canvas");
+  let clicked = "";
+  for (let step = 0; step < 60 && !clicked; step += 1) {
+    const box = (await canvas.boundingBox())!; // read at every click: the line under the model moves the page
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 - step * box.height / 130);
+    await page.waitForTimeout(60);
+    const picked = page.getByTestId("picked-regions");
+    clicked = ((await picked.count()) ? await picked.innerText() : "").match(/Edge-(Bottom|Top|Left|Right)/)?.[0] ?? "";
+  }
+  expect(clicked).toMatch(/^Edge-/);
+  await expect(page.getByTestId("chat-here")).toContainText(clicked);
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await message.fill("hold this edge");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card").last();
+  await expect(card.locator("[data-key='support:0']")).toContainText(`Hold ${clicked} x, y, z`);
+  expect(asked[0].plate?.here).toContain(clicked);
+  expect(asked[0].plate?.held).toEqual([]);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-plate-shape.png", fullPage: true });
+  await card.getByTestId("proposal-apply").click();
+  await expect(page.getByTestId("plate-words")).toContainText(`${clicked} holds x, y, z`);
+  await expect.poll(() => calls.checks.length).toBe(1);
+  expect((calls.checks[0] as { values: Record<string, unknown> }).values.supports).toEqual([{ region: clicked, dofs: [1, 2, 3] }]);
+  const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
+  for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
   expect(browserErrors).toEqual([]);
 });
 

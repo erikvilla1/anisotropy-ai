@@ -1,6 +1,6 @@
 # ADR-0101: On a plate the model proposes supports and loads from the engineer's words and the element clicked, and a guard keeps what the words or the click hold
 
-- Status: Proposed
+- Status: Proposed; since amendment 1 a plate that states no support or no load yet shows its shape, so its first hold can be the edge clicked
 - Date: 2026-11-16
 - Decided by: Founder, 2026-11-16 ("right now i can't edit the model click on an edge and tell the AI to make edits, or change boundary conditions or change load really fast", on what the assistant lacks; the same day, on the card asking where "hold this, add a 10 kN load here" should work first, he chose "The plate, only you see it live") | Drafted by: Claude Code
 - Related: [ADR-0054](ADR-0054-a-plate-kind-states-supports-and-loads-as-lists-over-named-regions-and-the-studio-lets-the-user-click-a-region.md) (the plate, its regions and the click); [ADR-0088](ADR-0088-the-model-proposes-rows-from-the-engineers-words-a-source-guard-keeps-what-the-message-writes-and-the-engineer-ticks-what-enters.md), which this extends from rows to a plate's lists; [ADR-0099](ADR-0099-the-assistant-answers-a-question-about-a-result-by-reading-its-place-with-fixed-patterns-and-looking-the-value-up-in-the-results-the-page-shows.md) (the clicked element as "here"); [ADR-0089](ADR-0089-only-unnotched-tension-under-d3039-or-no-standard-is-offered-until-its-abaqus-comparison-is-validated.md) (the plate is hidden on the hosted tier); [ADR-0001](ADR-0001-deterministic-engine.md); `api/src/anisotropy_api/plate_proposals.py`, `lib/proposals.ts`, `lib/studio-plate.ts`, `components/studio/coupon-chat.tsx`
@@ -72,3 +72,32 @@
 - Engineers untick or correct the region or the direction on the card often (to be seen in run records once a real model reads plates).
 - A support or a load enters a plate that neither the engineer's words nor the click hold. That would be a guard failure: add the case to `test_plate_proposals.py`.
 - A force stated as tension pushes. `test_tension_pulls_along_the_edges_outward_normal_whatever_sign_the_model_wrote` and the real solve above are the checks.
+
+## Amendment 1, 2026-11-16 (a plate that states no support or no load yet shows its shape to be clicked; not yet confirmed by the founder)
+
+**Context.**
+- This record left one gap: a plate with nothing held had no model on the page, so "hold this edge" could not be the first thing said. The founder's wish was to click an edge and tell the assistant what to do with it.
+- The setup check built no model for such a plate: `intake.check_form` refuses a plate with no support, and `spec.py` requires at least one support and a load, so nothing reached the mesher.
+- A plate's mesh follows its size, hole, tabs, drawn boxes and element size. No support and no load moves a node.
+- Two things on the page stood in the way. The live preview was asked for only once a plate's tab length and loading rows were filled, and a plate has no loading rows and may have no tabs. And the assistant's open question "Who is running it?" took any message with no digit as the name, so "hold this edge" became the engineer's name.
+
+**Options.**
+1. **Build the plate's mesh with a stand-in for the list that is missing, and show it as a shape: nothing drawn for the stand-in, the setup still blocked (chosen).**
+2. Let the spec and the form accept a plate with no support. Rejected: the rule that a plate is held and loaded is what keeps an unheld plate from being solved (ADR-0054, ADR-0003), and every reader of a spec would have to learn the exception.
+3. Draw the plate in the page from its length and width, and find the clicked region there. Rejected: a hole's ring and a drawn box's elements come from the mesher, and the page would hold a second mesh that must agree with the first.
+4. Leave it: the first hold and load are named in words. Rejected: it is the wish this record was written for.
+
+**Decision.**
+- **The shape.** For a plate whose supports or loads are not stated, `checks.plate_shape` builds the model with a stand-in for each missing list (`SHAPE_SUPPORT`: Edge-Bottom held; `SHAPE_LOAD`: a pressure on the Face), and only when nothing else about the plate is refused. `preview.shape_data` writes it as the preview with nothing drawn for a stand-in, `loaded` null when no load is stated, and `shape` naming the missing lists. A list the plate does state is drawn as stated.
+- **Nothing else changes.** The checklist is the real form's: blocked, with its own reason. A shape is never solved, kept, recorded or written to a deck. A hidden plate (ADR-0089) shows no shape.
+- **The page.** `readPreview` takes a preview with no load only when it is a shape. Under the model the page says what is still missing ("Nothing is held or loaded yet. This is the plate's shape: it cannot be solved until it is held and loaded."). A click on the shape is "here", as on the checked model.
+- **When it is asked for.** On a plate the live preview no longer waits for a tab length or for loading rows (`missingIn`), so the shape appears once the size, material and layup are stated, and again after each hold or load.
+- **A plate edit is not a name.** At "Who is running it?", on a plate read by a model, a message that names an action on a region, a kind of region, a load or the place clicked goes on to be read (`studio-plate.namesPlateEdit`); any other message with no digit is the name, as before.
+
+**Evidence.**
+- `cd fea && uv run pytest -q tests/test_plate_shape.py`: 9 passed. A plate with nothing held or loaded stays blocked and shows its mesh and regions with nothing held and no load; its mesh, node sets and element sets equal those of the same plate with its lists stated; a stated list is drawn and only the missing one is stood in; no shape for another test, for a plate refused for another reason, or for a hidden plate; `studio_tool.py check` and `live`, each as its own process, write the shape as the preview and no result file. The whole suite (`uv run pytest -q tests ../engine/tests`): 1574 passed, 43 skipped, 3 failed and 1 error, the four that need Gmsh, which this machine does not have (they fail the same way without this change).
+- `npm test`: 355 tests, 354 pass, 1 skipped; `npm run typecheck` clean. `tests/studio-plate.test.ts`: a shape is read with no load and a model with no load is refused; the element clicked on the shape names the same regions as on the checked model; a plate edit is told from a name. `tests/studio-live.test.ts`: a plate is complete without a tab length or loading rows, and a strip is not.
+- The studio browser suite: 42 passed. New: "a plate with nothing held shows its shape, and the first hold is the edge clicked", with a stand-in model and the package's answer played: the shape appears with its line, an element on an edge is clicked, "hold this edge" is sent with that edge as `here` while "Who is running it?" is open, the card holds that edge, and applying sends the check with it. The older plate scenario's click now waits for the scene to draw.
+- By hand on 2026-11-16, the real tool: `studio_tool.py check` and `live` on a 100 × 100 mm plate with no support and no load wrote `preview.json` with 256 elements, `shape: ["supports", "loads"]`, nothing held and no load, the checklist blocked on "Supports: required for a plate"; with the switch off, no preview.
+- UNVERIFIED: not deployed, so not tried on the live site; no real model has read "hold this edge" with a click.
+

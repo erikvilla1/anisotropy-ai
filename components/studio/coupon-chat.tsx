@@ -5,7 +5,7 @@ import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Message
 import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type UnreadPart } from "@/lib/studio-api";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
-import { plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
+import { namesPlateEdit, plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
 import { answerResultQuestion, extremeSentence, extremeWords, questionFrom, readResultQuestion, RESULT_COLUMNS, resultOffer, resultSentence, resultUnit, type ResultExtremes,
   type ResultQuestion, type ResultValues } from "@/lib/result-question";
 import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
@@ -418,7 +418,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     if (onLaminate && toolNamed(text) === "laminate") { add({ role: "user", text }); onLaminate(); return; }
     const current = entries.find((e) => e.id === active);
     const step = current && current.role === "assistant" && current.kind === "ask" ? current.step : null;
-    if (step === "name" && !/\d/.test(text)) { answer(text, { filled_by: text }); return; }
+    // an answer to "Who is running it?" is a name; on a plate read by a model, "hold this edge" is an edit and goes on to be read (ADR-0101 amendment 1)
+    if (step === "name" && !/\d/.test(text) && !(onPlateNow && namesPlateEdit(text))) { answer(text, { filled_by: text }); return; }
     // another unit system named: the chat's own switch handles it (ADR-0061), since a proposal is read in the coupon's system
     const named = unitsNamed(text);
     if (model?.proposes && apiBaseUrl && !isSwitchRequest(text) && (named === null || named === unitsOf(formRef.current))) { void readWithModel(text); return; }

@@ -104,3 +104,17 @@ export function plateWords(lists: PlateLists): string[] {
     ...lists.regions.map((r) => `box ${r.name.trim() || "?"}: x ${r.x0}..${r.x1}, y ${r.y0}..${r.y1} mm`),
   ];
 }
+
+/** What a plate's shape still waits for, in a sentence (ADR-0101 amendment 1): the plate is drawn to be clicked before it is held or loaded. */
+export function shapeWords(shape: ("supports" | "loads")[]): string {
+  const held = !shape.includes("supports"), loaded = !shape.includes("loads");
+  if (!held && !loaded) return "Nothing is held or loaded yet. This is the plate's shape: it cannot be solved until it is held and loaded.";
+  return held ? "No load yet. The plate cannot be solved until it is loaded." : "Nothing is held yet. The plate cannot be solved until it is held.";
+}
+
+/** Whether a message reads as an edit of a plate, not as a person's name (ADR-0101 amendment 1): it names an action on a region, a kind of
+ * region, a load, or the place clicked. The assistant's open question "Who is running it?" takes a typed name, and on a plate "hold this
+ * edge" must not become one. */
+export function namesPlateEdit(text: string): boolean {
+  return /\b(?:hold|held|fix|fixed|clamp|clamped|pin|pinned|support|supported|load|loaded|press|pressure|pull|push|force|tension|compression|edges?|face|hole|tabs?|here|this|that)\b/i.test(text);
+}

@@ -85,12 +85,12 @@ export function missingIn(step: ChatStep, form: StudioForm, simple = false): str
     case "geometry": {
       const keys = ["length", "width", "size_from"];
       if (isBending(form)) keys.push("span", "overhang", ...(form.test === FOUR_POINT_TEST ? ["load_span"] : []));
-      else keys.push("tab_length");
+      else if (form.test !== PLATE_TEST) keys.push("tab_length"); // a plate may have no tabs: its regions are its edges and its face (ADR-0054)
       if (form.test === OPEN_HOLE_TEST) keys.push("hole_diameter");
       keys.push(...(standardOf(form)?.needs ?? []).filter((key) => STRAIN_KEYS.includes(key))); // D3039 counts the gauge length (ADR-0072)
       return need(keys);
     }
-    case "loading": return need(["control", "value"]);
+    case "loading": return form.test === PLATE_TEST ? [] : need(["control", "value"]); // a plate lists its loads over regions, with no loading rows
     case "name": return need(["filled_by"]);
     case "review": return [];
   }
