@@ -87,7 +87,7 @@ test("with no system and no unit written a laminate value is held back, and a ti
 test("the proposals' answer is read only in the shape the API gives", () => {
   const good = { run_id: null, writer: "anthropic", model: "m", proposals: [p("length", "250", "mm")], conditions: [{ id: "temperature", title: "Temperature change", quote: "cooled" }],
     question: null, dropped: [{ key: "width", reason: "not a row on offer" }], reason: null };
-  assert.deepEqual(readProposalAnswer(good), { ...good, unread: [] }); // an API from before amendment 1 sends no unread parts
+  assert.deepEqual(readProposalAnswer(good), { ...good, unread: [], supports: [], loads: [] }); // an older API sends no unread parts and no plate lists
   assert.throws(() => readProposalAnswer({ ...good, proposals: [{ key: "length", value: 250 }] }), /could not be read/); // the reason to the console only
   assert.throws(() => readProposalAnswer({ ...good, dropped: null }), /could not be read/);
 });

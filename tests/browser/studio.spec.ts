@@ -954,6 +954,81 @@ test("the assistant says which words it could not use and why, in place of “No
   for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
 });
 
+test("a plate is held and loaded by talking: regions named in words, and “here” as the element clicked (ADR-0101)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  const asked: { message: string; plate?: { regions: { name: string }[]; here: string[]; held: string[]; loaded: string[]; force_unit: string; stress_unit: string } }[] = [];
+  const reading = { run_id: "run-p", writer: "anthropic", model: "claude-stand-in", proposals: [], conditions: [], question: null, dropped: [], reason: null, unread: [] };
+  await mockApi(page, calls, { allTests: true });
+  await page.route(API, async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/v1/workspace/assistant") return json({ proposes: true, provider: "anthropic", model: "claude-stand-in" });
+    if (path !== "/v1/workspace/proposals" || request.method() !== "POST") return route.fallback();
+    const body = request.postDataJSON() as (typeof asked)[number];
+    asked.push(body);
+    if (body.message.includes("bottom edge")) { // what the API's guard keeps of a model's reading (api/tests/test_plate_proposals.py)
+      return json({ ...reading, supports: [{ region: "Edge-Bottom", dofs: [1, 2, 3], quote: "hold the bottom edge" }],
+        loads: [{ region: "Edge-Top", kind: "force", dof: 2, value: "10000", unit: "N", written_value: "10", written_unit: "kN", sense: "tension",
+          quote: "pull the top edge with 10 kN in tension" }] });
+    }
+    return json({ ...reading, loads: [{ region: "Face", kind: "pressure", dof: null, value: "0.01", unit: "MPa", written_value: "0.01", written_unit: "MPa",
+      sense: null, quote: "press here with 0.01 MPa" }],
+      dropped: [{ key: "load on Edge-Left", reason: "the quoted words do not name Edge-Left, and it is not where you clicked" }] });
+  });
+  await page.goto("/workspace/fea");
+  await page.getByRole("button", { name: "Load example" }).click();
+  await pickTest(page, "plate");
+  await page.getByLabel("Length (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Width (mm)", { exact: true }).fill("100");
+  await page.getByLabel("Tab length (mm)", { exact: true }).fill("");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  await expect(message).toHaveAttribute("placeholder", /hold this edge/);
+  // with no model on the page yet, the regions are named in words
+  await message.fill("hold the bottom edge and pull the top edge with 10 kN in tension");
+  await message.press("Enter");
+  const card = page.getByTestId("proposal-card").last();
+  await expect(card.locator("[data-key='support:0']")).toContainText("Hold Edge-Bottom x, y, z");
+  await expect(card.locator("[data-key='load:0']")).toContainText("Force on Edge-Top 10000 N along y");
+  await expect(card.locator("[data-key='load:0']")).toContainText("written 10 kN; tension: pulling outward from the edge");
+  expect(asked[0].plate?.regions.map((r) => r.name)).toEqual(["Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right", "Face"]);
+  expect(asked[0].plate).toMatchObject({ here: [], held: [], loaded: [], force_unit: "N", stress_unit: "MPa" });
+  expect(calls.checks).toHaveLength(0); // nothing has entered the plate
+  await expect(page.getByTestId("plate-words")).toHaveCount(0);
+  await card.getByTestId("proposal-apply").click();
+  await expect(page.getByTestId("plate-words")).toContainText("Edge-Bottom holds x, y, z");
+  await expect(page.getByTestId("plate-words")).toContainText("Edge-Top loaded by 10000 N along y");
+  // applied, the setup is checked with the lists, and the model appears with what is held and loaded
+  await expect(page.getByTestId("preview")).toBeVisible();
+  const first = (calls.checks[0] as { values: Record<string, unknown> }).values;
+  expect(first.supports).toEqual([{ region: "Edge-Bottom", dofs: [1, 2, 3] }]);
+  expect(first.loads).toEqual([{ region: "Edge-Top", dof: 2, total: 10000 }]);
+  // an element clicked on the model is “here”: the page says which regions that is, and sends them with the next message
+  await expect(page.getByTestId("chat-here")).toHaveCount(0);
+  const box = (await page.getByTestId("studio-scene").locator("canvas").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.getByTestId("picked-regions")).toContainText("Face");
+  await expect(page.getByTestId("chat-here")).toContainText("Face");
+  await message.fill("press here with 0.01 MPa");
+  await message.press("Enter");
+  const second = page.getByTestId("proposal-card").last();
+  await expect(second.locator("[data-key='load:0']")).toContainText("Pressure on Face 0.01 MPa");
+  await expect(second.getByTestId("proposal-dropped")).toContainText("it is not where you clicked");
+  expect(asked[1].plate?.here).toContain("Face");
+  expect(asked[1].plate).toMatchObject({ held: ["Edge-Bottom"], loaded: ["Edge-Top"] });
+  await second.getByTestId("proposal-apply").click();
+  await expect(page.getByTestId("plate-words")).toContainText("Face under a pressure of 0.01 MPa");
+  await expect.poll(() => calls.checks.length).toBe(2);
+  expect((calls.checks[1] as { values: Record<string, unknown> }).values.loads).toEqual([{ region: "Edge-Top", dof: 2, total: 10000 }, { region: "Face", pressure: 0.01 }]);
+  const said = (await page.getByTestId("coupon-chat").innerText()).toLowerCase();
+  for (const word of ["claude", "anthropic", "model", "abaqus"]) expect(said).not.toContain(word);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({ path: ".local/website/screenshots/studio-plate-talk.png", fullPage: true });
+  expect(browserErrors).toEqual([]);
+});
+
 test("a coupon stated in inches and psi is read, labelled and sent in those units (ADR-0061)", async ({ page }) => {
   const calls = { checks: [] as unknown[], solves: [] as unknown[] };
   await mockApi(page, calls);

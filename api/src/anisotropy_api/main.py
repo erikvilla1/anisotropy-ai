@@ -30,8 +30,9 @@ from anisotropy_engine.summary import first_ply_failure_summary, laminate_summar
 
 from .access import CONNECTOR_PAIR, CONNECTOR_RUNS, CONNECTOR_UPLOADS, AccessMiddleware
 from .access import verifier as access_verifier
-from .assistant import TemplateAssistant, assistant_for
+from .assistant import PROPOSAL_SCHEMA, TemplateAssistant, assistant_for
 from .laminate_problems import case_of, facts_of, sentences_of, unit_labels
+from .plate_proposals import PLATE_SYSTEM, KeptPlate, plate_guard, plate_schema, plate_view
 from .proposals import model_view_of_form, source_guard
 from .result_questions import model_view, question_guard, question_schema
 from .live import LiveBusy, LiveRefused, LiveSolver, LiveTimedOut
@@ -1356,13 +1357,20 @@ def propose_rows(proposal: ProposalRequest, actor: Actor, request: Request, resp
         conditions = [c.model_dump(mode="json") for c in proposal.conditions]
         view = {"product": proposal.product, "message": proposal.message, "rows": rows, "conditions": conditions,
                 "form": model_view_of_form(proposal.form)}
-        reading = assistant.propose(view)
+        plate = proposal.plate.model_dump(mode="json") if proposal.plate is not None else None
+        if plate is None:
+            reading = assistant.propose(view)
+        else:  # a plate's regions and the place clicked: the same reading, with supports and loads in its schema (ADR-0101)
+            view["plate"] = plate_view(plate)
+            reading = assistant.propose(view, plate_schema(PROPOSAL_SCHEMA, [r["name"] for r in plate["regions"]]), PLATE_SYSTEM)
         if reading.raw is None:
             return ProposalResponse(run_id=None, writer=reading.writer, model=None, proposals=[], conditions=[], question=None, dropped=[],
                                     reason=reading.reason)
         kept = source_guard(reading.raw, proposal.message, rows, conditions)
+        on_plate = plate_guard(reading.raw, proposal.message, plate) if plate is not None else KeptPlate()
         return ProposalResponse(run_id=None, writer=reading.writer, model=reading.model, proposals=kept.proposals, conditions=kept.conditions,
-                                question=kept.question, dropped=kept.dropped, reason=None, unread=kept.unread)
+                                question=kept.question, dropped=[*kept.dropped, *on_plate.dropped], reason=None,
+                                unread=on_plate.not_taken(kept.unread), supports=on_plate.supports, loads=on_plate.loads)
 
     return _deliver(request, response, actor, proposal, compute, llm_of=lambda body: (body.writer, body.model) if body.model else (None, None))
 

@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, MessagesSquare, Play, RotateCcw, Sparkles, SlidersHorizontal, TableProperties } from "lucide-react";
 import { allCouponTests, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type UnreadPart } from "@/lib/studio-api";
-import { couponOffer, couponRowsFrom, unreadLines } from "@/lib/proposals";
+import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
+import { plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
 import { answerResultQuestion, extremeSentence, extremeWords, questionFrom, readResultQuestion, RESULT_COLUMNS, resultOffer, resultSentence, resultUnit, type ResultExtremes,
   type ResultQuestion, type ResultValues } from "@/lib/result-question";
 import { ProposalCard, UnreadList, type ProposalLine } from "./proposal-card";
@@ -113,13 +114,16 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   /** Opens the laminate workspace (ADR-0060): a stack under loads per unit width, no coupon around it. */
   onLaminate?: () => void;
 }) {
-  const { form, setForm: storeForm, run: runner, restored, allTests, picked, showPlace } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const { form, setForm: storeForm, plate, setPlate, run: runner, restored, allTests, picked, showPlace } = useProject(); // the rows and the run live in the project (ADR-0062)
+  const plateRef = useRef(plate); // a plate's supports and loads (ADR-0054), read when a message is sent and when the setup is checked
+  plateRef.current = plate;
   const shown = shownResults(runner); // the results on the page: what a question about a value is answered from (ADR-0099)
   // the tension screen's chat (ADR-0090): the material and the layup, the rest chosen by the software; every test's steps with the switch on.
   // A ref, since the first question waits for the API's answer and is asked before the page renders it
   const simpleRef = useRef(!allTests);
   simpleRef.current = !allTests;
-  const valuesOf = (rows: StudioForm) => (simpleRef.current ? tensionValues(rows) : buildValues(rows));
+  const valuesOf = (rows: StudioForm, lists: PlateLists = plateRef.current) => (simpleRef.current ? tensionValues(rows)
+    : buildValues(rows, rows.test === PLATE_TEST ? plateValues(lists) : undefined)); // a plate goes with its supports and loads
   const { checking, checked, job, fields, explanation, problem } = runner;
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<number | null>(null); // the question whose controls are live
@@ -205,7 +209,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       body: <><p>Everything is stated.</p><Chips><button type="button" onClick={() => void check(formRef.current)}><Check size={14} /> Check setup</button></Chips></> });
   }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function check(values: StudioForm) {
+  async function check(values: StudioForm, lists?: PlateLists) {
     setActive(null);
     if (!apiBaseUrl) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "Analysis unavailable",
@@ -213,7 +217,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       return;
     }
     try {
-      const answer = await runner.check(valuesOf(values));
+      const answer = await runner.check(valuesOf(values, lists));
       add({ role: "assistant", kind: "check", answer });
     } catch (error) {
       add({ role: "assistant", kind: "text", tone: "problem", title: "The setup could not be checked", body: <p>{error instanceof StudioError ? error.message : "Try again."}</p> });
@@ -430,10 +434,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     let answer: ProposalAnswer | null = null;
     let failed: string | null = null;
     try { if (await readQuestionWithModel(text)) { setReading(false); return; } } catch { /* the setup's reading goes on */ }
-    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, allTests) }); }
+    // a plate also offers its regions and the place clicked, so "hold this edge" and "10 kN in tension here" can be read (ADR-0101)
+    const onPlate = allTests && formRef.current.test === PLATE_TEST ? { plate: plateOffer(formRef.current, plateRef.current, here().map((r) => r.name)) } : {};
+    try { answer = await proposeRows(apiBaseUrl, { product: "coupon", message: text, conditions: [], ...couponOffer(formRef.current, allTests), ...onPlate }); }
     catch (error) { failed = error instanceof StudioError ? error.message : "the model did not answer"; }
     finally { setReading(false); }
-    if (answer && (answer.proposals.length || answer.question)) { add({ role: "assistant", kind: "proposal", answer }); return; }
+    if (answer && (answer.proposals.length || answer.question || answer.supports.length || answer.loads.length)) { add({ role: "assistant", kind: "proposal", answer }); return; }
     const reason = failed ?? answer?.reason;
     if (reason) { // a model that does not answer is not asked again this session: each message would wait for it and fail the same way
       setModel(null);
@@ -451,22 +457,33 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
       body: <div data-testid="chat-not-used"><UnreadList lines={unreadLines(parts)} /></div> });
   }
 
-  /** The proposals the engineer ticked go into the rows, and the conversation moves on. */
+  /** The proposals the engineer ticked go into the rows, and the conversation moves on. A plate's ticked supports and loads go into its
+   * lists (ADR-0101), and the setup is checked with them, so the model on the page shows what is now held and loaded. */
   function applyProposals(answer: ProposalAnswer, ticked: Set<string>) {
     const { rows, notes } = couponRowsFrom(answer.proposals.filter((p) => ticked.has(p.key)));
     if (notes.length) add({ role: "assistant", kind: "text", tone: "problem", title: "Not applied", body: <ul className="chat-understood">{notes.map((n) => <li key={n}>{n}</li>)}</ul> });
-    if (!Object.keys(rows).length) return;
-    const next: StudioForm = mergeRows(formRef.current, rows); // a new test clears a standard it is not under (ADR-0072)
-    setForm(next); clearRun();
-    proceed(next);
+    const lists = plateWith(plateRef.current, answer, ticked);
+    const onPlate = lists.supports.length > plateRef.current.supports.length || lists.loads.length > plateRef.current.loads.length;
+    if (!Object.keys(rows).length && !onPlate) return;
+    const next: StudioForm = Object.keys(rows).length ? mergeRows(formRef.current, rows) : formRef.current; // a new test clears a standard it is not under (ADR-0072)
+    if (next !== formRef.current) setForm(next);
+    if (onPlate) setPlate(lists);
+    clearRun();
+    if (onPlate && next.test === PLATE_TEST) void check(next, lists);
+    else proceed(next);
+  }
+
+  /** The plate's own regions the clicked element belongs to, on the mesh the page shows: what "here" means in a message (ADR-0101). */
+  function here() {
+    return regionsHere(picked, shown.fields?.mesh ?? checked?.preview?.mesh ?? null, formRef.current);
   }
 
   /** The card's lines: each value with the unit it goes in with, and how it was written when the API converted it within the system. */
   function proposalLines(answer: ProposalAnswer): ProposalLine[] {
-    return answer.proposals.map((p) => ({
+    return [...answer.proposals.map((p) => ({
       id: p.key, label: p.label.replace(/ \([^)]*\)$/, ""), value: p.key === "library" ? materialName(p.value) : p.value, unit: p.unit ?? "", quote: p.quote,
       note: p.written_unit && p.written_unit !== p.unit ? `written ${p.written_value} ${p.written_unit}` : undefined,
-    }));
+    })), ...plateLines(answer)];
   }
 
   /** The message read by the page's fixed patterns (ADR-0055); `echoed` when the user's words are already in the conversation. `nothing`
@@ -817,6 +834,8 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
   }
 
   const latestCheck = [...entries].reverse().find((e) => e.role === "assistant" && e.kind === "check")?.id;
+  const onPlateNow = allTests && form.test === PLATE_TEST && !!model?.proposes; // a plate's regions are read from a message by a model only
+  const hereNow = onPlateNow ? here() : [];
   return (
     <section className="chat-pane" aria-label="Coupon assistant" data-testid="coupon-chat">
       <div className="chat-pane-top">
@@ -833,9 +852,12 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         {/* on the tension screen the rail says an outage, once (audit fea-run-48); every other problem is said here */}
         {problem && (allTests || problem !== ANALYSIS_UNAVAILABLE) ? <p className="studio-alert" role="alert">{problem}</p> : null}
       </div>
+      {onPlateNow && picked !== null && hereNow.length ? (
+        <p className="chat-note chat-here" data-testid="chat-here">“Here” is the element you clicked: {hereNow.map((r) => r.name).join(", ")}.</p>
+      ) : null}
       <form className="chat-composer chat-studio-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea aria-label="Message the coupon assistant" rows={2} maxLength={2000} value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder="Describe the coupon or one change, e.g. “make it [0/90]2s”"
+          placeholder={onPlateNow ? "Hold or load a region, e.g. “hold this edge” or “10 kN in tension on the top edge”" : "Describe the coupon or one change, e.g. “make it [0/90]2s”"}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="composer-footer">
           <span className="chat-note">Enter to send · “check” · “run” · “start over”</span>

@@ -172,7 +172,7 @@ class Assistant(Protocol):
 
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft: ...
 
-    def propose(self, view: dict[str, Any]) -> Reading: ...
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading: ...
 
     def choose_tools(self, view: dict[str, Any]) -> Reading: ...
 
@@ -254,7 +254,7 @@ class TemplateAssistant:
     def explain_laminate(self, facts: dict[str, Any], template: list[str]) -> Draft:
         return Draft(tuple(template), "template", None)
 
-    def propose(self, view: dict[str, Any]) -> Reading:
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading:
         """The template reads nothing: the page's own patterns read the message (ADR-0055)."""
         return Reading(None, "template", None)
 
@@ -362,10 +362,11 @@ class ClaudeAssistant:
             return Reading(None, "template", None, "the model's answer was not the JSON asked for")
         return Reading(raw, self.name, self.model)
 
-    def propose(self, view: dict[str, Any]) -> Reading:
+    def propose(self, view: dict[str, Any], schema: dict[str, Any] | None = None, system: str = "") -> Reading:
         """The model's reading of a message (ADR-0088): proposals in the fixed schema, which the source guard then reads. `view` is what the
-        model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11)."""
-        return self._read(PROPOSE_SYSTEM, view, PROPOSAL_SCHEMA, PROPOSE_MAX_TOKENS)
+        model may see: the message, the rows and conditions on offer, and the filled rows with no name, note or source (R-11). A plate
+        passes its own schema and instructions, the rows' with its supports and loads added (ADR-0101)."""
+        return self._read(PROPOSE_SYSTEM + system, view, schema or PROPOSAL_SCHEMA, PROPOSE_MAX_TOKENS)
 
     def read_question(self, view: dict[str, Any], schema: dict[str, Any]) -> Reading:
         """The model's reading of a question about a result (ADR-0100), in a schema of names on offer and whole numbers, which the guard

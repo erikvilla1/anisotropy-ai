@@ -74,6 +74,16 @@ export function regionsOfElement(element: number, quads: number[][], nodeSets: R
   return out;
 }
 
+/** The plate's own regions, with no box the engineer drew: what a message may hold or load (ADR-0101). */
+export const ownRegions = (form: StudioForm): { name: string; kind: "edge" | "area" }[] => regionOptions(form, emptyPlate());
+
+/** The plate's own regions the clicked element belongs to, from the mesh shown (a preview's or a result's); none with nothing clicked. */
+export function regionsHere(element: number | null, mesh: { quads: number[][]; node_sets: Record<string, number[]>; element_sets: Record<string, number[]> } | null,
+  form: StudioForm): { name: string; kind: "edge" | "area" }[] {
+  if (element === null || !mesh || element < 0 || element >= mesh.quads.length) return [];
+  return regionsOfElement(element, mesh.quads, mesh.node_sets, mesh.element_sets, ownRegions(form));
+}
+
 /** The lists with one support added for a region: both in-plane directions and z, the usual start of a fixed edge. */
 export function withSupport(lists: PlateLists, region: string): PlateLists {
   return { ...lists, supports: [...lists.supports, { region, dofs: [1, 2, 3], value: "" }] };

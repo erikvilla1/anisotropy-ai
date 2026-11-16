@@ -494,9 +494,19 @@ export type OfferedRow = {
   key: string; label: string; kind: "number" | "choice" | "notation";
   unit?: string; dimension?: string; choices?: { value: string; label: string }[];
 };
+/** A plate's own regions offered to a message, and the place clicked (ADR-0101): `here` names the regions the clicked element belongs to. */
+export type PlateOffer = {
+  regions: { name: string; kind: "edge" | "area" }[]; here: string[]; force_unit: string; stress_unit: string; held: string[]; loaded: string[];
+};
 export type ProposalRequest = {
   product: "coupon" | "laminate"; message: string; rows: OfferedRow[];
-  conditions: { id: string; title: string; detail: string }[]; form: Record<string, string>;
+  conditions: { id: string; title: string; detail: string }[]; form: Record<string, string>; plate?: PlateOffer;
+};
+/** A support and a load the engineer's words or click hold (ADR-0101), as the plate's lists take them. */
+export type SupportProposal = { region: string; dofs: number[]; quote: string };
+export type LoadProposal = {
+  region: string; kind: "force" | "pressure"; dof: number | null; value: string; unit: string; written_value: string; written_unit: string | null;
+  sense: "tension" | "compression" | "as_signed" | null; quote: string;
 };
 /** A value the engineer wrote, for an offered row: as the row takes it, as written, and the words it came from. */
 export type Proposal = { key: string; label: string; value: string; unit: string | null; written_value: string; written_unit: string | null; quote: string };
@@ -506,7 +516,7 @@ export type UnreadPart = { quote: string; reason: (typeof UNREAD_REASONS)[number
 export type ProposalAnswer = {
   run_id: string | null; writer: string; model: string | null; proposals: Proposal[];
   conditions: { id: string; title: string; quote: string }[]; question: string | null; dropped: { key: string; reason: string }[]; reason: string | null;
-  unread: UnreadPart[];
+  unread: UnreadPart[]; supports: SupportProposal[]; loads: LoadProposal[];
 };
 export type AssistantInfo = { proposes: boolean; provider: string | null; model: string | null };
 
@@ -526,7 +536,19 @@ export function readProposalAnswer(payload: unknown): ProposalAnswer {
   const unread = payload.unread ?? []; // an API from before amendment 1 sends none
   if (!Array.isArray(unread)) throw bad();
   for (const u of unread) if (!isObject(u) || !isText(u.quote) || !(UNREAD_REASONS as readonly unknown[]).includes(u.reason)) throw bad();
-  return { ...payload, unread } as unknown as ProposalAnswer;
+  const supports = payload.supports ?? [], loads = payload.loads ?? []; // a plate's lists (ADR-0101); none from an API before it
+  if (!Array.isArray(supports) || !Array.isArray(loads)) throw bad();
+  const whole = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
+  for (const s of supports) {
+    if (!isObject(s) || !isText(s.region) || !isText(s.quote) || !Array.isArray(s.dofs) || !s.dofs.length || !s.dofs.every((d) => whole(d) && d >= 1 && d <= 6)) throw bad();
+  }
+  for (const l of loads) {
+    if (!isObject(l) || !isText(l.region) || !isText(l.quote) || !isText(l.value) || !isText(l.unit) || !isText(l.written_value) || !isTextOrNull(l.written_unit)
+      || !Number.isFinite(Number(l.value)) || l.value.trim() === "") throw bad();
+    if (l.kind === "force" ? !(whole(l.dof) && l.dof >= 1 && l.dof <= 3) : l.kind !== "pressure" || l.dof !== null) throw bad();
+    if (l.sense !== null && !["tension", "compression", "as_signed"].includes(l.sense as string)) throw bad();
+  }
+  return { ...payload, unread, supports, loads } as unknown as ProposalAnswer;
 }
 
 /** The model's reading of a message, kept by the source guard; nothing in it has entered the problem until the engineer applies it. */

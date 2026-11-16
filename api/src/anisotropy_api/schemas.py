@@ -811,19 +811,60 @@ class OfferedCondition(Contract):
     detail: Annotated[str, Field(max_length=400)] = ""
 
 
+PlateRegion = Literal["Edge-Bottom", "Edge-Top", "Edge-Left", "Edge-Right", "Hole", "Face", "Tab-Bottom", "Tab-Top"]
+PLATE_REGION_KINDS: dict[str, str] = {"Edge-Bottom": "edge", "Edge-Top": "edge", "Edge-Left": "edge", "Edge-Right": "edge", "Hole": "edge",
+                                      "Face": "area", "Tab-Bottom": "area", "Tab-Top": "area"}
+
+
+class OfferedRegion(Contract):
+    name: PlateRegion
+    kind: Literal["edge", "area"]
+
+
+class PlateOffer(Contract):
+    """A plate's regions offered to a message (ADR-0101): the plate's own named regions (never a box the engineer drew and named), those
+    the clicked element belongs to, the units a force and a pressure are stated in, and which regions are already held and loaded."""
+
+    regions: Annotated[list[OfferedRegion], Field(min_length=1, max_length=8)]
+    here: Annotated[list[PlateRegion], Field(max_length=8)] = []
+    force_unit: Literal["N", "lbf"]
+    stress_unit: Literal["MPa", "psi"]
+    held: Annotated[list[PlateRegion], Field(max_length=8)] = []
+    loaded: Annotated[list[PlateRegion], Field(max_length=8)] = []
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        names = [region.name for region in self.regions]
+        if len(set(names)) != len(names):
+            raise ValueError("each region is offered once")
+        for region in self.regions:
+            if PLATE_REGION_KINDS[region.name] != region.kind:
+                raise ValueError(f"{region.name} is an {PLATE_REGION_KINDS[region.name]}, not an {region.kind}")
+        for name in self.here:
+            if name not in names:
+                raise ValueError(f"{name} is clicked and not offered: a clicked region is one of those on offer")
+        if (self.force_unit == "N") != (self.stress_unit == "MPa"):
+            raise ValueError("a plate's force and pressure are stated in one system: N with MPa, or lbf with psi")
+        return self
+
+
 class ProposalRequest(Contract):
     """A message to read into rows (ADR-0088): the product, the message, the rows and conditions on offer, and the rows already filled.
-    The model sees these, with every name, note and source taken out (R-11); never a file, a deck or a result."""
+    The model sees these, with every name, note and source taken out (R-11); never a file, a deck or a result. A plate adds its regions
+    and the place clicked (ADR-0101)."""
 
     product: Literal["coupon", "laminate"]
     message: Annotated[str, Field(min_length=1, max_length=2000)]
     rows: Annotated[list[OfferedRow], Field(min_length=1, max_length=200)]
     conditions: Annotated[list[OfferedCondition], Field(max_length=20)] = []
     form: Annotated[dict[str, Annotated[str, Field(max_length=400)]], Field(max_length=400)] = {}
+    plate: PlateOffer | None = None
 
     @model_validator(mode="after")
     def _distinct(self) -> Self:
         keys = [row.key for row in self.rows]
+        if self.plate is not None and self.product != "coupon":
+            raise ValueError("only a coupon's message offers a plate's regions")
         if len(set(keys)) != len(keys):
             raise ValueError("each row is offered once")
         return self
@@ -852,6 +893,30 @@ class DroppedProposal(Contract):
     reason: str
 
 
+class SupportProposal(Contract):
+    """A support the engineer's words or click hold (ADR-0101): the region and the plate's directions it holds, 1 to 6."""
+
+    region: PlateRegion
+    dofs: list[int]
+    quote: str
+
+
+class LoadProposal(Contract):
+    """A load the engineer's words or click hold (ADR-0101): a force along a direction (1 to 3), the total over the region, or a pressure
+    on an area; the value as the plate takes it, signed, and as written. `sense` says a force was stated as tension or compression, so
+    its direction and sign came from the edge."""
+
+    region: PlateRegion
+    kind: Literal["force", "pressure"]
+    dof: int | None
+    value: str
+    unit: str
+    written_value: str
+    written_unit: str | None
+    sense: Literal["tension", "compression", "as_signed"] | None
+    quote: str
+
+
 class UnreadPart(Contract):
     """Words of the message the model proposed nothing for, and why, by name (ADR-0088 amendment 1). The words are the engineer's own."""
 
@@ -872,6 +937,8 @@ class ProposalResponse(Contract):
     dropped: list[DroppedProposal]
     reason: str | None
     unread: list[UnreadPart] = []
+    supports: list[SupportProposal] = []
+    loads: list[LoadProposal] = []
 
 
 ResultQuantity = Literal["S11", "S22", "S12", "Mises", "Tresca", "Max. Principal", "Mid. Principal", "Min. Principal", "Pressure", "E11", "E22", "E12"]
