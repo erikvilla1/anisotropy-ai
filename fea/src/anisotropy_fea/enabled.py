@@ -6,14 +6,16 @@ This module is the one list. The form's definition carries it to the page (`tool
 which offers nothing else; the setup check refuses anything else by row (ADR-0089, part 2).
 
 `ANISOTROPY_ALL_TESTS=on` shows every test again, for development: the switch is read on every call, `off` or unset keeps the list,
-and any other value is refused (ADR-0003). The hosted tier never sets it. Nothing here deletes or changes a hidden test's code,
+and any other value is refused (ADR-0003). The hosted tier never sets it; there the API asks for every test request by request,
+for a founder's sign-in alone (`every_test`, amendment 5). Nothing here deletes or changes a hidden test's code,
 specs, checks or records: they all stay, and the committed checks of every kind keep running.
 """
 
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 
 from .standards import NONE, PROFILES
 
@@ -49,6 +51,25 @@ def all_tests(environ: Mapping[str, str] | None = None) -> bool:
     if word not in SWITCH_WORDS:
         raise SwitchError(f"{ALL_TESTS_VARIABLE} must be 'on' or 'off', not {raw!r}; unset it to offer the unnotched tension coupon only (ADR-0089)")
     return word == "on"
+
+
+@contextmanager
+def every_test(on: bool) -> Iterator[None]:
+    """Every test offered for the length of one request (ADR-0089 amendment 5): the tools' `--every-test`, which the API passes for a
+    founder's sign-in, where the machine's own switch stays off for everyone else. With `on` false nothing changes: the machine's
+    switch decides, as before. The switch is put back afterwards, so a warm worker's next request is judged on its own."""
+    if not on:
+        yield
+        return
+    before = os.environ.get(ALL_TESTS_VARIABLE)
+    os.environ[ALL_TESTS_VARIABLE] = "on"
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop(ALL_TESTS_VARIABLE, None)
+        else:
+            os.environ[ALL_TESTS_VARIABLE] = before
 
 
 def standard_designations() -> tuple[str, ...]:

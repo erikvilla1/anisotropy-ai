@@ -44,7 +44,7 @@
 
 **The assistant's own check of a plate** now sends the plate's supports and loads.
 
-**Not in this record.** A support that moves by a stated travel; a moment; a load on a drawn box; fixed patterns for a plate with no model on; picking before a model exists (a plate with no support has nothing to click, so the first support and load are named in words); the plate on the hosted tier (ADR-0089 keeps it hidden; showing it to founder sign-ins is a later change to that record).
+**Not in this record.** A support that moves by a stated travel; a moment; a load on a drawn box; fixed patterns for a plate with no model on; picking before a model exists (a plate with no support has nothing to click, so the first support and load are named in words); the plate on the hosted tier (ADR-0089 keeps it hidden; its amendment 5 offers it to founder sign-ins).
 
 ## As built (2026-11-16)
 

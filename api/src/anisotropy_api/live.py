@@ -135,7 +135,8 @@ class LiveSolver:
             except queue.Empty:
                 return
 
-    def solve(self, values: bytes) -> LiveAnswer:
+    def solve(self, values: bytes, every: bool = False) -> LiveAnswer:
+        """`every` offers every test for this request (ADR-0089 amendment 5): a warm worker is told per request, a fresh one by option."""
         if self.command is None:
             raise LiveRefused("uv is not on PATH; the live solve runs fea/tools/studio_tool.py through `uv run --project fea`")
         started = time.perf_counter()
@@ -146,9 +147,9 @@ class LiveSolver:
             source.write_bytes(values)
             warm = self.workers > 0
             if warm:
-                self._ask_a_worker(source, out)
+                self._ask_a_worker(source, out, every)
             else:
-                self._run_once(source, out)
+                self._run_once(source, out, every)
             return self._read(out, time.perf_counter() - started, warm)
         finally:
             shutil.rmtree(folder, ignore_errors=True)
@@ -162,7 +163,7 @@ class LiveSolver:
         for _ in range(self.workers):
             self._start_one()
 
-    def _ask_a_worker(self, source: Path, out: Path) -> None:
+    def _ask_a_worker(self, source: Path, out: Path, every: bool = False) -> None:
         self._start()
         try:
             worker = self.idle.get(timeout=self.wait_s)
@@ -171,7 +172,7 @@ class LiveSolver:
             raise LiveBusy("The preview is busy. Try again in a moment.") from None  # the page's words (ADR-0091 amendment 2)
         healthy = True
         try:
-            answer = worker.ask({"values": str(source), "out": str(out)}, self.timeout_s)
+            answer = worker.ask({"values": str(source), "out": str(out), "every": every}, self.timeout_s)
         except (LiveTimedOut, LiveRefused):
             healthy = False
             raise
@@ -187,9 +188,9 @@ class LiveSolver:
         if "error" in answer:
             raise LiveRefused(f"the live solver could not solve these rows: {answer['error']}")
 
-    def _run_once(self, source: Path, out: Path) -> None:
+    def _run_once(self, source: Path, out: Path, every: bool = False) -> None:
         try:
-            done = subprocess.run([*self.command, "live", str(source), "--out", str(out)], capture_output=True, text=True, encoding="utf-8",
+            done = subprocess.run([*self.command, *(["--every-test"] if every else []), "live", str(source), "--out", str(out)], capture_output=True, text=True, encoding="utf-8",
                                   errors="replace", cwd=FEA, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, timeout=self.timeout_s, check=False)
         except subprocess.TimeoutExpired:
             raise LiveTimedOut(f"the live solver did not answer in {self.timeout_s:g} s") from None

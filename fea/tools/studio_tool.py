@@ -80,7 +80,8 @@ def serve(root: Path) -> None:
         started = time.perf_counter()
         try:
             request = json.loads(line)
-            answer = {"state": live(Path(request["values"]), Path(request["out"]), root, started=started)}
+            with enabled.every_test(request.get("every") is True):  # a founder's request (ADR-0089 amendment 5); the next is judged anew
+                answer = {"state": live(Path(request["values"]), Path(request["out"]), root, started=started)}
         except Exception as exc:  # the worker outlives a bad request: the API reads the error and asks again
             answer = {"error": f"{type(exc).__name__}: {exc}".splitlines()[0]}
         print(json.dumps(answer), file=answers, flush=True)
@@ -223,6 +224,8 @@ def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=paths.LOCAL, help="the folder holding one folder per coupon (default .local/fea)")
+    parser.add_argument("--every-test", action="store_true", help="offer every test for this call, as ANISOTROPY_ALL_TESTS=on does for the "
+                        "machine (ADR-0089 amendment 5: the API passes it for a founder's sign-in)")
     commands = parser.add_subparsers(dest="command", required=True)
     p = commands.add_parser("check", help="judge a values file; write checklist.json and preview.json")
     p.add_argument("values", type=Path)
@@ -241,6 +244,11 @@ def main() -> None:
     p.add_argument("values", type=Path)
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
+    with enabled.every_test(args.every_test):
+        answer_command(args)
+
+
+def answer_command(args: argparse.Namespace) -> None:
     try:
         if args.command == "check":
             check(args.values, args.out, args.root)
