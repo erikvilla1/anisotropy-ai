@@ -44,6 +44,13 @@ export type Preview = {
   probes: { nodes: Record<string, { index: number; xy: number[] }>; elements: Record<string, { index: number; xy: number[] }> };
   quality?: { summary: QualitySummary; per_element: Record<string, number[]> };
 };
+/** The working behind an answer (ADR-0103), as the package wrote it: for the first ply to fail by each criterion, the steps from the
+ * ply's strain to the loading at first-ply failure, each with the values put in and its formulas in LaTeX. Every number is the package's. */
+export type WorkingRow = { symbol: string; value: number; unit: string; what: string };
+export type WorkingEquation = { formula: string | null; substituted: string; result: { symbol: string; value: number; unit: string } | null };
+export type WorkingStep = { id: string; title: string; source: string; text: string; given: WorkingRow[]; equations: WorkingEquation[]; note?: string };
+export type WorkingChain = { ply: number; angle: number; element: string; face: string | null; where: string; factor: number; steps: WorkingStep[] };
+export type Working = { basis: "gauge" | "whole"; digits: { given: number; result: number }; criteria: Record<string, WorkingChain> };
 export type QualitySummary = { elements: number; acceptable: boolean; measures: Record<string, { word: string; worst: number; element: number; threshold: number; warns: string; over: number }> };
 /** One value per ply (a membrane solve), or one per face of the ply, bottom then top (a shell solve, ADR-0053); `Fields.mesh.faces` says which. */
 export type Faced<T> = T | T[];
@@ -92,6 +99,8 @@ export type Fields = {
     fpf_gauge?: Record<string, FirstPlyFailure>; earliest_gauge?: string | null;
     /** The answer (ADR-0085): its basis, earliest criterion and verdict, and the largest ply stresses on that basis; absent on older jobs. */
     verdict?: Verdict | null; ply_extremes?: PlyExtremes;
+    /** The working behind the answer (ADR-0103); absent on a result solved before it, and where no criterion is worked. */
+    working?: Working | null;
     /** CalculiX's numbers beside ours, from the comparison record and its `.frd` block (ADR-0030 amendment 6); absent on a job solved before it. */
     calculix?: CalculixBeside | null;
     /** Every ply's own peaks at the element centroids, each marked when its element touches a gripped node (ADR-0066); absent on older jobs. */

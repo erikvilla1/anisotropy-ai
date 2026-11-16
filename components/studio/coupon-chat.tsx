@@ -5,6 +5,8 @@ import { ArrowUp, Calculator, Check, CircleAlert, FlaskConical, Layers3, Message
 import { allCouponTests, answerResult, assistantInfo, couponValues, isActive, listCoupons, proposeRows, readResultRequest, StudioError, type AssistantInfo, type CheckAnswer, type CouponSummary, type Fields,
   type JobStatus, type ProposalAnswer, type ResultAnswer, type UnreadPart } from "@/lib/studio-api";
 import { asksWhy, factsOf, whyLines } from "@/lib/result-why";
+import { asksWorking, workingFor, workingOf, type FoundWorking } from "@/lib/result-working";
+import dynamic from "next/dynamic";
 import { couponOffer, couponRowsFrom, plateLines, plateOffer, plateWith, unreadLines } from "@/lib/proposals";
 import { namesPlateEdit, plateValues, regionsHere, type PlateLists } from "@/lib/studio-plate";
 import { answerResultQuestion, extremeSentence, extremeWords, questionFrom, readResultQuestion, RESULT_COLUMNS, resultOffer, resultSentence, resultUnit, type ResultExtremes,
@@ -33,6 +35,11 @@ import { ANALYSIS_UNAVAILABLE, checkText, customerText, runHeadline, runProblem,
 
 const RUN_BY_KEY = "anisotropy.studio.run_by";
 
+/** The typeset steps of a working (ADR-0103) load when one is first shown: the typesetter stays out of the workspace's first load. */
+const WorkingSteps = dynamic(() => import("./working-steps").then((module) => module.WorkingSteps), {
+  ssr: false, loading: () => <p className="chat-note" role="status">Typesetting the working…</p>,
+});
+
 type Entry =
   | { id: number; role: "user"; text: string }
   | { id: number; role: "assistant"; kind: "text"; title?: string; body?: ReactNode; tone?: "problem" }
@@ -45,6 +52,8 @@ type Entry =
   | { id: number; role: "assistant"; kind: "values"; answer: ResultValues; from: Fields; preview: boolean }
   // where a quantity is largest in those results (ADR-0100): stored values picked out, by the page's patterns or a model's reading
   | { id: number; role: "assistant"; kind: "extremes"; answer: ResultExtremes; from: Fields; preview: boolean; reader: "patterns" | "model" }
+  // the working behind the answer, as the package wrote it (ADR-0103): the chain asked for, the fields it is of, and whether they were a preview
+  | { id: number; role: "assistant"; kind: "working"; found: Extract<FoundWorking, { kind: "chain" }>; from: Fields; preview: boolean }
   // a question of why, answered in words from the results' fact sheet and our theory pages (ADR-0102)
   | { id: number; role: "assistant"; kind: "why"; answer: ResultAnswer; preview: boolean };
 type Without<T> = T extends unknown ? Omit<T, "id"> : never;
@@ -419,11 +428,33 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else add({ role: "assistant", kind: "text", title: "No answer right now", body: <p data-testid="chat-why-failed">That question could not be answered right now. Try again in a moment.</p> });
   }
 
+  /** The working behind the answer (ADR-0103), when the engineer asks for it: the package's own steps for the criterion named, else the
+   * earliest. No model reads the request and nothing is computed here. */
+  function showWorking(text: string) {
+    const from = shown;
+    add({ role: "user", text });
+    const found = workingFor(from.fields, text);
+    if (!from.fields || !found) {
+      add({ role: "assistant", kind: "text", title: "No working to show yet",
+        body: <p data-testid="chat-working-none">{!from.fields ? `The working is written with a solved model. ${checked?.state === "ready" ? "Say “run”, then ask again." : "Finish the setup and run it, then ask again."}`
+          : "This result carries no working. Run the analysis again, then ask."}</p> });
+      return;
+    }
+    if (found.kind === "not-worked") {
+      add({ role: "assistant", kind: "text", title: "No working for that criterion yet",
+        body: <p data-testid="chat-working-none">The working of {found.name} is not written yet. Ask for {found.others.join(" or ")}.</p> });
+      return;
+    }
+    add({ role: "assistant", kind: "working", found, from: from.fields, preview: from.live });
+  }
+
   function send(value = input) {
     const text = value.trim();
     if (!text) return;
     setInput("");
     if (/^(start over|reset|new coupon|restart)\b/i.test(text)) { add({ role: "user", text }); startOver(); return; }
+    // a request for the formula or the proof is answered with the package's own working, never read as a row or sent to a model (ADR-0103)
+    if (asksWorking(text) && !applyMessage(formRef.current, text).understood.length) { showWorking(text); return; }
     // a question of why is answered in words from the results on the page, before anything reads it as a value or a row (ADR-0102)
     const facts = factsOf(shown.live ? runner.live?.explanation : explanation);
     if (asksWhy(text)) {
@@ -736,6 +767,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
           : stepOfStage(job.stage) === "report" ? "…" : job.result ? ". The report follows." : "…"}</p> : null}
         <p className="chat-note" data-testid="chat-ask-hint">Ask for a value: “stress in ply {earliest?.ply ?? 1} at element {(earliest?.label ?? fields.mesh.element_labels[0] ?? "1").split(".").pop()}”, click an element and ask “strain here”, or ask “where is the shear stress highest?”.</p>
         <Chips>
+          {workingOf(fields) ? <button type="button" data-testid="chat-result-working" onClick={() => showWorking("Show the working")}>Show the working</button> : null}
           <button type="button" onClick={() => ask("layup")}>Change the layup</button>
           <button type="button" onClick={() => ask("loading")}>Change the load</button>
           <button type="button" onClick={() => ask("material")}>Try another material</button>
@@ -783,6 +815,23 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     );
   }
 
+  /** The working behind an answer (ADR-0103): which ply of which element, by which criterion, then each step typeset. */
+  function workingMessage(entry: Extract<Entry, { kind: "working" }>): ReactNode {
+    const { found, from, preview } = entry;
+    const figures = workingOf(from)?.digits.given ?? 6;
+    return (
+      <div data-testid="chat-working" data-criterion={found.criterion} data-source={preview ? "live" : "run"}>
+        <h4>The working: {found.name}</h4>
+        <p data-testid="chat-working-where">The first ply to fail in {found.basis}: {found.chain.where}, at {printed(found.chain.factor)} times the applied loading.</p>
+        <WorkingSteps chain={found.chain} figures={figures} />
+        <p className="chat-note" data-testid="chat-working-note">Every value is the solver’s own. Values put in are shown to {figures} figures and results to 4, so a step repeated by hand meets its result.
+          {preview ? " From the preview: run the analysis to verify it." : ""}</p>
+        {found.others.length ? <Chips>{found.others.map((name) => <button key={name} type="button" onClick={() => showWorking(`Show the working for ${name}`)}>Working for {name}</button>)}</Chips> : null}
+        {shown.fields !== from ? <p className="chat-note">The setup has changed since: ask again for the current working.</p> : null}
+      </div>
+    );
+  }
+
   /** An answer in words to a question of why (ADR-0102): its sentences, and under them what it rests on, the theory sections by name. */
   function whyMessage(entry: Extract<Entry, { kind: "why" }>): ReactNode {
     const lines = whyLines(entry.answer, entry.preview);
@@ -791,6 +840,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
         <h4>{lines.prose.length ? "Why" : "No answer in words"}</h4>
         {lines.prose.map((sentence, i) => <p key={i} data-testid="chat-why-sentence">{sentence}</p>)}
         <p className="chat-note" data-testid="chat-why-note">{lines.note}</p>
+        {lines.prose.length && workingOf(shown.fields) ? <Chips><button type="button" data-testid="chat-why-working" onClick={() => showWorking("Show the working")}>Show the working</button></Chips> : null}
       </div>
     );
   }
@@ -860,6 +910,7 @@ export function CouponChat({ apiBaseUrl, onLaminate }: {
     else if (entry.kind === "values") content = valuesMessage(entry);
     else if (entry.kind === "extremes") content = extremesMessage(entry);
     else if (entry.kind === "why") content = whyMessage(entry);
+    else if (entry.kind === "working") content = workingMessage(entry);
     else if (entry.kind === "proposal") {
       content = <ProposalCard lines={proposalLines(entry.answer)} conditions={entry.answer.conditions} question={entry.answer.question}
         dropped={entry.answer.dropped.map((d) => ({ ...d, key: labelOf(d.key, unitsOf(form)).replace(/ \([^)]*\)$/, "") }))}

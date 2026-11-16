@@ -810,6 +810,7 @@ test("a question of why is answered in words from the results and our theory pag
   await expect(why).toHaveAttribute("data-source", "run");
   await expect(why.getByTestId("chat-why-sentence")).toHaveText(["Ply 4 (90 degrees) fails first by tension across its fibres: σ₂ is 60.6 MPa there.", "By Tsai-Hill that is at 1.032 times the applied loading."]);
   await expect(why.getByTestId("chat-why-note")).toHaveText("From the results and the theory: Laminate theory, 5. Failure. Every number is the results’ own.");
+  await expect(why.getByTestId("chat-why-working")).toHaveText("Show the working"); // the formulas with the numbers put in are one click away (ADR-0103)
   expect(asked).toHaveLength(1);
   expect(Object.keys(asked[0]).sort()).toEqual(["facts", "question"]);
   expect(asked[0].facts).toEqual(fixture("explanation").facts); // the engine's fact sheet, as the job wrote it
@@ -844,6 +845,84 @@ test("a question of why is answered in words from the results and our theory pag
   expect(readings).toBe(before);
   expect(calls.checks).toHaveLength(1);
   expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the assistant's answers of why").toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
+test("the working behind an answer is shown when asked: each formula with the solver's numbers put in, and no model is asked (ADR-0103)", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const calls = { checks: [] as unknown[], solves: [] as unknown[] };
+  let asked = 0; // any call that would have a model read or write
+  await mockApi(page, calls);
+  await page.route(API, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/v1/workspace/assistant") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ proposes: true, provider: "anthropic", model: "claude-stand-in" }) });
+    if (/^\/v1\/workspace\/(proposals|result-questions|result-answers)$/.test(path)) { asked += 1; return route.fulfill({ status: 503, contentType: "application/json", body: "{}" }); }
+    return route.fallback();
+  });
+  await page.goto("/workspace/fea");
+  const message = page.getByLabel("Message the coupon assistant", { exact: true });
+  const say = async (text: string) => { await message.fill(text); await message.press("Enter"); };
+  await page.getByRole("button", { name: "Start from the IM7/8552 example" }).click();
+  await say("A. Engineer");
+  await expect(page.getByTestId("chat-check").last()).toHaveAttribute("data-state", "ready");
+
+  // before a result there is no working: the page says so and changes no row
+  await say("show me the formula");
+  await expect(page.getByTestId("chat-working-none")).toHaveText("The working is written with a solved model. Say “run”, then ask again.");
+  await expect(page.getByTestId("chat-working")).toHaveCount(0);
+
+  await page.getByTestId("chat-run").click();
+  await expect(page.getByTestId("chat-result")).toBeVisible({ timeout: 30_000 });
+  const working = fixture("fields").summary.working;
+
+  // one click under the results: the earliest criterion's chain, four steps, each formula typeset
+  await page.getByTestId("chat-result-working").click();
+  const first = page.getByTestId("chat-working").nth(0);
+  await expect(first).toHaveAttribute("data-criterion", "tsai_hill");
+  await expect(first).toHaveAttribute("data-source", "run");
+  const hill = working.criteria.tsai_hill;
+  await expect(first.getByTestId("chat-working-where")).toHaveText(`The first ply to fail in the gauge section: ply 4 (90°), element ${hill.element}, at ${printed(hill.factor)} times the applied loading.`);
+  await expect(first.getByTestId("chat-working-step")).toHaveCount(4);
+  await expect(first.getByTestId("chat-working-step").nth(0)).toHaveAttribute("data-step", "strain");
+  await expect(first.getByTestId("chat-working-step").nth(3)).toHaveAttribute("data-step", "loading");
+  const equations = hill.steps.reduce((n: number, step: { equations: unknown[] }) => n + step.equations.length, 0);
+  await expect(first.getByTestId("chat-working-equation")).toHaveCount(equations);
+  await expect(first.locator(".chat-working-equation .katex").first()).toBeVisible(); // typeset, not shown as source
+  await expect(first.locator(".katex-error")).toHaveCount(0);
+  // the values put in are the package's own, to six figures
+  const criterion = first.locator('[data-step="criterion"]');
+  await expect(criterion.getByTestId("chat-working-value").nth(1)).toHaveText("64.0523 MPa");
+  await expect(criterion.locator("annotation").last()).toHaveText(hill.steps[2].equations[2].substituted.replaceAll("\\frac", "\\dfrac")); // R = 1/sqrt(FI), as the package wrote it
+  await expect(criterion.getByTestId("chat-working-source")).toHaveText("From: Laminate theory, 5. Failure.");
+  await expect(first.getByTestId("chat-working-note")).toContainText("Values put in are shown to 6 figures and results to 4");
+
+  // asked in words, with the criterion named: the engineer's own phrases
+  await say("send me the formula for max stress");
+  const second = page.getByTestId("chat-working").nth(1);
+  await expect(second).toHaveAttribute("data-criterion", "max_stress");
+  await expect(second.locator('[data-step="criterion"]').getByTestId("chat-working-text")).toContainText("σ₂ reaching F2t"); // the page's symbols, not sigma_2
+  await expect(second.locator('[data-step="criterion"]').getByTestId("chat-working-equation").nth(1).locator("annotation").last()).toHaveText(working.criteria.max_stress.steps[2].equations[1].substituted.replaceAll("\\frac", "\\dfrac"));
+  await say("the proof of it being solved");
+  await expect(page.getByTestId("chat-working")).toHaveCount(3);
+  await expect(page.getByTestId("chat-working").last()).toHaveAttribute("data-criterion", "tsai_hill");
+
+  // a criterion with no working written is said, with the ones that have one
+  await say("show the working for Tsai-Wu");
+  await expect(page.getByTestId("chat-working-none").last()).toHaveText("The working of Tsai-Wu is not written yet. Ask for Maximum stress or Tsai-Hill.");
+
+  await page.waitForTimeout(600); // the list has settled at its newest message
+  await first.locator('[data-step="stress"]').evaluate((step) => step.scrollIntoView({ block: "start" }));
+  await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-working.png" });
+  await first.locator('[data-step="criterion"]').evaluate((step) => step.scrollIntoView({ block: "start" }));
+  await page.getByTestId("coupon-chat").screenshot({ path: ".local/website/screenshots/studio-working-criterion.png" });
+
+  // nothing was sent to a model, nothing was checked or solved again, and no row changed
+  expect(asked).toBe(0);
+  expect(calls.checks).toHaveLength(1);
+  expect(calls.solves).toHaveLength(1);
+  await expect(page.getByTestId("chat-spec")).toContainText("unnotched tension");
+  expect(bannedIn(await page.getByTestId("coupon-chat").innerText()), "the working").toEqual([]);
   expect(browserErrors).toEqual([]);
 });
 

@@ -175,6 +175,10 @@ computed by `answer_of`. The answer is read over the gauge section when the coup
 
 <!-- code: answer_of, verdict_of, ply_extremes -->
 
+The working behind the answer (ADR-0103) is this chain written out for the first ply to fail by maximum stress and by Tsai-Hill, on the answer's basis: the ply's strain in its fibre axes, its stress as $`\boldsymbol{\sigma} = \mathbf{Q}\,\boldsymbol{\varepsilon}`$ with the engine's reduced stiffness, the criterion's ratio, and the loading at first-ply failure. Each step holds its formula, the formula with the values in place and the result; values are put in to six significant figures and results are written to four, so a step repeated by hand meets its result. It is no second calculation of the answer. A chain is written only when the stiffness times the stored strain gives the stored stress and the engine's criterion, called again on that stress, gives the stored factor, each to a relative $`10^{-9}`$; this is checked by `working_of`. A stress that is zero to roundoff is written as zero and sets no limit.
+
+<!-- code: working_of -->
+
 ## 8. The flat shell: bending, transverse shear and pressure (`shell.py`)
 
 The membrane of the sections above stays the kernel for the in-plane coupons; every result it gives is pinned by the cases and records above. A deck that bends, carries a pressure, prescribes or loads a degree of freedom out of the plane, or has an unsymmetric layup goes to the flat shell of this section (ADR-0053), which keeps the same mesh, the same four-node element and the same engine laminate law. Which kernel a deck gets is computed by `needs_shell`, the dispatch is computed by `solve_deck`, and what the membrane refuses when it is asked directly is checked by `membrane_limits`.

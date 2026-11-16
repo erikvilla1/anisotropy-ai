@@ -128,8 +128,9 @@ PAGES = [section for section, _ in find(ASKED["question"], limit=SECTIONS_SHOWN)
 
 
 def test_the_question_finds_the_failure_section_of_our_own_pages_and_a_reason():
-    assert len(PAGES) == SECTIONS_SHOWN and PAGES[0].id == "engine:5-failure" and PAGES[0].cited() == "Laminate theory, 5. Failure"
-    assert PAGES[2].cited() == "Reasons behind a result, Why the failure criteria give different factors"
+    cited = {section.id: section.cited() for section in PAGES}  # which of the three is first moves as the pages are edited
+    assert len(PAGES) == SECTIONS_SHOWN and cited["engine:5-failure"] == "Laminate theory, 5. Failure"
+    assert "Reasons behind a result, Why the failure criteria give different factors" in cited.values()
 
 
 def test_with_no_model_no_answer_is_written_and_the_sections_found_are_named(monkeypatch):
@@ -137,7 +138,7 @@ def test_with_no_model_no_answer_is_written_and_the_sections_found_are_named(mon
     body = client.post("/v1/workspace/result-answers", json=ASKED).json()
     assert body["writer"] == "template" and body["model"] is None and body["prose"] == [] and body["covered"] is False
     assert body["withheld"] is False and body["reason"] is None and body["run_id"] is None
-    assert body["sources"][0] == {"id": "engine:5-failure", "document": "Laminate theory", "title": "5. Failure"}
+    assert {"id": "engine:5-failure", "document": "Laminate theory", "title": "5. Failure"} in body["sources"]
     assert [s["id"] for s in body["sources"]] == [s.id for s in PAGES]
 
 
